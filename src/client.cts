@@ -288,6 +288,8 @@ interface TrendChartProps {
   hoveredSeq: number | null
   /** The turn currently highlighted (from the turn strip or a hovered bar). */
   activeTurn: number | null
+  /** Display granularity; a switch re-anchors the chart at the newest bars. */
+  granularity: 'step' | 'turn'
   onSelect: (seq: number | null) => void
   onHover: (seq: number | null) => void
   onHoverTurn: (turn: number | null) => void
@@ -457,12 +459,15 @@ function makeView(ctx: ClientCtx, t: Translate): (props: ContextViewProps) => Re
     }
 
     // Default anchor: the newest bars at the RIGHT edge. The first layout
-    // after mount scrolls unconditionally; afterwards the chart only sticks
-    // to the end while the user is already near it (scrolling away is
-    // respected). useLayoutEffect avoids a first-paint flash at the left.
-    // Edge fades stay in sync with the scroll position.
+    // after mount scrolls unconditionally; a GRANULARITY SWITCH re-anchors
+    // the same way (returning to step mode must show the newest bars, not
+    // the stale left edge from the narrow turn chart); otherwise the chart
+    // only sticks to the end while the user is already near it (scrolling
+    // away is respected). useLayoutEffect avoids a first-paint flash at the
+    // left. Edge fades stay in sync with the scroll position.
     const scrollRef = React.useRef<HTMLDivElement | null>(null)
     const scrolledOnce = React.useRef(false)
+    const lastGranRef = React.useRef(props.granularity)
     const [edges, setEdges] = React.useState<{ left: boolean; right: boolean }>({ left: false, right: false })
     const updateEdges = (el: HTMLDivElement): void => {
       const left = el.scrollLeft > 4
@@ -472,6 +477,10 @@ function makeView(ctx: ClientCtx, t: Translate): (props: ContextViewProps) => Re
     React.useLayoutEffect(() => {
       const el = scrollRef.current
       if (el === null) return
+      if (props.granularity !== lastGranRef.current) {
+        lastGranRef.current = props.granularity
+        scrolledOnce.current = false // re-anchor on every granularity switch
+      }
       if (!scrolledOnce.current) {
         scrolledOnce.current = true
         el.scrollLeft = el.scrollWidth
@@ -763,6 +772,7 @@ function makeView(ctx: ClientCtx, t: Translate): (props: ContextViewProps) => Re
               selectedSeq: pinnedReq ? pinnedReq.seq : null,
               hoveredSeq,
               activeTurn,
+              granularity,
               onSelect: setSelectedSeq,
               onHover: setHoveredSeq,
               onHoverTurn: setHoverTurn,

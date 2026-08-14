@@ -140,8 +140,9 @@ const statefulReact = {
   },
   useLayoutEffect(fn) {
     // Store the callback in a hook slot so tests can drive the layout effect.
+    // Always overwrite: real React runs the LATEST render's closure.
     const i = hookCursor++
-    if (currentHooks[i] === undefined) currentHooks[i] = { effect: fn }
+    currentHooks[i] = { effect: fn }
     return currentHooks[i]
   },
 }
@@ -455,6 +456,26 @@ assert.equal(scrollEl.scrollLeft, 800, 'stays anchored at the end while near it'
 tr = renderView()
 assert.equal(byClass(tr, 'lc-chart-fade-l').length, 1, 'left fade shown once anchored at the newest bars')
 assert.equal(byClass(tr, 'lc-chart-fade-r').length, 0, 'no right fade at the end')
+
+// ---- granularity switches re-anchor at the newest bars ----
+// (the turn->step report: returning to step must show the right edge)
+const latestEffect = () => hookStates.get(trendKey).find(s => s && typeof s.effect === 'function')
+scrollEl.scrollLeft = 0 // stale left edge from the narrow turn chart
+const granTurnBtn = byClass(tr, 'lc-gran-btn')[1]
+granTurnBtn.args[1].onClick() // step -> turn
+tr = renderView()
+latestEffect().effect()
+assert.equal(scrollEl.scrollLeft, 800, 'switching to turn re-anchors at the newest bars')
+scrollEl.scrollLeft = 0
+const granStepBtn = byClass(tr, 'lc-gran-btn')[0]
+granStepBtn.args[1].onClick() // turn -> step
+tr = renderView()
+latestEffect().effect()
+assert.equal(scrollEl.scrollLeft, 800, 'switching back to step re-anchors at the newest bars')
+// a plain re-render (poll) without a switch must NOT yank a scrolled-away view
+scrollEl.scrollLeft = 200
+latestEffect().effect()
+assert.equal(scrollEl.scrollLeft, 200, 'plain re-renders still respect the scroll position')
 
 // ---- message list: newest first, with timestamps when available ----
 const nodeRows = byClass(tr, 'lc-node')
