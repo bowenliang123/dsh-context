@@ -53,7 +53,7 @@
     "token",
     "ui"
   ],
-  "license": "MIT",
+  "license": "Apache-2.0",
   "devDependencies": {
     "@deepseek-ai/cordis": "^4.0.1",
     "@types/react": "^18.3.31",
