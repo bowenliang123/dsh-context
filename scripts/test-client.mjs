@@ -305,6 +305,29 @@ assert.equal(tip.length, 1, 'hovering a segment shows the tooltip')
 assert.match(textOf(tip[0]), /\(10%\)/, 'tooltip shows the segment share of the total')
 assert.equal(typeof tip[0].args[1].style.left, 'string', 'tooltip is positioned along the pointer')
 
+// ---- composition bar hover highlights the matching legend chip (and back) ----
+// the tooltip test above left the first segment hovered -> its chip is on
+let chipsOn = byClass(tr, 'lc-chip-on')
+assert.equal(chipsOn.length, 1, 'hovered segment highlights its legend chip')
+const chip0 = byClass(tr, 'lc-chip')[0]
+assert.equal(typeof chip0.args[1].onMouseEnter, 'function', 'legend chips carry onMouseEnter')
+chip0.args[1].onMouseEnter()
+tr = renderView()
+assert.equal(byClass(tr, 'lc-stacked-seg-on').length, 1, 'hovering a chip highlights its segment')
+chip0.args[1].onMouseLeave()
+tr = renderView()
+assert.equal(byClass(tr, 'lc-stacked-seg-on').length, 0, 'leaving the chip clears the segment highlight')
+assert.equal(byClass(tr, 'lc-chip-on').length, 0, 'leaving the chip clears the chip highlight')
+// segment -> chip, on a different category
+const seg1 = byClass(tr, 'lc-stacked').find(s => s.args[1].style.height === '16px')
+  .args.slice(2).flat().filter(s => s !== null)[1]
+seg1.args[1].onMouseEnter({ clientX: 80 })
+tr = renderView()
+const chipsOn2 = byClass(tr, 'lc-chip-on')
+assert.equal(chipsOn2.length, 1, 'hovering another segment moves the chip highlight')
+assert.equal(chipsOn2[0].args[3], byClass(tr, 'lc-chip')[1].args[3], 'the matching chip is highlighted')
+assert.equal(byClass(tr, 'lc-stacked-seg-on').length, 1, 'the hovered segment is marked')
+
 // ---- turn strip: one color block per turn, aligned with the bars above ----
 let turnBlocks = byClass(tr, 'lc-turn')
 assert.equal(turnBlocks.length, 3, 'one turn block per turn')

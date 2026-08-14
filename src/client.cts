@@ -271,7 +271,14 @@ function aggregateByTurn(requests: RequestRecord[]): RequestRecord[] {
 // ---- view components ---------------------------------------------------------
 
 interface PartsPart { key: string; color: string; value: number }
-interface StackedBarProps { parts: PartsPart[]; max?: number; height?: number }
+interface StackedBarProps {
+  parts: PartsPart[]
+  max?: number
+  height?: number
+  /** Optional hover link: the active segment key, reported via onHoverKey. */
+  hoverKey?: string | null
+  onHoverKey?: (key: string | null) => void
+}
 interface TrendChartProps {
   requests: RequestRecord[]
   events: ContextEventRecord[]
@@ -338,7 +345,9 @@ function makeView(ctx: ClientCtx, t: Translate): (props: ContextViewProps) => Re
     // Themed hover tooltip per segment: shows the category, its tokens, and
     // its share of the parts' total. The tooltip is positioned at the
     // pointer's x within the bar (clamped) and floats above the stack — the
-    // wrapper keeps it outside the rounded/clipped stack itself.
+    // wrapper keeps it outside the rounded/clipped stack itself. The hovered
+    // key is also reported upward (when connected) so the legend below can
+    // highlight the matching composition.
     const wrapRef = React.useRef<HTMLDivElement | null>(null)
     const [tip, setTip] = React.useState<{ key: string; text: string; left: number } | null>(null)
     const showTip = (e: ReactNS.MouseEvent<HTMLDivElement>, p: PartsPart): void => {
@@ -350,6 +359,11 @@ function makeView(ctx: ClientCtx, t: Translate): (props: ContextViewProps) => Re
         text: catLabel(p.key) + ' ' + fmt(p.value) + ' (' + Math.round(p.value / total * 100) + '%)',
         left: Math.max(48, Math.min(left, width - 48)),
       })
+      if (props.onHoverKey !== undefined) props.onHoverKey(p.key)
+    }
+    const clearHover = (): void => {
+      setTip(null)
+      if (props.onHoverKey !== undefined) props.onHoverKey(null)
     }
 
     return h('div', { className: 'lc-stacked-wrap' },
@@ -357,14 +371,16 @@ function makeView(ctx: ClientCtx, t: Translate): (props: ContextViewProps) => Re
         className: 'lc-stacked',
         style: { height: (props.height || 14) + 'px' },
         ref: wrapRef,
-        onMouseLeave: () => { setTip(null) },
+        onMouseLeave: clearHover,
       },
         total <= 0
           ? null
           : props.parts.map(p => {
             if (!p.value) return null
+            const on = props.hoverKey !== undefined && props.hoverKey === p.key
             return h('div', {
               key: p.key,
+              className: 'lc-stacked-seg' + (on ? ' lc-stacked-seg-on' : ''),
               style: { width: (p.value / scale * 100) + '%', background: p.color },
               onMouseEnter: (e: ReactNS.MouseEvent<HTMLDivElement>) => { showTip(e, p) },
               onMouseMove: (e: ReactNS.MouseEvent<HTMLDivElement>) => { showTip(e, p) },
@@ -373,12 +389,22 @@ function makeView(ctx: ClientCtx, t: Translate): (props: ContextViewProps) => Re
       tip ? h('div', { className: 'lc-bar-tip', style: { left: tip.left + 'px' } }, tip.text) : null)
   }
 
-  function Legend(props: { parts: PartsPart[] }): ReactNS.ReactElement {
+  function Legend(props: {
+    parts: PartsPart[]
+    hoverKey?: string | null
+    onHoverKey?: (key: string | null) => void
+  }): ReactNS.ReactElement {
     let total = 0
     for (const p of props.parts) total += p.value
     return h('div', { className: 'lc-legend' },
       props.parts.map(p => {
-        return h('span', { key: p.key, className: 'lc-chip' },
+        const on = props.hoverKey !== undefined && props.hoverKey === p.key
+        return h('span', {
+          key: p.key,
+          className: 'lc-chip' + (on ? ' lc-chip-on' : ''),
+          onMouseEnter: () => { if (props.onHoverKey !== undefined) props.onHoverKey(p.key) },
+          onMouseLeave: () => { if (props.onHoverKey !== undefined) props.onHoverKey(null) },
+        },
           h('i', { style: { background: p.color } }),
           catLabel(p.key) + ' ' + fmt(p.value),
           total > 0 ? h('em', null, Math.round(p.value / total * 100) + '%') : null)
@@ -615,6 +641,8 @@ function makeView(ctx: ClientCtx, t: Translate): (props: ContextViewProps) => Re
     const [hoverTurn, setHoverTurn] = React.useState<number | null>(null)
     const [tick, setTick] = React.useState(0)
     const [granularity, setGranularity] = React.useState<'step' | 'turn'>('step')
+    // Shared hover link between the composition bar and its legend below.
+    const [hoverCat, setHoverCat] = React.useState<string | null>(null)
 
     React.useEffect(() => {
       if (typeof sessionId !== 'string' || sessionId === '') return undefined
@@ -694,8 +722,8 @@ function makeView(ctx: ClientCtx, t: Translate): (props: ContextViewProps) => Re
           h('span', null, data.contextWindow
             ? ' / ' + fmt(data.contextWindow) + ' ' + tr('overview.ofWindow', { p: windowPct ?? 0 })
             : ' ' + t('overview.estimate'))),
-        h(StackedBar, { parts: partsOf(current), height: 16, max: data.contextWindow }),
-        h(Legend, { parts: partsOf(current) }),
+        h(StackedBar, { parts: partsOf(current), height: 16, max: data.contextWindow, hoverKey: hoverCat, onHoverKey: setHoverCat }),
+        h(Legend, { parts: partsOf(current), hoverKey: hoverCat, onHoverKey: setHoverCat }),
         (data.toolList && data.toolList.length > 0) ? h('div', { className: 'lc-tools' },
           t('tools.top'),
           data.toolList.slice().sort((a, b) => b.tokens - a.tokens).slice(0, 5).map(tool => {
@@ -770,10 +798,13 @@ const STYLES = [
   '.lc-stacked { display: flex; width: 100%; border-radius: 5px; overflow: hidden; background: rgba(128,128,128,0.18); }',
   '.lc-bar-tip { position: absolute; bottom: calc(100% + 6px); transform: translateX(-50%); z-index: 5; white-space: nowrap; background: var(--dsw-alias-bg-layer-2); border: 1px solid var(--dsw-alias-border-l1); border-radius: 6px; padding: 3px 8px; font-size: 12px; color: var(--dsw-alias-label-primary); box-shadow: 0 2px 8px rgba(0,0,0,0.18); pointer-events: none; }',
   '.lc-stacked > div { height: 100%; }',
+  '.lc-stacked-seg-on { filter: brightness(1.18); }',
   '.lc-legend { display: flex; flex-wrap: wrap; gap: 6px 14px; margin-top: 10px; }',
   '.lc-chip { display: inline-flex; align-items: center; gap: 5px; color: var(--dsw-alias-label-primary); }',
   '.lc-chip i, .lc-detail-row i, .lc-node i { display: inline-block; width: 8px; height: 8px; border-radius: 2px; }',
   '.lc-chip em { font-style: normal; color: var(--dsw-alias-label-secondary); }',
+  '.lc-chip-on { font-weight: 600; }',
+  '.lc-chip-on i { box-shadow: 0 0 0 1px var(--dsw-alias-brand-primary); }',
   '.lc-tools { margin-top: 10px; color: var(--dsw-alias-label-secondary); display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }',
   '.lc-tool-chip { background: var(--dsw-alias-bg-layer-2); border-radius: 4px; padding: 1px 7px; font-size: 12px; color: var(--dsw-alias-label-primary); }',
   '.lc-chartrow { display: flex; gap: 6px; align-items: stretch; }',
