@@ -2,7 +2,7 @@
 
 A **Context insight panel** for [DeepSeek Harness](https://github.com/deepseek-ai/DeepSeek-Harness) (dsh): a plugin that adds a **Context** tab to the web UI — right beside **Chat** and **Trajectory** — so you can see what the model's context window is actually made of, and how it evolves across the conversation.
 
-![dsh-context screenshot](docs/screenshot.png)
+![dsh-context screenshot](https://raw.githubusercontent.com/bowenliang123/dsh-context/main/docs/screenshot.png)
 
 ## Why
 
