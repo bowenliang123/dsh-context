@@ -72,6 +72,8 @@ pnpm test               # typecheck + functional tests for both halves
 
 `build.mjs` also smoke-checks the outputs (both halves must parse; the host half must import with the `name`/`inject`/`apply` plugin shape).
 
+Commits are guarded by a [husky](https://typicode.github.io/husky/) pre-commit hook that runs `pnpm run typecheck` (`tsc --noEmit`, strict).
+
 ## Files
 
 | File | Role |

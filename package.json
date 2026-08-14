@@ -28,7 +28,8 @@
     "build": "node scripts/build.mjs",
     "typecheck": "tsc --noEmit",
     "test": "npm run typecheck && node scripts/test-host.mjs && node scripts/test-client.mjs",
-    "release": "bash scripts/publish.sh"
+    "release": "bash scripts/publish.sh",
+    "prepare": "husky"
   },
   "dsh": {
     "bundle": {
@@ -58,6 +59,7 @@
     "@deepseek-ai/cordis": "^4.0.1",
     "@types/react": "^18.3.31",
     "esbuild": "^0.28.2",
+    "husky": "^9.1.7",
     "typescript": "^7.0.2"
   },
   "packageManager": "pnpm@11.9.0"
