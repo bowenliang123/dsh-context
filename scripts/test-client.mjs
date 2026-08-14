@@ -153,7 +153,7 @@ const requireStateful = (spec) => {
 const m2 = { exports: {} }
 const pluginExports2 = factory(requireStateful, m2, globalThis.window, fakeDoc)
 
-const DICT_FOR_TEST = { 'tab': 'Context', 'loading': '…', 'error': 'x', 'detail.step': 'Turn {t} · Step {s}', 'gran.step': 'Step', 'gran.turn': 'Turn', 'detail.turn': 'Turn {t} · {n} steps', 'detail.lastStep': 'last step', 'overview.actual': '· last actual prompt {n}' }
+const DICT_FOR_TEST = { 'tab': 'Context', 'loading': '…', 'error': 'x', 'detail.step': 'Turn {t} · Step {s}', 'gran.step': 'Step', 'gran.turn': 'Turn', 'detail.turn': 'Turn {t} · {n} steps', 'detail.lastStep': 'last step', 'overview.actual': '· last actual prompt {n}', 'events.at': 'Turn {t} · Step {s}' }
 let viewComponent = null
 const fakeCtx2 = {
   get: () => undefined,
@@ -493,9 +493,34 @@ const fmtTimeLocal = (t) => {
 assert.equal(nodeTimes[0].args[2], fmtTimeLocal(65000), 'formatted time (65000ms)')
 assert.equal(nodeTimes[1].args[2], fmtTimeLocal(1000), 'formatted time (1000ms)')
 
+// ---- context events show the turn/step they contributed to ----
+// The host sends events oldest->newest; the list reverses them. Each event
+// carries the request that follows it (host-stamped); the label renders
+// only when both turn and step are present (in-flight events stay bare).
+ctxSlots[0][1]({
+  ...snapshot,
+  events: [
+    { seq: 7, kind: 'prune', time: 2000, tokens: 100, turn: 1, step: 0 },
+    { seq: 8, kind: 'model', time: 3000, from: 'a', to: 'b', turn: 1, step: 1 },
+    { seq: 9, kind: 'inject', time: 4000, tokens: 5, form: 'notice', turn: 2, step: 0 },
+    { seq: 10, kind: 'compaction', time: 5000, tokens: 5000, count: 4 }, // no request after -> unlabeled
+  ],
+})
+tr = renderView()
+const evRows = byClass(tr, 'lc-event')
+assert.equal(evRows.length, 4, 'event rows rendered newest first')
+const atLabels = byClass(tr, 'lc-event-at')
+assert.equal(atLabels.length, 3, 'only stamped events carry a turn/step label')
+assert.equal(atLabels[0].args[2], 'Turn 2 · Step 0', 'inject shows the request it fed')
+assert.equal(atLabels[1].args[2], 'Turn 1 · Step 1', 'model switch shows its request')
+assert.equal(atLabels[2].args[2], 'Turn 1 · Step 0', 'prune shows its request')
+ctxSlots[0][1](snapshot) // restore
+tr = renderView()
+assert.equal(byClass(tr, 'lc-event').length, 0, 'event list restored to the empty state')
+
 // ---- overview shows the provider-reported actual prompt of the last request ----
 const overviewNum = byClass(tr, 'lc-overview-num')[0]
 assert.ok(overviewNum, 'overview number row present')
 assert.match(textOf(overviewNum), /· last actual prompt 83\.0k/, 'overview shows the last actual prompt alongside the estimate')
 
-console.log('✔ chart render test passed (fixed-width bars, scroll container, turn ranges, hover linking, overview tooltip, turn strip, granularity toggle, edge fades, full history, right-anchored default, message times, overview actual)')
+console.log('✔ chart render test passed (fixed-width bars, scroll container, turn ranges, hover linking, overview tooltip, turn strip, granularity toggle, edge fades, full history, right-anchored default, message times, event turn/step labels, overview actual)')

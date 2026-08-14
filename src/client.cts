@@ -134,6 +134,9 @@ interface ContextEventRecord {
   name?: string
   from?: string
   to?: string
+  /** Turn/step of the request this event contributed to (host-stamped). */
+  turn?: number
+  step?: number
 }
 
 // ---- dictionaries ------------------------------------------------------------
@@ -160,6 +163,7 @@ const DICT_ZH: Record<string, string> = {
   'detail.output': '输出 {n}',
   'events.title': '上下文事件',
   'events.empty': '暂无上下文事件（压缩、注入、模型切换会出现在这里）',
+  'events.at': '第 {t} 轮 · 第 {s} 步',
   'nodes.title': '消息构成',
   'nodes.hint': '当前模型可见的消息，最新在前',
   'nodes.more': '… 更早的 {n} 条消息已省略',
@@ -206,6 +210,7 @@ const DICT_EN: Record<string, string> = {
   'detail.output': 'output {n}',
   'events.title': 'Context events',
   'events.empty': 'No context events yet (compaction, injections, model switches appear here)',
+  'events.at': 'Turn {t} · Step {s}',
   'nodes.title': 'Messages',
   'nodes.hint': 'currently model-visible, newest first',
   'nodes.more': '… {n} earlier messages omitted',
@@ -622,6 +627,12 @@ function makeView(ctx: ClientCtx, t: Translate): (props: ContextViewProps) => Re
         return h('div', { key: ev.seq + '-' + i, className: 'lc-event' },
           h('span', { className: 'lc-event-icon lc-event-' + ev.kind }, EVENT_ICONS[ev.kind] || '•'),
           h('span', { className: 'lc-event-label', title: label }, label),
+          // Which request this event contributed to (host-stamped: the first
+          // request logged after the event). In-flight or trimmed-away
+          // events have no turn/step and stay unlabeled.
+          typeof ev.turn === 'number' && typeof ev.step === 'number'
+            ? h('span', { className: 'lc-event-at' }, t('events.at', { t: ev.turn, s: ev.step }))
+            : null,
           ev.tokens ? h('span', { className: 'lc-event-tokens' + (ev.kind === 'inject' ? ' lc-up' : ' lc-down') },
             (ev.kind === 'inject' ? '+' : '−') + fmt(ev.tokens)) : null,
           h('span', { className: 'lc-event-time' }, fmtTime(ev.time)))
@@ -881,6 +892,7 @@ const STYLES = [
   '.lc-event-icon.lc-event-inject { color: #a855f7; }',
   '.lc-event-icon.lc-event-model { color: var(--dsw-alias-brand-primary); }',
   '.lc-event-label { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }',
+  '.lc-event-at { flex: none; color: var(--dsw-alias-label-secondary); font-size: 11px; white-space: nowrap; }',
   '.lc-event-tokens { color: var(--dsw-alias-state-success-primary); }',
   '.lc-event-tokens.lc-up { color: var(--dsw-alias-state-warn-primary); }',
   '.lc-event-time { color: var(--dsw-alias-label-secondary); font-size: 12px; }',
