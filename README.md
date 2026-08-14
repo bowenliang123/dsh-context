@@ -39,6 +39,10 @@ One stacked bar per model request, finer than per-message. Toggle between **Turn
 
 Above: a real session that grew to ~563k tokens across 48 turns, then compaction (✂) recycled −535.5k in one step, and the conversation continued from a fresh, small window.
 
+In **Step** granularity, hovering any bar shows that single step's context info instantly — its turn/step, timestamp, and estimated vs. provider-reported token counts:
+
+![History chart with a step hover tooltip](https://raw.githubusercontent.com/bowenliang123/dsh-context/main/docs/history-step-hover.png)
+
 ### ⚡ Context events — when and why the window changed
 
 Every compaction, tool-output prune, skill or plugin context injection, and model switch — each with its token delta, turn/step attribution, and timestamp:
