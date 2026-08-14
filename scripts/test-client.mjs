@@ -131,7 +131,19 @@ const statefulReact = {
     return slots[i]
   },
   useEffect: () => {},
-  useRef: (init) => ({ current: init }),
+  useRef(init) {
+    // Like React: the SAME ref object is returned on every render (stored
+    // in the fiber slot), so tree ref props and effect closures agree.
+    const i = hookCursor++
+    if (currentHooks[i] === undefined) currentHooks[i] = { ref: { current: init } }
+    return currentHooks[i].ref
+  },
+  useLayoutEffect(fn) {
+    // Store the callback in a hook slot so tests can drive the layout effect.
+    const i = hookCursor++
+    if (currentHooks[i] === undefined) currentHooks[i] = { effect: fn }
+    return currentHooks[i]
+  },
 }
 const requireStateful = (spec) => {
   assert.equal(spec, 'react')
@@ -387,4 +399,24 @@ ctxSlots[0][1](snapshot) // restore
 tr = renderView()
 assert.equal(byClass(tr, 'lc-bar').length, 4, 'snapshot restored')
 
-console.log('✔ chart render test passed (fixed-width bars, scroll container, turn ranges, hover linking, overview tooltip, turn strip, granularity toggle, edge fades, full history)')
+// ---- default anchor: the newest bars sit at the right edge ----
+const scrollNode = byClass(tr, 'lc-chart-scroll')[0]
+const scrollEl = { scrollLeft: 0, clientWidth: 120, scrollWidth: 800 }
+scrollNode.args[1].ref.current = scrollEl // attach a fake layout element
+const trendKey = [...hookStates.keys()].find(k => k.includes('TrendChart'))
+assert.ok(trendKey, 'TrendChart fiber registered')
+const layoutEffectSlot = hookStates.get(trendKey).find(s => s && typeof s.effect === 'function')
+assert.ok(layoutEffectSlot, 'chart layout effect captured')
+layoutEffectSlot.effect()
+assert.equal(scrollEl.scrollLeft, 800, 'initial layout anchors at the right (newest bars)')
+scrollEl.scrollLeft = 200
+layoutEffectSlot.effect()
+assert.equal(scrollEl.scrollLeft, 200, 'scrolling away from the end is respected')
+scrollEl.scrollLeft = 780
+layoutEffectSlot.effect()
+assert.equal(scrollEl.scrollLeft, 800, 'stays anchored at the end while near it')
+tr = renderView()
+assert.equal(byClass(tr, 'lc-chart-fade-l').length, 1, 'left fade shown once anchored at the newest bars')
+assert.equal(byClass(tr, 'lc-chart-fade-r').length, 0, 'no right fade at the end')
+
+console.log('✔ chart render test passed (fixed-width bars, scroll container, turn ranges, hover linking, overview tooltip, turn strip, granularity toggle, edge fades, full history, right-anchored default)')

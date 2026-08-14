@@ -408,20 +408,29 @@ function makeView(ctx: ClientCtx, t: Translate): (props: ContextViewProps) => Re
       grp.count++
     }
 
-    // Stick to the newest bars unless the user scrolled away from the end,
-    // and keep the edge fades in sync with the scroll position.
+    // Default anchor: the newest bars at the RIGHT edge. The first layout
+    // after mount scrolls unconditionally; afterwards the chart only sticks
+    // to the end while the user is already near it (scrolling away is
+    // respected). useLayoutEffect avoids a first-paint flash at the left.
+    // Edge fades stay in sync with the scroll position.
     const scrollRef = React.useRef<HTMLDivElement | null>(null)
+    const scrolledOnce = React.useRef(false)
     const [edges, setEdges] = React.useState<{ left: boolean; right: boolean }>({ left: false, right: false })
     const updateEdges = (el: HTMLDivElement): void => {
       const left = el.scrollLeft > 4
       const right = el.scrollLeft + el.clientWidth < el.scrollWidth - 4
       setEdges(prev => (prev.left === left && prev.right === right) ? prev : { left, right })
     }
-    React.useEffect(() => {
+    React.useLayoutEffect(() => {
       const el = scrollRef.current
       if (el === null) return
+      if (!scrolledOnce.current) {
+        scrolledOnce.current = true
+        el.scrollLeft = el.scrollWidth
+      } else if (el.scrollLeft + el.clientWidth >= el.scrollWidth - 24) {
+        el.scrollLeft = el.scrollWidth
+      }
       updateEdges(el)
-      if (el.scrollLeft + el.clientWidth >= el.scrollWidth - 24) el.scrollLeft = el.scrollWidth
     })
 
     return h('div', { className: 'lc-chartrow' },
@@ -669,6 +678,9 @@ function makeView(ctx: ClientCtx, t: Translate): (props: ContextViewProps) => Re
           ? h('div', { className: 'lc-empty' }, t('trend.empty'))
           : h('div', null,
             h(TrendChart, {
+              // Remount per session: switching sessions re-anchors the chart
+              // at the newest bars instead of inheriting stale scroll state.
+              key: sessionId,
               // The host caps the log at 160 requests; render them ALL so
               // earlier turns/steps stay reachable via horizontal scroll.
               requests: displayRequests,
