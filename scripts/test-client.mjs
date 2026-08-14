@@ -123,11 +123,12 @@ const statefulReact = {
   createElement: (...args) => ({ kind: 'element', args }),
   useState(init) {
     const i = hookCursor++
-    if (currentHooks[i] === undefined) {
-      const set = (v) => { currentHooks[i][0] = typeof v === 'function' ? v(currentHooks[i][0]) : v }
-      currentHooks[i] = [typeof init === 'function' ? init() : init, set]
+    const slots = currentHooks // captured by the setter: stable per fiber
+    if (slots[i] === undefined) {
+      const set = (v) => { slots[i][0] = typeof v === 'function' ? v(slots[i][0]) : v }
+      slots[i] = [typeof init === 'function' ? init() : init, set]
     }
-    return currentHooks[i]
+    return slots[i]
   },
   useEffect: () => {},
   useRef: (init) => ({ current: init }),
@@ -139,7 +140,7 @@ const requireStateful = (spec) => {
 const m2 = { exports: {} }
 const pluginExports2 = factory(requireStateful, m2, globalThis.window, fakeDoc)
 
-const DICT_FOR_TEST = { 'tab': 'Context', 'loading': '…', 'error': 'x' }
+const DICT_FOR_TEST = { 'tab': 'Context', 'loading': '…', 'error': 'x', 'detail.step': 'T{t} · step {s}' }
 let viewComponent = null
 const fakeCtx2 = {
   get: () => undefined,
@@ -161,23 +162,37 @@ const fakeCtx2 = {
 pluginExports2.apply(fakeCtx2)
 assert.ok(viewComponent !== null, 'view component captured')
 
-/** Invoke function-typed elements so hooks run and the tree materializes. */
-function evaluate(node) {
+/** Invoke function-typed elements so hooks run and the tree materializes.
+ * Hooks are keyed by the component's fiber path (e.g. root/ContextView#0/
+ * StackedBar#0), so distinct instances of the same component keep state. */
+function evaluate(node, path = '', fnIdx = 0) {
   if (node === null || typeof node !== 'object') return node
   if (node.kind === 'element') {
     const [type, props, ...children] = node.args
     if (typeof type === 'function') {
-      currentHooks = hookStates.get(type)
+      const key = path + '/' + (type.name || 'anon') + '#' + fnIdx
+      currentHooks = hookStates.get(key)
       if (currentHooks === undefined) {
         currentHooks = []
-        hookStates.set(type, currentHooks)
+        hookStates.set(key, currentHooks)
       }
       hookCursor = 0
-      return evaluate(type(props))
+      return evaluate(type(props), key)
     }
-    return { kind: 'element', args: [type, props, ...children.map(evaluate)] }
+    const kids = []
+    let f = 0
+    const walkChildren = (c) => {
+      if (Array.isArray(c)) { for (const x of c) walkChildren(x); return }
+      if (c !== null && typeof c === 'object' && c.kind === 'element' && typeof c.args[0] === 'function') {
+        kids.push(evaluate(c, path, f++))
+      } else {
+        kids.push(evaluate(c, path, f))
+      }
+    }
+    for (const c of children) walkChildren(c)
+    return { kind: 'element', args: [type, props, ...kids] }
   }
-  if (Array.isArray(node)) return node.map(evaluate)
+  if (Array.isArray(node)) return node.map(n => evaluate(n, path, fnIdx))
   return node
 }
 
@@ -212,8 +227,9 @@ const snapshot = {
   events: [], nodes: [], droppedNodes: 0,
 }
 // setData: slot 0 of the ContextView fiber holds the data state.
-const contextViewFn = viewComponent({ sessionId: 's1' }).args[0]
-hookStates.get(contextViewFn)[0][1](snapshot)
+const ctxKey = [...hookStates.keys()].find(k => k.includes('ContextView'))
+assert.ok(ctxKey, 'ContextView fiber registered')
+hookStates.get(ctxKey)[0][1](snapshot)
 const tree = evaluate(viewComponent({ sessionId: 's1' }))
 
 const bars = byClass(tree, 'lc-bar')
@@ -227,4 +243,37 @@ assert.equal(turnWidths[1], '14px', 'T2 tick spans one column')
 assert.ok(byClass(tree, 'lc-chart-scroll').length === 1, 'scroll container present')
 assert.ok(byClass(tree, 'lc-turns').length === 1, 'turn tick row present')
 
-console.log('✔ chart render test passed (fixed-width bars, scroll container, turn ranges)')
+// ---- hover linking: hovering a trend bar updates the detail below ----
+const ctxSlots = hookStates.get(ctxKey) // data(0) error(1) selected(2) hovered(3) tick(4)
+const renderView = () => evaluate(viewComponent({ sessionId: 's1' }))
+function textOf(node) {
+  if (typeof node === 'string') return node
+  if (node === null || node === undefined || typeof node !== 'object') return ''
+  if (node.kind === 'element') return node.args.slice(2).map(textOf).join('')
+  if (Array.isArray(node)) return node.map(textOf).join('')
+  return ''
+}
+const detailStep = (tr) => {
+  const head = byClass(tr, 'lc-detail-head')[0]
+  return head === undefined ? '' : textOf(head).trim()
+}
+
+let tr = renderView()
+assert.match(detailStep(tr), /T3/, 'detail defaults to the newest request (T3)')
+assert.equal(byClass(tr, 'lc-bar-hovered').length, 0, 'no hovered bar initially')
+
+ctxSlots[3][1](3) // setHoveredSeq(seq 3, turn 2)
+tr = renderView()
+assert.match(detailStep(tr), /T2/, 'hovering a bar links the detail below to it')
+const hovered = byClass(tr, 'lc-bar-hovered')
+assert.equal(hovered.length, 1, 'exactly one hovered bar')
+assert.equal(hovered[0].args[1].key, 3, 'hovered bar is seq 3')
+const bar3 = byClass(tr, 'lc-bar').find(b => b.args[1].key === 3)
+assert.equal(typeof bar3.args[1].onMouseEnter, 'function', 'bars carry onMouseEnter')
+assert.equal(typeof bar3.args[1].onClick, 'function', 'bars carry onClick')
+
+ctxSlots[3][1](null) // leave the plot
+tr = renderView()
+assert.match(detailStep(tr), /T3/, 'leaving the plot reverts the detail to the newest request')
+
+console.log('✔ chart render test passed (fixed-width bars, scroll container, turn ranges, hover linking)')

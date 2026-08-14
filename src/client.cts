@@ -237,7 +237,9 @@ interface TrendChartProps {
   requests: RequestRecord[]
   events: ContextEventRecord[]
   selectedSeq: number | null
+  hoveredSeq: number | null
   onSelect: (seq: number | null) => void
+  onHover: (seq: number | null) => void
 }
 interface RequestDetailProps { request: RequestRecord | null }
 interface EventListProps { events: ContextEventRecord[] }
@@ -371,20 +373,26 @@ function makeView(ctx: ClientCtx, t: Translate): (props: ContextViewProps) => Re
         h('span', { className: 'lc-axis-mid' }, fmt(Math.round(maxTotal / 2))),
         h('span', { className: 'lc-axis-bot' }, '0')),
       h('div', { className: 'lc-chart-scroll', ref: scrollRef },
-        h('div', { className: 'lc-chart' },
+        // Hovering a bar previews it in the detail below; leaving the plot
+        // clears the preview (a pinned selection, if any, takes over again).
+        h('div', { className: 'lc-chart', onMouseLeave: () => { props.onHover(null) } },
           h('div', { className: 'lc-grid lc-grid-top' }),
           h('div', { className: 'lc-grid lc-grid-mid' }),
           requests.map((req, i) => {
             const selected = props.selectedSeq === req.seq
+            const hovered = props.hoveredSeq === req.seq
             const tip = tr('tip.step', { t: req.turn ?? 0, s: req.step ?? 0 }) + ' · ' + fmtTime(req.time) + '\n'
               + tr('tip.total', { n: fmt(req.total) })
               + (req.prompt !== undefined ? tr('tip.actual', { n: fmt(req.prompt) }) : '') + '\n'
               + CATS.map(c => catLabel(c.key) + ' ' + fmt(req[c.key] || 0)).join(' / ')
             return h('div', {
               key: req.seq,
-              className: 'lc-bar' + (selected ? ' lc-bar-selected' : ''),
+              className: 'lc-bar'
+                + (selected ? ' lc-bar-selected' : '')
+                + (hovered ? ' lc-bar-hovered' : ''),
               title: tip,
               onClick: () => { props.onSelect(selected ? null : req.seq) },
+              onMouseEnter: () => { props.onHover(req.seq) },
             },
               markers[i] ? h('span', { className: 'lc-bar-marker', title: eventLabel(markers[i]) }, '✂') : null,
               h('div', { className: 'lc-bar-stack' },
@@ -473,6 +481,7 @@ function makeView(ctx: ClientCtx, t: Translate): (props: ContextViewProps) => Re
     const [data, setData] = React.useState<Snapshot | null>(null)
     const [error, setError] = React.useState<string | null>(null)
     const [selectedSeq, setSelectedSeq] = React.useState<number | null>(null)
+    const [hoveredSeq, setHoveredSeq] = React.useState<number | null>(null)
     const [tick, setTick] = React.useState(0)
 
     React.useEffect(() => {
@@ -514,9 +523,17 @@ function makeView(ctx: ClientCtx, t: Translate): (props: ContextViewProps) => Re
     const events = data.events || []
     const nodes = data.nodes || []
 
-    let selReq: RequestRecord | null = null
-    for (const req of requests) if (req.seq === selectedSeq) selReq = req
-    if (!selReq && requests.length > 0) selReq = requests[requests.length - 1]
+    // The detail below follows the pointer: hover previews a bar, a pinned
+    // click takes over when the pointer leaves, and both fall back to the
+    // newest request.
+    let pinnedReq: RequestRecord | null = null
+    for (const req of requests) if (req.seq === selectedSeq) pinnedReq = req
+    let activeReq: RequestRecord | null = null
+    if (hoveredSeq !== null) {
+      for (const req of requests) if (req.seq === hoveredSeq) activeReq = req
+    }
+    if (activeReq === null) activeReq = pinnedReq
+    if (activeReq === null && requests.length > 0) activeReq = requests[requests.length - 1]
 
     const windowPct = data.contextWindow ? Math.min(100, Math.round(current.total / data.contextWindow * 100)) : null
 
@@ -550,8 +567,15 @@ function makeView(ctx: ClientCtx, t: Translate): (props: ContextViewProps) => Re
         requests.length === 0
           ? h('div', { className: 'lc-empty' }, t('trend.empty'))
           : h('div', null,
-            h(TrendChart, { requests: requests.slice(-80), events, selectedSeq: selReq ? selReq.seq : null, onSelect: setSelectedSeq }),
-            h(RequestDetail, { request: selReq }))),
+            h(TrendChart, {
+              requests: requests.slice(-80),
+              events,
+              selectedSeq: pinnedReq ? pinnedReq.seq : null,
+              hoveredSeq,
+              onSelect: setSelectedSeq,
+              onHover: setHoveredSeq,
+            }),
+            h(RequestDetail, { request: activeReq }))),
 
       // ---- events + messages ----
       h('div', { className: 'lc-cols' },
@@ -603,6 +627,7 @@ const STYLES = [
   '.lc-bar { position: relative; width: 14px; flex: none; height: 100%; display: flex; align-items: flex-end; cursor: pointer; border-radius: 2px; }',
   '.lc-bar:hover { background: var(--dsw-alias-bg-layer-2); }',
   '.lc-bar-selected { outline: 2px solid var(--dsw-alias-brand-primary); outline-offset: 1px; }',
+  '.lc-bar-hovered { outline: 1px dashed var(--dsw-alias-brand-primary); outline-offset: 1px; }',
   '.lc-bar-stack { display: flex; flex-direction: column-reverse; width: 100%; }',
   '.lc-bar-stack > div { width: 100%; }',
   '.lc-bar-marker { position: absolute; top: -16px; left: 50%; transform: translateX(-50%); font-size: 11px; color: var(--dsw-alias-state-warn-primary); }',
