@@ -250,6 +250,32 @@ function isInjection(source: MessageSource | undefined): source is MessageSource
 
 // ---- the incremental fold -----------------------------------------------------
 
+/**
+ * History retention bounds. The fold keeps per-STEP request records; when
+ * the absolute step bound is exceeded, the timeline is trimmed to the most
+ * recent TURN runs (never cutting a turn in half), so turn granularity can
+ * always show the full recent turn range instead of a step-count fragment.
+ */
+const MAX_REQUEST_STEPS = 1500
+const MAX_KEPT_TURNS = 300
+
+/** Keep only the trailing `maxTurns` turn-runs of a request timeline. */
+function trimToLastTurns(requests: RequestRecord[], maxTurns: number): RequestRecord[] {
+  let runs = 0
+  let start = requests.length
+  let prevTurn: number | undefined
+  for (let i = requests.length - 1; i >= 0; i--) {
+    const turn = requests[i].turn
+    if (turn !== prevTurn) {
+      if (runs >= maxTurns) break
+      runs++
+      prevTurn = turn
+    }
+    start = i
+  }
+  return requests.slice(start)
+}
+
 function createFold(): FoldState {
   return {
     n: 0, // number of log events already folded
@@ -446,9 +472,13 @@ function foldInto(st: FoldState, events: readonly SessionEvent[]): void {
     }
   }
   st.n = events.length
-  // Keep a deep-enough history for both display granularities: turn mode
-  // collapses steps, so these bounds must cover many turns, not just steps.
-  if (st.requests.length > 500) st.requests = st.requests.slice(-500)
+  // Keep a deep-enough history for both display granularities: when the step
+  // bound is hit, trim by whole turns so turn mode never loses a turn.
+  if (st.requests.length > MAX_REQUEST_STEPS) {
+    st.requests = trimToLastTurns(st.requests, MAX_KEPT_TURNS)
+    // Pathological many-step turns: hard backstop after the turn trim.
+    if (st.requests.length > MAX_REQUEST_STEPS) st.requests = st.requests.slice(-MAX_REQUEST_STEPS)
+  }
   if (st.events.length > 400) st.events = st.events.slice(-400)
 }
 

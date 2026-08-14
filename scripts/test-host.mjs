@@ -100,4 +100,29 @@ const missing = await handler('snapshot', { sessionId: 'ghost' })
 assert.equal(missing.ok, false)
 assert.match(missing.error.message, /not found|not live/)
 
-console.log('✔ host half functional test passed (RPC shape, fold, incrementality, cache, error paths)')
+// -- turn-based retention: long sessions trim by whole turns, never mid-turn --
+// 400 turns x 4 steps = 1600 requests exceeds the step bound; the fold must
+// keep the newest 300 WHOLE turns (turns 101..400, 1200 requests).
+const many = []
+let seq = 1000
+for (let turn = 1; turn <= 400; turn++) {
+  for (let step = 0; step < 4; step++) {
+    many.push({
+      seq: seq++, type: 'assistant/message', time: seq * 1000,
+      data: { turn, step, message: { content: [{ type: 'text', text: 'x' }] } },
+    })
+  }
+}
+sessionsMap.set('long', { events: many })
+const long = await handler('snapshot', { sessionId: 'long' })
+assert.equal(long.ok, true)
+assert.equal(long.value.requests.length, 1200, 'kept 300 turns x 4 steps after trimming')
+assert.equal(long.value.requests[0].turn, 101, 'trim starts at a whole turn boundary')
+assert.equal(long.value.requests[0].step, 0, 'trim starts at the first step of that turn')
+const keptTurns = new Set(long.value.requests.map(r => r.turn))
+assert.equal(keptTurns.size, 300, 'all 300 kept turns are present')
+assert.ok([...keptTurns].every(t => t >= 101 && t <= 400), 'kept turns are the newest ones')
+assert.equal(long.value.requests.filter(r => r.turn === 101).length, 4, 'first kept turn is complete')
+assert.equal(long.value.requests.filter(r => r.turn === 400).length, 4, 'last turn is complete')
+
+console.log('✔ host half functional test passed (RPC shape, fold, incrementality, cache, error paths, turn-based retention)')
