@@ -47,23 +47,10 @@ Every compaction, tool-output prune, skill or plugin context injection, and mode
 
 The exact message list the model sees right now, newest first, with a per-message token cost.
 
-## Good to know
-
-- **Live**: refreshes every 2 seconds while the tab is open, and works for historical, persisted sessions too.
-- **Bilingual**: 中文 / English, following the dsh locale automatically.
-- **Honest numbers**: estimates use the same fixed-density heuristic as dsh's built-in tokenMeter (~4 chars ≈ 1 token), so they match the harness's own stats; wherever the provider reported real usage, it's shown alongside as "actual".
-
-## Development
-
-```sh
-pnpm install   # then: pnpm run typecheck / pnpm run build / pnpm test
-```
-
-To hack on it from this checkout: `dsh plugin --profile <name> add .`
 
 ## Like it?
 
-If dsh-context helped you understand what your agent is carrying around, a ⭐ on [GitHub](https://github.com/bowenliang123/dsh-context) is much appreciated — and issues/PRs are welcome!
+If `dsh-context` helped you understand what your agent is carrying around, a ⭐ on [GitHub](https://github.com/bowenliang123/dsh-context) is much appreciated — and issues/PRs are welcome!
 
 ## License
 
