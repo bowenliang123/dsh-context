@@ -86,42 +86,57 @@ assert.equal(toolNode.tokens, 13, 'tool result prices its nested content (5 + 4 
 assert.equal(toolNode.tool, 'bash', 'tool result node names its tool')
 assert.equal(asstNode.text, 'Hi!', 'assistant node carries its text preview')
 
-// -- events are attributed to the request that follows them (turn/step) --
+// -- events are attributed to the requests around them (turn/step + range) --
 const injectEv = v.events.find(e => e.kind === 'inject')
 assert.ok(injectEv, 'injection event present')
 assert.equal(injectEv.turn, 1, 'inject before step 1\'s call lands on Turn 1')
 assert.equal(injectEv.step, 1, 'inject lands on Step 1')
+assert.equal(injectEv.fromTurn, undefined, 'no request before the first inject')
 const compactEv = v.events.find(e => e.kind === 'compaction')
 assert.ok(compactEv, 'compaction event present')
 assert.equal(compactEv.turn, undefined, 'compaction with no following request yet stays unlabeled')
 assert.equal(compactEv.step, undefined, 'no step for a trailing event')
+assert.equal(compactEv.fromTurn, 1, 'trailing event still knows the request before it')
+assert.equal(compactEv.fromStep, 1, 'trailing event keeps its from-step')
 
 // -- second snapshot: incremental (same count) must be served from cache --
 const before = await handler('snapshot', { sessionId: 's1' })
 assert.deepEqual(before.value, v, 'cached result for unchanged log')
 
-// -- append one event: fold advances --
-live.events.push({ seq: 9, type: 'assistant/message', time: 7000, data: { turn: 2, step: 1, message: { content: [{ type: 'text', text: 'more' }] } } })
+// -- append a same-turn step: the compaction now spans Step 1 -> Step 2 --
+live.events.push({ seq: 9, type: 'assistant/message', time: 7000, data: { turn: 1, step: 2, message: { content: [{ type: 'text', text: 'more' }] } } })
 const after = await handler('snapshot', { sessionId: 's1' })
 assert.equal(after.ok, true)
 assert.equal(after.value.requests.length, 2, 'new request folded')
-assert.equal(after.value.requests[1].turn, 2)
+assert.equal(after.value.requests[1].turn, 1)
 const compactAfter = after.value.events.find(e => e.kind === 'compaction')
-assert.equal(compactAfter.turn, 2, 'compaction between turns lands on the next turn')
-assert.equal(compactAfter.step, 1, 'compaction lands on the next turn\'s first step')
+assert.equal(compactAfter.turn, 1, 'compaction inside a turn lands on the same turn')
+assert.equal(compactAfter.step, 2, 'compaction lands on the step whose request follows it')
+assert.equal(compactAfter.fromTurn, 1, 'same-turn range keeps the previous request\'s turn')
+assert.equal(compactAfter.fromStep, 1, 'same-turn range keeps the previous step')
+
+// -- a cross-turn compaction: prev turn 1 step 2 -> next turn 2 step 1 --
+live.events.push({ seq: 10, type: 'compaction/summary', time: 7500, data: { shadowedTokenCount: 3000, shadowedSeqs: [3, 4] } })
+live.events.push({ seq: 11, type: 'assistant/message', time: 8000, data: { turn: 2, step: 1, message: { content: [{ type: 'text', text: 'more2' }] } } })
+const cross = await handler('snapshot', { sessionId: 's1' })
+assert.equal(cross.ok, true)
+const compactCross = cross.value.events.find(e => e.kind === 'compaction' && e.seq === 10)
+assert.equal(compactCross.turn, 2, 'between-turn compaction lands on the next turn')
+assert.equal(compactCross.step, 1, 'lands on the next turn\'s first step')
+assert.equal(compactCross.fromTurn, 1, 'cross-turn range remembers the previous turn')
+assert.equal(compactCross.fromStep, 2, 'cross-turn range remembers the previous step')
 
 // -- an empty-content assistant message (usage-only step) prices 0 tokens --
-live.events.push({ seq: 10, type: 'assistant/message', time: 8000, data: { turn: 2, step: 2, message: { content: [] } } })
+live.events.push({ seq: 12, type: 'assistant/message', time: 9000, data: { turn: 2, step: 2, message: { content: [] } } })
 const emptyMsg = await handler('snapshot', { sessionId: 's1' })
 assert.equal(emptyMsg.ok, true)
-const emptyNode = emptyMsg.value.nodes.find(n => n.seq === 10)
+const emptyNode = emptyMsg.value.nodes.find(n => n.seq === 12)
 assert.ok(emptyNode, 'usage-only message is still a surface node')
 assert.equal(emptyNode.tokens, 0, 'empty assistant message prices 0, like dsh deriveEventMessage')
-// The compaction precedes turn 2 step 1 — a LATER step in the same turn must
-// not re-attribute it.
-const compactStill = emptyMsg.value.events.find(e => e.kind === 'compaction')
-assert.equal(compactStill.turn, 2, 'compaction stays on Turn 2')
-assert.equal(compactStill.step, 1, 'compaction stays on Step 1 (first request after it)')
+// A LATER step in the same turn must not re-attribute the compaction.
+const compactStill = emptyMsg.value.events.find(e => e.kind === 'compaction' && e.seq === 8)
+assert.equal(compactStill.turn, 1, 'compaction stays on Turn 1')
+assert.equal(compactStill.step, 2, 'compaction stays on Step 2 (first request after it)')
 
 // -- error paths --
 const bad = await handler('snapshot', {})
@@ -159,4 +174,4 @@ assert.ok([...keptTurns].every(t => t >= 101 && t <= 400), 'kept turns are the n
 assert.equal(long.value.requests.filter(r => r.turn === 101).length, 4, 'first kept turn is complete')
 assert.equal(long.value.requests.filter(r => r.turn === 400).length, 4, 'last turn is complete')
 
-console.log('✔ host half functional test passed (RPC shape, fold, incrementality, cache, error paths, turn-based retention, event turn/step attribution)')
+console.log('✔ host half functional test passed (RPC shape, fold, incrementality, cache, error paths, turn-based retention, event turn/step range attribution)')

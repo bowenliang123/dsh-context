@@ -141,6 +141,9 @@ export interface ContextEventRecord {
   name?: string
   from?: string
   to?: string
+  /** Turn/step of the request logged right BEFORE the event (stamped in buildResult). */
+  fromTurn?: number
+  fromStep?: number
   /** Turn/step of the request this event contributed to (stamped in buildResult). */
   turn?: number
   step?: number
@@ -539,20 +542,28 @@ function buildResult(st: FoldState): Snapshot {
   result.droppedNodes = Math.max(0, st.surface.length - MAX_NODES)
   result.nodes = st.surface.slice(-MAX_NODES)
 
-  // Attribute each event to the request that follows it — the context that
-  // event contributed to (same attachment the chart uses for ✂ markers):
-  // an injection before step 2's call lands on that step, a compaction
-  // between turns on the next turn's first step, a model switch on the
-  // request that uses the new model. Both lists stay sorted by seq, so one
-  // pointer walk suffices. Events with no following request (still in
-  // flight, or older than the retained window) stay unlabeled.
+  // Attribute each event to the requests around it — the context that event
+  // contributed to (same attachment the chart uses for ✂ markers). `turn`/
+  // `step` name the FIRST request logged after the event (an injection lands
+  // on the step that consumed it, a between-turn compaction on the next
+  // turn's first step); `fromTurn`/`fromStep` name the request logged right
+  // BEFORE it, so boundary events can show the gap they sit in
+  // ("Step 2→3", or "Turn 50 · Step 8 → Turn 51 · Step 1"). Both lists stay
+  // sorted by seq, so one pointer walk suffices. Events with no following
+  // request (still in flight, or older than the retained window) keep only
+  // the `from*` side; events before the first retained request keep none.
   let ri = 0
   for (const ev of result.events) {
     while (ri < result.requests.length && result.requests[ri].seq <= ev.seq) ri++
-    const req = result.requests[ri]
-    if (req !== undefined && typeof req.turn === 'number' && typeof req.step === 'number') {
-      ev.turn = req.turn
-      ev.step = req.step
+    const next = result.requests[ri]
+    const prev = ri > 0 ? result.requests[ri - 1] : undefined
+    if (next !== undefined && typeof next.turn === 'number' && typeof next.step === 'number') {
+      ev.turn = next.turn
+      ev.step = next.step
+    }
+    if (prev !== undefined && typeof prev.turn === 'number' && typeof prev.step === 'number') {
+      ev.fromTurn = prev.turn
+      ev.fromStep = prev.step
     }
   }
   return result
