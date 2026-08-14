@@ -140,7 +140,7 @@ const requireStateful = (spec) => {
 const m2 = { exports: {} }
 const pluginExports2 = factory(requireStateful, m2, globalThis.window, fakeDoc)
 
-const DICT_FOR_TEST = { 'tab': 'Context', 'loading': '…', 'error': 'x', 'detail.step': 'T{t} · step {s}' }
+const DICT_FOR_TEST = { 'tab': 'Context', 'loading': '…', 'error': 'x', 'detail.step': 'T{t} · step {s}', 'gran.step': 'Step', 'gran.turn': 'Turn' }
 let viewComponent = null
 const fakeCtx2 = {
   get: () => undefined,
@@ -322,4 +322,36 @@ assert.equal(onBlocks2.length, 1, 'bar hover highlights exactly one turn block')
 assert.equal(onBlocks2[0].args[2], 'T2', 'hovering a bar highlights its turn block')
 ctxSlots[3][1](null)
 
-console.log('✔ chart render test passed (fixed-width bars, scroll container, turn ranges, hover linking, overview tooltip, turn strip)')
+// ---- granularity toggle: one bar per step vs one bar per turn ----
+let granBtns = byClass(tr, 'lc-gran-btn')
+assert.equal(granBtns.length, 2, 'granularity toggle has two buttons')
+assert.equal(granBtns[0].args[2], 'Step', 'first button is step granularity')
+assert.equal(granBtns[1].args[2], 'Turn', 'second button is turn granularity')
+assert.equal(byClass(tr, 'lc-gran-on').length, 1, 'step is active by default')
+assert.equal(byClass(tr, 'lc-bar').length, 4, 'step mode: one bar per step')
+
+// switch to turn granularity: the 4 steps collapse into 3 turn bars
+granBtns[1].args[1].onClick()
+tr = renderView()
+assert.equal(byClass(tr, 'lc-bar').length, 3, 'turn mode: one bar per turn')
+assert.equal(byClass(tr, 'lc-turn').length, 3, 'turn strip still has one block per turn')
+const turnOn = byClass(tr, 'lc-gran-on')
+assert.equal(turnOn[0].args[2], 'Turn', 'turn button is active after switching')
+
+// the turn bar carries the LAST step's info: hover T1's bar (seq 2, step 1)
+const turnBars = byClass(tr, 'lc-bar')
+const t1Bar = turnBars.find(b => b.args[1].key === 2)
+assert.ok(t1Bar, 'T1 is aggregated into its last step (seq 2)')
+t1Bar.args[1].onMouseEnter()
+tr = renderView()
+assert.match(detailStep(tr), /T1 · step 1/, 'turn bar shows the last step info')
+ctxSlots[3][1](null)
+
+// back to step granularity
+granBtns = byClass(tr, 'lc-gran-btn')
+granBtns[0].args[1].onClick()
+tr = renderView()
+assert.equal(byClass(tr, 'lc-bar').length, 4, 'back to one bar per step')
+assert.equal(byClass(tr, 'lc-gran-on')[0].args[2], 'Step', 'step button active again')
+
+console.log('✔ chart render test passed (fixed-width bars, scroll container, turn ranges, hover linking, overview tooltip, turn strip, granularity toggle)')

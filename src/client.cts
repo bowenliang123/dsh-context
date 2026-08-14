@@ -141,6 +141,7 @@ const DICT_ZH: Record<string, string> = {
   'tools.top': '工具定义 Top：',
   'tools.more': '等 {n} 个',
   'trend.title': '历史趋势',
+  'gran.step': '步骤', 'gran.turn': '轮次',
   'trend.hint': '每次模型请求一段；点击柱子查看详情，✂ 表示压缩/剪枝',
   'trend.empty': '发起一轮对话后，这里会展示每次模型请求的上下文构成',
   'detail.step': 'T{t} · 第 {s} 步',
@@ -182,6 +183,7 @@ const DICT_EN: Record<string, string> = {
   'tools.top': 'Top tool schemas:',
   'tools.more': 'of {n}',
   'trend.title': 'History',
+  'gran.step': 'Step', 'gran.turn': 'Turn',
   'trend.hint': 'one bar per model request; click a bar for details, ✂ marks compaction/prune',
   'trend.empty': 'Send a message and each model request’s context makeup shows up here',
   'detail.step': 'T{t} · step {s}',
@@ -227,6 +229,22 @@ function fmtTime(t: number): string {
   const d = new Date(t)
   function p(x: number) { return (x < 10 ? '0' : '') + x }
   return p(d.getHours()) + ':' + p(d.getMinutes()) + ':' + p(d.getSeconds())
+}
+
+/**
+ * Collapse a per-step request timeline into one bar per turn: each turn is
+ * represented by its LAST step's record (the context state when the turn
+ * finished). Requests of one turn are consecutive in the log, so a run of
+ * equal turns is replaced by its final record.
+ */
+function aggregateByTurn(requests: RequestRecord[]): RequestRecord[] {
+  const out: RequestRecord[] = []
+  for (const req of requests) {
+    const last = out.length > 0 ? out[out.length - 1] : null
+    if (last !== null && (last.turn ?? 0) === (req.turn ?? 0)) out[out.length - 1] = req
+    else out.push(req)
+  }
+  return out
 }
 
 // ---- view components ---------------------------------------------------------
@@ -528,6 +546,7 @@ function makeView(ctx: ClientCtx, t: Translate): (props: ContextViewProps) => Re
     const [hoveredSeq, setHoveredSeq] = React.useState<number | null>(null)
     const [hoverTurn, setHoverTurn] = React.useState<number | null>(null)
     const [tick, setTick] = React.useState(0)
+    const [granularity, setGranularity] = React.useState<'step' | 'turn'>('step')
 
     React.useEffect(() => {
       if (typeof sessionId !== 'string' || sessionId === '') return undefined
@@ -567,26 +586,29 @@ function makeView(ctx: ClientCtx, t: Translate): (props: ContextViewProps) => Re
     const requests = data.requests || []
     const events = data.events || []
     const nodes = data.nodes || []
+    // Display granularity: one bar per step (default) or one bar per turn
+    // (each turn shown by its LAST step's record).
+    const displayRequests = granularity === 'turn' ? aggregateByTurn(requests) : requests
 
     // The detail below follows the pointer: hover previews a bar, a pinned
     // click takes over when the pointer leaves, and both fall back to the
     // newest request. The active turn (for strip/bar highlighting) follows
     // the turn strip hover, or the hovered bar's turn.
     let pinnedReq: RequestRecord | null = null
-    for (const req of requests) if (req.seq === selectedSeq) pinnedReq = req
+    for (const req of displayRequests) if (req.seq === selectedSeq) pinnedReq = req
     let activeReq: RequestRecord | null = null
     if (hoveredSeq !== null) {
-      for (const req of requests) if (req.seq === hoveredSeq) activeReq = req
+      for (const req of displayRequests) if (req.seq === hoveredSeq) activeReq = req
     }
     if (activeReq === null) activeReq = pinnedReq
-    if (activeReq === null && requests.length > 0) activeReq = requests[requests.length - 1]
+    if (activeReq === null && displayRequests.length > 0) activeReq = displayRequests[displayRequests.length - 1]
 
     // The turn highlight is hover-only: the turn strip hover wins, then the
     // hovered bar's turn (no fallback — a pinned or default selection must
     // not keep a turn glowing).
     let activeTurn: number | null = hoverTurn
     if (activeTurn === null && hoveredSeq !== null) {
-      for (const req of requests) if (req.seq === hoveredSeq) { activeTurn = req.turn ?? null; break }
+      for (const req of displayRequests) if (req.seq === hoveredSeq) { activeTurn = req.turn ?? null; break }
     }
 
     const windowPct = data.contextWindow ? Math.min(100, Math.round(current.total / data.contextWindow * 100)) : null
@@ -617,12 +639,21 @@ function makeView(ctx: ClientCtx, t: Translate): (props: ContextViewProps) => Re
       h('div', { className: 'lc-card' },
         h('div', { className: 'lc-card-title' },
           t('trend.title'),
-          h('span', { className: 'lc-card-sub' }, t('trend.hint'))),
-        requests.length === 0
+          h('span', { className: 'lc-card-sub' }, t('trend.hint')),
+          h('div', { className: 'lc-gran' },
+            h('button', {
+              className: 'lc-gran-btn' + (granularity === 'step' ? ' lc-gran-on' : ''),
+              onClick: () => { setGranularity('step') },
+            }, t('gran.step')),
+            h('button', {
+              className: 'lc-gran-btn' + (granularity === 'turn' ? ' lc-gran-on' : ''),
+              onClick: () => { setGranularity('turn') },
+            }, t('gran.turn')))),
+        displayRequests.length === 0
           ? h('div', { className: 'lc-empty' }, t('trend.empty'))
           : h('div', null,
             h(TrendChart, {
-              requests: requests.slice(-80),
+              requests: displayRequests.slice(-80),
               events,
               selectedSeq: pinnedReq ? pinnedReq.seq : null,
               hoveredSeq,
@@ -655,6 +686,10 @@ const STYLES = [
   '.lc-card { background: var(--dsw-alias-bg-layer-1); border: 1px solid var(--dsw-alias-border-l1); border-radius: 10px; padding: 14px 16px; margin-bottom: 14px; }',
   '.lc-card-title { font-weight: 600; margin-bottom: 10px; display: flex; align-items: baseline; gap: 8px; }',
   '.lc-card-sub { font-weight: 400; color: var(--dsw-alias-label-secondary); font-size: 12px; }',
+  '.lc-gran { margin-left: auto; display: flex; gap: 2px; background: var(--dsw-alias-bg-layer-2); border: 1px solid var(--dsw-alias-border-l1); border-radius: 6px; padding: 1px; }',
+  '.lc-gran-btn { border: 0; background: transparent; color: var(--dsw-alias-label-secondary); font-size: 11px; line-height: 1; padding: 3px 8px; border-radius: 5px; cursor: pointer; font-family: inherit; }',
+  '.lc-gran-btn:hover { color: var(--dsw-alias-label-primary); }',
+  '.lc-gran-on, .lc-gran-on:hover { background: var(--dsw-alias-brand-primary); color: #fff; }',
   '.lc-overview-num { margin-bottom: 8px; }',
   '.lc-overview-num b { font-size: 20px; }',
   '.lc-overview-num span { color: var(--dsw-alias-label-secondary); }',
