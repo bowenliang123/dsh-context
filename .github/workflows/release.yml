@@ -1,0 +1,57 @@
+name: Publish to npm
+
+# Fires when a release tag (v*) is pushed — the same tag our release flow
+# creates (`git tag vX.Y.Z && gh release create`). Publishing uses npm
+# Trusted Publishing (OIDC): no long-lived token is needed, and provenance
+# attestations are generated automatically (npm CLI >= 11.5.1 auto-detects
+# the OIDC environment). The npm-side trusted publisher must be configured
+# with this exact workflow filename: `release.yml`.
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  id-token: write # Required for OIDC
+  contents: read
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      # Reads the pinned pnpm version from `packageManager` in package.json.
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '24'
+          registry-url: 'https://registry.npmjs.org'
+          package-manager-cache: false # never use caching in release builds
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+        env:
+          HUSKY: 0 # skip the husky prepare hook in CI
+
+      - name: Build
+        run: pnpm run build
+
+      - name: Test
+        run: pnpm test
+
+      - name: Verify version matches the tag
+        run: |
+          TAG="${{ github.ref_name }}"
+          VER="v$(node -p "require('./package.json').version")"
+          if [ "$TAG" != "$VER" ]; then
+            echo "::error::tag $TAG does not match package version $VER"
+            exit 1
+          fi
+
+      # Trusted publishing (OIDC) — no NODE_AUTH_TOKEN required; npm >= 11.5.1
+      # exchanges the Actions OIDC token for a short-lived publish credential
+      # and attaches provenance automatically.
+      - name: Publish to npm
+        run: npm publish
