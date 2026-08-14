@@ -1,5 +1,5 @@
 /**
- * last-context — Client half.
+ * dsh-context — Client half.
  *
  * Registers a "上下文/Context" tab in the conversation view ring
  * (`conversation.view` slot, beside Chat/Trajectory) and renders the
@@ -420,12 +420,12 @@ return {
     if (localeSvc !== undefined) {
       try {
         ctx.effect(function () {
-          var d1 = localeSvc.register('last-context', 'zh', DICT_ZH)
-          var d2 = localeSvc.register('last-context', 'en', DICT_EN)
+          var d1 = localeSvc.register('dsh-context', 'zh', DICT_ZH)
+          var d2 = localeSvc.register('dsh-context', 'en', DICT_EN)
           return function () { d1(); d2() }
         }, 'locale-dicts')
       } catch (e) { /* dictionaries from an earlier run are still live; reuse them */ }
-      t = localeSvc.bind('last-context')
+      t = localeSvc.bind('dsh-context')
     } else {
       t = function (key) { return DICT_ZH[key] !== undefined ? DICT_ZH[key] : key }
     }

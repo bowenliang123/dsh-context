@@ -1,5 +1,5 @@
 /**
- * last-context — Host half.
+ * dsh-context — Host half.
  *
  * Replays a session's durable event log into a per-request context-composition
  * timeline, and serves it to the Client half over a Package-private
@@ -294,7 +294,7 @@ return {
     var sessionQuery = ctx.get('sessionQuery')
     var sessions = ctx.get('sessions')
     if (sessionQuery === undefined && sessions === undefined) {
-      console.error('last-context: neither sessions nor sessionQuery is available; snapshot RPC disabled')
+      console.error('dsh-context: neither sessions nor sessionQuery is available; snapshot RPC disabled')
       return
     }
 

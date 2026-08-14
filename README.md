@@ -1,12 +1,12 @@
-# last-context
+# dsh-context
 
-A [DeepSeek Harness](https://github.com/deepseek-ai/DeepSeek-Harness) (dsh) plugin that adds a **Context** tab to the web UI — right beside **Chat** and **Trajectory** — so you can see what the model's context window is actually made of, and how it evolves across the conversation.
+A **Context insight panel** for [DeepSeek Harness](https://github.com/deepseek-ai/DeepSeek-Harness) (dsh): a plugin that adds a **Context** tab to the web UI — right beside **Chat** and **Trajectory** — so you can see what the model's context window is actually made of, and how it evolves across the conversation.
 
-![last-context screenshot](docs/screenshot.png)
+![dsh-context screenshot](docs/screenshot.png)
 
 ## Why
 
-Every model request packs the same window from six sources: the system prompt, tool schemas, your messages, injected context (skills, AGENTS.md, runtime snapshots), assistant replies, and tool results. When a conversation degrades or gets compacted, *which part ate the budget* is usually invisible. last-context makes it observable:
+Every model request packs the same window from six sources: the system prompt, tool schemas, your messages, injected context (skills, AGENTS.md, runtime snapshots), assistant replies, and tool results. When a conversation degrades or gets compacted, *which part ate the budget* is usually invisible. dsh-context makes it observable:
 
 - **Current composition** — a stacked bar of the six categories, scaled against the model's context window (the gray track is your remaining headroom), plus the top-5 most expensive tool schemas.
 - **History** — one stacked bar per model request (finer than per-turn), with Y-axis ticks and gridlines. Click any bar for its full breakdown, including the **provider-reported** prompt/output tokens next to the estimate. ✂ marks where compaction/pruning happened — watch the bars drop.
@@ -17,13 +17,13 @@ The UI is bilingual (中文/English) and follows the dsh locale automatically.
 
 ## Install
 
-last-context is a **dynamic Cordis plugin**: two plain-JavaScript halves (`host.js`, `client.js`) loaded into a running dsh process — no build step, no restart.
+dsh-context is a **dynamic Cordis plugin**: two plain-JavaScript halves (`host.js`, `client.js`) loaded into a running dsh process — no build step, no restart.
 
 ### Option 1: ask the agent (easiest)
 
 In any dsh session with the Cordis tools available, say:
 
-> 加载 ~/dev/last-context 里的 dsh 插件（host.js + client.js），用 cordis_define 和 cordis_run 运行
+> 加载 ~/dev/dsh-context 里的 dsh 插件（host.js + client.js），用 cordis_define 和 cordis_run 运行
 
 The agent will define the package and run it; approve the client bundle when prompted, and the **Context** tab appears in every session view.
 
@@ -34,7 +34,7 @@ Call `cordis_define` with the file contents as `code.host` / `code.client`, then
 ```js
 // code.host   = contents of host.js
 // code.client = contents of client.js
-cordis_define({ plugin: { kind: 'new', idPrefix: 'lctx' }, name: 'last-context', purpose: '…', code })
+cordis_define({ plugin: { kind: 'new', idPrefix: 'dctx' }, name: 'dsh-context', purpose: '…', code })
 cordis_run({ pluginId, packageId, mode: 'run' })
 ```
 
