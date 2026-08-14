@@ -8,8 +8,7 @@ import type * as ReactNS from 'react'
 import type { PartsPart } from '../categories'
 import type { ViewKit } from '../viewkit'
 
-const React: typeof ReactNS = require('react')
-const h = React.createElement
+import { React, h } from '../react'
 
 export interface StackedBarProps {
   parts: PartsPart[]

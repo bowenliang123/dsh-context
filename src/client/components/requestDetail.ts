@@ -11,8 +11,7 @@ import { partsOf, CATS } from '../categories'
 import type { StackedBarProps } from './stackedBar'
 import type { ViewKit } from '../viewkit'
 
-const React: typeof ReactNS = require('react')
-const h = React.createElement
+import { React, h } from '../react'
 
 export interface RequestDetailProps {
   request: RequestRecord | null

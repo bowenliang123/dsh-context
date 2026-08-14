@@ -26,8 +26,7 @@ import { makeStatsBoard } from './statsBoard'
 import { makeLegend, makeStackedBar } from './stackedBar'
 import { aggregateByTurn, attachMarkers, makeTrendChart } from './trendChart'
 
-const React: typeof ReactNS = require('react')
-const h = React.createElement
+import { React, h } from '../react'
 
 export interface ContextViewProps { sessionId?: string }
 
@@ -85,16 +84,14 @@ export function makeContextView(ctx: ClientCtx, kit: ViewKit): (props: ContextVi
       // The data only serves the visible UI: pause polling while the tab is
       // hidden and refresh immediately when it becomes visible again.
       const timerId = setInterval(() => {
-        if (typeof document === 'undefined' || document.visibilityState !== 'hidden') load()
+        if (document.visibilityState !== 'hidden') load()
       }, 2000)
-      const onVisible = () => {
-        if (typeof document !== 'undefined' && document.visibilityState === 'visible') load()
-      }
-      if (typeof document !== 'undefined') document.addEventListener('visibilitychange', onVisible)
+      const onVisible = () => { if (document.visibilityState === 'visible') load() }
+      document.addEventListener('visibilitychange', onVisible)
       return () => {
         alive = false
         clearInterval(timerId)
-        if (typeof document !== 'undefined') document.removeEventListener('visibilitychange', onVisible)
+        document.removeEventListener('visibilitychange', onVisible)
       }
     }, [sessionId])
 

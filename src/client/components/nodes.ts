@@ -7,8 +7,7 @@ import type { SurfaceNode } from '../../shared/types'
 import { CATS } from '../categories'
 import type { ViewKit } from '../viewkit'
 
-const React: typeof ReactNS = require('react')
-const h = React.createElement
+import { React, h } from '../react'
 
 export interface NodeListProps { nodes: SurfaceNode[]; dropped: number }
 

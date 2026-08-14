@@ -10,8 +10,7 @@ import type * as ReactNS from 'react'
 import type { ContextEventRecord, RequestRecord } from '../../shared/types'
 import type { ViewKit } from '../viewkit'
 
-const React: typeof ReactNS = require('react')
-const h = React.createElement
+import { React, h } from '../react'
 
 export function makeStatsBoard(kit: ViewKit): (props: {
   requests: RequestRecord[]

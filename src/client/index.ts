@@ -15,14 +15,13 @@
  * beyond the bundled source.
  */
 
-import type * as ReactNS from 'react'
 import { DICT_EN, DICT_ZH } from './i18n'
 import type { ClientCtx } from './services'
 import { STYLES } from './styles'
-import { makeView } from './view'
+import { makeContextView } from './components/contextView'
+import { makeViewKit } from './viewkit'
 
-const React: typeof ReactNS = require('react')
-const h = React.createElement
+import { React, h } from './react'
 
 function apply(ctx: ClientCtx): void {
   // Bilingual dictionaries; the tab label thunk and all UI text follow the
@@ -46,7 +45,7 @@ function apply(ctx: ClientCtx): void {
     }
   }, 'dsh-context: styles')
 
-  const ContextView = makeView(ctx, t)
+  const ContextView = makeContextView(ctx, makeViewKit(t))
   ctx.slots.inject('conversation.view', () => {
     return ctx.slots.register(
       // order 20 renders right of Chat (0) and Trajectory (10).

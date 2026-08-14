@@ -10,8 +10,7 @@ import type { ContextEventRecord, RequestRecord } from '../../shared/types'
 import { CATS } from '../categories'
 import type { ViewKit } from '../viewkit'
 
-const React: typeof ReactNS = require('react')
-const h = React.createElement
+import { React, h } from '../react'
 
 export interface TrendChartProps {
   requests: RequestRecord[]
