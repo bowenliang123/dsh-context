@@ -57,12 +57,15 @@ Open any session and click **上下文 / Context** (to the right of Chat and Tra
 - **Transport**: host ↔ browser over a generic **Connection RPC channel** (`/dsh-context`, `ctx.connection.rpc` — the same channel mechanism the api gateway uses). The host half registers a `snapshot` endpoint; the client half calls it via `ctx.connection.rpc.call`.
 - **Incremental fold**: per-session fold state lives in the Host half, so each poll only processes newly appended events — reopening the tab is instant.
 - **Events decoded**: `request/header` (system prompt + tool schemas), surface events with `surfaceOp` (append/replace — compaction rewrites history in place), `compaction/summary|prune`, `assistant/message.usage` (real provider tokens), and message `source` metadata (`plugin` forms, `skill-invocation`) for injection events.
-- **Architecture**: `src/host.js` is a plain ESM Cordis plugin (zero dependencies) loaded by the `dsh-context` loader row; `src/client.js` is the browser half, wrapped at build time into the web boot's closure-factory bundle (`window.__ModuleLoader__.load`). The client renders with bare `React.createElement` — theme-native via dsh CSS variables, bilingual via the client `locale` service.
+- **Architecture**: `src/host.ts` is a plain ESM Cordis plugin (zero runtime dependencies) loaded by the `dsh-context` loader row; `src/client.cts` is the browser half, transpiled and wrapped at build time into the web boot's closure-factory bundle (`window.__ModuleLoader__.load`). The client renders with bare `React.createElement` — theme-native via dsh CSS variables, bilingual via the client `locale` service. Both halves are TypeScript with strict mode and local (drift-free) service contracts.
 
 ## Development
 
 ```sh
-node scripts/build.mjs   # writes lib/index.js (host) + lib/client.js (client bundle)
+npm install            # devDependencies only — the plugin itself stays dependency-free
+npm run typecheck      # tsc --noEmit (strict)
+npm run build          # esbuild: lib/index.js (host) + lib/client.js (client bundle)
+npm test               # typecheck + functional tests for both halves
 ```
 
 `build.mjs` also smoke-checks the outputs (both halves must parse; the host half must import with the `name`/`inject`/`apply` plugin shape).
@@ -71,11 +74,12 @@ node scripts/build.mjs   # writes lib/index.js (host) + lib/client.js (client bu
 
 | File | Role |
 | --- | --- |
-| `src/host.js` | Host half: incremental log fold, category accounting, `/dsh-context` snapshot RPC |
-| `src/client.js` | Client half: tab registration, bilingual chart UI |
+| `src/host.ts` | Host half (strict TS): incremental log fold, category accounting, `/dsh-context` snapshot RPC |
+| `src/client.cts` | Client half (strict TS, CJS-flavored for the browser bundle): tab registration, bilingual chart UI |
+| `tsconfig.json` | Strict typecheck config (noEmit; esbuild does the transpiling) |
 | `package.json` | `dsh.bundle` (patch layer) + `dsh.client` (web UI) manifests |
 | `cordis.patch.yml` | The bundle's patch layer: inserts the `dsh-context` row |
-| `scripts/build.mjs` | Zero-dependency build of `lib/index.js` + `lib/client.js` |
+| `scripts/build.mjs` | esbuild-based build of `lib/index.js` + `lib/client.js` |
 | `docs/screenshot.png` | The UI in action |
 
 ## License

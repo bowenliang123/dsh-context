@@ -9,16 +9,129 @@
  *
  * This file is the body of the package's `./client` bundle: build.mjs wraps
  * it into the web boot handoff (`window.__ModuleLoader__.load({id, factory})`),
- * so it runs inside the browser module table. React arrives via the injected
- * `require` (a platform seed word), UI text is bilingual (zh/en) through the
- * client `locale` service, and the Host sends structured event/node records
- * which this half localizes.
+ * so it runs inside the browser module table. Everything here must be
+ * TYPE-ONLY or runtime-free of imports (verbatimModuleSyntax enforces it):
+ * React arrives via the injected `require`, UI text is bilingual (zh/en)
+ * through the client `locale` service, and the Host sends structured
+ * event/node records which this half localizes.
  */
 
-var React = require('react')
-var h = React.createElement
+import type { Context } from '@deepseek-ai/cordis'
+import type * as ReactNS from 'react'
 
-var DICT_ZH = {
+/** React comes from the browser module table (`require('react')`). */
+const React: typeof ReactNS = require('react')
+const h = React.createElement
+
+// ---- local service contracts (typed subset of the client surface) -----------
+//
+// The `@deepseek-ai/*` service type packages publish broken dependency chains
+// on npm, so this plugin declares the exact client API surface it consumes.
+// These are TYPE-ONLY: the runtime services come from the user's harness.
+
+type RpcResult<T> = { ok: true; value: T } | { ok: false; error: { code?: string; message?: string } }
+
+interface ClientConnectionRpc {
+  call(channel: string, endpoint: string, payload: unknown): Promise<RpcResult<unknown>>
+}
+
+interface LocaleService {
+  register(ns: string, dicts: Record<string, Record<string, string>>): () => void
+  bind(ns: string): (key: string, params?: Record<string, string | number>) => string
+  subscribe(fn: () => void): () => void
+}
+
+interface SlotRegistration {
+  name: string
+  id: string
+  order: number
+  label: () => string
+}
+
+interface SlotsService {
+  inject(name: string, callback: () => unknown): unknown
+  register(
+    registration: SlotRegistration,
+    component: (props: { sessionId?: string }) => unknown,
+  ): unknown
+}
+
+/** The client context: cordis plus the services this plugin injects. */
+type ClientCtx = Context & {
+  connection: { rpc: ClientConnectionRpc }
+  locale: LocaleService
+  slots: SlotsService
+}
+
+// ---- snapshot wire contract (mirrors the Host half) --------------------------
+
+type Category = 'user' | 'inject' | 'assistant' | 'tool'
+
+interface Snapshot {
+  ok: boolean
+  model?: string
+  provider?: string
+  contextWindow?: number
+  current: {
+    system: number
+    tools: number
+    user: number
+    inject: number
+    assistant: number
+    tool: number
+    total: number
+  }
+  toolList: { name: string; tokens: number }[]
+  requests: RequestRecord[]
+  events: ContextEventRecord[]
+  nodes: SurfaceNode[]
+  droppedNodes: number
+}
+
+interface SurfaceNode {
+  seq: number
+  cat: Category
+  tokens: number
+  form?: string
+  text?: string
+  tool?: string
+  err?: boolean
+  skill?: string
+  calls?: string[]
+}
+
+interface RequestRecord {
+  turn?: number
+  step?: number
+  time: number
+  seq: number
+  system: number
+  tools: number
+  user: number
+  inject: number
+  assistant: number
+  tool: number
+  total: number
+  prompt?: number
+  output?: number
+}
+
+interface ContextEventRecord {
+  seq: number
+  time: number
+  kind: 'compaction' | 'prune' | 'inject' | 'model'
+  form?: string
+  tokens?: number
+  count?: number
+  sub?: string
+  name?: string
+  from?: string
+  to?: string
+}
+
+// ---- dictionaries ------------------------------------------------------------
+
+const DICT_ZH: Record<string, string> = {
   'tab': '上下文',
   'cat.system': '系统提示', 'cat.tools': '工具定义', 'cat.user': '用户消息',
   'cat.inject': '注入上下文', 'cat.assistant': '助手回复', 'cat.tool': '工具结果',
@@ -59,7 +172,7 @@ var DICT_ZH = {
   'node.snapshot': '快照: ',
 }
 
-var DICT_EN = {
+const DICT_EN: Record<string, string> = {
   'tab': 'Context',
   'cat.system': 'System', 'cat.tools': 'Tool schemas', 'cat.user': 'User',
   'cat.inject': 'Injected', 'cat.assistant': 'Assistant', 'cat.tool': 'Tool results',
@@ -100,26 +213,43 @@ var DICT_EN = {
   'node.snapshot': 'snapshot: ',
 }
 
-var EVENT_ICONS = { compaction: '✂', prune: '✂', inject: '＋', model: '⇄' }
+const EVENT_ICONS: Record<string, string> = { compaction: '✂', prune: '✂', inject: '＋', model: '⇄' }
 
-function fmt(n) {
+type Translate = (key: string, params?: Record<string, string | number>) => string
+
+function fmt(n: number | null | undefined): string {
   if (n === undefined || n === null || isNaN(n)) return '—'
   if (n >= 1000) return (n / 1000).toFixed(1) + 'k'
   return String(Math.round(n))
 }
 
-function fmtTime(t) {
-  var d = new Date(t)
-  function p(x) { return (x < 10 ? '0' : '') + x }
+function fmtTime(t: number): string {
+  const d = new Date(t)
+  function p(x: number) { return (x < 10 ? '0' : '') + x }
   return p(d.getHours()) + ':' + p(d.getMinutes()) + ':' + p(d.getSeconds())
 }
 
-function makeView(ctx, t) {
-  function tr(key, vars) {
+// ---- view components ---------------------------------------------------------
+
+interface PartsPart { key: string; color: string; value: number }
+interface StackedBarProps { parts: PartsPart[]; max?: number; height?: number }
+interface TrendChartProps {
+  requests: RequestRecord[]
+  events: ContextEventRecord[]
+  selectedSeq: number | null
+  onSelect: (seq: number | null) => void
+}
+interface RequestDetailProps { request: RequestRecord | null }
+interface EventListProps { events: ContextEventRecord[] }
+interface NodeListProps { nodes: SurfaceNode[]; dropped: number }
+interface ContextViewProps { sessionId?: string }
+
+function makeView(ctx: ClientCtx, t: Translate): (props: ContextViewProps) => ReactNS.ReactElement {
+  function tr(key: string, vars?: Record<string, string | number>): string {
     return t(key, vars)
   }
 
-  var CATS = [
+  const CATS: { key: Category | 'system' | 'tools'; color: string }[] = [
     { key: 'system', color: '#6366f1' },
     { key: 'tools', color: '#f59e0b' },
     { key: 'user', color: '#22c55e' },
@@ -128,21 +258,21 @@ function makeView(ctx, t) {
     { key: 'tool', color: '#14b8a6' },
   ]
 
-  function catLabel(key) { return t('cat.' + key) }
+  function catLabel(key: string): string { return t('cat.' + key) }
 
-  function eventLabel(ev) {
+  function eventLabel(ev: ContextEventRecord): string {
     if (ev.kind === 'compaction') return tr('ev.compaction', { n: ev.count || 0 })
     if (ev.kind === 'prune') return t('ev.prune')
     if (ev.kind === 'model') return tr('ev.model', { a: ev.from || '?', b: ev.to || '?' })
     if (ev.kind === 'inject') {
       if (ev.sub === 'skill') return tr('ev.skill', { name: ev.name || '?' })
-      var base = t('form.' + (ev.form || 'context'))
+      const base = t('form.' + (ev.form || 'context'))
       return ev.name ? base + ' · ' + ev.name : base
     }
     return ev.kind
   }
 
-  function nodeText(n) {
+  function nodeText(n: SurfaceNode): string {
     if (n.cat === 'tool') {
       return t('node.toolResult') + (n.tool ? ' ← ' + n.tool : '') + (n.err ? ' ⚠' : '')
     }
@@ -154,16 +284,16 @@ function makeView(ctx, t) {
     return t('node.nonText')
   }
 
-  function StackedBar(props) {
+  function StackedBar(props: StackedBarProps): ReactNS.ReactElement {
     // props.parts: [{key,color,value}]; optional props.max: when max exceeds
     // the parts' total, the remainder shows as empty track.
-    var total = 0
-    for (var i = 0; i < props.parts.length; i++) total += props.parts[i].value
-    var scale = props.max !== undefined && props.max > total ? props.max : total
+    let total = 0
+    for (const p of props.parts) total += p.value
+    const scale = props.max !== undefined && props.max > total ? props.max : total
     return h('div', { className: 'lc-stacked', style: { height: (props.height || 14) + 'px' } },
       total <= 0
         ? null
-        : props.parts.map(function (p) {
+        : props.parts.map(p => {
           if (!p.value) return null
           return h('div', {
             key: p.key,
@@ -173,11 +303,11 @@ function makeView(ctx, t) {
         }))
   }
 
-  function Legend(props) {
-    var total = 0
-    for (var i = 0; i < props.parts.length; i++) total += props.parts[i].value
+  function Legend(props: { parts: PartsPart[] }): ReactNS.ReactElement {
+    let total = 0
+    for (const p of props.parts) total += p.value
     return h('div', { className: 'lc-legend' },
-      props.parts.map(function (p) {
+      props.parts.map(p => {
         return h('span', { key: p.key, className: 'lc-chip' },
           h('i', { style: { background: p.color } }),
           catLabel(p.key) + ' ' + fmt(p.value),
@@ -185,31 +315,30 @@ function makeView(ctx, t) {
       }))
   }
 
-  function partsOf(breakdown) {
-    return CATS.map(function (c) {
+  function partsOf(breakdown: Snapshot['current'] | RequestRecord): PartsPart[] {
+    return CATS.map(c => {
       return { key: c.key, color: c.color, value: breakdown[c.key] || 0 }
     })
   }
 
   // Plot height in px (the marker lane above it is 18px).
-  var CHART_H = 112
+  const CHART_H = 112
   // Fixed column geometry: constant bar width keeps sparse histories from
   // stretching bars, and dense histories scroll horizontally instead of
   // compressing. The turn tick row below mirrors the same column grid.
-  var BAR_W = 14
-  var BAR_GAP = 2
+  const BAR_W = 14
+  const BAR_GAP = 2
 
-  function TrendChart(props) {
-    var requests = props.requests
-    var maxTotal = 1
-    for (var i = 0; i < requests.length; i++) if (requests[i].total > maxTotal) maxTotal = requests[i].total
+  function TrendChart(props: TrendChartProps): ReactNS.ReactElement {
+    const requests = props.requests
+    let maxTotal = 1
+    for (const req of requests) if (req.total > maxTotal) maxTotal = req.total
 
     // Compaction/prune markers: attach each to the first request logged after it.
-    var markers = {}
-    for (var m = 0; m < props.events.length; m++) {
-      var ev = props.events[m]
+    const markers: Record<number, ContextEventRecord> = {}
+    for (const ev of props.events) {
       if (ev.kind !== 'compaction' && ev.kind !== 'prune') continue
-      for (var r = 0; r < requests.length; r++) {
+      for (let r = 0; r < requests.length; r++) {
         if (requests[r].seq >= ev.seq) {
           if (!markers[r]) markers[r] = ev
           break
@@ -218,20 +347,20 @@ function makeView(ctx, t) {
     }
 
     // Consecutive requests of the same turn collapse into one labeled range.
-    var groups = []
-    for (var g = 0; g < requests.length; g++) {
-      var grp = groups.length > 0 ? groups[groups.length - 1] : null
-      if (grp === null || grp.turn !== requests[g].turn) {
-        grp = { turn: requests[g].turn, count: 0 }
+    const groups: { turn: number; count: number }[] = []
+    for (const req of requests) {
+      let grp = groups.length > 0 ? groups[groups.length - 1] : null
+      if (grp === null || grp.turn !== req.turn) {
+        grp = { turn: req.turn ?? 0, count: 0 }
         groups.push(grp)
       }
       grp.count++
     }
 
     // Stick to the newest bars unless the user scrolled away from the end.
-    var scrollRef = React.useRef(null)
-    React.useEffect(function () {
-      var el = scrollRef.current
+    const scrollRef = React.useRef<HTMLDivElement | null>(null)
+    React.useEffect(() => {
+      const el = scrollRef.current
       if (el === null) return
       if (el.scrollLeft + el.clientWidth >= el.scrollWidth - 24) el.scrollLeft = el.scrollWidth
     })
@@ -245,22 +374,22 @@ function makeView(ctx, t) {
         h('div', { className: 'lc-chart' },
           h('div', { className: 'lc-grid lc-grid-top' }),
           h('div', { className: 'lc-grid lc-grid-mid' }),
-          requests.map(function (req, i) {
-            var selected = props.selectedSeq === req.seq
-            var tip = tr('tip.step', { t: req.turn, s: req.step }) + ' · ' + fmtTime(req.time) + '\n'
+          requests.map((req, i) => {
+            const selected = props.selectedSeq === req.seq
+            const tip = tr('tip.step', { t: req.turn ?? 0, s: req.step ?? 0 }) + ' · ' + fmtTime(req.time) + '\n'
               + tr('tip.total', { n: fmt(req.total) })
               + (req.prompt !== undefined ? tr('tip.actual', { n: fmt(req.prompt) }) : '') + '\n'
-              + CATS.map(function (c) { return catLabel(c.key) + ' ' + fmt(req[c.key] || 0) }).join(' / ')
+              + CATS.map(c => catLabel(c.key) + ' ' + fmt(req[c.key] || 0)).join(' / ')
             return h('div', {
               key: req.seq,
               className: 'lc-bar' + (selected ? ' lc-bar-selected' : ''),
               title: tip,
-              onClick: function () { props.onSelect(selected ? null : req.seq) },
+              onClick: () => { props.onSelect(selected ? null : req.seq) },
             },
               markers[i] ? h('span', { className: 'lc-bar-marker', title: eventLabel(markers[i]) }, '✂') : null,
               h('div', { className: 'lc-bar-stack' },
-                CATS.map(function (c) {
-                  var v = req[c.key] || 0
+                CATS.map(c => {
+                  const v = req[c.key] || 0
                   if (!v) return null
                   // px heights: the stack's height is content-driven, so
                   // percentage heights would collapse against an indefinite base.
@@ -268,7 +397,7 @@ function makeView(ctx, t) {
                 })))
           })),
         h('div', { className: 'lc-turns' },
-          groups.map(function (grp, gi) {
+          groups.map((grp, gi) => {
             // One column per bar plus the shared gap; the flex gap between
             // ticks restores the inter-group gap, so tick spans line up with
             // their bars exactly.
@@ -280,20 +409,20 @@ function makeView(ctx, t) {
           }))))
   }
 
-  function RequestDetail(props) {
-    var req = props.request
+  function RequestDetail(props: RequestDetailProps): ReactNS.ReactElement | null {
+    const req = props.request
     if (!req) return null
     return h('div', { className: 'lc-detail' },
       h('div', { className: 'lc-detail-head' },
-        h('b', null, tr('detail.step', { t: req.turn, s: req.step })),
+        h('b', null, tr('detail.step', { t: req.turn ?? 0, s: req.step ?? 0 })),
         h('span', null, fmtTime(req.time)),
         h('span', null, tr('detail.estTotal', { n: fmt(req.total) })),
         req.prompt !== undefined ? h('span', { className: 'lc-actual' }, tr('detail.actual', { n: fmt(req.prompt) })) : null,
         req.output !== undefined ? h('span', null, tr('detail.output', { n: fmt(req.output) })) : null),
       h(StackedBar, { parts: partsOf(req), height: 10 }),
       h('div', { className: 'lc-detail-rows' },
-        CATS.map(function (c) {
-          var v = req[c.key] || 0
+        CATS.map(c => {
+          const v = req[c.key] || 0
           return h('div', { key: c.key, className: 'lc-detail-row' },
             h('i', { style: { background: c.color } }),
             h('span', { className: 'lc-detail-label' }, catLabel(c.key)),
@@ -304,14 +433,14 @@ function makeView(ctx, t) {
         })))
   }
 
-  function EventList(props) {
+  function EventList(props: EventListProps): ReactNS.ReactElement {
     if (props.events.length === 0) {
       return h('div', { className: 'lc-empty' }, t('events.empty'))
     }
-    var sorted = props.events.slice().reverse()
+    const sorted = props.events.slice().reverse()
     return h('div', { className: 'lc-events' },
-      sorted.map(function (ev, i) {
-        var label = eventLabel(ev)
+      sorted.map((ev, i) => {
+        const label = eventLabel(ev)
         return h('div', { key: ev.seq + '-' + i, className: 'lc-event' },
           h('span', { className: 'lc-event-icon lc-event-' + ev.kind }, EVENT_ICONS[ev.kind] || '•'),
           h('span', { className: 'lc-event-label', title: label }, label),
@@ -321,17 +450,17 @@ function makeView(ctx, t) {
       }))
   }
 
-  function NodeList(props) {
+  function NodeList(props: NodeListProps): ReactNS.ReactElement {
     if (props.nodes.length === 0) {
       return h('div', { className: 'lc-empty' }, t('nodes.empty'))
     }
-    var catColor = {}
-    CATS.forEach(function (c) { catColor[c.key] = c.color })
-    var rows = props.nodes.slice().reverse()
+    const catColor: Record<string, string> = {}
+    for (const c of CATS) catColor[c.key] = c.color
+    const rows = props.nodes.slice().reverse()
     return h('div', { className: 'lc-nodes' },
       props.dropped > 0 ? h('div', { className: 'lc-nodes-more' }, tr('nodes.more', { n: props.dropped })) : null,
-      rows.map(function (n) {
-        var text = nodeText(n)
+      rows.map(n => {
+        const text = nodeText(n)
         return h('div', { key: n.seq, className: 'lc-node' },
           h('i', { style: { background: catColor[n.cat] || '#999' } }),
           h('span', { className: 'lc-node-preview', title: text }, text),
@@ -339,44 +468,39 @@ function makeView(ctx, t) {
       }))
   }
 
-  function ContextView(props) {
-    var sessionId = props.sessionId
-    var state = React.useState(null)
-    var data = state[0]
-    var setData = state[1]
-    var errState = React.useState(null)
-    var error = errState[0]
-    var setError = errState[1]
-    var selState = React.useState(null)
-    var selectedSeq = selState[0]
-    var setSelectedSeq = selState[1]
-    var tickState = React.useState(0)
-    var setTick = tickState[1]
+  function ContextView(props: ContextViewProps): ReactNS.ReactElement {
+    const sessionId = props.sessionId
+    const [data, setData] = React.useState<Snapshot | null>(null)
+    const [error, setError] = React.useState<string | null>(null)
+    const [selectedSeq, setSelectedSeq] = React.useState<number | null>(null)
+    const [tick, setTick] = React.useState(0)
 
-    React.useEffect(function () {
+    React.useEffect(() => {
       if (typeof sessionId !== 'string' || sessionId === '') return undefined
-      var alive = true
-      var load = function () {
+      let alive = true
+      const load = () => {
         // Generic Connection RPC channel served by the Host half.
-        ctx.connection.rpc.call('/dsh-context', 'snapshot', { sessionId: sessionId }).then(function (res) {
+        ctx.connection.rpc.call('/dsh-context', 'snapshot', { sessionId }).then(res => {
           if (!alive) return
-          if (res && res.ok) { setData(res.value); setError(null) }
+          if (res && res.ok) { setData(res.value as Snapshot); setError(null) }
           else setError(res && res.error ? String(res.error.message || res.error.code) : 'failed')
-        }, function (err) {
-          if (alive) setError(String(err && err.message ? err.message : err))
+        }, (err: unknown) => {
+          if (alive) setError(String(err instanceof Error ? err.message : err))
         })
       }
       load()
-      var timerId = setInterval(load, 2000)
-      return function () { alive = false; clearInterval(timerId) }
+      const timerId = setInterval(load, 2000)
+      return () => { alive = false; clearInterval(timerId) }
     }, [sessionId])
 
     // Re-render on locale switch.
-    React.useEffect(function () {
-      var localeSvc = ctx.get('locale')
+    React.useEffect(() => {
+      const localeSvc = ctx.get('locale') as LocaleService | undefined
       if (!localeSvc) return undefined
-      return localeSvc.subscribe(function () { setTick(function (x) { return x + 1 }) })
+      return localeSvc.subscribe(() => setTick(x => x + 1))
     }, [])
+
+    void tick
 
     if (error) {
       return h('div', { className: 'lc-root' }, h('div', { className: 'lc-empty' }, t('error') + error))
@@ -385,16 +509,16 @@ function makeView(ctx, t) {
       return h('div', { className: 'lc-root' }, h('div', { className: 'lc-empty' }, t('loading')))
     }
 
-    var current = data.current
-    var requests = data.requests || []
-    var events = data.events || []
-    var nodes = data.nodes || []
+    const current = data.current
+    const requests = data.requests || []
+    const events = data.events || []
+    const nodes = data.nodes || []
 
-    var selReq = null
-    for (var i = 0; i < requests.length; i++) if (requests[i].seq === selectedSeq) selReq = requests[i]
+    let selReq: RequestRecord | null = null
+    for (const req of requests) if (req.seq === selectedSeq) selReq = req
     if (!selReq && requests.length > 0) selReq = requests[requests.length - 1]
 
-    var windowPct = data.contextWindow ? Math.min(100, Math.round(current.total / data.contextWindow * 100)) : null
+    const windowPct = data.contextWindow ? Math.min(100, Math.round(current.total / data.contextWindow * 100)) : null
 
     return h('div', { className: 'lc-root' },
 
@@ -407,13 +531,13 @@ function makeView(ctx, t) {
         h('div', { className: 'lc-overview-num' },
           h('b', null, fmt(current.total)),
           h('span', null, data.contextWindow
-            ? ' / ' + fmt(data.contextWindow) + ' ' + tr('overview.ofWindow', { p: windowPct })
+            ? ' / ' + fmt(data.contextWindow) + ' ' + tr('overview.ofWindow', { p: windowPct ?? 0 })
             : ' ' + t('overview.estimate'))),
         h(StackedBar, { parts: partsOf(current), height: 16, max: data.contextWindow }),
         h(Legend, { parts: partsOf(current) }),
         (data.toolList && data.toolList.length > 0) ? h('div', { className: 'lc-tools' },
           t('tools.top'),
-          data.toolList.slice().sort(function (a, b) { return b.tokens - a.tokens }).slice(0, 5).map(function (tool) {
+          data.toolList.slice().sort((a, b) => b.tokens - a.tokens).slice(0, 5).map(tool => {
             return h('span', { key: tool.name, className: 'lc-tool-chip' }, tool.name + ' ' + fmt(tool.tokens))
           }),
           data.toolList.length > 5 ? h('span', { className: 'lc-card-sub' }, ' ' + tr('tools.more', { n: data.toolList.length })) : null) : null),
@@ -426,19 +550,19 @@ function makeView(ctx, t) {
         requests.length === 0
           ? h('div', { className: 'lc-empty' }, t('trend.empty'))
           : h('div', null,
-            h(TrendChart, { requests: requests.slice(-80), events: events, selectedSeq: selReq ? selReq.seq : null, onSelect: setSelectedSeq }),
+            h(TrendChart, { requests: requests.slice(-80), events, selectedSeq: selReq ? selReq.seq : null, onSelect: setSelectedSeq }),
             h(RequestDetail, { request: selReq }))),
 
       // ---- events + messages ----
       h('div', { className: 'lc-cols' },
         h('div', { className: 'lc-card lc-col' },
           h('div', { className: 'lc-card-title' }, t('events.title')),
-          h(EventList, { events: events })),
+          h(EventList, { events })),
         h('div', { className: 'lc-card lc-col' },
           h('div', { className: 'lc-card-title' },
             t('nodes.title'),
             h('span', { className: 'lc-card-sub' }, t('nodes.hint'))),
-          h(NodeList, { nodes: nodes, dropped: data.droppedNodes || 0 }))),
+          h(NodeList, { nodes, dropped: data.droppedNodes || 0 }))),
 
       h('div', { className: 'lc-foot' }, t('footer')))
   }
@@ -446,7 +570,7 @@ function makeView(ctx, t) {
   return ContextView
 }
 
-var STYLES = [
+const STYLES = [
   '.lc-root { padding: 16px 20px 32px; overflow-y: auto; height: 100%; box-sizing: border-box; color: var(--dsw-alias-label-primary); font-size: 13px; }',
   '.lc-card { background: var(--dsw-alias-bg-layer-1); border: 1px solid var(--dsw-alias-border-l1); border-radius: 10px; padding: 14px 16px; margin-bottom: 14px; }',
   '.lc-card-title { font-weight: 600; margin-bottom: 10px; display: flex; align-items: baseline; gap: 8px; }',
@@ -514,34 +638,34 @@ var STYLES = [
   '.lc-foot { color: var(--dsw-alias-label-secondary); font-size: 12px; margin-top: 4px; }',
 ].join('\n')
 
-function apply(ctx) {
+function apply(ctx: ClientCtx): void {
   // Bilingual dictionaries; the tab label thunk and all UI text follow the
   // active locale through the bound translate (missing keys fall back to
   // zh, then the key itself). The registration rides ctx.effect, so a stop
   // or HMR reload disposes it.
-  ctx.effect(function () {
+  ctx.effect(() => {
     return ctx.locale.register('dsh-context', { zh: DICT_ZH, en: DICT_EN })
   }, 'dsh-context: dictionaries')
-  var t = ctx.locale.bind('dsh-context')
+  const t = ctx.locale.bind('dsh-context')
 
   // Theme-native styles, injected as a plugin-owned <style> tag (the web
   // boot loader claims and removes tags carrying data-plugin on unload).
-  ctx.effect(function () {
-    var tag = document.createElement('style')
+  ctx.effect(() => {
+    const tag = document.createElement('style')
     tag.setAttribute('data-plugin', 'dsh-context')
     tag.textContent = STYLES
     document.head.appendChild(tag)
-    return function () {
+    return () => {
       if (tag.parentNode !== null) tag.parentNode.removeChild(tag)
     }
   }, 'dsh-context: styles')
 
-  var ContextView = makeView(ctx, t)
-  ctx.slots.inject('conversation.view', function () {
+  const ContextView = makeView(ctx, t)
+  ctx.slots.inject('conversation.view', () => {
     return ctx.slots.register(
       // order 20 renders right of Chat (0) and Trajectory (10).
-      { name: 'conversation.view', id: 'context', order: 20, label: function () { return t('tab') } },
-      function (props) { return h(ContextView, props) },
+      { name: 'conversation.view', id: 'context', order: 20, label: () => t('tab') },
+      props => h(ContextView, props),
     )
   })
 }
@@ -549,5 +673,5 @@ function apply(ctx) {
 module.exports = {
   name: 'dsh-context',
   inject: ['connection', 'slots', 'locale'],
-  apply: apply,
+  apply,
 }

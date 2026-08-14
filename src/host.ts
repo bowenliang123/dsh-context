@@ -1,10 +1,10 @@
 /**
  * dsh-context — Host half (installed package entry).
  *
- * A plain Cordis plugin module (ESM, zero dependencies) loaded by the harness
- * as the `dsh-context` loader row. It replays a session's durable event log
- * into a per-request context-composition timeline and serves it to the
- * Client half over a generic Connection RPC channel (`/dsh-context`).
+ * A plain Cordis plugin module (ESM, zero runtime dependencies) loaded by the
+ * harness as the `dsh-context` loader row. It replays a session's durable
+ * event log into a per-request context-composition timeline and serves it to
+ * the Client half over a generic Connection RPC channel (`/dsh-context`).
  *
  * Performance: live sessions are folded straight from the in-memory log
  * (`sessions.get(id).events` — no clone, no parse) and the fold is
@@ -17,21 +17,165 @@
  * Labels are sent structured (kind/form/name/count) so the Client localizes.
  */
 
+import type { Context } from '@deepseek-ai/cordis'
+
 export const name = 'dsh-context'
 
 /** Required services: the generic Connection RPC registry (host half). */
 export const inject = ['connection']
 
-// ---- harness token-meter heuristic (mirrors dsh-token-meter/estimate.ts) ----
-var CHARS_PER_TOKEN = 4
-var BLOCK_OVERHEAD = 4
-var ROLE_OVERHEAD = 4
+// ---- local service contracts ------------------------------------------------
+//
+// The `@deepseek-ai/*` service type packages publish broken dependency chains
+// on npm (e.g. `dsh-paths` is missing), so this third-party plugin declares
+// the exact API surface it consumes against the documented harness contracts.
+// These are TYPE-ONLY: the runtime services come from the user's harness.
 
-function estimateBlocks(blocks) {
-  var tokens = 0
+/** A minimal session-log event, as folded by this plugin. */
+export interface SessionEvent {
+  seq: number
+  type: string
+  time: number
+  data?: unknown
+  surfaceOp?: unknown
+}
+
+interface SessionLike {
+  readonly events: readonly SessionEvent[]
+}
+
+interface SessionStoreLike {
+  get(id: string): SessionLike | undefined
+}
+
+interface SessionQueryLike {
+  listEvents(id: string): Promise<readonly unknown[]>
+  readSession(id: string): Promise<{ events?: readonly SessionEvent[] }>
+}
+
+/** The generic Connection RPC channel registry (`ctx.connection.rpc`). */
+interface HostConnectionRpc {
+  handle(
+    channel: string,
+    handler: (endpoint: string, payload: unknown, signal: AbortSignal) => Promise<RpcResult<unknown>>,
+    options: { authority: 'trusted-host' | 'loopback' },
+  ): () => Promise<void>
+}
+
+declare module '@deepseek-ai/cordis' {
+  interface Context {
+    connection: { rpc: HostConnectionRpc }
+    sessions: SessionStoreLike
+    sessionQuery: SessionQueryLike
+  }
+}
+
+// ---- wire envelope (mirrors the harness RpcResult shape) --------------------
+
+type RpcError = { code: string; message: string; details: unknown }
+type RpcResult<T> = { ok: true; value: T } | { ok: false; error: RpcError }
+
+// ---- snapshot model (shared wire contract with the Client half) -------------
+
+export type Category = 'user' | 'inject' | 'assistant' | 'tool'
+
+export interface Snapshot {
+  ok: boolean
+  model?: string
+  provider?: string
+  contextWindow?: number
+  current: {
+    system: number
+    tools: number
+    user: number
+    inject: number
+    assistant: number
+    tool: number
+    total: number
+  }
+  toolList: { name: string; tokens: number }[]
+  requests: RequestRecord[]
+  events: ContextEventRecord[]
+  nodes: SurfaceNode[]
+  droppedNodes: number
+}
+
+export interface SurfaceNode {
+  seq: number
+  cat: Category
+  tokens: number
+  form?: string
+  text?: string
+  tool?: string
+  err?: boolean
+  skill?: string
+  calls?: string[]
+}
+
+export interface RequestRecord {
+  turn?: number
+  step?: number
+  time: number
+  seq: number
+  system: number
+  tools: number
+  user: number
+  inject: number
+  assistant: number
+  tool: number
+  total: number
+  prompt?: number
+  output?: number
+}
+
+export interface ContextEventRecord {
+  seq: number
+  time: number
+  kind: 'compaction' | 'prune' | 'inject' | 'model'
+  form?: string
+  tokens?: number
+  count?: number
+  sub?: string
+  name?: string
+  from?: string
+  to?: string
+}
+
+interface FoldState {
+  n: number
+  surface: SurfaceNode[]
+  sums: Record<Category, number>
+  systemTokens: number
+  toolsTokens: number
+  toolList: { name: string; tokens: number }[]
+  model: string | undefined
+  provider: string | undefined
+  lastModel: string | undefined
+  contextWindow: number | undefined
+  requests: RequestRecord[]
+  events: ContextEventRecord[]
+  callNames: Record<string, string>
+}
+
+// ---- harness token-meter heuristic (mirrors dsh-token-meter/estimate.ts) ----
+
+const CHARS_PER_TOKEN = 4
+const BLOCK_OVERHEAD = 4
+const ROLE_OVERHEAD = 4
+
+interface ContentBlock {
+  type: string
+  text?: string
+  name?: string
+  arguments?: string
+  content?: ContentBlock[]
+  callId?: string
+}
+
+function estimateBlocks(blocks: ContentBlock[] | undefined): number {
+  let tokens = 0
   if (!Array.isArray(blocks)) return 0
-  for (var i = 0; i < blocks.length; i++) {
-    var block = blocks[i]
+  for (const block of blocks) {
     if (block === null || typeof block !== 'object') continue
     switch (block.type) {
       case 'text':
@@ -52,25 +196,24 @@ function estimateBlocks(blocks) {
   return tokens
 }
 
-function estimateMessage(message) {
-  return estimateBlocks(message && message.content) + ROLE_OVERHEAD
+function estimateMessage(message: { content?: ContentBlock[] } | undefined | null): number {
+  return estimateBlocks(message?.content) + ROLE_OVERHEAD
 }
 
-function estimateSystem(text) {
+function estimateSystem(text: unknown): number {
   if (typeof text !== 'string' || text.length === 0) return 0
   return Math.ceil(text.length / CHARS_PER_TOKEN) + ROLE_OVERHEAD
 }
 
-function estimateToolSchema(tool) {
+function estimateToolSchema(tool: unknown): number {
   return Math.ceil(JSON.stringify(tool).length / CHARS_PER_TOKEN) + BLOCK_OVERHEAD
 }
 
 // ---- content extraction -----------------------------------------------------
 
-function firstText(blocks) {
+function firstText(blocks: ContentBlock[] | undefined): string {
   if (!Array.isArray(blocks)) return ''
-  for (var i = 0; i < blocks.length; i++) {
-    var b = blocks[i]
+  for (const b of blocks) {
     if (b && b.type === 'text' && typeof b.text === 'string' && b.text.trim() !== '') {
       return b.text.replace(/\s+/g, ' ').trim().slice(0, 80)
     }
@@ -78,17 +221,25 @@ function firstText(blocks) {
   return ''
 }
 
-function toolCallNames(blocks) {
-  var names = []
+function toolCallNames(blocks: ContentBlock[] | undefined): string[] {
+  const names: string[] = []
   if (!Array.isArray(blocks)) return names
-  for (var i = 0; i < blocks.length; i++) {
-    var b = blocks[i]
+  for (const b of blocks) {
     if (b && b.type === 'tool-call' && typeof b.name === 'string') names.push(b.name)
   }
   return names
 }
 
-function isInjection(source) {
+interface MessageSource {
+  kind?: string
+  form?: string
+  name?: string
+  plugin?: string
+  summary?: string
+  sections?: { name?: string }[]
+}
+
+function isInjection(source: MessageSource | undefined): source is MessageSource {
   // plugin context (AGENTS.md, snapshots, notices, …) and user-explicit skill
   // invocations both ride user-role messages with a declared form.
   return source !== null && typeof source === 'object'
@@ -97,7 +248,7 @@ function isInjection(source) {
 
 // ---- the incremental fold -----------------------------------------------------
 
-function createFold() {
+function createFold(): FoldState {
   return {
     n: 0, // number of log events already folded
     surface: [], // { seq, cat, tokens, form?, text?, tool?, err?, skill?, calls? }
@@ -115,57 +266,74 @@ function createFold() {
   }
 }
 
-function categoryOf(type, message) {
+function categoryOf(type: string, message: { source?: MessageSource } | undefined): Category {
   if (type === 'assistant/message') return 'assistant'
   if (type === 'tool/result') return 'tool'
-  if (isInjection(message && message.source)) return 'inject'
+  if (isInjection(message?.source)) return 'inject'
   return 'user'
 }
 
-function applySurface(st, ev, type, data, message) {
-  var cat = categoryOf(type, message)
-  var node = { seq: ev.seq, cat: cat, tokens: estimateMessage(message) }
-  var source = message && message.source
-  var form = source && source.form
+interface SurfaceEventLike {
+  seq: number
+  surfaceOp?: unknown
+}
+
+interface MessageLike {
+  content?: ContentBlock[]
+  source?: MessageSource
+  error?: boolean
+}
+
+function applySurface(
+  st: FoldState,
+  ev: SurfaceEventLike,
+  type: string,
+  data: { error?: boolean } | undefined,
+  message: MessageLike | undefined,
+): SurfaceNode {
+  const cat = categoryOf(type, message)
+  const node: SurfaceNode = { seq: ev.seq, cat, tokens: estimateMessage(message) }
+  const source = message?.source
+  const form = source?.form
   if (typeof form === 'string') node.form = form
   if (type === 'assistant/message') {
-    var text = firstText(message && message.content)
+    const text = firstText(message?.content)
     if (text !== '') node.text = text
     else {
-      var names = toolCallNames(message && message.content)
+      const names = toolCallNames(message?.content)
       if (names.length > 0) node.calls = names.slice(0, 3)
     }
   } else if (type === 'tool/result') {
-    var block = message && message.content && message.content[0]
-    var tname = block && block.callId !== undefined ? st.callNames[block.callId] : undefined
+    const block = message?.content?.[0]
+    const tname = block && block.callId !== undefined ? st.callNames[block.callId] : undefined
     if (tname) node.tool = tname
-    if (data && data.error) node.err = true
-  } else if (source && source.kind === 'skill-invocation') {
+    if (data?.error) node.err = true
+  } else if (source?.kind === 'skill-invocation') {
     node.skill = typeof source.name === 'string' ? source.name : '?'
-  } else if (source && source.kind === 'plugin') {
+  } else if (source?.kind === 'plugin') {
     if (source.form === 'notice' && typeof source.summary === 'string') node.text = source.summary
     else if (source.form === 'snapshot' && Array.isArray(source.sections)) {
-      node.text = source.sections.map(function (s) { return s && s.name }).filter(Boolean).join(', ').slice(0, 80)
+      node.text = source.sections.map(s => s?.name).filter(Boolean).join(', ').slice(0, 80)
     } else {
-      var ptext = firstText(message && message.content)
+      const ptext = firstText(message?.content)
       if (ptext !== '') node.text = ptext
     }
   } else {
-    var utext = firstText(message && message.content)
+    const utext = firstText(message?.content)
     if (utext !== '') node.text = utext
   }
 
-  var op = ev.surfaceOp
+  const op = ev.surfaceOp as { op?: string; start?: number; end?: number } | null | undefined
   if (op !== null && typeof op === 'object' && op.op === 'replace') {
-    var si = -1
-    var ei = -1
-    for (var i = 0; i < st.surface.length; i++) {
+    let si = -1
+    let ei = -1
+    for (let i = 0; i < st.surface.length; i++) {
       if (si < 0 && st.surface[i].seq === op.start) si = i
       if (st.surface[i].seq === op.end) { ei = i; break }
     }
     if (si >= 0 && ei >= si) {
-      var removed = st.surface.splice(si, ei - si + 1, node)
-      for (var r = 0; r < removed.length; r++) st.sums[removed[r].cat] -= removed[r].tokens
+      const removed = st.surface.splice(si, ei - si + 1, node)
+      for (const r of removed) st.sums[r.cat] -= r.tokens
       st.sums[cat] += node.tokens
       return node
     }
@@ -175,24 +343,29 @@ function applySurface(st, ev, type, data, message) {
   return node
 }
 
-function foldInto(st, events) {
-  for (var e = st.n; e < events.length; e++) {
-    var ev = events[e]
+function foldInto(st: FoldState, events: readonly SessionEvent[]): void {
+  for (let e = st.n; e < events.length; e++) {
+    const ev = events[e]
     if (ev === null || typeof ev !== 'object') continue
-    var data = ev.data
+    const data = ev.data as Record<string, unknown> | undefined
     switch (ev.type) {
       case 'request/header': {
-        var header = data && data.header ? data.header : {}
-        var tools = Array.isArray(header.tools) ? header.tools : []
-        st.toolList = tools.map(function (t) {
-          return { name: typeof t.name === 'string' ? t.name : '?', tokens: estimateToolSchema(t) }
-        })
-        st.toolsTokens = st.toolList.reduce(function (a, t) { return a + t.tokens }, 0)
+        const header = (data?.header ?? {}) as {
+          system?: unknown
+          tools?: unknown[]
+          config?: { model?: unknown; provider?: unknown }
+        }
+        const tools = Array.isArray(header.tools) ? header.tools : []
+        st.toolList = tools.map(t => ({
+          name: typeof (t as { name?: unknown }).name === 'string' ? (t as { name: string }).name : '?',
+          tokens: estimateToolSchema(t),
+        }))
+        st.toolsTokens = st.toolList.reduce((a, t) => a + t.tokens, 0)
         if (tools.length > 0) st.toolsTokens += BLOCK_OVERHEAD
         st.systemTokens = estimateSystem(header.system)
         if (header.config && typeof header.config.model === 'string') st.model = header.config.model
         if (header.config && typeof header.config.provider === 'string') st.provider = header.config.provider
-        if (data && data.reason === 'change' && st.model && st.lastModel && st.model !== st.lastModel) {
+        if (data?.reason === 'change' && st.model && st.lastModel && st.model !== st.lastModel) {
           st.events.push({ seq: ev.seq, time: ev.time, kind: 'model', from: st.lastModel, to: st.model })
         }
         if (st.model) st.lastModel = st.model
@@ -204,13 +377,16 @@ function foldInto(st, events) {
         if (data && typeof data.provider === 'string') st.provider = data.provider
         break
       case 'tool/call':
-        if (data && data.callId !== undefined && typeof data.name === 'string') st.callNames[data.callId] = data.name
+        if (data && data.callId !== undefined && typeof data.name === 'string') st.callNames[String(data.callId)] = data.name
         break
       case 'user/message': {
-        var node = applySurface(st, ev, ev.type, data, data)
-        var source = data && data.source
+        const msg = data as unknown as MessageLike
+        const node = applySurface(st, ev, ev.type, data, msg)
+        const source = msg?.source
         if (isInjection(source)) {
-          var rec = { seq: ev.seq, time: ev.time, kind: 'inject', form: source.form || 'context', tokens: node.tokens }
+          const rec: ContextEventRecord = {
+            seq: ev.seq, time: ev.time, kind: 'inject', form: source.form || 'context', tokens: node.tokens,
+          }
           if (source.kind === 'skill-invocation') {
             rec.sub = 'skill'
             rec.name = typeof source.name === 'string' ? source.name : '?'
@@ -222,28 +398,31 @@ function foldInto(st, events) {
         break
       }
       case 'tool/result':
-        applySurface(st, ev, ev.type, data, data && data.message)
+        applySurface(st, ev, ev.type, data, data as unknown as MessageLike)
         break
       case 'assistant/message': {
         // Snapshot the request exactly as dispatched: current surface + header,
         // before this response joins the surface.
-        var usage = data && data.usage
-        var record = {
-          turn: data && data.turn, step: data && data.step, time: ev.time, seq: ev.seq,
+        const usage = data?.usage as { inputTokens?: number; cacheReadTokens?: number; cacheWriteTokens?: number; outputTokens?: number } | undefined
+        const total = st.systemTokens + st.toolsTokens + st.sums.user + st.sums.inject + st.sums.assistant + st.sums.tool
+        const record: RequestRecord = {
+          turn: data && typeof data.turn === 'number' ? data.turn : undefined,
+          step: data && typeof data.step === 'number' ? data.step : undefined,
+          time: ev.time, seq: ev.seq,
           system: st.systemTokens,
           tools: st.toolsTokens,
           user: st.sums.user,
           inject: st.sums.inject,
           assistant: st.sums.assistant,
           tool: st.sums.tool,
+          total,
         }
-        record.total = record.system + record.tools + record.user + record.inject + record.assistant + record.tool
         if (usage && typeof usage.inputTokens === 'number') {
           record.prompt = usage.inputTokens + (usage.cacheReadTokens || 0) + (usage.cacheWriteTokens || 0)
           if (typeof usage.outputTokens === 'number') record.output = usage.outputTokens
         }
         st.requests.push(record)
-        applySurface(st, ev, ev.type, data, data && data.message)
+        applySurface(st, ev, ev.type, data, data as unknown as MessageLike)
         break
       }
       case 'compaction/summary':
@@ -268,9 +447,9 @@ function foldInto(st, events) {
   if (st.events.length > 150) st.events = st.events.slice(-150)
 }
 
-function buildResult(st) {
-  var surfaceTotal = st.sums.user + st.sums.inject + st.sums.assistant + st.sums.tool
-  var result = {
+function buildResult(st: FoldState): Snapshot {
+  const surfaceTotal = st.sums.user + st.sums.inject + st.sums.assistant + st.sums.tool
+  const result: Snapshot = {
     ok: true,
     model: st.model,
     provider: st.provider,
@@ -287,9 +466,11 @@ function buildResult(st) {
     toolList: st.toolList,
     requests: st.requests,
     events: st.events,
+    nodes: [],
+    droppedNodes: 0,
   }
   // Bound the payload: the newest surface nodes carry the most signal.
-  var MAX_NODES = 200
+  const MAX_NODES = 200
   result.droppedNodes = Math.max(0, st.surface.length - MAX_NODES)
   result.nodes = st.surface.slice(-MAX_NODES)
   return result
@@ -302,8 +483,14 @@ function buildResult(st) {
 // half and call it from the browser half through `ctx.connection.rpc.call`.
 // Responses use the harness RpcResult envelope ({ok:true,value} | {ok:false,error}).
 
-async function computeSnapshot(ctx, states, sessionId) {
-  var st = states.get(sessionId)
+interface SessionState {
+  fold: FoldState
+  count: number
+  result: Snapshot | null
+}
+
+async function computeSnapshot(ctx: Context, states: Map<string, SessionState>, sessionId: string): Promise<Snapshot> {
+  let st = states.get(sessionId)
   if (st === undefined) {
     st = { fold: createFold(), count: -1, result: null }
     states.set(sessionId, st)
@@ -312,22 +499,22 @@ async function computeSnapshot(ctx, states, sessionId) {
   // Resolve the log sources lazily per call: `sessions` / `sessionQuery` may
   // be provided after this plugin applies, and a replaced service must not
   // leave us holding a stale instance.
-  var sessions = ctx.get('sessions')
-  var sessionQuery = ctx.get('sessionQuery')
+  const sessions = ctx.get('sessions')
+  const sessionQuery = ctx.get('sessionQuery')
 
   // Live sessions fold from the in-memory log — no clone, no disk parse.
-  var live = sessions !== undefined ? sessions.get(sessionId) : undefined
-  var events
+  const live = sessions !== undefined ? sessions.get(sessionId) : undefined
+  let events: readonly SessionEvent[]
   if (live !== undefined) {
     events = live.events
   } else {
     if (sessionQuery === undefined) throw new Error('session is not live and sessionQuery is unavailable')
     if (st.result !== null && st.count >= 0) {
       // Cold logs never grow: probe the lightweight record count only.
-      var records = await sessionQuery.listEvents(sessionId)
+      const records = await sessionQuery.listEvents(sessionId)
       if (records.length === st.count) return st.result
     }
-    var snapshot = await sessionQuery.readSession(sessionId)
+    const snapshot = await sessionQuery.readSession(sessionId)
     events = snapshot && Array.isArray(snapshot.events) ? snapshot.events : []
   }
 
@@ -339,33 +526,32 @@ async function computeSnapshot(ctx, states, sessionId) {
   return st.result
 }
 
-export function apply(ctx) {
+export function apply(ctx: Context): void {
   // sessionId -> { fold state + last built result + the count it reflects }.
-  var states = new Map()
+  const states = new Map<string, SessionState>()
 
-  ctx.effect(function () {
+  ctx.effect(() => {
     return ctx.connection.rpc.handle(
       '/dsh-context',
-      async function (endpoint, payload) {
+      async (endpoint: string, payload: unknown): Promise<RpcResult<Snapshot>> => {
         try {
           if (endpoint !== 'snapshot') {
-            return {
-              ok: false,
-              error: { code: 'internal', message: 'unknown endpoint: ' + endpoint, details: {} },
-            }
+            return { ok: false, error: { code: 'internal', message: `unknown endpoint: ${endpoint}`, details: {} } }
           }
-          var sessionId = payload !== null && typeof payload === 'object' ? payload.sessionId : undefined
+          const sessionId = payload !== null && typeof payload === 'object'
+            ? (payload as { sessionId?: unknown }).sessionId
+            : undefined
           if (typeof sessionId !== 'string' || sessionId === '') {
             return { ok: false, error: { code: 'internal', message: 'missing sessionId', details: {} } }
           }
-          var value = await computeSnapshot(ctx, states, sessionId)
-          return { ok: true, value: value }
+          const value = await computeSnapshot(ctx, states, sessionId)
+          return { ok: true, value }
         } catch (err) {
           return {
             ok: false,
             error: {
               code: 'internal',
-              message: String(err && err.message ? err.message : err),
+              message: err instanceof Error ? err.message : String(err),
               details: {},
             },
           }
