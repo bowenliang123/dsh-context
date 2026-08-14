@@ -153,7 +153,7 @@ const requireStateful = (spec) => {
 const m2 = { exports: {} }
 const pluginExports2 = factory(requireStateful, m2, globalThis.window, fakeDoc)
 
-const DICT_FOR_TEST = { 'tab': 'Context', 'loading': '…', 'error': 'x', 'detail.step': 'Turn {t} · Step {s}', 'gran.step': 'Step', 'gran.turn': 'Turn', 'detail.turn': 'Turn {t} · {n} steps', 'detail.lastStep': 'last step', 'overview.actual': '· last actual prompt {n}', 'events.at': 'Turn {t} · Step {s}' }
+const DICT_FOR_TEST = { 'tab': 'Context', 'loading': '…', 'error': 'x', 'detail.step': 'Turn {t} · Step {s}', 'gran.step': 'Step', 'gran.turn': 'Turn', 'detail.turn': 'Turn {t} · {n} steps', 'detail.lastStep': 'last step', 'overview.actual': '· last actual prompt {n}', 'events.at': 'Turn {t} · Step {s}', 'events.range': 'Turn {t} · Step {a}→{b}', 'events.rangeTo': 'Turn {a} · Step {as} → Turn {b} · Step {bs}' }
 let viewComponent = null
 const fakeCtx2 = {
   get: () => undefined,
@@ -493,27 +493,31 @@ const fmtTimeLocal = (t) => {
 assert.equal(nodeTimes[0].args[2], fmtTimeLocal(65000), 'formatted time (65000ms)')
 assert.equal(nodeTimes[1].args[2], fmtTimeLocal(1000), 'formatted time (1000ms)')
 
-// ---- context events show the turn/step they contributed to ----
-// The host sends events oldest->newest; the list reverses them. Each event
-// carries the request that follows it (host-stamped); the label renders
-// only when both turn and step are present (in-flight events stay bare).
+// ---- context events show where they sit in the request timeline ----
+// The host sends events oldest->newest; the list reverses them. Boundary
+// events (compaction/prune) show the GAP between the request before and the
+// request after (same-turn "Step a→b", cross-turn "Turn a·s → Turn b·s");
+// inject/model switches keep the single point of the request they belong
+// to; events with no following request (in flight) stay bare.
 ctxSlots[0][1]({
   ...snapshot,
   events: [
-    { seq: 7, kind: 'prune', time: 2000, tokens: 100, turn: 1, step: 0 },
+    { seq: 6, kind: 'prune', time: 1500, tokens: 60, fromTurn: 1, fromStep: 0, turn: 1, step: 1 },
+    { seq: 7, kind: 'prune', time: 2000, tokens: 100, fromTurn: 1, fromStep: 1, turn: 2, step: 0 },
     { seq: 8, kind: 'model', time: 3000, from: 'a', to: 'b', turn: 1, step: 1 },
     { seq: 9, kind: 'inject', time: 4000, tokens: 5, form: 'notice', turn: 2, step: 0 },
-    { seq: 10, kind: 'compaction', time: 5000, tokens: 5000, count: 4 }, // no request after -> unlabeled
+    { seq: 10, kind: 'compaction', time: 5000, tokens: 5000, count: 4, fromTurn: 2, fromStep: 0 }, // no request after -> unlabeled
   ],
 })
 tr = renderView()
 const evRows = byClass(tr, 'lc-event')
-assert.equal(evRows.length, 4, 'event rows rendered newest first')
+assert.equal(evRows.length, 5, 'event rows rendered newest first')
 const atLabels = byClass(tr, 'lc-event-at')
-assert.equal(atLabels.length, 3, 'only stamped events carry a turn/step label')
-assert.equal(atLabels[0].args[2], 'Turn 2 · Step 0', 'inject shows the request it fed')
-assert.equal(atLabels[1].args[2], 'Turn 1 · Step 1', 'model switch shows its request')
-assert.equal(atLabels[2].args[2], 'Turn 1 · Step 0', 'prune shows its request')
+assert.equal(atLabels.length, 4, 'boundary + single-point events carry labels; in-flight stays bare')
+assert.equal(atLabels[0].args[2], 'Turn 2 · Step 0', 'inject keeps the single point of the request it fed')
+assert.equal(atLabels[1].args[2], 'Turn 1 · Step 1', 'model switch keeps the single point')
+assert.equal(atLabels[2].args[2], 'Turn 1 · Step 1 → Turn 2 · Step 0', 'cross-turn boundary shows the gap')
+assert.equal(atLabels[3].args[2], 'Turn 1 · Step 0→1', 'same-turn boundary compresses to a step range')
 ctxSlots[0][1](snapshot) // restore
 tr = renderView()
 assert.equal(byClass(tr, 'lc-event').length, 0, 'event list restored to the empty state')
@@ -523,4 +527,4 @@ const overviewNum = byClass(tr, 'lc-overview-num')[0]
 assert.ok(overviewNum, 'overview number row present')
 assert.match(textOf(overviewNum), /· last actual prompt 83\.0k/, 'overview shows the last actual prompt alongside the estimate')
 
-console.log('✔ chart render test passed (fixed-width bars, scroll container, turn ranges, hover linking, overview tooltip, turn strip, granularity toggle, edge fades, full history, right-anchored default, message times, event turn/step labels, overview actual)')
+console.log('✔ chart render test passed (fixed-width bars, scroll container, turn ranges, hover linking, overview tooltip, turn strip, granularity toggle, edge fades, full history, right-anchored default, message times, event range labels, overview actual)')
