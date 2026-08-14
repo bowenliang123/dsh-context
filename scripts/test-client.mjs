@@ -290,10 +290,14 @@ assert.equal(tip.length, 1, 'hovering a segment shows the tooltip')
 assert.match(textOf(tip[0]), /\(10%\)/, 'tooltip shows the segment share of the total')
 assert.equal(typeof tip[0].args[1].style.left, 'string', 'tooltip is positioned along the pointer')
 
-// ---- turn strip: hovering a turn block highlights its bars (and back) ----
+// ---- turn strip: one color block per turn, aligned with the bars above ----
 let turnBlocks = byClass(tr, 'lc-turn')
 assert.equal(turnBlocks.length, 3, 'one turn block per turn')
 assert.equal(typeof turnBlocks[0].args[1].onMouseEnter, 'function', 'turn blocks carry onMouseEnter')
+const blockColors = turnBlocks.map(b => b.args[1].style.background)
+assert.ok(blockColors.every(c => typeof c === 'string' && c.length > 0), 'turn blocks carry a color')
+assert.notEqual(blockColors[0], blockColors[1], 'consecutive turns get distinct colors')
+assert.equal(turnBlocks[0].args[1].title, 'T1', 'turn blocks carry a full-label tooltip')
 turnBlocks[0].args[1].onMouseEnter() // T1 (covers seq 1 and 2)
 tr = renderView()
 const inTurn = byClass(tr, 'lc-bar-in-turn')

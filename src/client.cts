@@ -356,9 +356,11 @@ function makeView(ctx: ClientCtx, t: Translate): (props: ContextViewProps) => Re
   const CHART_H = 112
   // Fixed column geometry: constant bar width keeps sparse histories from
   // stretching bars, and dense histories scroll horizontally instead of
-  // compressing. The turn tick row below mirrors the same column grid.
+  // compressing. The turn strip below mirrors the same column grid.
   const BAR_W = 14
   const BAR_GAP = 2
+  // Turn strip palette: one color per turn, cycling for long histories.
+  const TURN_COLORS = ['#6366f1', '#f59e0b', '#22c55e', '#a855f7', '#3b82f6', '#14b8a6', '#ef4444', '#ec4899']
 
   function TrendChart(props: TrendChartProps): ReactNS.ReactElement {
     const requests = props.requests
@@ -435,9 +437,11 @@ function makeView(ctx: ClientCtx, t: Translate): (props: ContextViewProps) => Re
                   return h('div', { key: c.key, style: { height: Math.max(1, Math.round(v / maxTotal * CHART_H)) + 'px', background: c.color } })
                 })))
           })),
-        // Turn strip: one block per turn spanning its bars. Hovering a block
-        // highlights that turn's bars in the chart (and hovering a bar
-        // highlights its block — the active turn is shared state).
+        // Turn strip: one COLOR BLOCK per turn, spanning exactly its bars'
+        // columns, so the partition reads at a glance and lines up with the
+        // steps above. Hovering a block highlights that turn's bars in the
+        // chart (and hovering a bar highlights its block — the active turn
+        // is shared hover-only state).
         h('div', { className: 'lc-turns', onMouseLeave: () => { props.onHoverTurn(null) } },
           groups.map((grp, gi) => {
             // One column per bar plus the shared gap; the flex gap between
@@ -447,7 +451,11 @@ function makeView(ctx: ClientCtx, t: Translate): (props: ContextViewProps) => Re
             return h('span', {
               key: 'turn-' + gi,
               className: 'lc-turn' + (on ? ' lc-turn-on' : ''),
-              style: { width: (grp.count * (BAR_W + BAR_GAP) - BAR_GAP) + 'px' },
+              style: {
+                width: (grp.count * (BAR_W + BAR_GAP) - BAR_GAP) + 'px',
+                background: TURN_COLORS[gi % TURN_COLORS.length],
+              },
+              title: 'T' + grp.turn,
               onMouseEnter: () => { props.onHoverTurn(grp.turn) },
             }, 'T' + grp.turn)
           }))))
@@ -682,9 +690,9 @@ const STYLES = [
   '.lc-bar-stack { display: flex; flex-direction: column-reverse; width: 100%; }',
   '.lc-bar-stack > div { width: 100%; }',
   '.lc-bar-marker { position: absolute; top: -16px; left: 50%; transform: translateX(-50%); font-size: 11px; color: var(--dsw-alias-state-warn-primary); }',
-  '.lc-turns { display: flex; gap: 2px; width: max-content; min-width: 100%; }',
-  '.lc-turn { flex: none; min-width: 24px; box-sizing: border-box; text-align: center; font-size: 11px; line-height: 18px; color: var(--dsw-alias-label-secondary); border-top: 1px solid var(--dsw-alias-border-l1); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; cursor: default; transition: color 120ms, background 120ms, border-color 120ms; }',
-  '.lc-turn-on { color: var(--dsw-alias-brand-primary); border-top-color: var(--dsw-alias-brand-primary); font-weight: 600; background: rgba(99,102,241,0.10); }',
+  '.lc-turns { display: flex; gap: 2px; width: max-content; min-width: 100%; margin-top: 4px; }',
+  '.lc-turn { flex: none; min-width: 16px; box-sizing: border-box; text-align: center; font-size: 10px; line-height: 14px; font-weight: 600; color: #fff; border-radius: 3px; height: 14px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; cursor: default; transition: filter 120ms; }',
+  '.lc-turn-on { filter: brightness(1.35); box-shadow: 0 0 0 1px rgba(255,255,255,0.4); }',
   '.lc-detail { margin-top: 12px; border-top: 1px solid var(--dsw-alias-border-l1); padding-top: 12px; }',
   '.lc-detail-head { display: flex; flex-wrap: wrap; gap: 6px 16px; margin-bottom: 8px; color: var(--dsw-alias-label-secondary); }',
   '.lc-detail-head b { color: var(--dsw-alias-label-primary); }',
