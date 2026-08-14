@@ -4,10 +4,13 @@
 # Usage:
 #   NPM_TOKEN=<your npmjs access token> ./scripts/publish.sh        # bump patch if needed
 #   NPM_TOKEN=<token> ./scripts/publish.sh minor                    # force a minor bump
+#   NPM_OTP=<6-digit code> NPM_TOKEN=<token> ./scripts/publish.sh   # 2FA accounts (non-automation tokens)
 #
 # The token is read from the environment only — it is never written to a
 # file. If your token starts with "npm_", it is an npmjs access token and
 # can be passed directly; keep it out of shell history by exporting it.
+# Accounts with 2FA "auth and writes" must pass NPM_OTP (or use an
+# Automation token, which bypasses the one-time password).
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -38,8 +41,10 @@ if [[ "$CURRENT" == "$PUBLISHED" ]]; then
 fi
 
 echo "==> publishing $NAME@$CURRENT"
+OTP_ARGS=()
+if [[ -n "${NPM_OTP:-}" ]]; then OTP_ARGS=(--otp "$NPM_OTP"); fi
 npm publish --access public --registry https://registry.npmjs.org \
-  --//registry.npmjs.org/:_authToken="$NPM_TOKEN"
+  --//registry.npmjs.org/:_authToken="$NPM_TOKEN" "${OTP_ARGS[@]}"
 
 echo "==> verifying"
 LIVE="$(npm view "$NAME" version --registry https://registry.npmjs.org)"
