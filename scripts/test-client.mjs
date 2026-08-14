@@ -152,7 +152,7 @@ const requireStateful = (spec) => {
 const m2 = { exports: {} }
 const pluginExports2 = factory(requireStateful, m2, globalThis.window, fakeDoc)
 
-const DICT_FOR_TEST = { 'tab': 'Context', 'loading': '…', 'error': 'x', 'detail.step': 'T{t} · step {s}', 'gran.step': 'Step', 'gran.turn': 'Turn', 'detail.turn': 'T{t} · {n} steps', 'detail.lastStep': 'last step' }
+const DICT_FOR_TEST = { 'tab': 'Context', 'loading': '…', 'error': 'x', 'detail.step': 'T{t} · step {s}', 'gran.step': 'Step', 'gran.turn': 'Turn', 'detail.turn': 'T{t} · {n} steps', 'detail.lastStep': 'last step', 'overview.actual': '· last actual prompt {n}' }
 let viewComponent = null
 const fakeCtx2 = {
   get: () => undefined,
@@ -234,7 +234,7 @@ const snapshot = {
     { seq: 1, turn: 1, step: 0, time: 1000, system: 10, tools: 20, user: 30, inject: 5, assistant: 15, tool: 20, total: 100, prompt: 95 },
     { seq: 2, turn: 1, step: 1, time: 2000, system: 10, tools: 20, user: 25, inject: 5, assistant: 10, tool: 20, total: 90 },
     { seq: 3, turn: 2, step: 0, time: 3000, system: 10, tools: 20, user: 40, inject: 5, assistant: 12, tool: 20, total: 107 },
-    { seq: 4, turn: 3, step: 0, time: 4000, system: 10, tools: 20, user: 20, inject: 5, assistant: 8, tool: 20, total: 83 },
+    { seq: 4, turn: 3, step: 0, time: 4000, system: 10, tools: 20, user: 20, inject: 5, assistant: 8, tool: 20, total: 83, prompt: 83000 },
   ],
   events: [], nodes: [
     { seq: 1, cat: 'user', tokens: 10, text: 'first message', time: 1000 },
@@ -469,4 +469,9 @@ const fmtTimeLocal = (t) => {
 assert.equal(nodeTimes[0].args[2], fmtTimeLocal(65000), 'formatted time (65000ms)')
 assert.equal(nodeTimes[1].args[2], fmtTimeLocal(1000), 'formatted time (1000ms)')
 
-console.log('✔ chart render test passed (fixed-width bars, scroll container, turn ranges, hover linking, overview tooltip, turn strip, granularity toggle, edge fades, full history, right-anchored default, message times)')
+// ---- overview shows the provider-reported actual prompt of the last request ----
+const overviewNum = byClass(tr, 'lc-overview-num')[0]
+assert.ok(overviewNum, 'overview number row present')
+assert.match(textOf(overviewNum), /· last actual prompt 83\.0k/, 'overview shows the last actual prompt alongside the estimate')
+
+console.log('✔ chart render test passed (fixed-width bars, scroll container, turn ranges, hover linking, overview tooltip, turn strip, granularity toggle, edge fades, full history, right-anchored default, message times, overview actual)')

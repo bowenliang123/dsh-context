@@ -77,6 +77,14 @@ assert.ok(v.events.some(e => e.kind === 'inject' && e.form === 'notice'), 'injec
 assert.ok(v.events.some(e => e.kind === 'compaction'), 'compaction event recorded')
 assert.ok(v.nodes.length >= 4, 'surface nodes folded')
 assert.equal(v.nodes[0].time, 2000, 'nodes carry their event timestamp')
+// Message projection must price CONTENT: assistant replies and tool results
+// carry their message body (data.message), not a flat envelope price.
+const asstNode = v.nodes.find(n => n.seq === 7)
+assert.equal(asstNode.tokens, 9, "assistant 'Hi!' prices its text content (1 + 4 + 4)")
+const toolNode = v.nodes.find(n => n.seq === 6)
+assert.equal(toolNode.tokens, 13, 'tool result prices its nested content (5 + 4 + 4)')
+assert.equal(toolNode.tool, 'bash', 'tool result node names its tool')
+assert.equal(asstNode.text, 'Hi!', 'assistant node carries its text preview')
 
 // -- second snapshot: incremental (same count) must be served from cache --
 const before = await handler('snapshot', { sessionId: 's1' })
@@ -88,6 +96,14 @@ const after = await handler('snapshot', { sessionId: 's1' })
 assert.equal(after.ok, true)
 assert.equal(after.value.requests.length, 2, 'new request folded')
 assert.equal(after.value.requests[1].turn, 2)
+
+// -- an empty-content assistant message (usage-only step) prices 0 tokens --
+live.events.push({ seq: 10, type: 'assistant/message', time: 8000, data: { turn: 2, step: 2, message: { content: [] } } })
+const emptyMsg = await handler('snapshot', { sessionId: 's1' })
+assert.equal(emptyMsg.ok, true)
+const emptyNode = emptyMsg.value.nodes.find(n => n.seq === 10)
+assert.ok(emptyNode, 'usage-only message is still a surface node')
+assert.equal(emptyNode.tokens, 0, 'empty assistant message prices 0, like dsh deriveEventMessage')
 
 // -- error paths --
 const bad = await handler('snapshot', {})

@@ -145,6 +145,7 @@ const DICT_ZH: Record<string, string> = {
   'overview.title': '当前构成',
   'overview.ofWindow': 'tokens（约 {p}%）',
   'overview.estimate': 'tokens（估算）',
+  'overview.actual': '· 上次实际 prompt {n}',
   'tools.top': '工具定义 Top：',
   'tools.more': '等 {n} 个',
   'trend.title': '历史趋势',
@@ -190,6 +191,7 @@ const DICT_EN: Record<string, string> = {
   'overview.title': 'Current composition',
   'overview.ofWindow': 'tokens (~{p}%)',
   'overview.estimate': 'tokens (estimated)',
+  'overview.actual': '· last actual prompt {n}',
   'tools.top': 'Top tool schemas:',
   'tools.more': 'of {n}',
   'trend.title': 'History',
@@ -721,7 +723,15 @@ function makeView(ctx: ClientCtx, t: Translate): (props: ContextViewProps) => Re
           h('b', null, fmt(current.total)),
           h('span', null, data.contextWindow
             ? ' / ' + fmt(data.contextWindow) + ' ' + tr('overview.ofWindow', { p: windowPct ?? 0 })
-            : ' ' + t('overview.estimate'))),
+            : ' ' + t('overview.estimate')),
+          // The provider-reported prompt of the last request is the best
+          // ground truth for what the model actually received; the fixed
+          // density heuristic can undercount CJK-heavy content, so show the
+          // real number alongside the estimate.
+          displayRequests.length > 0 && displayRequests[displayRequests.length - 1].prompt !== undefined
+            ? h('span', { className: 'lc-actual' },
+              tr('overview.actual', { n: fmt(displayRequests[displayRequests.length - 1].prompt ?? 0) }))
+            : null),
         h(StackedBar, { parts: partsOf(current), height: 16, max: data.contextWindow, hoverKey: hoverCat, onHoverKey: setHoverCat }),
         h(Legend, { parts: partsOf(current), hoverKey: hoverCat, onHoverKey: setHoverCat }),
         (data.toolList && data.toolList.length > 0) ? h('div', { className: 'lc-tools' },

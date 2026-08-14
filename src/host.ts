@@ -198,7 +198,16 @@ function estimateBlocks(blocks: ContentBlock[] | undefined): number {
   return tokens
 }
 
-function estimateMessage(message: { content?: ContentBlock[] } | undefined | null): number {
+/**
+ * Price one surface message exactly like dsh's token-meter estimate:
+ * an empty-content assistant/message projects to NO message (it only hosts
+ * usage), so it prices 0; every other message pays content + role framing.
+ */
+function estimateMessage(message: { content?: ContentBlock[] } | undefined | null, emptyIsZero = false): number {
+  if (emptyIsZero && (message === null || message === undefined
+    || !Array.isArray(message.content) || message.content.length === 0)) {
+    return 0
+  }
   return estimateBlocks(message?.content) + ROLE_OVERHEAD
 }
 
@@ -207,6 +216,7 @@ function estimateSystem(text: unknown): number {
   return Math.ceil(text.length / CHARS_PER_TOKEN) + ROLE_OVERHEAD
 }
 
+/** Per-tool price for the top-tools display (the total uses dsh's whole-array price). */
 function estimateToolSchema(tool: unknown): number {
   return Math.ceil(JSON.stringify(tool).length / CHARS_PER_TOKEN) + BLOCK_OVERHEAD
 }
@@ -321,7 +331,14 @@ function applySurface(
   message: MessageLike | undefined,
 ): SurfaceNode {
   const cat = categoryOf(type, message)
-  const node: SurfaceNode = { seq: ev.seq, time: ev.time, cat, tokens: estimateMessage(message) }
+  const node: SurfaceNode = {
+    seq: ev.seq,
+    time: ev.time,
+    cat,
+    // Empty assistant messages project to no model message (usage-only), so
+    // they price 0 — mirroring dsh's deriveEventMessage/estimate.
+    tokens: estimateMessage(message, type === 'assistant/message'),
+  }
   const source = message?.source
   const form = source?.form
   if (typeof form === 'string') node.form = form
@@ -389,8 +406,11 @@ function foldInto(st: FoldState, events: readonly SessionEvent[]): void {
           name: typeof (t as { name?: unknown }).name === 'string' ? (t as { name: string }).name : '?',
           tokens: estimateToolSchema(t),
         }))
-        st.toolsTokens = st.toolList.reduce((a, t) => a + t.tokens, 0)
-        if (tools.length > 0) st.toolsTokens += BLOCK_OVERHEAD
+        // The tools TOTAL uses dsh's whole-array price (one JSON string of
+        // every schema); per-tool prices above are display-only rankings.
+        st.toolsTokens = tools.length > 0
+          ? Math.ceil(JSON.stringify(tools).length / CHARS_PER_TOKEN) + BLOCK_OVERHEAD
+          : 0
         st.systemTokens = estimateSystem(header.system)
         if (header.config && typeof header.config.model === 'string') st.model = header.config.model
         if (header.config && typeof header.config.provider === 'string') st.provider = header.config.provider
@@ -426,9 +446,13 @@ function foldInto(st: FoldState, events: readonly SessionEvent[]): void {
         }
         break
       }
-      case 'tool/result':
-        applySurface(st, ev, ev.type, data, data as unknown as MessageLike)
+      case 'tool/result': {
+        // The model-visible message is data.message (the envelope also
+        // carries callId/error); pricing the envelope would miss all content.
+        const toolMsg = (data?.message ?? null) as MessageLike | undefined
+        applySurface(st, ev, ev.type, data, toolMsg)
         break
+      }
       case 'assistant/message': {
         // Snapshot the request exactly as dispatched: current surface + header,
         // before this response joins the surface.
@@ -451,7 +475,10 @@ function foldInto(st: FoldState, events: readonly SessionEvent[]): void {
           if (typeof usage.outputTokens === 'number') record.output = usage.outputTokens
         }
         st.requests.push(record)
-        applySurface(st, ev, ev.type, data, data as unknown as MessageLike)
+        // The model-visible message is data.message (mirrors dsh's
+        // deriveEventMessage); the envelope also carries turn/step/usage.
+        const asstMsg = (data?.message ?? null) as MessageLike | undefined
+        applySurface(st, ev, ev.type, data, asstMsg)
         break
       }
       case 'compaction/summary':
