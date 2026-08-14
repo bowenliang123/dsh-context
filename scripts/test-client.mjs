@@ -350,13 +350,18 @@ assert.equal(byClass(tr, 'lc-turn').length, 3, 'turn strip still has one block p
 const turnOn = byClass(tr, 'lc-gran-on')
 assert.equal(turnOn[0].args[2], 'Turn', 'turn button is active after switching')
 
-// the turn bar carries the LAST step's info: hover T1's bar (seq 2, step 1)
+// turn bars span their steps' columns and align with their strip blocks
 const turnBars = byClass(tr, 'lc-bar')
 const t1Bar = turnBars.find(b => b.args[1].key === 2)
 assert.ok(t1Bar, 'T1 is aggregated into its last step (seq 2)')
+assert.equal(t1Bar.args[1].style.width, '30px', 'T1 bar spans its two step columns')
+const t1Block = byClass(tr, 'lc-turn')[0]
+assert.equal(t1Block.args[1].style.width, '30px', 'T1 strip block matches the bar width (aligned)')
+assert.equal(turnBars[1].args[1].style.width, '14px', 'single-step turn bar keeps the step column width')
+
 t1Bar.args[1].onMouseEnter()
 tr = renderView()
-assert.match(detailStep(tr), /T1 · step 1/, 'turn bar shows the last step info')
+assert.match(detailStep(tr), /T1 · step 1/, 'turn bar carries the last step record')
 ctxSlots[3][1](null)
 
 // back to step granularity

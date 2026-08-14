@@ -114,6 +114,11 @@ interface RequestRecord {
   total: number
   prompt?: number
   output?: number
+  /**
+   * Turn-mode aggregate marker: the number of steps this turn collapsed
+   * into one bar (set by aggregateByTurn; absent for plain step records).
+   */
+  stepCount?: number
 }
 
 interface ContextEventRecord {
@@ -234,15 +239,23 @@ function fmtTime(t: number): string {
 /**
  * Collapse a per-step request timeline into one bar per turn: each turn is
  * represented by its LAST step's record (the context state when the turn
- * finished). Requests of one turn are consecutive in the log, so a run of
- * equal turns is replaced by its final record.
+ * finished), tagged with the number of steps the turn spans so the bar can
+ * keep the turn's column width and the detail can label it. Requests of one
+ * turn are consecutive in the log, so a run of equal turns is replaced by
+ * its final record.
  */
 function aggregateByTurn(requests: RequestRecord[]): RequestRecord[] {
   const out: RequestRecord[] = []
+  let runSteps = 0
   for (const req of requests) {
     const last = out.length > 0 ? out[out.length - 1] : null
-    if (last !== null && (last.turn ?? 0) === (req.turn ?? 0)) out[out.length - 1] = req
-    else out.push(req)
+    if (last !== null && (last.turn ?? 0) === (req.turn ?? 0)) {
+      runSteps++
+      out[out.length - 1] = { ...req, stepCount: runSteps }
+    } else {
+      runSteps = 1
+      out.push({ ...req, stepCount: 1 })
+    }
   }
   return out
 }
@@ -398,14 +411,18 @@ function makeView(ctx: ClientCtx, t: Translate): (props: ContextViewProps) => Re
     }
 
     // Consecutive requests of the same turn collapse into one labeled range.
-    const groups: { turn: number; count: number }[] = []
+    // `span` is the number of STEP columns the group covers: step records
+    // count one each, turn aggregates count their stepCount, so the strip
+    // blocks always line up with the bars above (in both granularities).
+    const groups: { turn: number; count: number; span: number }[] = []
     for (const req of requests) {
       let grp = groups.length > 0 ? groups[groups.length - 1] : null
-      if (grp === null || grp.turn !== req.turn) {
-        grp = { turn: req.turn ?? 0, count: 0 }
+      if (grp === null || grp.turn !== (req.turn ?? 0)) {
+        grp = { turn: req.turn ?? 0, count: 0, span: 0 }
         groups.push(grp)
       }
       grp.count++
+      grp.span += req.stepCount ?? 1
     }
 
     // Default anchor: the newest bars at the RIGHT edge. The first layout
@@ -455,6 +472,11 @@ function makeView(ctx: ClientCtx, t: Translate): (props: ContextViewProps) => Re
             const selected = props.selectedSeq === req.seq
             const hovered = props.hoveredSeq === req.seq
             const inTurn = props.activeTurn !== null && (req.turn ?? 0) === props.activeTurn
+            // Turn aggregates span their steps' columns, so the bar IS the
+            // turn's width and lines up with its strip block below.
+            const barW = req.stepCount !== undefined
+              ? req.stepCount * (BAR_W + BAR_GAP) - BAR_GAP
+              : BAR_W
             const tip = tr('tip.step', { t: req.turn ?? 0, s: req.step ?? 0 }) + ' · ' + fmtTime(req.time) + '\n'
               + tr('tip.total', { n: fmt(req.total) })
               + (req.prompt !== undefined ? tr('tip.actual', { n: fmt(req.prompt) }) : '') + '\n'
@@ -465,6 +487,7 @@ function makeView(ctx: ClientCtx, t: Translate): (props: ContextViewProps) => Re
                 + (selected ? ' lc-bar-selected' : '')
                 + (hovered ? ' lc-bar-hovered' : '')
                 + (inTurn ? ' lc-bar-in-turn' : ''),
+              style: { width: barW + 'px' },
               title: tip,
               onClick: () => { props.onSelect(selected ? null : req.seq) },
               onMouseEnter: () => { props.onHover(req.seq) },
@@ -494,7 +517,7 @@ function makeView(ctx: ClientCtx, t: Translate): (props: ContextViewProps) => Re
               key: 'turn-' + gi,
               className: 'lc-turn' + (on ? ' lc-turn-on' : ''),
               style: {
-                width: (grp.count * (BAR_W + BAR_GAP) - BAR_GAP) + 'px',
+                width: (grp.span * (BAR_W + BAR_GAP) - BAR_GAP) + 'px',
                 background: TURN_COLORS[gi % TURN_COLORS.length],
               },
               title: 'T' + grp.turn,
@@ -760,7 +783,7 @@ const STYLES = [
   '.lc-bar-stack > div { width: 100%; }',
   '.lc-bar-marker { position: absolute; top: -16px; left: 50%; transform: translateX(-50%); font-size: 11px; color: var(--dsw-alias-state-warn-primary); }',
   '.lc-turns { display: flex; gap: 2px; width: max-content; min-width: 100%; margin-top: 4px; }',
-  '.lc-turn { flex: none; min-width: 16px; box-sizing: border-box; text-align: center; font-size: 10px; line-height: 14px; font-weight: 600; color: #fff; border-radius: 3px; height: 14px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; cursor: default; transition: filter 120ms; }',
+  '.lc-turn { flex: none; box-sizing: border-box; text-align: center; font-size: 10px; line-height: 14px; font-weight: 600; color: #fff; border-radius: 3px; height: 14px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; cursor: default; transition: filter 120ms; }',
   '.lc-turn-on { filter: brightness(1.35); box-shadow: 0 0 0 1px rgba(255,255,255,0.4); }',
   '.lc-detail { margin-top: 12px; border-top: 1px solid var(--dsw-alias-border-l1); padding-top: 12px; }',
   '.lc-detail-head { display: flex; flex-wrap: wrap; gap: 6px 16px; margin-bottom: 8px; color: var(--dsw-alias-label-secondary); }',
