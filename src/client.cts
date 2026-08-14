@@ -800,7 +800,7 @@ const STYLES = [
   '.lc-gran { margin-left: auto; display: flex; gap: 2px; background: var(--dsw-alias-bg-layer-2); border: 1px solid var(--dsw-alias-border-l1); border-radius: 6px; padding: 1px; }',
   '.lc-gran-btn { border: 0; background: transparent; color: var(--dsw-alias-label-secondary); font-size: 11px; line-height: 1; padding: 3px 8px; border-radius: 5px; cursor: pointer; font-family: inherit; }',
   '.lc-gran-btn:hover { color: var(--dsw-alias-label-primary); }',
-  '.lc-gran-on, .lc-gran-on:hover { background: var(--dsw-alias-brand-primary); color: #fff; }',
+  '.lc-gran-on, .lc-gran-on:hover { background: var(--dsw-alias-button-primary-fill); color: var(--dsw-alias-label-primary-foreground); }',
   '.lc-overview-num { margin-bottom: 8px; }',
   '.lc-overview-num b { font-size: 20px; }',
   '.lc-overview-num span { color: var(--dsw-alias-label-secondary); }',
