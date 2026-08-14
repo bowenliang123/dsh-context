@@ -17,28 +17,22 @@ The UI is bilingual (中文/English) and follows the dsh locale automatically.
 
 ## Install
 
-dsh-context is a **dynamic Cordis plugin**: two plain-JavaScript halves (`host.js`, `client.js`) loaded into a running dsh process — no build step, no restart.
+dsh-context ships as a **dsh bundle**: an npm package with a `dsh.bundle` manifest (a `cordis.patch.yml` layer that inserts the plugin row) and a `dsh.client` manifest (the web UI half). No build step, no restart — install it into any profile:
 
-### Option 1: ask the agent (easiest)
-
-In any dsh session with the Cordis tools available, say:
-
-> 加载 ~/dev/dsh-context 里的 dsh 插件（host.js + client.js），用 cordis_define 和 cordis_run 运行
-
-The agent will define the package and run it; approve the client bundle when prompted, and the **Context** tab appears in every session view.
-
-### Option 2: load it yourself
-
-Call `cordis_define` with the file contents as `code.host` / `code.client`, then `cordis_run`:
-
-```js
-// code.host   = contents of host.js
-// code.client = contents of client.js
-cordis_define({ plugin: { kind: 'new', idPrefix: 'dctx' }, name: 'dsh-context', purpose: '…', code })
-cordis_run({ pluginId, packageId, mode: 'run' })
+```sh
+dsh plugin --profile <name> add dsh-context
+dsh --profile <name> web
 ```
 
-> Dynamic plugins are process-local: they disappear when dsh restarts. To make it permanent, wrap the two halves as a plugin package (a `package.json` with a `dsh` field, like [`@deepseek-ai/dsh-client-ui-trajectory`](https://github.com/deepseek-ai/DeepSeek-Harness/tree/master/packages/client/ui-trajectory)) and add a row to your agent preset's `cordis.yml` — see the [dsh plugin docs](https://deepseek-harness.github.io/deepseek-harness/develop/).
+That's it: the `dsh-context` loader row activates the host half, and the web app picks up the package's `./client` bundle and adds the **上下文 / Context** tab to every session view.
+
+To install from this checkout instead (for development), from the repo root:
+
+```sh
+dsh plugin --profile <name> add .
+```
+
+If dsh is run from a source checkout, prefix the commands with `pnpm` (`pnpm dsh plugin ...`).
 
 ## Usage
 
@@ -51,16 +45,40 @@ Open any session and click **上下文 / Context** (to the right of Chat and Tra
 ## How it works
 
 - **Data source**: the session's durable event log. Live sessions are folded straight from the in-memory log (`sessions.get(id).events` — no clone, no disk parse); persisted sessions fall back to `sessionQuery.readSession`.
+- **Transport**: host ↔ browser over a generic **Connection RPC channel** (`/dsh-context`, `ctx.connection.rpc` — the same channel mechanism the api gateway uses). The host half registers a `snapshot` endpoint; the client half calls it via `ctx.connection.rpc.call`.
 - **Incremental fold**: per-session fold state lives in the Host half, so each poll only processes newly appended events — reopening the tab is instant.
 - **Events decoded**: `request/header` (system prompt + tool schemas), surface events with `surfaceOp` (append/replace — compaction rewrites history in place), `compaction/summary|prune`, `assistant/message.usage` (real provider tokens), and message `source` metadata (`plugin` forms, `skill-invocation`) for injection events.
-- **Architecture**: `host.js` folds the log and serves a package-private `snapshot` RPC; `client.js` registers the tab in the `conversation.view` slot and renders with bare `React.createElement` — zero dependencies, theme-native via dsh CSS variables.
+- **Architecture**: `src/host.js` is a plain ESM Cordis plugin (zero dependencies) loaded by the `dsh-context` loader row; `src/client.js` is the browser half, wrapped at build time into the web boot's closure-factory bundle (`window.__ModuleLoader__.load`). The client renders with bare `React.createElement` — theme-native via dsh CSS variables, bilingual via the client `locale` service.
+
+## Development
+
+```sh
+node scripts/build.mjs   # writes lib/index.js (host) + lib/client.js (client bundle)
+```
+
+`build.mjs` also smoke-checks the outputs (both halves must parse; the host half must import with the `name`/`inject`/`apply` plugin shape).
+
+## Publishing
+
+`scripts/publish.sh` builds and publishes to npm as the authenticated user:
+
+```sh
+NPM_TOKEN=<your npmjs access token> ./scripts/publish.sh        # patch bump if the current version is already published
+NPM_TOKEN=<token> ./scripts/publish.sh minor                    # explicit bump level
+```
+
+The token is read from the environment only and never written to disk. The script auto-bumps the version when the current one is already on the registry, so re-running it after a successful publish is a no-op.
 
 ## Files
 
 | File | Role |
 | --- | --- |
-| `host.js` | Host half: incremental log fold, category accounting, `snapshot` RPC |
-| `client.js` | Client half: tab registration, bilingual chart UI |
+| `src/host.js` | Host half: incremental log fold, category accounting, `/dsh-context` snapshot RPC |
+| `src/client.js` | Client half: tab registration, bilingual chart UI |
+| `package.json` | `dsh.bundle` (patch layer) + `dsh.client` (web UI) manifests |
+| `cordis.patch.yml` | The bundle's patch layer: inserts the `dsh-context` row |
+| `scripts/build.mjs` | Zero-dependency build of `lib/index.js` + `lib/client.js` |
+| `scripts/publish.sh` | npm publish with `NPM_TOKEN` |
 | `docs/screenshot.png` | The UI in action |
 
 ## License

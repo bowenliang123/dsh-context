@@ -1,15 +1,21 @@
 /**
- * dsh-context — Client half.
+ * dsh-context — Client half (installed package bundle).
  *
  * Registers a "上下文/Context" tab in the conversation view ring
  * (`conversation.view` slot, beside Chat/Trajectory) and renders the
- * context-composition timeline served by the Host half: current makeup,
- * per-request stacked-bar history, context events, and the live message list.
+ * context-composition timeline served by the Host half over the generic
+ * Connection RPC channel `/dsh-context`: current makeup, per-request
+ * stacked-bar history, context events, and the live message list.
  *
- * UI text is bilingual (zh/en) through the client `locale` service; the Host
- * sends structured event/node records and this half localizes the labels.
+ * This file is the body of the package's `./client` bundle: build.mjs wraps
+ * it into the web boot handoff (`window.__ModuleLoader__.load({id, factory})`),
+ * so it runs inside the browser module table. React arrives via the injected
+ * `require` (a platform seed word), UI text is bilingual (zh/en) through the
+ * client `locale` service, and the Host sends structured event/node records
+ * which this half localizes.
  */
 
+var React = require('react')
 var h = React.createElement
 
 var DICT_ZH = {
@@ -108,11 +114,9 @@ function fmtTime(t) {
   return p(d.getHours()) + ':' + p(d.getMinutes()) + ':' + p(d.getSeconds())
 }
 
-function makeView(ctx, t, localeSvc) {
+function makeView(ctx, t) {
   function tr(key, vars) {
-    var s = t(key)
-    if (vars) for (var k in vars) s = s.replace('{' + k + '}', String(vars[k]))
-    return s
+    return t(key, vars)
   }
 
   var CATS = [
@@ -317,21 +321,23 @@ function makeView(ctx, t, localeSvc) {
       if (typeof sessionId !== 'string' || sessionId === '') return undefined
       var alive = true
       var load = function () {
-        host.call('snapshot', { sessionId: sessionId }).then(function (res) {
+        // Generic Connection RPC channel served by the Host half.
+        ctx.connection.rpc.call('/dsh-context', 'snapshot', { sessionId: sessionId }).then(function (res) {
           if (!alive) return
-          if (res && res.ok) { setData(res); setError(null) }
-          else setError(res && res.error ? String(res.error) : 'failed')
+          if (res && res.ok) { setData(res.value); setError(null) }
+          else setError(res && res.error ? String(res.error.message || res.error.code) : 'failed')
         }, function (err) {
           if (alive) setError(String(err && err.message ? err.message : err))
         })
       }
       load()
-      var dispose = ctx.interval(load, 2000)
-      return function () { alive = false; dispose() }
+      var timerId = setInterval(load, 2000)
+      return function () { alive = false; clearInterval(timerId) }
     }, [sessionId])
 
     // Re-render on locale switch.
     React.useEffect(function () {
+      var localeSvc = ctx.get('locale')
       if (!localeSvc) return undefined
       return localeSvc.subscribe(function () { setTick(function (x) { return x + 1 }) })
     }, [])
@@ -404,106 +410,102 @@ function makeView(ctx, t, localeSvc) {
   return ContextView
 }
 
-return {
-  inject: ['timer'],
-  apply(ctx) {
-    var slots = ctx.get('slots')
-    if (slots === undefined) return
+var STYLES = [
+  '.lc-root { padding: 16px 20px 32px; overflow-y: auto; height: 100%; box-sizing: border-box; color: var(--dsw-alias-label-primary); font-size: 13px; }',
+  '.lc-card { background: var(--dsw-alias-bg-layer-1); border: 1px solid var(--dsw-alias-border-l1); border-radius: 10px; padding: 14px 16px; margin-bottom: 14px; }',
+  '.lc-card-title { font-weight: 600; margin-bottom: 10px; display: flex; align-items: baseline; gap: 8px; }',
+  '.lc-card-sub { font-weight: 400; color: var(--dsw-alias-label-secondary); font-size: 12px; }',
+  '.lc-overview-num { margin-bottom: 8px; }',
+  '.lc-overview-num b { font-size: 20px; }',
+  '.lc-overview-num span { color: var(--dsw-alias-label-secondary); }',
+  '.lc-stacked { display: flex; width: 100%; border-radius: 5px; overflow: hidden; background: rgba(128,128,128,0.18); }',
+  '.lc-stacked > div { height: 100%; }',
+  '.lc-legend { display: flex; flex-wrap: wrap; gap: 6px 14px; margin-top: 10px; }',
+  '.lc-chip { display: inline-flex; align-items: center; gap: 5px; color: var(--dsw-alias-label-primary); }',
+  '.lc-chip i, .lc-detail-row i, .lc-node i { display: inline-block; width: 8px; height: 8px; border-radius: 2px; }',
+  '.lc-chip em { font-style: normal; color: var(--dsw-alias-label-secondary); }',
+  '.lc-tools { margin-top: 10px; color: var(--dsw-alias-label-secondary); display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }',
+  '.lc-tool-chip { background: var(--dsw-alias-bg-layer-2); border-radius: 4px; padding: 1px 7px; font-size: 12px; color: var(--dsw-alias-label-primary); }',
+  '.lc-chartrow { display: flex; gap: 6px; align-items: stretch; }',
+  '.lc-axis { position: relative; width: 40px; height: 130px; padding-top: 18px; box-sizing: border-box; color: var(--dsw-alias-label-secondary); font-size: 11px; }',
+  '.lc-axis span { position: absolute; right: 0; line-height: 1; }',
+  '.lc-axis-top { top: 13px; }',
+  '.lc-axis-mid { top: 69px; }',
+  '.lc-axis-bot { top: 125px; }',
+  '.lc-chart { position: relative; flex: 1; display: flex; align-items: flex-end; gap: 2px; height: 130px; padding-top: 18px; box-sizing: border-box; }',
+  '.lc-grid { position: absolute; left: 0; right: 0; border-top: 1px dashed var(--dsw-alias-border-l1); pointer-events: none; }',
+  '.lc-grid-top { top: 18px; }',
+  '.lc-grid-mid { top: 74px; }',
+  '.lc-bar { position: relative; flex: 1; min-width: 5px; height: 100%; display: flex; align-items: flex-end; cursor: pointer; border-radius: 2px; }',
+  '.lc-bar:hover { background: var(--dsw-alias-bg-layer-2); }',
+  '.lc-bar-selected { outline: 2px solid var(--dsw-alias-brand-primary); outline-offset: 1px; }',
+  '.lc-bar-stack { display: flex; flex-direction: column-reverse; width: 100%; }',
+  '.lc-bar-stack > div { width: 100%; }',
+  '.lc-bar-marker { position: absolute; top: -16px; left: 50%; transform: translateX(-50%); font-size: 11px; color: var(--dsw-alias-state-warn-primary); }',
+  '.lc-detail { margin-top: 12px; border-top: 1px solid var(--dsw-alias-border-l1); padding-top: 12px; }',
+  '.lc-detail-head { display: flex; flex-wrap: wrap; gap: 6px 16px; margin-bottom: 8px; color: var(--dsw-alias-label-secondary); }',
+  '.lc-detail-head b { color: var(--dsw-alias-label-primary); }',
+  '.lc-detail-head .lc-actual { color: var(--dsw-alias-state-success-primary); }',
+  '.lc-detail-rows { margin-top: 10px; display: grid; grid-template-columns: 1fr 1fr; gap: 4px 24px; }',
+  '.lc-detail-row { display: flex; align-items: center; gap: 8px; }',
+  '.lc-detail-label { min-width: 70px; white-space: nowrap; color: var(--dsw-alias-label-secondary); }',
+  '.lc-bar-track { flex: 1; height: 5px; border-radius: 3px; background: rgba(128,128,128,0.18); overflow: hidden; display: block; }',
+  '.lc-bar-fill { display: block; height: 100%; border-radius: 3px; }',
+  '.lc-detail-num { width: 44px; text-align: right; }',
+  '.lc-detail-pct { width: 34px; text-align: right; color: var(--dsw-alias-label-secondary); }',
+  '.lc-cols { display: flex; gap: 14px; flex-wrap: wrap; }',
+  '.lc-col { flex: 1; min-width: 280px; }',
+  '.lc-events, .lc-nodes { display: flex; flex-direction: column; gap: 2px; max-height: 320px; overflow-y: auto; }',
+  '.lc-event { display: flex; align-items: center; gap: 8px; padding: 3px 0; }',
+  '.lc-event-icon { width: 18px; text-align: center; color: var(--dsw-alias-state-warn-primary); }',
+  '.lc-event-icon.lc-event-inject { color: #a855f7; }',
+  '.lc-event-icon.lc-event-model { color: var(--dsw-alias-brand-primary); }',
+  '.lc-event-label { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }',
+  '.lc-event-tokens { color: var(--dsw-alias-state-success-primary); }',
+  '.lc-event-tokens.lc-up { color: var(--dsw-alias-state-warn-primary); }',
+  '.lc-event-time { color: var(--dsw-alias-label-secondary); font-size: 12px; }',
+  '.lc-node { display: flex; align-items: center; gap: 8px; padding: 3px 0; }',
+  '.lc-node-preview { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--dsw-alias-label-primary); }',
+  '.lc-node-tokens { color: var(--dsw-alias-label-secondary); }',
+  '.lc-nodes-more { color: var(--dsw-alias-label-secondary); padding: 3px 0; }',
+  '.lc-empty { color: var(--dsw-alias-label-secondary); padding: 18px 0; text-align: center; }',
+  '.lc-foot { color: var(--dsw-alias-label-secondary); font-size: 12px; margin-top: 4px; }',
+].join('\n')
 
-    // Bilingual dictionaries; the tab label thunk and all UI text follow the
-    // active locale (missing keys fall back to zh, then the key itself).
-    // Registrations ride ctx.effect so a stop/update disposes them; the catch
-    // tolerates dictionaries leaked by an earlier run of this same plugin
-    // (re-registering a live (ns, locale) pair throws).
-    var localeSvc = ctx.get('locale')
-    var t
-    if (localeSvc !== undefined) {
-      try {
-        ctx.effect(function () {
-          var d1 = localeSvc.register('dsh-context', 'zh', DICT_ZH)
-          var d2 = localeSvc.register('dsh-context', 'en', DICT_EN)
-          return function () { d1(); d2() }
-        }, 'locale-dicts')
-      } catch (e) { /* dictionaries from an earlier run are still live; reuse them */ }
-      t = localeSvc.bind('dsh-context')
-    } else {
-      t = function (key) { return DICT_ZH[key] !== undefined ? DICT_ZH[key] : key }
+function apply(ctx) {
+  // Bilingual dictionaries; the tab label thunk and all UI text follow the
+  // active locale through the bound translate (missing keys fall back to
+  // zh, then the key itself). The registration rides ctx.effect, so a stop
+  // or HMR reload disposes it.
+  ctx.effect(function () {
+    return ctx.locale.register('dsh-context', { zh: DICT_ZH, en: DICT_EN })
+  }, 'dsh-context: dictionaries')
+  var t = ctx.locale.bind('dsh-context')
+
+  // Theme-native styles, injected as a plugin-owned <style> tag (the web
+  // boot loader claims and removes tags carrying data-plugin on unload).
+  ctx.effect(function () {
+    var tag = document.createElement('style')
+    tag.setAttribute('data-plugin', 'dsh-context')
+    tag.textContent = STYLES
+    document.head.appendChild(tag)
+    return function () {
+      if (tag.parentNode !== null) tag.parentNode.removeChild(tag)
     }
+  }, 'dsh-context: styles')
 
-    styles.insert([
-      '.lc-root { padding: 16px 20px 32px; overflow-y: auto; height: 100%; box-sizing: border-box; color: var(--dsw-alias-label-primary); font-size: 13px; }',
-      '.lc-card { background: var(--dsw-alias-bg-layer-1); border: 1px solid var(--dsw-alias-border-l1); border-radius: 10px; padding: 14px 16px; margin-bottom: 14px; }',
-      '.lc-card-title { font-weight: 600; margin-bottom: 10px; display: flex; align-items: baseline; gap: 8px; }',
-      '.lc-card-sub { font-weight: 400; color: var(--dsw-alias-label-secondary); font-size: 12px; }',
-      '.lc-overview-num { margin-bottom: 8px; }',
-      '.lc-overview-num b { font-size: 20px; }',
-      '.lc-overview-num span { color: var(--dsw-alias-label-secondary); }',
-      '.lc-stacked { display: flex; width: 100%; border-radius: 5px; overflow: hidden; background: rgba(128,128,128,0.18); }',
-      '.lc-stacked > div { height: 100%; }',
-      '.lc-legend { display: flex; flex-wrap: wrap; gap: 6px 14px; margin-top: 10px; }',
-      '.lc-chip { display: inline-flex; align-items: center; gap: 5px; color: var(--dsw-alias-label-primary); }',
-      '.lc-chip i, .lc-detail-row i, .lc-node i { display: inline-block; width: 8px; height: 8px; border-radius: 2px; }',
-      '.lc-chip em { font-style: normal; color: var(--dsw-alias-label-secondary); }',
-      '.lc-tools { margin-top: 10px; color: var(--dsw-alias-label-secondary); display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }',
-      '.lc-tool-chip { background: var(--dsw-alias-bg-layer-2); border-radius: 4px; padding: 1px 7px; font-size: 12px; color: var(--dsw-alias-label-primary); }',
-      '.lc-chartrow { display: flex; gap: 6px; align-items: stretch; }',
-      '.lc-axis { position: relative; width: 40px; height: 130px; padding-top: 18px; box-sizing: border-box; color: var(--dsw-alias-label-secondary); font-size: 11px; }',
-      '.lc-axis span { position: absolute; right: 0; line-height: 1; }',
-      '.lc-axis-top { top: 13px; }',
-      '.lc-axis-mid { top: 69px; }',
-      '.lc-axis-bot { top: 125px; }',
-      '.lc-chart { position: relative; flex: 1; display: flex; align-items: flex-end; gap: 2px; height: 130px; padding-top: 18px; box-sizing: border-box; }',
-      '.lc-grid { position: absolute; left: 0; right: 0; border-top: 1px dashed var(--dsw-alias-border-l1); pointer-events: none; }',
-      '.lc-grid-top { top: 18px; }',
-      '.lc-grid-mid { top: 74px; }',
-      '.lc-bar { position: relative; flex: 1; min-width: 5px; height: 100%; display: flex; align-items: flex-end; cursor: pointer; border-radius: 2px; }',
-      '.lc-bar:hover { background: var(--dsw-alias-bg-layer-2); }',
-      '.lc-bar-selected { outline: 2px solid var(--dsw-alias-brand-primary); outline-offset: 1px; }',
-      '.lc-bar-stack { display: flex; flex-direction: column-reverse; width: 100%; }',
-      '.lc-bar-stack > div { width: 100%; }',
-      '.lc-bar-marker { position: absolute; top: -16px; left: 50%; transform: translateX(-50%); font-size: 11px; color: var(--dsw-alias-state-warn-primary); }',
-      '.lc-detail { margin-top: 12px; border-top: 1px solid var(--dsw-alias-border-l1); padding-top: 12px; }',
-      '.lc-detail-head { display: flex; flex-wrap: wrap; gap: 6px 16px; margin-bottom: 8px; color: var(--dsw-alias-label-secondary); }',
-      '.lc-detail-head b { color: var(--dsw-alias-label-primary); }',
-      '.lc-detail-head .lc-actual { color: var(--dsw-alias-state-success-primary); }',
-      '.lc-detail-rows { margin-top: 10px; display: grid; grid-template-columns: 1fr 1fr; gap: 4px 24px; }',
-      '.lc-detail-row { display: flex; align-items: center; gap: 8px; }',
-      '.lc-detail-label { min-width: 70px; white-space: nowrap; color: var(--dsw-alias-label-secondary); }',
-      '.lc-bar-track { flex: 1; height: 5px; border-radius: 3px; background: rgba(128,128,128,0.18); overflow: hidden; display: block; }',
-      '.lc-bar-fill { display: block; height: 100%; border-radius: 3px; }',
-      '.lc-detail-num { width: 44px; text-align: right; }',
-      '.lc-detail-pct { width: 34px; text-align: right; color: var(--dsw-alias-label-secondary); }',
-      '.lc-cols { display: flex; gap: 14px; flex-wrap: wrap; }',
-      '.lc-col { flex: 1; min-width: 280px; }',
-      '.lc-events, .lc-nodes { display: flex; flex-direction: column; gap: 2px; max-height: 320px; overflow-y: auto; }',
-      '.lc-event { display: flex; align-items: center; gap: 8px; padding: 3px 0; }',
-      '.lc-event-icon { width: 18px; text-align: center; color: var(--dsw-alias-state-warn-primary); }',
-      '.lc-event-icon.lc-event-inject { color: #a855f7; }',
-      '.lc-event-icon.lc-event-model { color: var(--dsw-alias-brand-primary); }',
-      '.lc-event-label { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }',
-      '.lc-event-tokens { color: var(--dsw-alias-state-success-primary); }',
-      '.lc-event-tokens.lc-up { color: var(--dsw-alias-state-warn-primary); }',
-      '.lc-event-time { color: var(--dsw-alias-label-secondary); font-size: 12px; }',
-      '.lc-node { display: flex; align-items: center; gap: 8px; padding: 3px 0; }',
-      '.lc-node-preview { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--dsw-alias-label-primary); }',
-      '.lc-node-tokens { color: var(--dsw-alias-label-secondary); }',
-      '.lc-nodes-more { color: var(--dsw-alias-label-secondary); padding: 3px 0; }',
-      '.lc-empty { color: var(--dsw-alias-label-secondary); padding: 18px 0; text-align: center; }',
-      '.lc-foot { color: var(--dsw-alias-label-secondary); font-size: 12px; margin-top: 4px; }',
-    ].join('\n'))
+  var ContextView = makeView(ctx, t)
+  ctx.slots.inject('conversation.view', function () {
+    return ctx.slots.register(
+      // order 20 renders right of Chat (0) and Trajectory (10).
+      { name: 'conversation.view', id: 'context', order: 20, label: function () { return t('tab') } },
+      function (props) { return h(ContextView, props) },
+    )
+  })
+}
 
-    var ContextView = makeView(ctx, t, localeSvc)
-    slots.inject('conversation.view', function () {
-      return slots.register(
-        // NOTE: for dynamic packages the client Guard overrides `priority`
-        // with its own page-local rank (negative), so dynamic tabs always sort
-        // BEFORE the shipped priority-0 tabs — the tab currently renders
-        // leftmost by sandbox design. The priority/order pair below takes
-        // effect (right of Trajectory) once the plugin is installed as a real
-        // package in a preset composition instead of dynamically.
-        { name: 'conversation.view', id: 'context', order: 20, priority: 10, label: function () { return t('tab') } },
-        function (props) { return h(ContextView, props) },
-      )
-    })
-  },
+module.exports = {
+  name: 'dsh-context',
+  inject: ['connection', 'slots', 'locale'],
+  apply: apply,
 }

@@ -1,9 +1,10 @@
 /**
- * dsh-context — Host half.
+ * dsh-context — Host half (installed package entry).
  *
- * Replays a session's durable event log into a per-request context-composition
- * timeline, and serves it to the Client half over a Package-private
- * `snapshot` RPC.
+ * A plain Cordis plugin module (ESM, zero dependencies) loaded by the harness
+ * as the `dsh-context` loader row. It replays a session's durable event log
+ * into a per-request context-composition timeline and serves it to the
+ * Client half over a generic Connection RPC channel (`/dsh-context`).
  *
  * Performance: live sessions are folded straight from the in-memory log
  * (`sessions.get(id).events` — no clone, no parse) and the fold is
@@ -15,6 +16,11 @@
  * token-meter (4 chars ≈ 1 token, +4 per content block, +4 role framing).
  * Labels are sent structured (kind/form/name/count) so the Client localizes.
  */
+
+export const name = 'dsh-context'
+
+/** Required services: the generic Connection RPC registry (host half). */
+export const inject = ['connection']
 
 // ---- harness token-meter heuristic (mirrors dsh-token-meter/estimate.ts) ----
 var CHARS_PER_TOKEN = 4
@@ -131,8 +137,8 @@ function applySurface(st, ev, type, data, message) {
     }
   } else if (type === 'tool/result') {
     var block = message && message.content && message.content[0]
-    var name = block && block.callId !== undefined ? st.callNames[block.callId] : undefined
-    if (name) node.tool = name
+    var tname = block && block.callId !== undefined ? st.callNames[block.callId] : undefined
+    if (tname) node.tool = tname
     if (data && data.error) node.err = true
   } else if (source && source.kind === 'skill-invocation') {
     node.skill = typeof source.name === 'string' ? source.name : '?'
@@ -289,54 +295,83 @@ function buildResult(st) {
   return result
 }
 
-return {
-  apply(ctx) {
-    var sessionQuery = ctx.get('sessionQuery')
-    var sessions = ctx.get('sessions')
-    if (sessionQuery === undefined && sessions === undefined) {
-      console.error('dsh-context: neither sessions nor sessionQuery is available; snapshot RPC disabled')
-      return
+// ---- RPC endpoint: /dsh-context snapshot -------------------------------------
+//
+// The generic Connection RPC channel replaces the dynamic-runner
+// `harness.handle` seat: installed packages register a channel on the host
+// half and call it from the browser half through `ctx.connection.rpc.call`.
+// Responses use the harness RpcResult envelope ({ok:true,value} | {ok:false,error}).
+
+async function computeSnapshot(ctx, states, sessionId) {
+  var st = states.get(sessionId)
+  if (st === undefined) {
+    st = { fold: createFold(), count: -1, result: null }
+    states.set(sessionId, st)
+  }
+
+  // Resolve the log sources lazily per call: `sessions` / `sessionQuery` may
+  // be provided after this plugin applies, and a replaced service must not
+  // leave us holding a stale instance.
+  var sessions = ctx.get('sessions')
+  var sessionQuery = ctx.get('sessionQuery')
+
+  // Live sessions fold from the in-memory log — no clone, no disk parse.
+  var live = sessions !== undefined ? sessions.get(sessionId) : undefined
+  var events
+  if (live !== undefined) {
+    events = live.events
+  } else {
+    if (sessionQuery === undefined) throw new Error('session is not live and sessionQuery is unavailable')
+    if (st.result !== null && st.count >= 0) {
+      // Cold logs never grow: probe the lightweight record count only.
+      var records = await sessionQuery.listEvents(sessionId)
+      if (records.length === st.count) return st.result
     }
+    var snapshot = await sessionQuery.readSession(sessionId)
+    events = snapshot && Array.isArray(snapshot.events) ? snapshot.events : []
+  }
 
-    // sessionId -> { fold state + last built result + the count it reflects }.
-    var states = new Map()
+  if (events.length === st.count && st.result !== null) return st.result
+  if (events.length < st.fold.n) st.fold = createFold() // defensive: log replaced
+  foldInto(st.fold, events)
+  st.count = events.length
+  st.result = buildResult(st.fold)
+  return st.result
+}
 
-    harness.handle('snapshot', async function (args) {
-      try {
-        var sessionId = args !== null && typeof args === 'object' ? args.sessionId : undefined
-        if (typeof sessionId !== 'string' || sessionId === '') return { ok: false, error: 'missing sessionId' }
+export function apply(ctx) {
+  // sessionId -> { fold state + last built result + the count it reflects }.
+  var states = new Map()
 
-        var st = states.get(sessionId)
-        if (st === undefined) {
-          st = { fold: createFold(), count: -1, result: null }
-          states.set(sessionId, st)
-        }
-
-        // Live sessions fold from the in-memory log — no clone, no disk parse.
-        var live = sessions !== undefined ? sessions.get(sessionId) : undefined
-        var events
-        if (live !== undefined) {
-          events = live.events
-        } else {
-          if (sessionQuery === undefined) return { ok: false, error: 'session is not live and sessionQuery is unavailable' }
-          if (st.result !== null && st.count >= 0) {
-            // Cold logs never grow: probe the lightweight record count only.
-            var records = await sessionQuery.listEvents(sessionId)
-            if (records.length === st.count) return st.result
+  ctx.effect(function () {
+    return ctx.connection.rpc.handle(
+      '/dsh-context',
+      async function (endpoint, payload) {
+        try {
+          if (endpoint !== 'snapshot') {
+            return {
+              ok: false,
+              error: { code: 'internal', message: 'unknown endpoint: ' + endpoint, details: {} },
+            }
           }
-          var snapshot = await sessionQuery.readSession(sessionId)
-          events = snapshot && Array.isArray(snapshot.events) ? snapshot.events : []
+          var sessionId = payload !== null && typeof payload === 'object' ? payload.sessionId : undefined
+          if (typeof sessionId !== 'string' || sessionId === '') {
+            return { ok: false, error: { code: 'internal', message: 'missing sessionId', details: {} } }
+          }
+          var value = await computeSnapshot(ctx, states, sessionId)
+          return { ok: true, value: value }
+        } catch (err) {
+          return {
+            ok: false,
+            error: {
+              code: 'internal',
+              message: String(err && err.message ? err.message : err),
+              details: {},
+            },
+          }
         }
-
-        if (events.length === st.count && st.result !== null) return st.result
-        if (events.length < st.fold.n) st.fold = createFold() // defensive: log replaced
-        foldInto(st.fold, events)
-        st.count = events.length
-        st.result = buildResult(st.fold)
-        return st.result
-      } catch (err) {
-        return { ok: false, error: String(err && err.message ? err.message : err) }
-      }
-    })
-  },
+      },
+      { authority: 'trusted-host' },
+    )
+  }, 'dsh-context: rpc channel')
 }

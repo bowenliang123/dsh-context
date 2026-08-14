@@ -1,0 +1,46 @@
+{
+  "name": "dsh-context",
+  "version": "0.1.0",
+  "description": "Context insight panel for DeepSeek Harness: a Context tab (beside Chat/Trajectory) showing what the model's context window is made of and how it evolves — composition, per-request history, compactions, injections, and model switches.",
+  "type": "module",
+  "main": "lib/index.js",
+  "exports": {
+    ".": "./lib/index.js",
+    "./client": "./lib/client.js",
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "lib",
+    "cordis.patch.yml",
+    "README.md",
+    "LICENSE"
+  ],
+  "scripts": {
+    "build": "node scripts/build.mjs",
+    "publish": "bash scripts/publish.sh"
+  },
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    },
+    "client": {
+      "inject": [
+        "@deepseek-ai/dsh-client-connection",
+        "@deepseek-ai/dsh-client-locale",
+        "@deepseek-ai/dsh-client-runtime",
+        "@deepseek-ai/dsh-client-ui-conversation"
+      ],
+      "platform": "web"
+    }
+  },
+  "keywords": [
+    "deepseek-harness",
+    "dsh",
+    "cordis",
+    "plugin",
+    "context",
+    "token",
+    "ui"
+  ],
+  "license": "MIT"
+}

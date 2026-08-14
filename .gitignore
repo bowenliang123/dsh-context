@@ -20,6 +20,9 @@ yarn-debug.log*
 yarn-error.log*
 *.log
 
+# Packed tarballs
+*.tgz
+
 # Environment variables
 .env
 .env.local
