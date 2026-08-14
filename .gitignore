@@ -1,0 +1,25 @@
+# Dependencies
+node_modules/
+
+# Production/Build outputs (compiled JavaScript)
+dist/
+build/
+out/
+lib/
+
+# TypeScript incremental build cache
+*.tsbuildinfo
+
+# Source maps (optional, remove if you want to track maps)
+*.js.map
+*.d.ts.map
+
+# Execution logs
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+*.log
+
+# Environment variables
+.env
+.env.local
