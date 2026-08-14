@@ -443,8 +443,10 @@ function foldInto(st: FoldState, events: readonly SessionEvent[]): void {
     }
   }
   st.n = events.length
-  if (st.requests.length > 160) st.requests = st.requests.slice(-160)
-  if (st.events.length > 150) st.events = st.events.slice(-150)
+  // Keep a deep-enough history for both display granularities: turn mode
+  // collapses steps, so these bounds must cover many turns, not just steps.
+  if (st.requests.length > 500) st.requests = st.requests.slice(-500)
+  if (st.events.length > 400) st.events = st.events.slice(-400)
 }
 
 function buildResult(st: FoldState): Snapshot {
