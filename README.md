@@ -4,6 +4,22 @@ A **Context insight panel** for [DeepSeek Harness](https://github.com/deepseek-a
 
 ![dsh-context screenshot](https://raw.githubusercontent.com/bowenliang123/dsh-context/main/docs/screenshot.png)
 
+## Quick install
+
+One command, from any [DeepSeek Harness](https://github.com/deepseek-ai/DeepSeek-Harness) installation (the `demo` profile is created automatically on first use):
+
+```sh
+dsh plugin --profile demo add dsh-context
+```
+
+then start the web UI and open any session — the **上下文 / Context** tab appears right beside **Chat** and **Trajectory**:
+
+```sh
+dsh --profile demo web
+```
+
+> Running dsh from a source checkout instead of the installed CLI? Prefix the commands with `pnpm` (`pnpm dsh plugin --profile demo add dsh-context`).
+
 ## Why
 
 Every model request packs the same window from six sources: the system prompt, tool schemas, your messages, injected context (skills, AGENTS.md, runtime snapshots), assistant replies, and tool results. When a conversation degrades or gets compacted, *which part ate the budget* is usually invisible. dsh-context makes it observable:
@@ -17,14 +33,7 @@ The UI is bilingual (中文/English) and follows the dsh locale automatically.
 
 ## Install
 
-dsh-context ships as a **dsh bundle**: an npm package with a `dsh.bundle` manifest (a `cordis.patch.yml` layer that inserts the plugin row) and a `dsh.client` manifest (the web UI half). No build step, no restart — install it into any profile:
-
-```sh
-dsh plugin --profile <name> add dsh-context
-dsh --profile <name> web
-```
-
-That's it: the `dsh-context` loader row activates the host half, and the web app picks up the package's `./client` bundle and adds the **上下文 / Context** tab to every session view.
+dsh-context ships as a **dsh bundle**: an npm package with a `dsh.bundle` manifest (a `cordis.patch.yml` layer that inserts the plugin row) and a `dsh.client` manifest (the web UI half). No build step, no restart — the one-liner above installs it into any profile (swap `demo` for your profile name). The `dsh-context` loader row activates the host half, and the web app picks up the package's `./client` bundle and adds the **上下文 / Context** tab to every session view.
 
 To install from this checkout instead (for development), from the repo root:
 
