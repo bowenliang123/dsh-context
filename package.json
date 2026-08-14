@@ -1,6 +1,6 @@
 {
   "name": "dsh-context",
-  "version": "0.7.2",
+  "version": "0.7.3",
   "description": "Context insight panel for DeepSeek Harness: see what the model's context window is made of and how it evolves — composition, per-request history, compactions, injections, and model switches.",
   "author": "bowenliang123",
   "repository": {
