@@ -141,6 +141,9 @@ export interface ContextEventRecord {
   name?: string
   from?: string
   to?: string
+  /** Turn/step of the request this event contributed to (stamped in buildResult). */
+  turn?: number
+  step?: number
 }
 
 interface FoldState {
@@ -535,6 +538,23 @@ function buildResult(st: FoldState): Snapshot {
   const MAX_NODES = 200
   result.droppedNodes = Math.max(0, st.surface.length - MAX_NODES)
   result.nodes = st.surface.slice(-MAX_NODES)
+
+  // Attribute each event to the request that follows it — the context that
+  // event contributed to (same attachment the chart uses for ✂ markers):
+  // an injection before step 2's call lands on that step, a compaction
+  // between turns on the next turn's first step, a model switch on the
+  // request that uses the new model. Both lists stay sorted by seq, so one
+  // pointer walk suffices. Events with no following request (still in
+  // flight, or older than the retained window) stay unlabeled.
+  let ri = 0
+  for (const ev of result.events) {
+    while (ri < result.requests.length && result.requests[ri].seq <= ev.seq) ri++
+    const req = result.requests[ri]
+    if (req !== undefined && typeof req.turn === 'number' && typeof req.step === 'number') {
+      ev.turn = req.turn
+      ev.step = req.step
+    }
+  }
   return result
 }
 
