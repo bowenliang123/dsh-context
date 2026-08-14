@@ -151,6 +151,7 @@ const DICT_ZH: Record<string, string> = {
   'overview.title': '当前构成',
   'overview.ofWindow': 'tokens（约 {p}%）',
   'overview.estimate': 'tokens（估算）',
+  'overview.free': '剩余窗口',
   'stats.title': '上下文统计',
   'stats.hint': '统计当前保留的历史窗口（与趋势图一致）',
   'stats.turns': '轮次', 'stats.steps': '步数',
@@ -210,6 +211,7 @@ const DICT_EN: Record<string, string> = {
   'overview.title': 'Current composition',
   'overview.ofWindow': 'tokens (~{p}%)',
   'overview.estimate': 'tokens (estimated)',
+  'overview.free': 'Free window',
   'stats.title': 'Context stats',
   'stats.hint': 'Over the retained history window (same as the History chart)',
   'stats.turns': 'Turns', 'stats.steps': 'Steps',
@@ -379,10 +381,12 @@ function makeView(ctx: ClientCtx, t: Translate): (props: ContextViewProps) => Re
 
   function StackedBar(props: StackedBarProps): ReactNS.ReactElement {
     // props.parts: [{key,color,value}]; optional props.max: when max exceeds
-    // the parts' total, the remainder shows as empty track.
+    // the parts' total, the remainder shows as an empty, hoverable track
+    // ("free window" — the space left in the context window).
     let total = 0
     for (const p of props.parts) total += p.value
     const scale = props.max !== undefined && props.max > total ? props.max : total
+    const free = props.max !== undefined && props.max > total ? props.max - total : 0
 
     // The tooltip is DERIVED from the shared hover key, so hovering either a
     // segment or its legend chip lights the same segment and shows the same
@@ -390,17 +394,25 @@ function makeView(ctx: ClientCtx, t: Translate): (props: ContextViewProps) => Re
     // measuring). The wrapper keeps the tooltip outside the clipped stack.
     let tip: { text: string; leftPct: number } | null = null
     if (props.hoverKey !== null && props.hoverKey !== undefined) {
-      let acc = 0
-      for (const p of props.parts) {
-        const pct = scale > 0 ? p.value / scale * 100 : 0
-        if (p.key === props.hoverKey && p.value > 0) {
-          tip = {
-            text: catLabel(p.key) + ' ' + fmt(p.value) + ' (' + Math.round(p.value / total * 100) + '%)',
-            leftPct: Math.max(12, Math.min(acc + pct / 2, 88)),
-          }
-          break
+      if (props.hoverKey === 'free' && free > 0) {
+        const pct = scale > 0 ? free / scale * 100 : 0
+        tip = {
+          text: t('overview.free') + ' ' + fmt(free) + ' (' + Math.round(pct) + '%)',
+          leftPct: Math.max(12, Math.min((total / scale * 100) + pct / 2, 88)),
         }
-        acc += pct
+      } else {
+        let acc = 0
+        for (const p of props.parts) {
+          const pct = scale > 0 ? p.value / scale * 100 : 0
+          if (p.key === props.hoverKey && p.value > 0) {
+            tip = {
+              text: catLabel(p.key) + ' ' + fmt(p.value) + ' (' + Math.round(p.value / total * 100) + '%)',
+              leftPct: Math.max(12, Math.min(acc + pct / 2, 88)),
+            }
+            break
+          }
+          acc += pct
+        }
       }
     }
 
@@ -410,9 +422,8 @@ function makeView(ctx: ClientCtx, t: Translate): (props: ContextViewProps) => Re
         style: { height: (props.height || 14) + 'px' },
         onMouseLeave: () => { if (props.onHoverKey !== undefined) props.onHoverKey(null) },
       },
-        total <= 0
-          ? null
-          : props.parts.map(p => {
+        total > 0
+          ? props.parts.map(p => {
             if (!p.value) return null
             const on = props.hoverKey !== undefined && props.hoverKey === p.key
             return h('div', {
@@ -421,7 +432,14 @@ function makeView(ctx: ClientCtx, t: Translate): (props: ContextViewProps) => Re
               style: { width: (p.value / scale * 100) + '%', background: p.color },
               onMouseEnter: () => { if (props.onHoverKey !== undefined) props.onHoverKey(p.key) },
             })
-          })),
+          })
+          : null,
+        free > 0 ? h('div', {
+          key: 'free',
+          className: 'lc-stacked-free' + (props.hoverKey === 'free' ? ' lc-stacked-free-on' : ''),
+          style: { width: (free / scale * 100) + '%' },
+          onMouseEnter: () => { if (props.onHoverKey !== undefined) props.onHoverKey('free') },
+        }) : null),
       tip ? h('div', { className: 'lc-bar-tip', style: { left: tip.leftPct + '%' } }, tip.text) : null)
   }
 
@@ -970,6 +988,7 @@ const STYLES = [
   '.lc-bar-tip { position: absolute; bottom: calc(100% + 6px); transform: translateX(-50%); z-index: 5; white-space: nowrap; background: var(--dsw-alias-bg-layer-2); border: 1px solid var(--dsw-alias-border-l1); border-radius: 6px; padding: 3px 8px; font-size: 12px; color: var(--dsw-alias-label-primary); box-shadow: 0 2px 8px rgba(0,0,0,0.18); pointer-events: none; }',
   '.lc-stacked > div { height: 100%; }',
   '.lc-stacked-seg-on { filter: brightness(1.18); }',
+  '.lc-stacked-free-on { box-shadow: inset 0 0 0 1px var(--dsw-alias-label-secondary); border-radius: 3px; }',
   '.lc-legend { display: flex; flex-wrap: wrap; gap: 6px 14px; margin-top: 10px; }',
   '.lc-chip { display: inline-flex; align-items: center; gap: 5px; color: var(--dsw-alias-label-primary); }',
   '.lc-chip i, .lc-detail-row i, .lc-node i { display: inline-block; width: 8px; height: 8px; border-radius: 2px; }',
