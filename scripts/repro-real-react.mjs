@@ -17,10 +17,36 @@ const bundle = await readFile(new URL('../lib/client.js', import.meta.url), 'utf
 const dom = new JSDOM('<!doctype html><html><body></body></html>', { pretendToBeVisual: true })
 globalThis.window = dom.window
 globalThis.document = dom.window.document
-// jsdom lacks scrollWidth/clientWidth semantics; stub layout-ish reads.
-Object.defineProperty(dom.window.HTMLElement.prototype, 'scrollWidth', { configurable: true, get() { return this.__scrollW ?? 0 } })
+// jsdom lacks scrollWidth/clientWidth semantics; emulate just enough layout
+// for the scroll container: content width follows the bar count (so a
+// granularity switch genuinely flips the overflow state — a static stub
+// never changes the edge fades and cannot regress-test the React #185
+// setState cascade this script exists for).
+Object.defineProperty(dom.window.HTMLElement.prototype, 'scrollWidth', {
+  configurable: true,
+  get() {
+    if (this.classList && this.classList.contains('lc-chart-scroll')) {
+      const chart = this.querySelector('.lc-chart')
+      return Math.max(this.clientWidth, chart ? chart.children.length * 16 : 0)
+    }
+    return this.__scrollW ?? 0
+  },
+})
 Object.defineProperty(dom.window.HTMLElement.prototype, 'clientWidth', { configurable: true, get() { return this.__clientW ?? 400 } })
-Object.defineProperty(dom.window.HTMLElement.prototype, 'scrollLeft', { configurable: true, get() { return this.__scrollL ?? 0 }, set(v) { this.__scrollL = v } })
+Object.defineProperty(dom.window.HTMLElement.prototype, 'scrollLeft', {
+  configurable: true,
+  get() { return this.__scrollL ?? 0 },
+  set(v) {
+    this.__scrollL = Math.max(0, Math.min(v, Math.max(0, this.scrollWidth - this.clientWidth)))
+    // Real browsers dispatch an async scroll event for programmatic scrolls;
+    // jsdom does not. The event lands mid-cascade and its dispatch is what
+    // disabled the same-value eager bailout in the no-deps layout effect
+    // (React #185 on a granularity switch) — emulate it or the bug stays
+    // invisible here.
+    const el = this
+    queueMicrotask(() => { if (el.isConnected) el.dispatchEvent(new dom.window.Event('scroll')) })
+  },
+})
 
 // ---- module table: real React ----
 let handoff = null
@@ -76,28 +102,46 @@ const ctx = {
 plugin.apply(ctx)
 assert.ok(viewComponent !== null)
 
-// ---- mount with real React ----
+// ---- mount with real React (behind a boundary so #185-style crashes are
+// catchable; without one an update-depth error unmounts the whole root) ----
 const container = dom.window.document.createElement('div')
 dom.window.document.body.appendChild(container)
 const root = createRoot(container)
 let caught = null
+const boundaryErrors = []
+class Boundary extends React.Component {
+  constructor(p) { super(p); this.state = { err: null } }
+  componentDidCatch(err) { boundaryErrors.push(err); this.setState({ err }) }
+  render() { return this.state.err ? React.createElement('pre', null, 'CRASHED') : this.props.children }
+}
 try {
-  root.render(React.createElement(viewComponent, { sessionId: 's1' }))
+  root.render(React.createElement(Boundary, null, React.createElement(viewComponent, { sessionId: 's1' })))
   // let the RPC resolve and the poll-free render settle
   await new Promise(r => setTimeout(r, 60))
   assert.ok(container.textContent.includes('tokens'), 'chart rendered')
+  // Wide viewport: the step chart overflows (460 bars) but the turn chart
+  // fits (≈41 columns), so toggling flips the edge-fade state for real.
+  const scroller = container.querySelector('.lc-chart-scroll')
+  scroller.__clientW = 800
   const buttons = [...container.querySelectorAll('.lc-gran-btn')]
   assert.equal(buttons.length, 2, 'toggle buttons rendered')
-  // step -> turn
-  buttons[1].click()
-  await new Promise(r => setTimeout(r, 30))
-  assert.ok(container.textContent.includes('T'), 'turn mode rendered')
-  // turn -> step (the reported black screen)
-  const back = [...container.querySelectorAll('.lc-gran-btn')][0]
-  back.click()
-  await new Promise(r => setTimeout(r, 30))
+  // Rapid toggles: the overflow state flips each time (wide step chart vs
+  // narrow turn chart), which used to cascade setEdges dispatches inside the
+  // no-deps layout effect until React #185 (maximum update depth) fired.
+  for (let i = 0; i < 8; i++) {
+    const btns = [...container.querySelectorAll('.lc-gran-btn')]
+    assert.equal(btns.length, 2, `toggle buttons still mounted after ${i} switches`)
+    btns[i % 2].click()
+    await new Promise(r => setTimeout(r, 20))
+  }
+  assert.equal(boundaryErrors.length, 0, 'no render crash: ' + (boundaryErrors[0] && boundaryErrors[0].message))
+  // back to step mode: all step bars render again
+  const finalBtns = [...container.querySelectorAll('.lc-gran-btn')]
+  finalBtns[0].click()
+  await new Promise(r => setTimeout(r, 20))
+  assert.equal(boundaryErrors.length, 0, 'no render crash: ' + (boundaryErrors[0] && boundaryErrors[0].message))
   assert.ok(container.querySelectorAll('.lc-bar').length > 100, 'step mode re-rendered many bars')
-  console.log('✔ real-React repro passed: step->turn->step renders without throwing')
+  console.log('✔ real-React repro passed: 8 rapid step<->turn toggles render without throwing')
 } catch (err) {
   caught = err
   console.error('✘ REAL-REACT REPRO FAILED:', err && err.message ? err.message : err)

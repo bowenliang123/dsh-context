@@ -469,10 +469,21 @@ function makeView(ctx: ClientCtx, t: Translate): (props: ContextViewProps) => Re
     const scrolledOnce = React.useRef(false)
     const lastGranRef = React.useRef(props.granularity)
     const [edges, setEdges] = React.useState<{ left: boolean; right: boolean }>({ left: false, right: false })
+    // Mirror of the last computed fades. The layout effect below runs after
+    // EVERY render (no deps), so it must not dispatch a setState unless the
+    // values truly changed: on a granularity switch the first dispatch
+    // schedules a sync re-render whose fiber still has pending lanes, which
+    // disables React's same-value eager bailout — every subsequent commit
+    // then enqueues yet another update and the queue grows without bound
+    // (React error #185, maximum update depth — the tab whites out).
+    const edgesRef = React.useRef(edges)
     const updateEdges = (el: HTMLDivElement): void => {
       const left = el.scrollLeft > 4
       const right = el.scrollLeft + el.clientWidth < el.scrollWidth - 4
-      setEdges(prev => (prev.left === left && prev.right === right) ? prev : { left, right })
+      const prev = edgesRef.current
+      if (prev.left === left && prev.right === right) return
+      edgesRef.current = { left, right }
+      setEdges({ left, right })
     }
     React.useLayoutEffect(() => {
       const el = scrollRef.current
