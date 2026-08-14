@@ -354,4 +354,37 @@ tr = renderView()
 assert.equal(byClass(tr, 'lc-bar').length, 4, 'back to one bar per step')
 assert.equal(byClass(tr, 'lc-gran-on')[0].args[2], 'Step', 'step button active again')
 
-console.log('✔ chart render test passed (fixed-width bars, scroll container, turn ranges, hover linking, overview tooltip, turn strip, granularity toggle)')
+// ---- edge fades signal reachable history beyond the viewport ----
+let scroller = byClass(tr, 'lc-chart-scroll')[0]
+const fakeScroller = { scrollLeft: 200, clientWidth: 120, scrollWidth: 800 }
+scroller.args[1].onScroll({ currentTarget: fakeScroller })
+tr = renderView()
+assert.equal(byClass(tr, 'lc-chart-fade-l').length, 1, 'left fade shown while scrolled into history')
+assert.equal(byClass(tr, 'lc-chart-fade-r').length, 1, 'right fade shown while more bars follow')
+fakeScroller.scrollLeft = 680
+scroller.args[1].onScroll({ currentTarget: fakeScroller })
+tr = renderView()
+assert.equal(byClass(tr, 'lc-chart-fade-r').length, 0, 'right fade gone at the right end')
+assert.equal(byClass(tr, 'lc-chart-fade-l').length, 1, 'left fade stays at the right end')
+fakeScroller.scrollLeft = 0
+scroller.args[1].onScroll({ currentTarget: fakeScroller })
+tr = renderView()
+assert.equal(byClass(tr, 'lc-chart-fade-l').length, 0, 'left fade gone at the start')
+
+// ---- no 80-bar cap: every request the host sends is rendered ----
+const bigRequests = []
+for (let i = 0; i < 120; i++) {
+  bigRequests.push({
+    seq: 1000 + i, turn: 1 + Math.floor(i / 4), step: i % 4, time: 1000 * i,
+    system: 10, tools: 20, user: 30, inject: 5, assistant: 15, tool: 20, total: 100,
+  })
+}
+ctxSlots[0][1]({ ...snapshot, requests: bigRequests })
+tr = renderView()
+assert.equal(byClass(tr, 'lc-bar').length, 120, 'all requests render — earlier turns/steps stay reachable')
+assert.equal(byClass(tr, 'lc-turn').length, 30, 'turn strip follows the full history')
+ctxSlots[0][1](snapshot) // restore
+tr = renderView()
+assert.equal(byClass(tr, 'lc-bar').length, 4, 'snapshot restored')
+
+console.log('✔ chart render test passed (fixed-width bars, scroll container, turn ranges, hover linking, overview tooltip, turn strip, granularity toggle, edge fades, full history)')

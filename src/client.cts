@@ -142,7 +142,7 @@ const DICT_ZH: Record<string, string> = {
   'tools.more': '等 {n} 个',
   'trend.title': '历史趋势',
   'gran.step': '步骤', 'gran.turn': '轮次',
-  'trend.hint': '每次模型请求一段；点击柱子查看详情，✂ 表示压缩/剪枝',
+  'trend.hint': '每次模型请求一段；点击柱子查看详情，✂ 表示压缩/剪枝；左右滑动可回看更早',
   'trend.empty': '发起一轮对话后，这里会展示每次模型请求的上下文构成',
   'detail.step': 'T{t} · 第 {s} 步',
   'detail.estTotal': '估算合计 ≈ {n}',
@@ -184,7 +184,7 @@ const DICT_EN: Record<string, string> = {
   'tools.more': 'of {n}',
   'trend.title': 'History',
   'gran.step': 'Step', 'gran.turn': 'Turn',
-  'trend.hint': 'one bar per model request; click a bar for details, ✂ marks compaction/prune',
+  'trend.hint': 'one bar per model request; click a bar for details, ✂ marks compaction/prune; scroll sideways to see earlier',
   'trend.empty': 'Send a message and each model request’s context makeup shows up here',
   'detail.step': 'T{t} · step {s}',
   'detail.estTotal': 'estimated ≈ {n}',
@@ -408,11 +408,19 @@ function makeView(ctx: ClientCtx, t: Translate): (props: ContextViewProps) => Re
       grp.count++
     }
 
-    // Stick to the newest bars unless the user scrolled away from the end.
+    // Stick to the newest bars unless the user scrolled away from the end,
+    // and keep the edge fades in sync with the scroll position.
     const scrollRef = React.useRef<HTMLDivElement | null>(null)
+    const [edges, setEdges] = React.useState<{ left: boolean; right: boolean }>({ left: false, right: false })
+    const updateEdges = (el: HTMLDivElement): void => {
+      const left = el.scrollLeft > 4
+      const right = el.scrollLeft + el.clientWidth < el.scrollWidth - 4
+      setEdges(prev => (prev.left === left && prev.right === right) ? prev : { left, right })
+    }
     React.useEffect(() => {
       const el = scrollRef.current
       if (el === null) return
+      updateEdges(el)
       if (el.scrollLeft + el.clientWidth >= el.scrollWidth - 24) el.scrollLeft = el.scrollWidth
     })
 
@@ -421,7 +429,14 @@ function makeView(ctx: ClientCtx, t: Translate): (props: ContextViewProps) => Re
         h('span', { className: 'lc-axis-top' }, fmt(maxTotal)),
         h('span', { className: 'lc-axis-mid' }, fmt(Math.round(maxTotal / 2))),
         h('span', { className: 'lc-axis-bot' }, '0')),
-      h('div', { className: 'lc-chart-scroll', ref: scrollRef },
+      h('div', {
+        className: 'lc-chart-scroll',
+        ref: scrollRef,
+        onScroll: (e: ReactNS.UIEvent<HTMLDivElement>) => { updateEdges(e.currentTarget) },
+      },
+        // Edge fades: visible whenever more history sits beyond the viewport,
+        // so the horizontal scroll affordance is obvious.
+        edges.left ? h('div', { className: 'lc-chart-fade lc-chart-fade-l' }) : null,
         // Hovering a bar previews it in the detail below; leaving the plot
         // clears the preview (a pinned selection, if any, takes over again).
         h('div', { className: 'lc-chart', onMouseLeave: () => { props.onHover(null) } },
@@ -476,7 +491,8 @@ function makeView(ctx: ClientCtx, t: Translate): (props: ContextViewProps) => Re
               title: 'T' + grp.turn,
               onMouseEnter: () => { props.onHoverTurn(grp.turn) },
             }, 'T' + grp.turn)
-          }))))
+          })),
+        edges.right ? h('div', { className: 'lc-chart-fade lc-chart-fade-r' }) : null))
   }
 
   function RequestDetail(props: RequestDetailProps): ReactNS.ReactElement | null {
@@ -653,7 +669,9 @@ function makeView(ctx: ClientCtx, t: Translate): (props: ContextViewProps) => Re
           ? h('div', { className: 'lc-empty' }, t('trend.empty'))
           : h('div', null,
             h(TrendChart, {
-              requests: displayRequests.slice(-80),
+              // The host caps the log at 160 requests; render them ALL so
+              // earlier turns/steps stay reachable via horizontal scroll.
+              requests: displayRequests,
               events,
               selectedSeq: pinnedReq ? pinnedReq.seq : null,
               hoveredSeq,
@@ -709,10 +727,14 @@ const STYLES = [
   '.lc-axis-top { top: 13px; }',
   '.lc-axis-mid { top: 69px; }',
   '.lc-axis-bot { top: 125px; }',
-  '.lc-chart-scroll { flex: 1; overflow-x: auto; overflow-y: hidden; min-width: 0; scrollbar-width: thin; }',
-  '.lc-chart-scroll::-webkit-scrollbar { height: 6px; }',
-  '.lc-chart-scroll::-webkit-scrollbar-thumb { background: var(--dsw-alias-border-l1); border-radius: 3px; }',
+  '.lc-chart-scroll { position: relative; flex: 1; overflow-x: auto; overflow-y: hidden; min-width: 0; scrollbar-width: thin; }',
+  '.lc-chart-scroll::-webkit-scrollbar { height: 8px; }',
+  '.lc-chart-scroll::-webkit-scrollbar-thumb { background: color-mix(in srgb, var(--dsw-alias-label-secondary) 45%, transparent); border-radius: 4px; }',
+  '.lc-chart-scroll::-webkit-scrollbar-thumb:hover { background: color-mix(in srgb, var(--dsw-alias-label-secondary) 70%, transparent); }',
   '.lc-chart-scroll::-webkit-scrollbar-track { background: transparent; }',
+  '.lc-chart-fade { position: absolute; top: 0; bottom: 0; width: 26px; pointer-events: none; z-index: 2; }',
+  '.lc-chart-fade-l { left: 0; background: linear-gradient(to right, var(--dsw-alias-bg-layer-1), transparent); }',
+  '.lc-chart-fade-r { right: 0; background: linear-gradient(to left, var(--dsw-alias-bg-layer-1), transparent); }',
   '.lc-chart { position: relative; display: flex; align-items: flex-end; gap: 2px; height: 130px; padding-top: 18px; box-sizing: border-box; width: max-content; min-width: 100%; }',
   '.lc-grid { position: absolute; left: 0; right: 0; border-top: 1px dashed var(--dsw-alias-border-l1); pointer-events: none; }',
   '.lc-grid-top { top: 18px; }',
