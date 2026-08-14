@@ -290,4 +290,32 @@ assert.equal(tip.length, 1, 'hovering a segment shows the tooltip')
 assert.match(textOf(tip[0]), /\(10%\)/, 'tooltip shows the segment share of the total')
 assert.equal(typeof tip[0].args[1].style.left, 'string', 'tooltip is positioned along the pointer')
 
-console.log('✔ chart render test passed (fixed-width bars, scroll container, turn ranges, hover linking, overview tooltip)')
+// ---- turn strip: hovering a turn block highlights its bars (and back) ----
+let turnBlocks = byClass(tr, 'lc-turn')
+assert.equal(turnBlocks.length, 3, 'one turn block per turn')
+assert.equal(typeof turnBlocks[0].args[1].onMouseEnter, 'function', 'turn blocks carry onMouseEnter')
+turnBlocks[0].args[1].onMouseEnter() // T1 (covers seq 1 and 2)
+tr = renderView()
+const inTurn = byClass(tr, 'lc-bar-in-turn')
+assert.equal(inTurn.length, 2, 'hovering T1 highlights its two bars')
+assert.deepEqual(inTurn.map(b => b.args[1].key), [1, 2], 'highlighted bars are seq 1 and 2')
+const onBlocks = byClass(tr, 'lc-turn-on')
+assert.equal(onBlocks.length, 1, 'exactly one turn block highlighted')
+assert.equal(onBlocks[0].args[2], 'T1', 'highlighted block is T1')
+
+// leaving the strip clears the turn highlight
+const strip = byClass(tr, 'lc-turns')[0]
+assert.equal(typeof strip.args[1].onMouseLeave, 'function', 'strip carries onMouseLeave')
+strip.args[1].onMouseLeave()
+tr = renderView()
+assert.equal(byClass(tr, 'lc-bar-in-turn').length, 0, 'leaving the strip clears bar highlights')
+
+// hovering a bar highlights its turn block (bidirectional)
+ctxSlots[3][1](3) // hover seq 3 (turn 2)
+tr = renderView()
+const onBlocks2 = byClass(tr, 'lc-turn-on')
+assert.equal(onBlocks2.length, 1, 'bar hover highlights exactly one turn block')
+assert.equal(onBlocks2[0].args[2], 'T2', 'hovering a bar highlights its turn block')
+ctxSlots[3][1](null)
+
+console.log('✔ chart render test passed (fixed-width bars, scroll container, turn ranges, hover linking, overview tooltip, turn strip)')

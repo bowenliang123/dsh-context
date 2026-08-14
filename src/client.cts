@@ -238,8 +238,11 @@ interface TrendChartProps {
   events: ContextEventRecord[]
   selectedSeq: number | null
   hoveredSeq: number | null
+  /** The turn currently highlighted (from the turn strip or a hovered bar). */
+  activeTurn: number | null
   onSelect: (seq: number | null) => void
   onHover: (seq: number | null) => void
+  onHoverTurn: (turn: number | null) => void
 }
 interface RequestDetailProps { request: RequestRecord | null }
 interface EventListProps { events: ContextEventRecord[] }
@@ -407,6 +410,7 @@ function makeView(ctx: ClientCtx, t: Translate): (props: ContextViewProps) => Re
           requests.map((req, i) => {
             const selected = props.selectedSeq === req.seq
             const hovered = props.hoveredSeq === req.seq
+            const inTurn = props.activeTurn !== null && (req.turn ?? 0) === props.activeTurn
             const tip = tr('tip.step', { t: req.turn ?? 0, s: req.step ?? 0 }) + ' · ' + fmtTime(req.time) + '\n'
               + tr('tip.total', { n: fmt(req.total) })
               + (req.prompt !== undefined ? tr('tip.actual', { n: fmt(req.prompt) }) : '') + '\n'
@@ -415,7 +419,8 @@ function makeView(ctx: ClientCtx, t: Translate): (props: ContextViewProps) => Re
               key: req.seq,
               className: 'lc-bar'
                 + (selected ? ' lc-bar-selected' : '')
-                + (hovered ? ' lc-bar-hovered' : ''),
+                + (hovered ? ' lc-bar-hovered' : '')
+                + (inTurn ? ' lc-bar-in-turn' : ''),
               title: tip,
               onClick: () => { props.onSelect(selected ? null : req.seq) },
               onMouseEnter: () => { props.onHover(req.seq) },
@@ -430,15 +435,20 @@ function makeView(ctx: ClientCtx, t: Translate): (props: ContextViewProps) => Re
                   return h('div', { key: c.key, style: { height: Math.max(1, Math.round(v / maxTotal * CHART_H)) + 'px', background: c.color } })
                 })))
           })),
-        h('div', { className: 'lc-turns' },
+        // Turn strip: one block per turn spanning its bars. Hovering a block
+        // highlights that turn's bars in the chart (and hovering a bar
+        // highlights its block — the active turn is shared state).
+        h('div', { className: 'lc-turns', onMouseLeave: () => { props.onHoverTurn(null) } },
           groups.map((grp, gi) => {
             // One column per bar plus the shared gap; the flex gap between
-            // ticks restores the inter-group gap, so tick spans line up with
-            // their bars exactly.
+            // blocks restores the inter-group gap, so block spans line up
+            // with their bars exactly.
+            const on = props.activeTurn === grp.turn
             return h('span', {
               key: 'turn-' + gi,
-              className: 'lc-turn',
+              className: 'lc-turn' + (on ? ' lc-turn-on' : ''),
               style: { width: (grp.count * (BAR_W + BAR_GAP) - BAR_GAP) + 'px' },
+              onMouseEnter: () => { props.onHoverTurn(grp.turn) },
             }, 'T' + grp.turn)
           }))))
   }
@@ -508,6 +518,7 @@ function makeView(ctx: ClientCtx, t: Translate): (props: ContextViewProps) => Re
     const [error, setError] = React.useState<string | null>(null)
     const [selectedSeq, setSelectedSeq] = React.useState<number | null>(null)
     const [hoveredSeq, setHoveredSeq] = React.useState<number | null>(null)
+    const [hoverTurn, setHoverTurn] = React.useState<number | null>(null)
     const [tick, setTick] = React.useState(0)
 
     React.useEffect(() => {
@@ -551,7 +562,8 @@ function makeView(ctx: ClientCtx, t: Translate): (props: ContextViewProps) => Re
 
     // The detail below follows the pointer: hover previews a bar, a pinned
     // click takes over when the pointer leaves, and both fall back to the
-    // newest request.
+    // newest request. The active turn (for strip/bar highlighting) follows
+    // the turn strip hover, or the hovered bar's turn.
     let pinnedReq: RequestRecord | null = null
     for (const req of requests) if (req.seq === selectedSeq) pinnedReq = req
     let activeReq: RequestRecord | null = null
@@ -560,6 +572,14 @@ function makeView(ctx: ClientCtx, t: Translate): (props: ContextViewProps) => Re
     }
     if (activeReq === null) activeReq = pinnedReq
     if (activeReq === null && requests.length > 0) activeReq = requests[requests.length - 1]
+
+    // The turn highlight is hover-only: the turn strip hover wins, then the
+    // hovered bar's turn (no fallback — a pinned or default selection must
+    // not keep a turn glowing).
+    let activeTurn: number | null = hoverTurn
+    if (activeTurn === null && hoveredSeq !== null) {
+      for (const req of requests) if (req.seq === hoveredSeq) { activeTurn = req.turn ?? null; break }
+    }
 
     const windowPct = data.contextWindow ? Math.min(100, Math.round(current.total / data.contextWindow * 100)) : null
 
@@ -598,8 +618,10 @@ function makeView(ctx: ClientCtx, t: Translate): (props: ContextViewProps) => Re
               events,
               selectedSeq: pinnedReq ? pinnedReq.seq : null,
               hoveredSeq,
+              activeTurn,
               onSelect: setSelectedSeq,
               onHover: setHoveredSeq,
+              onHoverTurn: setHoverTurn,
             }),
             h(RequestDetail, { request: activeReq }))),
 
@@ -656,11 +678,13 @@ const STYLES = [
   '.lc-bar:hover { background: var(--dsw-alias-bg-layer-2); }',
   '.lc-bar-selected { outline: 2px solid var(--dsw-alias-brand-primary); outline-offset: 1px; }',
   '.lc-bar-hovered { outline: 1px dashed var(--dsw-alias-brand-primary); outline-offset: 1px; }',
+  '.lc-bar-in-turn { background: rgba(99,102,241,0.14); }',
   '.lc-bar-stack { display: flex; flex-direction: column-reverse; width: 100%; }',
   '.lc-bar-stack > div { width: 100%; }',
   '.lc-bar-marker { position: absolute; top: -16px; left: 50%; transform: translateX(-50%); font-size: 11px; color: var(--dsw-alias-state-warn-primary); }',
   '.lc-turns { display: flex; gap: 2px; width: max-content; min-width: 100%; }',
-  '.lc-turn { flex: none; min-width: 24px; box-sizing: border-box; text-align: center; font-size: 11px; line-height: 18px; color: var(--dsw-alias-label-secondary); border-top: 1px solid var(--dsw-alias-border-l1); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }',
+  '.lc-turn { flex: none; min-width: 24px; box-sizing: border-box; text-align: center; font-size: 11px; line-height: 18px; color: var(--dsw-alias-label-secondary); border-top: 1px solid var(--dsw-alias-border-l1); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; cursor: default; transition: color 120ms, background 120ms, border-color 120ms; }',
+  '.lc-turn-on { color: var(--dsw-alias-brand-primary); border-top-color: var(--dsw-alias-brand-primary); font-weight: 600; background: rgba(99,102,241,0.10); }',
   '.lc-detail { margin-top: 12px; border-top: 1px solid var(--dsw-alias-border-l1); padding-top: 12px; }',
   '.lc-detail-head { display: flex; flex-wrap: wrap; gap: 6px 16px; margin-bottom: 8px; color: var(--dsw-alias-label-secondary); }',
   '.lc-detail-head b { color: var(--dsw-alias-label-primary); }',
