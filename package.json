@@ -1,6 +1,6 @@
 {
   "name": "dsh-context",
-  "version": "0.6.0",
+  "version": "0.6.1",
   "description": "Context insight panel for DeepSeek Harness: a Context tab (beside Chat/Trajectory) showing what the model's context window is made of and how it evolves — composition, per-request history, compactions, injections, and model switches.",
   "author": "bowenliang123",
   "repository": {
