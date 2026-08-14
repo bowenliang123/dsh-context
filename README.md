@@ -2,11 +2,10 @@
 
 [![npm version](https://img.shields.io/npm/v/dsh-context)](https://www.npmjs.com/package/dsh-context)
 [![GitHub stars](https://img.shields.io/github/stars/bowenliang123/dsh-context?style=social)](https://github.com/bowenliang123/dsh-context)
-[![license](https://img.shields.io/npm/l/dsh-context)](https://github.com/bowenliang123/dsh-context/blob/main/LICENSE)
 
-**See what your agent's context window is actually made of.**
+**See what your DeepSeek Harness agent's context window is actually made of and how it evolves.**
 
-dsh-context is a plugin for [DeepSeek Harness](https://github.com/deepseek-ai/DeepSeek-Harness) that adds a **Context** panel to the web UI: a live, visual answer to *"what is the model carrying right now, and how did it get there?"* — context composition, per-request history, compactions, and injections, all in one place.
+`dsh-context` is a [DeepSeek Harness](https://github.com/deepseek-ai/DeepSeek-Harness) plugin that adds a **Context Insight** panel to the web UI: a live, visual answer to *"what is the model carrying right now, and how did it get there?"* — context composition, per-request history, compactions, and injections, all in one place.
 
 ![Context panel overview](https://raw.githubusercontent.com/bowenliang123/dsh-context/main/docs/context-overview.png)
 
