@@ -16,6 +16,11 @@ cd "$ROOT"
 BUMP="${1:-patch}"
 : "${NPM_TOKEN:?NPM_TOKEN is not set — run with NPM_TOKEN=<token> ./scripts/publish.sh}"
 
+# Keep npm's cache/logs inside the repo when the default location (~/.npm)
+# is not writable (sandboxed builds, CI with a read-only home).
+export NPM_CONFIG_CACHE="${NPM_CONFIG_CACHE:-$ROOT/.npm-cache}"
+mkdir -p "$NPM_CONFIG_CACHE"
+
 echo "==> building lib/ artifacts"
 node scripts/build.mjs
 
