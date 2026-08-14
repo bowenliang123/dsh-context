@@ -295,7 +295,8 @@ interface StackedBarProps {
 }
 interface TrendChartProps {
   requests: RequestRecord[]
-  events: ContextEventRecord[]
+  /** One boundary event (compaction/prune) per request index, if attached. */
+  markers: (ContextEventRecord | undefined)[]
   selectedSeq: number | null
   hoveredSeq: number | null
   /** The turn currently highlighted (from the turn strip or a hovered bar). */
@@ -306,7 +307,11 @@ interface TrendChartProps {
   onHover: (seq: number | null) => void
   onHoverTurn: (turn: number | null) => void
 }
-interface RequestDetailProps { request: RequestRecord | null }
+interface RequestDetailProps {
+  request: RequestRecord | null
+  /** The boundary event attached to this request (✂ chip in the header). */
+  marker?: ContextEventRecord | null
+}
 interface EventListProps { events: ContextEventRecord[] }
 interface NodeListProps { nodes: SurfaceNode[]; dropped: number }
 interface ContextViewProps { sessionId?: string }
@@ -437,22 +442,31 @@ function makeView(ctx: ClientCtx, t: Translate): (props: ContextViewProps) => Re
   // Turn strip palette: one color per turn, cycling for long histories.
   const TURN_COLORS = ['#6366f1', '#f59e0b', '#22c55e', '#a855f7', '#3b82f6', '#14b8a6', '#ef4444', '#ec4899']
 
-  function TrendChart(props: TrendChartProps): ReactNS.ReactElement {
-    const requests = props.requests
-    let maxTotal = 1
-    for (const req of requests) if (req.total > maxTotal) maxTotal = req.total
-
-    // Compaction/prune markers: attach each to the first request logged after it.
-    const markers: Record<number, ContextEventRecord> = {}
-    for (const ev of props.events) {
+  /**
+   * Attach each boundary event (compaction/prune) to the first request
+   * logged after it — one entry per request index, for the ✂ marker above
+   * the bar and the range chip in the detail header. Shared by TrendChart
+   * and the detail panel so both show the SAME event for a request.
+   */
+  function attachMarkers(requests: RequestRecord[], events: ContextEventRecord[]): (ContextEventRecord | undefined)[] {
+    const markers: (ContextEventRecord | undefined)[] = new Array(requests.length)
+    for (const ev of events) {
       if (ev.kind !== 'compaction' && ev.kind !== 'prune') continue
       for (let r = 0; r < requests.length; r++) {
         if (requests[r].seq >= ev.seq) {
-          if (!markers[r]) markers[r] = ev
+          if (markers[r] === undefined) markers[r] = ev
           break
         }
       }
     }
+    return markers
+  }
+
+  function TrendChart(props: TrendChartProps): ReactNS.ReactElement {
+    const requests = props.requests
+    const markers = props.markers
+    let maxTotal = 1
+    for (const req of requests) if (req.total > maxTotal) maxTotal = req.total
 
     // Consecutive requests of the same turn collapse into one labeled range.
     // `span` is the number of STEP columns the group covers (step records
@@ -532,6 +546,7 @@ function makeView(ctx: ClientCtx, t: Translate): (props: ContextViewProps) => Re
           h('div', { className: 'lc-grid lc-grid-top' }),
           h('div', { className: 'lc-grid lc-grid-mid' }),
           requests.map((req, i) => {
+            const marker = markers[i]
             const selected = props.selectedSeq === req.seq
             const hovered = props.hoveredSeq === req.seq
             const inTurn = props.activeTurn !== null && (req.turn ?? 0) === props.activeTurn
@@ -555,7 +570,12 @@ function makeView(ctx: ClientCtx, t: Translate): (props: ContextViewProps) => Re
               onClick: () => { props.onSelect(selected ? null : req.seq) },
               onMouseEnter: () => { props.onHover(req.seq) },
             },
-              markers[i] ? h('span', { className: 'lc-bar-marker', title: eventLabel(markers[i]) }, '✂') : null,
+              // The ✂ tooltip names the event AND where it happened: the
+              // gap between the request before and the request after.
+              marker !== undefined ? h('span', {
+                className: 'lc-bar-marker',
+                title: '✂ ' + (eventAt(marker) !== null ? eventAt(marker) + ' — ' : '') + eventLabel(marker),
+              }, '✂') : null,
               h('div', { className: 'lc-bar-stack' },
                 CATS.map(c => {
                   const v = req[c.key] || 0
@@ -601,9 +621,17 @@ function makeView(ctx: ClientCtx, t: Translate): (props: ContextViewProps) => Re
     const head = isTurn
       ? tr('detail.turn', { t: req.turn ?? 0, n: req.stepCount ?? 0 })
       : tr('detail.step', { t: req.turn ?? 0, s: req.step ?? 0 })
+    // When this bar carries a boundary event (compaction/prune), the header
+    // also shows WHERE the event happened: the gap between the request
+    // before and the request after (e.g. "✂ Turn 49 · Step 2→3").
+    const marker = props.marker ?? null
+    const markerAt = marker !== null ? eventAt(marker) : null
     return h('div', { className: 'lc-detail' },
       h('div', { className: 'lc-detail-head' },
         h('b', null, head),
+        marker !== null && markerAt !== null
+          ? h('span', { className: 'lc-detail-marker', title: eventLabel(marker) }, '✂ ' + markerAt)
+          : null,
         isTurn ? h('span', { className: 'lc-detail-tag' }, t('detail.lastStep')) : null,
         h('span', null, fmtTime(req.time)),
         h('span', null, tr('detail.estTotal', { n: fmt(req.total) })),
@@ -739,6 +767,13 @@ function makeView(ctx: ClientCtx, t: Translate): (props: ContextViewProps) => Re
     // Display granularity: one bar per step (default) or one bar per turn
     // (each turn shown by its LAST step's record).
     const displayRequests = granularity === 'turn' ? aggregateByTurn(requests) : requests
+    // Boundary events attach to the first request after them; the same
+    // attachment drives the ✂ marker above the bar and the detail chip.
+    const markers = attachMarkers(displayRequests, events)
+    const markerOf = (req: RequestRecord): ContextEventRecord | undefined => {
+      const i = displayRequests.indexOf(req)
+      return i >= 0 ? markers[i] : undefined
+    }
 
     // The detail below follows the pointer: hover previews a bar, a pinned
     // click takes over when the pointer leaves, and both fall back to the
@@ -817,7 +852,7 @@ function makeView(ctx: ClientCtx, t: Translate): (props: ContextViewProps) => Re
               // The host caps the log at 160 requests; render them ALL so
               // earlier turns/steps stay reachable via horizontal scroll.
               requests: displayRequests,
-              events,
+              markers,
               selectedSeq: pinnedReq ? pinnedReq.seq : null,
               hoveredSeq,
               activeTurn,
@@ -826,7 +861,7 @@ function makeView(ctx: ClientCtx, t: Translate): (props: ContextViewProps) => Re
               onHover: setHoveredSeq,
               onHoverTurn: setHoverTurn,
             }),
-            h(RequestDetail, { request: activeReq }))),
+            h(RequestDetail, { request: activeReq, marker: activeReq !== null ? markerOf(activeReq) : undefined }))),
 
       // ---- events + messages ----
       h('div', { className: 'lc-cols' },
@@ -902,6 +937,7 @@ const STYLES = [
   '.lc-detail { margin-top: 12px; border-top: 1px solid var(--dsw-alias-border-l1); padding-top: 12px; }',
   '.lc-detail-head { display: flex; flex-wrap: wrap; gap: 6px 16px; margin-bottom: 8px; color: var(--dsw-alias-label-secondary); }',
   '.lc-detail-head b { color: var(--dsw-alias-label-primary); }',
+  '.lc-detail-marker { color: var(--dsw-alias-state-warn-primary); font-size: 11px; background: var(--dsw-alias-bg-layer-2); border-radius: 6px; padding: 1px 7px; }',
   '.lc-detail-head .lc-actual { color: var(--dsw-alias-state-success-primary); }',
   '.lc-detail-tag { background: var(--dsw-alias-bg-layer-2); border: 1px solid var(--dsw-alias-border-l1); border-radius: 4px; padding: 0 6px; font-size: 11px; color: var(--dsw-alias-label-secondary); }',
   '.lc-detail-rows { margin-top: 10px; display: grid; grid-template-columns: 1fr 1fr; gap: 4px 24px; }',

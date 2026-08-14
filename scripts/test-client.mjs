@@ -498,10 +498,12 @@ assert.equal(nodeTimes[1].args[2], fmtTimeLocal(1000), 'formatted time (1000ms)'
 // events (compaction/prune) show the GAP between the request before and the
 // request after (same-turn "Step a→b", cross-turn "Turn a·s → Turn b·s");
 // inject/model switches keep the single point of the request they belong
-// to; events with no following request (in flight) stay bare.
+// to; events with no following request (in flight) stay bare. The same
+// attachment drives the ✂ marker and the detail header chip.
 ctxSlots[0][1]({
   ...snapshot,
   events: [
+    { seq: 3, kind: 'compaction', time: 1200, tokens: 900, count: 2, fromTurn: 1, fromStep: 0, turn: 2, step: 0 }, // attaches to request seq 3 (Turn 2 · Step 0)
     { seq: 6, kind: 'prune', time: 1500, tokens: 60, fromTurn: 1, fromStep: 0, turn: 1, step: 1 },
     { seq: 7, kind: 'prune', time: 2000, tokens: 100, fromTurn: 1, fromStep: 1, turn: 2, step: 0 },
     { seq: 8, kind: 'model', time: 3000, from: 'a', to: 'b', turn: 1, step: 1 },
@@ -511,13 +513,30 @@ ctxSlots[0][1]({
 })
 tr = renderView()
 const evRows = byClass(tr, 'lc-event')
-assert.equal(evRows.length, 5, 'event rows rendered newest first')
+assert.equal(evRows.length, 6, 'event rows rendered newest first')
 const atLabels = byClass(tr, 'lc-event-at')
-assert.equal(atLabels.length, 4, 'boundary + single-point events carry labels; in-flight stays bare')
+assert.equal(atLabels.length, 5, 'boundary + single-point events carry labels; in-flight stays bare')
 assert.equal(atLabels[0].args[2], 'Turn 2 · Step 0', 'inject keeps the single point of the request it fed')
 assert.equal(atLabels[1].args[2], 'Turn 1 · Step 1', 'model switch keeps the single point')
 assert.equal(atLabels[2].args[2], 'Turn 1 · Step 1 → Turn 2 · Step 0', 'cross-turn boundary shows the gap')
 assert.equal(atLabels[3].args[2], 'Turn 1 · Step 0→1', 'same-turn boundary compresses to a step range')
+assert.equal(atLabels[4].args[2], 'Turn 1 · Step 0 → Turn 2 · Step 0', 'oldest boundary event shows its gap')
+
+// the ✂ marker sits on the bar it attaches to and tooltips the event gap
+const barMark = byClass(tr, 'lc-bar-marker')
+assert.equal(barMark.length, 1, 'one ✂ marker on the attached bar')
+assert.match(barMark[0].args[1].title, /Turn 1 · Step 0 → Turn 2 · Step 0/, '✂ tooltip carries the event gap')
+
+// the detail header shows the same gap as a chip when that bar is active
+ctxSlots[3][1](3) // hover the attached bar (seq 3, Turn 2 · Step 0)
+tr = renderView()
+const markerChip = byClass(tr, 'lc-detail-marker')
+assert.equal(markerChip.length, 1, 'detail header shows the attached boundary event')
+assert.equal(markerChip[0].args[2], '✂ Turn 1 · Step 0 → Turn 2 · Step 0', 'chip shows the event gap')
+assert.equal(typeof markerChip[0].args[1].title, 'string', 'chip tooltips the event text')
+ctxSlots[3][1](null) // leave the plot
+tr = renderView()
+assert.equal(byClass(tr, 'lc-detail-marker').length, 0, 'chip clears with the hover')
 ctxSlots[0][1](snapshot) // restore
 tr = renderView()
 assert.equal(byClass(tr, 'lc-event').length, 0, 'event list restored to the empty state')
@@ -527,4 +546,4 @@ const overviewNum = byClass(tr, 'lc-overview-num')[0]
 assert.ok(overviewNum, 'overview number row present')
 assert.match(textOf(overviewNum), /· last actual prompt 83\.0k/, 'overview shows the last actual prompt alongside the estimate')
 
-console.log('✔ chart render test passed (fixed-width bars, scroll container, turn ranges, hover linking, overview tooltip, turn strip, granularity toggle, edge fades, full history, right-anchored default, message times, event range labels, overview actual)')
+console.log('✔ chart render test passed (fixed-width bars, scroll container, turn ranges, hover linking, overview tooltip, turn strip, granularity toggle, edge fades, full history, right-anchored default, message times, event range labels, detail marker chip, overview actual)')
