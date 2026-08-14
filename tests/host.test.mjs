@@ -149,6 +149,28 @@ const missing = await handler('snapshot', { sessionId: 'ghost' })
 assert.equal(missing.ok, false)
 assert.match(missing.error.message, /not found|not live/)
 
+// -- the shadow price covers the SEQ list, not the declared range end: a
+// prune replacement node whose seq lies beyond the range must still be
+// removed (the producer's shadowedSeqs include it) --
+const s2 = {
+  events: [
+    { seq: 1, type: 'user/message', time: 1000, data: { content: [{ type: 'text', text: 'a'.repeat(40) }] } },
+    // two tool results, 80-char text each: 20 + 4 (text) + 4 (tool-result) + 4 (role) = 32
+    { seq: 2, type: 'tool/result', time: 2000, data: { message: { content: [{ type: 'tool-result', callId: 'c1', content: [{ type: 'text', text: 'b'.repeat(80) }] }] } } },
+    { seq: 3, type: 'tool/result', time: 3000, data: { message: { content: [{ type: 'tool-result', callId: 'c2', content: [{ type: 'text', text: 'c'.repeat(80) }] }] } } },
+    // metering event: range says [2,2] but the shadowed seqs cover 2 AND 3
+    { seq: 4, type: 'compaction/prune', time: 4000, data: { shadowedRange: { start: 2, end: 2 }, shadowedSeqs: [2, 3], shadowedTokenCount: 64 } },
+    // replacement: 'd' -> 1 + 4 (text) + 4 (tool-result) + 4 (role) = 13
+    { seq: 5, type: 'tool/result', time: 5000, surfaceOp: { op: 'replace', start: 2, end: 2 }, data: { message: { content: [{ type: 'tool-result', callId: 'c3', content: [{ type: 'text', text: 'd' }] }] } } },
+  ],
+}
+sessionsMap.set('s2', s2)
+const snap2 = await handler('snapshot', { sessionId: 's2' })
+assert.equal(snap2.ok, true)
+assert.equal(snap2.value.current.tool, 13, 'shadowed seqs beyond the range end are removed too (only the replacement survives)')
+assert.equal(snap2.value.current.user, 18, 'unrelated nodes keep their price (40 chars: 10 + 4 + 4)')
+assert.equal(snap2.value.current.total, 18 + 13, 'total reflects the seq-based removal')
+
 // -- turn-based retention: long sessions trim by whole turns, never mid-turn --
 // 400 turns x 4 steps = 1600 requests exceeds the step bound; the fold must
 // keep the newest 300 WHOLE turns (turns 101..400, 1200 requests).

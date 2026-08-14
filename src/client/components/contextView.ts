@@ -148,6 +148,15 @@ export function makeContextView(ctx: ClientCtx, kit: ViewKit): (props: ContextVi
     }
 
     const windowPct = data.contextWindow ? Math.min(100, Math.round(current.total / data.contextWindow * 100)) : null
+    // Provider-reported CURRENT occupancy, computed exactly like the official
+    // contextPressure projection: the newest usage sample (input + cache)
+    // carried forward by the heuristic surface movement since it was taken.
+    // The fixed-density heuristic can undercount CJK-heavy content, so the
+    // real provider figure rides alongside the estimate.
+    const lastReq = displayRequests.length > 0 ? displayRequests[displayRequests.length - 1] : null
+    const occupancy = lastReq !== null && typeof lastReq.prompt === 'number' && data.contextWindow
+      ? Math.min(100, Math.round((lastReq.prompt + (current.total - lastReq.total)) / data.contextWindow * 100))
+      : null
 
     return h('div', { className: 'lc-root' },
 
@@ -165,13 +174,12 @@ export function makeContextView(ctx: ClientCtx, kit: ViewKit): (props: ContextVi
           h('span', null, data.contextWindow
             ? ' / ' + fmt(data.contextWindow) + ' ' + tr('overview.ofWindow', { p: windowPct ?? 0 })
             : ' ' + t('overview.estimate')),
-          // The provider-reported prompt of the last request is the best
-          // ground truth for what the model actually received; the fixed
-          // density heuristic can undercount CJK-heavy content, so show the
-          // real number alongside the estimate.
-          displayRequests.length > 0 && displayRequests[displayRequests.length - 1].prompt !== undefined
+          lastReq !== null && typeof lastReq.prompt === 'number' && data.contextWindow && occupancy !== null
             ? h('span', { className: 'lc-actual' },
-              tr('overview.actual', { n: fmt(displayRequests[displayRequests.length - 1].prompt ?? 0) }))
+              tr('overview.actual', {
+                n: fmt(lastReq.prompt + (current.total - lastReq.total)),
+                p: occupancy,
+              }))
             : null),
         h(StackedBar, { parts: partsOf(current), height: 16, max: data.contextWindow, hoverKey: hoverCat, onHoverKey: setHoverCat }),
         h(Legend, { parts: partsOf(current), hoverKey: hoverCat, onHoverKey: setHoverCat }),

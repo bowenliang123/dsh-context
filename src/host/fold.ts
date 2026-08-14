@@ -48,6 +48,15 @@ export interface FoldState {
   requests: RequestRecord[]
   events: ContextEventRecord[]
   callNames: Record<string, string>
+  /**
+   * Seq list of the surface nodes the next replacement will shadow, armed by
+   * the metering event (`compaction/summary` | `compaction/prune`) and
+   * consumed by the replacement that must follow it synchronously. The
+   * producer's shadow price covers exactly these seqs — which can differ
+   * from the replacement's declared range (pruned replacement nodes keep
+   * their own seqs, beyond the range end) — so removal must follow the seqs.
+   */
+  pendingShadowedSeqs?: number[]
 }
 
 /** Keep only the trailing `maxTurns` turn-runs of a request timeline. */
@@ -150,8 +159,31 @@ function applySurface(
     if (utext !== '') node.text = utext
   }
 
+  // The metering event armed the shadowed seqs for the replacement that must
+  // follow it synchronously; consume them here (any later surface event
+  // would expire them, mirroring the official shadow-price protocol).
+  const shadowedSeqs = st.pendingShadowedSeqs
+  st.pendingShadowedSeqs = undefined
+
   const op = ev.surfaceOp as { op?: string; start?: number; end?: number } | null | undefined
   if (op !== null && typeof op === 'object' && op.op === 'replace') {
+    if (Array.isArray(shadowedSeqs) && shadowedSeqs.length > 0) {
+      // The producer's shadow price covers exactly these node seqs, which can
+      // include replacement nodes BEYOND the declared range end (their own
+      // seqs postdate the range). Removing by seqs keeps our per-category
+      // bookkeeping equal to the producer's total — a range-based removal
+      // would leave those nodes behind and overcount.
+      const shadowed = new Set(shadowedSeqs)
+      const kept: SurfaceNode[] = []
+      for (const n of st.surface) {
+        if (shadowed.has(n.seq)) st.sums[n.cat] -= n.tokens
+        else kept.push(n)
+      }
+      st.surface = kept
+      st.sums[cat] += node.tokens
+      st.surface.push(node)
+      return node
+    }
     let si = -1
     let ei = -1
     for (let i = 0; i < st.surface.length; i++) {
@@ -262,6 +294,11 @@ export function foldInto(st: FoldState, events: readonly SessionEvent[]): void {
         break
       }
       case 'compaction/summary':
+        // Arm the shadow-price claim: the replacement that follows this
+        // event synchronously shadows exactly these node seqs.
+        if (data && Array.isArray(data.shadowedSeqs)) {
+          st.pendingShadowedSeqs = data.shadowedSeqs.filter((s): s is number => typeof s === 'number')
+        }
         st.events.push({
           seq: ev.seq, time: ev.time, kind: 'compaction',
           tokens: data && typeof data.shadowedTokenCount === 'number' ? data.shadowedTokenCount : 0,
@@ -269,6 +306,9 @@ export function foldInto(st: FoldState, events: readonly SessionEvent[]): void {
         })
         break
       case 'compaction/prune':
+        if (data && Array.isArray(data.shadowedSeqs)) {
+          st.pendingShadowedSeqs = data.shadowedSeqs.filter((s): s is number => typeof s === 'number')
+        }
         st.events.push({
           seq: ev.seq, time: ev.time, kind: 'prune',
           tokens: data && typeof data.shadowedTokenCount === 'number' ? data.shadowedTokenCount : 0,
