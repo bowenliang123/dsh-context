@@ -57,7 +57,7 @@ Open any session and click **上下文 / Context** (to the right of Chat and Tra
 - **Transport**: host ↔ browser over a generic **Connection RPC channel** (`/dsh-context`, `ctx.connection.rpc` — the same channel mechanism the api gateway uses). The host half registers a `snapshot` endpoint; the client half calls it via `ctx.connection.rpc.call`.
 - **Incremental fold**: per-session fold state lives in the Host half, so each poll only processes newly appended events — reopening the tab is instant.
 - **Events decoded**: `request/header` (system prompt + tool schemas), surface events with `surfaceOp` (append/replace — compaction rewrites history in place), `compaction/summary|prune`, `assistant/message.usage` (real provider tokens), and message `source` metadata (`plugin` forms, `skill-invocation`) for injection events.
-- **Architecture**: `src/host.ts` is a plain ESM Cordis plugin (zero runtime dependencies) loaded by the `dsh-context` loader row; `src/client.cts` is the browser half, transpiled and wrapped at build time into the web boot's closure-factory bundle (`window.__ModuleLoader__.load`). The client renders with bare `React.createElement` — theme-native via dsh CSS variables, bilingual via the client `locale` service. Both halves are TypeScript with strict mode and local (drift-free) service contracts.
+- **Architecture**: `src/host/` is a plain ESM Cordis plugin (zero runtime dependencies) loaded by the `dsh-context` loader row; `src/client/` is the browser half, bundled at build time into the web boot's closure-factory bundle (`window.__ModuleLoader__.load`). The client renders with bare `React.createElement` — theme-native via dsh CSS variables, bilingual via the client `locale` service. Both halves are strict TypeScript with local (drift-free) service contracts, sharing the wire model in `src/shared/types.ts`.
 
 ## Development
 
@@ -68,22 +68,51 @@ pnpm install            # devDependencies only — the plugin itself stays depen
 pnpm run typecheck      # tsc --noEmit (strict)
 pnpm run build          # esbuild: lib/index.js (host) + lib/client.js (client bundle)
 pnpm test               # typecheck + functional tests for both halves
+pnpm run repro          # real-React + jsdom render smoke (granularity-toggle regression)
 ```
 
 `build.mjs` also smoke-checks the outputs (both halves must parse; the host half must import with the `name`/`inject`/`apply` plugin shape).
 
 Commits are guarded by a [husky](https://typicode.github.io/husky/) pre-commit hook that runs `pnpm run typecheck` (`tsc --noEmit`, strict).
 
+## Project structure
+
+```
+src/
+  shared/types.ts        # Wire contract: Snapshot / RequestRecord / ContextEventRecord / SurfaceNode
+  host/                  # Host half — folds the session log into the snapshot
+    index.ts             #   Plugin entry: name/inject/apply + /dsh-context RPC endpoint
+    services.ts          #   Local service contracts (sessions/sessionQuery/connection)
+    pricing.ts           #   dsh token-meter heuristic (estimateMessage/system/tools)
+    fold.ts              #   Incremental per-session fold + whole-turn retention
+    snapshot.ts          #   Snapshot building + event turn/step attribution + caching
+  client/                # Client half — the Context tab UI
+    index.ts             #   Plugin entry: dicts, styles, slot registration
+    view.ts              #   Composition root: ViewKit + component wiring
+    viewkit.ts           #   Shared component dependencies (t/tr/fmt/catLabel/event helpers)
+    i18n.ts / styles.ts  #   Bilingual dictionaries / theme-native styles
+    format.ts            #   Number (k/M) and time formatting
+    categories.ts        #   Category colors + partsOf breakdown projection
+    cache.ts             #   Per-session snapshot cache (stale-while-revalidate)
+    components/          #   One module per component (TrendChart, RequestDetail, …)
+scripts/                 # build.mjs (esbuild) + publish.sh (npm release)
+tests/                   # host.test.mjs, client.test.mjs, repro-real-react.mjs
+```
+
+First-screen notes: the tab seeds its initial render from the per-session snapshot cache (re-opening a session paints instantly, the poll refreshes behind it), pauses polling while the tab is hidden, and never blanks already-visible data on a transient fetch error. On the host, cold-session folding is a one-time ~10 ms pass over the durable log and is cached afterwards, so the `/dsh-context` poll stays cheap.
+
 ## Files
 
 | File | Role |
 | --- | --- |
-| `src/host.ts` | Host half (strict TS): incremental log fold, category accounting, `/dsh-context` snapshot RPC |
-| `src/client.cts` | Client half (strict TS, CJS-flavored for the browser bundle): tab registration, bilingual chart UI |
+| `src/shared/types.ts` | Shared wire contract (type-only; both halves import it) |
+| `src/host/*.ts` | Host half: fold, pricing, snapshot, RPC entry |
+| `src/client/*.ts` | Client half: view composition, components, i18n, styles |
 | `tsconfig.json` | Strict typecheck config (noEmit; esbuild does the transpiling) |
 | `package.json` | `dsh.bundle` (patch layer) + `dsh.client` (web UI) manifests |
 | `cordis.patch.yml` | The bundle's patch layer: inserts the `dsh-context` row |
 | `scripts/build.mjs` | esbuild-based build of `lib/index.js` + `lib/client.js` |
+| `tests/*.mjs` | Functional tests for both halves + the real-React repro |
 | `docs/screenshot.png` | The UI in action |
 
 ## License

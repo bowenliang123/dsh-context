@@ -27,9 +27,10 @@
   "scripts": {
     "build": "node scripts/build.mjs",
     "typecheck": "tsc --noEmit",
-    "test": "npm run typecheck && node scripts/test-host.mjs && node scripts/test-client.mjs",
+    "test": "npm run typecheck && node tests/host.test.mjs && node tests/client.test.mjs",
     "release": "bash scripts/publish.sh",
-    "prepare": "husky"
+    "prepare": "husky",
+    "repro": "node tests/repro-real-react.mjs"
   },
   "dsh": {
     "bundle": {
