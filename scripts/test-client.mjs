@@ -153,7 +153,7 @@ const requireStateful = (spec) => {
 const m2 = { exports: {} }
 const pluginExports2 = factory(requireStateful, m2, globalThis.window, fakeDoc)
 
-const DICT_FOR_TEST = { 'tab': 'Context', 'loading': '…', 'error': 'x', 'detail.step': 'T{t} · step {s}', 'gran.step': 'Step', 'gran.turn': 'Turn', 'detail.turn': 'T{t} · {n} steps', 'detail.lastStep': 'last step', 'overview.actual': '· last actual prompt {n}' }
+const DICT_FOR_TEST = { 'tab': 'Context', 'loading': '…', 'error': 'x', 'detail.step': 'Turn {t} · Step {s}', 'gran.step': 'Step', 'gran.turn': 'Turn', 'detail.turn': 'Turn {t} · {n} steps', 'detail.lastStep': 'last step', 'overview.actual': '· last actual prompt {n}' }
 let viewComponent = null
 const fakeCtx2 = {
   get: () => undefined,
@@ -275,12 +275,12 @@ const detailStep = (tr) => {
 }
 
 let tr = renderView()
-assert.match(detailStep(tr), /T3/, 'detail defaults to the newest request (T3)')
+assert.match(detailStep(tr), /Turn 3/, 'detail defaults to the newest request (Turn 3)')
 assert.equal(byClass(tr, 'lc-bar-hovered').length, 0, 'no hovered bar initially')
 
 ctxSlots[3][1](3) // setHoveredSeq(seq 3, turn 2)
 tr = renderView()
-assert.match(detailStep(tr), /T2/, 'hovering a bar links the detail below to it')
+assert.match(detailStep(tr), /Turn 2/, 'hovering a bar links the detail below to it')
 const hovered = byClass(tr, 'lc-bar-hovered')
 assert.equal(hovered.length, 1, 'exactly one hovered bar')
 assert.equal(hovered[0].args[1].key, 3, 'hovered bar is seq 3')
@@ -290,7 +290,7 @@ assert.equal(typeof bar3.args[1].onClick, 'function', 'bars carry onClick')
 
 ctxSlots[3][1](null) // leave the plot
 tr = renderView()
-assert.match(detailStep(tr), /T3/, 'leaving the plot reverts the detail to the newest request')
+assert.match(detailStep(tr), /Turn 3/, 'leaving the plot reverts the detail to the newest request')
 
 // ---- overview stacked bar: themed hover tooltip per segment ----
 const overviewStack = byClass(tr, 'lc-stacked').find(s => s.args[1].style.height === '16px')
@@ -392,7 +392,7 @@ assert.equal(turnBlocks2[0].args[1].style.width, t1Bar.args[1].style.width, 'T1 
 // the turn detail is labeled with the step count and tagged as the last step
 t1Bar.args[1].onMouseEnter()
 tr = renderView()
-assert.match(detailStep(tr), /T1 · 2 steps/, 'turn detail shows the step count, not a bare step number')
+assert.match(detailStep(tr), /Turn 1 · 2 steps/, 'turn detail shows the step count, not a bare step number')
 assert.equal(byClass(tr, 'lc-detail-tag').length, 1, 'the last-step tag marks the shown breakdown')
 assert.equal(byClass(tr, 'lc-detail-tag')[0].args[2], 'last step', 'tag text localized')
 ctxSlots[3][1](null)
