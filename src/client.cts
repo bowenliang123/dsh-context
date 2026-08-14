@@ -292,17 +292,43 @@ function makeView(ctx: ClientCtx, t: Translate): (props: ContextViewProps) => Re
     let total = 0
     for (const p of props.parts) total += p.value
     const scale = props.max !== undefined && props.max > total ? props.max : total
-    return h('div', { className: 'lc-stacked', style: { height: (props.height || 14) + 'px' } },
-      total <= 0
-        ? null
-        : props.parts.map(p => {
-          if (!p.value) return null
-          return h('div', {
-            key: p.key,
-            title: catLabel(p.key) + ' ' + fmt(p.value) + ' (' + Math.round(p.value / total * 100) + '%)',
-            style: { width: (p.value / scale * 100) + '%', background: p.color },
-          })
-        }))
+
+    // Themed hover tooltip per segment: shows the category, its tokens, and
+    // its share of the parts' total. The tooltip is positioned at the
+    // pointer's x within the bar (clamped) and floats above the stack — the
+    // wrapper keeps it outside the rounded/clipped stack itself.
+    const wrapRef = React.useRef<HTMLDivElement | null>(null)
+    const [tip, setTip] = React.useState<{ key: string; text: string; left: number } | null>(null)
+    const showTip = (e: ReactNS.MouseEvent<HTMLDivElement>, p: PartsPart): void => {
+      const rect = wrapRef.current?.getBoundingClientRect()
+      const left = rect ? e.clientX - rect.left : 50
+      const width = rect?.width ?? 200
+      setTip({
+        key: p.key,
+        text: catLabel(p.key) + ' ' + fmt(p.value) + ' (' + Math.round(p.value / total * 100) + '%)',
+        left: Math.max(48, Math.min(left, width - 48)),
+      })
+    }
+
+    return h('div', { className: 'lc-stacked-wrap' },
+      h('div', {
+        className: 'lc-stacked',
+        style: { height: (props.height || 14) + 'px' },
+        ref: wrapRef,
+        onMouseLeave: () => { setTip(null) },
+      },
+        total <= 0
+          ? null
+          : props.parts.map(p => {
+            if (!p.value) return null
+            return h('div', {
+              key: p.key,
+              style: { width: (p.value / scale * 100) + '%', background: p.color },
+              onMouseEnter: (e: ReactNS.MouseEvent<HTMLDivElement>) => { showTip(e, p) },
+              onMouseMove: (e: ReactNS.MouseEvent<HTMLDivElement>) => { showTip(e, p) },
+            })
+          })),
+      tip ? h('div', { className: 'lc-bar-tip', style: { left: tip.left + 'px' } }, tip.text) : null)
   }
 
   function Legend(props: { parts: PartsPart[] }): ReactNS.ReactElement {
@@ -602,7 +628,9 @@ const STYLES = [
   '.lc-overview-num { margin-bottom: 8px; }',
   '.lc-overview-num b { font-size: 20px; }',
   '.lc-overview-num span { color: var(--dsw-alias-label-secondary); }',
+  '.lc-stacked-wrap { position: relative; width: 100%; }',
   '.lc-stacked { display: flex; width: 100%; border-radius: 5px; overflow: hidden; background: rgba(128,128,128,0.18); }',
+  '.lc-bar-tip { position: absolute; bottom: calc(100% + 6px); transform: translateX(-50%); z-index: 5; white-space: nowrap; background: var(--dsw-alias-bg-layer-2); border: 1px solid var(--dsw-alias-border-l1); border-radius: 6px; padding: 3px 8px; font-size: 12px; color: var(--dsw-alias-label-primary); box-shadow: 0 2px 8px rgba(0,0,0,0.18); pointer-events: none; }',
   '.lc-stacked > div { height: 100%; }',
   '.lc-legend { display: flex; flex-wrap: wrap; gap: 6px 14px; margin-top: 10px; }',
   '.lc-chip { display: inline-flex; align-items: center; gap: 5px; color: var(--dsw-alias-label-primary); }',

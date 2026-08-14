@@ -276,4 +276,18 @@ ctxSlots[3][1](null) // leave the plot
 tr = renderView()
 assert.match(detailStep(tr), /T3/, 'leaving the plot reverts the detail to the newest request')
 
-console.log('✔ chart render test passed (fixed-width bars, scroll container, turn ranges, hover linking)')
+// ---- overview stacked bar: themed hover tooltip per segment ----
+const overviewStack = byClass(tr, 'lc-stacked').find(s => s.args[1].style.height === '16px')
+assert.ok(overviewStack, 'overview stacked bar present')
+const segment = overviewStack.args.slice(2).flat().find(s => s !== null)
+assert.ok(segment, 'overview has segments')
+assert.equal(segment.args[1].title, undefined, 'native title replaced by the custom tooltip')
+assert.equal(typeof segment.args[1].onMouseEnter, 'function', 'segments carry onMouseEnter')
+segment.args[1].onMouseEnter({ clientX: 120 }) // fake pointer; ref is null in tests -> centered fallback
+tr = renderView()
+const tip = byClass(tr, 'lc-bar-tip')
+assert.equal(tip.length, 1, 'hovering a segment shows the tooltip')
+assert.match(textOf(tip[0]), /\(10%\)/, 'tooltip shows the segment share of the total')
+assert.equal(typeof tip[0].args[1].style.left, 'string', 'tooltip is positioned along the pointer')
+
+console.log('✔ chart render test passed (fixed-width bars, scroll container, turn ranges, hover linking, overview tooltip)')
