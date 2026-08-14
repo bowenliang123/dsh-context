@@ -149,13 +149,29 @@ export function makeTrendChart(kit: ViewKit): (props: TrendChartProps) => ReactN
       updateEdges(el)
     })
 
+    // Compact single-line hover tooltip (shown instantly by the custom
+    // `.lc-chart-tip`, replacing the delayed native title): position, time,
+    // estimated total, and the provider-reported prompt when available. The
+    // per-category breakdown lives in the detail panel below.
+    const tipOf = (req: RequestRecord): string => {
+      const head = req.stepCount !== undefined && req.stepCount > 1
+        ? tr('tip.turn', { t: req.turn ?? 0, n: req.stepCount })
+        : tr('tip.step', { t: req.turn ?? 0, s: req.step ?? 0 })
+      return head + ' · ' + fmtTime(req.time) + ' · ' + tr('tip.total', { n: fmt(req.total) })
+        + (req.prompt !== undefined ? ' · ' + tr('tip.actual', { n: fmt(req.prompt) }) : '')
+    }
+    const hoveredIdx = props.hoveredSeq !== null ? requests.findIndex(r => r.seq === props.hoveredSeq) : -1
+    const hoveredReq = hoveredIdx >= 0 ? requests[hoveredIdx] : null
+
     return h('div', { className: 'lc-chartrow' },
       h('div', { className: 'lc-axis' },
         h('span', { className: 'lc-axis-top' }, fmt(maxTotal)),
         h('span', { className: 'lc-axis-mid' }, fmt(Math.round(maxTotal / 2))),
         h('span', { className: 'lc-axis-bot' }, '0')),
       h('div', {
-        className: 'lc-chart-scroll',
+        // Turn-aware dim scope: while a turn is focused (bar or strip hover),
+        // bars and strip blocks OUTSIDE the active turn fade to 35%.
+        className: 'lc-chart-scroll' + (props.activeTurn !== null ? ' lc-chart-dim' : ''),
         ref: scrollRef,
         onScroll: (e: ReactNS.UIEvent<HTMLDivElement>) => { updateEdges(e.currentTarget) },
       },
@@ -164,7 +180,10 @@ export function makeTrendChart(kit: ViewKit): (props: TrendChartProps) => ReactN
         edges.left ? h('div', { className: 'lc-chart-fade lc-chart-fade-l' }) : null,
         // Hovering a bar previews it in the detail below; leaving the plot
         // clears the preview (a pinned selection, if any, takes over again).
-        h('div', { className: 'lc-chart', onMouseLeave: () => { props.onHover(null) } },
+        h('div', {
+          className: 'lc-chart',
+          onMouseLeave: () => { props.onHover(null) },
+        },
           h('div', { className: 'lc-grid lc-grid-top' }),
           h('div', { className: 'lc-grid lc-grid-mid' }),
           requests.map((req, i) => {
@@ -173,13 +192,6 @@ export function makeTrendChart(kit: ViewKit): (props: TrendChartProps) => ReactN
             const selected = props.selectedSeq === req.seq
             const hovered = props.hoveredSeq === req.seq
             const inTurn = props.activeTurn !== null && (req.turn ?? 0) === props.activeTurn
-            const tip = (req.stepCount !== undefined && req.stepCount > 1
-              ? tr('tip.turn', { t: req.turn ?? 0, n: req.stepCount })
-              : tr('tip.step', { t: req.turn ?? 0, s: req.step ?? 0 }))
-              + ' · ' + fmtTime(req.time) + '\n'
-              + tr('tip.total', { n: fmt(req.total) })
-              + (req.prompt !== undefined ? tr('tip.actual', { n: fmt(req.prompt) }) : '') + '\n'
-              + CATS.map(c => catLabel(c.key) + ' ' + fmt(req[c.key] || 0)).join(' / ')
             return h('div', {
               key: req.seq,
               // Uniform column width in BOTH granularities: turn aggregates
@@ -189,7 +201,6 @@ export function makeTrendChart(kit: ViewKit): (props: TrendChartProps) => ReactN
                 + (hovered ? ' lc-bar-hovered' : '')
                 + (inTurn ? ' lc-bar-in-turn' : ''),
               style: { width: BAR_W + 'px' },
-              title: tip,
               onClick: () => { props.onSelect(selected ? null : req.seq) },
               onMouseEnter: () => { props.onHover(req.seq) },
             },
@@ -208,6 +219,12 @@ export function makeTrendChart(kit: ViewKit): (props: TrendChartProps) => ReactN
                   return h('div', { key: c.key, style: { height: Math.max(1, Math.round(v / maxTotal * CHART_H)) + 'px', background: c.color } })
                 })))
           })),
+        // Instant hover tooltip, glued to its bar's column (it lives in the
+        // scrolling content, so it follows the bar while the chart scrolls).
+        hoveredReq !== null ? h('div', {
+          className: 'lc-chart-tip',
+          style: { left: (hoveredIdx * (BAR_W + BAR_GAP) + BAR_W / 2) + 'px' },
+        }, tipOf(hoveredReq)) : null,
         // Turn strip: one COLOR BLOCK per turn, spanning exactly its bars'
         // columns, so the partition reads at a glance and lines up with the
         // steps above. Hovering a block highlights that turn's bars in the

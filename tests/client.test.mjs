@@ -153,7 +153,7 @@ const requireStateful = (spec) => {
 const m2 = { exports: {} }
 const pluginExports2 = factory(requireStateful, m2, globalThis.window, fakeDoc)
 
-const DICT_FOR_TEST = { 'tab': 'Context', 'loading': '…', 'error': 'x', 'detail.step': 'Turn {t} · Step {s}', 'gran.step': 'Step', 'gran.turn': 'Turn', 'detail.turn': 'Turn {t} · {n} steps', 'detail.lastStep': 'last step', 'overview.actual': '· last actual prompt {n}', 'overview.free': 'Free window', 'events.at': 'Turn {t} · Step {s}', 'events.range': 'Turn {t} · Step {a}→{b}', 'events.rangeTo': 'Turn {a} · Step {as} → Turn {b} · Step {bs}', 'stats.recycleSub': '{c} compactions · {p} prunes' }
+const DICT_FOR_TEST = { 'tab': 'Context', 'loading': '…', 'error': 'x', 'detail.step': 'Turn {t} · Step {s}', 'gran.step': 'Step', 'gran.turn': 'Turn', 'detail.turn': 'Turn {t} · {n} steps', 'detail.lastStep': 'last step', 'overview.actual': '· last actual prompt {n}', 'overview.free': 'Free window', 'events.at': 'Turn {t} · Step {s}', 'events.range': 'Turn {t} · Step {a}→{b}', 'events.rangeTo': 'Turn {a} · Step {as} → Turn {b} · Step {bs}', 'stats.recycleSub': '{c} compactions · {p} prunes', 'tip.step': 'Turn {t} · Step {s}', 'tip.turn': 'Turn {t} · {n} steps', 'tip.total': 'total ≈ {n}', 'tip.actual': ' (actual {n})' }
 let viewComponent = null
 const fakeCtx2 = {
   get: () => undefined,
@@ -302,10 +302,20 @@ assert.equal(hovered[0].args[1].key, 3, 'hovered bar is seq 3')
 const bar3 = byClass(tr, 'lc-bar').find(b => b.args[1].key === 3)
 assert.equal(typeof bar3.args[1].onMouseEnter, 'function', 'bars carry onMouseEnter')
 assert.equal(typeof bar3.args[1].onClick, 'function', 'bars carry onClick')
+// the instant custom tooltip replaces the delayed native title
+const chartTip = byClass(tr, 'lc-chart-tip')
+assert.equal(chartTip.length, 1, 'hovering shows the custom tooltip immediately')
+assert.match(textOf(chartTip[0]), /Turn 2 · Step 0/, 'tooltip names the hovered request')
+assert.match(textOf(chartTip[0]), /total ≈ 107/, 'tooltip carries the estimated total')
+assert.equal(typeof chartTip[0].args[1].style.left, 'string', 'tooltip is positioned at the bar column')
+// turn-aware dimming: the chart is in dim mode while a turn is focused
+assert.equal(byClass(tr, 'lc-chart-dim').length, 1, 'bar hover activates the turn-aware dim')
 
 ctxSlots[3][1](null) // leave the plot
 tr = renderView()
 assert.match(detailStep(tr), /Turn 3/, 'leaving the plot reverts the detail to the newest request')
+assert.equal(byClass(tr, 'lc-chart-tip').length, 0, 'tooltip clears with the hover')
+assert.equal(byClass(tr, 'lc-chart-dim').length, 0, 'dim clears with the hover')
 
 // ---- overview stacked bar: themed hover tooltip per segment ----
 const overviewStack = byClass(tr, 'lc-stacked').find(s => s.args[1].style.height === '16px')
@@ -380,6 +390,7 @@ assert.deepEqual(inTurn.map(b => b.args[1].key), [1, 2], 'highlighted bars are s
 const onBlocks = byClass(tr, 'lc-turn-on')
 assert.equal(onBlocks.length, 1, 'exactly one turn block highlighted')
 assert.equal(onBlocks[0].args[2], 'T1', 'highlighted block is T1')
+assert.equal(byClass(tr, 'lc-chart-dim').length, 1, 'strip hover also dims bars outside the turn')
 
 // leaving the strip clears the turn highlight
 const strip = byClass(tr, 'lc-turns')[0]
@@ -387,6 +398,7 @@ assert.equal(typeof strip.args[1].onMouseLeave, 'function', 'strip carries onMou
 strip.args[1].onMouseLeave()
 tr = renderView()
 assert.equal(byClass(tr, 'lc-bar-in-turn').length, 0, 'leaving the strip clears bar highlights')
+assert.equal(byClass(tr, 'lc-chart-dim').length, 0, 'leaving the strip clears the dim')
 
 // hovering a bar highlights its turn block (bidirectional)
 ctxSlots[3][1](3) // hover seq 3 (turn 2)
