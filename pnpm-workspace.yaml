@@ -1,0 +1,8 @@
+# The project is its own pnpm workspace root, so pnpm never walks up into a
+# parent workspace (e.g. $HOME) when installing.
+packages:
+  - .
+
+# Allow esbuild's postinstall (binary bootstrap); everything else is pure JS.
+allowBuilds:
+  esbuild: true

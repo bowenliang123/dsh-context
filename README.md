@@ -61,11 +61,13 @@ Open any session and click **上下文 / Context** (to the right of Chat and Tra
 
 ## Development
 
+The project is a pnpm workspace root (`pnpm-workspace.yaml`), so `pnpm install` never walks up into a parent workspace.
+
 ```sh
-npm install            # devDependencies only — the plugin itself stays dependency-free
-npm run typecheck      # tsc --noEmit (strict)
-npm run build          # esbuild: lib/index.js (host) + lib/client.js (client bundle)
-npm test               # typecheck + functional tests for both halves
+pnpm install            # devDependencies only — the plugin itself stays dependency-free
+pnpm run typecheck      # tsc --noEmit (strict)
+pnpm run build          # esbuild: lib/index.js (host) + lib/client.js (client bundle)
+pnpm test               # typecheck + functional tests for both halves
 ```
 
 `build.mjs` also smoke-checks the outputs (both halves must parse; the host half must import with the `name`/`inject`/`apply` plugin shape).

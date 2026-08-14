@@ -26,6 +26,10 @@ yarn-error.log*
 # npm cache kept in-repo for sandboxed environments
 .npm-cache/
 
+# pnpm workspace-local store and temp
+.pnpm-store/
+.tmp/
+
 # Environment variables
 .env
 .env.local

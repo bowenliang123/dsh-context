@@ -59,5 +59,6 @@
     "@types/react": "^18.3.31",
     "esbuild": "^0.28.2",
     "typescript": "^7.0.2"
-  }
+  },
+  "packageManager": "pnpm@11.9.0"
 }
