@@ -67,17 +67,6 @@ node scripts/build.mjs   # writes lib/index.js (host) + lib/client.js (client bu
 
 `build.mjs` also smoke-checks the outputs (both halves must parse; the host half must import with the `name`/`inject`/`apply` plugin shape).
 
-## Publishing
-
-`scripts/publish.sh` builds and publishes to npm as the authenticated user:
-
-```sh
-NPM_TOKEN=<your npmjs access token> ./scripts/publish.sh        # patch bump if the current version is already published
-NPM_TOKEN=<token> ./scripts/publish.sh minor                    # explicit bump level
-```
-
-The token is read from the environment only and never written to disk. The script auto-bumps the version when the current one is already on the registry, so re-running it after a successful publish is a no-op.
-
 ## Files
 
 | File | Role |
@@ -87,7 +76,6 @@ The token is read from the environment only and never written to disk. The scrip
 | `package.json` | `dsh.bundle` (patch layer) + `dsh.client` (web UI) manifests |
 | `cordis.patch.yml` | The bundle's patch layer: inserts the `dsh-context` row |
 | `scripts/build.mjs` | Zero-dependency build of `lib/index.js` + `lib/client.js` |
-| `scripts/publish.sh` | npm publish with `NPM_TOKEN` |
 | `docs/screenshot.png` | The UI in action |
 
 ## License
