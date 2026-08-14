@@ -193,6 +193,11 @@ function makeView(ctx, t) {
 
   // Plot height in px (the marker lane above it is 18px).
   var CHART_H = 112
+  // Fixed column geometry: constant bar width keeps sparse histories from
+  // stretching bars, and dense histories scroll horizontally instead of
+  // compressing. The turn tick row below mirrors the same column grid.
+  var BAR_W = 14
+  var BAR_GAP = 2
 
   function TrendChart(props) {
     var requests = props.requests
@@ -212,36 +217,67 @@ function makeView(ctx, t) {
       }
     }
 
+    // Consecutive requests of the same turn collapse into one labeled range.
+    var groups = []
+    for (var g = 0; g < requests.length; g++) {
+      var grp = groups.length > 0 ? groups[groups.length - 1] : null
+      if (grp === null || grp.turn !== requests[g].turn) {
+        grp = { turn: requests[g].turn, count: 0 }
+        groups.push(grp)
+      }
+      grp.count++
+    }
+
+    // Stick to the newest bars unless the user scrolled away from the end.
+    var scrollRef = React.useRef(null)
+    React.useEffect(function () {
+      var el = scrollRef.current
+      if (el === null) return
+      if (el.scrollLeft + el.clientWidth >= el.scrollWidth - 24) el.scrollLeft = el.scrollWidth
+    })
+
     return h('div', { className: 'lc-chartrow' },
       h('div', { className: 'lc-axis' },
         h('span', { className: 'lc-axis-top' }, fmt(maxTotal)),
         h('span', { className: 'lc-axis-mid' }, fmt(Math.round(maxTotal / 2))),
         h('span', { className: 'lc-axis-bot' }, '0')),
-      h('div', { className: 'lc-chart' },
-        h('div', { className: 'lc-grid lc-grid-top' }),
-        h('div', { className: 'lc-grid lc-grid-mid' }),
-        requests.map(function (req, i) {
-          var selected = props.selectedSeq === req.seq
-          var tip = tr('tip.step', { t: req.turn, s: req.step }) + ' · ' + fmtTime(req.time) + '\n'
-            + tr('tip.total', { n: fmt(req.total) })
-            + (req.prompt !== undefined ? tr('tip.actual', { n: fmt(req.prompt) }) : '') + '\n'
-            + CATS.map(function (c) { return catLabel(c.key) + ' ' + fmt(req[c.key] || 0) }).join(' / ')
-          return h('div', {
-            key: req.seq,
-            className: 'lc-bar' + (selected ? ' lc-bar-selected' : ''),
-            title: tip,
-            onClick: function () { props.onSelect(selected ? null : req.seq) },
-          },
-            markers[i] ? h('span', { className: 'lc-bar-marker', title: eventLabel(markers[i]) }, '✂') : null,
-            h('div', { className: 'lc-bar-stack' },
-              CATS.map(function (c) {
-                var v = req[c.key] || 0
-                if (!v) return null
-                // px heights: the stack's height is content-driven, so
-                // percentage heights would collapse against an indefinite base.
-                return h('div', { key: c.key, style: { height: Math.max(1, Math.round(v / maxTotal * CHART_H)) + 'px', background: c.color } })
-              })))
-        })))
+      h('div', { className: 'lc-chart-scroll', ref: scrollRef },
+        h('div', { className: 'lc-chart' },
+          h('div', { className: 'lc-grid lc-grid-top' }),
+          h('div', { className: 'lc-grid lc-grid-mid' }),
+          requests.map(function (req, i) {
+            var selected = props.selectedSeq === req.seq
+            var tip = tr('tip.step', { t: req.turn, s: req.step }) + ' · ' + fmtTime(req.time) + '\n'
+              + tr('tip.total', { n: fmt(req.total) })
+              + (req.prompt !== undefined ? tr('tip.actual', { n: fmt(req.prompt) }) : '') + '\n'
+              + CATS.map(function (c) { return catLabel(c.key) + ' ' + fmt(req[c.key] || 0) }).join(' / ')
+            return h('div', {
+              key: req.seq,
+              className: 'lc-bar' + (selected ? ' lc-bar-selected' : ''),
+              title: tip,
+              onClick: function () { props.onSelect(selected ? null : req.seq) },
+            },
+              markers[i] ? h('span', { className: 'lc-bar-marker', title: eventLabel(markers[i]) }, '✂') : null,
+              h('div', { className: 'lc-bar-stack' },
+                CATS.map(function (c) {
+                  var v = req[c.key] || 0
+                  if (!v) return null
+                  // px heights: the stack's height is content-driven, so
+                  // percentage heights would collapse against an indefinite base.
+                  return h('div', { key: c.key, style: { height: Math.max(1, Math.round(v / maxTotal * CHART_H)) + 'px', background: c.color } })
+                })))
+          })),
+        h('div', { className: 'lc-turns' },
+          groups.map(function (grp, gi) {
+            // One column per bar plus the shared gap; the flex gap between
+            // ticks restores the inter-group gap, so tick spans line up with
+            // their bars exactly.
+            return h('span', {
+              key: 'turn-' + gi,
+              className: 'lc-turn',
+              style: { width: (grp.count * (BAR_W + BAR_GAP) - BAR_GAP) + 'px' },
+            }, 'T' + grp.turn)
+          }))))
   }
 
   function RequestDetail(props) {
@@ -427,21 +463,27 @@ var STYLES = [
   '.lc-tools { margin-top: 10px; color: var(--dsw-alias-label-secondary); display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }',
   '.lc-tool-chip { background: var(--dsw-alias-bg-layer-2); border-radius: 4px; padding: 1px 7px; font-size: 12px; color: var(--dsw-alias-label-primary); }',
   '.lc-chartrow { display: flex; gap: 6px; align-items: stretch; }',
-  '.lc-axis { position: relative; width: 40px; height: 130px; padding-top: 18px; box-sizing: border-box; color: var(--dsw-alias-label-secondary); font-size: 11px; }',
+  '.lc-axis { position: relative; width: 40px; height: 150px; padding-top: 18px; box-sizing: border-box; color: var(--dsw-alias-label-secondary); font-size: 11px; }',
   '.lc-axis span { position: absolute; right: 0; line-height: 1; }',
   '.lc-axis-top { top: 13px; }',
   '.lc-axis-mid { top: 69px; }',
   '.lc-axis-bot { top: 125px; }',
-  '.lc-chart { position: relative; flex: 1; display: flex; align-items: flex-end; gap: 2px; height: 130px; padding-top: 18px; box-sizing: border-box; }',
+  '.lc-chart-scroll { flex: 1; overflow-x: auto; overflow-y: hidden; min-width: 0; scrollbar-width: thin; }',
+  '.lc-chart-scroll::-webkit-scrollbar { height: 6px; }',
+  '.lc-chart-scroll::-webkit-scrollbar-thumb { background: var(--dsw-alias-border-l1); border-radius: 3px; }',
+  '.lc-chart-scroll::-webkit-scrollbar-track { background: transparent; }',
+  '.lc-chart { position: relative; display: flex; align-items: flex-end; gap: 2px; height: 130px; padding-top: 18px; box-sizing: border-box; width: max-content; min-width: 100%; }',
   '.lc-grid { position: absolute; left: 0; right: 0; border-top: 1px dashed var(--dsw-alias-border-l1); pointer-events: none; }',
   '.lc-grid-top { top: 18px; }',
   '.lc-grid-mid { top: 74px; }',
-  '.lc-bar { position: relative; flex: 1; min-width: 5px; height: 100%; display: flex; align-items: flex-end; cursor: pointer; border-radius: 2px; }',
+  '.lc-bar { position: relative; width: 14px; flex: none; height: 100%; display: flex; align-items: flex-end; cursor: pointer; border-radius: 2px; }',
   '.lc-bar:hover { background: var(--dsw-alias-bg-layer-2); }',
   '.lc-bar-selected { outline: 2px solid var(--dsw-alias-brand-primary); outline-offset: 1px; }',
   '.lc-bar-stack { display: flex; flex-direction: column-reverse; width: 100%; }',
   '.lc-bar-stack > div { width: 100%; }',
   '.lc-bar-marker { position: absolute; top: -16px; left: 50%; transform: translateX(-50%); font-size: 11px; color: var(--dsw-alias-state-warn-primary); }',
+  '.lc-turns { display: flex; gap: 2px; width: max-content; min-width: 100%; }',
+  '.lc-turn { flex: none; min-width: 24px; box-sizing: border-box; text-align: center; font-size: 11px; line-height: 18px; color: var(--dsw-alias-label-secondary); border-top: 1px solid var(--dsw-alias-border-l1); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }',
   '.lc-detail { margin-top: 12px; border-top: 1px solid var(--dsw-alias-border-l1); padding-top: 12px; }',
   '.lc-detail-head { display: flex; flex-wrap: wrap; gap: 6px 16px; margin-bottom: 8px; color: var(--dsw-alias-label-secondary); }',
   '.lc-detail-head b { color: var(--dsw-alias-label-primary); }',
