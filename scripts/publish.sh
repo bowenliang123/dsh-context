@@ -41,10 +41,10 @@ if [[ "$CURRENT" == "$PUBLISHED" ]]; then
 fi
 
 echo "==> publishing $NAME@$CURRENT"
-OTP_ARGS=()
-if [[ -n "${NPM_OTP:-}" ]]; then OTP_ARGS=(--otp "$NPM_OTP"); fi
-npm publish --access public --registry https://registry.npmjs.org \
-  --//registry.npmjs.org/:_authToken="$NPM_TOKEN" "${OTP_ARGS[@]}"
+PUBLISH_ARGS=(--access public --registry https://registry.npmjs.org \
+  --//registry.npmjs.org/:_authToken="$NPM_TOKEN")
+if [[ -n "${NPM_OTP:-}" ]]; then PUBLISH_ARGS+=(--otp "$NPM_OTP"); fi
+npm publish "${PUBLISH_ARGS[@]}"
 
 echo "==> verifying"
 LIVE="$(npm view "$NAME" version --registry https://registry.npmjs.org)"
