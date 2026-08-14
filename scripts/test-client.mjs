@@ -314,10 +314,13 @@ assert.equal(typeof chip0.args[1].onMouseEnter, 'function', 'legend chips carry 
 chip0.args[1].onMouseEnter()
 tr = renderView()
 assert.equal(byClass(tr, 'lc-stacked-seg-on').length, 1, 'hovering a chip highlights its segment')
+assert.equal(byClass(tr, 'lc-bar-tip').length, 1, 'hovering a chip also shows the tooltip above its segment')
+assert.match(textOf(byClass(tr, 'lc-bar-tip')[0]), /\(10%\)/, 'chip-driven tooltip carries the share')
 chip0.args[1].onMouseLeave()
 tr = renderView()
 assert.equal(byClass(tr, 'lc-stacked-seg-on').length, 0, 'leaving the chip clears the segment highlight')
 assert.equal(byClass(tr, 'lc-chip-on').length, 0, 'leaving the chip clears the chip highlight')
+assert.equal(byClass(tr, 'lc-bar-tip').length, 0, 'leaving the chip clears the tooltip')
 // segment -> chip, on a different category
 const seg1 = byClass(tr, 'lc-stacked').find(s => s.args[1].style.height === '16px')
   .args.slice(2).flat().filter(s => s !== null)[1]

@@ -344,36 +344,31 @@ function makeView(ctx: ClientCtx, t: Translate): (props: ContextViewProps) => Re
     for (const p of props.parts) total += p.value
     const scale = props.max !== undefined && props.max > total ? props.max : total
 
-    // Themed hover tooltip per segment: shows the category, its tokens, and
-    // its share of the parts' total. The tooltip is positioned at the
-    // pointer's x within the bar (clamped) and floats above the stack — the
-    // wrapper keeps it outside the rounded/clipped stack itself. The hovered
-    // key is also reported upward (when connected) so the legend below can
-    // highlight the matching composition.
-    const wrapRef = React.useRef<HTMLDivElement | null>(null)
-    const [tip, setTip] = React.useState<{ key: string; text: string; left: number } | null>(null)
-    const showTip = (e: ReactNS.MouseEvent<HTMLDivElement>, p: PartsPart): void => {
-      const rect = wrapRef.current?.getBoundingClientRect()
-      const left = rect ? e.clientX - rect.left : 50
-      const width = rect?.width ?? 200
-      setTip({
-        key: p.key,
-        text: catLabel(p.key) + ' ' + fmt(p.value) + ' (' + Math.round(p.value / total * 100) + '%)',
-        left: Math.max(48, Math.min(left, width - 48)),
-      })
-      if (props.onHoverKey !== undefined) props.onHoverKey(p.key)
-    }
-    const clearHover = (): void => {
-      setTip(null)
-      if (props.onHoverKey !== undefined) props.onHoverKey(null)
+    // The tooltip is DERIVED from the shared hover key, so hovering either a
+    // segment or its legend chip lights the same segment and shows the same
+    // tooltip (centered on the segment; percentage positioning needs no
+    // measuring). The wrapper keeps the tooltip outside the clipped stack.
+    let tip: { text: string; leftPct: number } | null = null
+    if (props.hoverKey !== null && props.hoverKey !== undefined) {
+      let acc = 0
+      for (const p of props.parts) {
+        const pct = scale > 0 ? p.value / scale * 100 : 0
+        if (p.key === props.hoverKey && p.value > 0) {
+          tip = {
+            text: catLabel(p.key) + ' ' + fmt(p.value) + ' (' + Math.round(p.value / total * 100) + '%)',
+            leftPct: Math.max(12, Math.min(acc + pct / 2, 88)),
+          }
+          break
+        }
+        acc += pct
+      }
     }
 
     return h('div', { className: 'lc-stacked-wrap' },
       h('div', {
         className: 'lc-stacked',
         style: { height: (props.height || 14) + 'px' },
-        ref: wrapRef,
-        onMouseLeave: clearHover,
+        onMouseLeave: () => { if (props.onHoverKey !== undefined) props.onHoverKey(null) },
       },
         total <= 0
           ? null
@@ -384,11 +379,10 @@ function makeView(ctx: ClientCtx, t: Translate): (props: ContextViewProps) => Re
               key: p.key,
               className: 'lc-stacked-seg' + (on ? ' lc-stacked-seg-on' : ''),
               style: { width: (p.value / scale * 100) + '%', background: p.color },
-              onMouseEnter: (e: ReactNS.MouseEvent<HTMLDivElement>) => { showTip(e, p) },
-              onMouseMove: (e: ReactNS.MouseEvent<HTMLDivElement>) => { showTip(e, p) },
+              onMouseEnter: () => { if (props.onHoverKey !== undefined) props.onHoverKey(p.key) },
             })
           })),
-      tip ? h('div', { className: 'lc-bar-tip', style: { left: tip.left + 'px' } }, tip.text) : null)
+      tip ? h('div', { className: 'lc-bar-tip', style: { left: tip.leftPct + '%' } }, tip.text) : null)
   }
 
   function Legend(props: {
