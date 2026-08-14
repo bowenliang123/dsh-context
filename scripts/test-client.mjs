@@ -153,7 +153,7 @@ const requireStateful = (spec) => {
 const m2 = { exports: {} }
 const pluginExports2 = factory(requireStateful, m2, globalThis.window, fakeDoc)
 
-const DICT_FOR_TEST = { 'tab': 'Context', 'loading': '…', 'error': 'x', 'detail.step': 'Turn {t} · Step {s}', 'gran.step': 'Step', 'gran.turn': 'Turn', 'detail.turn': 'Turn {t} · {n} steps', 'detail.lastStep': 'last step', 'overview.actual': '· last actual prompt {n}', 'events.at': 'Turn {t} · Step {s}', 'events.range': 'Turn {t} · Step {a}→{b}', 'events.rangeTo': 'Turn {a} · Step {as} → Turn {b} · Step {bs}' }
+const DICT_FOR_TEST = { 'tab': 'Context', 'loading': '…', 'error': 'x', 'detail.step': 'Turn {t} · Step {s}', 'gran.step': 'Step', 'gran.turn': 'Turn', 'detail.turn': 'Turn {t} · {n} steps', 'detail.lastStep': 'last step', 'overview.actual': '· last actual prompt {n}', 'events.at': 'Turn {t} · Step {s}', 'events.range': 'Turn {t} · Step {a}→{b}', 'events.rangeTo': 'Turn {a} · Step {as} → Turn {b} · Step {bs}', 'stats.recycleSub': '{c} compactions · {p} prunes' }
 let viewComponent = null
 const fakeCtx2 = {
   get: () => undefined,
@@ -258,6 +258,21 @@ assert.equal(turnWidths[0], '30px', 'T1 tick spans two columns (2*16-2)')
 assert.equal(turnWidths[1], '14px', 'T2 tick spans one column')
 assert.ok(byClass(tree, 'lc-chart-scroll').length === 1, 'scroll container present')
 assert.ok(byClass(tree, 'lc-turns').length === 1, 'turn tick row present')
+
+// ---- context stats board: totals over the retained window ----
+// fixture: 4 requests (turns 1,1,2,3; totals 100/90/107/83; prompts 95+83000),
+// no events yet -> recycled 0, all event counters 0.
+const statVals = byClass(tree, 'lc-stat-value').map(n => n.args[2])
+assert.equal(statVals.length, 8, 'eight stat cells')
+assert.equal(statVals[0], '3', 'turns counted by distinct turn')
+assert.equal(statVals[1], '4', 'steps = request count')
+assert.equal(statVals[2], '0', 'no events yet -> nothing recycled')
+assert.equal(byClass(tree, 'lc-stat-sub')[0].args[2], '0 compactions · 0 prunes', 'recycle sub shows zero counts')
+assert.equal(statVals[3], '0', 'no injections yet')
+assert.equal(statVals[4], '0', 'no model switches yet')
+assert.equal(statVals[5], '≈ 380', 'estimated total sums request totals')
+assert.equal(statVals[6], '83.1k', 'actual prompt sums provider-reported prompts (95 + 83000)')
+assert.equal(statVals[7], '0', 'no provider output reported')
 
 // ---- hover linking: hovering a trend bar updates the detail below ----
 const ctxSlots = hookStates.get(ctxKey) // data(0) error(1) selected(2) hovered(3) tick(4)
@@ -522,6 +537,13 @@ assert.equal(atLabels[2].args[2], 'Turn 1 · Step 1 → Turn 2 · Step 0', 'cros
 assert.equal(atLabels[3].args[2], 'Turn 1 · Step 0→1', 'same-turn boundary compresses to a step range')
 assert.equal(atLabels[4].args[2], 'Turn 1 · Step 0 → Turn 2 · Step 0', 'oldest boundary event shows its gap')
 
+// the stats board picks up the event counters and recycled tokens
+const statVals2 = byClass(tr, 'lc-stat-value').map(n => n.args[2])
+assert.equal(statVals2[2], '−6.1k', 'recycled sums compaction+prune shadowed tokens (900+60+100+5000)')
+assert.equal(byClass(tr, 'lc-stat-sub')[0].args[2], '2 compactions · 2 prunes', 'recycle sub counts both kinds')
+assert.equal(statVals2[3], '1', 'one injection counted')
+assert.equal(statVals2[4], '1', 'one model switch counted')
+
 // the ✂ marker sits on the bar it attaches to and tooltips the event gap
 const barMark = byClass(tr, 'lc-bar-marker')
 assert.equal(barMark.length, 1, 'one ✂ marker on the attached bar')
@@ -546,4 +568,4 @@ const overviewNum = byClass(tr, 'lc-overview-num')[0]
 assert.ok(overviewNum, 'overview number row present')
 assert.match(textOf(overviewNum), /· last actual prompt 83\.0k/, 'overview shows the last actual prompt alongside the estimate')
 
-console.log('✔ chart render test passed (fixed-width bars, scroll container, turn ranges, hover linking, overview tooltip, turn strip, granularity toggle, edge fades, full history, right-anchored default, message times, event range labels, detail marker chip, overview actual)')
+console.log('✔ chart render test passed (context stats board, fixed-width bars, scroll container, turn ranges, hover linking, overview tooltip, turn strip, granularity toggle, edge fades, full history, right-anchored default, message times, event range labels, detail marker chip, overview actual)')

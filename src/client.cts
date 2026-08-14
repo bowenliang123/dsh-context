@@ -151,6 +151,16 @@ const DICT_ZH: Record<string, string> = {
   'overview.title': '当前构成',
   'overview.ofWindow': 'tokens（约 {p}%）',
   'overview.estimate': 'tokens（估算）',
+  'stats.title': '上下文统计',
+  'stats.hint': '统计当前保留的历史窗口（与趋势图一致）',
+  'stats.turns': '轮次', 'stats.steps': '步数',
+  'stats.recycled': '✂ 回收',
+  'stats.recycleSub': '压缩 {c} 次 · 剪枝 {p} 次',
+  'stats.injects': '＋ 注入',
+  'stats.switches': '⇄ 模型切换',
+  'stats.est': '≈ 累计估算',
+  'stats.actualPrompt': '实际 prompt',
+  'stats.output': '输出',
   'overview.actual': '· 上次实际 prompt {n}',
   'tools.top': '工具定义 Top：',
   'tools.more': '等 {n} 个',
@@ -200,6 +210,16 @@ const DICT_EN: Record<string, string> = {
   'overview.title': 'Current composition',
   'overview.ofWindow': 'tokens (~{p}%)',
   'overview.estimate': 'tokens (estimated)',
+  'stats.title': 'Context stats',
+  'stats.hint': 'Over the retained history window (same as the History chart)',
+  'stats.turns': 'Turns', 'stats.steps': 'Steps',
+  'stats.recycled': '✂ Recycled',
+  'stats.recycleSub': '{c} compactions · {p} prunes',
+  'stats.injects': '＋ Injections',
+  'stats.switches': '⇄ Model switches',
+  'stats.est': '≈ Estimated total',
+  'stats.actualPrompt': 'actual prompt',
+  'stats.output': 'output',
   'overview.actual': '· last actual prompt {n}',
   'tools.top': 'Top tool schemas:',
   'tools.more': 'of {n}',
@@ -248,6 +268,7 @@ type Translate = (key: string, params?: Record<string, string | number>) => stri
 
 function fmt(n: number | null | undefined): string {
   if (n === undefined || n === null || isNaN(n)) return '—'
+  if (n >= 1e6) return (n / 1e6).toFixed(1) + 'M'
   if (n >= 1000) return (n / 1000).toFixed(1) + 'k'
   return String(Math.round(n))
 }
@@ -675,6 +696,50 @@ function makeView(ctx: ClientCtx, t: Translate): (props: ContextViewProps) => Re
     return null
   }
 
+  /**
+   * One-stop session context statistics over the retained history window:
+   * conversation size (turns/steps), context churn (recycled tokens from
+   * compactions/prunes, injection and model-switch counts), and volume
+   * (estimated totals plus provider-reported prompt/output sums).
+   */
+  function StatsBoard(props: { requests: RequestRecord[]; events: ContextEventRecord[] }): ReactNS.ReactElement {
+    const turns = new Set<number>()
+    let steps = 0, compactions = 0, prunes = 0, injects = 0, switches = 0
+    let recycled = 0, est = 0, prompt = 0, output = 0
+    for (const req of props.requests) {
+      turns.add(req.turn ?? 0)
+      steps++
+      est += req.total
+      if (typeof req.prompt === 'number') prompt += req.prompt
+      if (typeof req.output === 'number') output += req.output
+    }
+    for (const ev of props.events) {
+      if (ev.kind === 'compaction') { compactions++; recycled += ev.tokens || 0 }
+      else if (ev.kind === 'prune') { prunes++; recycled += ev.tokens || 0 }
+      else if (ev.kind === 'inject') injects++
+      else if (ev.kind === 'model') switches++
+    }
+    const cell = (label: string, value: string, sub?: string) =>
+      h('div', { className: 'lc-stat' },
+        h('span', { className: 'lc-stat-label' }, label),
+        h('b', { className: 'lc-stat-value' }, value),
+        sub !== undefined ? h('span', { className: 'lc-stat-sub' }, sub) : null)
+    return h('div', { className: 'lc-card' },
+      h('div', { className: 'lc-card-title' },
+        t('stats.title'),
+        h('span', { className: 'lc-card-sub' }, t('stats.hint'))),
+      h('div', { className: 'lc-stats' },
+        cell(t('stats.turns'), fmt(turns.size)),
+        cell(t('stats.steps'), fmt(steps)),
+        cell(t('stats.recycled'), recycled > 0 ? '−' + fmt(recycled) : '0',
+          tr('stats.recycleSub', { c: compactions, p: prunes })),
+        cell(t('stats.injects'), fmt(injects)),
+        cell(t('stats.switches'), fmt(switches)),
+        cell(t('stats.est'), '≈ ' + fmt(est)),
+        cell(t('stats.actualPrompt'), fmt(prompt)),
+        cell(t('stats.output'), fmt(output))))
+  }
+
   function EventList(props: EventListProps): ReactNS.ReactElement {
     if (props.events.length === 0) {
       return h('div', { className: 'lc-empty' }, t('events.empty'))
@@ -800,6 +865,9 @@ function makeView(ctx: ClientCtx, t: Translate): (props: ContextViewProps) => Re
 
     return h('div', { className: 'lc-root' },
 
+      // ---- session context stats (over the retained window) ----
+      h(StatsBoard, { requests, events }),
+
       // ---- overview ----
       h('div', { className: 'lc-card' },
         h('div', { className: 'lc-card-title' },
@@ -884,6 +952,11 @@ const STYLES = [
   '.lc-root { padding: 16px 20px 32px; overflow-y: auto; height: 100%; box-sizing: border-box; color: var(--dsw-alias-label-primary); font-size: 13px; }',
   '.lc-card { background: var(--dsw-alias-bg-layer-1); border: 1px solid var(--dsw-alias-border-l1); border-radius: 10px; padding: 14px 16px; margin-bottom: 14px; }',
   '.lc-card-title { font-weight: 600; margin-bottom: 10px; display: flex; align-items: baseline; gap: 8px; }',
+  '.lc-stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(92px, 1fr)); gap: 8px; }',
+  '.lc-stat { background: var(--dsw-alias-bg-layer-2); border: 1px solid var(--dsw-alias-border-l1); border-radius: 8px; padding: 8px 10px; display: flex; flex-direction: column; gap: 2px; min-width: 0; }',
+  '.lc-stat-label { color: var(--dsw-alias-label-secondary); font-size: 11px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }',
+  '.lc-stat-value { color: var(--dsw-alias-label-primary); font-size: 14px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }',
+  '.lc-stat-sub { color: var(--dsw-alias-label-secondary); font-size: 11px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }',
   '.lc-card-sub { font-weight: 400; color: var(--dsw-alias-label-secondary); font-size: 12px; }',
   '.lc-gran { margin-left: auto; display: flex; gap: 2px; background: var(--dsw-alias-bg-layer-2); border: 1px solid var(--dsw-alias-border-l1); border-radius: 6px; padding: 1px; }',
   '.lc-gran-btn { border: 0; background: transparent; color: var(--dsw-alias-label-secondary); font-size: 11px; line-height: 1; padding: 3px 8px; border-radius: 5px; cursor: pointer; font-family: inherit; }',
