@@ -152,7 +152,7 @@ const requireStateful = (spec) => {
 const m2 = { exports: {} }
 const pluginExports2 = factory(requireStateful, m2, globalThis.window, fakeDoc)
 
-const DICT_FOR_TEST = { 'tab': 'Context', 'loading': '…', 'error': 'x', 'detail.step': 'T{t} · step {s}', 'gran.step': 'Step', 'gran.turn': 'Turn' }
+const DICT_FOR_TEST = { 'tab': 'Context', 'loading': '…', 'error': 'x', 'detail.step': 'T{t} · step {s}', 'gran.step': 'Step', 'gran.turn': 'Turn', 'detail.turn': 'T{t} · {n} steps', 'detail.lastStep': 'last step' }
 let viewComponent = null
 const fakeCtx2 = {
   get: () => undefined,
@@ -359,9 +359,12 @@ const t1Block = byClass(tr, 'lc-turn')[0]
 assert.equal(t1Block.args[1].style.width, '30px', 'T1 strip block matches the bar width (aligned)')
 assert.equal(turnBars[1].args[1].style.width, '14px', 'single-step turn bar keeps the step column width')
 
+// the turn detail is labeled with the step count and tagged as the last step
 t1Bar.args[1].onMouseEnter()
 tr = renderView()
-assert.match(detailStep(tr), /T1 · step 1/, 'turn bar carries the last step record')
+assert.match(detailStep(tr), /T1 · 2 steps/, 'turn detail shows the step count, not a bare step number')
+assert.equal(byClass(tr, 'lc-detail-tag').length, 1, 'the last-step tag marks the shown breakdown')
+assert.equal(byClass(tr, 'lc-detail-tag')[0].args[2], 'last step', 'tag text localized')
 ctxSlots[3][1](null)
 
 // back to step granularity

@@ -150,6 +150,8 @@ const DICT_ZH: Record<string, string> = {
   'trend.hint': '每次模型请求一段；点击柱子查看详情，✂ 表示压缩/剪枝；左右滑动可回看更早',
   'trend.empty': '发起一轮对话后，这里会展示每次模型请求的上下文构成',
   'detail.step': 'T{t} · 第 {s} 步',
+  'detail.turn': 'T{t} · 共 {n} 步',
+  'detail.lastStep': '末步',
   'detail.estTotal': '估算合计 ≈ {n}',
   'detail.actual': '实际 prompt {n}',
   'detail.output': '输出 {n}',
@@ -163,6 +165,7 @@ const DICT_ZH: Record<string, string> = {
   'error': '上下文数据读取失败：',
   'footer': '估算口径：与 dsh 内置 tokenMeter 相同的固定密度启发式（约 4 字符 ≈ 1 token）；「实际」为供应商上报用量。',
   'tip.step': 'T{t} · 第{s}步',
+  'tip.turn': 'T{t} · 共 {n} 步',
   'tip.total': '合计 ≈ {n}',
   'tip.actual': '（实际 {n}）',
   'ev.compaction': '压缩上下文（摘要替换 {n} 条消息）',
@@ -192,6 +195,8 @@ const DICT_EN: Record<string, string> = {
   'trend.hint': 'one bar per model request; click a bar for details, ✂ marks compaction/prune; scroll sideways to see earlier',
   'trend.empty': 'Send a message and each model request’s context makeup shows up here',
   'detail.step': 'T{t} · step {s}',
+  'detail.turn': 'T{t} · {n} steps',
+  'detail.lastStep': 'last step',
   'detail.estTotal': 'estimated ≈ {n}',
   'detail.actual': 'actual prompt {n}',
   'detail.output': 'output {n}',
@@ -205,6 +210,7 @@ const DICT_EN: Record<string, string> = {
   'error': 'Failed to read context data: ',
   'footer': 'Estimate: same fixed-density heuristic as dsh’s built-in tokenMeter (~4 chars ≈ 1 token); “actual” is provider-reported usage.',
   'tip.step': 'T{t} · step {s}',
+  'tip.turn': 'T{t} · {n} steps',
   'tip.total': 'total ≈ {n}',
   'tip.actual': ' (actual {n})',
   'ev.compaction': 'Context compacted (summary replaced {n} messages)',
@@ -477,7 +483,10 @@ function makeView(ctx: ClientCtx, t: Translate): (props: ContextViewProps) => Re
             const barW = req.stepCount !== undefined
               ? req.stepCount * (BAR_W + BAR_GAP) - BAR_GAP
               : BAR_W
-            const tip = tr('tip.step', { t: req.turn ?? 0, s: req.step ?? 0 }) + ' · ' + fmtTime(req.time) + '\n'
+            const tip = (req.stepCount !== undefined && req.stepCount > 1
+              ? tr('tip.turn', { t: req.turn ?? 0, n: req.stepCount })
+              : tr('tip.step', { t: req.turn ?? 0, s: req.step ?? 0 }))
+              + ' · ' + fmtTime(req.time) + '\n'
               + tr('tip.total', { n: fmt(req.total) })
               + (req.prompt !== undefined ? tr('tip.actual', { n: fmt(req.prompt) }) : '') + '\n'
               + CATS.map(c => catLabel(c.key) + ' ' + fmt(req[c.key] || 0)).join(' / ')
@@ -530,9 +539,17 @@ function makeView(ctx: ClientCtx, t: Translate): (props: ContextViewProps) => Re
   function RequestDetail(props: RequestDetailProps): ReactNS.ReactElement | null {
     const req = props.request
     if (!req) return null
+    // Turn aggregates are labeled with their step count, and the breakdown
+    // below is explicitly tagged as the turn's LAST step (that is the record
+    // the bar carries).
+    const isTurn = req.stepCount !== undefined && req.stepCount > 1
+    const head = isTurn
+      ? tr('detail.turn', { t: req.turn ?? 0, n: req.stepCount ?? 0 })
+      : tr('detail.step', { t: req.turn ?? 0, s: req.step ?? 0 })
     return h('div', { className: 'lc-detail' },
       h('div', { className: 'lc-detail-head' },
-        h('b', null, tr('detail.step', { t: req.turn ?? 0, s: req.step ?? 0 })),
+        h('b', null, head),
+        isTurn ? h('span', { className: 'lc-detail-tag' }, t('detail.lastStep')) : null,
         h('span', null, fmtTime(req.time)),
         h('span', null, tr('detail.estTotal', { n: fmt(req.total) })),
         req.prompt !== undefined ? h('span', { className: 'lc-actual' }, tr('detail.actual', { n: fmt(req.prompt) })) : null,
@@ -789,6 +806,7 @@ const STYLES = [
   '.lc-detail-head { display: flex; flex-wrap: wrap; gap: 6px 16px; margin-bottom: 8px; color: var(--dsw-alias-label-secondary); }',
   '.lc-detail-head b { color: var(--dsw-alias-label-primary); }',
   '.lc-detail-head .lc-actual { color: var(--dsw-alias-state-success-primary); }',
+  '.lc-detail-tag { background: var(--dsw-alias-bg-layer-2); border: 1px solid var(--dsw-alias-border-l1); border-radius: 4px; padding: 0 6px; font-size: 11px; color: var(--dsw-alias-label-secondary); }',
   '.lc-detail-rows { margin-top: 10px; display: grid; grid-template-columns: 1fr 1fr; gap: 4px 24px; }',
   '.lc-detail-row { display: flex; align-items: center; gap: 8px; }',
   '.lc-detail-label { min-width: 70px; white-space: nowrap; color: var(--dsw-alias-label-secondary); }',
