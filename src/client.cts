@@ -419,14 +419,15 @@ function makeView(ctx: ClientCtx, t: Translate): (props: ContextViewProps) => Re
     }
 
     // Consecutive requests of the same turn collapse into one labeled range.
-    // `span` is the number of STEP columns the group covers: step records
-    // count one each, turn aggregates count their stepCount, so the strip
-    // blocks always line up with the bars above (in both granularities).
-    const groups: { turn: number; count: number; span: number }[] = []
+    // `span` is the number of STEP columns the group covers (step records
+    // count one each). In turn granularity the bars are uniform width, so
+    // the strip blocks are uniform too; in step granularity they span their
+    // steps' columns. Either way bars and blocks stay aligned.
+    const groups: { turn: number; count: number; span: number; agg: boolean }[] = []
     for (const req of requests) {
       let grp = groups.length > 0 ? groups[groups.length - 1] : null
       if (grp === null || grp.turn !== (req.turn ?? 0)) {
-        grp = { turn: req.turn ?? 0, count: 0, span: 0 }
+        grp = { turn: req.turn ?? 0, count: 0, span: 0, agg: req.stepCount !== undefined }
         groups.push(grp)
       }
       grp.count++
@@ -480,11 +481,6 @@ function makeView(ctx: ClientCtx, t: Translate): (props: ContextViewProps) => Re
             const selected = props.selectedSeq === req.seq
             const hovered = props.hoveredSeq === req.seq
             const inTurn = props.activeTurn !== null && (req.turn ?? 0) === props.activeTurn
-            // Turn aggregates span their steps' columns, so the bar IS the
-            // turn's width and lines up with its strip block below.
-            const barW = req.stepCount !== undefined
-              ? req.stepCount * (BAR_W + BAR_GAP) - BAR_GAP
-              : BAR_W
             const tip = (req.stepCount !== undefined && req.stepCount > 1
               ? tr('tip.turn', { t: req.turn ?? 0, n: req.stepCount })
               : tr('tip.step', { t: req.turn ?? 0, s: req.step ?? 0 }))
@@ -494,11 +490,13 @@ function makeView(ctx: ClientCtx, t: Translate): (props: ContextViewProps) => Re
               + CATS.map(c => catLabel(c.key) + ' ' + fmt(req[c.key] || 0)).join(' / ')
             return h('div', {
               key: req.seq,
+              // Uniform column width in BOTH granularities: turn aggregates
+              // keep the same fixed width as step bars.
               className: 'lc-bar'
                 + (selected ? ' lc-bar-selected' : '')
                 + (hovered ? ' lc-bar-hovered' : '')
                 + (inTurn ? ' lc-bar-in-turn' : ''),
-              style: { width: barW + 'px' },
+              style: { width: BAR_W + 'px' },
               title: tip,
               onClick: () => { props.onSelect(selected ? null : req.seq) },
               onMouseEnter: () => { props.onHover(req.seq) },
@@ -520,15 +518,16 @@ function makeView(ctx: ClientCtx, t: Translate): (props: ContextViewProps) => Re
         // is shared hover-only state).
         h('div', { className: 'lc-turns', onMouseLeave: () => { props.onHoverTurn(null) } },
           groups.map((grp, gi) => {
-            // One column per bar plus the shared gap; the flex gap between
-            // blocks restores the inter-group gap, so block spans line up
-            // with their bars exactly.
+            // Turn mode: uniform blocks under uniform bars (1:1). Step mode:
+            // blocks span their steps' columns. The flex gap between blocks
+            // mirrors the bar gap, so blocks always line up with the bars.
             const on = props.activeTurn === grp.turn
+            const blockW = grp.agg ? BAR_W : grp.span * (BAR_W + BAR_GAP) - BAR_GAP
             return h('span', {
               key: 'turn-' + gi,
               className: 'lc-turn' + (on ? ' lc-turn-on' : ''),
               style: {
-                width: (grp.span * (BAR_W + BAR_GAP) - BAR_GAP) + 'px',
+                width: blockW + 'px',
                 background: TURN_COLORS[gi % TURN_COLORS.length],
               },
               title: 'T' + grp.turn,

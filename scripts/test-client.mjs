@@ -353,14 +353,14 @@ assert.equal(byClass(tr, 'lc-turn').length, 3, 'turn strip still has one block p
 const turnOn = byClass(tr, 'lc-gran-on')
 assert.equal(turnOn[0].args[2], 'Turn', 'turn button is active after switching')
 
-// turn bars span their steps' columns and align with their strip blocks
+// turn bars keep the uniform column width and align with their strip blocks
 const turnBars = byClass(tr, 'lc-bar')
 const t1Bar = turnBars.find(b => b.args[1].key === 2)
 assert.ok(t1Bar, 'T1 is aggregated into its last step (seq 2)')
-assert.equal(t1Bar.args[1].style.width, '30px', 'T1 bar spans its two step columns')
-const t1Block = byClass(tr, 'lc-turn')[0]
-assert.equal(t1Block.args[1].style.width, '30px', 'T1 strip block matches the bar width (aligned)')
-assert.equal(turnBars[1].args[1].style.width, '14px', 'single-step turn bar keeps the step column width')
+for (const b of turnBars) assert.equal(b.args[1].style.width, '14px', 'every turn bar keeps the uniform column width')
+const turnBlocks2 = byClass(tr, 'lc-turn')
+for (const blk of turnBlocks2) assert.equal(blk.args[1].style.width, '14px', 'every turn block matches the bar width (aligned)')
+assert.equal(turnBlocks2[0].args[1].style.width, t1Bar.args[1].style.width, 'T1 bar and block align 1:1')
 
 // the turn detail is labeled with the step count and tagged as the last step
 t1Bar.args[1].onMouseEnter()
