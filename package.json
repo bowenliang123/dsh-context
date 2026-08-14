@@ -17,7 +17,8 @@
   ],
   "scripts": {
     "build": "node scripts/build.mjs",
-    "publish": "bash scripts/publish.sh"
+    "test": "node scripts/test-host.mjs && node scripts/test-client.mjs",
+    "release": "bash scripts/publish.sh"
   },
   "dsh": {
     "bundle": {
