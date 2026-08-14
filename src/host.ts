@@ -102,6 +102,8 @@ export interface Snapshot {
 
 export interface SurfaceNode {
   seq: number
+  /** Event timestamp (ms epoch); the Client shows it when present. */
+  time?: number
   cat: Category
   tokens: number
   form?: string
@@ -275,6 +277,7 @@ function categoryOf(type: string, message: { source?: MessageSource } | undefine
 
 interface SurfaceEventLike {
   seq: number
+  time: number
   surfaceOp?: unknown
 }
 
@@ -292,7 +295,7 @@ function applySurface(
   message: MessageLike | undefined,
 ): SurfaceNode {
   const cat = categoryOf(type, message)
-  const node: SurfaceNode = { seq: ev.seq, cat, tokens: estimateMessage(message) }
+  const node: SurfaceNode = { seq: ev.seq, time: ev.time, cat, tokens: estimateMessage(message) }
   const source = message?.source
   const form = source?.form
   if (typeof form === 'string') node.form = form

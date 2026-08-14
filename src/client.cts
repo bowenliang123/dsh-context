@@ -90,6 +90,8 @@ interface Snapshot {
 
 interface SurfaceNode {
   seq: number
+  /** Event timestamp (ms epoch); shown in the message list when present. */
+  time?: number
   cat: Category
   tokens: number
   form?: string
@@ -599,6 +601,8 @@ function makeView(ctx: ClientCtx, t: Translate): (props: ContextViewProps) => Re
         return h('div', { key: n.seq, className: 'lc-node' },
           h('i', { style: { background: catColor[n.cat] || '#999' } }),
           h('span', { className: 'lc-node-preview', title: text }, text),
+          // Timestamp when the host event carried one.
+          typeof n.time === 'number' ? h('span', { className: 'lc-node-time' }, fmtTime(n.time)) : null,
           h('span', { className: 'lc-node-tokens' }, fmt(n.tokens)))
       }))
   }
@@ -827,6 +831,7 @@ const STYLES = [
   '.lc-event-time { color: var(--dsw-alias-label-secondary); font-size: 12px; }',
   '.lc-node { display: flex; align-items: center; gap: 8px; padding: 3px 0; }',
   '.lc-node-preview { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--dsw-alias-label-primary); }',
+  '.lc-node-time { color: var(--dsw-alias-label-secondary); font-size: 12px; min-width: 54px; text-align: right; }',
   '.lc-node-tokens { color: var(--dsw-alias-label-secondary); }',
   '.lc-nodes-more { color: var(--dsw-alias-label-secondary); padding: 3px 0; }',
   '.lc-empty { color: var(--dsw-alias-label-secondary); padding: 18px 0; text-align: center; }',

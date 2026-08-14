@@ -76,6 +76,7 @@ assert.equal(v.requests[0].output, 40)
 assert.ok(v.events.some(e => e.kind === 'inject' && e.form === 'notice'), 'injection event recorded')
 assert.ok(v.events.some(e => e.kind === 'compaction'), 'compaction event recorded')
 assert.ok(v.nodes.length >= 4, 'surface nodes folded')
+assert.equal(v.nodes[0].time, 2000, 'nodes carry their event timestamp')
 
 // -- second snapshot: incremental (same count) must be served from cache --
 const before = await handler('snapshot', { sessionId: 's1' })

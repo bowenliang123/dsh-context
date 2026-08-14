@@ -236,7 +236,10 @@ const snapshot = {
     { seq: 3, turn: 2, step: 0, time: 3000, system: 10, tools: 20, user: 40, inject: 5, assistant: 12, tool: 20, total: 107 },
     { seq: 4, turn: 3, step: 0, time: 4000, system: 10, tools: 20, user: 20, inject: 5, assistant: 8, tool: 20, total: 83 },
   ],
-  events: [], nodes: [], droppedNodes: 0,
+  events: [], nodes: [
+    { seq: 1, cat: 'user', tokens: 10, text: 'first message', time: 1000 },
+    { seq: 2, cat: 'assistant', tokens: 20, text: 'second message', time: 65000 },
+  ], droppedNodes: 0,
 }
 // setData: slot 0 of the ContextView fiber holds the data state.
 const ctxKey = [...hookStates.keys()].find(k => k.includes('ContextView'))
@@ -427,4 +430,20 @@ tr = renderView()
 assert.equal(byClass(tr, 'lc-chart-fade-l').length, 1, 'left fade shown once anchored at the newest bars')
 assert.equal(byClass(tr, 'lc-chart-fade-r').length, 0, 'no right fade at the end')
 
-console.log('✔ chart render test passed (fixed-width bars, scroll container, turn ranges, hover linking, overview tooltip, turn strip, granularity toggle, edge fades, full history, right-anchored default)')
+// ---- message list: newest first, with timestamps when available ----
+const nodeRows = byClass(tr, 'lc-node')
+assert.equal(nodeRows.length, 2, 'message rows rendered')
+assert.equal(nodeRows[0].args[1].key, 2, 'newest message on top')
+assert.equal(nodeRows[1].args[1].key, 1, 'older message below')
+const nodeTimes = byClass(tr, 'lc-node-time')
+assert.equal(nodeTimes.length, 2, 'timestamps shown for every node')
+// fmtTime renders LOCAL time; mirror the same formatting for expectations.
+const fmtTimeLocal = (t) => {
+  const d = new Date(t)
+  const p = (x) => (x < 10 ? '0' : '') + x
+  return p(d.getHours()) + ':' + p(d.getMinutes()) + ':' + p(d.getSeconds())
+}
+assert.equal(nodeTimes[0].args[2], fmtTimeLocal(65000), 'formatted time (65000ms)')
+assert.equal(nodeTimes[1].args[2], fmtTimeLocal(1000), 'formatted time (1000ms)')
+
+console.log('✔ chart render test passed (fixed-width bars, scroll container, turn ranges, hover linking, overview tooltip, turn strip, granularity toggle, edge fades, full history, right-anchored default, message times)')
