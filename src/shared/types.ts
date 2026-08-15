@@ -1,11 +1,32 @@
 /**
  * Shared wire contract — the snapshot model exchanged between the Host and
- * Client halves over the `/dsh-context` Connection RPC channel.
+ * Client halves.
  *
- * TYPE-ONLY module: both halves import these as `import type`, so nothing
- * from here ever reaches the runtime bundles. The Host produces these
- * records while folding the session log; the Client renders them.
+ * The Host half no longer serves this over a custom RPC channel: it is the
+ * `view()` payload of the `contextTimeline` session projection, registered on
+ * the harness's `ctx.sessionProjections` registry. The registry drives
+ * `apply(state, event)` over every committed session event, persists the state
+ * through `ctx.sessionProjectionCache`, and pushes the finished value to the
+ * browser as a `session/projection` frame (with a tail-page baseline), where
+ * the Client reads it through the framework-standard `useProjection` seat.
+ *
+ * TYPE-ONLY host-side module: both halves import these as `import type`, so
+ * nothing from here ever reaches the runtime bundles.
  */
+
+import type {} from '@deepseek-ai/dsh-session-projection/types'
+
+declare module '@deepseek-ai/dsh-session-projection/types' {
+  interface SessionProjectionMap {
+    /**
+     * The plugin's whole-value context timeline: current composition,
+     * per-request history, context events, and the model-visible surface.
+     * The Host folds it from the session log; clients receive the finished
+     * value (key absence = the plugin's host half is not composed).
+     */
+    contextTimeline: ContextTimeline
+  }
+}
 
 /** The five priced context categories (plus system/tools handled separately). */
 export type Category = 'user' | 'inject' | 'assistant' | 'tool'
@@ -49,6 +70,15 @@ export interface Snapshot {
   nodes: SurfaceNode[]
   droppedNodes: number
 }
+
+/**
+ * The `contextTimeline` projection's whole value — the same snapshot the
+ * Client has always rendered, now delivered through the session-projection
+ * pipeline. `ok` is always `true` here (a delivered projection is by
+ * definition available); it is kept for wire compatibility with the
+ * snapshot shape.
+ */
+export type ContextTimeline = Snapshot
 
 /** One model-visible message on the surface, with its heuristic token price. */
 export interface SurfaceNode {

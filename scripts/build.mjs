@@ -1,9 +1,10 @@
 #!/usr/bin/env node
 /**
- * dsh-context build — zero runtime dependencies.
+ * dsh-context build — one runtime dependency (zod, for the projection's wire
+ * schema; every `@deepseek-ai/*` contract is type-only and erased here).
  *
  * Produces the npm-package artifacts under lib/:
- *   lib/index.js  — host half: src/host/ bundled to plain ESM.
+ *   lib/index.js  — host half: src/host/ bundled to plain ESM (zod external).
  *   lib/client.js — client half: src/client/ bundled to CJS, then
  *                   wrapped in the web boot handoff
  *                   `window.__ModuleLoader__.load({ id, factory })`, the
@@ -28,7 +29,9 @@ const pkg = JSON.parse(await readFile(join(ROOT, 'package.json'), 'utf8'))
 
 await mkdir(join(ROOT, 'lib'), { recursive: true })
 
-// ---- host half: bundled TS -> ESM (zero external runtime deps) ----------------
+// ---- host half: bundled TS -> ESM (zod stays external — the user's harness
+// provides the wire schema validator, like every other @deepseek-ai/* runtime
+// service; the package ships zod as a regular dependency) ----------------
 await build({
   entryPoints: [join(ROOT, 'src', 'host', 'index.ts')],
   outfile: join(ROOT, 'lib', 'index.js'),
@@ -36,6 +39,7 @@ await build({
   platform: 'node',
   target: 'es2022',
   bundle: true,
+  external: ['zod'],
   sourcemap: false,
 })
 
@@ -76,8 +80,8 @@ const host = await import(join(ROOT, 'lib', 'index.js'))
 if (host.name !== 'dsh-context' || !Array.isArray(host.inject) || typeof host.apply !== 'function') {
   throw new Error('host half does not expose the expected plugin shape (name/inject/apply)')
 }
-if (!host.inject.includes('connection')) {
-  throw new Error('host half must inject the connection service')
+if (!host.inject.includes('sessionProjections')) {
+  throw new Error('host half must inject the sessionProjections service')
 }
 
 console.log(`built ${pkg.name}:`)

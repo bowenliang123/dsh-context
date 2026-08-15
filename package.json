@@ -1,7 +1,7 @@
 {
   "name": "dsh-context",
-  "version": "0.8.0",
-  "description": "Context insight panel for DeepSeek Harness: see what the model's context window is made of and how it evolves — composition, per-request history, compactions, injections, and model switches.",
+  "version": "0.9.0",
+  "description": "Context insight panel for DeepSeek Harness: see what the model's context window is made of and how it evolves — composition, per-request history, compactions, injections, and model switches. Streamed through the harness's session-projection pipeline.",
   "author": "bowenliang123",
   "repository": {
     "type": "git",
@@ -56,8 +56,14 @@
     "ui"
   ],
   "license": "Apache-2.0",
+  "dependencies": {
+    "zod": "^4.4.3"
+  },
   "devDependencies": {
     "@deepseek-ai/cordis": "^4.0.1",
+    "@deepseek-ai/dsh-session": "0.1.0-rc.6",
+    "@deepseek-ai/dsh-session-projection": "0.1.0-rc.6",
+    "@deepseek-ai/dsh-token-meter": "0.1.0-rc.6",
     "@types/react": "^18.3.31",
     "esbuild": "^0.28.2",
     "husky": "^9.1.7",

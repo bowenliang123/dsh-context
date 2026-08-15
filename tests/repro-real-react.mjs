@@ -93,7 +93,6 @@ const ctx = {
       return s
     },
   },
-  connection: { rpc: { call: async () => ({ ok: true, value: snapshot }) } },
   slots: {
     inject: (name, fn) => { fn() },
     register: (opts, component) => { viewComponent = component; return opts },
@@ -101,6 +100,9 @@ const ctx = {
 }
 plugin.apply(ctx)
 assert.ok(viewComponent !== null)
+// The framework standard kit delivers the timeline as a push-fed projection;
+// hand it straight to the stub so the chart renders on the first commit.
+const viewProps = { sessionId: 's1', useProjection: (key) => (key === 'contextTimeline' ? snapshot : undefined) }
 
 // ---- mount with real React (behind a boundary so #185-style crashes are
 // catchable; without one an update-depth error unmounts the whole root) ----
@@ -115,8 +117,8 @@ class Boundary extends React.Component {
   render() { return this.state.err ? React.createElement('pre', null, 'CRASHED') : this.props.children }
 }
 try {
-  root.render(React.createElement(Boundary, null, React.createElement(viewComponent, { sessionId: 's1' })))
-  // let the RPC resolve and the poll-free render settle
+  root.render(React.createElement(Boundary, null, React.createElement(viewComponent, viewProps)))
+  // the projection value is present on the first commit — no poll to wait on
   await new Promise(r => setTimeout(r, 60))
   assert.ok(container.textContent.includes('tokens'), 'chart rendered')
   // Wide viewport: the step chart overflows (460 bars) but the turn chart

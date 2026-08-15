@@ -63,7 +63,7 @@ const m = { exports: {} }
 const pluginExports = factory(require, m, globalThis.window, fakeDoc)
 
 assert.equal(pluginExports.name, 'dsh-context')
-assert.deepEqual(pluginExports.inject, ['connection', 'slots', 'locale'])
+assert.deepEqual(pluginExports.inject, ['slots', 'locale'])
 
 // ---- apply the client plugin ----
 const localeRegistrations = []
@@ -80,9 +80,6 @@ const fakeCtx = {
       if (vars) for (const k in vars) s = s.replace('{' + k + '}', String(vars[k]))
       return s
     },
-  },
-  connection: {
-    rpc: { call: async () => ({ ok: true, value: { current: { total: 100 }, requests: [], events: [], nodes: [] } }) },
   },
   slots: {
     inject: (name, fn) => { slotInjections.push([name, fn]) },
@@ -166,7 +163,6 @@ const fakeCtx2 = {
       return s
     },
   },
-  connection: { rpc: { call: async () => ({ ok: true, value: {} }) } },
   slots: {
     inject: (name, fn) => { fn() }, // the register call inside captures the component
     register: (opts, component) => { viewComponent = component; return opts },
@@ -174,6 +170,15 @@ const fakeCtx2 = {
 }
 pluginExports2.apply(fakeCtx2)
 assert.ok(viewComponent !== null, 'view component captured')
+
+// The framework standard kit delivers the context timeline as a push-fed
+// projection (`useProjection('contextTimeline')`); the test drives renders by
+// swapping the holder the stub reads, exactly like a session/projection frame.
+let dataValue = null
+const renderView = () => evaluate(viewComponent({
+  sessionId: 's1',
+  useProjection: (key) => (key === 'contextTimeline' ? dataValue : undefined),
+}))
 
 /** Invoke function-typed elements so hooks run and the tree materializes.
  * Hooks are keyed by the component's fiber path (e.g. root/ContextView#0/
@@ -226,8 +231,8 @@ function byClass(root, className) {
   return found
 }
 
-// Render 1 (loading): creates the ContextView hook slots.
-evaluate(viewComponent({ sessionId: 's1' }))
+// Render 1 (no value yet): creates the ContextView hook slots and shows loading.
+renderView()
 const snapshot = {
   ok: true, model: 'deepseek-v4', provider: 'deepseek', contextWindow: 128000,
   current: { system: 10, tools: 20, user: 30, inject: 5, assistant: 15, tool: 20, total: 100 },
@@ -242,11 +247,12 @@ const snapshot = {
     { seq: 2, cat: 'assistant', tokens: 20, text: 'second message', time: 65000 },
   ], droppedNodes: 0,
 }
-// setData: slot 0 of the ContextView fiber holds the data state.
+// Deliver the timeline like a session/projection frame: swap the holder the
+// useProjection stub reads, then re-render the view.
 const ctxKey = [...hookStates.keys()].find(k => k.includes('ContextView'))
 assert.ok(ctxKey, 'ContextView fiber registered')
-hookStates.get(ctxKey)[0][1](snapshot)
-const tree = evaluate(viewComponent({ sessionId: 's1' }))
+dataValue = snapshot
+const tree = renderView()
 
 const bars = byClass(tree, 'lc-bar')
 assert.equal(bars.length, 4, 'one bar per request')
@@ -275,8 +281,7 @@ assert.equal(statVals[6], '83.1k', 'actual prompt sums provider-reported prompts
 assert.equal(statVals[7], '0', 'no provider output reported')
 
 // ---- hover linking: hovering a trend bar updates the detail below ----
-const ctxSlots = hookStates.get(ctxKey) // data(0) error(1) selected(2) hovered(3) tick(4)
-const renderView = () => evaluate(viewComponent({ sessionId: 's1' }))
+const ctxSlots = hookStates.get(ctxKey) // selected(0) hovered(1) hoverTurn(2) tick(3) gran(4) hoverCat(5)
 function textOf(node) {
   if (typeof node === 'string') return node
   if (node === null || node === undefined || typeof node !== 'object') return ''
@@ -293,7 +298,7 @@ let tr = renderView()
 assert.match(detailStep(tr), /Turn 3/, 'detail defaults to the newest request (Turn 3)')
 assert.equal(byClass(tr, 'lc-bar-hovered').length, 0, 'no hovered bar initially')
 
-ctxSlots[3][1](3) // setHoveredSeq(seq 3, turn 2)
+ctxSlots[1][1](3) // setHoveredSeq(seq 3, turn 2)
 tr = renderView()
 assert.match(detailStep(tr), /Turn 2/, 'hovering a bar links the detail below to it')
 const hovered = byClass(tr, 'lc-bar-hovered')
@@ -311,7 +316,7 @@ assert.equal(typeof chartTip[0].args[1].style.left, 'string', 'tooltip is positi
 // turn-aware dimming: the chart is in dim mode while a turn is focused
 assert.equal(byClass(tr, 'lc-chart-dim').length, 1, 'bar hover activates the turn-aware dim')
 
-ctxSlots[3][1](null) // leave the plot
+ctxSlots[1][1](null) // leave the plot
 tr = renderView()
 assert.match(detailStep(tr), /Turn 3/, 'leaving the plot reverts the detail to the newest request')
 assert.equal(byClass(tr, 'lc-chart-tip').length, 0, 'tooltip clears with the hover')
@@ -401,12 +406,12 @@ assert.equal(byClass(tr, 'lc-bar-in-turn').length, 0, 'leaving the strip clears 
 assert.equal(byClass(tr, 'lc-chart-dim').length, 0, 'leaving the strip clears the dim')
 
 // hovering a bar highlights its turn block (bidirectional)
-ctxSlots[3][1](3) // hover seq 3 (turn 2)
+ctxSlots[1][1](3) // hover seq 3 (turn 2)
 tr = renderView()
 const onBlocks2 = byClass(tr, 'lc-turn-on')
 assert.equal(onBlocks2.length, 1, 'bar hover highlights exactly one turn block')
 assert.equal(onBlocks2[0].args[2], 'T2', 'hovering a bar highlights its turn block')
-ctxSlots[3][1](null)
+ctxSlots[1][1](null)
 
 // ---- granularity toggle: one bar per step vs one bar per turn ----
 let granBtns = byClass(tr, 'lc-gran-btn')
@@ -439,7 +444,7 @@ tr = renderView()
 assert.match(detailStep(tr), /Turn 1 · 2 steps/, 'turn detail shows the step count, not a bare step number')
 assert.equal(byClass(tr, 'lc-detail-tag').length, 1, 'the last-step tag marks the shown breakdown')
 assert.equal(byClass(tr, 'lc-detail-tag')[0].args[2], 'last step', 'tag text localized')
-ctxSlots[3][1](null)
+ctxSlots[1][1](null)
 
 // back to step granularity
 granBtns = byClass(tr, 'lc-gran-btn')
@@ -473,11 +478,11 @@ for (let i = 0; i < 120; i++) {
     system: 10, tools: 20, user: 30, inject: 5, assistant: 15, tool: 20, total: 100,
   })
 }
-ctxSlots[0][1]({ ...snapshot, requests: bigRequests })
+dataValue = { ...snapshot, requests: bigRequests }
 tr = renderView()
 assert.equal(byClass(tr, 'lc-bar').length, 120, 'all requests render — earlier turns/steps stay reachable')
 assert.equal(byClass(tr, 'lc-turn').length, 30, 'turn strip follows the full history')
-ctxSlots[0][1](snapshot) // restore
+dataValue = snapshot
 tr = renderView()
 assert.equal(byClass(tr, 'lc-bar').length, 4, 'snapshot restored')
 
@@ -544,7 +549,7 @@ assert.equal(nodeTimes[1].args[2], fmtTimeLocal(1000), 'formatted time (1000ms)'
 // inject/model switches keep the single point of the request they belong
 // to; events with no following request (in flight) stay bare. The same
 // attachment drives the ✂ marker and the detail header chip.
-ctxSlots[0][1]({
+dataValue = {
   ...snapshot,
   events: [
     { seq: 3, kind: 'compaction', time: 1200, tokens: 900, count: 2, fromTurn: 1, fromStep: 0, turn: 2, step: 0 }, // attaches to request seq 3 (Turn 2 · Step 0)
@@ -554,7 +559,7 @@ ctxSlots[0][1]({
     { seq: 9, kind: 'inject', time: 4000, tokens: 5, form: 'notice', turn: 2, step: 0 },
     { seq: 10, kind: 'compaction', time: 5000, tokens: 5000, count: 4, fromTurn: 2, fromStep: 0 }, // no request after -> unlabeled
   ],
-})
+}
 tr = renderView()
 const evRows = byClass(tr, 'lc-event')
 assert.equal(evRows.length, 6, 'event rows rendered newest first')
@@ -579,16 +584,16 @@ assert.equal(barMark.length, 1, 'one ✂ marker on the attached bar')
 assert.match(barMark[0].args[1].title, /Turn 1 · Step 0 → Turn 2 · Step 0/, '✂ tooltip carries the event gap')
 
 // the detail header shows the same gap as a chip when that bar is active
-ctxSlots[3][1](3) // hover the attached bar (seq 3, Turn 2 · Step 0)
+ctxSlots[1][1](3) // hover the attached bar (seq 3, Turn 2 · Step 0)
 tr = renderView()
 const markerChip = byClass(tr, 'lc-detail-marker')
 assert.equal(markerChip.length, 1, 'detail header shows the attached boundary event')
 assert.equal(markerChip[0].args[2], '✂ Turn 1 · Step 0 → Turn 2 · Step 0', 'chip shows the event gap')
 assert.equal(typeof markerChip[0].args[1].title, 'string', 'chip tooltips the event text')
-ctxSlots[3][1](null) // leave the plot
+ctxSlots[1][1](null) // leave the plot
 tr = renderView()
 assert.equal(byClass(tr, 'lc-detail-marker').length, 0, 'chip clears with the hover')
-ctxSlots[0][1](snapshot) // restore
+dataValue = snapshot
 tr = renderView()
 assert.equal(byClass(tr, 'lc-event').length, 0, 'event list restored to the empty state')
 
@@ -604,15 +609,15 @@ assert.match(textOf(overviewNum), /tokens \(~65%\)/, 'occupancy percent matches 
 assert.match(textOf(overviewNum), /· category split is estimated/, 'no conflicting heuristic percentage next to the headline')
 
 // ---- a host-served `occupancy` projection wins over the derived fallback ----
-ctxSlots[0][1]({
+dataValue = {
   ...snapshot,
   occupancy: { pressureTokens: 90000, surfaceTokens: 70, sampledSurfaceTokens: 60, projectedTokens: 90010, contextWindow: 200000 },
-})
+}
 tr = renderView()
 const overviewNum2 = byClass(tr, 'lc-overview-num')[0]
 assert.match(textOf(overviewNum2), /90\.0k/, 'host occupancy projection is the headline when present')
 assert.match(textOf(overviewNum2), /tokens \(~45%\)/, 'host occupancy window is the percent denominator')
-ctxSlots[0][1](snapshot) // restore
+dataValue = snapshot
 tr = renderView()
 
 console.log('✔ chart render test passed (context stats board, free window hover, fixed-width bars, scroll container, turn ranges, hover linking, overview tooltip, turn strip, granularity toggle, edge fades, full history, right-anchored default, message times, event range labels, detail marker chip, overview actual)')

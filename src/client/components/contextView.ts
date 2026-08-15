@@ -1,22 +1,24 @@
 /**
- * ContextView — the root component of the Context tab: owns the snapshot
- * fetch/poll state and composes the stats board, composition bar, history
- * chart + detail, events and message columns.
+ * ContextView — the root component of the Context tab: renders the
+ * `contextTimeline` session projection delivered by the framework (finished
+ * value, pushed by the Host half) and composes the stats board, composition
+ * bar, history chart + detail, events and message columns.
  *
- * First-screen notes (all behavior-preserving):
- * - The initial data state is seeded from the per-session cache, so
- *   re-opening a session renders instantly and the poll refreshes behind it.
- * - Polling pauses while the tab is hidden and resumes (with an immediate
- *   fetch) on becoming visible again.
- * - A failed poll only surfaces the error screen when there is no data to
- *   show yet; already-visible data is never blanked by a transient error.
+ * First-screen notes:
+ * - The projection value arrives through the framework standard `useProjection`
+ *   seat (a prop on every session-scope slot component); it shows the loading
+ *   state until the tail-page baseline or a `session/projection` frame lands.
+ *   The value store keeps a stable reference between changes, so re-renders
+ *   are cheap and scroll restoration runs only when the data actually moves.
+ * - The component never calls any RPC and holds no cache — the harness owns
+ *   the projection pipeline end to end.
  */
 
 import type * as ReactNS from 'react'
 import type { ContextEventRecord, RequestRecord, Snapshot } from '../../shared/types'
-import { cacheGet, cachePut } from '../cache'
 import { anchoredParts, partsOf } from '../categories'
-import type { LocaleService } from '../services'
+import type { LocaleService, SessionStandardProps } from '../services'
+import { timelineOf } from '../services'
 import type { ClientCtx } from '../services'
 import type { ViewKit } from '../viewkit'
 import { makeEventList } from './events'
@@ -38,7 +40,7 @@ import { React, h } from '../react'
 // restore it once the content renders — first visits start at the top.
 const viewScroll = new Map<string, number>()
 
-export interface ContextViewProps { sessionId?: string }
+export type ContextViewProps = SessionStandardProps
 
 export function makeContextView(ctx: ClientCtx, kit: ViewKit): (props: ContextViewProps) => ReactNS.ReactElement {
   const { t, tr, fmt, fmtTime, catLabel } = kit
@@ -52,9 +54,12 @@ export function makeContextView(ctx: ClientCtx, kit: ViewKit): (props: ContextVi
 
   return function ContextView(props: ContextViewProps): ReactNS.ReactElement {
     const sessionId = props.sessionId
-    const initial = typeof sessionId === 'string' && sessionId !== '' ? cacheGet(sessionId) ?? null : null
-    const [data, setData] = React.useState<Snapshot | null>(initial)
-    const [error, setError] = React.useState<string | null>(null)
+    // The finished value the harness pushes for this session: the
+    // `contextTimeline` projection key (capability-absent until a value
+    // arrives -> loading screen, mirroring the old first-poll wait).
+    const data = typeof props.useProjection === 'function'
+      ? timelineOf(props.useProjection('contextTimeline'))
+      : null
     const [selectedSeq, setSelectedSeq] = React.useState<number | null>(null)
     const [hoveredSeq, setHoveredSeq] = React.useState<number | null>(null)
     const [hoverTurn, setHoverTurn] = React.useState<number | null>(null)
@@ -62,16 +67,12 @@ export function makeContextView(ctx: ClientCtx, kit: ViewKit): (props: ContextVi
     const [granularity, setGranularity] = React.useState<'step' | 'turn'>('step')
     // Shared hover link between the composition bar and its legend below.
     const [hoverCat, setHoverCat] = React.useState<string | null>(null)
-    // Latest data for the fetch effect's error branch (a ref, so the
-    // [sessionId]-only effect sees fresh state without re-subscribing).
-    const dataRef = React.useRef<Snapshot | null>(initial)
-    React.useEffect(() => { dataRef.current = data }, [data])
 
     // ---- page-scroller ownership (see `viewScroll` above) ----
     const rootRef = React.useRef<HTMLElement | null>(null)
     const scrollerRef = React.useRef<HTMLElement | null>(null)
-    // The session whose position was already applied this mount: polls and
-    // re-renders must never re-apply, or they would yank the reader's scroll.
+    // The session whose position was already applied this mount: re-renders
+    // must never re-apply, or they would yank the reader's scroll.
     const restoredRef = React.useRef<string | null>(null)
 
     // Restore this session's saved position (or the top on a first visit) as
@@ -102,44 +103,6 @@ export function makeContextView(ctx: ClientCtx, kit: ViewKit): (props: ContextVi
       }
     }, [sessionId])
 
-    React.useEffect(() => {
-      if (typeof sessionId !== 'string' || sessionId === '') return undefined
-      let alive = true
-      const load = () => {
-        // Generic Connection RPC channel served by the Host half.
-        ctx.connection.rpc.call('/dsh-context', 'snapshot', { sessionId }).then(res => {
-          if (!alive) return
-          if (res && res.ok) {
-            const snap = res.value as Snapshot
-            cachePut(sessionId, snap)
-            setData(snap)
-            setError(null)
-          } else if (dataRef.current === null) {
-            // Only surface fetch failures when there is nothing to show yet —
-            // a transient poll error must not blank already-visible data.
-            setError(res && res.error ? String(res.error.message || res.error.code) : 'failed')
-          }
-        }, (err: unknown) => {
-          if (alive && dataRef.current === null) {
-            setError(String(err instanceof Error ? err.message : err))
-          }
-        })
-      }
-      load()
-      // The data only serves the visible UI: pause polling while the tab is
-      // hidden and refresh immediately when it becomes visible again.
-      const timerId = setInterval(() => {
-        if (document.visibilityState !== 'hidden') load()
-      }, 2000)
-      const onVisible = () => { if (document.visibilityState === 'visible') load() }
-      document.addEventListener('visibilitychange', onVisible)
-      return () => {
-        alive = false
-        clearInterval(timerId)
-        document.removeEventListener('visibilitychange', onVisible)
-      }
-    }, [sessionId])
-
     // Re-render on locale switch.
     React.useEffect(() => {
       const localeSvc = ctx.get('locale') as LocaleService | undefined
@@ -149,9 +112,6 @@ export function makeContextView(ctx: ClientCtx, kit: ViewKit): (props: ContextVi
 
     void tick
 
-    if (error) {
-      return h('div', { className: 'lc-root', ref: rootRef }, h('div', { className: 'lc-empty' }, t('error') + error))
-    }
     if (!data) {
       return h('div', { className: 'lc-root', ref: rootRef }, h('div', { className: 'lc-empty' }, t('loading')))
     }
@@ -199,12 +159,6 @@ export function makeContextView(ctx: ClientCtx, kit: ViewKit): (props: ContextVi
     // the fixed 4-chars/token heuristic can undercount by ~10-15% on
     // CJK-heavy sessions — so this is the headline, and the heuristic
     // composition below is anchored to it (proportions stay heuristic).
-    //
-    // Source preference: the host's `occupancy` projection (exact official
-    // semantics, incl. streamed usage chunks); a session served by an OLDER
-    // host build without that field derives the same figure from the newest
-    // request record carrying provider usage; before any usage, the raw
-    // heuristic total is all there is.
     const occ = data.occupancy
     const projected = occ !== undefined && typeof occ.projectedTokens === 'number' ? occ.projectedTokens : undefined
     const lastReq = displayRequests.length > 0 ? displayRequests[displayRequests.length - 1] : null

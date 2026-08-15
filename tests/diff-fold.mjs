@@ -64,20 +64,16 @@ for (const file of files) {
   for (const ev of events) st = contextPressureProjectionDefinition.apply(st, ev)
   const pressure = contextPressureProjectionDefinition.view(st)
 
-  // Plugin fold through its public RPC handler (same mounting as host.test).
-  let handler = null
-  const sessionsMap = new Map([['s1', { events }]])
+  // Plugin fold through its public projection unit (same mounting as host.test).
+  let def = null
   apply({
-    get(name) {
-      if (name === 'sessions') return { get: id => sessionsMap.get(id) }
-      if (name === 'sessionQuery') return { listEvents: async () => [], readSession: async () => ({ events: [] }) }
-      return undefined
-    },
+    inject(list, cb) { cb(this) },
     effect(fn) { fn(); return () => {} },
-    connection: { rpc: { handle(_ch, fn) { handler = fn; return async () => {} } } },
+    sessionProjections: { register(d) { def = d; return () => {} } },
   })
-  const snap = (await handler('snapshot', { sessionId: 's1' })).value
-  const occ = snap.occupancy ?? {}
+  let mine = def.init()
+  for (const ev of events) mine = def.apply(mine, ev)
+  const occ = def.view(mine).occupancy ?? {}
 
   const match = occ.projectedTokens === pressure.projectedTokens && occ.contextWindow === pressure.contextWindow
   if (!match) failed = 1

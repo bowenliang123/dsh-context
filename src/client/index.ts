@@ -3,9 +3,15 @@
  *
  * Registers a "上下文/Context" tab in the conversation view ring
  * (`conversation.view` slot, beside Chat/Trajectory) and renders the
- * context-composition timeline served by the Host half over the generic
- * Connection RPC channel `/dsh-context`: current makeup, per-request
- * stacked-bar history, context events, and the live message list.
+ * context-composition timeline: current makeup, per-request stacked-bar
+ * history, context events, and the live message list.
+ *
+ * Since v0.9 the tab needs no custom data plane: the Host half pushes its
+ * fold through the harness's session-projection pipeline
+ * (`contextTimeline` projection key), and this half reads the finished value
+ * from the framework standard kit (`useProjection('contextTimeline')`, a
+ * standard prop on every session-scope slot component). No polling, no RPC,
+ * no client-side cache.
  *
  * This module is the body of the package's `./client` bundle: build.mjs
  * bundles it (external `react` — the browser module table supplies it via
@@ -23,15 +29,17 @@ import { makeViewKit } from './viewkit'
 
 import { React, h } from './react'
 
+const NS = 'dsh-context'
+
 function apply(ctx: ClientCtx): void {
   // Bilingual dictionaries; the tab label thunk and all UI text follow the
   // active locale through the bound translate (missing keys fall back to
   // zh, then the key itself). The registration rides ctx.effect, so a stop
   // or HMR reload disposes it.
   ctx.effect(() => {
-    return ctx.locale.register('dsh-context', { zh: DICT_ZH, en: DICT_EN })
+    return ctx.locale.register(NS, { zh: DICT_ZH, en: DICT_EN })
   }, 'dsh-context: dictionaries')
-  const t = ctx.locale.bind('dsh-context')
+  const t = ctx.locale.bind(NS)
 
   // Theme-native styles, injected as a plugin-owned <style> tag (the web
   // boot loader claims and removes tags carrying data-plugin on unload).
@@ -48,8 +56,9 @@ function apply(ctx: ClientCtx): void {
   const ContextView = makeContextView(ctx, makeViewKit(t))
   ctx.slots.inject('conversation.view', () => {
     return ctx.slots.register(
-      // order 20 renders right of Chat (0) and Trajectory (10).
-      { name: 'conversation.view', id: 'context', order: 20, label: () => t('tab') },
+      // order 20 renders right of Chat (0) and Trajectory (10); the locale
+      // namespace put the framework `t` seat on the component's props too.
+      { name: 'conversation.view', id: 'context', order: 20, locale: NS, label: () => t('tab') },
       props => h(ContextView, props),
     )
   })
@@ -57,6 +66,6 @@ function apply(ctx: ClientCtx): void {
 
 module.exports = {
   name: 'dsh-context',
-  inject: ['connection', 'slots', 'locale'],
+  inject: ['slots', 'locale'],
   apply,
 }
