@@ -28,6 +28,16 @@ import { aggregateByTurn, attachMarkers, makeTrendChart } from './trendChart'
 
 import { React, h } from '../react'
 
+// The context page scrolls inside the conversation's shared page scroller
+// (`[data-conversation-scroll]`) — the same container the chat auto-scrolls
+// to the bottom on every visit. Without a position ledger of its own, a
+// context mount inherits wherever the chat left that container, so the tab
+// opens at the bottom and stays locked there (each chat visit re-scrolls it).
+// Mirror the chat's chatScroll pattern: remember where the reader left each
+// session's context page (module-level, so it survives tab remounts) and
+// restore it once the content renders — first visits start at the top.
+const viewScroll = new Map<string, number>()
+
 export interface ContextViewProps { sessionId?: string }
 
 export function makeContextView(ctx: ClientCtx, kit: ViewKit): (props: ContextViewProps) => ReactNS.ReactElement {
@@ -56,6 +66,41 @@ export function makeContextView(ctx: ClientCtx, kit: ViewKit): (props: ContextVi
     // [sessionId]-only effect sees fresh state without re-subscribing).
     const dataRef = React.useRef<Snapshot | null>(initial)
     React.useEffect(() => { dataRef.current = data }, [data])
+
+    // ---- page-scroller ownership (see `viewScroll` above) ----
+    const rootRef = React.useRef<HTMLElement | null>(null)
+    const scrollerRef = React.useRef<HTMLElement | null>(null)
+    // The session whose position was already applied this mount: polls and
+    // re-renders must never re-apply, or they would yank the reader's scroll.
+    const restoredRef = React.useRef<string | null>(null)
+
+    // Restore this session's saved position (or the top on a first visit) as
+    // soon as the content renders — a layout effect, so the reader never sees
+    // the chat's bottom-anchored position flash in first.
+    React.useLayoutEffect(() => {
+      if (typeof sessionId !== 'string' || sessionId === '' || data === null) return
+      if (restoredRef.current === sessionId) return
+      restoredRef.current = sessionId
+      const scroller = rootRef.current !== null
+        ? rootRef.current.closest('[data-conversation-scroll]')
+        : null
+      if (scroller === null) return
+      scrollerRef.current = scroller as HTMLElement
+      scroller.scrollTop = viewScroll.get(sessionId) ?? 0
+    }, [sessionId, data])
+
+    // Save where the reader left this session's context page. Runs on unmount
+    // (tab switch) and on session change — a layout-effect cleanup, so it
+    // fires before the incoming view's own layout effects re-scroll the
+    // shared container.
+    React.useLayoutEffect(() => {
+      return () => {
+        if (typeof sessionId !== 'string' || sessionId === '') return
+        const scroller = scrollerRef.current
+        if (scroller === null) return
+        viewScroll.set(sessionId, scroller.scrollTop)
+      }
+    }, [sessionId])
 
     React.useEffect(() => {
       if (typeof sessionId !== 'string' || sessionId === '') return undefined
@@ -105,10 +150,10 @@ export function makeContextView(ctx: ClientCtx, kit: ViewKit): (props: ContextVi
     void tick
 
     if (error) {
-      return h('div', { className: 'lc-root' }, h('div', { className: 'lc-empty' }, t('error') + error))
+      return h('div', { className: 'lc-root', ref: rootRef }, h('div', { className: 'lc-empty' }, t('error') + error))
     }
     if (!data) {
-      return h('div', { className: 'lc-root' }, h('div', { className: 'lc-empty' }, t('loading')))
+      return h('div', { className: 'lc-root', ref: rootRef }, h('div', { className: 'lc-empty' }, t('loading')))
     }
 
     const current = data.current
@@ -179,7 +224,7 @@ export function makeContextView(ctx: ClientCtx, kit: ViewKit): (props: ContextVi
     // legend agree with the official ring instead of the underpriced raw sum.
     const parts = anchoredParts(partsOf(current), occupancyTokens !== null && headline > 0 ? headline : null)
 
-    return h('div', { className: 'lc-root' },
+    return h('div', { className: 'lc-root', ref: rootRef },
 
       // ---- session context stats (over the retained window) ----
       h(StatsBoard, { requests, events }),
