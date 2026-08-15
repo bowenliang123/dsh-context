@@ -24,6 +24,12 @@ export interface SessionState {
 
 function buildResult(st: FoldState): Snapshot {
   const surfaceTotal = st.sums.user + st.sums.inject + st.sums.assistant + st.sums.tool
+  // Provider-anchored occupancy (the official chat ring's formula): the newest
+  // usage sample carried forward by the surface's movement since it was taken,
+  // so a compaction shows immediately instead of waiting for the next request.
+  const projectedTokens = st.pressureTokens !== undefined && st.sampledSurfaceTokens !== undefined
+    ? Math.max(0, st.pressureTokens + surfaceTotal - st.sampledSurfaceTokens)
+    : undefined
   const result: Snapshot = {
     ok: true,
     model: st.model,
@@ -37,6 +43,13 @@ function buildResult(st: FoldState): Snapshot {
       assistant: st.sums.assistant,
       tool: st.sums.tool,
       total: surfaceTotal + st.systemTokens + st.toolsTokens,
+    },
+    occupancy: {
+      ...st.pressureTokens === undefined ? {} : { pressureTokens: st.pressureTokens },
+      surfaceTokens: surfaceTotal,
+      ...st.sampledSurfaceTokens === undefined ? {} : { sampledSurfaceTokens: st.sampledSurfaceTokens },
+      ...projectedTokens === undefined ? {} : { projectedTokens },
+      ...st.occupancyWindow === undefined ? {} : { contextWindow: st.occupancyWindow },
     },
     toolList: st.toolList,
     requests: st.requests,

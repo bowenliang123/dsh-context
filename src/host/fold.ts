@@ -45,6 +45,16 @@ export interface FoldState {
   provider: string | undefined
   lastModel: string | undefined
   contextWindow: number | undefined
+  /**
+   * Provider-anchored occupancy, mirroring dsh token-meter's contextPressure
+   * projection: the newest usage sample's prompt-side pressure (input + cache
+   * read + write) and the heuristic surface total at that moment. The snapshot
+   * derives projectedTokens = pressure + (surface now − surface at sample).
+   */
+  pressureTokens: number | undefined
+  sampledSurfaceTokens: number | undefined
+  /** Last-wins route capacity for occupancy (mirrors the official removal semantics). */
+  occupancyWindow: number | undefined
   requests: RequestRecord[]
   events: ContextEventRecord[]
   callNames: Record<string, string>
@@ -88,6 +98,9 @@ export function createFold(): FoldState {
     provider: undefined,
     lastModel: undefined,
     contextWindow: undefined,
+    pressureTokens: undefined,
+    sampledSurfaceTokens: undefined,
+    occupancyWindow: undefined,
     requests: [], // one entry per answered model call
     events: [], // notable context events (structured; the Client labels them)
     callNames: {}, // callId -> tool name
@@ -202,6 +215,32 @@ function applySurface(
   return node
 }
 
+interface UsageLike {
+  inputTokens?: number
+  cacheReadTokens?: number
+  cacheWriteTokens?: number
+  outputTokens?: number
+}
+
+/** Prompt-side pressure of one usage sample: input plus cache traffic, no output. */
+function pressureOf(usage: UsageLike | undefined): number | undefined {
+  if (usage === undefined || typeof usage.inputTokens !== 'number') return undefined
+  return usage.inputTokens + (usage.cacheReadTokens || 0) + (usage.cacheWriteTokens || 0)
+}
+
+/**
+ * Anchor the occupancy sample: the provider's prompt-side pressure paired with
+ * the heuristic surface total AT THIS MOMENT. Callers must sample BEFORE the
+ * same event joins the surface, so the anchor matches the surface the sampled
+ * request actually saw (mirroring token-meter's contextPressure fold).
+ */
+function sampleUsage(st: FoldState, usage: UsageLike | undefined): void {
+  const pressureTokens = pressureOf(usage)
+  if (pressureTokens === undefined) return
+  st.pressureTokens = pressureTokens
+  st.sampledSurfaceTokens = st.sums.user + st.sums.inject + st.sums.assistant + st.sums.tool
+}
+
 /** Advance the fold over every event not yet folded. Mutates `st` in place. */
 export function foldInto(st: FoldState, events: readonly SessionEvent[]): void {
   for (let e = st.n; e < events.length; e++) {
@@ -236,6 +275,9 @@ export function foldInto(st: FoldState, events: readonly SessionEvent[]): void {
         if (data && typeof data.contextWindow === 'number') st.contextWindow = data.contextWindow
         if (data && typeof data.model === 'string') st.model = data.model
         if (data && typeof data.provider === 'string') st.provider = data.provider
+        // Occupancy capacity is last-wins (an absent window retracts it),
+        // unlike the sticky display window above — the official semantics.
+        st.occupancyWindow = data && typeof data.contextWindow === 'number' ? data.contextWindow : undefined
         break
       case 'tool/call':
         if (data && data.callId !== undefined && typeof data.name === 'string') st.callNames[String(data.callId)] = data.name
@@ -265,10 +307,20 @@ export function foldInto(st: FoldState, events: readonly SessionEvent[]): void {
         applySurface(st, ev, ev.type, data, toolMsg)
         break
       }
+      case 'assistant/chunk': {
+        // A streamed usage chunk is a valid occupancy sample even when its
+        // step never completes (no assistant/message follows a failed step).
+        const chunk = data?.chunk as { type?: string; usage?: UsageLike } | undefined
+        if (chunk !== undefined && chunk.type === 'usage') sampleUsage(st, chunk.usage)
+        break
+      }
       case 'assistant/message': {
         // Snapshot the request exactly as dispatched: current surface + header,
         // before this response joins the surface.
-        const usage = data?.usage as { inputTokens?: number; cacheReadTokens?: number; cacheWriteTokens?: number; outputTokens?: number } | undefined
+        const usage = data?.usage as UsageLike | undefined
+        // The occupancy anchor is stamped against the surface this request
+        // saw, i.e. BEFORE this message joins it (mirrors the official fold).
+        sampleUsage(st, usage)
         const total = st.systemTokens + st.toolsTokens + st.sums.user + st.sums.inject + st.sums.assistant + st.sums.tool
         const record: RequestRecord = {
           turn: data && typeof data.turn === 'number' ? data.turn : undefined,

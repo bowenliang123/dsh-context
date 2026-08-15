@@ -48,7 +48,7 @@ export function makeStackedBar(kit: ViewKit): (props: StackedBarProps) => ReactN
           const pct = scale > 0 ? p.value / scale * 100 : 0
           if (p.key === props.hoverKey && p.value > 0) {
             tip = {
-              text: catLabel(p.key) + ' ' + fmt(p.value) + ' (' + Math.round(p.value / total * 100) + '%)',
+              text: catLabel(p.key) + ' ≈' + fmt(p.value) + ' (' + Math.round(p.value / total * 100) + '%)',
               leftPct: Math.max(12, Math.min(acc + pct / 2, 88)),
             }
             break
@@ -109,7 +109,7 @@ export function makeLegend(kit: ViewKit): (props: {
           onMouseLeave: () => { if (props.onHoverKey !== undefined) props.onHoverKey(null) },
         },
           h('i', { style: { background: p.color } }),
-          catLabel(p.key) + ' ' + fmt(p.value),
+          catLabel(p.key) + ' ≈' + fmt(p.value),
           total > 0 ? h('em', null, Math.round(p.value / total * 100) + '%') : null)
       }))
   }

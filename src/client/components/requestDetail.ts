@@ -58,7 +58,7 @@ export function makeRequestDetail(
             h('span', { className: 'lc-detail-label' }, catLabel(c.key)),
             h('span', { className: 'lc-bar-track' },
               h('span', { className: 'lc-bar-fill', style: { width: (req.total > 0 ? v / req.total * 100 : 0) + '%', background: c.color } })),
-            h('span', { className: 'lc-detail-num' }, fmt(v)),
+            h('span', { className: 'lc-detail-num' }, '≈' + fmt(v)),
             h('span', { className: 'lc-detail-pct' }, req.total > 0 ? Math.round(v / req.total * 100) + '%' : ''))
         })))
   }

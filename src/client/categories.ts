@@ -23,3 +23,18 @@ export function partsOf(breakdown: Snapshot['current'] | RequestRecord): PartsPa
     return { key: c.key, color: c.color, value: breakdown[c.key] || 0 }
   })
 }
+
+/**
+ * Reproportion heuristic parts so they sum to a provider-anchored target —
+ * the same trick the official ContextMeter uses: the heuristic breakdown
+ * supplies the composition RATIOS, the provider sample the total. Returns
+ * the parts unchanged when no anchor applies.
+ */
+export function anchoredParts(parts: PartsPart[], target: number | null): PartsPart[] {
+  if (target === null || target <= 0) return parts
+  let total = 0
+  for (const p of parts) total += p.value
+  if (total <= 0 || total === target) return parts
+  const scale = target / total
+  return parts.map(p => ({ ...p, value: Math.round(p.value * scale) }))
+}

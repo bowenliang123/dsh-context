@@ -87,8 +87,19 @@ export function makeTrendChart(kit: ViewKit): (props: TrendChartProps) => ReactN
   return function TrendChart(props: TrendChartProps): ReactNS.ReactElement {
     const requests = props.requests
     const markers = props.markers
+    // Anchor each bar to the provider-reported prompt size when the request
+    // carried usage: the heuristic categories keep their ratios but the bar
+    // HEIGHT tracks the real billed tokens (matching the overview card and
+    // the official chat ring) instead of the underpriced raw estimate.
+    const anchorOf = (req: RequestRecord): number =>
+      typeof req.prompt === 'number' && req.prompt > 0 && req.total > 0 ? req.prompt / req.total : 1
+    const barTotalOf = (req: RequestRecord): number =>
+      typeof req.prompt === 'number' && req.prompt > 0 ? req.prompt : req.total
     let maxTotal = 1
-    for (const req of requests) if (req.total > maxTotal) maxTotal = req.total
+    for (const req of requests) {
+      const bt = barTotalOf(req)
+      if (bt > maxTotal) maxTotal = bt
+    }
 
     // Consecutive requests of the same turn collapse into one labeled range.
     // `span` is the number of STEP columns the group covers (step records
@@ -212,7 +223,7 @@ export function makeTrendChart(kit: ViewKit): (props: TrendChartProps) => ReactN
               }, '✂') : null,
               h('div', { className: 'lc-bar-stack' },
                 CATS.map(c => {
-                  const v = req[c.key] || 0
+                  const v = (req[c.key] || 0) * anchorOf(req)
                   if (!v) return null
                   // px heights: the stack's height is content-driven, so
                   // percentage heights would collapse against an indefinite base.

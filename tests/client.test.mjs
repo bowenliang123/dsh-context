@@ -153,7 +153,7 @@ const requireStateful = (spec) => {
 const m2 = { exports: {} }
 const pluginExports2 = factory(requireStateful, m2, globalThis.window, fakeDoc)
 
-const DICT_FOR_TEST = { 'tab': 'Context', 'loading': '…', 'error': 'x', 'detail.step': 'Turn {t} · Step {s}', 'gran.step': 'Step', 'gran.turn': 'Turn', 'detail.turn': 'Turn {t} · {n} steps', 'detail.lastStep': 'last step', 'overview.est': '· estimate ≈ {n} (~{p}%)', 'overview.ofWindow': 'tokens (~{p}%)', 'overview.free': 'Free window', 'events.at': 'Turn {t} · Step {s}', 'events.range': 'Turn {t} · Step {a}→{b}', 'events.rangeTo': 'Turn {a} · Step {as} → Turn {b} · Step {bs}', 'stats.recycleSub': '{c} compactions · {p} prunes', 'tip.step': 'Turn {t} · Step {s}', 'tip.turn': 'Turn {t} · {n} steps', 'tip.total': 'total ≈ {n}', 'tip.actual': ' (actual {n})' }
+const DICT_FOR_TEST = { 'tab': 'Context', 'loading': '…', 'error': 'x', 'detail.step': 'Turn {t} · Step {s}', 'gran.step': 'Step', 'gran.turn': 'Turn', 'detail.turn': 'Turn {t} · {n} steps', 'detail.lastStep': 'last step', 'overview.splitEst': '· category split is estimated', 'overview.ofWindow': 'tokens (~{p}%)', 'overview.free': 'Free window', 'events.at': 'Turn {t} · Step {s}', 'events.range': 'Turn {t} · Step {a}→{b}', 'events.rangeTo': 'Turn {a} · Step {as} → Turn {b} · Step {bs}', 'stats.recycleSub': '{c} compactions · {p} prunes', 'tip.step': 'Turn {t} · Step {s}', 'tip.turn': 'Turn {t} · {n} steps', 'tip.total': 'total ≈ {n}', 'tip.actual': ' (actual {n})' }
 let viewComponent = null
 const fakeCtx2 = {
   get: () => undefined,
@@ -358,7 +358,7 @@ assert.equal(chipsOn2[0].args[3], byClass(tr, 'lc-chip')[1].args[3], 'the matchi
 assert.equal(byClass(tr, 'lc-stacked-seg-on').length, 1, 'the hovered segment is marked')
 
 // ---- the free window space (blank track) is hoverable too ----
-// fixture: contextWindow 128000 vs usage 100 -> 127900 free (100% of the bar)
+// fixture: window 128000 vs anchored occupancy 83017 -> 44983 free (35%)
 const freeSeg = byClass(tr, 'lc-stacked-free')[0]
 assert.ok(freeSeg, 'free window segment present when contextWindow > usage')
 assert.equal(typeof freeSeg.args[1].onMouseEnter, 'function', 'free segment carries onMouseEnter')
@@ -366,7 +366,7 @@ freeSeg.args[1].onMouseEnter()
 tr = renderView()
 const freeTip = byClass(tr, 'lc-bar-tip')
 assert.equal(freeTip.length, 1, 'hovering the blank space shows the tooltip')
-assert.match(textOf(freeTip[0]), /Free window 127\.9k \(100%\)/, 'tooltip names the free window and its share')
+assert.match(textOf(freeTip[0]), /Free window 45\.0k \(35%\)/, 'tooltip names the free window and its share')
 assert.equal(byClass(tr, 'lc-stacked-free-on').length, 1, 'free segment highlights on hover')
 assert.equal(byClass(tr, 'lc-chip-on').length, 0, 'no legend chip matches the free space')
 const stackEl = byClass(tr, 'lc-stacked').find(s => s.args[1].style.height === '16px')
@@ -593,13 +593,26 @@ tr = renderView()
 assert.equal(byClass(tr, 'lc-event').length, 0, 'event list restored to the empty state')
 
 // ---- overview headline is the provider-based occupancy (like the chat
-// ring); the heuristic estimate is the secondary label ----
-// fixture: last request prompt 83000, last total 83, current total 100,
-// window 128000 -> occupancy = 83000 + (100 - 83) = 83017 (65%), est = 100 (0%)
+// ring); the composition is anchored to it, proportions stay heuristic ----
+// fixture (no host `occupancy` field -> derived fallback): last request
+// prompt 83000, last total 83, current total 100, window 128000
+// -> occupancy = 83000 + (100 - 83) = 83017 (65%), raw heuristic = 100.
 const overviewNum = byClass(tr, 'lc-overview-num')[0]
 assert.ok(overviewNum, 'overview number row present')
 assert.match(textOf(overviewNum), /83\.0k/, 'headline shows the provider-based occupancy')
 assert.match(textOf(overviewNum), /tokens \(~65%\)/, 'occupancy percent matches the chat ring formula')
-assert.match(textOf(overviewNum), /· estimate ≈ 100 \(~0%\)/, 'heuristic estimate rides as the secondary label')
+assert.match(textOf(overviewNum), /· category split is estimated/, 'no conflicting heuristic percentage next to the headline')
+
+// ---- a host-served `occupancy` projection wins over the derived fallback ----
+ctxSlots[0][1]({
+  ...snapshot,
+  occupancy: { pressureTokens: 90000, surfaceTokens: 70, sampledSurfaceTokens: 60, projectedTokens: 90010, contextWindow: 200000 },
+})
+tr = renderView()
+const overviewNum2 = byClass(tr, 'lc-overview-num')[0]
+assert.match(textOf(overviewNum2), /90\.0k/, 'host occupancy projection is the headline when present')
+assert.match(textOf(overviewNum2), /tokens \(~45%\)/, 'host occupancy window is the percent denominator')
+ctxSlots[0][1](snapshot) // restore
+tr = renderView()
 
 console.log('✔ chart render test passed (context stats board, free window hover, fixed-width bars, scroll container, turn ranges, hover linking, overview tooltip, turn strip, granularity toggle, edge fades, full history, right-anchored default, message times, event range labels, detail marker chip, overview actual)')

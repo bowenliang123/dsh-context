@@ -24,6 +24,25 @@ export interface Snapshot {
     tool: number
     total: number
   }
+  /**
+   * Provider-anchored occupancy, mirroring dsh token-meter's contextPressure
+   * projection (the official chat context ring). `projectedTokens` answers for
+   * the NEXT request: the newest usage sample's prompt pressure carried
+   * forward by the heuristic surface movement since the sample. Fields are
+   * independent last-wins records; absent until a provider reports usage.
+   */
+  occupancy?: {
+    /** Provider-reported prompt size of the most recent request (input + cache). */
+    pressureTokens?: number
+    /** Heuristic total over the current model-visible surface. */
+    surfaceTokens: number
+    /** `surfaceTokens` at the newest usage sample. */
+    sampledSurfaceTokens?: number
+    /** pressureTokens + surface movement since the sample (clamped ≥ 0). */
+    projectedTokens?: number
+    /** Newest recorded route capacity (last-wins). */
+    contextWindow?: number
+  }
   toolList: { name: string; tokens: number }[]
   requests: RequestRecord[]
   events: ContextEventRecord[]
