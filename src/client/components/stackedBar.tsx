@@ -23,7 +23,7 @@ export interface StackedBarProps {
 }
 
 export function makeStackedBar(kit: ViewKit): (props: StackedBarProps) => ReactNS.ReactElement {
-  const { t, fmt, catLabel } = kit
+  const { t, tr, fmt, catLabel } = kit
   return function StackedBar(props: StackedBarProps): ReactNS.ReactElement {
     // props.parts: [{key,color,value}]; optional props.max: when max exceeds
     // the parts' total, the remainder shows as an empty, hoverable track
@@ -32,6 +32,13 @@ export function makeStackedBar(kit: ViewKit): (props: StackedBarProps) => ReactN
     for (const p of props.parts) total += p.value
     const scale = props.max !== undefined && props.max > total ? props.max : total
     const free = props.max !== undefined && props.max > total ? props.max - total : 0
+    // Segment widths are laid out against the FULL window (scale), but their
+    // legend/tooltip percentages are shares of the OCCUPIED total — so on
+    // hover we frame the occupied region (width = used/scale) with a dashed
+    // box that makes that reference frame visible. Only when a free track
+    // exists (otherwise width already equals the percentage).
+    const usedPct = scale > 0 ? total / scale * 100 : 0
+    const showBox = free > 0 && props.hoverKey !== null && props.hoverKey !== undefined
 
     // The tooltip is DERIVED from the shared hover key, so hovering either a
     // segment or its legend chip lights the same segment and shows the same
@@ -51,7 +58,10 @@ export function makeStackedBar(kit: ViewKit): (props: StackedBarProps) => ReactN
           const pct = scale > 0 ? p.value / scale * 100 : 0
           if (p.key === props.hoverKey && p.value > 0) {
             tip = {
-              text: catLabel(p.key) + ' ≈' + fmt(p.value) + ' (' + Math.round(p.value / total * 100) + '%)',
+              // "(pct%)" is a share of the OCCUPIED total — the dashed box
+              // that appears on hover frames exactly this reference region.
+              text: catLabel(p.key) + ' ≈' + fmt(p.value) + ' (' + Math.round(p.value / total * 100) + '%) '
+                + tr('overview.ofUsed'),
               leftPct: Math.max(12, Math.min(acc + pct / 2, 88)),
             }
             break
@@ -90,6 +100,12 @@ export function makeStackedBar(kit: ViewKit): (props: StackedBarProps) => ReactN
               onMouseEnter={() => { if (props.onHoverKey !== undefined) props.onHoverKey('free') }}
             />
           ) : null}
+          {/* Hover reference frame: the occupied region (outside the free
+              track) — the region the legend/tooltip percentages refer to.
+              Painted last so its border stays above the segments. */}
+          {showBox ? (
+            <div className="lc-occupied-box" style={{ width: usedPct + '%' }} />
+          ) : null}
         </div>
         {tip ? <div className="lc-bar-tip" style={{ left: tip.leftPct + '%' }}>{tip.text}</div> : null}
       </div>
@@ -102,7 +118,7 @@ export function makeLegend(kit: ViewKit): (props: {
   hoverKey?: string | null
   onHoverKey?: (key: string | null) => void
 }) => ReactNS.ReactElement {
-  const { fmt, catLabel } = kit
+  const { tr, fmt, catLabel } = kit
   return function Legend(props: {
     parts: PartsPart[]
     hoverKey?: string | null
@@ -118,6 +134,7 @@ export function makeLegend(kit: ViewKit): (props: {
             <span
               key={p.key}
               className={'lc-chip' + (on ? ' lc-chip-on' : '')}
+              title={tr('overview.ofUsed')}
               onMouseEnter={() => { if (props.onHoverKey !== undefined) props.onHoverKey(p.key) }}
               onMouseLeave={() => { if (props.onHoverKey !== undefined) props.onHoverKey(null) }}
             >

@@ -342,6 +342,11 @@ tr = renderView()
 const tip = byClass(tr, 'lc-bar-tip')
 assert.equal(tip.length, 1, 'hovering a segment shows the tooltip')
 assert.match(textOf(tip[0]), /\(10%\)/, 'tooltip shows the segment share of the total')
+// The occupied-region reference frame appears on hover (there is a free
+// track here, so the legend % refers to the boxed part, not the bar width).
+assert.equal(byClass(tr, 'lc-occupied-box').length, 1, 'hovered segment frames the occupied region')
+const occBox = byClass(tr, 'lc-occupied-box')[0]
+assert.equal(typeof occBox.args[1].style.width, 'string', 'frame width follows the used share')
 assert.equal(typeof tip[0].args[1].style.left, 'string', 'tooltip is positioned along the pointer')
 
 // ---- composition bar hover highlights the matching legend chip (and back) ----
@@ -379,6 +384,7 @@ freeSeg.args[1].onMouseEnter()
 tr = renderView()
 const freeTip = byClass(tr, 'lc-bar-tip')
 assert.equal(freeTip.length, 1, 'hovering the blank space shows the tooltip')
+assert.equal(byClass(tr, 'lc-occupied-box').length, 1, 'hovering the free track still frames the occupied region')
 assert.match(textOf(freeTip[0]), /Free window 45\.0k \(35%\)/, 'tooltip names the free window and its share')
 assert.equal(byClass(tr, 'lc-stacked-free-on').length, 1, 'free segment highlights on hover')
 assert.equal(byClass(tr, 'lc-chip-on').length, 0, 'no legend chip matches the free space')
@@ -386,6 +392,7 @@ const stackEl = byClass(tr, 'lc-stacked').find(s => s.args[1].style.height === '
 stackEl.args[1].onMouseLeave()
 tr = renderView()
 assert.equal(byClass(tr, 'lc-bar-tip').length, 0, 'leaving the stack clears the free tooltip')
+assert.equal(byClass(tr, 'lc-occupied-box').length, 0, 'leaving the stack clears the occupied frame')
 
 // ---- turn strip: one color block per turn, aligned with the bars above ----
 let turnBlocks = byClass(tr, 'lc-turn')

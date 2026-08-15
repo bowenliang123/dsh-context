@@ -21,7 +21,12 @@ export const STYLES = [
   '.lc-overview-num b { font-size: 20px; }',
   '.lc-overview-num span { color: var(--dsw-alias-label-secondary); }',
   '.lc-stacked-wrap { position: relative; width: 100%; }',
-  '.lc-stacked { display: flex; width: 100%; border-radius: 5px; overflow: hidden; background: rgba(128,128,128,0.18); }',
+  '.lc-stacked { display: flex; width: 100%; border-radius: 5px; overflow: hidden; background: rgba(128,128,128,0.18); position: relative; }',
+  // Hover reference frame around the OCCUPIED region of the composition bar:
+  // dashes from the left edge to the used/window boundary, so the legend's
+  // "share of used" percentages visibly map to the boxed part (the free track
+  // sits outside it). pointer-events: none keeps hover on the segments/free.
+  '.lc-occupied-box { position: absolute; top: 0; bottom: 0; left: 0; border: 1px dashed var(--dsw-alias-brand-primary); border-radius: 5px; box-sizing: border-box; pointer-events: none; opacity: 0.9; }',
   '.lc-bar-tip { position: absolute; bottom: calc(100% + 6px); transform: translateX(-50%); z-index: 5; white-space: nowrap; background: var(--dsw-alias-bg-layer-2); border: 1px solid var(--dsw-alias-border-l1); border-radius: 6px; padding: 3px 8px; font-size: 12px; color: var(--dsw-alias-label-primary); box-shadow: 0 2px 8px rgba(0,0,0,0.18); pointer-events: none; }',
   '.lc-stacked > div { height: 100%; }',
   '.lc-stacked-seg-on { filter: brightness(1.18); }',
