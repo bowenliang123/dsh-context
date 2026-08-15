@@ -2,13 +2,16 @@
  * StackedBar + Legend — the composition bar (overview card) and its legend.
  * Hovering a segment or its legend chip lights the same segment and shows
  * the same tooltip; the free window space (blank track) is hoverable too.
+ * JSX components; the shared hover-link tooltip is bespoke (no shared
+ * primitive reproduces the cross-segment/legend linkage), so it stays custom
+ * but styled through the shared `--dsw-alias-*` tokens.
  */
 
 import type * as ReactNS from 'react'
 import type { PartsPart } from '../categories'
 import type { ViewKit } from '../viewkit'
 
-import { React, h } from '../react'
+import { React } from '../react'
 
 export interface StackedBarProps {
   parts: PartsPart[]
@@ -58,31 +61,39 @@ export function makeStackedBar(kit: ViewKit): (props: StackedBarProps) => ReactN
       }
     }
 
-    return h('div', { className: 'lc-stacked-wrap' },
-      h('div', {
-        className: 'lc-stacked',
-        style: { height: (props.height || 14) + 'px' },
-        onMouseLeave: () => { if (props.onHoverKey !== undefined) props.onHoverKey(null) },
-      },
-        total > 0
-          ? props.parts.map(p => {
-            if (!p.value) return null
-            const on = props.hoverKey !== undefined && props.hoverKey === p.key
-            return h('div', {
-              key: p.key,
-              className: 'lc-stacked-seg' + (on ? ' lc-stacked-seg-on' : ''),
-              style: { width: (p.value / scale * 100) + '%', background: p.color },
-              onMouseEnter: () => { if (props.onHoverKey !== undefined) props.onHoverKey(p.key) },
+    return (
+      <div className="lc-stacked-wrap">
+        <div
+          className="lc-stacked"
+          style={{ height: (props.height || 14) + 'px' }}
+          onMouseLeave={() => { if (props.onHoverKey !== undefined) props.onHoverKey(null) }}
+        >
+          {total > 0
+            ? props.parts.map(p => {
+              if (!p.value) return null
+              const on = props.hoverKey !== undefined && props.hoverKey === p.key
+              return (
+                <div
+                  key={p.key}
+                  className={'lc-stacked-seg' + (on ? ' lc-stacked-seg-on' : '')}
+                  style={{ width: (p.value / scale * 100) + '%', background: p.color }}
+                  onMouseEnter={() => { if (props.onHoverKey !== undefined) props.onHoverKey(p.key) }}
+                />
+              )
             })
-          })
-          : null,
-        free > 0 ? h('div', {
-          key: 'free',
-          className: 'lc-stacked-free' + (props.hoverKey === 'free' ? ' lc-stacked-free-on' : ''),
-          style: { width: (free / scale * 100) + '%' },
-          onMouseEnter: () => { if (props.onHoverKey !== undefined) props.onHoverKey('free') },
-        }) : null),
-      tip ? h('div', { className: 'lc-bar-tip', style: { left: tip.leftPct + '%' } }, tip.text) : null)
+            : null}
+          {free > 0 ? (
+            <div
+              key="free"
+              className={'lc-stacked-free' + (props.hoverKey === 'free' ? ' lc-stacked-free-on' : '')}
+              style={{ width: (free / scale * 100) + '%' }}
+              onMouseEnter={() => { if (props.onHoverKey !== undefined) props.onHoverKey('free') }}
+            />
+          ) : null}
+        </div>
+        {tip ? <div className="lc-bar-tip" style={{ left: tip.leftPct + '%' }}>{tip.text}</div> : null}
+      </div>
+    )
   }
 }
 
@@ -99,18 +110,24 @@ export function makeLegend(kit: ViewKit): (props: {
   }): ReactNS.ReactElement {
     let total = 0
     for (const p of props.parts) total += p.value
-    return h('div', { className: 'lc-legend' },
-      props.parts.map(p => {
-        const on = props.hoverKey !== undefined && props.hoverKey === p.key
-        return h('span', {
-          key: p.key,
-          className: 'lc-chip' + (on ? ' lc-chip-on' : ''),
-          onMouseEnter: () => { if (props.onHoverKey !== undefined) props.onHoverKey(p.key) },
-          onMouseLeave: () => { if (props.onHoverKey !== undefined) props.onHoverKey(null) },
-        },
-          h('i', { style: { background: p.color } }),
-          catLabel(p.key) + ' ≈' + fmt(p.value),
-          total > 0 ? h('em', null, Math.round(p.value / total * 100) + '%') : null)
-      }))
+    return (
+      <div className="lc-legend">
+        {props.parts.map(p => {
+          const on = props.hoverKey !== undefined && props.hoverKey === p.key
+          return (
+            <span
+              key={p.key}
+              className={'lc-chip' + (on ? ' lc-chip-on' : '')}
+              onMouseEnter={() => { if (props.onHoverKey !== undefined) props.onHoverKey(p.key) }}
+              onMouseLeave={() => { if (props.onHoverKey !== undefined) props.onHoverKey(null) }}
+            >
+              <i style={{ background: p.color }} />
+              {catLabel(p.key) + ' ≈' + fmt(p.value)}
+              {total > 0 ? <em>{Math.round(p.value / total * 100) + '%'}</em> : null}
+            </span>
+          )
+        })}
+      </div>
+    )
   }
 }

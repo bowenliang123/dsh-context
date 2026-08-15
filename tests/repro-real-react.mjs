@@ -55,6 +55,13 @@ globalThis.window.__ModuleLoader__ = {
 }
 const require = (spec) => {
   if (spec === 'react') return React
+  if (spec === '@deepseek-ai/dsh-client-ui-primitives') {
+    // Glyph-only usage in this bundle; render inert svgs (never asserted).
+    return {
+      IconPlusOutline16: (p) => React.createElement('svg', p, null),
+      IconBranchOutline16: (p) => React.createElement('svg', p, null),
+    }
+  }
   throw new Error(`unexpected module: ${spec}`)
 }
 const start = bundle.indexOf('factory: (require) => {') + 'factory: (require) => {'.length

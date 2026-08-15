@@ -360,9 +360,15 @@ the compact-checkpoint `user/message` marker, classify injections through
 `contextProvenance`/`contextForm`/`KnownContextForm`, and optionally surface
 `todo/write`.
 
-**Phase 5 — polish & config (open)**: add a `Config` read as `apply(ctx, config)`
-(schemastery) for caps/colors; evaluate moving charts onto shared
-`ui-primitives` (Tooltip), real functional components, and pricing through
+**Phase 5 — polish & config (partial)**: the client moved onto the real React
+stack — all view components are now `tsx` JSX function components, the injection
+and model-switch event glyphs reuse the shared `ui-primitives` icons, and the
+bundle externalizes the framework seed words (`react`,
+`@deepseek-ai/dsh-client-ui-primitives`) so the loader shares the single
+framework instance. Remaining: a `Config` read as `apply(ctx, config)`
+(schemastery) for caps/colors, swapping the bespoke hover tooltips onto
+`ui-primitives` `Tooltip` where semantics allow (the shared-hover linkage and
+in-chart positioning are bespoke), and pricing through
 `ctx.tokenMeter.estimateMessage`.
 
 ---
@@ -398,3 +404,83 @@ the compact-checkpoint `user/message` marker, classify injections through
   compat table incl. the one verified `(c)` bug) is incorporated into §2–§3.
 - Published npm surface (`@deepseek-ai/dsh-*`, `next` dist-tag) cross-checked
   via the registry.
+---
+
+## 8. Client framework upgrade — reuse Harness Web's React stack & styles
+
+The web UI is **React 18** (`react ^18.2.0` in `apps/web`; `react-dom`,
+`react/jsx-runtime`, `react-dom/client` all available) on a tiered framework:
+`dsh-client-ui-slots` (the slot system) → `dsh-client-web-react` (renderer +
+`bindSnapshotSelector`/`SessionProvider`) → `dsh-client-ui-primitives` (shared
+components styled only via `--dsw-*` tokens) → `dsh-client-ui-conversation`
+(the chat slots this plugin hooks).
+
+### What a third-party bundle may import at runtime
+
+The frozen loader module table (`packages/client/web/src/platform.ts`
+`PLATFORM_MODULES`) is the exact allow-list. A `dsh.client` bundle's `require`
+resolves `seed → static → memoized records → …`, so these **seed words** are
+safe to keep external and dereference at runtime:
+
+```
+react, react/jsx-runtime, react-dom, react-dom/client,
+@deepseek-ai/cordis,
+@deepseek-ai/dsh-client-ui-slots,
+@deepseek-ai/dsh-client-web-react,
+@deepseek-ai/dsh-client-ui-primitives,
+@deepseek-ai/dsh-client-ui-attachment,
+@deepseek-ai/dsh-client-schema-form
+```
+
+Any **other** `@deepseek-ai/*` value import is a build-time purity error
+(first-party gate: `packages/client/tsdown.client.ts` `dsh-client-bundle-purity`);
+only type-only imports are erased and safe. Framework singletons (e.g.
+ui-primitives) are shared — their CSS arrives already compiled in the shell.
+
+### What this enables (reuse, don't rebuild)
+
+- **Real functional components + JSX** instead of hand-rolled `h()` factories
+  (`jsx-runtime` is a seed; the shell shares ONE React instance).
+- **Standard kit** is already injected (`useSession`/`useProjection`/`useInput`/`t`)
+  and this plugin already reads `useProjection`.
+- **Shared primitives** for free: `Tooltip`, `Pill`, `Button`, `Menu`,
+  `HoverCard`, `Modal`, `Toast`, 72 `Icon*` glyphs, `MarkdownText`/`MessageText`,
+  `JsonTree`, `TerminalBlock`, `ReadBlock`, `DiffBlock`, `SearchBlock`,
+  `useCopyFeedback`/`writeClipboard` … (imported at runtime by first-party
+  clients like ui-trajectory/ui-goal — sanctioned).
+- **Styles**: UI theme owns the `--dsw-alias-*` semantic tokens
+  (`ui-theme/src/styles/design-platform.css`, applied document-wide by the
+  theme runtime); the plugin already consumes them. CSS Modules are the
+  documented convention (compiled by lightningcss into `<style data-plugin>`
+  tags; the loader inventories/removes those). The current hand-injected
+  `<style data-plugin="dsh-context">` is the official mechanism, so the
+  bespoke chart CSS stays as-is; everything else (tooltips, chips, buttons,
+  icons) can move onto ui-primitives.
+
+### Migration shape (Phase 5 concretized — mostly landed)
+
+Landed: the client is real React — all view components are `tsx` JSX function
+components (esbuild classic transform → `React.createElement`, so the loader
+shares one React instance), and the bundle externalizes the used platform seed
+words (`react`, `@deepseek-ai/dsh-client-ui-primitives`) so the injected
+`require` resolves the shared framework singletons at runtime. The injection
+(`IconPlusOutline16`) and model-switch (`IconBranchOutline16`) event glyphs now
+use the shared primitives; compaction/prune keep the ✂ marker.
+
+- Keep the standalone esbuild build (this package is an independent npm
+  plugin; the first-party `tsdown.client.ts` preset is harness-workspace
+  bound), but:
+  1. add the used seed words (`@deepseek-ai/dsh-client-ui-primitives`,
+     `react/jsx-runtime`) to `external` so the loader answers them at runtime;
+  2. flip the client source to `tsx` functional components + JSX (esbuild
+     `jsx: automatic`, `jsxImportSource` default) — components already
+     receive props, including the framework hooks;
+  3. adopt `Tooltip` (replaces the two hand-rolled `.lc-*-tip` tooltips),
+     `Pill`/`Button` (granularity toggle, chips), and `Icon*` where
+     meaningful; keep bespoke chart markup/CSS (no shared equivalent).
+- CSS Modules for the bespoke styles are optional — a small lightningcss
+  esbuild plugin can emit the hashed class map + `<style data-plugin-css>`
+  tag to match the loader contract; the current data-plugin `<style>` also
+  remains valid. Token reuse is already in place.
+- Net effect: strictly less custom CSS/HTML, one shared React instance, typed
+  i18n `t` seat, and the same UI.

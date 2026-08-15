@@ -45,10 +45,17 @@ globalThis.window = {
 }
 globalThis.document = fakeDoc
 
-// The module table answers 'react'; everything else the bundle needs rides ctx.
+// The module table answers the platform seeds this bundle uses ('react' and
+// the shared primitives singleton); everything else rides ctx or is inlined.
+// Icons are stubbed as inert elements (glyph rendering is never asserted).
+const fakePrimitives = {
+  IconPlusOutline16: (p) => ({ kind: 'icon', name: 'IconPlusOutline16', props: p }),
+  IconBranchOutline16: (p) => ({ kind: 'icon', name: 'IconBranchOutline16', props: p }),
+}
 const require = (spec) => {
-  assert.equal(spec, 'react', `bundle must only require platform modules (got "${spec}")`)
-  return fakeReact
+  assert.ok(spec === 'react' || spec === '@deepseek-ai/dsh-client-ui-primitives',
+    `bundle must only require platform modules (got "${spec}")`)
+  return spec === 'react' ? fakeReact : fakePrimitives
 }
 
 // ---- materialize the bundle the way the loader does ----
@@ -144,8 +151,9 @@ const statefulReact = {
   },
 }
 const requireStateful = (spec) => {
-  assert.equal(spec, 'react')
-  return statefulReact
+  assert.ok(spec === 'react' || spec === '@deepseek-ai/dsh-client-ui-primitives',
+    `bundle must only require platform modules (got "${spec}")`)
+  return spec === 'react' ? statefulReact : fakePrimitives
 }
 const m2 = { exports: {} }
 const pluginExports2 = factory(requireStateful, m2, globalThis.window, fakeDoc)

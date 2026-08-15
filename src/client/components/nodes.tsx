@@ -1,5 +1,7 @@
 /**
  * NodeList — the current model-visible message list (newest first).
+ * JSX function component; no framework primitives needed (rows are bespoke
+ * data-viz chrome, styled through the shared `--dsw-alias-*` tokens).
  */
 
 import type * as ReactNS from 'react'
@@ -7,7 +9,7 @@ import type { SurfaceNode } from '../../shared/types'
 import { CATS } from '../categories'
 import type { ViewKit } from '../viewkit'
 
-import { React, h } from '../react'
+import { React } from '../react'
 
 export interface NodeListProps { nodes: SurfaceNode[]; dropped: number }
 
@@ -28,21 +30,29 @@ export function makeNodeList(kit: ViewKit): (props: NodeListProps) => ReactNS.Re
 
   return function NodeList(props: NodeListProps): ReactNS.ReactElement {
     if (props.nodes.length === 0) {
-      return h('div', { className: 'lc-empty' }, t('nodes.empty'))
+      return <div className="lc-empty">{t('nodes.empty')}</div>
     }
     const catColor: Record<string, string> = {}
     for (const c of CATS) catColor[c.key] = c.color
     const rows = props.nodes.slice().reverse()
-    return h('div', { className: 'lc-nodes' },
-      props.dropped > 0 ? h('div', { className: 'lc-nodes-more' }, tr('nodes.more', { n: props.dropped })) : null,
-      rows.map(n => {
-        const text = nodeText(n)
-        return h('div', { key: n.seq, className: 'lc-node' },
-          h('i', { style: { background: catColor[n.cat] || '#999' } }),
-          h('span', { className: 'lc-node-preview', title: text }, text),
-          // Timestamp when the host event carried one.
-          typeof n.time === 'number' ? h('span', { className: 'lc-node-time' }, fmtTime(n.time)) : null,
-          h('span', { className: 'lc-node-tokens' }, fmt(n.tokens)))
-      }))
+    return (
+      <div className="lc-nodes">
+        {props.dropped > 0
+          ? <div className="lc-nodes-more">{tr('nodes.more', { n: props.dropped })}</div>
+          : null}
+        {rows.map(n => {
+          const text = nodeText(n)
+          return (
+            <div key={n.seq} className="lc-node">
+              <i style={{ background: catColor[n.cat] || '#999' }} />
+              <span className="lc-node-preview" title={text}>{text}</span>
+              {/* Timestamp when the host event carried one. */}
+              {typeof n.time === 'number' ? <span className="lc-node-time">{fmtTime(n.time)}</span> : null}
+              <span className="lc-node-tokens">{fmt(n.tokens)}</span>
+            </div>
+          )
+        })}
+      </div>
+    )
   }
 }

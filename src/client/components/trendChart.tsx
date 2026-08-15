@@ -3,6 +3,8 @@
  * a horizontal scroll (newest anchored right), a turn color strip below,
  * ✂ markers for boundary events, and edge fades. Includes the data
  * preparation helpers (aggregateByTurn, attachMarkers) used by ContextView.
+ * JSX component; the chart chrome is bespoke data-viz (no shared primitive),
+ * styled through the shared `--dsw-alias-*` tokens.
  */
 
 import type * as ReactNS from 'react'
@@ -10,7 +12,7 @@ import type { ContextEventRecord, RequestRecord } from '../../shared/types'
 import { CATS } from '../categories'
 import type { ViewKit } from '../viewkit'
 
-import { React, h } from '../react'
+import { React } from '../react'
 
 export interface TrendChartProps {
   requests: RequestRecord[]
@@ -174,91 +176,108 @@ export function makeTrendChart(kit: ViewKit): (props: TrendChartProps) => ReactN
     const hoveredIdx = props.hoveredSeq !== null ? requests.findIndex(r => r.seq === props.hoveredSeq) : -1
     const hoveredReq = hoveredIdx >= 0 ? requests[hoveredIdx] : null
 
-    return h('div', { className: 'lc-chartrow' },
-      h('div', { className: 'lc-axis' },
-        h('span', { className: 'lc-axis-top' }, fmt(maxTotal)),
-        h('span', { className: 'lc-axis-mid' }, fmt(Math.round(maxTotal / 2))),
-        h('span', { className: 'lc-axis-bot' }, '0')),
-      h('div', {
-        // Turn-aware dim scope: while a turn is focused (bar or strip hover),
-        // bars and strip blocks OUTSIDE the active turn fade to 35%.
-        className: 'lc-chart-scroll' + (props.activeTurn !== null ? ' lc-chart-dim' : ''),
-        ref: scrollRef,
-        onScroll: (e: ReactNS.UIEvent<HTMLDivElement>) => { updateEdges(e.currentTarget) },
-      },
-        // Edge fades: visible whenever more history sits beyond the viewport,
-        // so the horizontal scroll affordance is obvious.
-        edges.left ? h('div', { className: 'lc-chart-fade lc-chart-fade-l' }) : null,
-        // Hovering a bar previews it in the detail below; leaving the plot
-        // clears the preview (a pinned selection, if any, takes over again).
-        h('div', {
-          className: 'lc-chart',
-          onMouseLeave: () => { props.onHover(null) },
-        },
-          h('div', { className: 'lc-grid lc-grid-top' }),
-          h('div', { className: 'lc-grid lc-grid-mid' }),
-          requests.map((req, i) => {
-            const marker = markers[i]
-            const markerAt = marker !== undefined ? eventAt(marker) : null
-            const selected = props.selectedSeq === req.seq
-            const hovered = props.hoveredSeq === req.seq
-            const inTurn = props.activeTurn !== null && (req.turn ?? 0) === props.activeTurn
-            return h('div', {
-              key: req.seq,
-              // Uniform column width in BOTH granularities: turn aggregates
-              // keep the same fixed width as step bars.
-              className: 'lc-bar'
-                + (selected ? ' lc-bar-selected' : '')
-                + (hovered ? ' lc-bar-hovered' : '')
-                + (inTurn ? ' lc-bar-in-turn' : ''),
-              style: { width: BAR_W + 'px' },
-              onClick: () => { props.onSelect(selected ? null : req.seq) },
-              onMouseEnter: () => { props.onHover(req.seq) },
-            },
-              // The ✂ tooltip names the event AND where it happened: the
-              // gap between the request before and the request after.
-              marker !== undefined ? h('span', {
-                className: 'lc-bar-marker',
-                title: '✂ ' + (markerAt !== null ? markerAt + ' — ' : '') + eventLabel(marker),
-              }, '✂') : null,
-              h('div', { className: 'lc-bar-stack' },
-                CATS.map(c => {
-                  const v = (req[c.key] || 0) * anchorOf(req)
-                  if (!v) return null
-                  // px heights: the stack's height is content-driven, so
-                  // percentage heights would collapse against an indefinite base.
-                  return h('div', { key: c.key, style: { height: Math.max(1, Math.round(v / maxTotal * CHART_H)) + 'px', background: c.color } })
-                })))
-          })),
-        // Instant hover tooltip, glued to its bar's column (it lives in the
-        // scrolling content, so it follows the bar while the chart scrolls).
-        hoveredReq !== null ? h('div', {
-          className: 'lc-chart-tip',
-          style: { left: (hoveredIdx * (BAR_W + BAR_GAP) + BAR_W / 2) + 'px' },
-        }, tipOf(hoveredReq)) : null,
-        // Turn strip: one COLOR BLOCK per turn, spanning exactly its bars'
-        // columns, so the partition reads at a glance and lines up with the
-        // steps above. Hovering a block highlights that turn's bars in the
-        // chart (and hovering a bar highlights its block — the active turn
-        // is shared hover-only state).
-        h('div', { className: 'lc-turns', onMouseLeave: () => { props.onHoverTurn(null) } },
-          groups.map((grp, gi) => {
-            // Turn mode: uniform blocks under uniform bars (1:1). Step mode:
-            // blocks span their steps' columns. The flex gap between blocks
-            // mirrors the bar gap, so blocks always line up with the bars.
-            const on = props.activeTurn === grp.turn
-            const blockW = grp.agg ? BAR_W : grp.span * (BAR_W + BAR_GAP) - BAR_GAP
-            return h('span', {
-              key: 'turn-' + gi,
-              className: 'lc-turn' + (on ? ' lc-turn-on' : ''),
-              style: {
-                width: blockW + 'px',
-                background: TURN_COLORS[gi % TURN_COLORS.length],
-              },
-              title: 'T' + grp.turn,
-              onMouseEnter: () => { props.onHoverTurn(grp.turn) },
-            }, 'T' + grp.turn)
-          }))),
-      edges.right ? h('div', { className: 'lc-chart-fade lc-chart-fade-r' }) : null)
+    return (
+      <div className="lc-chartrow">
+        <div className="lc-axis">
+          <span className="lc-axis-top">{fmt(maxTotal)}</span>
+          <span className="lc-axis-mid">{fmt(Math.round(maxTotal / 2))}</span>
+          <span className="lc-axis-bot">{'0'}</span>
+        </div>
+        <div
+          // Turn-aware dim scope: while a turn is focused (bar or strip hover),
+          // bars and strip blocks OUTSIDE the active turn fade to 35%.
+          className={'lc-chart-scroll' + (props.activeTurn !== null ? ' lc-chart-dim' : '')}
+          ref={scrollRef}
+          onScroll={(e: ReactNS.UIEvent<HTMLDivElement>) => { updateEdges(e.currentTarget) }}
+        >
+          {/* Edge fades: visible whenever more history sits beyond the viewport,
+              so the horizontal scroll affordance is obvious. */}
+          {edges.left ? <div className="lc-chart-fade lc-chart-fade-l" /> : null}
+          {/* Hovering a bar previews it in the detail below; leaving the plot
+              clears the preview (a pinned selection, if any, takes over again). */}
+          <div
+            className="lc-chart"
+            onMouseLeave={() => { props.onHover(null) }}
+          >
+            <div className="lc-grid lc-grid-top" />
+            <div className="lc-grid lc-grid-mid" />
+            {requests.map((req, i) => {
+              const marker = markers[i]
+              const markerAt = marker !== undefined ? eventAt(marker) : null
+              const selected = props.selectedSeq === req.seq
+              const hovered = props.hoveredSeq === req.seq
+              const inTurn = props.activeTurn !== null && (req.turn ?? 0) === props.activeTurn
+              return (
+                <div
+                  key={req.seq}
+                  // Uniform column width in BOTH granularities: turn aggregates
+                  // keep the same fixed width as step bars.
+                  className={'lc-bar'
+                    + (selected ? ' lc-bar-selected' : '')
+                    + (hovered ? ' lc-bar-hovered' : '')
+                    + (inTurn ? ' lc-bar-in-turn' : '')}
+                  style={{ width: BAR_W + 'px' }}
+                  onClick={() => { props.onSelect(selected ? null : req.seq) }}
+                  onMouseEnter={() => { props.onHover(req.seq) }}
+                >
+                  {/* The ✂ tooltip names the event AND where it happened: the
+                      gap between the request before and the request after. */}
+                  {marker !== undefined ? (
+                    <span
+                      className="lc-bar-marker"
+                      title={'✂ ' + (markerAt !== null ? markerAt + ' — ' : '') + eventLabel(marker)}
+                    >{'✂'}</span>
+                  ) : null}
+                  <div className="lc-bar-stack">
+                    {CATS.map(c => {
+                      const v = (req[c.key] || 0) * anchorOf(req)
+                      if (!v) return null
+                      // px heights: the stack's height is content-driven, so
+                      // percentage heights would collapse against an indefinite base.
+                      return <div key={c.key} style={{ height: Math.max(1, Math.round(v / maxTotal * CHART_H)) + 'px', background: c.color }} />
+                    })}
+                  </div>
+                </div>
+              )
+            })}
+          </div>
+          {/* Instant hover tooltip, glued to its bar's column (it lives in the
+              scrolling content, so it follows the bar while the chart scrolls). */}
+          {hoveredReq !== null ? (
+            <div
+              className="lc-chart-tip"
+              style={{ left: (hoveredIdx * (BAR_W + BAR_GAP) + BAR_W / 2) + 'px' }}
+            >{tipOf(hoveredReq)}</div>
+          ) : null}
+          {/* Turn strip: one COLOR BLOCK per turn, spanning exactly its bars'
+              columns, so the partition reads at a glance and lines up with the
+              steps above. Hovering a block highlights that turn's bars in the
+              chart (and hovering a bar highlights its block — the active turn
+              is shared hover-only state). */}
+          <div className="lc-turns" onMouseLeave={() => { props.onHoverTurn(null) }}>
+            {groups.map((grp, gi) => {
+              // Turn mode: uniform blocks under uniform bars (1:1). Step mode:
+              // blocks span their steps' columns. The flex gap between blocks
+              // mirrors the bar gap, so blocks always line up with the bars.
+              const on = props.activeTurn === grp.turn
+              const blockW = grp.agg ? BAR_W : grp.span * (BAR_W + BAR_GAP) - BAR_GAP
+              return (
+                <span
+                  key={'turn-' + gi}
+                  className={'lc-turn' + (on ? ' lc-turn-on' : '')}
+                  style={{
+                    width: blockW + 'px',
+                    background: TURN_COLORS[gi % TURN_COLORS.length],
+                  }}
+                  title={'T' + grp.turn}
+                  onMouseEnter={() => { props.onHoverTurn(grp.turn) }}
+                >{'T' + grp.turn}</span>
+              )
+            })}
+          </div>
+        </div>
+        {edges.right ? <div className="lc-chart-fade lc-chart-fade-r" /> : null}
+      </div>
+    )
   }
 }

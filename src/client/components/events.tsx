@@ -1,15 +1,21 @@
 /**
  * Context events — event text helpers (label + timeline range) and the
  * EventList component that renders the events column.
+ *
+ * JSX function components: glyphs for injection/model-switch reuse the
+ * harness's shared icon set (`@deepseek-ai/dsh-client-ui-primitives`, a
+ * platform seed word resolved from the loader module table); compaction and
+ * prune keep the ✂ marker (product vocabulary, no shared glyph exists).
  */
 
 import type * as ReactNS from 'react'
 import type { ContextEventRecord } from '../../shared/types'
+import { IconBranchOutline16, IconPlusOutline16 } from '@deepseek-ai/dsh-client-ui-primitives'
 import { fmt } from '../format'
 import type { Translate } from '../i18n'
 import type { ViewKit } from '../viewkit'
 
-import { React, h } from '../react'
+import { React } from '../react'
 
 export const EVENT_ICONS: Record<string, string> = { compaction: '✂', prune: '✂', inject: '＋', model: '⇄' }
 
@@ -63,20 +69,32 @@ export function makeEventList(kit: ViewKit): (props: EventListProps) => ReactNS.
   const { t, fmt, fmtTime, eventLabel, eventAt } = kit
   return function EventList(props: EventListProps): ReactNS.ReactElement {
     if (props.events.length === 0) {
-      return h('div', { className: 'lc-empty' }, t('events.empty'))
+      return <div className="lc-empty">{t('events.empty')}</div>
     }
     const sorted = props.events.slice().reverse()
-    return h('div', { className: 'lc-events' },
-      sorted.map((ev, i) => {
-        const label = eventLabel(ev)
-        const at = eventAt(ev)
-        return h('div', { key: ev.seq + '-' + i, className: 'lc-event' },
-          h('span', { className: 'lc-event-icon lc-event-' + ev.kind }, EVENT_ICONS[ev.kind] || '•'),
-          h('span', { className: 'lc-event-label', title: label }, label),
-          at !== null ? h('span', { className: 'lc-event-at' }, at) : null,
-          ev.tokens ? h('span', { className: 'lc-event-tokens' + (ev.kind === 'inject' ? ' lc-up' : ' lc-down') },
-            (ev.kind === 'inject' ? '+' : '−') + fmt(ev.tokens)) : null,
-          h('span', { className: 'lc-event-time' }, fmtTime(ev.time)))
-      }))
+    return (
+      <div className="lc-events">
+        {sorted.map((ev, i) => {
+          const label = eventLabel(ev)
+          const at = eventAt(ev)
+          const glyph = ev.kind === 'inject' ? <IconPlusOutline16 />
+            : ev.kind === 'model' ? <IconBranchOutline16 />
+            : EVENT_ICONS[ev.kind] || '•'
+          return (
+            <div key={ev.seq + '-' + i} className="lc-event">
+              <span className={'lc-event-icon lc-event-' + ev.kind}>{glyph}</span>
+              <span className="lc-event-label" title={label}>{label}</span>
+              {at !== null ? <span className="lc-event-at">{at}</span> : null}
+              {ev.tokens ? (
+                <span className={'lc-event-tokens' + (ev.kind === 'inject' ? ' lc-up' : ' lc-down')}>
+                  {(ev.kind === 'inject' ? '+' : '−') + fmt(ev.tokens)}
+                </span>
+              ) : null}
+              <span className="lc-event-time">{fmtTime(ev.time)}</span>
+            </div>
+          )
+        })}
+      </div>
+    )
   }
 }

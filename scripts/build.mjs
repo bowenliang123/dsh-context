@@ -44,8 +44,11 @@ await build({
 })
 
 // ---- client half: bundled TS -> CJS, then wrap in the loader handoff -------
-// `react` stays external: the browser module table answers the injected
-// `require('react')`, everything else is inlined by the bundler.
+// `react` stays external (the browser module table answers the injected
+// require), as do the framework seed words this bundle uses — esbuild turns
+// JSX into plain React.createElement calls (classic transform), and the loader
+// resolves the shared framework singletons at runtime. Everything else is
+// inlined by the bundler.
 await build({
   entryPoints: [join(ROOT, 'src', 'client', 'index.ts')],
   outfile: join(ROOT, 'lib', '_client.js'),
@@ -53,7 +56,7 @@ await build({
   platform: 'browser',
   target: 'es2020',
   bundle: true,
-  external: ['react'],
+  external: ['react', '@deepseek-ai/dsh-client-ui-primitives'],
   sourcemap: false,
 })
 const clientSource = await readFile(join(ROOT, 'lib', '_client.js'), 'utf8')

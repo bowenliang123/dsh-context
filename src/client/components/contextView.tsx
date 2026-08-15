@@ -4,14 +4,9 @@
  * value, pushed by the Host half) and composes the stats board, composition
  * bar, history chart + detail, events and message columns.
  *
- * First-screen notes:
- * - The projection value arrives through the framework standard `useProjection`
- *   seat (a prop on every session-scope slot component); it shows the loading
- *   state until the tail-page baseline or a `session/projection` frame lands.
- *   The value store keeps a stable reference between changes, so re-renders
- *   are cheap and scroll restoration runs only when the data actually moves.
- * - The component never calls any RPC and holds no cache — the harness owns
- *   the projection pipeline end to end.
+ * JSX functional component. All data comes through the framework standard
+ * kit (`useProjection`); the component never calls any RPC and holds no
+ * cache — the harness owns the projection pipeline end to end.
  */
 
 import type * as ReactNS from 'react'
@@ -28,7 +23,7 @@ import { makeStatsBoard } from './statsBoard'
 import { makeLegend, makeStackedBar } from './stackedBar'
 import { aggregateByTurn, attachMarkers, makeTrendChart } from './trendChart'
 
-import { React, h } from '../react'
+import { React } from '../react'
 
 // The context page scrolls inside the conversation's shared page scroller
 // (`[data-conversation-scroll]`) — the same container the chat auto-scrolls
@@ -69,7 +64,7 @@ export function makeContextView(ctx: ClientCtx, kit: ViewKit): (props: ContextVi
     const [hoverCat, setHoverCat] = React.useState<string | null>(null)
 
     // ---- page-scroller ownership (see `viewScroll` above) ----
-    const rootRef = React.useRef<HTMLElement | null>(null)
+    const rootRef = React.useRef<HTMLDivElement | null>(null)
     const scrollerRef = React.useRef<HTMLElement | null>(null)
     // The session whose position was already applied this mount: re-renders
     // must never re-apply, or they would yank the reader's scroll.
@@ -113,7 +108,7 @@ export function makeContextView(ctx: ClientCtx, kit: ViewKit): (props: ContextVi
     void tick
 
     if (!data) {
-      return h('div', { className: 'lc-root', ref: rootRef }, h('div', { className: 'lc-empty' }, t('loading')))
+      return <div className="lc-root" ref={rootRef}><div className="lc-empty">{t('loading')}</div></div>
     }
 
     const current = data.current
@@ -178,80 +173,102 @@ export function makeContextView(ctx: ClientCtx, kit: ViewKit): (props: ContextVi
     // legend agree with the official ring instead of the underpriced raw sum.
     const parts = anchoredParts(partsOf(current), occupancyTokens !== null && headline > 0 ? headline : null)
 
-    return h('div', { className: 'lc-root', ref: rootRef },
+    return (
+      <div className="lc-root" ref={rootRef}>
 
-      // ---- session context stats (over the retained window) ----
-      h(StatsBoard, { requests, events }),
+        {/* ---- session context stats (over the retained window) ---- */}
+        <StatsBoard requests={requests} events={events} />
 
-      // ---- overview ----
-      h('div', { className: 'lc-card' },
-        h('div', { className: 'lc-card-title' },
-          t('overview.title'),
-          h('span', { className: 'lc-card-sub' },
-            (data.model ? data.model : '') + (data.provider ? ' · ' + data.provider : ''))),
-        h('div', { className: 'lc-overview-num' },
-          h('b', null, fmt(headline)),
-          h('span', null, occupancyWindow
-            ? ' / ' + fmt(occupancyWindow) + ' ' + tr('overview.ofWindow', { p: headlinePct ?? 0 })
-            : ' ' + t('overview.estimate')),
-          occupancyTokens !== null
-            ? h('span', { className: 'lc-card-sub' }, t('overview.splitEst'))
-            : null),
-        h(StackedBar, { parts, height: 16, max: occupancyWindow, hoverKey: hoverCat, onHoverKey: setHoverCat }),
-        h(Legend, { parts, hoverKey: hoverCat, onHoverKey: setHoverCat }),
-        (data.toolList && data.toolList.length > 0) ? h('div', { className: 'lc-tools' },
-          t('tools.top'),
-          data.toolList.slice().sort((a, b) => b.tokens - a.tokens).slice(0, 5).map(tool => {
-            return h('span', { key: tool.name, className: 'lc-tool-chip' }, tool.name + ' ' + fmt(tool.tokens))
-          }),
-          data.toolList.length > 5 ? h('span', { className: 'lc-card-sub' }, ' ' + tr('tools.more', { n: data.toolList.length })) : null) : null),
+        {/* ---- overview ---- */}
+        <div className="lc-card">
+          <div className="lc-card-title">
+            {t('overview.title')}
+            <span className="lc-card-sub">
+              {(data.model ? data.model : '') + (data.provider ? ' · ' + data.provider : '')}
+            </span>
+          </div>
+          <div className="lc-overview-num">
+            <b>{fmt(headline)}</b>
+            <span>
+              {occupancyWindow
+                ? ' / ' + fmt(occupancyWindow) + ' ' + tr('overview.ofWindow', { p: headlinePct ?? 0 })
+                : ' ' + t('overview.estimate')}
+            </span>
+            {occupancyTokens !== null ? <span className="lc-card-sub">{t('overview.splitEst')}</span> : null}
+          </div>
+          <StackedBar parts={parts} height={16} max={occupancyWindow} hoverKey={hoverCat} onHoverKey={setHoverCat} />
+          <Legend parts={parts} hoverKey={hoverCat} onHoverKey={setHoverCat} />
+          {(data.toolList && data.toolList.length > 0) ? (
+            <div className="lc-tools">
+              {t('tools.top')}
+              {data.toolList.slice().sort((a, b) => b.tokens - a.tokens).slice(0, 5).map(tool => {
+                return <span key={tool.name} className="lc-tool-chip">{tool.name + ' ' + fmt(tool.tokens)}</span>
+              })}
+              {data.toolList.length > 5
+                ? <span className="lc-card-sub">{' ' + tr('tools.more', { n: data.toolList.length })}</span>
+                : null}
+            </div>
+          ) : null}
+        </div>
 
-      // ---- trend ----
-      h('div', { className: 'lc-card' },
-        h('div', { className: 'lc-card-title' },
-          t('trend.title'),
-          h('span', { className: 'lc-card-sub' }, t('trend.hint')),
-          h('div', { className: 'lc-gran' },
-            h('button', {
-              className: 'lc-gran-btn' + (granularity === 'step' ? ' lc-gran-on' : ''),
-              onClick: () => { setGranularity('step') },
-            }, t('gran.step')),
-            h('button', {
-              className: 'lc-gran-btn' + (granularity === 'turn' ? ' lc-gran-on' : ''),
-              onClick: () => { setGranularity('turn') },
-            }, t('gran.turn')))),
-        displayRequests.length === 0
-          ? h('div', { className: 'lc-empty' }, t('trend.empty'))
-          : h('div', null,
-            h(TrendChart, {
-              // Remount per session: switching sessions re-anchors the chart
-              // at the newest bars instead of inheriting stale scroll state.
-              key: sessionId,
-              // The host caps the log at 160 requests; render them ALL so
-              // earlier turns/steps stay reachable via horizontal scroll.
-              requests: displayRequests,
-              markers,
-              selectedSeq: pinnedReq ? pinnedReq.seq : null,
-              hoveredSeq,
-              activeTurn,
-              granularity,
-              onSelect: setSelectedSeq,
-              onHover: setHoveredSeq,
-              onHoverTurn: setHoverTurn,
-            }),
-            h(RequestDetail, { request: activeReq, marker: activeReq !== null ? markerOf(activeReq) : undefined }))),
+        {/* ---- trend ---- */}
+        <div className="lc-card">
+          <div className="lc-card-title">
+            {t('trend.title')}
+            <span className="lc-card-sub">{t('trend.hint')}</span>
+            <div className="lc-gran">
+              <button
+                className={'lc-gran-btn' + (granularity === 'step' ? ' lc-gran-on' : '')}
+                onClick={() => { setGranularity('step') }}
+              >{t('gran.step')}</button>
+              <button
+                className={'lc-gran-btn' + (granularity === 'turn' ? ' lc-gran-on' : '')}
+                onClick={() => { setGranularity('turn') }}
+              >{t('gran.turn')}</button>
+            </div>
+          </div>
+          {displayRequests.length === 0
+            ? <div className="lc-empty">{t('trend.empty')}</div>
+            : (
+              <div>
+                <TrendChart
+                  // Remount per session: switching sessions re-anchors the chart
+                  // at the newest bars instead of inheriting stale scroll state.
+                  key={sessionId}
+                  // The host caps the log at 160 requests; render them ALL so
+                  // earlier turns/steps stay reachable via horizontal scroll.
+                  requests={displayRequests}
+                  markers={markers}
+                  selectedSeq={pinnedReq ? pinnedReq.seq : null}
+                  hoveredSeq={hoveredSeq}
+                  activeTurn={activeTurn}
+                  granularity={granularity}
+                  onSelect={setSelectedSeq}
+                  onHover={setHoveredSeq}
+                  onHoverTurn={setHoverTurn}
+                />
+                <RequestDetail request={activeReq} marker={activeReq !== null ? markerOf(activeReq) : undefined} />
+              </div>
+            )}
+        </div>
 
-      // ---- events + messages ----
-      h('div', { className: 'lc-cols' },
-        h('div', { className: 'lc-card lc-col' },
-          h('div', { className: 'lc-card-title' }, t('events.title')),
-          h(EventList, { events })),
-        h('div', { className: 'lc-card lc-col' },
-          h('div', { className: 'lc-card-title' },
-            t('nodes.title'),
-            h('span', { className: 'lc-card-sub' }, t('nodes.hint'))),
-          h(NodeList, { nodes, dropped: data.droppedNodes || 0 }))),
+        {/* ---- events + messages ---- */}
+        <div className="lc-cols">
+          <div className="lc-card lc-col">
+            <div className="lc-card-title">{t('events.title')}</div>
+            <EventList events={events} />
+          </div>
+          <div className="lc-card lc-col">
+            <div className="lc-card-title">
+              {t('nodes.title')}
+              <span className="lc-card-sub">{t('nodes.hint')}</span>
+            </div>
+            <NodeList nodes={nodes} dropped={data.droppedNodes || 0} />
+          </div>
+        </div>
 
-      h('div', { className: 'lc-foot' }, t('footer')))
+        <div className="lc-foot">{t('footer')}</div>
+      </div>
+    )
   }
 }
