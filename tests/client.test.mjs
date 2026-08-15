@@ -153,7 +153,7 @@ const requireStateful = (spec) => {
 const m2 = { exports: {} }
 const pluginExports2 = factory(requireStateful, m2, globalThis.window, fakeDoc)
 
-const DICT_FOR_TEST = { 'tab': 'Context', 'loading': '…', 'error': 'x', 'detail.step': 'Turn {t} · Step {s}', 'gran.step': 'Step', 'gran.turn': 'Turn', 'detail.turn': 'Turn {t} · {n} steps', 'detail.lastStep': 'last step', 'overview.actual': '· actual occupancy ≈ {n} ({p}%)', 'overview.free': 'Free window', 'events.at': 'Turn {t} · Step {s}', 'events.range': 'Turn {t} · Step {a}→{b}', 'events.rangeTo': 'Turn {a} · Step {as} → Turn {b} · Step {bs}', 'stats.recycleSub': '{c} compactions · {p} prunes', 'tip.step': 'Turn {t} · Step {s}', 'tip.turn': 'Turn {t} · {n} steps', 'tip.total': 'total ≈ {n}', 'tip.actual': ' (actual {n})' }
+const DICT_FOR_TEST = { 'tab': 'Context', 'loading': '…', 'error': 'x', 'detail.step': 'Turn {t} · Step {s}', 'gran.step': 'Step', 'gran.turn': 'Turn', 'detail.turn': 'Turn {t} · {n} steps', 'detail.lastStep': 'last step', 'overview.est': '· estimate ≈ {n} (~{p}%)', 'overview.ofWindow': 'tokens (~{p}%)', 'overview.free': 'Free window', 'events.at': 'Turn {t} · Step {s}', 'events.range': 'Turn {t} · Step {a}→{b}', 'events.rangeTo': 'Turn {a} · Step {as} → Turn {b} · Step {bs}', 'stats.recycleSub': '{c} compactions · {p} prunes', 'tip.step': 'Turn {t} · Step {s}', 'tip.turn': 'Turn {t} · {n} steps', 'tip.total': 'total ≈ {n}', 'tip.actual': ' (actual {n})' }
 let viewComponent = null
 const fakeCtx2 = {
   get: () => undefined,
@@ -592,11 +592,14 @@ ctxSlots[0][1](snapshot) // restore
 tr = renderView()
 assert.equal(byClass(tr, 'lc-event').length, 0, 'event list restored to the empty state')
 
-// ---- overview shows the provider-based occupancy alongside the estimate ----
+// ---- overview headline is the provider-based occupancy (like the chat
+// ring); the heuristic estimate is the secondary label ----
 // fixture: last request prompt 83000, last total 83, current total 100,
-// window 128000 -> occupancy = (83000 + 17) / 128000 = 65%
+// window 128000 -> occupancy = 83000 + (100 - 83) = 83017 (65%), est = 100 (0%)
 const overviewNum = byClass(tr, 'lc-overview-num')[0]
 assert.ok(overviewNum, 'overview number row present')
-assert.match(textOf(overviewNum), /· actual occupancy ≈ 83\.0k \(65%\)/, 'overview shows the provider-based occupancy alongside the estimate')
+assert.match(textOf(overviewNum), /83\.0k/, 'headline shows the provider-based occupancy')
+assert.match(textOf(overviewNum), /tokens \(~65%\)/, 'occupancy percent matches the chat ring formula')
+assert.match(textOf(overviewNum), /· estimate ≈ 100 \(~0%\)/, 'heuristic estimate rides as the secondary label')
 
 console.log('✔ chart render test passed (context stats board, free window hover, fixed-width bars, scroll container, turn ranges, hover linking, overview tooltip, turn strip, granularity toggle, edge fades, full history, right-anchored default, message times, event range labels, detail marker chip, overview actual)')

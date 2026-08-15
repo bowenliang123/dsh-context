@@ -148,15 +148,22 @@ export function makeContextView(ctx: ClientCtx, kit: ViewKit): (props: ContextVi
     }
 
     const windowPct = data.contextWindow ? Math.min(100, Math.round(current.total / data.contextWindow * 100)) : null
-    // Provider-reported CURRENT occupancy, computed exactly like the official
-    // contextPressure projection: the newest usage sample (input + cache)
-    // carried forward by the heuristic surface movement since it was taken.
-    // The fixed-density heuristic can undercount CJK-heavy content, so the
-    // real provider figure rides alongside the estimate.
+    // Provider-based CURRENT occupancy, computed exactly like the official
+    // chat ring (contextPressure.projectedTokens): the newest usage sample
+    // (input + cache) carried forward by the heuristic surface movement since
+    // it was taken. The provider's tokenizer counts the real billed tokens,
+    // which the fixed 4-chars/token heuristic can undercount by ~10-15% on
+    // CJK-heavy sessions — so this is the headline, and the heuristic figure
+    // (which the composition bar below is built from) is the secondary label.
     const lastReq = displayRequests.length > 0 ? displayRequests[displayRequests.length - 1] : null
-    const occupancy = lastReq !== null && typeof lastReq.prompt === 'number' && data.contextWindow
-      ? Math.min(100, Math.round((lastReq.prompt + (current.total - lastReq.total)) / data.contextWindow * 100))
+    const occupancyTokens = lastReq !== null && typeof lastReq.prompt === 'number'
+      ? lastReq.prompt + (current.total - lastReq.total)
       : null
+    const occupancyPct = occupancyTokens !== null && data.contextWindow
+      ? Math.min(100, Math.round(occupancyTokens / data.contextWindow * 100))
+      : null
+    const headline = occupancyTokens ?? current.total
+    const headlinePct = occupancyPct ?? windowPct
 
     return h('div', { className: 'lc-root' },
 
@@ -170,16 +177,12 @@ export function makeContextView(ctx: ClientCtx, kit: ViewKit): (props: ContextVi
           h('span', { className: 'lc-card-sub' },
             (data.model ? data.model : '') + (data.provider ? ' · ' + data.provider : ''))),
         h('div', { className: 'lc-overview-num' },
-          h('b', null, fmt(current.total)),
+          h('b', null, fmt(headline)),
           h('span', null, data.contextWindow
-            ? ' / ' + fmt(data.contextWindow) + ' ' + tr('overview.ofWindow', { p: windowPct ?? 0 })
+            ? ' / ' + fmt(data.contextWindow) + ' ' + tr('overview.ofWindow', { p: headlinePct ?? 0 })
             : ' ' + t('overview.estimate')),
-          lastReq !== null && typeof lastReq.prompt === 'number' && data.contextWindow && occupancy !== null
-            ? h('span', { className: 'lc-actual' },
-              tr('overview.actual', {
-                n: fmt(lastReq.prompt + (current.total - lastReq.total)),
-                p: occupancy,
-              }))
+          occupancyTokens !== null
+            ? h('span', { className: 'lc-actual' }, tr('overview.est', { n: fmt(current.total), p: windowPct ?? 0 }))
             : null),
         h(StackedBar, { parts: partsOf(current), height: 16, max: data.contextWindow, hoverKey: hoverCat, onHoverKey: setHoverCat }),
         h(Legend, { parts: partsOf(current), hoverKey: hoverCat, onHoverKey: setHoverCat }),
