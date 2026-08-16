@@ -35,13 +35,19 @@ export const DEFAULT_BOUNDS: Required<Config> = {
   maxNodes: 200,
 }
 
-/** The cordis `Config` validator: strict, defaults on the schema fields. */
-export const Config = z.object({
-  maxRequestSteps: z.number().int().min(1).default(DEFAULT_BOUNDS.maxRequestSteps),
-  maxKeptTurns: z.number().int().min(1).default(DEFAULT_BOUNDS.maxKeptTurns),
-  maxEvents: z.number().int().min(1).default(DEFAULT_BOUNDS.maxEvents),
-  maxNodes: z.number().int().min(1).default(DEFAULT_BOUNDS.maxNodes),
-}).strict()
+/**
+ * The cordis `Config` validator: strict on keys, defaults on the schema fields.
+ * Tolerates `undefined` (a patch row without a `config:` block — defaults win).
+ */
+export const Config = z.preprocess(
+  (v) => v ?? {},
+  z.object({
+    maxRequestSteps: z.number().int().min(1).default(DEFAULT_BOUNDS.maxRequestSteps),
+    maxKeptTurns: z.number().int().min(1).default(DEFAULT_BOUNDS.maxKeptTurns),
+    maxEvents: z.number().int().min(1).default(DEFAULT_BOUNDS.maxEvents),
+    maxNodes: z.number().int().min(1).default(DEFAULT_BOUNDS.maxNodes),
+  }).strict()
+)
 
 /** The resolved retention/slice bounds the fold operates under. */
 export interface FoldBounds {
