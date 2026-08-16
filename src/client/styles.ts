@@ -26,11 +26,20 @@ export const STYLES = [
   // dashes from the left edge to the used/window boundary, so the legend's
   // "share of used" percentages visibly map to the boxed part (the free track
   // sits outside it). pointer-events: none keeps hover on the segments/free.
-  '.lc-occupied-box { position: absolute; top: 0; bottom: 0; left: 0; border: 1px dashed var(--dsw-alias-brand-primary); border-radius: 5px; box-sizing: border-box; pointer-events: none; opacity: 0.9; }',
+  // Deliberately high-contrast (label-primary) and thick so the frame reads at
+  // a glance, and the other parts dim underneath it (`.lc-stacked-dim`).
+  '.lc-occupied-box { position: absolute; top: 0; bottom: 0; left: 0; border: 2px dashed var(--dsw-alias-label-primary); border-radius: 5px; box-sizing: border-box; pointer-events: none; opacity: 1; box-shadow: 0 0 0 1px var(--dsw-alias-bg-layer-2); }',
   '.lc-bar-tip { position: absolute; bottom: calc(100% + 6px); transform: translateX(-50%); z-index: 5; white-space: nowrap; background: var(--dsw-alias-bg-layer-2); border: 1px solid var(--dsw-alias-border-l1); border-radius: 6px; padding: 3px 8px; font-size: 12px; color: var(--dsw-alias-label-primary); box-shadow: 0 2px 8px rgba(0,0,0,0.18); pointer-events: none; }',
   '.lc-stacked > div { height: 100%; }',
   '.lc-stacked-seg-on { filter: brightness(1.18); }',
   '.lc-stacked-free-on { box-shadow: inset 0 0 0 1px var(--dsw-alias-label-secondary); border-radius: 3px; }',
+  // Hover focus: everything except the hovered part (segment, legend chip, or
+  // free track) recedes, so the composition highlight and the occupied-region
+  // frame read clearly. The selected segment/free keeps full opacity.
+  '.lc-stacked-dim .lc-stacked-seg { opacity: 0.35; }',
+  '.lc-stacked-dim .lc-stacked-seg-on { opacity: 1; }',
+  '.lc-stacked-dim .lc-stacked-free { opacity: 0.35; }',
+  '.lc-stacked-dim .lc-stacked-free-on { opacity: 1; }',
   '.lc-legend { display: flex; flex-wrap: wrap; gap: 6px 14px; margin-top: 10px; }',
   '.lc-chip { display: inline-flex; align-items: center; gap: 5px; color: var(--dsw-alias-label-primary); }',
   '.lc-chip i, .lc-detail-row i, .lc-node i { display: inline-block; width: 8px; height: 8px; border-radius: 2px; }',

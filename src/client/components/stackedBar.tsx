@@ -38,7 +38,8 @@ export function makeStackedBar(kit: ViewKit): (props: StackedBarProps) => ReactN
     // box that makes that reference frame visible. Only when a free track
     // exists (otherwise width already equals the percentage).
     const usedPct = scale > 0 ? total / scale * 100 : 0
-    const showBox = free > 0 && props.hoverKey !== null && props.hoverKey !== undefined
+    const hovering = props.hoverKey !== null && props.hoverKey !== undefined
+    const showBox = free > 0 && hovering
 
     // The tooltip is DERIVED from the shared hover key, so hovering either a
     // segment or its legend chip lights the same segment and shows the same
@@ -74,7 +75,9 @@ export function makeStackedBar(kit: ViewKit): (props: StackedBarProps) => ReactN
     return (
       <div className="lc-stacked-wrap">
         <div
-          className="lc-stacked"
+          // Hover focus: dim everything except the hovered part and show the
+          // occupied-region frame (`.lc-stacked-dim` + `.lc-occupied-box`).
+          className={'lc-stacked' + (hovering ? ' lc-stacked-dim' : '')}
           style={{ height: (props.height || 14) + 'px' }}
           onMouseLeave={() => { if (props.onHoverKey !== undefined) props.onHoverKey(null) }}
         >
