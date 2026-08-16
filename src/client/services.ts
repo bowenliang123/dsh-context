@@ -11,7 +11,7 @@
  */
 
 import type { Context } from '@deepseek-ai/cordis'
-import type { ContextTimeline } from '../shared/types'
+import type { ContextPressure, ContextTimeline } from '../shared/types'
 
 export interface LocaleService {
   register(ns: string, dicts: Record<string, Record<string, string>>): () => void
@@ -59,6 +59,18 @@ export type ClientCtx = Context & {
 export function timelineOf(value: unknown): ContextTimeline | null {
   if (value === null || value === undefined || typeof value !== 'object') return null
   return value as ContextTimeline
+}
+
+/**
+ * Narrow a delivered projection value to the official token-meter
+ * `contextPressure` projection (provider-anchored occupancy of the next
+ * request). Absent key or value = the meter's projection is not composed
+ * (e.g. a harness without the session-projection registry) — callers fall
+ * back to their derived anchor, so the UI degrades gracefully.
+ */
+export function contextPressureOf(value: unknown): ContextPressure | null {
+  if (value === null || value === undefined || typeof value !== 'object') return null
+  return value as ContextPressure
 }
 
 // ---- /context command faces (framework `inputTriggers` service) ----

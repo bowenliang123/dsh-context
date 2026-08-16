@@ -251,12 +251,16 @@ pluginExports2.apply(fakeCtx2)
 assert.ok(viewComponent !== null, 'view component captured')
 
 // The framework standard kit delivers the context timeline as a push-fed
-// projection (`useProjection('contextTimeline')`); the test drives renders by
-// swapping the holder the stub reads, exactly like a session/projection frame.
+// projection (`useProjection('contextTimeline')`) and the official
+// token-meter occupancy as another (`useProjection('contextPressure')`); the
+// test drives renders by swapping the holders the stub reads, exactly like
+// session/projection frames.
 let dataValue = null
+let pressureValue = undefined
 const renderView = () => evaluate(viewComponent({
   sessionId: 's1',
-  useProjection: (key) => (key === 'contextTimeline' ? dataValue : undefined),
+  useProjection: (key) => (key === 'contextTimeline' ? dataValue
+    : (key === 'contextPressure' ? pressureValue : undefined)),
 }))
 
 /** Invoke function-typed elements so hooks run and the tree materializes.
@@ -685,7 +689,7 @@ assert.equal(byClass(tr, 'lc-event').length, 0, 'event list restored to the empt
 
 // ---- overview headline is the provider-based occupancy (like the chat
 // ring); the composition is anchored to it, proportions stay heuristic ----
-// fixture (no host `occupancy` field -> derived fallback): last request
+// fixture (no `contextPressure` projection -> derived fallback): last request
 // prompt 83000, last total 83, current total 100, window 128000
 // -> occupancy = 83000 + (100 - 83) = 83017 (65%), raw heuristic = 100.
 const overviewNum = byClass(tr, 'lc-overview-num')[0]
@@ -694,15 +698,14 @@ assert.match(textOf(overviewNum), /83\.0k/, 'headline shows the provider-based o
 assert.match(textOf(overviewNum), /tokens \(~65%\)/, 'occupancy percent matches the chat ring formula')
 assert.match(textOf(overviewNum), /· category split is estimated/, 'no conflicting heuristic percentage next to the headline')
 
-// ---- a host-served `occupancy` projection wins over the derived fallback ----
-dataValue = {
-  ...snapshot,
-  occupancy: { pressureTokens: 90000, surfaceTokens: 70, sampledSurfaceTokens: 60, projectedTokens: 90010, contextWindow: 200000 },
-}
+// ---- the OFFICIAL token-meter `contextPressure` projection wins over the
+// derived fallback (the chat ring's own value, read as a second projection) ----
+pressureValue = { pressureTokens: 90000, projectedTokens: 90010, contextWindow: 200000 }
 tr = renderView()
 const overviewNum2 = byClass(tr, 'lc-overview-num')[0]
-assert.match(textOf(overviewNum2), /90\.0k/, 'host occupancy projection is the headline when present')
-assert.match(textOf(overviewNum2), /tokens \(~45%\)/, 'host occupancy window is the percent denominator')
+assert.match(textOf(overviewNum2), /90\.0k/, 'official contextPressure projection is the headline when present')
+assert.match(textOf(overviewNum2), /tokens \(~45%\)/, 'contextPressure window is the percent denominator')
+pressureValue = undefined
 dataValue = snapshot
 tr = renderView()
 

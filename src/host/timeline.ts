@@ -84,21 +84,12 @@ const currentSchema = z.object({
   total: z.number().int().nonnegative(),
 }).strict()
 
-const occupancySchema = z.object({
-  pressureTokens: z.number().int().nonnegative().optional(),
-  surfaceTokens: z.number().int().nonnegative(),
-  sampledSurfaceTokens: z.number().int().nonnegative().optional(),
-  projectedTokens: z.number().int().nonnegative().optional(),
-  contextWindow: z.number().int().positive().optional(),
-}).strict()
-
 const contextTimelineSchema = z.object({
   ok: z.literal(true),
   model: z.string().optional(),
   provider: z.string().optional(),
   contextWindow: z.number().optional(),
   current: currentSchema,
-  occupancy: occupancySchema.optional(),
   toolList: z.array(z.object({ name: z.string(), tokens: z.number().int().nonnegative() }).strict()),
   requests: z.array(requestRecordSchema),
   events: z.array(contextEventSchema),
@@ -124,6 +115,10 @@ export function createContextTimelineDefinition(config: Config): ProjectionDefin
     init: () => createTimelineState(),
     apply: (state: TimelineState, event: SessionEvent) => applyTimeline(state, event as Parameters<typeof applyTimeline>[1], bounds),
     view: (state: TimelineState) => buildTimelineView(state, bounds),
-    stateVersion: 1,
+    // 2 since 0.11: the occupancy mirror (pressureTokens/sampledSurfaceTokens/
+    // occupancyWindow) left the persisted state — the client now reads the
+    // official token-meter `contextPressure` projection instead. Old cached
+    // rows are discarded and refolded.
+    stateVersion: 2,
   }
 }

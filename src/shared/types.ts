@@ -46,11 +46,10 @@ export interface Snapshot {
     total: number
   }
   /**
-   * Provider-anchored occupancy, mirroring dsh token-meter's contextPressure
-   * projection (the official chat context ring). `projectedTokens` answers for
-   * the NEXT request: the newest usage sample's prompt pressure carried
-   * forward by the heuristic surface movement since the sample. Fields are
-   * independent last-wins records; absent until a provider reports usage.
+   * Provider-anchored occupancy of the NEXT request. LEGACY since 0.11: the
+   * Host no longer folds this — the Client reads the official token-meter
+   * `contextPressure` projection key (`useProjection('contextPressure')`)
+   * instead. Kept optional for wire compatibility with older clients.
    */
   occupancy?: {
     /** Provider-reported prompt size of the most recent request (input + cache). */
@@ -79,6 +78,25 @@ export interface Snapshot {
  * snapshot shape.
  */
 export type ContextTimeline = Snapshot
+
+/**
+ * The official token-meter `contextPressure` projection (registered by
+ * `@deepseek-ai/dsh-token-meter` on the same `SessionProjectionMap`): the
+ * provider-anchored occupancy of the NEXT request. The Client reads this key
+ * directly instead of the Host mirroring it inside `contextTimeline`
+ * (token-meter owns estimation and replay — the docs' stated division of
+ * labor). Fields are independent last-wins records; absent until a provider
+ * reports usage. Absent key/value = the registry (or the meter) is not
+ * composed — the Client falls back to its derived anchor.
+ */
+export interface ContextPressure {
+  /** Provider-reported prompt size of the most recent request (input + cache). */
+  pressureTokens?: number
+  /** pressureTokens + heuristic surface movement since the sample (clamped ≥ 0). */
+  projectedTokens?: number
+  /** Newest recorded route capacity (last-wins). */
+  contextWindow?: number
+}
 
 /** One model-visible message on the surface, with its heuristic token price. */
 export interface SurfaceNode {

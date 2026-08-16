@@ -12,7 +12,7 @@ import type { ContextEventRecord, RequestRecord } from '../../shared/types'
 import { headlineOf } from '../headline'
 import { modalStoreOf, takePendingConsume } from '../modalStore'
 import type { ClientCtx, SessionStandardProps, SessionsFace } from '../services'
-import { timelineOf } from '../services'
+import { contextPressureOf, timelineOf } from '../services'
 import type { ViewKit } from '../viewkit'
 import { makeRequestDetail } from './requestDetail'
 import { makeLegend, makeStackedBar } from './stackedBar'
@@ -41,6 +41,12 @@ export function makeContextModal(ctx: ClientCtx, kit: ViewKit): (props: ContextM
     const open = typeof props.useContextModal === 'function' ? props.useContextModal(s => s) : false
     const data = typeof props.useProjection === 'function'
       ? timelineOf(props.useProjection('contextTimeline'))
+      : null
+    // Provider-anchored occupancy from the official token-meter
+    // `contextPressure` projection (same key the chat ring reads); absent
+    // value degrades to the derived fallback inside headlineOf.
+    const pressure = typeof props.useProjection === 'function'
+      ? contextPressureOf(props.useProjection('contextPressure'))
       : null
     const [selectedSeq, setSelectedSeq] = React.useState<number | null>(null)
     const [hoveredSeq, setHoveredSeq] = React.useState<number | null>(null)
@@ -98,7 +104,7 @@ export function makeContextModal(ctx: ClientCtx, kit: ViewKit): (props: ContextM
       return i >= 0 ? markers[i] : undefined
     }
 
-    const head = data !== null ? headlineOf(data) : null
+    const head = data !== null ? headlineOf(data, pressure) : null
 
     return (
       <div className="lc-modal-backdrop" onClick={close}>

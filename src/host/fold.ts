@@ -72,17 +72,6 @@ export interface TimelineState {
   provider: string | undefined
   lastModel: string | undefined
   contextWindow: number | undefined
-  /**
-   * Provider-anchored occupancy, mirroring dsh token-meter's contextPressure
-   * projection: the newest usage sample's prompt-side pressure (input + cache
-   * read + write) and the heuristic surface total at that moment.
-   * `buildTimelineView` derives projectedTokens = pressure + (surface now −
-   * surface at sample).
-   */
-  pressureTokens: number | undefined
-  sampledSurfaceTokens: number | undefined
-  /** Last-wins route capacity for occupancy (mirrors the official removal semantics). */
-  occupancyWindow: number | undefined
   requests: RequestRecord[]
   events: ContextEventRecord[]
   callNames: Record<string, string>
@@ -154,9 +143,6 @@ export function createTimelineState(): TimelineState {
     provider: undefined,
     lastModel: undefined,
     contextWindow: undefined,
-    pressureTokens: undefined,
-    sampledSurfaceTokens: undefined,
-    occupancyWindow: undefined,
     requests: [],
     events: [],
     callNames: {},
@@ -284,25 +270,6 @@ interface UsageLike {
   outputTokens?: number
 }
 
-/** Prompt-side pressure of one usage sample: input plus cache traffic, no output. */
-function pressureOf(usage: UsageLike | undefined): number | undefined {
-  if (usage === undefined || typeof usage.inputTokens !== 'number') return undefined
-  return usage.inputTokens + (usage.cacheReadTokens || 0) + (usage.cacheWriteTokens || 0)
-}
-
-/**
- * Anchor the occupancy sample: the provider's prompt-side pressure paired with
- * the heuristic surface total AT THIS MOMENT. Callers must sample BEFORE the
- * same event joins the surface, so the anchor matches the surface the sampled
- * request actually saw (mirroring token-meter's contextPressure fold).
- */
-function sampleUsage(st: TimelineState, usage: UsageLike | undefined): void {
-  const pressureTokens = pressureOf(usage)
-  if (pressureTokens === undefined) return
-  st.pressureTokens = pressureTokens
-  st.sampledSurfaceTokens = st.sums.user + st.sums.inject + st.sums.assistant + st.sums.tool
-}
-
 /**
  * Advance the fold over ONE committed session event under the projection
  * contract. Uninteresting events return the same reference (`Object.is` gates
@@ -358,12 +325,13 @@ export function applyTimeline(state: TimelineState, event: TimelineEvent, bounds
     }
     case 'request/context': {
       const s = ensure()
+      // Route/capacity metadata: request/context is logged only when the
+      // route or capacity changes (appended after request/header), so it
+      // updates the CURRENT route display — it never fires a model-switch
+      // event on its own (see the request/header case).
       if (data && typeof data.contextWindow === 'number') s.contextWindow = data.contextWindow
       if (data && typeof data.model === 'string') s.model = data.model
       if (data && typeof data.provider === 'string') s.provider = data.provider
-      // Occupancy capacity is last-wins (an absent window retracts it),
-      // unlike the sticky display window above — the official semantics.
-      s.occupancyWindow = data && typeof data.contextWindow === 'number' ? data.contextWindow : undefined
       break
     }
     case 'tool/call': {
@@ -400,24 +368,11 @@ export function applyTimeline(state: TimelineState, event: TimelineEvent, bounds
       applySurface(s, event, event.type, data, toolMsg)
       break
     }
-    case 'assistant/chunk': {
-      // A streamed usage chunk is a valid occupancy sample even when its
-      // step never completes (no assistant/message follows a failed step).
-      const chunk = data?.chunk as { type?: string; usage?: UsageLike } | undefined
-      if (chunk !== undefined && chunk.type === 'usage') {
-        const s = ensure()
-        sampleUsage(s, chunk.usage)
-      }
-      break
-    }
     case 'assistant/message': {
       // Snapshot the request exactly as dispatched: current surface + header,
       // before this response joins the surface.
       const usage = data?.usage as UsageLike | undefined
       const s = ensure()
-      // The occupancy anchor is stamped against the surface this request
-      // saw, i.e. BEFORE this message joins it (mirrors the official fold).
-      sampleUsage(s, usage)
       const total = s.systemTokens + s.toolsTokens + s.sums.user + s.sums.inject + s.sums.assistant + s.sums.tool
       const record: RequestRecord = {
         turn: data && typeof data.turn === 'number' ? data.turn : undefined,
@@ -485,12 +440,11 @@ export function applyTimeline(state: TimelineState, event: TimelineEvent, bounds
  */
 export function buildTimelineView(state: TimelineState, bounds: FoldBounds): Snapshot {
   const surfaceTotal = state.sums.user + state.sums.inject + state.sums.assistant + state.sums.tool
-  // Provider-anchored occupancy (the official chat ring's formula): the newest
-  // usage sample carried forward by the surface's movement since it was taken,
-  // so a compaction shows immediately instead of waiting for the next request.
-  const projectedTokens = state.pressureTokens !== undefined && state.sampledSurfaceTokens !== undefined
-    ? Math.max(0, state.pressureTokens + surfaceTotal - state.sampledSurfaceTokens)
-    : undefined
+  // NOTE: provider-anchored occupancy (the official chat ring) is NOT folded
+  // here since 0.11 — the Client reads token-meter's own `contextPressure`
+  // projection key for it (token-meter owns estimation and replay). This
+  // value keeps only the heuristic composition; `current.total` includes the
+  // envelope (system + tools) and the live surface.
   const result: Snapshot = {
     ok: true,
     model: state.model,
@@ -504,13 +458,6 @@ export function buildTimelineView(state: TimelineState, bounds: FoldBounds): Sna
       assistant: state.sums.assistant,
       tool: state.sums.tool,
       total: surfaceTotal + state.systemTokens + state.toolsTokens,
-    },
-    occupancy: {
-      ...state.pressureTokens === undefined ? {} : { pressureTokens: state.pressureTokens },
-      surfaceTokens: surfaceTotal,
-      ...state.sampledSurfaceTokens === undefined ? {} : { sampledSurfaceTokens: state.sampledSurfaceTokens },
-      ...projectedTokens === undefined ? {} : { projectedTokens },
-      ...state.occupancyWindow === undefined ? {} : { contextWindow: state.occupancyWindow },
     },
     toolList: state.toolList,
     requests: state.requests.map(r => ({ ...r })),

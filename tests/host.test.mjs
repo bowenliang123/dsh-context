@@ -81,16 +81,12 @@ assert.equal(toolNode.tokens, 13, 'tool result prices its nested content (5 + 4 
 assert.equal(toolNode.tool, 'bash', 'tool result node names its tool (via source.callId)')
 assert.equal(asstNode.text, 'Hi!', 'assistant node carries its text preview')
 
-// -- occupancy: provider-anchored, mirroring the official contextPressure --
-// The usage sample (seq 7: input 900, no cache) is stamped BEFORE its own
-// message joins the surface: sampled 53 = user 28 + inject 12 + tool 13,
-// surface now 62 (adds the assistant 'Hi!' 9), so projected = 900 + 62 - 53.
-assert.ok(v.occupancy, 'occupancy projection present')
-assert.equal(v.occupancy.pressureTokens, 900, 'pressure is input + cache traffic')
-assert.equal(v.occupancy.sampledSurfaceTokens, 53, 'sample anchored before the message joins the surface')
-assert.equal(v.occupancy.surfaceTokens, 62, 'surface total is current')
-assert.equal(v.occupancy.projectedTokens, 909, 'sample carried forward by the surface movement')
-assert.equal(v.occupancy.contextWindow, 128000, 'occupancy window from request/context')
+// -- occupancy is NOT folded by the host anymore (R3): the client reads the
+// official token-meter `contextPressure` projection (token-meter owns
+// estimation and replay); the timeline wire carries only the heuristic
+// composition + per-request provider usage (record.prompt/output) --
+assert.equal(v.occupancy, undefined, 'the host no longer mirrors contextPressure inside contextTimeline')
+assert.equal(v.requests[0].prompt, 900, 'provider usage still rides the request records (usage sample input + cache)')
 
 // -- events are attributed to the requests around them (turn/step + range) --
 const injectEv = v.events.find(e => e.kind === 'inject')
@@ -213,16 +209,18 @@ assert.ok([...keptTurns].every(t => t >= 101 && t <= 400), 'kept turns are the n
 assert.equal(long.requests.filter(r => r.turn === 101).length, 4, 'first kept turn is complete')
 assert.equal(long.requests.filter(r => r.turn === 400).length, 4, 'last turn is complete')
 
-// -- a streamed usage chunk is an occupancy sample even with no
-// assistant/message (e.g. the step failed mid-stream) --
+// -- streamed chunks are structurally ignored (same reference): token-level
+// events carry no state change for the timeline since the occupancy mirror
+// left the fold (R3) --
+const chunkEvent = { seq: 3, type: 'assistant/chunk', time: 3000, data: { turn: 1, step: 1, chunk: { type: 'usage', usage: { inputTokens: 5000 } } } }
+assert.equal(def.apply(base, chunkEvent), base, 'usage chunks keep the same reference (no change feed)')
 const snap3 = drive([
   { seq: 1, type: 'request/context', time: 1000, data: { contextWindow: 100000 } },
   { seq: 2, type: 'user/message', time: 2000, data: { content: [{ type: 'text', text: 'a'.repeat(40) }] } },
   { seq: 3, type: 'assistant/chunk', time: 3000, data: { turn: 1, step: 1, chunk: { type: 'usage', usage: { inputTokens: 5000, cacheReadTokens: 1000, outputTokens: 0 } } } },
 ])
-assert.equal(snap3.occupancy.pressureTokens, 6000, 'chunk usage supplies the pressure sample')
-assert.equal(snap3.occupancy.projectedTokens, 6000, 'no surface movement since the chunk sample')
-assert.equal(snap3.occupancy.contextWindow, 100000, 'occupancy window present without any request record')
+assert.equal(snap3.occupancy, undefined, 'chunk usage never re-enters the timeline')
+assert.equal(snap3.contextWindow, 100000, 'route capacity still folds from request/context')
 
 // -- entry config: bounded slices are honored (config -> bounds threading) --
 let cfgDef = null

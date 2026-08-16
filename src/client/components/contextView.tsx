@@ -13,7 +13,7 @@ import type * as ReactNS from 'react'
 import type { ContextEventRecord, RequestRecord } from '../../shared/types'
 import { headlineOf } from '../headline'
 import type { LocaleService, SessionStandardProps } from '../services'
-import { timelineOf } from '../services'
+import { contextPressureOf, timelineOf } from '../services'
 import type { ClientCtx } from '../services'
 import type { ViewKit } from '../viewkit'
 import { makeEventList } from './events'
@@ -54,6 +54,13 @@ export function makeContextView(ctx: ClientCtx, kit: ViewKit): (props: ContextVi
     // arrives -> loading screen, mirroring the old first-poll wait).
     const data = typeof props.useProjection === 'function'
       ? timelineOf(props.useProjection('contextTimeline'))
+      : null
+    // Provider-anchored occupancy comes from the OFFICIAL token-meter
+    // `contextPressure` projection (the same key the chat's context ring
+    // reads) — token-meter owns estimation and replay, the Host no longer
+    // mirrors it. Absent key/value degrades to the derived fallback.
+    const pressure = typeof props.useProjection === 'function'
+      ? contextPressureOf(props.useProjection('contextPressure'))
       : null
     const [selectedSeq, setSelectedSeq] = React.useState<number | null>(null)
     const [hoveredSeq, setHoveredSeq] = React.useState<number | null>(null)
@@ -146,7 +153,7 @@ export function makeContextView(ctx: ClientCtx, kit: ViewKit): (props: ContextVi
       for (const req of displayRequests) if (req.seq === hoveredSeq) { activeTurn = req.turn ?? null; break }
     }
 
-    // Provider-anchored CURRENT occupancy, matching the official chat ring
+    // Provider-anchored CURRENT occupancy from the official chat ring
     // (contextPressure.projectedTokens): the newest usage sample (input +
     // cache) carried forward by the heuristic surface movement since it was
     // taken. The provider's tokenizer counts the real billed tokens, which
@@ -154,7 +161,7 @@ export function makeContextView(ctx: ClientCtx, kit: ViewKit): (props: ContextVi
     // CJK-heavy sessions — so this is the headline, and the heuristic
     // composition below is anchored to it (proportions stay heuristic).
     // Shared with the /context popup (headline.ts).
-    const head = headlineOf(data)
+    const head = headlineOf(data, pressure)
 
     return (
       <div className="lc-root" ref={rootRef}>
