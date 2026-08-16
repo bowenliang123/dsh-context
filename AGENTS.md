@@ -15,22 +15,7 @@ A DeepSeek Harness plugin for context insight, actions, and management.
 
 - DeepSeek Harness Plugin:
   - docs:
-    - Development
-      - Get started: https://deepseek-harness.github.io/deepseek-harness/develop/basic/
-      - Config: https://deepseek-harness.github.io/deepseek-harness/develop/basic/config
-      - Packaging: https://deepseek-harness.github.io/deepseek-harness/develop/basic/publish
-    - Framework:
-      - Lifecycle: https://deepseek-harness.github.io/deepseek-harness/develop/framework/
-      - Services: https://deepseek-harness.github.io/deepseek-harness/develop/framework/service
-      - Events: https://deepseek-harness.github.io/deepseek-harness/develop/framework/events
-  - Cordis: plugin framework underneath DeepSeek Harness
-    - Tutorial: https://deepseek-harness.github.io/deepseek-harness/develop/cordis-tutorial/
-    - https://deepseek-harness.github.io/deepseek-harness/develop/cordis-tutorial/02-lifecycle-and-effects
-    - https://deepseek-harness.github.io/deepseek-harness/develop/cordis-tutorial/03-services
-    - https://deepseek-harness.github.io/deepseek-harness/develop/cordis-tutorial/04-events
-    - https://deepseek-harness.github.io/deepseek-harness/develop/cordis-tutorial/05-config
-    - https://deepseek-harness.github.io/deepseek-harness/develop/cordis-tutorial/06-composition-and-hmr
-    - https://deepseek-harness.github.io/deepseek-harness/develop/cordis-tutorial/07-into-the-harness
+    - Reference: https://deepseek-harness.github.io/deepseek-harness/en/reference/
   - Example plugins:
     - Available on GitHub topic `dsh-plugin`: https://github.com/topics/dsh-plugin
 
