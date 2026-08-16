@@ -4,7 +4,8 @@
  * schema; every `@deepseek-ai/*` contract is type-only and erased here).
  *
  * Produces the npm-package artifacts under lib/:
- *   lib/index.js  — host half: src/host/ bundled to plain ESM (zod external).
+ *   lib/index.js  — host half: src/index.ts (re-export of src/host/) bundled
+ *                   to plain ESM (zod external).
  *   lib/client.js — client half: src/client/ bundled to CJS, then
  *                   wrapped in the web boot handoff
  *                   `window.__ModuleLoader__.load({ id, factory })`, the
@@ -22,7 +23,7 @@
 import { build } from 'esbuild'
 import { mkdir, readFile, rm, writeFile } from 'node:fs/promises'
 import { dirname, join } from 'node:path'
-import { fileURLToPath } from 'node:url'
+import { fileURLToPath, pathToFileURL } from 'node:url'
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..')
 const pkg = JSON.parse(await readFile(join(ROOT, 'package.json'), 'utf8'))
@@ -33,7 +34,7 @@ await mkdir(join(ROOT, 'lib'), { recursive: true })
 // provides the wire schema validator, like every other @deepseek-ai/* runtime
 // service; the package ships zod as a regular dependency) ----------------
 await build({
-  entryPoints: [join(ROOT, 'src', 'host', 'index.ts')],
+  entryPoints: [join(ROOT, 'src', 'index.ts')],
   outfile: join(ROOT, 'lib', 'index.js'),
   format: 'esm',
   platform: 'node',
@@ -79,7 +80,7 @@ await writeFile(join(ROOT, 'lib', 'client.js'), bundle)
 
 // ---- smoke checks ----
 new Function(bundle) // syntax parse only; never executes (window is undefined here)
-const host = await import(join(ROOT, 'lib', 'index.js'))
+const host = await import(pathToFileURL(join(ROOT, 'lib', 'index.js')).href)
 if (host.name !== 'dsh-context' || !Array.isArray(host.inject) || typeof host.apply !== 'function') {
   throw new Error('host half does not expose the expected plugin shape (name/inject/apply)')
 }

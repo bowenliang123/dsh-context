@@ -13,24 +13,37 @@
   },
   "type": "module",
   "main": "lib/index.js",
+  "types": "lib/types/index.d.ts",
   "exports": {
-    ".": "./lib/index.js",
-    "./client": "./lib/client.js",
+    ".": {
+      "types": "./lib/types/index.d.ts",
+      "default": "./lib/index.js"
+    },
+    "./client": {
+      "types": "./lib/types/client/index.d.ts",
+      "default": "./lib/client.js"
+    },
     "./package.json": "./package.json"
   },
   "files": [
     "lib",
+    "src",
     "cordis.patch.yml",
     "README.md",
     "LICENSE"
   ],
   "scripts": {
     "build": "node scripts/build.mjs",
+    "build:types": "tsc -p tsconfig.build.json",
     "typecheck": "tsc --noEmit",
+    "prepack": "npm run typecheck && npm run build && npm run build:types",
     "test": "npm run typecheck && node tests/host.test.mjs && node tests/client.test.mjs",
     "release": "bash scripts/publish.sh",
     "prepare": "husky",
     "repro": "node tests/repro-real-react.mjs"
+  },
+  "peerDependencies": {
+    "@deepseek-ai/cordis": "^4.0.1"
   },
   "dsh": {
     "bundle": {
