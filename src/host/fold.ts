@@ -341,8 +341,15 @@ export function applyTimeline(state: TimelineState, event: TimelineEvent, bounds
       // every schema); per-tool prices above are display-only rankings.
       s.toolsTokens = estimateToolsTotal(tools)
       s.systemTokens = estimateSystem(header.system)
+      // Current route/model: the durable request envelope is the source of
+      // truth (request/context is only route/capacity metadata, appended
+      // AFTER request/header per request — see agent-loop buildRequestHeader).
       if (header.config && typeof header.config.model === 'string') s.model = header.config.model
       if (header.config && typeof header.config.provider === 'string') s.provider = header.config.provider
+      // A model switch has no dedicated durable event: it is a request
+      // header that differs from the previous one, logged with reason
+      // 'change' ('initial' opens a session, 'resume' reopens it). Firing
+      // only here keeps the model event list equal to the durable record.
       if (data?.reason === 'change' && s.model && s.lastModel && s.model !== s.lastModel) {
         s.events.push({ seq: event.seq, time: event.time, kind: 'model', from: s.lastModel, to: s.model })
       }
@@ -425,6 +432,11 @@ export function applyTimeline(state: TimelineState, event: TimelineEvent, bounds
         total,
       }
       if (usage && typeof usage.inputTokens === 'number') {
+        // Official TokenUsage semantics (dsh-llm): the buckets are disjoint —
+        // inputTokens is uncached input only, cache read/write are separate,
+        // and billed prompt-side = input + cacheRead + cacheWrite. outputTokens
+        // already includes reasoningTokens. No separate prompt/output field
+        // exists in the durable vocabulary.
         record.prompt = usage.inputTokens + (usage.cacheReadTokens || 0) + (usage.cacheWriteTokens || 0)
         if (typeof usage.outputTokens === 'number') record.output = usage.outputTokens
       }

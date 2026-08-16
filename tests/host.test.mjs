@@ -236,4 +236,31 @@ assert.ok(bounded.nodes.length <= 2, 'maxNodes bounds the served surface slice')
 assert.ok(bounded.requests.length <= 8, 'maxKeptTurns bounds the retained history (400-turn fixture trimmed by whole turns)')
 assert.equal(typeof cfgDef.schema.safeParse(bounded).success, 'boolean', 'custom-bounds view still passes the unit schema')
 
-console.log('✔ host half functional test passed (projection unit, fold semantics, attribution, retention, shadow-price seqs, reference stability, determinism, config bounds)')
+// -- model-switch semantics (R6): the only durable signal is a request
+// header differing from the previous one (reason 'change'); route/capacity
+// metadata (request/context) must NOT fire a switch event by itself, and a
+// provider-only change with the same model is not a switch either --
+const switchLog = drive([
+  { seq: 1, type: 'request/header', time: 1000, data: { reason: 'initial', header: { system: 's', config: { model: 'model-a', provider: 'deepseek' } } } },
+  { seq: 2, type: 'request/header', time: 2000, data: { reason: 'change', header: { system: 's', config: { model: 'model-b', provider: 'deepseek' } } } },
+  { seq: 3, type: 'request/context', time: 2000, data: { model: 'model-b', provider: 'deepseek', contextWindow: 64000 } },
+  { seq: 4, type: 'request/header', time: 3000, data: { reason: 'change', header: { system: 's', config: { model: 'model-b', provider: 'openai' } } } },
+  { seq: 5, type: 'request/header', time: 4000, data: { reason: 'change', header: { system: 's', config: { model: 'model-b', provider: 'openai' } } } },
+])
+const switchEvents = switchLog.events.filter(e => e.kind === 'model')
+assert.equal(switchEvents.length, 1, 'exactly one model-switch event')
+assert.equal(switchEvents[0].from, 'model-a', 'switch records the previous model')
+assert.equal(switchEvents[0].to, 'model-b', 'switch records the new model')
+assert.equal(switchLog.model, 'model-b', 'current model follows the header')
+assert.equal(switchLog.provider, 'openai', 'provider-only change updates the route, not a switch')
+assert.equal(switchLog.contextWindow, 64000, 'request/context supplies route capacity')
+
+// Usage mapping (R5): prompt-side = input + cacheRead + cacheWrite (billed
+// input), output = outputTokens; reasoningTokens stay inside outputTokens.
+const usageLog = drive([
+  { seq: 1, type: 'assistant/message', time: 1000, data: { turn: 1, step: 1, usage: { inputTokens: 800, cacheReadTokens: 150, cacheWriteTokens: 50, outputTokens: 30, reasoningTokens: 10 }, message: { content: [] } } },
+])
+assert.equal(usageLog.requests[0].prompt, 1000, 'prompt side sums the disjoint input buckets')
+assert.equal(usageLog.requests[0].output, 30, 'output is outputTokens (reasoning already inside)')
+
+console.log('✔ host half functional test passed (projection unit, fold semantics, attribution, retention, shadow-price seqs, reference stability, determinism, config bounds, model switch, usage mapping)')
