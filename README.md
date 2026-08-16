@@ -1,4 +1,4 @@
-![/context command — a centered dialog with the current composition and recent trend](https://raw.githubusercontent.com/bowenliang123/dsh-context/main/docs/context-command.png)
+![Social preview](https://raw.githubusercontent.com/bowenliang123/dsh-context/main/docs/social-preview.png)
 
 # dsh-context
 

@@ -1,7 +1,7 @@
 {
   "name": "dsh-context",
   "version": "0.9.0",
-  "description": "Context insight for DeepSeek Harness: see what the model's context window is made of and how it evolves — composition, per-request history, compactions, injections, and model switches. A Context tab beside Chat/Trajectory plus a client-owned /context command that opens the headline and recent trend as a centered dialog, without touching the message history. Streamed through the harness's session-projection pipeline.",
+  "description": "A DeepSeek Harness plugin for context dashboard and context command, for understanding how the context is made of, and how it evolves.",
   "author": "bowenliang123",
   "repository": {
     "type": "git",
