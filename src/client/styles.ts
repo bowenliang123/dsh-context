@@ -116,4 +116,12 @@ export const STYLES = [
   '.lc-nodes-more { color: var(--dsw-alias-label-secondary); padding: 3px 0; }',
   '.lc-empty { color: var(--dsw-alias-label-secondary); padding: 18px 0; text-align: center; }',
   '.lc-foot { color: var(--dsw-alias-label-secondary); font-size: 12px; margin-top: 4px; }',
+  // ---- /context modal (centered dialog; escapes the composer anchor via fixed positioning) ----
+  '.lc-modal-backdrop { position: fixed; inset: 0; z-index: 200; background: rgba(0, 0, 0, 0.45); display: flex; align-items: center; justify-content: center; }',
+  '.lc-modal-card { width: min(720px, calc(100vw - 48px)); max-height: min(82vh, 760px); overflow-y: auto; box-sizing: border-box; background: var(--dsw-alias-bg-layer-1); border: 1px solid var(--dsw-alias-border-l1); border-radius: 12px; box-shadow: var(--dsw-shadow-lv3, 0 12px 32px rgba(0, 0, 0, 0.4)); padding: 16px 18px 18px; color: var(--dsw-alias-label-primary); font-size: 13px; }',
+  '.lc-modal-head { display: flex; align-items: baseline; gap: 8px; margin-bottom: 12px; }',
+  '.lc-modal-title { font-weight: 600; font-size: 14px; }',
+  '.lc-modal-close { margin-left: auto; border: 0; background: transparent; color: var(--dsw-alias-label-secondary); font-size: 18px; line-height: 1; padding: 2px 6px; border-radius: 6px; cursor: pointer; font-family: inherit; }',
+  '.lc-modal-close:hover { color: var(--dsw-alias-label-primary); background: var(--dsw-alias-bg-layer-2); }',
+  '.lc-modal-trend { margin-top: 14px; }',
 ].join('\n')

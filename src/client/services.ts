@@ -25,7 +25,9 @@ export interface SlotRegistration {
   order: number
   /** optional dictionary namespace; the framework then synthesizes the `t` seat. */
   locale?: string
-  label: () => string
+  label?: () => string
+  /** optional business face factory; a `hooks` compartment binds selector hooks onto props. */
+  inject?: (sessionId: string) => unknown
 }
 
 export interface SlotsService {
@@ -57,4 +59,64 @@ export type ClientCtx = Context & {
 export function timelineOf(value: unknown): ContextTimeline | null {
   if (value === null || value === undefined || typeof value !== 'object') return null
   return value as ContextTimeline
+}
+
+// ---- /context command faces (framework `inputTriggers` service) ----
+
+/** One menu candidate offered by a trigger source. */
+export interface TriggerCandidate {
+  name: string
+  description?: string
+}
+
+/** Pick-moment snapshot of the trigger token span (draftRev CAS). */
+export interface TokenSpan {
+  start: number
+  end: number
+  draftRev: number
+}
+
+/** Everything a source receives on a menu pick. */
+export interface TriggerPick {
+  candidate: TriggerCandidate
+  session: { sessionId: string }
+  position: string
+  via: string
+  span: TokenSpan
+}
+
+/** The pick outcomes this plugin produces (see the framework's PickOutcome). */
+export type SourcePickOutcome = 'handled' | undefined
+
+/**
+ * The harness input-trigger service (`ctx.inputTriggers`), as far as this
+ * plugin consumes it: registering one '/' source whose candidates, picks,
+ * and enter adjudication all stay on the client.
+ */
+export interface InputTriggersFace {
+  registerSource(src: {
+    trigger: '/'
+    name: string
+    order?: number
+    candidates(
+      session: { sessionId: string },
+      req: { query: string; position: string; signal: AbortSignal },
+    ): Promise<readonly TriggerCandidate[]>
+    onPick(pick: TriggerPick): SourcePickOutcome
+    matchEnter?(
+      session: { sessionId: string },
+      line: string,
+      signal: AbortSignal,
+    ): Promise<SourcePickOutcome>
+  }): () => void
+}
+
+/** The session scope (`ctx.sessions.scope`), used to dispatch the scoped consume-token event. */
+export interface SessionScopeFace {
+  bail(subject: unknown, event: string, payload: unknown): unknown
+}
+
+/** The session runtime (`ctx.sessions`), as consumed here. */
+export interface SessionsFace {
+  scope(id: string): SessionScopeFace | undefined
 }

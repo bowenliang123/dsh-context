@@ -10,8 +10,8 @@
  */
 
 import type * as ReactNS from 'react'
-import type { ContextEventRecord, RequestRecord, Snapshot } from '../../shared/types'
-import { anchoredParts, partsOf } from '../categories'
+import type { ContextEventRecord, RequestRecord } from '../../shared/types'
+import { headlineOf } from '../headline'
 import type { LocaleService, SessionStandardProps } from '../services'
 import { timelineOf } from '../services'
 import type { ClientCtx } from '../services'
@@ -111,7 +111,6 @@ export function makeContextView(ctx: ClientCtx, kit: ViewKit): (props: ContextVi
       return <div className="lc-root" ref={rootRef}><div className="lc-empty">{t('loading')}</div></div>
     }
 
-    const current = data.current
     const requests = data.requests || []
     const events = data.events || []
     const nodes = data.nodes || []
@@ -154,24 +153,8 @@ export function makeContextView(ctx: ClientCtx, kit: ViewKit): (props: ContextVi
     // the fixed 4-chars/token heuristic can undercount by ~10-15% on
     // CJK-heavy sessions — so this is the headline, and the heuristic
     // composition below is anchored to it (proportions stay heuristic).
-    const occ = data.occupancy
-    const projected = occ !== undefined && typeof occ.projectedTokens === 'number' ? occ.projectedTokens : undefined
-    const lastReq = displayRequests.length > 0 ? displayRequests[displayRequests.length - 1] : null
-    const derived = lastReq !== null && typeof lastReq.prompt === 'number'
-      ? lastReq.prompt + (current.total - lastReq.total)
-      : undefined
-    const occupancyTokens = projected ?? derived ?? null
-    const occupancyWindow = occ !== undefined && typeof occ.contextWindow === 'number'
-      ? occ.contextWindow
-      : data.contextWindow
-    const headline = occupancyTokens ?? current.total
-    const headlinePct = occupancyWindow
-      ? Math.min(100, Math.round(headline / occupancyWindow * 100))
-      : null
-    // Composition anchored to the provider total: the six categories keep
-    // their heuristic RATIOS but sum to the headline, so the bar fill and
-    // legend agree with the official ring instead of the underpriced raw sum.
-    const parts = anchoredParts(partsOf(current), occupancyTokens !== null && headline > 0 ? headline : null)
+    // Shared with the /context popup (headline.ts).
+    const head = headlineOf(data)
 
     return (
       <div className="lc-root" ref={rootRef}>
@@ -188,16 +171,16 @@ export function makeContextView(ctx: ClientCtx, kit: ViewKit): (props: ContextVi
             </span>
           </div>
           <div className="lc-overview-num">
-            <b>{fmt(headline)}</b>
+            <b>{fmt(head.tokens)}</b>
             <span>
-              {occupancyWindow
-                ? ' / ' + fmt(occupancyWindow) + ' ' + tr('overview.ofWindow', { p: headlinePct ?? 0 })
+              {head.window
+                ? ' / ' + fmt(head.window) + ' ' + tr('overview.ofWindow', { p: head.pct ?? 0 })
                 : ' ' + t('overview.estimate')}
             </span>
-            {occupancyTokens !== null ? <span className="lc-card-sub">{t('overview.splitEst')}</span> : null}
+            {!head.estimated ? <span className="lc-card-sub">{t('overview.splitEst')}</span> : null}
           </div>
-          <StackedBar parts={parts} height={16} max={occupancyWindow} hoverKey={hoverCat} onHoverKey={setHoverCat} />
-          <Legend parts={parts} hoverKey={hoverCat} onHoverKey={setHoverCat} />
+          <StackedBar parts={head.parts} height={16} max={head.window} hoverKey={hoverCat} onHoverKey={setHoverCat} />
+          <Legend parts={head.parts} hoverKey={hoverCat} onHoverKey={setHoverCat} />
           {(data.toolList && data.toolList.length > 0) ? (
             <div className="lc-tools">
               {t('tools.top')}

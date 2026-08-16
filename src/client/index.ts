@@ -22,6 +22,9 @@
  */
 
 import { DICT_EN, DICT_ZH } from './i18n'
+import { registerContextCommand } from './command'
+import { makeContextModal } from './components/contextModal'
+import { modalStoreOf } from './modalStore'
 import type { ClientCtx } from './services'
 import { STYLES } from './styles'
 import { makeContextView } from './components/contextView'
@@ -53,13 +56,27 @@ function apply(ctx: ClientCtx): void {
     }
   }, 'dsh-context: styles')
 
-  const ContextView = makeContextView(ctx, makeViewKit(t))
+  const kit = makeViewKit(t)
+  const ContextView = makeContextView(ctx, kit)
   ctx.slots.inject('conversation.view', () => {
     return ctx.slots.register(
       // order 20 renders right of Chat (0) and Trajectory (10); the locale
       // namespace put the framework `t` seat on the component's props too.
       { name: 'conversation.view', id: 'context', order: 20, locale: NS, label: () => t('tab') },
       props => h(ContextView, props),
+    )
+  })
+
+  // `/context` slash command: opens the context modal (see command.ts for
+  // the trigger source). The modal itself renders from the input overlay
+  // slot, opened per session through the hooks-compartment store.
+  registerContextCommand(ctx, kit)
+  const ContextModal = makeContextModal(ctx, kit)
+  ctx.slots.inject('conversation.input.overlay', () => {
+    return ctx.slots.register(
+      { name: 'conversation.input.overlay', id: 'context-modal', order: 10, locale: NS,
+        inject: (sessionId: string) => ({ hooks: { contextModal: modalStoreOf(sessionId) } }) },
+      props => h(ContextModal, props),
     )
   })
 }

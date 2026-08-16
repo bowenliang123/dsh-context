@@ -64,6 +64,8 @@ export const DICT_ZH: Record<string, string> = {
   'node.empty': '(空回复)',
   'node.nonText': '(非文本消息)',
   'node.snapshot': '快照: ',
+  'cmd.desc': '查看上下文的构成和变化',
+  'cmd.close': '关闭',
 }
 
 export const DICT_EN: Record<string, string> = {
@@ -125,4 +127,6 @@ export const DICT_EN: Record<string, string> = {
   'node.empty': '(empty reply)',
   'node.nonText': '(non-text message)',
   'node.snapshot': 'snapshot: ',
+  'cmd.desc': 'View context makeup and how it evolves',
+  'cmd.close': 'Close',
 }

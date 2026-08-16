@@ -98,13 +98,13 @@ const fakeCtx = {
 }
 pluginExports.apply(fakeCtx)
 
-assert.equal(effects.length, 2, 'dictionaries + styles effects')
+assert.equal(effects.length, 3, 'dictionaries + styles + /context command effects')
 assert.deepEqual(localeRegistrations[0][0], 'dsh-context')
 assert.ok(localeRegistrations[0][1].zh && localeRegistrations[0][1].en, 'bilingual dicts')
 const styleTag = registered.get('dsh-context')
 assert.ok(styleTag, 'plugin-owned <style data-plugin="dsh-context"> injected')
 assert.ok(styleTag.textContent.includes('.lc-root'), 'styles content present')
-assert.equal(slotInjections.length, 1)
+assert.equal(slotInjections.length, 2, 'view tab + input overlay injections')
 assert.equal(slotInjections[0][0], 'conversation.view')
 const registeredOpts = slotInjections[0][1]() // slots.inject callback returns the register result
 assert.equal(registeredOpts.name, 'conversation.view')
@@ -112,8 +112,65 @@ assert.equal(registeredOpts.id, 'context')
 assert.equal(registeredOpts.order, 20)
 assert.equal(typeof registeredOpts.label, 'function')
 assert.equal(registeredOpts.label(), '上下文', 'tab label localized')
+assert.equal(slotInjections[1][0], 'conversation.input.overlay')
+const overlayOpts = slotInjections[1][1]()
+assert.equal(overlayOpts.name, 'conversation.input.overlay')
+assert.equal(overlayOpts.id, 'context-modal')
+assert.ok(typeof overlayOpts.inject === 'function', 'overlay injects the modal store hook')
+const injected = overlayOpts.inject('s1')
+assert.equal(typeof injected.hooks.contextModal.getSnapshot, 'function', 'hooks compartment carries the modal store')
+assert.equal(injected.hooks.contextModal.getSnapshot(), false, 'modal closed initially')
 
-console.log('✔ client bundle test passed (handoff, require table, dicts, styles, slot registration)')
+// ---- /context command: the plugin's own '/' trigger source ----
+// The first fake ctx has no inputTriggers service: the command effect must
+// stay inert (soft dependency), which the apply above already proved by not
+// throwing. Now apply again with the trigger service present.
+{
+  const sources = []
+  let localeDict = null
+  const ctx3 = {
+    get: (name) => name === 'inputTriggers'
+      ? { registerSource: (s) => { sources.push(s); return () => {} } }
+      : undefined,
+    effect: (fn) => { fn(); return () => {} },
+    locale: {
+      register: (ns, dicts) => { localeDict = dicts.zh; return () => {} },
+      bind: () => (key, vars) => {
+        let s = localeDict !== null && localeDict[key] !== undefined ? localeDict[key] : key
+        if (vars) for (const k in vars) s = s.replace('{' + k + '}', String(vars[k]))
+        return s
+      },
+      subscribe: () => () => {},
+    },
+    slots: { inject: () => {}, register: () => ({}) },
+  }
+  pluginExports.apply(ctx3)
+  assert.equal(sources.length, 1, 'one /context trigger source registered')
+  const src = sources[0]
+  assert.equal(src.trigger, '/')
+  assert.equal(src.name, 'context')
+
+  // Candidates: leading-only, prefix-filtered, description localized.
+  const req = (query, position = 'leading') => ({ query, position, signal: new AbortController().signal })
+  assert.deepEqual(await src.candidates({ sessionId: 's1' }, req('')), [{ name: 'context', description: '查看上下文的构成和变化' }])
+  assert.deepEqual((await src.candidates({ sessionId: 's1' }, req('cont'))).length, 1, 'prefix match')
+  assert.deepEqual(await src.candidates({ sessionId: 's1' }, req('xyz')), [], 'non-prefix miss')
+  assert.deepEqual(await src.candidates({ sessionId: 's1' }, req('', 'inline')), [], 'inline positions never offer the command')
+
+  // Menu pick: opens the session's modal and answers 'handled'; the token
+  // stays in the composer while the modal is open (consumed on close).
+  const outcome = src.onPick({ candidate: { name: 'context' }, session: { sessionId: 's1' }, position: 'leading', via: 'menu', span: { start: 0, end: 8, draftRev: 1 } })
+  assert.equal(outcome, 'handled', 'menu pick is handled internally')
+  assert.equal(injected.hooks.contextModal.getSnapshot(), true, 'menu pick opens the modal')
+
+  // Bare enter: also 'handled' (nothing is submitted, the draft keeps the
+  // token until the modal closes).
+  assert.equal(await src.matchEnter({ sessionId: 's1' }, '/context', new AbortController().signal), 'handled', 'bare enter opens the modal without submitting')
+  assert.equal(await src.matchEnter({ sessionId: 's1' }, '/context now', new AbortController().signal), undefined, 'argued lines miss')
+  assert.equal(await src.matchEnter({ sessionId: 's1' }, '/compact', new AbortController().signal), undefined, 'other commands miss')
+}
+
+console.log('✔ client bundle test passed (handoff, require table, dicts, styles, slot registration, /context command)')
 
 // ---- chart render test: fixed-width bars, horizontal scroll, turn ranges ----
 // Materialize the bundle a second time with a STATEFUL fake React so the
@@ -125,6 +182,7 @@ let currentHooks = null
 let hookCursor = 0
 const statefulReact = {
   createElement: (...args) => ({ kind: 'element', args }),
+  useCallback: (fn) => fn,
   useState(init) {
     const i = hookCursor++
     const slots = currentHooks // captured by the setter: stable per fiber
@@ -158,10 +216,19 @@ const requireStateful = (spec) => {
 const m2 = { exports: {} }
 const pluginExports2 = factory(requireStateful, m2, globalThis.window, fakeDoc)
 
-const DICT_FOR_TEST = { 'tab': 'Context', 'loading': '…', 'error': 'x', 'detail.step': 'Turn {t} · Step {s}', 'gran.step': 'Step', 'gran.turn': 'Turn', 'detail.turn': 'Turn {t} · {n} steps', 'detail.lastStep': 'last step', 'overview.splitEst': '· category split is estimated', 'overview.ofWindow': 'tokens (~{p}%)', 'overview.free': 'Free window', 'events.at': 'Turn {t} · Step {s}', 'events.range': 'Turn {t} · Step {a}→{b}', 'events.rangeTo': 'Turn {a} · Step {as} → Turn {b} · Step {bs}', 'stats.recycleSub': '{c} compactions · {p} prunes', 'tip.step': 'Turn {t} · Step {s}', 'tip.turn': 'Turn {t} · {n} steps', 'tip.total': 'total ≈ {n}', 'tip.actual': ' (actual {n})' }
+const DICT_FOR_TEST = { 'tab': 'Context', 'loading': '…', 'error': 'x', 'detail.step': 'Turn {t} · Step {s}', 'gran.step': 'Step', 'gran.turn': 'Turn', 'detail.turn': 'Turn {t} · {n} steps', 'detail.lastStep': 'last step', 'overview.splitEst': '· category split is estimated', 'overview.ofWindow': 'tokens (~{p}%)', 'overview.free': 'Free window', 'events.at': 'Turn {t} · Step {s}', 'events.range': 'Turn {t} · Step {a}→{b}', 'events.rangeTo': 'Turn {a} · Step {as} → Turn {b} · Step {bs}', 'stats.recycleSub': '{c} compactions · {p} prunes', 'tip.step': 'Turn {t} · Step {s}', 'tip.turn': 'Turn {t} · {n} steps', 'tip.total': 'total ≈ {n}', 'tip.actual': ' (actual {n})', 'trend.title': 'History', 'trend.empty': 'empty trend', 'cmd.close': 'Close' }
 let viewComponent = null
+let modalComponent = null
+let modalSource = null
+const bailCalls = []
 const fakeCtx2 = {
-  get: () => undefined,
+  get: (name) => {
+    if (name === 'inputTriggers') return { registerSource: (s) => { modalSource = s; return () => {} } }
+    if (name === 'sessions') return {
+      scope: (id) => id === 's1' ? { bail: (...args) => { bailCalls.push(args); return true } } : undefined,
+    }
+    return undefined
+  },
   effect: (fn) => { fn(); return () => {} },
   locale: {
     register: () => () => {},
@@ -173,7 +240,11 @@ const fakeCtx2 = {
   },
   slots: {
     inject: (name, fn) => { fn() }, // the register call inside captures the component
-    register: (opts, component) => { viewComponent = component; return opts },
+    register: (opts, component) => {
+      if (opts.name === 'conversation.view') viewComponent = component
+      if (opts.name === 'conversation.input.overlay') modalComponent = component
+      return opts
+    },
   },
 }
 pluginExports2.apply(fakeCtx2)
@@ -636,3 +707,64 @@ dataValue = snapshot
 tr = renderView()
 
 console.log('✔ chart render test passed (context stats board, free window hover, fixed-width bars, scroll container, turn ranges, hover linking, overview tooltip, turn strip, granularity toggle, edge fades, full history, right-anchored default, message times, event range labels, detail marker chip, overview actual)')
+
+// ---- /context modal render: centered dialog with the same overview +
+// last-10-turn trend, driven by the modal store hook ----
+assert.ok(modalComponent !== null, 'overlay component captured')
+// 14 turns of growing totals; the modal must show exactly the last 10.
+const modalRequests = []
+for (let turn = 1; turn <= 14; turn++) {
+  modalRequests.push({
+    turn, step: 0, time: 1000 * turn, seq: turn * 10,
+    system: 10, tools: 20, user: 10 * turn, inject: 0, assistant: 15, tool: 20, total: 65 + 10 * turn,
+  })
+}
+const modalData = {
+  ...snapshot,
+  current: { system: 10, tools: 20, user: 140, inject: 0, assistant: 15, tool: 20, total: 205 },
+  requests: modalRequests,
+  events: [{ seq: 95, time: 9500, kind: 'compaction', tokens: 50, count: 2 }],
+}
+let modalOpen = false
+const renderModal = () => evaluate(modalComponent({
+  sessionId: 's1',
+  useProjection: (key) => (key === 'contextTimeline' ? modalData : undefined),
+  useContextModal: (sel) => sel(modalOpen),
+}))
+
+assert.equal(renderModal(), null, 'modal renders nothing while closed')
+modalOpen = true
+const modalTree = renderModal()
+assert.equal(byClass(modalTree, 'lc-modal-backdrop').length, 1, 'centered backdrop rendered')
+const modalBars = byClass(modalTree, 'lc-bar')
+assert.equal(modalBars.length, 10, 'trend shows exactly the last 10 turns')
+// First visible bar is turn 5 (seq 50); turns 1-4 are cut.
+const modalTurns = byClass(modalTree, 'lc-turn')
+assert.deepEqual(modalTurns.map(t => t.args[2]), ['T5', 'T6', 'T7', 'T8', 'T9', 'T10', 'T11', 'T12', 'T13', 'T14'], 'turn ticks 5..14')
+// The compaction (seq 95) attaches to the first request after it (turn 10).
+assert.equal(byClass(modalTree, 'lc-bar-marker').length, 1, '✂ marker rides the turn after the compaction')
+const modalOverview = byClass(modalTree, 'lc-overview-num')[0]
+assert.match(textOf(modalOverview), /205/, 'modal headline falls back to the heuristic total (no prompt on last request)')
+assert.match(textOf(modalOverview), /tokens \(~0%\)/, 'percent against the 128k window')
+assert.equal(byClass(modalTree, 'lc-modal-trend').length, 1, 'trend section title present')
+const closeBtn = byClass(modalTree, 'lc-modal-close')[0]
+assert.equal(closeBtn.args[1]['aria-label'], 'Close', 'close button localized')
+
+// Deferred token consumption: the enter path left `/context` in the draft
+// and recorded a bare-token guard; closing the modal dispatches the scoped
+// consume-token event through the session scope.
+assert.ok(modalSource !== null, 'trigger source registered on this instance')
+await modalSource.matchEnter({ sessionId: 's1' }, '/context', new AbortController().signal)
+const backdrop = byClass(modalTree, 'lc-modal-backdrop')[0]
+backdrop.args[1].onClick()
+assert.equal(bailCalls.length, 1, 'closing the modal dispatches consume-token')
+assert.equal(bailCalls[0][1], 'slash/input-consume-token')
+assert.deepEqual(bailCalls[0][2], { guard: { kind: 'bare-token', token: '/context' } }, 'enter-path guard consumed on close')
+// A second close without a prior open records nothing.
+backdrop.args[1].onClick()
+assert.equal(bailCalls.length, 1, 'no pending guard -> no dispatch')
+
+modalOpen = false
+assert.equal(renderModal(), null, 'modal closes again')
+
+console.log('✔ modal render test passed (open/close, last-10-turn window, ✂ marker, headline, localized chrome, deferred token consume on close)')
