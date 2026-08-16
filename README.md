@@ -1,15 +1,16 @@
-![Social preview](https://raw.githubusercontent.com/bowenliang123/dsh-context/main/docs/social-preview.png)
+![/context command — a centered dialog with the current composition and recent trend](https://raw.githubusercontent.com/bowenliang123/dsh-context/main/docs/context-command.png)
 
 # dsh-context
 
 [![npm version](https://img.shields.io/npm/v/dsh-context)](https://www.npmjs.com/package/dsh-context)
 [![GitHub stars](https://img.shields.io/github/stars/bowenliang123/dsh-context?style=social)](https://github.com/bowenliang123/dsh-context)
 
-**See what your DeepSeek Harness agent's context window is actually made of and how it evolves.**
+**A DeepSeek Harness plugin for context dashboard and context command, for understanding how the context is made of, and how it evolves.**
 
-`dsh-context` is a [DeepSeek Harness](https://github.com/deepseek-ai/DeepSeek-Harness) plugin that adds a **Context Insight** panel to the web UI: a live, visual answer to *"what is the model carrying right now, and how did it get there?"* — context composition, per-request history, compactions, and injections, all in one place.
+`dsh-context` is a [DeepSeek Harness](https://github.com/deepseek-ai/DeepSeek-Harness) plugin for context insight.
 
-![Context panel overview](https://raw.githubusercontent.com/bowenliang123/dsh-context/main/docs/context-overview.png)
+- **The Context tab** — a full insight panel for context composition, per-turn context history, context compactions, and the message surface, etc.
+- **The `/context` command** — the same headline and recent trend as a centered dialog straight from the composer (the screenshot above). 
 
 ## Install
 
@@ -19,7 +20,21 @@ One command, from any DeepSeek Harness installation:
 dsh plugin --profile web add dsh-context
 ```
 
-Then start the web UI with `dsh web`, open any session, and click the **上下文 / Context** tab. No build step, no restart.
+Then start the web UI with `dsh web`. No build step, no restart.
+
+## Use it
+
+### Context tab
+
+Open any session and click the **Context / 上下文** tab:
+
+![Context panel overview](https://raw.githubusercontent.com/bowenliang123/dsh-context/main/docs/context-overview.png)
+
+### ⌨️ `/context` command — In-session Context Insight modal
+
+Type `/context` (or pick it from the `/` menu) and press Enter: a centered dialog shows the provider-anchored occupancy headline, the six-category composition bar, and the last-10-turn trend chart — hover or click a bar for its full breakdown, exactly like the tab.
+
+![Context command](https://raw.githubusercontent.com/bowenliang123/dsh-context/main/docs/context-command.png)
 
 ## What you'll see
 
