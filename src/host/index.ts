@@ -10,9 +10,11 @@
  *
  * Required service: the session-projection registry (the framework drives
  * the unit over `session/event` and persists its state via the projection
- * cache). Registration conditions on the registry being composed
- * (`ctx.inject(['sessionProjections'], …)`, the official pattern — an absent
- * registry leaves the plugin inert, which is safe).
+ * cache). The module-level `inject` is the one gate: Cordis keeps this
+ * plugin PENDING until the registry exists, re-runs it when a provider is
+ * replaced, and an absent registry leaves the plugin inert (safe). The
+ * registration itself is an effect whose disposer rides the calling fiber —
+ * an unloaded plugin's key disappears from drives and snapshots.
  */
 
 import type { Context } from '@deepseek-ai/cordis'
@@ -24,9 +26,7 @@ export const name = 'dsh-context'
 export const inject = ['sessionProjections']
 
 export function apply(ctx: Context): void {
-  ctx.inject(['sessionProjections'], (projectionCtx) => {
-    projectionCtx.sessionProjections.register(contextTimelineDefinition)
-  })
+  ctx.sessionProjections.register(contextTimelineDefinition)
 }
 
 // ---- public type surface (stable for downstream consumers) -------------------
