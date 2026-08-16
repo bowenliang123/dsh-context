@@ -53,10 +53,6 @@ Every compaction, tool-output prune, skill or plugin context injection, and mode
 
 The exact message list the model sees right now, newest first, with a per-message token cost.
 
-## Releasing
-
-Releases are cut by tagging: `git tag vX.Y.Z && gh release create vX.Y.Z`. A [GitHub Actions workflow](.github/workflows/release.yml) then builds, tests, and publishes the package to npm automatically via [npm Trusted Publishing (OIDC)](https://docs.npmjs.com/trusted-publishers) — no long-lived token needed, provenance included.
-
 ## Like it?
 
 If `dsh-context` helped you understand what your agent is carrying around, a ⭐ on [GitHub](https://github.com/bowenliang123/dsh-context) is much appreciated — and issues/PRs are welcome!
