@@ -20,6 +20,7 @@
  */
 
 import type { Category, ContextEventRecord, RequestRecord, Snapshot, SurfaceNode } from '../shared/types'
+import type { FoldBounds } from './config'
 import {
   estimateMessage,
   estimateSystem,
@@ -48,19 +49,15 @@ export interface TimelineEvent {
 }
 
 /**
- * History retention bounds. The fold keeps per-STEP request records; once the
- * newest run count exceeds `MAX_KEPT_TURNS`, the timeline is trimmed to the
+ * History retention bounds (configurable since 0.11 — see config.ts; these
+ * are the defaults' values). The fold keeps per-STEP request records; once the
+ * newest run count exceeds `maxKeptTurns`, the timeline is trimmed to the
  * most recent whole TURN runs (never cutting a turn in half), so turn
  * granularity can always show the full recent turn range instead of a
  * step-count fragment. The turn-run trim runs whenever the cap is crossed
  * (not only when the raw step bound is), so the bounded state stays at the
- * newest ~`MAX_KEPT_TURNS` turns deterministically as a live log grows.
+ * newest ~`maxKeptTurns` turns deterministically as a live log grows.
  */
-const MAX_REQUEST_STEPS = 1500
-const MAX_KEPT_TURNS = 300
-const MAX_EVENTS = 400
-/** Surface nodes served to the browser (the newest carry the most signal). */
-const MAX_NODES = 200
 
 /** The projection unit's persisted state (plain JSON, bounded see above). */
 export interface TimelineState {
@@ -131,19 +128,19 @@ function countTurnRuns(requests: RequestRecord[]): number {
 }
 
 /** Retain the newest tail of the two unbounded lists (bounded persisted state). */
-function trimState(st: TimelineState): void {
+function trimState(st: TimelineState, bounds: FoldBounds): void {
   // Trim by WHOLE turn-runs as soon as the run count crosses the cap —
   // not only when the raw step count does — so the state stays
-  // deterministically at the newest ~MAX_KEPT_TURNS turns (a threshold-only
+  // deterministically at the newest ~maxKeptTurns turns (a threshold-only
   // policy would oscillate: trim to 1200, regrow to 1500, trim again).
-  if (countTurnRuns(st.requests) > MAX_KEPT_TURNS) {
-    st.requests = trimToLastTurns(st.requests, MAX_KEPT_TURNS)
+  if (countTurnRuns(st.requests) > bounds.maxKeptTurns) {
+    st.requests = trimToLastTurns(st.requests, bounds.maxKeptTurns)
   }
   // Pathological many-step turns: hard step backstop after the turn trim.
-  if (st.requests.length > MAX_REQUEST_STEPS) {
-    st.requests = st.requests.slice(-MAX_REQUEST_STEPS)
+  if (st.requests.length > bounds.maxRequestSteps) {
+    st.requests = st.requests.slice(-bounds.maxRequestSteps)
   }
-  if (st.events.length > MAX_EVENTS) st.events = st.events.slice(-MAX_EVENTS)
+  if (st.events.length > bounds.maxEvents) st.events = st.events.slice(-bounds.maxEvents)
 }
 
 export function createTimelineState(): TimelineState {
@@ -311,8 +308,10 @@ function sampleUsage(st: TimelineState, usage: UsageLike | undefined): void {
  * contract. Uninteresting events return the same reference (`Object.is` gates
  * the change feed); any change returns a new reference over a lazy shallow
  * clone, so the persisted state is never mutated in place by the caller.
+ * `bounds` come from the plugin config (config.ts) — retention only, they
+ * never change the state shape.
  */
-export function applyTimeline(state: TimelineState, event: TimelineEvent): TimelineState {
+export function applyTimeline(state: TimelineState, event: TimelineEvent, bounds: FoldBounds): TimelineState {
   let st: TimelineState | undefined
   const ensure = (): TimelineState => st ??= {
     ...state,
@@ -460,7 +459,7 @@ export function applyTimeline(state: TimelineState, event: TimelineEvent): Timel
   }
 
   if (st !== undefined) {
-    trimState(st)
+    trimState(st, bounds)
     return st
   }
   return state
@@ -472,7 +471,7 @@ export function applyTimeline(state: TimelineState, event: TimelineEvent): Timel
  * event to the request around it by stamping COPIES (the persisted state
  * objects are never mutated).
  */
-export function buildTimelineView(state: TimelineState): Snapshot {
+export function buildTimelineView(state: TimelineState, bounds: FoldBounds): Snapshot {
   const surfaceTotal = state.sums.user + state.sums.inject + state.sums.assistant + state.sums.tool
   // Provider-anchored occupancy (the official chat ring's formula): the newest
   // usage sample carried forward by the surface's movement since it was taken,
@@ -507,8 +506,8 @@ export function buildTimelineView(state: TimelineState): Snapshot {
     nodes: [],
     droppedNodes: 0,
   }
-  result.droppedNodes = Math.max(0, state.surface.length - MAX_NODES)
-  result.nodes = state.surface.slice(-MAX_NODES)
+  result.droppedNodes = Math.max(0, state.surface.length - bounds.maxNodes)
+  result.nodes = state.surface.slice(-bounds.maxNodes)
 
   // Attribute each event to the requests around it — the context that event
   // contributed to (same attachment the chart uses for ✂ markers). `turn`/

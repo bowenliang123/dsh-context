@@ -20,6 +20,8 @@
 import { z } from 'zod'
 import type { ProjectionDefinition } from '@deepseek-ai/dsh-session-projection'
 import type { SessionEvent } from '@deepseek-ai/dsh-session'
+import type { Config } from './config'
+import { resolveBounds } from './config'
 import type { ContextTimeline } from '../shared/types'
 import { applyTimeline, buildTimelineView, createTimelineState } from './fold'
 import type { TimelineState } from './fold'
@@ -105,18 +107,23 @@ const contextTimelineSchema = z.object({
 }).strict() as unknown as z.ZodType<ContextTimeline>
 
 /**
- * The context-timeline projection unit, registered on `ctx.sessionProjections`.
- * Registry lifecycle notes (mirrored from the harness contract):
- * registration is an effect on the caller's fiber — an unloaded Host half
- * removes the key, and clients read it as capability absence.
- * `stateVersion` must be bumped whenever the persisted state shape or fold
- * semantics change (invalidation of cached rows).
+ * The context-timeline projection unit, created per plugin instance with its
+ * config-resolved retention bounds (config.ts), and registered on
+ * `ctx.sessionProjections`. Registry lifecycle notes (mirrored from the
+ * harness contract): registration is an effect on the caller's fiber — an
+ * unloaded Host half removes the key, and clients read it as capability
+ * absence. `stateVersion` must be bumped whenever the persisted state shape
+ * or fold semantics change (invalidation of cached rows); config-only
+ * changes never require it (bounds tune retention, not state shape).
  */
-export const contextTimelineDefinition: ProjectionDefinition<'contextTimeline', TimelineState> = {
-  key: 'contextTimeline',
-  schema: contextTimelineSchema,
-  init: () => createTimelineState(),
-  apply: (state: TimelineState, event: SessionEvent) => applyTimeline(state, event as Parameters<typeof applyTimeline>[1]),
-  view: (state: TimelineState) => buildTimelineView(state),
-  stateVersion: 1,
+export function createContextTimelineDefinition(config: Config): ProjectionDefinition<'contextTimeline', TimelineState> {
+  const bounds = resolveBounds(config)
+  return {
+    key: 'contextTimeline',
+    schema: contextTimelineSchema,
+    init: () => createTimelineState(),
+    apply: (state: TimelineState, event: SessionEvent) => applyTimeline(state, event as Parameters<typeof applyTimeline>[1], bounds),
+    view: (state: TimelineState) => buildTimelineView(state, bounds),
+    stateVersion: 1,
+  }
 }

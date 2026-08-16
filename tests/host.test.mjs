@@ -224,4 +224,16 @@ assert.equal(snap3.occupancy.pressureTokens, 6000, 'chunk usage supplies the pre
 assert.equal(snap3.occupancy.projectedTokens, 6000, 'no surface movement since the chunk sample')
 assert.equal(snap3.occupancy.contextWindow, 100000, 'occupancy window present without any request record')
 
-console.log('✔ host half functional test passed (projection unit, fold semantics, attribution, retention, shadow-price seqs, reference stability, determinism)')
+// -- entry config: bounded slices are honored (config -> bounds threading) --
+let cfgDef = null
+apply({ ...fakeCtx, sessionProjections: { register(d) { cfgDef = d; return () => {} } } }, { maxNodes: 2, maxKeptTurns: 1 })
+const bounded = (() => {
+  let st = cfgDef.init()
+  for (const ev of live.events) st = cfgDef.apply(st, ev)
+  return cfgDef.view(st)
+})()
+assert.ok(bounded.nodes.length <= 2, 'maxNodes bounds the served surface slice')
+assert.ok(bounded.requests.length <= 8, 'maxKeptTurns bounds the retained history (400-turn fixture trimmed by whole turns)')
+assert.equal(typeof cfgDef.schema.safeParse(bounded).success, 'boolean', 'custom-bounds view still passes the unit schema')
+
+console.log('✔ host half functional test passed (projection unit, fold semantics, attribution, retention, shadow-price seqs, reference stability, determinism, config bounds)')

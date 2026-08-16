@@ -18,15 +18,22 @@
  */
 
 import type { Context } from '@deepseek-ai/cordis'
-import { contextTimelineDefinition } from './timeline'
+import { Config } from './config'
+import { createContextTimelineDefinition } from './timeline'
 
 export const name = 'dsh-context'
 
 /** Required services: the session-projection registry that drives the unit. */
 export const inject = ['sessionProjections']
 
-export function apply(ctx: Context): void {
-  ctx.sessionProjections.register(contextTimelineDefinition)
+/**
+ * Entry config: retention/slice bounds, validated by cordis (Standard Schema).
+ * Re-exported as both value (the validator) and type (the interface).
+ */
+export { Config } from './config'
+
+export function apply(ctx: Context, config: Config): void {
+  ctx.sessionProjections.register(createContextTimelineDefinition(config))
 }
 
 // ---- public type surface (stable for downstream consumers) -------------------
