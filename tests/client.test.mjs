@@ -674,6 +674,8 @@ dataValue = {
 tr = renderView()
 const evRows = byClass(tr, 'lc-event')
 assert.equal(evRows.length, 6, 'event rows rendered newest first')
+const kindChips = byClass(tr, 'lc-kind')
+assert.equal(kindChips.length, 6, 'every event row carries a kind chip (注入/压缩/剪枝/切换)')
 const atLabels = byClass(tr, 'lc-event-at')
 assert.equal(atLabels.length, 5, 'boundary + single-point events carry labels; in-flight stays bare')
 assert.equal(atLabels[0].args[2], 'Turn 2 · Step 0', 'inject keeps the single point of the request it fed')

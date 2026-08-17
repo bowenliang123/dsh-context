@@ -129,9 +129,16 @@ export const STYLES = [
   '.lc-event-icon { width: 18px; text-align: center; color: var(--dsw-alias-state-warn-primary); }',
   '.lc-event-icon.lc-event-inject { color: #a855f7; }',
   '.lc-event-icon.lc-event-model { color: var(--dsw-alias-brand-primary); }',
+  // Kind chip: the event classification at a glance; the tint matches the
+  // impact direction (inject = adds context, compaction/prune = frees it,
+  // model switch = neutral), mirroring the token sign colors below.
+  '.lc-kind { flex: none; font-size: 10px; font-weight: 600; padding: 1px 6px; border-radius: 4px; white-space: nowrap; }',
+  '.lc-kind-inject { background: color-mix(in srgb, var(--dsw-alias-state-warn-primary) 15%, transparent); color: var(--dsw-alias-state-warn-primary); }',
+  '.lc-kind-compaction, .lc-kind-prune { background: color-mix(in srgb, var(--dsw-alias-state-success-primary) 15%, transparent); color: var(--dsw-alias-state-success-primary); }',
+  '.lc-kind-model { background: color-mix(in srgb, var(--dsw-alias-brand-primary) 15%, transparent); color: var(--dsw-alias-brand-primary); }',
   '.lc-event-label { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }',
   '.lc-event-at { flex: none; color: var(--dsw-alias-label-secondary); font-size: 11px; white-space: nowrap; }',
-  '.lc-event-tokens { color: var(--dsw-alias-state-success-primary); }',
+  '.lc-event-tokens { color: var(--dsw-alias-state-success-primary); font-weight: 600; white-space: nowrap; }',
   '.lc-event-tokens.lc-up { color: var(--dsw-alias-state-warn-primary); }',
   '.lc-event-time { color: var(--dsw-alias-label-secondary); font-size: 12px; }',
   '.lc-node { display: flex; align-items: center; gap: 8px; padding: 3px 0; }',

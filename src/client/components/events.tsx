@@ -6,6 +6,11 @@
  * harness's shared icon set (`@deepseek-ai/dsh-client-ui-primitives`, a
  * platform seed word resolved from the loader module table); compaction and
  * prune keep the ✂ marker (product vocabulary, no shared glyph exists).
+ * Each row carries a kind chip (注入/压缩/剪枝/切换) so the classification is
+ * readable at a glance; chip color matches the impact direction (+ adds,
+ * − frees, ⇄ neutral), mirroring the token sign colors. Long labels truncate
+ * with an ellipsis; the native title tooltip is attached only while the
+ * label actually overflows (re-measured on every render and on resize).
  */
 
 import type * as ReactNS from 'react'
@@ -71,9 +76,25 @@ export function makeEventList(kit: ViewKit): (props: EventListProps) => ReactNS.
     if (props.events.length === 0) {
       return <div className="lc-empty">{t('events.empty')}</div>
     }
+    const rootRef = React.useRef<HTMLDivElement | null>(null)
+    // Attach the native tooltip only where the ellipsis actually truncates:
+    // re-sync after every render (events/width change) and on window resize,
+    // reading scrollWidth vs clientWidth on the live row.
+    React.useLayoutEffect(() => {
+      const root = rootRef.current
+      if (!root) return
+      const sync = () => {
+        for (const el of root.querySelectorAll<HTMLElement>('.lc-event-label')) {
+          el.title = el.scrollWidth > el.clientWidth ? el.textContent || '' : ''
+        }
+      }
+      sync()
+      window.addEventListener('resize', sync)
+      return () => window.removeEventListener('resize', sync)
+    })
     const sorted = props.events.slice().reverse()
     return (
-      <div className="lc-events">
+      <div className="lc-events" ref={rootRef}>
         {sorted.map((ev, i) => {
           const label = eventLabel(ev)
           const at = eventAt(ev)
@@ -83,7 +104,8 @@ export function makeEventList(kit: ViewKit): (props: EventListProps) => ReactNS.
           return (
             <div key={ev.seq + '-' + i} className="lc-event">
               <span className={'lc-event-icon lc-event-' + ev.kind}>{glyph}</span>
-              <span className="lc-event-label" title={label}>{label}</span>
+              <span className={'lc-kind lc-kind-' + ev.kind}>{t('kind.' + ev.kind)}</span>
+              <span className="lc-event-label">{label}</span>
               {at !== null ? <span className="lc-event-at">{at}</span> : null}
               {ev.tokens ? (
                 <span className={'lc-event-tokens' + (ev.kind === 'inject' ? ' lc-up' : ' lc-down')}>

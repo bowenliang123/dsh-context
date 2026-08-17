@@ -250,7 +250,10 @@ export function makeContextView(ctx: ClientCtx, kit: ViewKit): (props: ContextVi
         {/* ---- events + messages ---- */}
         <div className="lc-cols">
           <div className="lc-card lc-col">
-            <div className="lc-card-title">{t('events.title')}</div>
+            <div className="lc-card-title">
+              {t('events.title')}
+              <span className="lc-card-sub">{t('events.hint')}</span>
+            </div>
             <EventList events={events} />
           </div>
           <div className="lc-card lc-col">
