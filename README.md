@@ -5,12 +5,11 @@
 [![npm version](https://img.shields.io/npm/v/dsh-context)](https://www.npmjs.com/package/dsh-context)
 [![GitHub stars](https://img.shields.io/github/stars/bowenliang123/dsh-context?style=social)](https://github.com/bowenliang123/dsh-context)
 
-**A DeepSeek Harness plugin for context dashboard and context command, for understanding how the context is made of, and how it evolves.**
+** The best DeepSeek Harness plugin for context insights and management. **
 
-`dsh-context` is a [DeepSeek Harness](https://github.com/deepseek-ai/DeepSeek-Harness) plugin for context insight.
-
-- **The Context tab** — a full insight panel for context composition, per-turn context history, context compactions, and the message surface, etc.
-- **The `/context` command** — the same headline and recent trend as a centered dialog straight from the composer (the screenshot above). 
+`dsh-context` provides full context lifecycle management features.
+- **Context tab** — an UI context dashboard for DeepSeek Harness’s context stats, composition, history, events, and messages.
+- **`/context` command** — the slash command shows the context model for current context composition and recent context evolution.
 
 ## Install
 
