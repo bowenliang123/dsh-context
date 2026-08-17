@@ -31,6 +31,7 @@ import {
   toolCallNames,
 } from './pricing'
 import type { ContentBlock, MessageSource } from './pricing'
+import { deriveEventMessage } from '@deepseek-ai/dsh-session'
 
 /**
  * The runtime event envelope this fold consumes. The core
@@ -173,15 +174,16 @@ function applySurface(
   ev: SurfaceEventLike,
   type: string,
   data: { error?: boolean } | undefined,
-  message: MessageLike | undefined,
+  message: MessageLike | null | undefined,
 ): SurfaceNode {
-  const cat = categoryOf(type, message)
+  const cat = categoryOf(type, message ?? undefined)
   const node: SurfaceNode = {
     seq: ev.seq,
     time: ev.time,
     cat,
     // Empty assistant messages project to no model message (usage-only), so
-    // they price 0 — mirroring dsh's deriveEventMessage/estimate.
+    // they price 0 — `deriveEventMessage` returns null for that case, and
+    // `estimateMessage(null, true)` short-circuits before ROLE_OVERHEAD.
     tokens: estimateMessage(message, type === 'assistant/message'),
   }
   const source = message?.source
@@ -342,7 +344,9 @@ export function applyTimeline(state: TimelineState, event: TimelineEvent, bounds
       break
     }
     case 'user/message': {
-      const msg = data as unknown as MessageLike
+      // `deriveEventMessage` is the canonical per-event projection: returns
+      // `event.data` for user/message (no `data.message` indirection).
+      const msg = deriveEventMessage(event as never) as MessageLike | null
       const s = ensure()
       const node = applySurface(s, event, event.type, data, msg)
       const source = msg?.source
@@ -361,9 +365,10 @@ export function applyTimeline(state: TimelineState, event: TimelineEvent, bounds
       break
     }
     case 'tool/result': {
-      // The model-visible message is data.message (the envelope also
-      // carries callId/error); pricing the envelope would miss all content.
-      const toolMsg = (data?.message ?? null) as MessageLike | undefined
+      // The model-visible message is data.message; `deriveEventMessage`
+      // returns that directly (the envelope also carries callId/error; pricing
+      // the envelope would miss all content).
+      const toolMsg = deriveEventMessage(event as never) as MessageLike | null
       const s = ensure()
       applySurface(s, event, event.type, data, toolMsg)
       break
@@ -396,9 +401,10 @@ export function applyTimeline(state: TimelineState, event: TimelineEvent, bounds
         if (typeof usage.outputTokens === 'number') record.output = usage.outputTokens
       }
       s.requests.push(record)
-      // The model-visible message is data.message (mirrors dsh's
-      // deriveEventMessage); the envelope also carries turn/step/usage.
-      const asstMsg = (data?.message ?? null) as MessageLike | undefined
+      // `deriveEventMessage` returns `data.message` for assistant/message, or
+      // null when the content array is empty (usage-only events project to no
+      // message — same rule as dsh's surface fold).
+      const asstMsg = deriveEventMessage(event as never) as MessageLike | null
       applySurface(s, event, event.type, data, asstMsg)
       break
     }
