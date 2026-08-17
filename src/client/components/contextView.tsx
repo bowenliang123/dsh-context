@@ -277,7 +277,12 @@ export function makeContextView(ctx: ClientCtx, kit: ViewKit): (props: ContextVi
         </div>
 
         {/* ---- context browser: the assembled content of the live surface or a picked step ---- */}
-        <ContextBrowser data={data} headers={headers} useSession={props.useSession} />
+        <ContextBrowser
+          data={data}
+          headers={headers}
+          useSession={props.useSession}
+          loadOlderHistory={props.loadOlderHistory}
+        />
 
         {/* ---- events + messages ---- */}
         <div className="lc-cols">

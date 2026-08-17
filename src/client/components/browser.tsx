@@ -31,6 +31,8 @@ export interface ContextBrowserProps {
   data: ContextTimeline
   headers: ContextHeaders | null
   useSession?: UseSessionLike
+  /** History-pagination verb contributed via `sessions.provide` (absent on older hosts). */
+  loadOlderHistory?: () => Promise<void>
 }
 
 /** One raw content block (text/reasoning/tool-result/…), rendered defensively. */
@@ -128,6 +130,11 @@ export function makeContextBrowser(
   const catColor: Record<string, string> = {}
   for (const c of CATS) catColor[c.key] = c.color
 
+  // Auto-load ceiling: one expand pulls older pages (50 events each) until
+  // the element's seq enters the window, history runs out, or this cap is
+  // hit — a guard against seqs that never land in the conversation snapshot.
+  const MAX_AUTO_PAGES = 20
+
   return function ContextBrowser(props: ContextBrowserProps): ReactNS.ReactElement {
     const { data, headers } = props
     // 'live' = the current surface (the NEXT request's context); a number =
@@ -147,6 +154,47 @@ export function makeContextBrowser(
       for (const n of convNodes ?? []) m.set(n.seq, n)
       return m
     }, [convNodes])
+
+    // Window state for on-demand history pagination (primitive selectors, so
+    // the component re-renders only when a page actually lands or runs out).
+    const hasMore = typeof props.useSession === 'function'
+      ? props.useSession(s => s.hasMore === true)
+      : false
+    const loadingOlder = typeof props.useSession === 'function'
+      ? props.useSession(s => s.loadingOlder === true)
+      : false
+
+    // The open element's surface-node seq ('sys'/'tool:*' keys never join).
+    const openSeq = openElem !== null && openElem.startsWith('n')
+      ? Number(openElem.slice(1))
+      : null
+    const missingSeq = openSeq !== null && !bySeq.has(openSeq) ? openSeq : null
+    // Auto-load: expanding an out-of-window element pages older history in
+    // until its seq joins (one page in flight, sequenced by the snapshot's
+    // own loadingOlder flag). `exhausted` latches the cap/history-end so the
+    // hint falls back to the static note instead of "loading" forever.
+    const [exhausted, setExhausted] = React.useState(false)
+    const pagesRef = React.useRef(0)
+    React.useEffect(() => {
+      pagesRef.current = 0
+      setExhausted(false)
+    }, [openElem])
+    const loadOlderHistory = props.loadOlderHistory
+    React.useEffect(() => {
+      if (missingSeq === null || !hasMore || loadingOlder || exhausted) return
+      if (loadOlderHistory === undefined) return
+      if (pagesRef.current >= MAX_AUTO_PAGES) {
+        setExhausted(true)
+        return
+      }
+      pagesRef.current += 1
+      void loadOlderHistory()
+    }, [missingSeq, hasMore, loadingOlder, exhausted, bySeq, loadOlderHistory])
+    React.useEffect(() => {
+      // History ran out with the seq still missing: stop showing "loading".
+      if (!hasMore && missingSeq !== null && !exhausted) setExhausted(true)
+    }, [hasMore, missingSeq, exhausted])
+    const awaiting = missingSeq !== null && !exhausted && loadOlderHistory !== undefined && hasMore
 
     const requests = data.requests || []
     const req = sel === 'live' ? null : requests.find(r => r.seq === sel) ?? null
@@ -235,7 +283,16 @@ export function makeContextBrowser(
           }
         }
         return elemRow('n' + n.seq, tag, preview, n.tokens, n.time,
-          <NodeContent node={n} conv={bySeq.get(n.seq)} hint={t('browser.noContent')} />)
+          <NodeContent
+            node={n}
+            conv={bySeq.get(n.seq)}
+            // This row's body renders only while it is the open element, so
+            // `awaiting` (open seq missing, pagination armed) means THIS join
+            // is the one pages are being pulled for.
+            hint={bySeq.get(n.seq) === undefined && awaiting
+              ? t('browser.loading')
+              : t('browser.noContent')}
+          />)
       })
     }
 

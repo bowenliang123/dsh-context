@@ -56,7 +56,13 @@ export interface ConversationNodeLike {
 
 /** The conversation-snapshot selector hook, minimally typed for this plugin. */
 export type UseSessionLike = <T>(
-  selector: (snapshot: { nodes?: readonly ConversationNodeLike[] }) => T,
+  selector: (snapshot: {
+    nodes?: readonly ConversationNodeLike[]
+    /** whether older history remains outside the loaded window */
+    hasMore?: boolean
+    /** whether an older-history page is currently being pulled */
+    loadingOlder?: boolean
+  }) => T,
 ) => T
 
 /**
@@ -69,6 +75,13 @@ export interface SessionStandardProps {
   sessionId?: string
   useProjection?: (key: string) => unknown
   useSession?: UseSessionLike
+  /**
+   * History-pagination verb this plugin contributes through the harness's
+   * `sessions.provide` channel (one call prepends one older page to the
+   * conversation window). Absent on older hosts without the channel — the
+   * Context browser then keeps its preview-plus-hint degradation.
+   */
+  loadOlderHistory?: () => Promise<void>
 }
 
 /** The client context: cordis plus the services this plugin injects. */
@@ -163,7 +176,27 @@ export interface SessionScopeFace {
   bail(subject: unknown, event: string, payload: unknown): unknown
 }
 
+/**
+ * One standard-props contribution to the harness's `sessions.provide`
+ * channel: declared members are resolved per session and delivered to every
+ * session-scope slot component (hooks become `use<Name>` selector hooks,
+ * props spread verbatim). Minimally typed against the runtime contract.
+ */
+export interface SessionProvideDescriptorLike {
+  hooks?: readonly string[]
+  props?: readonly string[]
+  resolve(binding: { session: { loadOlder(): Promise<void> } }): {
+    hooks?: Record<string, unknown>
+    props?: Record<string, unknown>
+  }
+}
+
 /** The session runtime (`ctx.sessions`), as consumed here. */
 export interface SessionsFace {
   scope(id: string): SessionScopeFace | undefined
+  /**
+   * The standard-props provide channel (absent on older hosts). Throws on a
+   * misdeclared or duplicate contribution — callers fail soft.
+   */
+  provide?(descriptor: SessionProvideDescriptorLike): () => void
 }

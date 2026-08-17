@@ -98,7 +98,7 @@ const fakeCtx = {
 }
 pluginExports.apply(fakeCtx)
 
-assert.equal(effects.length, 3, 'dictionaries + styles + /context command effects')
+assert.equal(effects.length, 4, 'dictionaries + styles + loadOlderHistory prop + /context command effects')
 assert.deepEqual(localeRegistrations[0][0], 'dsh-context')
 assert.ok(localeRegistrations[0][1].zh && localeRegistrations[0][1].en, 'bilingual dicts')
 const styleTag = registered.get('dsh-context')
@@ -192,7 +192,14 @@ const statefulReact = {
     }
     return slots[i]
   },
-  useEffect: () => {},
+  useEffect(fn) {
+    // Store the callback in a hook slot (never auto-run) so tests can drive
+    // effects explicitly, with the LATEST render's closure — like React.
+    const i = hookCursor++
+    if (currentHooks[i] === undefined) currentHooks[i] = { effect: undefined }
+    currentHooks[i].effect = fn
+    return currentHooks[i]
+  },
   // Memo values are recomputed every render in tests (no staleness assertions).
   useMemo: (fn) => fn(),
   useRef(init) {
@@ -218,16 +225,18 @@ const requireStateful = (spec) => {
 const m2 = { exports: {} }
 const pluginExports2 = factory(requireStateful, m2, globalThis.window, fakeDoc)
 
-const DICT_FOR_TEST = { 'tab': 'Context', 'loading': '…', 'error': 'x', 'detail.step': 'Turn {t} · Step {s}', 'gran.step': 'Step', 'gran.turn': 'Turn', 'detail.turn': 'Turn {t} · {n} steps', 'detail.lastStep': 'last step', 'overview.splitEst': '· category split is estimated', 'overview.ofWindow': 'tokens (~{p}%)', 'overview.free': 'Free window', 'events.at': 'Turn {t} · Step {s}', 'events.range': 'Turn {t} · Step {a}→{b}', 'events.rangeTo': 'Turn {a} · Step {as} → Turn {b} · Step {bs}', 'stats.recycleSub': '{c} compactions · {p} prunes', 'tip.step': 'Turn {t} · Step {s}', 'tip.turn': 'Turn {t} · {n} steps', 'tip.total': 'total ≈ {n}', 'tip.actual': ' (actual {n})', 'trend.title': 'History', 'trend.empty': 'empty trend', 'cmd.close': 'Close', 'cat.user': 'User', 'browser.live': 'Live (next request)', 'browser.liveNow': 'Live · next request', 'browser.items': '{n} items', 'browser.noContent': 'outside the loaded window', 'browser.noHeader': 'older plugin build' }
+const DICT_FOR_TEST = { 'tab': 'Context', 'loading': '…', 'error': 'x', 'detail.step': 'Turn {t} · Step {s}', 'gran.step': 'Step', 'gran.turn': 'Turn', 'detail.turn': 'Turn {t} · {n} steps', 'detail.lastStep': 'last step', 'overview.splitEst': '· category split is estimated', 'overview.ofWindow': 'tokens (~{p}%)', 'overview.free': 'Free window', 'events.at': 'Turn {t} · Step {s}', 'events.range': 'Turn {t} · Step {a}→{b}', 'events.rangeTo': 'Turn {a} · Step {as} → Turn {b} · Step {bs}', 'stats.recycleSub': '{c} compactions · {p} prunes', 'tip.step': 'Turn {t} · Step {s}', 'tip.turn': 'Turn {t} · {n} steps', 'tip.total': 'total ≈ {n}', 'tip.actual': ' (actual {n})', 'trend.title': 'History', 'trend.empty': 'empty trend', 'cmd.close': 'Close', 'cat.user': 'User', 'browser.live': 'Live (next request)', 'browser.liveNow': 'Live · next request', 'browser.items': '{n} items', 'browser.noContent': 'outside the loaded window', 'browser.loading': 'loading older history', 'browser.noHeader': 'older plugin build' }
 let viewComponent = null
 let modalComponent = null
 let modalSource = null
 const bailCalls = []
+const provideDescriptors = []
 const fakeCtx2 = {
   get: (name) => {
     if (name === 'inputTriggers') return { registerSource: (s) => { modalSource = s; return () => {} } }
     if (name === 'sessions') return {
       scope: (id) => id === 's1' ? { bail: (...args) => { bailCalls.push(args); return true } } : undefined,
+      provide: (d) => { provideDescriptors.push(d); return () => {} },
     }
     return undefined
   },
@@ -252,6 +261,19 @@ const fakeCtx2 = {
 pluginExports2.apply(fakeCtx2)
 assert.ok(viewComponent !== null, 'view component captured')
 
+// The loadOlderHistory contribution rides the harness's sessions.provide
+// channel: one declared prop, resolved per session to the session's own
+// history-pagination verb.
+assert.equal(provideDescriptors.length, 1, 'one sessions.provide contribution registered')
+assert.deepEqual(provideDescriptors[0].props, ['loadOlderHistory'], 'the contributed prop is loadOlderHistory')
+{
+  let olderPulled = 0
+  const contribution = provideDescriptors[0].resolve({ session: { loadOlder: async () => { olderPulled += 1 } } })
+  assert.equal(typeof contribution.props.loadOlderHistory, 'function', 'resolved prop is a function')
+  await contribution.props.loadOlderHistory()
+  assert.equal(olderPulled, 1, 'the prop delegates to session.loadOlder()')
+}
+
 // The framework standard kit delivers the context timeline as a push-fed
 // projection (`useProjection('contextTimeline')`) and the official
 // token-meter occupancy as another (`useProjection('contextPressure')`); the
@@ -260,11 +282,18 @@ assert.ok(viewComponent !== null, 'view component captured')
 let dataValue = null
 let pressureValue = undefined
 let headersValue = undefined
+// Optional session-snapshot hook + pagination verb holders: undefined until
+// the auto-load test arms them, so every earlier render exercises the
+// no-`useSession` degradation exactly as before.
+let useSessionHolder = undefined
+let loadOlderHolder = undefined
 const renderView = () => evaluate(viewComponent({
   sessionId: 's1',
   useProjection: (key) => (key === 'contextTimeline' ? dataValue
     : (key === 'contextPressure' ? pressureValue
       : (key === 'contextHeaders' ? headersValue : undefined))),
+  useSession: useSessionHolder,
+  loadOlderHistory: loadOlderHolder,
 }))
 
 /** Invoke function-typed elements so hooks run and the tree materializes.
@@ -854,6 +883,44 @@ dataValue = snapshot
 tr = renderView()
 
 console.log('✔ context browser test passed (picker, category accordion, per-step reconstruction, archived nodes, header content, graceful degradation)')
+
+// ---- Context browser auto-load: expanding an element whose seq is outside
+// the loaded conversation window pages older history in (via the plugin's
+// own `sessions.provide` contribution) until the join hits. ----
+let sessionSnap = { nodes: [], hasMore: true, loadingOlder: false }
+let loadCalls = 0
+useSessionHolder = (sel) => sel(sessionSnap)
+loadOlderHolder = async () => {
+  loadCalls += 1
+  // The page lands: seq 1's full content enters the window, history ends.
+  sessionSnap = {
+    nodes: [{ kind: 'user', seq: 1, content: [{ type: 'text', text: 'FULL-MESSAGE-TEXT' }] }],
+    hasMore: false,
+    loadingOlder: false,
+  }
+}
+dataValue = snapshot
+brSlots[1][1]('user') // reopen the user category
+brSlots[2][1]('n1')   // expand the out-of-window element
+tr = renderView()
+assert.match(textOf(byClass(tr, 'lc-br-content')[0]), /loading older history/, 'loading note while the page is being pulled')
+// ContextBrowser hook slots: 0 sel, 1 openCat, 2 openElem, 3 exhausted,
+// 4 pagesRef, 5 reset effect, 6 auto-load effect, 7 history-end effect.
+// React runs effects in order post-render; drive them the same way.
+brSlots[5].effect()
+brSlots[6].effect()
+assert.equal(loadCalls, 1, 'expanding pulls one older page')
+tr = renderView()
+const joined = textOf(byClass(tr, 'lc-br-content')[0])
+assert.match(joined, /FULL-MESSAGE-TEXT/, 'joined content replaces the preview once the page lands')
+assert.ok(!/outside the loaded window/.test(joined), 'window note gone after the join hits')
+// No further pages once the seq joined.
+brSlots[6].effect()
+assert.equal(loadCalls, 1, 'no extra pages after the join hits')
+useSessionHolder = undefined
+loadOlderHolder = undefined
+
+console.log('✔ context browser auto-load test passed (loading note, one page pulled, joined content, no over-paging)')
 
 // ---- /context modal render: centered dialog with the same overview +
 // last-10-turn trend, driven by the modal store hook ----

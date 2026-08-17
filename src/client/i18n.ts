@@ -77,6 +77,7 @@ export const DICT_ZH: Record<string, string> = {
   'browser.noHeader': '此数据来自旧版插件：仅提供 token 估算，无实际内容',
   'browser.noEpoch': '该步骤的头部内容（系统提示 / 工具定义）不在保留范围内',
   'browser.noContent': '完整内容不在当前加载的消息窗口内（在聊天页加载更早历史后可查看）',
+  'browser.loading': '正在从更早的会话历史加载完整内容…',
 }
 
 export const DICT_EN: Record<string, string> = {
@@ -151,4 +152,5 @@ export const DICT_EN: Record<string, string> = {
   'browser.noHeader': 'Served by an older plugin build: token estimates only, no content',
   'browser.noEpoch': 'The header content (system prompt / tool schemas) of this step is outside retention',
   'browser.noContent': 'Full content is outside the loaded message window (load older history in Chat to view)',
+  'browser.loading': 'Loading full content from older session history…',
 }
