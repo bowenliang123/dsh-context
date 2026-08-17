@@ -2,7 +2,7 @@
 
 ## Install / update
 
-Install the `dsh-context` plugin with [DeepSeek Harness cli]([https://deepseek-harness.github.io/deepseek-harness/en/reference/](https://www.npmjs.com/package/@deepseek-ai/dsh)):
+Install the `dsh-context` plugin with [DeepSeek Harness cli](https://www.deepseek.com/harness/):
 
 ```sh
 dsh plugin --profile web add dsh-context@latest
