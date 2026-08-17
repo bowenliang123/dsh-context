@@ -93,8 +93,16 @@ export const STYLES = [
   '.lc-bar-fill { display: block; height: 100%; border-radius: 3px; }',
   '.lc-detail-num { width: 44px; text-align: right; }',
   '.lc-detail-pct { width: 34px; text-align: right; color: var(--dsw-alias-label-secondary); }',
-  '.lc-cols { display: flex; gap: 14px; flex-wrap: wrap; }',
+  // Section rows share one 14px vertical rhythm, owned by the ROW (flex gap
+  // covers the wrapped-row axis too), never by the cards inside: a card that
+  // IS a column (head, events/messages) drops its own bottom margin, and a
+  // card stacked inside a wrapper column (overview + trend) keeps its margin
+  // as the inner gap but the last one drops it — so every section boundary
+  // measures exactly one 14px, whichever way the flex wraps.
+  '.lc-cols { display: flex; gap: 14px; flex-wrap: wrap; margin-bottom: 14px; }',
   '.lc-col { flex: 1; min-width: 280px; }',
+  '.lc-cols > .lc-card { margin-bottom: 0; }',
+  '.lc-col > .lc-card:last-child { margin-bottom: 0; }',
   // Head row: stats board + plugin info sit side by side under the shared
   // `lc-cols` flex — stats takes ~7/10 of the row, plugin info ~3/10, both
   // wrap onto their own line when the available width falls below each card's
@@ -102,7 +110,6 @@ export const STYLES = [
   // `.lc-card` themselves (rendered by StatsBoard / PluginInfo); the flex
   // sizing lives on the head row's direct children so the existing card
   // chrome doesn't change.
-  '.lc-head > .lc-card { margin-bottom: 0; }',
   '.lc-head > .lc-card:first-child { flex: 7 1 0; min-width: 360px; }',
   '.lc-head > .lc-card:last-child { flex: 3 1 0; min-width: 220px; }',
   // Plugin info: two full-width rows (Plugin / GitHub), each one horizontal

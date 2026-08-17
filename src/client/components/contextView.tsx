@@ -203,86 +203,95 @@ export function makeContextView(ctx: ClientCtx, kit: ViewKit): (props: ContextVi
           <PluginInfo />
         </div>
 
-        {/* ---- overview ---- */}
-        <div className="lc-card">
-          <div className="lc-card-title">
-            {t('overview.title')}
-            <span className="lc-card-sub">
-              {(data.model ? data.model : '') + (data.provider ? ' · ' + data.provider : '')}
-            </span>
-          </div>
-          <div className="lc-overview-num">
-            <b>{fmt(head.tokens)}</b>
-            <span>
-              {head.window
-                ? ' / ' + fmt(head.window) + ' ' + tr('overview.ofWindow', { p: head.pct ?? 0 })
-                : ' ' + t('overview.estimate')}
-            </span>
-            {!head.estimated ? <span className="lc-card-sub">{t('overview.splitEst')}</span> : null}
-          </div>
-          <StackedBar parts={head.parts} height={16} max={head.window} hoverKey={hoverCat} onHoverKey={setHoverCat} />
-          <Legend parts={head.parts} hoverKey={hoverCat} onHoverKey={setHoverCat} />
-          {(data.toolList && data.toolList.length > 0) ? (
-            <div className="lc-tools">
-              {t('tools.top')}
-              {data.toolList.slice().sort((a, b) => b.tokens - a.tokens).slice(0, 5).map(tool => {
-                return <span key={tool.name} className="lc-tool-chip">{tool.name + ' ' + fmt(tool.tokens)}</span>
-              })}
-              {data.toolList.length > 5
-                ? <span className="lc-card-sub">{' ' + tr('tools.more', { n: data.toolList.length })}</span>
-                : null}
-            </div>
-          ) : null}
-        </div>
-
-        {/* ---- trend ---- */}
-        <div className="lc-card">
-          <div className="lc-card-title">
-            {t('trend.title')}
-            <span className="lc-card-sub">{t('trend.hint')}</span>
-            <div className="lc-gran">
-              <button
-                className={'lc-gran-btn' + (granularity === 'step' ? ' lc-gran-on' : '')}
-                onClick={() => { setGranularity('step') }}
-              >{t('gran.step')}</button>
-              <button
-                className={'lc-gran-btn' + (granularity === 'turn' ? ' lc-gran-on' : '')}
-                onClick={() => { setGranularity('turn') }}
-              >{t('gran.turn')}</button>
-            </div>
-          </div>
-          {displayRequests.length === 0
-            ? <div className="lc-empty">{t('trend.empty')}</div>
-            : (
-              <div>
-                <TrendChart
-                  // Remount per session: switching sessions re-anchors the chart
-                  // at the newest bars instead of inheriting stale scroll state.
-                  key={sessionId}
-                  // The host caps the log at 160 requests; render them ALL so
-                  // earlier turns/steps stay reachable via horizontal scroll.
-                  requests={displayRequests}
-                  markers={markers}
-                  selectedSeq={pinnedReq ? pinnedReq.seq : null}
-                  hoveredSeq={hoveredSeq}
-                  activeTurn={activeTurn}
-                  granularity={granularity}
-                  onSelect={setSelectedSeq}
-                  onHover={setHoveredSeq}
-                  onHoverTurn={setHoverTurn}
-                />
-                <RequestDetail request={activeReq} marker={activeReq !== null ? markerOf(activeReq) : undefined} />
+        {/* ---- main split: overview + trend stacked in the left column,
+               the context browser in the right column (shared lc-cols flex,
+               wraps to one column on narrow widths) ---- */}
+        <div className="lc-cols">
+          <div className="lc-col">
+            {/* ---- overview ---- */}
+            <div className="lc-card">
+              <div className="lc-card-title">
+                {t('overview.title')}
+                <span className="lc-card-sub">
+                  {(data.model ? data.model : '') + (data.provider ? ' · ' + data.provider : '')}
+                </span>
               </div>
-            )}
-        </div>
+              <div className="lc-overview-num">
+                <b>{fmt(head.tokens)}</b>
+                <span>
+                  {head.window
+                    ? ' / ' + fmt(head.window) + ' ' + tr('overview.ofWindow', { p: head.pct ?? 0 })
+                    : ' ' + t('overview.estimate')}
+                </span>
+                {!head.estimated ? <span className="lc-card-sub">{t('overview.splitEst')}</span> : null}
+              </div>
+              <StackedBar parts={head.parts} height={16} max={head.window} hoverKey={hoverCat} onHoverKey={setHoverCat} />
+              <Legend parts={head.parts} hoverKey={hoverCat} onHoverKey={setHoverCat} />
+              {(data.toolList && data.toolList.length > 0) ? (
+                <div className="lc-tools">
+                  {t('tools.top')}
+                  {data.toolList.slice().sort((a, b) => b.tokens - a.tokens).slice(0, 5).map(tool => {
+                    return <span key={tool.name} className="lc-tool-chip">{tool.name + ' ' + fmt(tool.tokens)}</span>
+                  })}
+                  {data.toolList.length > 5
+                    ? <span className="lc-card-sub">{' ' + tr('tools.more', { n: data.toolList.length })}</span>
+                    : null}
+                </div>
+              ) : null}
+            </div>
 
-        {/* ---- context browser: the assembled content of the live surface or a picked step ---- */}
-        <ContextBrowser
-          data={data}
-          headers={headers}
-          useSession={props.useSession}
-          loadOlderHistory={props.loadOlderHistory}
-        />
+            {/* ---- trend ---- */}
+            <div className="lc-card">
+              <div className="lc-card-title">
+                {t('trend.title')}
+                <span className="lc-card-sub">{t('trend.hint')}</span>
+                <div className="lc-gran">
+                  <button
+                    className={'lc-gran-btn' + (granularity === 'step' ? ' lc-gran-on' : '')}
+                    onClick={() => { setGranularity('step') }}
+                  >{t('gran.step')}</button>
+                  <button
+                    className={'lc-gran-btn' + (granularity === 'turn' ? ' lc-gran-on' : '')}
+                    onClick={() => { setGranularity('turn') }}
+                  >{t('gran.turn')}</button>
+                </div>
+              </div>
+              {displayRequests.length === 0
+                ? <div className="lc-empty">{t('trend.empty')}</div>
+                : (
+                  <div>
+                    <TrendChart
+                      // Remount per session: switching sessions re-anchors the chart
+                      // at the newest bars instead of inheriting stale scroll state.
+                      key={sessionId}
+                      // The host caps the log at 160 requests; render them ALL so
+                      // earlier turns/steps stay reachable via horizontal scroll.
+                      requests={displayRequests}
+                      markers={markers}
+                      selectedSeq={pinnedReq ? pinnedReq.seq : null}
+                      hoveredSeq={hoveredSeq}
+                      activeTurn={activeTurn}
+                      granularity={granularity}
+                      onSelect={setSelectedSeq}
+                      onHover={setHoveredSeq}
+                      onHoverTurn={setHoverTurn}
+                    />
+                    <RequestDetail request={activeReq} marker={activeReq !== null ? markerOf(activeReq) : undefined} />
+                  </div>
+                )}
+            </div>
+          </div>
+
+          {/* ---- context browser: the assembled content of the live surface or a picked step ---- */}
+          <div className="lc-col">
+            <ContextBrowser
+              data={data}
+              headers={headers}
+              useSession={props.useSession}
+              loadOlderHistory={props.loadOlderHistory}
+            />
+          </div>
+        </div>
 
         {/* ---- events + messages ---- */}
         <div className="lc-cols">
