@@ -5,7 +5,7 @@
 [![npm version](https://img.shields.io/npm/v/dsh-context)](https://www.npmjs.com/package/dsh-context)
 [![GitHub stars](https://img.shields.io/github/stars/bowenliang123/dsh-context?style=social)](https://github.com/bowenliang123/dsh-context)
 
-** The best DeepSeek Harness plugin for context insights and management. **
+**The best DeepSeek Harness plugin for context insights and management.**
 
 `dsh-context` provides full context lifecycle management features.
 - **Context tab** — an UI context dashboard for DeepSeek Harness’s context stats, composition, history, events, and messages.
