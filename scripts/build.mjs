@@ -57,6 +57,15 @@ await build({
   target: 'es2020',
   bundle: true,
   external: ['react', '@deepseek-ai/dsh-client-ui-primitives'],
+  // The harness's `__ModuleLoader__` wraps the bundled output in a CJS
+  // closure factory that provides `var module = { exports: {} }` as a local
+  // (see scripts/build.mjs:73-86). The source's `module.exports = {...}` is
+  // therefore legitimate, but esbuild's parser flags it as suspicious in a
+  // `.ts` source under `"type": "module"`. Silence that one warning here; any
+  // NEW `module` reference added by a future maintainer (e.g. a real CJS leak
+  // outside the harness-loader contract) should land in its a separate `.cjs`
+  // file or `.cts` rename, not get buried here.
+  logOverride: { 'commonjs-variable-in-esm': 'silent' },
   // Plugin self-metadata (shown on the Plugin info card), read from
   // package.json so the card always matches the shipped release.
   define: {
