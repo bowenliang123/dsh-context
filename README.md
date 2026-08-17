@@ -53,7 +53,7 @@ A six-color stacked bar scaled against the model's full context window (the gray
 
 ### 📈 History — watch the window grow (and get compacted)
 
-One stacked bar per model request, finer than per-message. Toggle between **Turn** and **Step** granularity, scroll sideways through the session, hover any bar for a quick tooltip, and click to pin the full breakdown — including provider-reported actual prompt/output tokens next to the estimate. **✂ marks where compaction or pruning happened** — watch the bars drop:
+One stacked bar per model request, finer than per-message. Toggle between **Turn** and **Step** granularity, scroll sideways through the session, hover any bar for a quick tooltip, and click to pin the full breakdown — including provider-reported actual prompt/output tokens next to the estimate. **Hovering a bar also drives the Context browser beside it** — the browser previews that step's assembled context in real time as you scrub across the history. **✂ marks where compaction or pruning happened** — watch the bars drop:
 
 ![History chart with a pinned request](https://raw.githubusercontent.com/bowenliang123/dsh-context/main/docs/history-detail.png)
 
@@ -75,7 +75,14 @@ The exact message list the model sees right now, newest first, with a per-messag
 
 ### 🧭 Context browser — open the box of any request
 
-Pick **Live (next request)** or any retained step from the picker, and browse what that request was actually assembled from. Six collapsible category sections (system prompt, tool schemas, user messages, injected context, assistant replies, tool results) expand into one row per element — each with its token price — and every element expands again into its **actual content**: the full system prompt, each tool's description and JSON schema, message text, reasoning, tool-call arguments, and tool outputs. Steps before a compaction are reconstructed from the removed-message archive, and the card tells you honestly when a step's makeup is only approximate.
+Pick **Live (next request)** or any retained step from the picker, and browse what that request was actually assembled from:
+
+![Context browser](https://raw.githubusercontent.com/bowenliang123/dsh-context/main/docs/context-browser.png)
+
+Six collapsible category sections (system prompt, tool schemas, user messages, injected context, assistant replies, tool results) expand into one row per element — each with its token price — and every element expands again into its **actual content**: the full system prompt, each tool's description and JSON schema, message text, reasoning, tool-call arguments, and tool outputs.
+
+- **Linked with the history chart** — hover any bar in the History card and the browser previews that step instantly; leave the chart and it returns to your own pick. Keep a category open while scrubbing to compare one category across steps.
+- **Honest about coverage** — steps before a compaction are reconstructed from the removed-message archive, and the card says so when a step's makeup is only approximate. Elements older than the loaded chat window page older history in automatically when you expand them, and live injections (AGENTS.md, session-start context, …) are always listed — never a token sum without its items.
 
 ## Like it?
 
