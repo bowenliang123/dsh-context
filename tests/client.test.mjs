@@ -525,11 +525,15 @@ assert.equal(onBlocks2[0].args[2], 'T2', 'hovering a bar highlights its turn blo
 ctxSlots[1][1](null)
 
 // ---- granularity toggle: one bar per step vs one bar per turn ----
-let granBtns = byClass(tr, 'lc-gran-btn')
+// the trend card scopes its own toggle row: the events card kind toggles
+// reuse the pill-button classes, so address the row, not the buttons.
+const granRow = () => byClass(tr, 'lc-gran')[0].args.slice(2)
+const onBtns = (row) => row.filter(b => String(b.args[1].className || '').includes('lc-gran-on'))
+let granBtns = granRow()
 assert.equal(granBtns.length, 2, 'granularity toggle has two buttons')
 assert.equal(granBtns[0].args[2], 'Step', 'first button is step granularity')
 assert.equal(granBtns[1].args[2], 'Turn', 'second button is turn granularity')
-assert.equal(byClass(tr, 'lc-gran-on').length, 1, 'step is active by default')
+assert.equal(onBtns(granRow()).length, 1, 'step is active by default')
 assert.equal(byClass(tr, 'lc-bar').length, 4, 'step mode: one bar per step')
 
 // switch to turn granularity: the 4 steps collapse into 3 turn bars
@@ -537,7 +541,7 @@ granBtns[1].args[1].onClick()
 tr = renderView()
 assert.equal(byClass(tr, 'lc-bar').length, 3, 'turn mode: one bar per turn')
 assert.equal(byClass(tr, 'lc-turn').length, 3, 'turn strip still has one block per turn')
-const turnOn = byClass(tr, 'lc-gran-on')
+const turnOn = onBtns(granRow())
 assert.equal(turnOn[0].args[2], 'Turn', 'turn button is active after switching')
 
 // turn bars keep the uniform column width and align with their strip blocks
@@ -558,11 +562,11 @@ assert.equal(byClass(tr, 'lc-detail-tag')[0].args[2], 'last step', 'tag text loc
 ctxSlots[1][1](null)
 
 // back to step granularity
-granBtns = byClass(tr, 'lc-gran-btn')
+granBtns = granRow()
 granBtns[0].args[1].onClick()
 tr = renderView()
 assert.equal(byClass(tr, 'lc-bar').length, 4, 'back to one bar per step')
-assert.equal(byClass(tr, 'lc-gran-on')[0].args[2], 'Step', 'step button active again')
+assert.equal(onBtns(granRow())[0].args[2], 'Step', 'step button active again')
 
 // ---- edge fades signal reachable history beyond the viewport ----
 let scroller = byClass(tr, 'lc-chart-scroll')[0]
@@ -621,13 +625,13 @@ assert.equal(byClass(tr, 'lc-chart-fade-r').length, 0, 'no right fade at the end
 // (the turn->step report: returning to step must show the right edge)
 const latestEffect = () => hookStates.get(trendKey).find(s => s && typeof s.effect === 'function')
 scrollEl.scrollLeft = 0 // stale left edge from the narrow turn chart
-const granTurnBtn = byClass(tr, 'lc-gran-btn')[1]
+const granTurnBtn = granRow()[1]
 granTurnBtn.args[1].onClick() // step -> turn
 tr = renderView()
 latestEffect().effect()
 assert.equal(scrollEl.scrollLeft, 800, 'switching to turn re-anchors at the newest bars')
 scrollEl.scrollLeft = 0
-const granStepBtn = byClass(tr, 'lc-gran-btn')[0]
+const granStepBtn = granRow()[0]
 granStepBtn.args[1].onClick() // turn -> step
 tr = renderView()
 latestEffect().effect()
@@ -683,6 +687,35 @@ assert.equal(atLabels[1].args[2], 'Turn 1 · Step 1', 'model switch keeps the si
 assert.equal(atLabels[2].args[2], 'Turn 1 · Step 1 → Turn 2 · Step 0', 'cross-turn boundary shows the gap')
 assert.equal(atLabels[3].args[2], 'Turn 1 · Step 0→1', 'same-turn boundary compresses to a step range')
 assert.equal(atLabels[4].args[2], 'Turn 1 · Step 0 → Turn 2 · Step 0', 'oldest boundary event shows its gap')
+
+// the events card header carries the four kind buttons as a picker, all
+// picked by default: clicking an unpicked kind adds it (A -> A+B -> ...),
+// clicking a picked one removes it, clicking the last one resets to all
+let kindsRow = byClass(tr, 'lc-kinds')
+assert.equal(kindsRow.length, 1, 'events card shows the kind buttons inline')
+const kindBtns = () => byClass(tr, 'lc-kinds')[0].args.slice(2)
+assert.equal(kindBtns().length, 4, 'four kind buttons (注入/压缩/剪枝/切换)')
+assert.equal(onBtns(kindBtns()).length, 4, 'all four kinds are picked by default')
+assert.equal(byClass(tr, 'lc-event').length, 6, 'default shows every event')
+const click = (i) => { kindBtns()[i].args[1].onClick(); tr = renderView() }
+click(0) // pick-only 注入
+assert.equal(byClass(tr, 'lc-event').length, 1, 'clicking 注入 among all shows only injections')
+assert.ok(String(kindBtns()[0].args[1].className || '').includes('lc-gran-on'), 'picked button is highlighted')
+assert.ok(String(kindBtns()[0].args[1].className || '').includes('lc-kind-inject'), 'highlight carries the kind color')
+assert.equal(onBtns(kindBtns()).length, 1, 'the other three turned off')
+click(1) // add 压缩
+assert.equal(byClass(tr, 'lc-event').length, 3, 'adding 压缩 shows 注入 + 压缩')
+click(2) // add 剪枝
+assert.equal(byClass(tr, 'lc-event').length, 5, 'adding 剪枝 shows 注入 + 压缩 + 剪枝')
+click(0) // remove 注入
+assert.equal(byClass(tr, 'lc-event').length, 4, 'removing 注入 leaves 压缩 + 剪枝')
+click(3) // add 切换
+assert.equal(byClass(tr, 'lc-event').length, 5, 'adding 切换 shows 压缩 + 剪枝 + 切换')
+click(1); click(2) // remove 压缩 and 剪枝
+assert.equal(byClass(tr, 'lc-event').length, 1, 'only 切换 stays picked')
+click(3) // remove the last one -> reset to all
+assert.equal(byClass(tr, 'lc-event').length, 6, 'removing the last picked kind restores all')
+assert.equal(onBtns(kindBtns()).length, 4, 'all four kinds picked again')
 
 // the stats board picks up the event counters
 const statVals2 = byClass(tr, 'lc-stat-value').map(n => n.args[2])

@@ -36,6 +36,9 @@ import { React } from '../react'
 // restore it once the content renders — first visits start at the top.
 const viewScroll = new Map<string, number>()
 
+// The four event kinds, in display order (toggles + filter share the list).
+const EVENT_KINDS = ['inject', 'compaction', 'prune', 'model'] as const
+
 export type ContextViewProps = SessionStandardProps
 
 export function makeContextView(ctx: ClientCtx, kit: ViewKit): (props: ContextViewProps) => ReactNS.ReactElement {
@@ -71,6 +74,21 @@ export function makeContextView(ctx: ClientCtx, kit: ViewKit): (props: ContextVi
     const [granularity, setGranularity] = React.useState<'step' | 'turn'>('step')
     // Shared hover link between the composition bar and its legend below.
     const [hoverCat, setHoverCat] = React.useState<string | null>(null)
+    // Kind picker for the events column, every kind picked by default (all
+    // shown). Clicking an unpicked kind adds it (A -> A+B -> ...); clicking
+    // the only remaining picked kind resets to all; clicking a picked kind
+    // among several removes it.
+    const [pickedKinds, setPickedKinds] = React.useState<string[]>([...EVENT_KINDS])
+    const toggleKind = (k: string) => {
+      setPickedKinds(p => {
+        // All picked -> narrow to this kind only (that's the "点击后只显示该分类" entry).
+        if (p.length === EVENT_KINDS.length) return [k]
+        // Unpicked -> add it (A -> A+B -> ...).
+        if (!p.includes(k)) return [...p, k]
+        // Picked -> remove it; removing the last one resets to all.
+        return p.length === 1 ? [...EVENT_KINDS] : p.filter(x => x !== k)
+      })
+    }
 
     // ---- page-scroller ownership (see `viewScroll` above) ----
     const rootRef = React.useRef<HTMLDivElement | null>(null)
@@ -122,6 +140,9 @@ export function makeContextView(ctx: ClientCtx, kit: ViewKit): (props: ContextVi
 
     const requests = data.requests || []
     const events = data.events || []
+    // The events column filters to the picked kinds (all picked = all shown);
+    // the stats board keeps the full log regardless.
+    const shownEvents = pickedKinds.length === EVENT_KINDS.length ? events : events.filter(e => pickedKinds.includes(e.kind))
     const nodes = data.nodes || []
     // Display granularity: one bar per step (default) or one bar per turn
     // (each turn shown by its LAST step's record).
@@ -252,9 +273,17 @@ export function makeContextView(ctx: ClientCtx, kit: ViewKit): (props: ContextVi
           <div className="lc-card lc-col">
             <div className="lc-card-title">
               {t('events.title')}
-              <span className="lc-card-sub">{t('events.hint')}</span>
+              <div className="lc-kinds">
+                {EVENT_KINDS.map(k => (
+                  <button
+                    key={k}
+                    className={'lc-gran-btn' + (pickedKinds.includes(k) ? ' lc-gran-on lc-kind-' + k : '')}
+                    onClick={() => { toggleKind(k) }}
+                  >{t('kind.' + k)}</button>
+                ))}
+              </div>
             </div>
-            <EventList events={events} />
+            <EventList events={shownEvents} />
           </div>
           <div className="lc-card lc-col">
             <div className="lc-card-title">
