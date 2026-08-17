@@ -23,7 +23,7 @@ export interface Config {
   maxKeptTurns?: number
   /** Newest context-event records kept. */
   maxEvents?: number
-  /** Surface nodes served to the browser (newest carry the signal). */
+  /** Surface nodes served to the browser (newest carry the signal; live inject nodes are always served — they are few and land first). */
   maxNodes?: number
   /** Removed (shadowed) surface nodes kept for per-step reconstruction. */
   maxArchiveNodes?: number

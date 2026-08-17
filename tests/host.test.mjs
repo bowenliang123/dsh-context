@@ -221,6 +221,25 @@ const floored = (() => {
 assert.equal(floored.droppedNodes, 2, 'two oldest live nodes outside the served slice')
 assert.equal(floored.surfaceFloor, 2, 'surfaceFloor is the newest dropped live seq')
 
+// -- inject pinning: live inject nodes older than the served tail are still
+// served (they land first and are few), so the browser can always list them;
+// droppedNodes/surfaceFloor count only the non-inject overflow --
+let pinCfg = null
+apply({ ...fakeCtx, sessionProjections: { register(d) { if (d.key === 'contextTimeline') pinCfg = d; return () => {} } } }, { maxNodes: 2 })
+const pinnedView = (() => {
+  let st = pinCfg.init()
+  st = pinCfg.apply(st, { seq: 1, type: 'user/message', time: 1000, data: { source: { kind: 'plugin', form: 'context', plugin: 'dsh-test' }, content: [{ type: 'text', text: 'injected context' }] } })
+  for (let s = 2; s <= 5; s++) {
+    st = pinCfg.apply(st, { seq: s, type: 'user/message', time: s * 1000, data: { content: [{ type: 'text', text: 'x'.repeat(20) }] } })
+  }
+  return pinCfg.view(st)
+})()
+assert.deepEqual(pinnedView.nodes.map(n => n.seq), [1, 4, 5], 'the out-of-window inject node is pinned ahead of the served tail, seq-ordered')
+assert.equal(pinnedView.nodes[0].cat, 'inject', 'the pinned node keeps its category')
+assert.equal(pinnedView.droppedNodes, 2, 'droppedNodes counts only the non-inject overflow')
+assert.equal(pinnedView.surfaceFloor, 3, 'surfaceFloor is the newest UNSERVED seq (pinned injects excluded)')
+assert.equal(pinCfg.schema.safeParse(pinnedView).success, true, 'pinning view passes the wire schema')
+
 // -- the wire view passes the unit's own schema (drift guard incl. archive) --
 assert.equal(def.schema.safeParse(shadow).success, true, 'archive-carrying view passes the wire schema')
 
@@ -307,7 +326,13 @@ const bounded = (() => {
   for (const ev of live.events) st = cfgDef.apply(st, ev)
   return cfgDef.view(st)
 })()
-assert.ok(bounded.nodes.length <= 2, 'maxNodes bounds the served surface slice')
+// The served slice is the newest `maxNodes` tail PLUS pinned live injects
+// (fixture: surface [3,4,6,7,9,11,12], tail [11,12] + pinned inject seq 4;
+// seqs 3/6/7/9 are the unserved overflow).
+assert.deepEqual(bounded.nodes.map(n => n.seq), [4, 11, 12], 'maxNodes bounds the tail; live injects are pinned on top')
+assert.ok(bounded.nodes.filter(n => n.cat !== 'inject').length <= 2, 'the non-inject tail still honors maxNodes')
+assert.equal(bounded.droppedNodes, 4, 'pinned injects do not count as dropped')
+assert.equal(bounded.surfaceFloor, 9, 'surfaceFloor is the newest unserved seq')
 assert.ok(bounded.requests.length <= 8, 'maxKeptTurns bounds the retained history (400-turn fixture trimmed by whole turns)')
 assert.equal(typeof cfgDef.schema.safeParse(bounded).success, 'boolean', 'custom-bounds view still passes the unit schema')
 
@@ -338,4 +363,4 @@ const usageLog = drive([
 assert.equal(usageLog.requests[0].prompt, 1000, 'prompt side sums the disjoint input buckets')
 assert.equal(usageLog.requests[0].output, 30, 'output is outputTokens (reasoning already inside)')
 
-console.log('✔ host half functional test passed (projection unit, fold semantics, attribution, retention, shadow-price seqs, reference stability, determinism, config bounds, model switch, usage mapping)')
+console.log('✔ host half functional test passed (projection unit, fold semantics, attribution, retention, shadow-price seqs, reference stability, determinism, config bounds, inject pinning, model switch, usage mapping)')

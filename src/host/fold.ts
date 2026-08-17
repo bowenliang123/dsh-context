@@ -519,8 +519,20 @@ export function buildTimelineView(state: TimelineState, bounds: FoldBounds): Sna
     droppedNodes: 0,
     archive: state.archived.map(n => ({ ...n })),
   }
-  result.droppedNodes = Math.max(0, state.surface.length - bounds.maxNodes)
-  result.nodes = state.surface.slice(-bounds.maxNodes)
+  // The served slice: the newest `maxNodes` tail PLUS every live inject node
+  // older than the tail. Injections (AGENTS.md, session-start context, …)
+  // land on the surface FIRST, so in a long session the plain tail window
+  // drops their identity while their tokens keep counting (sums cover the
+  // full surface) — the browser's inject section would show a token sum with
+  // zero listable items. Injects are few; pin them all into the served list.
+  // The overflow slice precedes the tail by position, so the concatenation
+  // stays seq-ordered.
+  const overflowCount = Math.max(0, state.surface.length - bounds.maxNodes)
+  const overflow = state.surface.slice(0, overflowCount)
+  const tail = state.surface.slice(overflowCount)
+  const pinned = overflow.filter(n => n.cat === 'inject')
+  result.nodes = pinned.length > 0 ? [...pinned, ...tail] : tail
+  result.droppedNodes = overflowCount - pinned.length
   // Coverage floors for the Context browser's per-step reconstruction:
   // `surfaceFloor` names the newest live node NOT served (the dropped slice
   // is the oldest by position); `archiveFloor` rides the state's retention
@@ -528,8 +540,7 @@ export function buildTimelineView(state: TimelineState, bounds: FoldBounds): Sna
   // reconstruction approximate instead of silently under-showing it.
   if (result.droppedNodes > 0) {
     let floor = 0
-    const dropped = state.surface.slice(0, state.surface.length - bounds.maxNodes)
-    for (const n of dropped) floor = Math.max(floor, n.seq)
+    for (const n of overflow) if (n.cat !== 'inject') floor = Math.max(floor, n.seq)
     result.surfaceFloor = floor
   }
   if (state.archiveFloor !== undefined) result.archiveFloor = state.archiveFloor

@@ -75,7 +75,14 @@ export interface Snapshot {
   toolList: { name: string; tokens: number }[]
   requests: RequestRecord[]
   events: ContextEventRecord[]
+  /**
+   * The served live surface: the newest `maxNodes` tail PLUS every live
+   * inject node older than the tail (injections land first and are few, so
+   * they are pinned — otherwise a long session would price them while the
+   * browser could list none). Seq-ordered, oldest first.
+   */
   nodes: SurfaceNode[]
+  /** Live nodes not served (the overflow beyond `maxNodes`, minus pinned injects — see `nodes`). */
   droppedNodes: number
   /**
    * Recently REMOVED surface nodes (compaction/prune shadows), each stamped
