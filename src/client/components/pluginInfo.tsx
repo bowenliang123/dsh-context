@@ -6,8 +6,8 @@
  * root; hovering a row underlines its value. Metadata is baked into the
  * bundle from package.json via esbuild `define` (see src/client/meta.ts +
  * scripts/build.mjs). One live check rides on top: the card asks the npm
- * registry for the latest published version once per page load and shows
- * an `↑ vX.Y.Z` chip when it is newer (see ../latestVersion.ts).
+ * registry for the latest published version (cached with a 1-hour TTL, see
+ * ../latestVersion.ts) and shows an `↑ vX.Y.Z` chip when it is newer.
  *
  * Layout: exactly two full-width rows, each a single horizontal line with
  * the label on the left and the value on the right — a compact definition
