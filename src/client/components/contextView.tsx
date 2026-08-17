@@ -18,6 +18,7 @@ import type { ClientCtx } from '../services'
 import type { ViewKit } from '../viewkit'
 import { makeEventList } from './events'
 import { makeNodeList } from './nodes'
+import { makePluginInfo } from './pluginInfo'
 import { makeRequestDetail } from './requestDetail'
 import { makeStatsBoard } from './statsBoard'
 import { makeLegend, makeStackedBar } from './stackedBar'
@@ -46,6 +47,7 @@ export function makeContextView(ctx: ClientCtx, kit: ViewKit): (props: ContextVi
   const EventList = makeEventList(kit)
   const NodeList = makeNodeList(kit)
   const StatsBoard = makeStatsBoard(kit)
+  const PluginInfo = makePluginInfo(kit)
 
   return function ContextView(props: ContextViewProps): ReactNS.ReactElement {
     const sessionId = props.sessionId
@@ -166,8 +168,11 @@ export function makeContextView(ctx: ClientCtx, kit: ViewKit): (props: ContextVi
     return (
       <div className="lc-root" ref={rootRef}>
 
-        {/* ---- session context stats (over the retained window) ---- */}
-        <StatsBoard requests={requests} events={events} />
+        {/* ---- session context stats + plugin info, side by side ---- */}
+        <div className="lc-cols">
+          <StatsBoard requests={requests} events={events} />
+          <PluginInfo />
+        </div>
 
         {/* ---- overview ---- */}
         <div className="lc-card">

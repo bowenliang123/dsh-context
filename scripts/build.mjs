@@ -57,6 +57,14 @@ await build({
   target: 'es2020',
   bundle: true,
   external: ['react', '@deepseek-ai/dsh-client-ui-primitives'],
+  // Plugin self-metadata (shown on the Plugin info card), read from
+  // package.json so the card always matches the shipped release.
+  define: {
+    __DSH_CTX_VERSION__: JSON.stringify(pkg.version),
+    __DSH_CTX_REPO__: JSON.stringify(
+      String((pkg.repository && pkg.repository.url) || '').replace(/^git\+/, '').replace(/\.git$/, ''),
+    ),
+  },
   sourcemap: false,
 })
 const clientSource = await readFile(join(ROOT, 'lib', '_client.js'), 'utf8')

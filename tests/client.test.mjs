@@ -350,13 +350,28 @@ assert.ok(byClass(tree, 'lc-turns').length === 1, 'turn tick row present')
 
 // ---- context stats board: totals over the retained window ----
 // fixture: 4 requests (turns 1,1,2,3), no events yet -> all event counters 0.
+const pkg = JSON.parse(await readFile(new URL('../package.json', import.meta.url), 'utf8'))
 const statVals = byClass(tree, 'lc-stat-value').map(n => n.args[2])
-assert.equal(statVals.length, 5, 'five stat cells (turns / steps / injections / compactions / prunes)')
+assert.equal(statVals.length, 8, 'five stats cells + three plugin-info cells')
 assert.equal(statVals[0], '3', 'turns counted by distinct turn')
 assert.equal(statVals[1], '4', 'steps = request count')
 assert.equal(statVals[2], '0', 'no injections yet')
 assert.equal(statVals[3], '0', 'no compactions yet')
 assert.equal(statVals[4], '0', 'no prunes yet')
+
+// ---- plugin info card: name / version / GitHub (whole cell is a link) ----
+assert.equal(statVals[5], 'dsh-context', 'plugin name label')
+const verVal = statVals[6]
+assert.ok(verVal && verVal.kind === 'element', 'version value is a fragment (version + optional badge)')
+assert.equal(verVal.args[2], 'v' + pkg.version, 'version label')
+assert.equal(verVal.args[3] ?? null, null, 'no Update badge — effects never run here')
+assert.equal(statVals[7], 'bowenliang123/dsh-context ↗', 'GitHub label')
+const linkCells = byClass(tree, 'lc-stat-cell')
+assert.equal(linkCells.length, 3, 'three whole-cell links')
+assert.match(linkCells[0].args[1].href, /^https:\/\/github\.com\/bowenliang123\/dsh-context/, 'name cell links to the GitHub repo')
+assert.equal(linkCells[1].args[1].href, 'https://www.npmjs.com/package/dsh-context', 'version cell links to the npm page')
+assert.equal(linkCells[1].args[1].title, undefined, 'no update tooltip without a registry result')
+assert.match(linkCells[2].args[1].href, /^https:\/\/github\.com\/bowenliang123\/dsh-context/, 'GitHub cell link target')
 
 // ---- hover linking: hovering a trend bar updates the detail below ----
 const ctxSlots = hookStates.get(ctxKey) // selected(0) hovered(1) hoverTurn(2) tick(3) gran(4) hoverCat(5)

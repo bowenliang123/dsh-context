@@ -99,6 +99,19 @@ export const STYLES = [
   '.lc-detail-pct { width: 34px; text-align: right; color: var(--dsw-alias-label-secondary); }',
   '.lc-cols { display: flex; gap: 14px; flex-wrap: wrap; }',
   '.lc-col { flex: 1; min-width: 280px; }',
+  // Head row: the stats board (five cells) takes the wider share, the plugin
+  // card (three cells) the narrower — both wrap onto their own line when tight.
+  '.lc-col-stats { flex: 3; min-width: 380px; }',
+  '.lc-col-plugin { flex: 2; min-width: 260px; }',
+  '.lc-stat-link { color: var(--dsw-alias-brand-primary); text-decoration: none; font-weight: 600; }',
+  // Whole-cell link (Plugin info): the anchor carries the stat-cell chrome,
+  // so the entire padded box is one hit target; hovering anywhere on it
+  // underlines the value and tints the border for affordance.
+  '.lc-stat-cell { text-decoration: none; cursor: pointer; transition: border-color 120ms ease; }',
+  '.lc-stat-cell:hover { border-color: var(--dsw-alias-brand-primary); }',
+  '.lc-stat:hover .lc-stat-link { text-decoration: underline; }',
+  // "Update!" pill inside the version cell (update = good news -> brand fill).
+  '.lc-update-badge { margin-left: 6px; font-size: 10px; font-weight: 600; background: var(--dsw-alias-button-primary-fill); color: var(--dsw-alias-label-primary-foreground); border-radius: 4px; padding: 1px 6px; }',
   '.lc-events, .lc-nodes { display: flex; flex-direction: column; gap: 2px; max-height: 320px; overflow-y: auto; }',
   '.lc-event { display: flex; align-items: center; gap: 8px; padding: 3px 0; }',
   '.lc-event-icon { width: 18px; text-align: center; color: var(--dsw-alias-state-warn-primary); }',
