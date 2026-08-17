@@ -168,8 +168,8 @@ export function makeContextView(ctx: ClientCtx, kit: ViewKit): (props: ContextVi
     return (
       <div className="lc-root" ref={rootRef}>
 
-        {/* ---- session context stats + plugin info, side by side ---- */}
-        <div className="lc-cols">
+        {/* ---- session context stats + plugin info, side by side (7 : 3) ---- */}
+        <div className="lc-cols lc-head">
           <StatsBoard requests={requests} events={events} />
           <PluginInfo />
         </div>

@@ -99,19 +99,31 @@ export const STYLES = [
   '.lc-detail-pct { width: 34px; text-align: right; color: var(--dsw-alias-label-secondary); }',
   '.lc-cols { display: flex; gap: 14px; flex-wrap: wrap; }',
   '.lc-col { flex: 1; min-width: 280px; }',
-  // Head row: the stats board (five cells) takes the wider share, the plugin
-  // card (three cells) the narrower — both wrap onto their own line when tight.
-  '.lc-col-stats { flex: 3; min-width: 380px; }',
-  '.lc-col-plugin { flex: 2; min-width: 260px; }',
-  '.lc-stat-link { color: var(--dsw-alias-brand-primary); text-decoration: none; font-weight: 600; }',
-  // Whole-cell link (Plugin info): the anchor carries the stat-cell chrome,
-  // so the entire padded box is one hit target; hovering anywhere on it
-  // underlines the value and tints the border for affordance.
-  '.lc-stat-cell { text-decoration: none; cursor: pointer; transition: border-color 120ms ease; }',
-  '.lc-stat-cell:hover { border-color: var(--dsw-alias-brand-primary); }',
-  '.lc-stat:hover .lc-stat-link { text-decoration: underline; }',
-  // "Update!" pill inside the version cell (update = good news -> brand fill).
-  '.lc-update-badge { margin-left: 6px; font-size: 10px; font-weight: 600; background: var(--dsw-alias-button-primary-fill); color: var(--dsw-alias-label-primary-foreground); border-radius: 4px; padding: 1px 6px; }',
+  // Head row: stats board + plugin info sit side by side under the shared
+  // `lc-cols` flex — stats takes ~7/10 of the row, plugin info ~3/10, both
+  // wrap onto their own line when the available width falls below each card's
+  // min-width (so a narrow viewport keeps both readable). Both children are
+  // `.lc-card` themselves (rendered by StatsBoard / PluginInfo); the flex
+  // sizing lives on the head row's direct children so the existing card
+  // chrome doesn't change.
+  '.lc-head > .lc-card { margin-bottom: 0; }',
+  '.lc-head > .lc-card:first-child { flex: 7 1 0; min-width: 360px; }',
+  '.lc-head > .lc-card:last-child { flex: 3 1 0; min-width: 220px; }',
+  // Plugin info: two full-width rows (Plugin / GitHub), each one horizontal
+  // line with the label on the left and the value on the right — a compact
+  // definition list rather than a multi-cell grid.
+  '.lc-pi-grid { display: grid; grid-template-columns: 1fr; gap: 8px; }',
+  // The row IS the link: an `<a>` with the label + value on one baseline.
+  // Hovering a row underlines its value — the only hover affordance.
+  '.lc-pi-row { display: flex; flex-direction: row; justify-content: space-between; align-items: baseline; gap: 12px; min-width: 0; text-decoration: none; color: inherit; }',
+  '.lc-pi-row:hover .lc-pi-value { text-decoration: underline; }',
+  // Upgrade chip appended to the Plugin value when the npm registry has a
+  // newer version than the baked-in one.
+  '.lc-pi-update { color: var(--dsw-alias-state-warn-primary); font-size: 11px; margin-left: 6px; white-space: nowrap; }',
+  '.lc-pi-label { flex: none; color: var(--dsw-alias-label-secondary); font-size: 11px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }',
+  // min-width: 0 lets the value shrink inside the flex row and truncate with
+  // an ellipsis; without it a narrow card pushes the value over the label.
+  '.lc-pi-value { min-width: 0; color: var(--dsw-alias-label-primary); font-size: 13px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; text-align: right; }',
   '.lc-events, .lc-nodes { display: flex; flex-direction: column; gap: 2px; max-height: 320px; overflow-y: auto; }',
   '.lc-event { display: flex; align-items: center; gap: 8px; padding: 3px 0; }',
   '.lc-event-icon { width: 18px; text-align: center; color: var(--dsw-alias-state-warn-primary); }',

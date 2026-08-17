@@ -352,26 +352,37 @@ assert.ok(byClass(tree, 'lc-turns').length === 1, 'turn tick row present')
 // fixture: 4 requests (turns 1,1,2,3), no events yet -> all event counters 0.
 const pkg = JSON.parse(await readFile(new URL('../package.json', import.meta.url), 'utf8'))
 const statVals = byClass(tree, 'lc-stat-value').map(n => n.args[2])
-assert.equal(statVals.length, 8, 'five stats cells + three plugin-info cells')
+assert.equal(statVals.length, 5, 'five stats cells (turns / steps / injections / compactions / prunes)')
 assert.equal(statVals[0], '3', 'turns counted by distinct turn')
 assert.equal(statVals[1], '4', 'steps = request count')
 assert.equal(statVals[2], '0', 'no injections yet')
 assert.equal(statVals[3], '0', 'no compactions yet')
 assert.equal(statVals[4], '0', 'no prunes yet')
 
-// ---- plugin info card: name / version / GitHub (whole cell is a link) ----
-assert.equal(statVals[5], 'dsh-context', 'plugin name label')
-const verVal = statVals[6]
-assert.ok(verVal && verVal.kind === 'element', 'version value is a fragment (version + optional badge)')
-assert.equal(verVal.args[2], 'v' + pkg.version, 'version label')
-assert.equal(verVal.args[3] ?? null, null, 'no Update badge — effects never run here')
-assert.equal(statVals[7], 'bowenliang123/dsh-context ↗', 'GitHub label')
-const linkCells = byClass(tree, 'lc-stat-cell')
-assert.equal(linkCells.length, 3, 'three whole-cell links')
-assert.match(linkCells[0].args[1].href, /^https:\/\/github\.com\/bowenliang123\/dsh-context/, 'name cell links to the GitHub repo')
-assert.equal(linkCells[1].args[1].href, 'https://www.npmjs.com/package/dsh-context', 'version cell links to the npm page')
-assert.equal(linkCells[1].args[1].title, undefined, 'no update tooltip without a registry result')
-assert.match(linkCells[2].args[1].href, /^https:\/\/github\.com\/bowenliang123\/dsh-context/, 'GitHub cell link target')
+// ---- plugin info card: two full-width rows; every row is itself a link ----
+function plainText(node) {
+  if (typeof node === 'string') return node
+  if (node === null || node === undefined || typeof node !== 'object') return ''
+  if (node.kind === 'element') return node.args.slice(2).map(plainText).join('')
+  if (Array.isArray(node)) return node.map(plainText).join('')
+  return ''
+}
+const piLabels = byClass(tree, 'lc-pi-label').map(n => n.args[2])
+const piValues = byClass(tree, 'lc-pi-value').map(n => n.args[2])
+const piGrid = byClass(tree, 'lc-pi-grid')
+assert.equal(piGrid.length, 1, 'plugin info rendered as one grid')
+assert.equal(piLabels.length, 2, 'plugin info: two rows (Plugin / GitHub)')
+assert.equal(plainText(piValues[0]), 'dsh-context (v' + pkg.version + ')', 'Plugin row combines package id + version (update chip only after the npm check resolves)')
+assert.equal(plainText(piValues[1]), 'bowenliang123/dsh-context', 'GitHub row shows the short owner/repo')
+
+// Each row IS the link — Plugin goes to the repo's releases page, GitHub to
+// the repo root.
+const linkRows = byClass(tree, 'lc-pi-row')
+assert.equal(linkRows.length, 2, 'every row is a whole-row link')
+assert.equal(linkRows[0].args[1].href, 'https://github.com/bowenliang123/dsh-context/releases', 'Plugin → GitHub releases page')
+assert.equal(linkRows[1].args[1].href, 'https://github.com/bowenliang123/dsh-context', 'GitHub → GitHub repo')
+// Hover affordance is CSS-driven (row-level `:hover` underlines the value);
+// no JS state needed, so no onMouseEnter/onMouseLeave handlers.
 
 // ---- hover linking: hovering a trend bar updates the detail below ----
 const ctxSlots = hookStates.get(ctxKey) // selected(0) hovered(1) hoverTurn(2) tick(3) gran(4) hoverCat(5)
