@@ -225,7 +225,7 @@ const requireStateful = (spec) => {
 const m2 = { exports: {} }
 const pluginExports2 = factory(requireStateful, m2, globalThis.window, fakeDoc)
 
-const DICT_FOR_TEST = { 'tab': 'Context', 'loading': '…', 'error': 'x', 'detail.step': 'Turn {t} · Step {s}', 'gran.step': 'Step', 'gran.turn': 'Turn', 'detail.turn': 'Turn {t} · {n} steps', 'detail.lastStep': 'last step', 'overview.splitEst': '· category split is estimated', 'overview.ofWindow': 'tokens (~{p}%)', 'overview.free': 'Free window', 'events.at': 'Turn {t} · Step {s}', 'events.range': 'Turn {t} · Step {a}→{b}', 'events.rangeTo': 'Turn {a} · Step {as} → Turn {b} · Step {bs}', 'stats.recycleSub': '{c} compactions · {p} prunes', 'tip.step': 'Turn {t} · Step {s}', 'tip.turn': 'Turn {t} · {n} steps', 'tip.total': 'total ≈ {n}', 'tip.actual': ' (actual {n})', 'trend.title': 'History', 'trend.empty': 'empty trend', 'cmd.close': 'Close', 'cat.user': 'User', 'browser.live': 'Live (next request)', 'browser.liveNow': 'Live · next request', 'browser.items': '{n} items', 'browser.noContent': 'outside the loaded window', 'browser.loading': 'loading older history', 'browser.noHeader': 'older plugin build' }
+const DICT_FOR_TEST = { 'tab': 'Context', 'loading': '…', 'error': 'x', 'detail.step': 'Turn {t} · Step {s}', 'gran.step': 'Step', 'gran.turn': 'Turn', 'detail.turn': 'Turn {t} · {n} steps', 'detail.lastStep': 'last step', 'overview.splitEst': '· category split is estimated', 'overview.ofWindow': 'tokens (~{p}%)', 'overview.free': 'Free window', 'events.at': 'Turn {t} · Step {s}', 'events.range': 'Turn {t} · Step {a}→{b}', 'events.rangeTo': 'Turn {a} · Step {as} → Turn {b} · Step {bs}', 'stats.recycleSub': '{c} compactions · {p} prunes', 'tip.step': 'Turn {t} · Step {s}', 'tip.turn': 'Turn {t} · {n} steps', 'tip.total': 'total ≈ {n}', 'tip.actual': ' (actual {n})', 'trend.title': 'History', 'trend.empty': 'empty trend', 'cmd.close': 'Close', 'cat.user': 'User', 'browser.live': 'Live (next request)', 'browser.liveNow': 'Live · next request', 'browser.items': '{n} items', 'browser.noContent': 'outside the loaded window', 'browser.loading': 'loading older history', 'browser.preview': 'preview', 'browser.noHeader': 'older plugin build' }
 let viewComponent = null
 let modalComponent = null
 let modalSource = null
@@ -883,6 +883,27 @@ dataValue = snapshot
 tr = renderView()
 
 console.log('✔ context browser test passed (picker, category accordion, per-step reconstruction, archived nodes, header content, graceful degradation)')
+
+// ---- trend-chart hover linkage: the bar under the pointer transiently
+// previews its step in the browser (picker value + meta follow); leaving
+// the chart returns to the picker's own selection. Driven through
+// ContextView's hoveredSeq state, exactly like TrendChart's onHover. ----
+ctxSlots[1][1](2) // hover the seq-2 bar (Turn 1 · Step 1)
+tr = renderView()
+assert.equal(byClass(tr, 'lc-br-pick')[0].args[1].value, '2', 'hovered bar drives the browser picker')
+assert.match(textOf(byClass(tr, 'lc-br-meta')[0]), /Turn 1 · Step 1/, 'meta shows the hovered step')
+assert.match(textOf(byClass(tr, 'lc-br-meta')[0]), /preview/, 'hover preview is marked')
+ctxSlots[1][1](3)
+tr = renderView()
+assert.equal(byClass(tr, 'lc-br-pick')[0].args[1].value, '3', 'hover moves across bars')
+ctxSlots[1][1](9999)
+tr = renderView()
+assert.equal(byClass(tr, 'lc-br-pick')[0].args[1].value, 'live', 'an unknown (trimmed) preview seq is ignored')
+ctxSlots[1][1](null)
+tr = renderView()
+assert.equal(byClass(tr, 'lc-br-pick')[0].args[1].value, 'live', 'leaving the chart returns to the picker selection')
+
+console.log('✔ hover linkage test passed (bar hover previews its step, unknown seq ignored, picker resumes)')
 
 // ---- Context browser auto-load: expanding an element whose seq is outside
 // the loaded conversation window pages older history in (via the plugin's

@@ -33,6 +33,12 @@ export interface ContextBrowserProps {
   useSession?: UseSessionLike
   /** History-pagination verb contributed via `sessions.provide` (absent on older hosts). */
   loadOlderHistory?: () => Promise<void>
+  /**
+   * Trend-chart hover linkage: the seq of the bar under the pointer. While
+   * set, the browser transiently previews that step; the picker's own
+   * selection resumes when the pointer leaves the chart.
+   */
+  previewSeq?: number | null
 }
 
 /** One raw content block (text/reasoning/tool-result/…), rendered defensively. */
@@ -197,7 +203,13 @@ export function makeContextBrowser(
     const awaiting = missingSeq !== null && !exhausted && loadOlderHistory !== undefined && hasMore
 
     const requests = data.requests || []
-    const req = sel === 'live' ? null : requests.find(r => r.seq === sel) ?? null
+    // Trend-chart hover linkage: the bar under the pointer transiently
+    // previews its step (unknown seq = trimmed out of retention, ignored);
+    // the picker's own selection resumes when the pointer leaves the chart.
+    const hoverReq = props.previewSeq !== null && props.previewSeq !== undefined
+      ? requests.find(r => r.seq === props.previewSeq) ?? null
+      : null
+    const req = hoverReq ?? (sel === 'live' ? null : requests.find(r => r.seq === sel) ?? null)
     // A pinned step trimmed out of retention falls back to live.
     const seq = req !== null ? req.seq : null
     const view = assemble(data, headers, seq)
@@ -320,6 +332,7 @@ export function makeContextBrowser(
             ? tr('detail.step', { t: req.turn ?? 0, s: req.step ?? 0 })
             : t('browser.liveNow')}</b>
           {req !== null ? <span>{fmtTime(req.time)}</span> : null}
+          {hoverReq !== null ? <span className="lc-card-sub">{t('browser.preview')}</span> : null}
           <span>{tr('detail.estTotal', { n: fmt(total) })}</span>
           {req !== null && req.prompt !== undefined
             ? <span className="lc-actual">{tr('detail.actual', { n: fmt(req.prompt) })}</span>

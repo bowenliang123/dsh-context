@@ -282,13 +282,15 @@ export function makeContextView(ctx: ClientCtx, kit: ViewKit): (props: ContextVi
             </div>
           </div>
 
-          {/* ---- context browser: the assembled content of the live surface or a picked step ---- */}
+          {/* ---- context browser: the assembled content of the live surface
+                 or a picked step; follows the trend chart's hovered bar ---- */}
           <div className="lc-col">
             <ContextBrowser
               data={data}
               headers={headers}
               useSession={props.useSession}
               loadOlderHistory={props.loadOlderHistory}
+              previewSeq={hoveredSeq}
             />
           </div>
         </div>
