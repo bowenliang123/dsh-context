@@ -21,6 +21,7 @@ A DeepSeek Harness plugin for context insight, actions, and management.
 
 ## Coding
 - Always consider the minimal change and the most performance efficient implementation.
+- Try best to use the existing classes, utilities, styles, events, presets and lifecycles provided by DeepSeek Harness.ess.
 - Use English in code comments and documentation.
 
 ## Dependency
@@ -31,6 +32,9 @@ A DeepSeek Harness plugin for context insight, actions, and management.
 
 ## Docs
 - `docs/social-preview.png` (GitHub social preview) must be exactly **1280 × 640 pixels**.
+
+## Temp files
+- Generate one-time temp files in the `.tmp` directory, and properly clean them up right after use.
 
 ## Releasing
 - Releases are cut by tagging: `git tag vX.Y.Z && gh release create vX.Y.Z`.
