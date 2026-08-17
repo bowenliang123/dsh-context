@@ -11,7 +11,7 @@
  */
 
 import type { Context } from '@deepseek-ai/cordis'
-import type { ContextPressure, ContextTimeline } from '../shared/types'
+import type { ContextHeaders, ContextPressure, ContextTimeline } from '../shared/types'
 
 export interface LocaleService {
   register(ns: string, dicts: Record<string, Record<string, string>>): () => void
@@ -39,6 +39,27 @@ export interface SlotsService {
 }
 
 /**
+ * The conversation node, as far as the Context browser consumes it: the
+ * framework's finalized chat nodes carry the source surface event's `seq`
+ * plus the full content — the browser joins its surface nodes on `seq` to
+ * show actual content without carrying it through the projection.
+ */
+export interface ConversationNodeLike {
+  kind: string
+  seq: number
+  content?: readonly unknown[]
+  blocks?: readonly unknown[]
+  call?: { name: string; argsRaw: string } | null
+  isError?: boolean
+  summary?: string | null
+}
+
+/** The conversation-snapshot selector hook, minimally typed for this plugin. */
+export type UseSessionLike = <T>(
+  selector: (snapshot: { nodes?: readonly ConversationNodeLike[] }) => T,
+) => T
+
+/**
  * The framework standard kit of a session-scope slot component, as far as
  * this plugin consumes it: the resolve session id and the key-addressed
  * projection reader that delivers the `contextTimeline` value (undefined =
@@ -47,6 +68,7 @@ export interface SlotsService {
 export interface SessionStandardProps {
   sessionId?: string
   useProjection?: (key: string) => unknown
+  useSession?: UseSessionLike
 }
 
 /** The client context: cordis plus the services this plugin injects. */
@@ -71,6 +93,19 @@ export function timelineOf(value: unknown): ContextTimeline | null {
 export function contextPressureOf(value: unknown): ContextPressure | null {
   if (value === null || value === undefined || typeof value !== 'object') return null
   return value as ContextPressure
+}
+
+/**
+ * Narrow a delivered projection value to the plugin's `contextHeaders`
+ * (request-header content epochs). Absent key = an older Host half without
+ * the companion unit — the Context browser degrades its system/tools
+ * sections to tokens-only with a note.
+ */
+export function headersOf(value: unknown): ContextHeaders | null {
+  if (value === null || value === undefined || typeof value !== 'object') return null
+  const headers = (value as ContextHeaders).headers
+  if (!Array.isArray(headers)) return null
+  return value as ContextHeaders
 }
 
 // ---- /context command faces (framework `inputTriggers` service) ----

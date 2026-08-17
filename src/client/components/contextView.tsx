@@ -13,9 +13,10 @@ import type * as ReactNS from 'react'
 import type { ContextEventRecord, RequestRecord } from '../../shared/types'
 import { headlineOf } from '../headline'
 import type { LocaleService, SessionStandardProps } from '../services'
-import { contextPressureOf, timelineOf } from '../services'
+import { contextPressureOf, headersOf, timelineOf } from '../services'
 import type { ClientCtx } from '../services'
 import type { ViewKit } from '../viewkit'
+import { makeContextBrowser } from './browser'
 import { makeEventList } from './events'
 import { makeNodeList } from './nodes'
 import { makePluginInfo } from './pluginInfo'
@@ -51,6 +52,7 @@ export function makeContextView(ctx: ClientCtx, kit: ViewKit): (props: ContextVi
   const NodeList = makeNodeList(kit)
   const StatsBoard = makeStatsBoard(kit)
   const PluginInfo = makePluginInfo(kit)
+  const ContextBrowser = makeContextBrowser(kit, StackedBar)
 
   return function ContextView(props: ContextViewProps): ReactNS.ReactElement {
     const sessionId = props.sessionId
@@ -66,6 +68,12 @@ export function makeContextView(ctx: ClientCtx, kit: ViewKit): (props: ContextVi
     // mirrors it. Absent key/value degrades to the derived fallback.
     const pressure = typeof props.useProjection === 'function'
       ? contextPressureOf(props.useProjection('contextPressure'))
+      : null
+    // The header-content companion projection (full system prompt + tool
+    // schemas) for the Context browser card; absent key = older Host half,
+    // the card degrades those sections to tokens-only with a note.
+    const headers = typeof props.useProjection === 'function'
+      ? headersOf(props.useProjection('contextHeaders'))
       : null
     const [selectedSeq, setSelectedSeq] = React.useState<number | null>(null)
     const [hoveredSeq, setHoveredSeq] = React.useState<number | null>(null)
@@ -267,6 +275,9 @@ export function makeContextView(ctx: ClientCtx, kit: ViewKit): (props: ContextVi
               </div>
             )}
         </div>
+
+        {/* ---- context browser: the assembled content of the live surface or a picked step ---- */}
+        <ContextBrowser data={data} headers={headers} useSession={props.useSession} />
 
         {/* ---- events + messages ---- */}
         <div className="lc-cols">

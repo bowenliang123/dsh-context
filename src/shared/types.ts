@@ -25,6 +25,15 @@ declare module '@deepseek-ai/dsh-session-projection/types' {
      * value (key absence = the plugin's host half is not composed).
      */
     contextTimeline: ContextTimeline
+    /**
+     * The request-header CONTENT epochs (full system prompt + tool schemas)
+     * behind the timeline's envelope figures. A separate unit so the hot
+     * `contextTimeline` value stays lean: headers change rarely, so this
+     * value (and its pushes) change only when a `request/header` lands.
+     * The Context browser card reads it to show the actual prompt/schema
+     * content of a picked step (key absence = older host: tokens only).
+     */
+    contextHeaders: ContextHeaders
   }
 }
 
@@ -68,6 +77,24 @@ export interface Snapshot {
   events: ContextEventRecord[]
   nodes: SurfaceNode[]
   droppedNodes: number
+  /**
+   * Recently REMOVED surface nodes (compaction/prune shadows), each stamped
+   * with `gone` (the replacing event's seq). Together with `nodes` this lets
+   * the Context browser reconstruct the assembled surface of any retained
+   * step: alive at request R = seq < R.seq && (gone undefined || gone > R.seq).
+   */
+  archive: SurfaceNode[]
+  /**
+   * Coverage floor of the served live `nodes`: the newest seq among the
+   * `droppedNodes` live nodes not served. Present only when droppedNodes > 0.
+   */
+  surfaceFloor?: number
+  /**
+   * Coverage floor of `archive`: the newest `gone` among archive entries the
+   * retention bounds dropped. Steps with seq < archiveFloor may miss removed
+   * nodes (the browser shows the reconstruction as approximate).
+   */
+  archiveFloor?: number
 }
 
 /**
@@ -105,6 +132,13 @@ export interface SurfaceNode {
   time?: number
   cat: Category
   tokens: number
+  /**
+   * Removal marker, present only on `archive` entries: the seq of the
+   * replacement surface event that shadowed this node (compaction/prune).
+   * The node is part of the assembled context of every request with
+   * seq > this node.seq and seq < gone.
+   */
+  gone?: number
   form?: string
   text?: string
   tool?: string
@@ -153,4 +187,34 @@ export interface ContextEventRecord {
   /** Turn/step of the request this event contributed to (host-stamped). */
   turn?: number
   step?: number
+}
+
+// ---- contextHeaders projection (request-header content epochs) -------------
+
+/** One tool schema as assembled into a request header, with its display price. */
+export interface HeaderTool {
+  name: string
+  tokens: number
+  /** Producer-declared description (may be long; the browser truncates). */
+  description?: string
+  /** The raw JSON schema object the model received (plain JSON). */
+  schema?: unknown
+}
+
+/**
+ * One request-header epoch: the full system prompt and tool schemas in force
+ * from this event's seq until the next epoch. Headers change rarely (the loop
+ * only logs `request/header` on change), so this unit's pushes are rare and
+ * carrying full content is cheap.
+ */
+export interface HeaderRecord {
+  seq: number
+  time: number
+  system?: string
+  tools: HeaderTool[]
+}
+
+/** The `contextHeaders` projection value: the bounded epoch list (newest last). */
+export interface ContextHeaders {
+  headers: HeaderRecord[]
 }

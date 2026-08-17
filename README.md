@@ -73,6 +73,10 @@ Every compaction, tool-output prune, skill or plugin context injection, and mode
 
 The exact message list the model sees right now, newest first, with a per-message token cost.
 
+### 🧭 Context browser — open the box of any request
+
+Pick **Live (next request)** or any retained step from the picker, and browse what that request was actually assembled from. Six collapsible category sections (system prompt, tool schemas, user messages, injected context, assistant replies, tool results) expand into one row per element — each with its token price — and every element expands again into its **actual content**: the full system prompt, each tool's description and JSON schema, message text, reasoning, tool-call arguments, and tool outputs. Steps before a compaction are reconstructed from the removed-message archive, and the card tells you honestly when a step's makeup is only approximate.
+
 ## Like it?
 
 If `dsh-context` helped you understand what your agent is carrying around, a ⭐ on [GitHub](https://github.com/bowenliang123/dsh-context) is much appreciated — and issues/PRs are welcome!

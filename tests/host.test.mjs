@@ -14,17 +14,20 @@
 import assert from 'node:assert/strict'
 import { apply } from '../lib/index.js'
 
-let def = null
+const defs = new Map()
 const disposers = []
 const fakeCtx = {
   inject(list, cb) { cb(this) }, // ctx.inject(['sessionProjections'], ...)
   effect(fn) { disposers.push(fn()); return () => {} },
   sessionProjections: {
-    register(d) { def = d; return () => {} },
+    register(d) { defs.set(d.key, d); return () => {} },
   },
 }
 apply(fakeCtx)
-assert.ok(def !== null, 'contextTimeline projection unit registered')
+const def = defs.get('contextTimeline')
+const hdef = defs.get('contextHeaders')
+assert.ok(def !== undefined, 'contextTimeline projection unit registered')
+assert.ok(hdef !== undefined, 'contextHeaders projection unit registered')
 assert.equal(def.key, 'contextTimeline')
 assert.equal(typeof def.init, 'function')
 assert.equal(typeof def.apply, 'function')
@@ -177,6 +180,80 @@ assert.equal(shadow.current.total, 18 + 13, 'total reflects the seq-based remova
 // label stays empty (never a crash)
 assert.equal(shadow.nodes.find(n => n.seq === 5).tool, undefined, 'no registered call name -> no tool label')
 
+// -- the removed nodes land in the archive (the Context browser's per-step
+// reconstruction raw material), stamped with the replacing event's seq --
+assert.deepEqual(shadow.archive.map(n => n.seq), [2, 3], 'both shadowed nodes archived in removal order')
+assert.ok(shadow.archive.every(n => n.gone === 5), 'archive entries carry the replacing event seq as gone')
+assert.equal(shadow.surfaceFloor, undefined, 'no live-node drop without an overflow')
+// Reconstructing step seq 4 (between removal and replacement... here: any
+// request with seq > 3 and < 5) sees the pre-shadow surface.
+const preShadow = [...shadow.nodes, ...shadow.archive].filter(n => n.seq < 4 && (n.gone === undefined || n.gone > 4))
+assert.deepEqual(preShadow.map(n => n.seq).sort(), [1, 2, 3], 'pre-shadow steps still see the shadowed nodes')
+
+// -- archive retention: count cap + request-window prune --
+let archiveCfg = null
+apply({ ...fakeCtx, sessionProjections: { register(d) { if (d.key === 'contextTimeline') archiveCfg = d; return () => {} } } }, { maxArchiveNodes: 1 })
+const capped = (() => {
+  let st = archiveCfg.init()
+  for (const ev of [
+    { seq: 1, type: 'user/message', time: 1000, data: { content: [{ type: 'text', text: 'a'.repeat(40) }] } },
+    { seq: 2, type: 'compaction/prune', time: 2000, data: { shadowedSeqs: [1], shadowedTokenCount: 18 } },
+    { seq: 3, type: 'user/message', time: 3000, surfaceOp: { op: 'replace', start: 1, end: 1 }, data: { content: [{ type: 'text', text: 'b' }] } },
+    { seq: 4, type: 'user/message', time: 4000, data: { content: [{ type: 'text', text: 'c'.repeat(40) }] } },
+    { seq: 5, type: 'compaction/prune', time: 5000, data: { shadowedSeqs: [4], shadowedTokenCount: 18 } },
+    { seq: 6, type: 'user/message', time: 6000, surfaceOp: { op: 'replace', start: 4, end: 4 }, data: { content: [{ type: 'text', text: 'd' }] } },
+  ]) st = archiveCfg.apply(st, ev)
+  return archiveCfg.view(st)
+})()
+assert.deepEqual(capped.archive.map(n => n.seq), [4], 'maxArchiveNodes keeps the newest removals only')
+assert.equal(capped.archiveFloor, 3, 'archiveFloor names the newest dropped removal')
+
+// -- surfaceFloor: the coverage floor of the served live-node slice --
+let floorCfg = null
+apply({ ...fakeCtx, sessionProjections: { register(d) { if (d.key === 'contextTimeline') floorCfg = d; return () => {} } } }, { maxNodes: 2 })
+const floored = (() => {
+  let st = floorCfg.init()
+  for (let s = 1; s <= 4; s++) {
+    st = floorCfg.apply(st, { seq: s, type: 'user/message', time: s * 1000, data: { content: [{ type: 'text', text: 'x'.repeat(20) }] } })
+  }
+  return floorCfg.view(st)
+})()
+assert.equal(floored.droppedNodes, 2, 'two oldest live nodes outside the served slice')
+assert.equal(floored.surfaceFloor, 2, 'surfaceFloor is the newest dropped live seq')
+
+// -- the wire view passes the unit's own schema (drift guard incl. archive) --
+assert.equal(def.schema.safeParse(shadow).success, true, 'archive-carrying view passes the wire schema')
+
+// -- contextHeaders unit: full header content epochs, dedupe + cap --
+const hdrive = (events) => {
+  let st = hdef.init()
+  for (const ev of events) st = hdef.apply(st, ev)
+  return hdef.view(st)
+}
+const hlog = hdrive([
+  { seq: 1, type: 'request/header', time: 1000, data: { reason: 'initial', header: { system: 'You are an agent.', tools: [{ name: 'bash', description: 'run a command', parameters: { type: 'object' } }], config: { model: 'm', provider: 'p' } } } },
+  { seq: 2, type: 'user/message', time: 2000, data: { content: [{ type: 'text', text: 'hi' }] } },
+  { seq: 3, type: 'request/header', time: 3000, data: { reason: 'change', header: { system: 'You are another agent.', tools: [], config: { model: 'm2', provider: 'p' } } } },
+])
+assert.equal(hlog.headers.length, 2, 'one epoch per request/header event')
+assert.equal(hlog.headers[0].system, 'You are an agent.', 'epoch carries the full system prompt')
+assert.equal(hlog.headers[0].tools.length, 1, 'epoch carries the tool schemas')
+assert.equal(hlog.headers[0].tools[0].name, 'bash')
+assert.equal(hlog.headers[0].tools[0].description, 'run a command')
+assert.deepEqual(hlog.headers[0].tools[0].schema.parameters, { type: 'object' }, 'raw schema content preserved')
+assert.ok(hlog.headers[0].tools[0].tokens > 0, 'tool schema priced')
+assert.equal(hlog.headers[1].system, 'You are another agent.')
+assert.equal(hdef.apply(hdef.init(), { type: 'user/message', seq: 9, time: 0, data: {} }).headers.length, 0,
+  'non-header events leave the headers state empty')
+assert.equal(hdef.schema.safeParse(hlog).success, true, 'headers view passes its wire schema')
+// cap: 60 epochs keep the newest 50
+const manyHeaders = []
+for (let i = 1; i <= 60; i++) {
+  manyHeaders.push({ seq: i, type: 'request/header', time: i * 1000, data: { reason: 'change', header: { system: 's' + i, config: { model: 'm' + i } } } })
+}
+assert.equal(hdrive(manyHeaders).headers.length, 50, 'header epochs capped')
+assert.equal(hdrive(manyHeaders).headers[0].system, 's11', 'the oldest epochs are dropped first')
+
 // -- tool names also resolve from the content block's toolCallId when the
 // source is absent on a (legacy) envelope --
 const legacyTool = drive([
@@ -224,7 +301,7 @@ assert.equal(snap3.contextWindow, 100000, 'route capacity still folds from reque
 
 // -- entry config: bounded slices are honored (config -> bounds threading) --
 let cfgDef = null
-apply({ ...fakeCtx, sessionProjections: { register(d) { cfgDef = d; return () => {} } } }, { maxNodes: 2, maxKeptTurns: 1 })
+apply({ ...fakeCtx, sessionProjections: { register(d) { if (d.key === 'contextTimeline') cfgDef = d; return () => {} } } }, { maxNodes: 2, maxKeptTurns: 1 })
 const bounded = (() => {
   let st = cfgDef.init()
   for (const ev of live.events) st = cfgDef.apply(st, ev)

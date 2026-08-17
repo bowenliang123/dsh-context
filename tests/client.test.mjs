@@ -193,6 +193,8 @@ const statefulReact = {
     return slots[i]
   },
   useEffect: () => {},
+  // Memo values are recomputed every render in tests (no staleness assertions).
+  useMemo: (fn) => fn(),
   useRef(init) {
     // Like React: the SAME ref object is returned on every render (stored
     // in the fiber slot), so tree ref props and effect closures agree.
@@ -216,7 +218,7 @@ const requireStateful = (spec) => {
 const m2 = { exports: {} }
 const pluginExports2 = factory(requireStateful, m2, globalThis.window, fakeDoc)
 
-const DICT_FOR_TEST = { 'tab': 'Context', 'loading': '…', 'error': 'x', 'detail.step': 'Turn {t} · Step {s}', 'gran.step': 'Step', 'gran.turn': 'Turn', 'detail.turn': 'Turn {t} · {n} steps', 'detail.lastStep': 'last step', 'overview.splitEst': '· category split is estimated', 'overview.ofWindow': 'tokens (~{p}%)', 'overview.free': 'Free window', 'events.at': 'Turn {t} · Step {s}', 'events.range': 'Turn {t} · Step {a}→{b}', 'events.rangeTo': 'Turn {a} · Step {as} → Turn {b} · Step {bs}', 'stats.recycleSub': '{c} compactions · {p} prunes', 'tip.step': 'Turn {t} · Step {s}', 'tip.turn': 'Turn {t} · {n} steps', 'tip.total': 'total ≈ {n}', 'tip.actual': ' (actual {n})', 'trend.title': 'History', 'trend.empty': 'empty trend', 'cmd.close': 'Close' }
+const DICT_FOR_TEST = { 'tab': 'Context', 'loading': '…', 'error': 'x', 'detail.step': 'Turn {t} · Step {s}', 'gran.step': 'Step', 'gran.turn': 'Turn', 'detail.turn': 'Turn {t} · {n} steps', 'detail.lastStep': 'last step', 'overview.splitEst': '· category split is estimated', 'overview.ofWindow': 'tokens (~{p}%)', 'overview.free': 'Free window', 'events.at': 'Turn {t} · Step {s}', 'events.range': 'Turn {t} · Step {a}→{b}', 'events.rangeTo': 'Turn {a} · Step {as} → Turn {b} · Step {bs}', 'stats.recycleSub': '{c} compactions · {p} prunes', 'tip.step': 'Turn {t} · Step {s}', 'tip.turn': 'Turn {t} · {n} steps', 'tip.total': 'total ≈ {n}', 'tip.actual': ' (actual {n})', 'trend.title': 'History', 'trend.empty': 'empty trend', 'cmd.close': 'Close', 'cat.user': 'User', 'browser.live': 'Live (next request)', 'browser.liveNow': 'Live · next request', 'browser.items': '{n} items', 'browser.noContent': 'outside the loaded window', 'browser.noHeader': 'older plugin build' }
 let viewComponent = null
 let modalComponent = null
 let modalSource = null
@@ -257,10 +259,12 @@ assert.ok(viewComponent !== null, 'view component captured')
 // session/projection frames.
 let dataValue = null
 let pressureValue = undefined
+let headersValue = undefined
 const renderView = () => evaluate(viewComponent({
   sessionId: 's1',
   useProjection: (key) => (key === 'contextTimeline' ? dataValue
-    : (key === 'contextPressure' ? pressureValue : undefined)),
+    : (key === 'contextPressure' ? pressureValue
+      : (key === 'contextHeaders' ? headersValue : undefined))),
 }))
 
 /** Invoke function-typed elements so hooks run and the tree materializes.
@@ -765,6 +769,91 @@ dataValue = snapshot
 tr = renderView()
 
 console.log('✔ chart render test passed (context stats board, free window hover, fixed-width bars, scroll container, turn ranges, hover linking, overview tooltip, turn strip, granularity toggle, edge fades, full history, right-anchored default, message times, event range labels, detail marker chip, overview actual)')
+
+// ---- Context browser card: step picker + category accordion + element
+// content. Fixture: the snapshot's two live nodes (seq 1 user, seq 2
+// assistant) plus one archived (removed) node that was still alive at the
+// early steps; one header epoch with full prompt/schema content. ----
+dataValue = {
+  ...snapshot,
+  archive: [{ seq: 0, cat: 'user', tokens: 5, text: 'archived message', gone: 3, time: 500 }],
+}
+headersValue = {
+  headers: [{
+    seq: 1, time: 900, system: 'SYSTEM-PROMPT-TEXT',
+    tools: [{ name: 'bash', tokens: 5, description: 'run a command', schema: { name: 'bash', parameters: { type: 'object' } } }],
+  }],
+}
+tr = renderView()
+const brKey = [...hookStates.keys()].find(k => k.includes('ContextBrowser'))
+assert.ok(brKey, 'ContextBrowser fiber registered')
+const brSlots = hookStates.get(brKey) // sel(0) openCat(1) openElem(2)
+
+// Live view (default): six category rows; message counts follow the live nodes.
+assert.equal(byClass(tr, 'lc-br-cat-row').length, 6, 'six category sections (system/tools + four message cats)')
+assert.equal(byClass(tr, 'lc-br-pick').length, 1, 'step picker present')
+const pickOptions = byClass(tr, 'lc-br-pick')[0].args.slice(2).flat()
+assert.equal(pickOptions.length, 5, 'picker lists live + one option per retained step')
+assert.equal(byClass(tr, 'lc-br-body').length, 0, 'all categories collapsed by default (no flat dump)')
+
+// Open the user category -> one live element row; open the element -> content
+// falls back to the preview + the window note (no useSession in this harness).
+const catRowOf = (label) => byClass(tr, 'lc-br-cat-row').find(r => textOf(r).includes(label))
+assert.ok(catRowOf('User'), 'user category row present')
+brSlots[1][1]('user') // openCat('user')
+tr = renderView()
+assert.equal(byClass(tr, 'lc-br-body').length, 1, 'one category body open')
+assert.equal(byClass(tr, 'lc-br-elem-row').length, 1, 'live view lists the live user node')
+brSlots[2][1]('n1') // openElem(seq 1)
+tr = renderView()
+assert.equal(byClass(tr, 'lc-br-content').length, 1, 'element content area open')
+assert.match(textOf(byClass(tr, 'lc-br-content')[0]), /first message/, 'content falls back to the node preview')
+assert.match(textOf(byClass(tr, 'lc-br-content')[0]), /outside the loaded window/, 'window note follows the fallback preview')
+
+// Pick step seq 2 (Turn 1 · Step 1): the reconstruction includes the archived
+// node (gone 3 > 2) — the accordion resets on picking, so reopen the category.
+byClass(tr, 'lc-br-pick')[0].args[1].onChange({ target: { value: '2' } })
+tr = renderView()
+assert.equal(byClass(tr, 'lc-br-body').length, 0, 'picking a step collapses the accordion')
+brSlots[1][1]('user')
+tr = renderView()
+assert.equal(byClass(tr, 'lc-br-elem-row').length, 2, 'a past step reconstructs archived + live nodes')
+assert.match(textOf(byClass(tr, 'lc-br-body')[0]), /archived message/, 'the archived node appears in its step')
+
+// The live view must NOT show the archived node.
+byClass(tr, 'lc-br-pick')[0].args[1].onChange({ target: { value: 'live' } })
+tr = renderView()
+brSlots[1][1]('user')
+tr = renderView()
+assert.equal(byClass(tr, 'lc-br-elem-row').length, 1, 'live view excludes removed nodes')
+
+// Header content sections: the system prompt and tool schemas ride the
+// contextHeaders projection (full content, not just prices).
+brSlots[1][1]('system')
+tr = renderView()
+brSlots[2][1]('sys')
+tr = renderView()
+assert.match(textOf(byClass(tr, 'lc-br-body')[0]), /SYSTEM-PROMPT-TEXT/, 'system section shows the full prompt')
+brSlots[1][1]('tools')
+tr = renderView()
+assert.match(textOf(byClass(tr, 'lc-br-body')[0]), /bash/, 'tools section lists the schema rows')
+brSlots[2][1]('tool:bash')
+tr = renderView()
+const toolContent = textOf(byClass(tr, 'lc-br-content')[0])
+assert.match(toolContent, /run a command/, 'tool row expands to its description')
+assert.match(toolContent, /"parameters"/, 'tool row expands to the raw JSON schema')
+
+// Without the contextHeaders key (older host), those sections degrade to a note.
+headersValue = undefined
+brSlots[1][1]('system')
+brSlots[2][1](null)
+tr = renderView()
+assert.match(textOf(byClass(tr, 'lc-br-body')[0]), /older plugin build/, 'absent headers projection degrades gracefully')
+brSlots[1][1](null)
+dataValue = snapshot
+tr = renderView()
+
+console.log('✔ context browser test passed (picker, category accordion, per-step reconstruction, archived nodes, header content, graceful degradation)')
 
 // ---- /context modal render: centered dialog with the same overview +
 // last-10-turn trend, driven by the modal store hook ----

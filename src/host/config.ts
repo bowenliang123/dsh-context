@@ -25,6 +25,8 @@ export interface Config {
   maxEvents?: number
   /** Surface nodes served to the browser (newest carry the signal). */
   maxNodes?: number
+  /** Removed (shadowed) surface nodes kept for per-step reconstruction. */
+  maxArchiveNodes?: number
 }
 
 /** Defaults — the exact bounds the fold used before they became configurable. */
@@ -33,6 +35,7 @@ export const DEFAULT_BOUNDS: Required<Config> = {
   maxKeptTurns: 300,
   maxEvents: 400,
   maxNodes: 200,
+  maxArchiveNodes: 400,
 }
 
 /**
@@ -46,6 +49,7 @@ export const Config = z.preprocess(
     maxKeptTurns: z.number().int().min(1).default(DEFAULT_BOUNDS.maxKeptTurns),
     maxEvents: z.number().int().min(1).default(DEFAULT_BOUNDS.maxEvents),
     maxNodes: z.number().int().min(1).default(DEFAULT_BOUNDS.maxNodes),
+    maxArchiveNodes: z.number().int().min(1).default(DEFAULT_BOUNDS.maxArchiveNodes),
   }).strict()
 )
 
@@ -55,6 +59,7 @@ export interface FoldBounds {
   maxKeptTurns: number
   maxEvents: number
   maxNodes: number
+  maxArchiveNodes: number
 }
 
 /** Validate (and default) the entry config into concrete fold bounds. */
@@ -65,5 +70,6 @@ export function resolveBounds(config: Config | undefined): FoldBounds {
     maxKeptTurns: parsed.maxKeptTurns,
     maxEvents: parsed.maxEvents,
     maxNodes: parsed.maxNodes,
+    maxArchiveNodes: parsed.maxArchiveNodes,
   }
 }

@@ -75,6 +75,16 @@ export interface TimelineState {
   contextWindow: number | undefined
   requests: RequestRecord[]
   events: ContextEventRecord[]
+  /**
+   * Recently removed surface nodes (stamped COPIES carrying `gone`), in
+   * removal order. Feeds the Context browser's per-step reconstruction.
+   * Bounded two ways in trimState: capped to `maxArchiveNodes`, and pruned
+   * to removals after the oldest retained request (older removals can only
+   * serve steps the requests trim already forgot).
+   */
+  archived: SurfaceNode[]
+  /** Newest `gone` among archive entries dropped by the retention bounds. */
+  archiveFloor?: number
   callNames: Record<string, string>
   /**
    * Seq list of the surface nodes the next replacement will shadow, armed by
@@ -131,6 +141,29 @@ function trimState(st: TimelineState, bounds: FoldBounds): void {
     st.requests = st.requests.slice(-bounds.maxRequestSteps)
   }
   if (st.events.length > bounds.maxEvents) st.events = st.events.slice(-bounds.maxEvents)
+  // Archive retention (the Context browser's per-step reconstruction raw
+  // material). Entries leave in removal order (oldest `gone` first), so the
+  // newest dropped `gone` is the last dropped entry's — recorded as
+  // `archiveFloor` for the client's approximate-reconstruction note.
+  if (st.archived.length > 0) {
+    let drop = 0
+    // Removals at or before the oldest retained request can only reconstruct
+    // steps the requests trim already forgot.
+    const oldestReq = st.requests.length > 0 ? st.requests[0].seq : undefined
+    if (oldestReq !== undefined) {
+      while (drop < st.archived.length
+        && (st.archived[drop].gone ?? Infinity) <= oldestReq) drop++
+    }
+    // Hard count cap.
+    if (st.archived.length - drop > bounds.maxArchiveNodes) {
+      drop = st.archived.length - bounds.maxArchiveNodes
+    }
+    if (drop > 0) {
+      const floor = st.archived[drop - 1].gone
+      if (floor !== undefined) st.archiveFloor = Math.max(st.archiveFloor ?? 0, floor)
+      st.archived = st.archived.slice(drop)
+    }
+  }
 }
 
 export function createTimelineState(): TimelineState {
@@ -146,6 +179,7 @@ export function createTimelineState(): TimelineState {
     contextWindow: undefined,
     requests: [],
     events: [],
+    archived: [],
     callNames: {},
   }
 }
@@ -155,6 +189,15 @@ function categoryOf(type: string, message: { source?: MessageSource } | undefine
   if (type === 'tool/result') return 'tool'
   if (isInjection(message?.source)) return 'inject'
   return 'user'
+}
+
+/**
+ * Archive removed surface nodes as stamped COPIES — the objects leaving
+ * `st.surface` are shared with the persisted previous state, so `gone` must
+ * never be written onto them directly.
+ */
+function archiveRemoved(st: TimelineState, removed: SurfaceNode[], goneSeq: number): void {
+  for (const n of removed) st.archived.push({ ...n, gone: goneSeq })
 }
 
 interface SurfaceEventLike {
@@ -238,10 +281,12 @@ function applySurface(
       // would leave those nodes behind and overcount.
       const shadowed = new Set(shadowedSeqs)
       const kept: SurfaceNode[] = []
+      const removed: SurfaceNode[] = []
       for (const n of st.surface) {
-        if (shadowed.has(n.seq)) st.sums[n.cat] -= n.tokens
+        if (shadowed.has(n.seq)) { st.sums[n.cat] -= n.tokens; removed.push(n) }
         else kept.push(n)
       }
+      archiveRemoved(st, removed, ev.seq)
       st.surface = kept
       st.sums[cat] += node.tokens
       st.surface.push(node)
@@ -255,6 +300,7 @@ function applySurface(
     }
     if (si >= 0 && ei >= si) {
       const removed = st.surface.splice(si, ei - si + 1, node)
+      archiveRemoved(st, removed, ev.seq)
       for (const r of removed) st.sums[r.cat] -= r.tokens
       st.sums[cat] += node.tokens
       return node
@@ -289,6 +335,7 @@ export function applyTimeline(state: TimelineState, event: TimelineEvent, bounds
     toolList: [...state.toolList],
     requests: [...state.requests],
     events: [...state.events],
+    archived: [...state.archived],
     callNames: { ...state.callNames },
   }
 
@@ -470,9 +517,22 @@ export function buildTimelineView(state: TimelineState, bounds: FoldBounds): Sna
     events: state.events.map(e => ({ ...e })),
     nodes: [],
     droppedNodes: 0,
+    archive: state.archived.map(n => ({ ...n })),
   }
   result.droppedNodes = Math.max(0, state.surface.length - bounds.maxNodes)
   result.nodes = state.surface.slice(-bounds.maxNodes)
+  // Coverage floors for the Context browser's per-step reconstruction:
+  // `surfaceFloor` names the newest live node NOT served (the dropped slice
+  // is the oldest by position); `archiveFloor` rides the state's retention
+  // ledger (see trimState). Both let the client mark a picked step's
+  // reconstruction approximate instead of silently under-showing it.
+  if (result.droppedNodes > 0) {
+    let floor = 0
+    const dropped = state.surface.slice(0, state.surface.length - bounds.maxNodes)
+    for (const n of dropped) floor = Math.max(floor, n.seq)
+    result.surfaceFloor = floor
+  }
+  if (state.archiveFloor !== undefined) result.archiveFloor = state.archiveFloor
 
   // Attribute each event to the requests around it — the context that event
   // contributed to (same attachment the chart uses for ✂ markers). `turn`/

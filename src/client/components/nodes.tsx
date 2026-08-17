@@ -13,10 +13,10 @@ import { React } from '../react'
 
 export interface NodeListProps { nodes: SurfaceNode[]; dropped: number }
 
-export function makeNodeList(kit: ViewKit): (props: NodeListProps) => ReactNS.ReactElement {
-  const { t, tr, fmt, fmtTime } = kit
-
-  function nodeText(n: SurfaceNode): string {
+/** One-line preview of a surface node (shared by the node list and the Context browser's element rows). */
+export function makeNodeText(kit: ViewKit): (n: SurfaceNode) => string {
+  const { t } = kit
+  return function nodeText(n: SurfaceNode): string {
     if (n.cat === 'tool') {
       return t('node.toolResult') + (n.tool ? ' ← ' + n.tool : '') + (n.err ? ' ⚠' : '')
     }
@@ -27,6 +27,11 @@ export function makeNodeList(kit: ViewKit): (props: NodeListProps) => ReactNS.Re
     if (n.cat === 'inject') return t('form.' + (n.form || 'context'))
     return t('node.nonText')
   }
+}
+
+export function makeNodeList(kit: ViewKit): (props: NodeListProps) => ReactNS.ReactElement {
+  const { t, tr, fmt, fmtTime } = kit
+  const nodeText = makeNodeText(kit)
 
   return function NodeList(props: NodeListProps): ReactNS.ReactElement {
     if (props.nodes.length === 0) {

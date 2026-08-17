@@ -19,6 +19,7 @@
 
 import type { Context } from '@deepseek-ai/cordis'
 import { Config } from './config'
+import { createContextHeadersDefinition } from './headers'
 import { createContextTimelineDefinition } from './timeline'
 
 export const name = 'dsh-context'
@@ -34,9 +35,14 @@ export { Config } from './config'
 
 export function apply(ctx: Context, config: Config): void {
   ctx.sessionProjections.register(createContextTimelineDefinition(config))
+  // The header-content companion unit (full system prompt + tool schemas —
+  // rare changes, so its pushes stay off the per-event hot path).
+  ctx.sessionProjections.register(createContextHeadersDefinition())
 }
 
 // ---- public type surface (stable for downstream consumers) -------------------
 
 export type { Category, ContextEventRecord, RequestRecord, Snapshot, ContextTimeline, SurfaceNode } from '../shared/types'
+export type { ContextHeaders, HeaderRecord, HeaderTool } from '../shared/types'
 export type { TimelineState } from './fold'
+export type { HeadersState } from './headers'

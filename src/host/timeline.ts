@@ -32,6 +32,7 @@ const surfaceNodeSchema = z.object({
   time: z.number().optional(),
   cat: z.enum(['user', 'inject', 'assistant', 'tool']),
   tokens: z.number().int().nonnegative(),
+  gone: z.number().int().nonnegative().optional(),
   form: z.string().optional(),
   text: z.string().optional(),
   tool: z.string().optional(),
@@ -95,6 +96,9 @@ const contextTimelineSchema = z.object({
   events: z.array(contextEventSchema),
   nodes: z.array(surfaceNodeSchema),
   droppedNodes: z.number().int().nonnegative(),
+  archive: z.array(surfaceNodeSchema),
+  surfaceFloor: z.number().int().nonnegative().optional(),
+  archiveFloor: z.number().int().nonnegative().optional(),
 }).strict() as unknown as z.ZodType<ContextTimeline>
 
 /**
@@ -119,6 +123,9 @@ export function createContextTimelineDefinition(config: Config): ProjectionDefin
     // occupancyWindow) left the persisted state — the client now reads the
     // official token-meter `contextPressure` projection instead. Old cached
     // rows are discarded and refolded.
-    stateVersion: 2,
+    // 3 since 0.12: the removed-node archive (`archived` + `archiveFloor`)
+    // joined the persisted state for the Context browser's per-step
+    // reconstruction — cached rows predate the shape and are refolded.
+    stateVersion: 3,
   }
 }
