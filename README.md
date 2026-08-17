@@ -40,7 +40,7 @@ Type `/context` (or pick it from the `/` menu) and press Enter: a centered dialo
 
 ### 📊 Context stats — the session at a glance
 
-Turns, steps, how much context has been recycled by compactions and prunes, how many injections happened, model switches, and the estimated total tokens sent — next to the provider-reported actuals, so you can see how the estimate holds up.
+Turns, steps, how many injections, compactions, and prunes have happened.
 
 ### 🧱 Current composition — what's in the window right now
 

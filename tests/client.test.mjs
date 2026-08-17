@@ -349,19 +349,14 @@ assert.ok(byClass(tree, 'lc-chart-scroll').length === 1, 'scroll container prese
 assert.ok(byClass(tree, 'lc-turns').length === 1, 'turn tick row present')
 
 // ---- context stats board: totals over the retained window ----
-// fixture: 4 requests (turns 1,1,2,3; totals 100/90/107/83; prompts 95+83000),
-// no events yet -> recycled 0, all event counters 0.
+// fixture: 4 requests (turns 1,1,2,3), no events yet -> all event counters 0.
 const statVals = byClass(tree, 'lc-stat-value').map(n => n.args[2])
-assert.equal(statVals.length, 8, 'eight stat cells')
+assert.equal(statVals.length, 5, 'five stat cells (turns / steps / injections / compactions / prunes)')
 assert.equal(statVals[0], '3', 'turns counted by distinct turn')
 assert.equal(statVals[1], '4', 'steps = request count')
-assert.equal(statVals[2], '0', 'no events yet -> nothing recycled')
-assert.equal(byClass(tree, 'lc-stat-sub')[0].args[2], '0 compactions · 0 prunes', 'recycle sub shows zero counts')
-assert.equal(statVals[3], '0', 'no injections yet')
-assert.equal(statVals[4], '0', 'no model switches yet')
-assert.equal(statVals[5], '≈ 380', 'estimated total sums request totals')
-assert.equal(statVals[6], '83.1k', 'actual prompt sums provider-reported prompts (95 + 83000)')
-assert.equal(statVals[7], '0', 'no provider output reported')
+assert.equal(statVals[2], '0', 'no injections yet')
+assert.equal(statVals[3], '0', 'no compactions yet')
+assert.equal(statVals[4], '0', 'no prunes yet')
 
 // ---- hover linking: hovering a trend bar updates the detail below ----
 const ctxSlots = hookStates.get(ctxKey) // selected(0) hovered(1) hoverTurn(2) tick(3) gran(4) hoverCat(5)
@@ -661,12 +656,11 @@ assert.equal(atLabels[2].args[2], 'Turn 1 · Step 1 → Turn 2 · Step 0', 'cros
 assert.equal(atLabels[3].args[2], 'Turn 1 · Step 0→1', 'same-turn boundary compresses to a step range')
 assert.equal(atLabels[4].args[2], 'Turn 1 · Step 0 → Turn 2 · Step 0', 'oldest boundary event shows its gap')
 
-// the stats board picks up the event counters and recycled tokens
+// the stats board picks up the event counters
 const statVals2 = byClass(tr, 'lc-stat-value').map(n => n.args[2])
-assert.equal(statVals2[2], '−6.1k', 'recycled sums compaction+prune shadowed tokens (900+60+100+5000)')
-assert.equal(byClass(tr, 'lc-stat-sub')[0].args[2], '2 compactions · 2 prunes', 'recycle sub counts both kinds')
-assert.equal(statVals2[3], '1', 'one injection counted')
-assert.equal(statVals2[4], '1', 'one model switch counted')
+assert.equal(statVals2[2], '1', 'one injection counted')
+assert.equal(statVals2[3], '2', 'two compactions counted')
+assert.equal(statVals2[4], '2', 'two prunes counted')
 
 // the ✂ marker sits on the bar it attaches to and tooltips the event gap
 const barMark = byClass(tr, 'lc-bar-marker')
