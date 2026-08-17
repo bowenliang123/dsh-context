@@ -65,7 +65,7 @@ In **Step** granularity, hovering any bar shows that single step's context info 
 
 ### ⚡ Context events — when and why the window changed
 
-Every compaction, tool-output prune, skill or plugin context injection, and model switch — each with its token delta, turn/step attribution, and timestamp:
+Every compaction, tool-output prune, skill or plugin context injection, and model switch — each with its token delta, turn/step attribution, and timestamp. Filter by category (**Inject / Compact / Prune / Switch**) to see exactly when each kind of event happened and its impact — e.g. when a skill was injected, when instructions were added, or how much a compaction reclaimed:
 
 ![Context events and messages](https://raw.githubusercontent.com/bowenliang123/dsh-context/main/docs/context-events.png)
 
