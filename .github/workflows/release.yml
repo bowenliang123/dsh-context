@@ -16,8 +16,16 @@ permissions:
   contents: read
 
 jobs:
+  check-plugin:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - name: Check the DeeSeek Harness plugin
+        uses: bowenliang123/dsh-plugin-checker@v1
+
   publish:
     runs-on: ubuntu-latest
+    needs: check-plugin
     steps:
       - uses: actions/checkout@v7
 
