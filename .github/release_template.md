@@ -2,7 +2,7 @@
 
 ## Install / update
 
-Install the `dsh-context` plugin with [DeepSeek Harness cli](https://www.deepseek.com/harness/):
+Install the `dsh-context` plugin on [DeepSeek Harness](https://www.deepseek.com/harness/) with released [NPM package](https://www.npmjs.com/package/dsh-context):
 
 ```sh
 dsh plugin --profile web add dsh-context@latest
@@ -23,8 +23,8 @@ The single most important user-facing change, as a narrative. Drop this section 
 
 ## Commits
 
-- commit 1
-- commit 2
+- commit message ([commit_id](link_to_commit))
+- commit message ([commit_id](link_to_commit))
 
 [vPREV...vNEW](https://github.com/bowenliang123/dsh-context/compare/vPREV...vNEW) · N commits
 
