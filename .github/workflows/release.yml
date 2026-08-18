@@ -32,8 +32,6 @@ jobs:
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
-        env:
-          HUSKY: 0 # skip the husky prepare hook in CI
 
       - name: Build
         run: pnpm run build
