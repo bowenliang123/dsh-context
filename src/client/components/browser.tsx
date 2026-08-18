@@ -312,7 +312,6 @@ export function makeContextBrowser(
       <div className="lc-card">
         <div className="lc-card-title">
           {t('browser.title')}
-          <span className="lc-card-sub">{t('browser.hint')}</span>
           <select
             className="lc-br-pick"
             value={seq === null ? 'live' : String(seq)}
