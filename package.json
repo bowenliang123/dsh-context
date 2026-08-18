@@ -26,6 +26,7 @@
   ],
   "scripts": {
     "build": "node scripts/build.mjs",
+    "register": "dsh plugin --profile web remove dsh-context ; dsh plugin --profile web add .",
     "typecheck": "tsc --noEmit",
     "test": "npm run typecheck && node tests/host.test.mjs && node tests/client.test.mjs",
     "release": "bash scripts/publish.sh",
