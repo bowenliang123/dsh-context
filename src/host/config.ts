@@ -23,7 +23,14 @@ export interface Config {
   maxKeptTurns?: number
   /** Newest context-event records kept. */
   maxEvents?: number
-  /** Surface nodes served to the browser (newest carry the signal; live inject nodes are always served — they are few and land first). */
+  /**
+   * Surface nodes served to the browser (newest carry the signal; live
+   * inject nodes are always served — they are few and land first). The
+   * default is deliberately generous: auto-compaction keeps the live
+   * surface far below it in healthy sessions, so the browser effectively
+   * lists EVERY live node; the bound stays as a backstop for pathological
+   * sessions (every projection push ships the whole value, ~150B per node).
+   */
   maxNodes?: number
   /** Removed (shadowed) surface nodes kept for per-step reconstruction. */
   maxArchiveNodes?: number
@@ -34,7 +41,7 @@ export const DEFAULT_BOUNDS: Required<Config> = {
   maxRequestSteps: 1500,
   maxKeptTurns: 300,
   maxEvents: 400,
-  maxNodes: 200,
+  maxNodes: 2000,
   maxArchiveNodes: 400,
 }
 
