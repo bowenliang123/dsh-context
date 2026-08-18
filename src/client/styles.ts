@@ -73,13 +73,16 @@ export const STYLES = [
   '.lc-bar:hover { background: var(--dsw-alias-bg-layer-2); }',
   '.lc-bar-selected { outline: 2px solid var(--dsw-alias-brand-primary); outline-offset: 1px; }',
   '.lc-bar-hovered { outline: 1px dashed var(--dsw-alias-brand-primary); outline-offset: 1px; }',
-  '.lc-bar-in-turn { background: rgba(99,102,241,0.14); }',
+  '.lc-bar-in-turn { background: rgba(128,128,128,0.14); }',
   '.lc-bar-stack { display: flex; flex-direction: column-reverse; width: 100%; }',
   '.lc-bar-stack > div { width: 100%; }',
   '.lc-bar-marker { position: absolute; top: -16px; left: 50%; transform: translateX(-50%); font-size: 11px; color: var(--dsw-alias-state-warn-primary); }',
+  // Turn strip: NEUTRAL zebra fills (inline, see TURN_FILLS) with secondary
+  // text — never the category palette, or the strip reads as a detached
+  // bottom segment of the bars above it.
   '.lc-turns { display: flex; gap: 2px; width: max-content; min-width: 100%; margin-top: 4px; }',
-  '.lc-turn { flex: none; box-sizing: border-box; text-align: center; font-size: 10px; line-height: 14px; font-weight: 600; color: #fff; border-radius: 3px; height: 14px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; cursor: default; transition: filter 120ms, opacity 120ms; }',
-  '.lc-turn-on { filter: brightness(1.35); box-shadow: 0 0 0 1px rgba(255,255,255,0.4); }',
+  '.lc-turn { flex: none; box-sizing: border-box; text-align: center; font-size: 10px; line-height: 14px; font-weight: 600; color: var(--dsw-alias-label-secondary); border-radius: 3px; height: 14px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; cursor: default; transition: filter 120ms, opacity 120ms; }',
+  '.lc-turn-on { filter: brightness(1.35); color: var(--dsw-alias-label-primary); }',
   '.lc-detail { margin-top: 12px; border-top: 1px solid var(--dsw-alias-border-l1); padding-top: 12px; }',
   '.lc-detail-head { display: flex; flex-wrap: wrap; gap: 6px 16px; margin-bottom: 8px; color: var(--dsw-alias-label-secondary); }',
   '.lc-detail-head b { color: var(--dsw-alias-label-primary); }',

@@ -83,8 +83,11 @@ export function makeTrendChart(kit: ViewKit): (props: TrendChartProps) => ReactN
   // compressing. The turn strip below mirrors the same column grid.
   const BAR_W = 14
   const BAR_GAP = 2
-  // Turn strip palette: one color per turn, cycling for long histories.
-  const TURN_COLORS = ['#6366f1', '#f59e0b', '#22c55e', '#a855f7', '#3b82f6', '#14b8a6', '#ef4444', '#ec4899']
+  // Turn strip fills: a neutral zebra, deliberately DISJOINT from the
+  // category palette — the strip sits directly under the bars, and the old
+  // per-turn palette (identical to the six category colors) made it read as
+  // a detached, misaligned bottom segment of the composition bars.
+  const TURN_FILLS = ['rgba(128,128,128,0.12)', 'rgba(128,128,128,0.26)']
 
   return function TrendChart(props: TrendChartProps): ReactNS.ReactElement {
     const requests = props.requests
@@ -267,7 +270,7 @@ export function makeTrendChart(kit: ViewKit): (props: TrendChartProps) => ReactN
                   className={'lc-turn' + (on ? ' lc-turn-on' : '')}
                   style={{
                     width: blockW + 'px',
-                    background: TURN_COLORS[gi % TURN_COLORS.length],
+                    background: TURN_FILLS[gi % TURN_FILLS.length],
                   }}
                   title={'T' + grp.turn}
                   onMouseEnter={() => { props.onHoverTurn(grp.turn) }}
