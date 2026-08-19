@@ -291,6 +291,11 @@ export function makeContextView(ctx: ClientCtx, kit: ViewKit): (props: ContextVi
               useSession={props.useSession}
               loadOlderHistory={props.loadOlderHistory}
               previewSeq={hoveredSeq}
+              // Shared current-composition hover link (bar + legend + browser
+              // category rows); the browser joins only while it shows the
+              // live step, gated inside the browser itself.
+              hoverKey={hoverCat}
+              onHoverKey={setHoverCat}
             />
           </div>
         </div>

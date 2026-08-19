@@ -39,6 +39,15 @@ export interface ContextBrowserProps {
    * selection resumes when the pointer leaves the chart.
    */
   previewSeq?: number | null
+  /**
+   * Current-composition hover link, shared with the Current Composition card
+   * (its bar + legend): the active category key, reported via onHoverKey.
+   * The browser joins the link ONLY while it shows the LIVE step — a pinned
+   * or previewed step's composition differs, so its hover must not light the
+   * overview (and the overview's hover must not highlight another step).
+   */
+  hoverKey?: string | null
+  onHoverKey?: (key: string | null) => void
 }
 
 /** One raw content block (text/reasoning/tool-result/…), rendered defensively. */
@@ -212,6 +221,16 @@ export function makeContextBrowser(
     const req = hoverReq ?? (sel === 'live' ? null : requests.find(r => r.seq === sel) ?? null)
     // A pinned step trimmed out of retention falls back to live.
     const seq = req !== null ? req.seq : null
+    // Current-composition hover link: the browser joins the Current
+    // Composition card's shared hover only while it shows the LIVE step —
+    // a pinned/previewed step has a different composition, so its hover must
+    // not light the overview (and the overview's hover must not highlight
+    // this step's parts). The mirror filter drops the overview's FREE-track
+    // key, which has no segment in the browser's bar.
+    const linked = req === null && props.onHoverKey !== undefined
+    const linkKey = linked && props.hoverKey !== null && props.hoverKey !== 'free'
+      ? props.hoverKey
+      : null
     const view = assemble(data, headers, seq)
     const breakdown = req !== null ? req : data.current
     const parts = partsOf(breakdown)
@@ -338,7 +357,20 @@ export function makeContextBrowser(
             : null}
         </div>
 
-        <StackedBar parts={parts} height={10} />
+        <div className="lc-br-bar">
+          <StackedBar
+            parts={parts}
+            height={10}
+            // Mirrored hover link (see `linked` above): while the browser
+            // shows the live surface, its bar highlights the shared category
+            // key and reports its own hovers back to the Current Composition
+            // card. The tip stays off — a cross-card hover must not float a
+            // second tooltip over a bar the pointer does not rest on.
+            hoverKey={linked ? linkKey : undefined}
+            onHoverKey={linked ? props.onHoverKey : undefined}
+            tip={false}
+          />
+        </div>
 
         {view.missingLive > 0
           ? <div className="lc-br-note">{tr('browser.missingLive', { n: view.missingLive })}</div>
@@ -356,7 +388,13 @@ export function makeContextBrowser(
             const open = openCat === c.key && openable
             return (
               <div key={c.key} className={'lc-br-cat' + (openable ? '' : ' lc-br-cat-empty')}>
-                <button type="button" className="lc-br-cat-row" onClick={() => { toggleCat(c.key) }}>
+                <button
+                  type="button"
+                  className={'lc-br-cat-row' + (linked && props.hoverKey === c.key ? ' lc-br-cat-on' : '')}
+                  onMouseEnter={linked ? () => { if (props.onHoverKey !== undefined) props.onHoverKey(c.key) } : undefined}
+                  onMouseLeave={linked ? () => { if (props.onHoverKey !== undefined) props.onHoverKey(null) } : undefined}
+                  onClick={() => { toggleCat(c.key) }}
+                >
                   <span className={'lc-br-chev' + (open ? ' lc-br-chev-on' : '')}>{'▸'}</span>
                   <i style={{ background: c.color }} />
                   <span className="lc-br-cat-label">{catLabel(c.key)}</span>

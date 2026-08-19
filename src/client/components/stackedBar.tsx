@@ -20,6 +20,10 @@ export interface StackedBarProps {
   /** Optional hover link: the active segment key, reported via onHoverKey. */
   hoverKey?: string | null
   onHoverKey?: (key: string | null) => void
+  /** Render the hover tooltip (default true). A mirrored bar that only echoes
+   * another card's hover turns it off, so the tooltip floats only over the
+   * surface the pointer actually rests on. */
+  tip?: boolean
 }
 
 export function makeStackedBar(kit: ViewKit): (props: StackedBarProps) => ReactNS.ReactElement {
@@ -110,7 +114,7 @@ export function makeStackedBar(kit: ViewKit): (props: StackedBarProps) => ReactN
             <div className="lc-occupied-box" style={{ width: usedPct + '%' }} />
           ) : null}
         </div>
-        {tip ? <div className="lc-bar-tip" style={{ left: tip.leftPct + '%' }}>{tip.text}</div> : null}
+        {tip && props.tip !== false ? <div className="lc-bar-tip" style={{ left: tip.leftPct + '%' }}>{tip.text}</div> : null}
       </div>
     )
   }

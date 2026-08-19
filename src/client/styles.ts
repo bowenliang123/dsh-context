@@ -175,6 +175,11 @@ export const STYLES = [
   '.lc-br-cat-empty { opacity: 0.55; }',
   '.lc-br-cat-row { display: flex; align-items: center; gap: 8px; width: 100%; border: 0; background: transparent; color: var(--dsw-alias-label-primary); font: inherit; padding: 7px 10px; cursor: pointer; text-align: left; }',
   '.lc-br-cat-row:hover { background: var(--dsw-alias-interactive-bg-hover); }',
+  // Current-composition hover echo: the category row lit by the shared hover
+  // link (hovering the Current Composition card's bar/legend) looks hovered
+  // too — same tint as the physical hover, plus a ring on its color dot.
+  '.lc-br-cat-on { background: var(--dsw-alias-interactive-bg-hover); }',
+  '.lc-br-cat-on i { box-shadow: 0 0 0 1px var(--dsw-alias-brand-primary); }',
   '.lc-br-cat-row i { display: inline-block; width: 8px; height: 8px; border-radius: 2px; flex: none; }',
   '.lc-br-cat-label { font-weight: 600; }',
   '.lc-br-cat-count { color: var(--dsw-alias-label-secondary); font-size: 12px; flex: 1; }',
