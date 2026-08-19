@@ -40,6 +40,12 @@ export interface ContextBrowserProps {
    */
   previewSeq?: number | null
   /**
+   * Trend-chart pin linkage: the seq of the bar pinned by a click. The
+   * browser's own step picker follows it — a pin selects that step, an
+   * unpin (pinSeq back to null) returns the browser to the live surface.
+   */
+  pinSeq?: number | null
+  /**
    * Current-composition hover link, shared with the Current Composition card
    * (its bar + legend): the active category key, reported via onHoverKey.
    * The browser joins the link ONLY while it shows the LIVE step — a pinned
@@ -209,6 +215,16 @@ export function makeContextBrowser(
       // History ran out with the seq still missing: stop showing "loading".
       if (!hasMore && missingSeq !== null && !exhausted) setExhausted(true)
     }, [hasMore, missingSeq, exhausted])
+    // History-chart pin linkage: a pinned bar selects its step in the picker,
+    // an unpin returns to live — the same accordion reset a manual pick
+    // performs. (Live is also the right target while unpinned: a manual pick
+    // made here is overridden only when a NEW pin lands.)
+    const pinSeq = props.pinSeq
+    React.useEffect(() => {
+      setSel(pinSeq === null || pinSeq === undefined ? 'live' : pinSeq)
+      setOpenCat(null)
+      setOpenElem(null)
+    }, [pinSeq])
     const awaiting = missingSeq !== null && !exhausted && loadOlderHistory !== undefined && hasMore
 
     const requests = data.requests || []

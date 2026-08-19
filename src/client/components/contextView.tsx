@@ -296,6 +296,9 @@ export function makeContextView(ctx: ClientCtx, kit: ViewKit): (props: ContextVi
               useSession={props.useSession}
               loadOlderHistory={props.loadOlderHistory}
               previewSeq={hoveredSeq}
+              // History-chart pin linkage: a clicked (locked) bar pins the
+              // browser on that step; unpinning returns it to live.
+              pinSeq={pinnedReq !== null ? pinnedReq.seq : null}
               // Shared current-composition hover link (bar + legend + browser
               // category rows); the browser joins only while it shows the
               // live step, gated inside the browser itself.
