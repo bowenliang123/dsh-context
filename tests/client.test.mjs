@@ -229,7 +229,8 @@ const requireStateful = (spec) => {
 const m2 = { exports: {} }
 const pluginExports2 = factory(requireStateful, m2, globalThis.window, fakeDoc)
 
-const DICT_FOR_TEST = { 'tab': 'Context', 'loading': '…', 'error': 'x', 'detail.step': 'Turn {t} · Step {s}', 'gran.step': 'Step', 'gran.turn': 'Turn', 'detail.turn': 'Turn {t} · {n} steps', 'detail.lastStep': 'last step', 'overview.used': 'of context used', 'overview.free': 'Free window', 'events.at': 'Turn {t} · Step {s}', 'events.range': 'Turn {t} · Step {a}→{b}', 'events.rangeTo': 'Turn {a} · Step {as} → Turn {b} · Step {bs}', 'stats.recycleSub': '{c} compactions · {p} prunes', 'tip.step': 'Turn {t} · Step {s}', 'tip.turn': 'Turn {t} · {n} steps', 'tip.total': 'total ≈ {n}', 'tip.actual': ' (actual {n})', 'trend.title': 'History', 'trend.empty': 'empty trend', 'cmd.close': 'Close', 'cat.user': 'User', 'browser.live': 'Live (next request)', 'browser.liveNow': 'Live · next request', 'browser.items': '{n} items', 'browser.noContent': 'outside the loaded window', 'browser.loading': 'loading older history', 'browser.preview': 'preview', 'browser.noHeader': 'older plugin build', 'tool.desc': 'Description', 'tool.params': 'Parameters', 'tool.paramsEmpty': '(no parameters)', 'tool.jsonToggle': 'View Raw JSON', 'tool.jsonHide': 'Collapse' }
+const DICT_FOR_TEST = { 'tab': 'Context', 'loading': '…', 'error': 'x', 'detail.step': 'Turn {t} · Step {s}', 'gran.step': 'Step', 'gran.turn': 'Turn', 'detail.turn': 'Turn {t} · {n} steps', 'detail.lastStep': 'last step', 'overview.used': 'of context used', 'overview.free': 'Free window', 'events.at': 'Turn {t} · Step {s}', 'events.range': 'Turn {t} · Step {a}→{b}', 'events.rangeTo': 'Turn {a} · Step {as} → Turn {b} · Step {bs}', 'stats.recycleSub': '{c} compactions · {p} prunes', 'tip.step': 'Turn {t} · Step {s}', 'tip.turn': 'Turn {t} · {n} steps', 'tip.total': 'total ≈ {n}', 'tip.actual': ' (actual {n})', 'trend.title': 'History', 'trend.empty': 'empty trend', 'cmd.close': 'Close', 'cat.user': 'User', 'browser.live': 'Live (next request)', 'browser.liveNow': 'Live · next request', 'browser.items': '{n} items', 'browser.noContent': 'outside the loaded window', 'browser.loading': 'loading older history', 'browser.preview': 'preview', 'browser.noHeader': 'older plugin build',
+'browser.deltaHint': 'vs previous turn', 'tool.desc': 'Description', 'tool.params': 'Parameters', 'tool.paramsEmpty': '(no parameters)', 'tool.jsonToggle': 'View Raw JSON', 'tool.jsonHide': 'Collapse' }
 let viewComponent = null
 let modalComponent = null
 let modalSource = null
@@ -977,6 +978,89 @@ tr = renderView()
 assert.match(textOf(byClass(tr, 'lc-br-body')[0]), /older plugin build/, 'absent headers projection degrades gracefully')
 brSlots[1][1](null)
 dataValue = snapshot
+tr = renderView()
+
+// ---- Δ pills: count + token swings vs the PREVIOUS TURN's last request
+// (one baseline whatever step/turn granularity; live = last request).
+// The header caption states the baseline; each category row carries a count
+// pill after "n items" and a token pill hugging the left of "≈X", each
+// hidden while its figure held.
+const deltaHint = byClass(tr, 'lc-br-hint')[0]
+assert.ok(deltaHint, 'browser header carries the δ baseline caption')
+assert.match(textOf(deltaHint), /previous turn/, 'caption names the previous-turn baseline')
+headersValue = {
+  headers: [{
+    seq: 1, time: 900, system: 'SYSTEM-PROMPT-TEXT',
+    tools: [
+      { name: 'tiny', tokens: 2, description: 'a tiny helper', schema: { name: 'tiny', parameters: { type: 'object' } } },
+      { name: 'bash', tokens: 5, description: 'run a command', schema: { name: 'bash', parameters: { type: 'object', properties: { command: { type: 'string' } }, required: ['command'] } } },
+    ],
+  }],
+}
+dataValue = { ...snapshot, archive: [{ seq: 0, cat: 'user', tokens: 5, text: 'archived message', gone: 3, time: 500 }] }
+tr = renderView()
+// Pick step seq 3 (turn 2): baseline = turn 1's last request, seq 2. That
+// step's assemble (seq 1 user + seq 2 assistant) vs seq 2's (archived seq 0
+// + seq 1 user) reads user 1→2 (-1) and assistant 1→0 (+1); tokens ride the
+// request records (user 40 vs 25, assistant 12 vs 10).
+byClass(tr, 'lc-br-pick')[0].args[1].onChange({ target: { value: '3' } })
+tr = renderView()
+const countPills = byClass(tr, 'lc-br-delta')
+assert.equal(countPills.length, 2, 'count pills: user -1, assistant +1')
+assert.equal(textOf(countPills[0]), '-1', 'user lost one element vs the previous turn')
+assert.equal(textOf(countPills[1]), '+1', 'assistant gained one element vs the previous turn')
+assert.match(countPills[0].args[1].className, /down/, 'a shrunken category is red-tinted')
+const tokenPills = byClass(tr, 'lc-br-tdelta')
+assert.equal(tokenPills.length, 2, 'token pills: user +15, assistant +2')
+assert.equal(textOf(tokenPills[0]), '+15', 'user tokens grew by 15 (40 vs 25)')
+assert.equal(textOf(tokenPills[1]), '+2', 'assistant tokens grew by 2 (12 vs 10)')
+// every category row still carries its count/tokens
+assert.equal(byClass(tr, 'lc-br-tokens-grp').length, 6, 'token figure never leaves a row')
+
+// ---- the baseline is the previous turn's last step in EITHER dimension:
+// custom fixture, turn 2 has two steps and one user node joins per step, so
+// viewing turn 2's last step (seq 4) reads +2 vs turn 1's last (seq 2, 1
+// node) — stay identical after flipping the trend granularity to turn.
+dataValue = {
+  ok: true, model: 'm', provider: 'p', contextWindow: 1000,
+  current: { system: 1, tools: 2, user: 99, inject: 0, assistant: 0, tool: 0, total: 102 },
+  toolList: [],
+  requests: [
+    { seq: 1, turn: 1, step: 0, time: 1, system: 1, tools: 2, user: 10, inject: 0, assistant: 0, tool: 0, total: 13 },
+    { seq: 2, turn: 1, step: 1, time: 2, system: 1, tools: 2, user: 20, inject: 0, assistant: 0, tool: 0, total: 23 },
+    { seq: 3, turn: 2, step: 0, time: 3, system: 1, tools: 2, user: 30, inject: 0, assistant: 0, tool: 0, total: 33 },
+    { seq: 4, turn: 2, step: 1, time: 4, system: 1, tools: 2, user: 40, inject: 0, assistant: 0, tool: 0, total: 43 },
+    { seq: 5, turn: 3, step: 0, time: 5, system: 1, tools: 2, user: 50, inject: 0, assistant: 0, tool: 0, total: 53 },
+  ],
+  events: [],
+  nodes: [
+    { seq: 1, cat: 'user', tokens: 1, time: 1 },
+    { seq: 2, cat: 'user', tokens: 2, time: 2 },
+    { seq: 3, cat: 'user', tokens: 3, time: 3 },
+    { seq: 4, cat: 'user', tokens: 4, time: 4 },
+    { seq: 5, cat: 'user', tokens: 5, time: 5 },
+  ],
+  droppedNodes: 0,
+  archive: [],
+}
+tr = renderView()
+byClass(tr, 'lc-br-pick')[0].args[1].onChange({ target: { value: '4' } })
+tr = renderView()
+const readDeltas = () => ({ count: textOf(byClass(tr, 'lc-br-delta')[0]), token: textOf(byClass(tr, 'lc-br-tdelta')[0]) })
+assert.deepEqual(readDeltas(), { count: '+2', token: '+20' }, 'step granularity: seq 4 vs turn 1 last (seq 2)')
+ctxSlots[4][1]('turn') // context view -> turn granularity
+tr = renderView()
+assert.deepEqual(readDeltas(), { count: '+2', token: '+20' }, 'turn granularity keeps the SAME previous-turn baseline, not seq 3')
+// Live view: baseline = last request (seq 5, turn 3) — user 5 vs 4 (+1).
+byClass(tr, 'lc-br-pick')[0].args[1].onChange({ target: { value: 'live' } })
+tr = renderView()
+assert.deepEqual(readDeltas(), { count: '+1', token: '+49' }, 'live compares against the most recent request')
+
+// restore state for the following tests
+ctxSlots[4][1]('step')
+dataValue = snapshot
+headersValue = undefined
+byClass(tr, 'lc-br-pick')[0].args[1].onChange({ target: { value: 'live' } })
 tr = renderView()
 
 console.log('✔ context browser test passed (picker, category accordion, per-step reconstruction, archived nodes, header content, graceful degradation)')

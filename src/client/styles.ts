@@ -199,7 +199,10 @@ export const STYLES = [
   '.lc-modal-trend { margin-top: 14px; }',
   // ---- Context browser card (progressive disclosure: category accordion ->
   // element rows -> per-kind content) ----
-  '.lc-br-pick { margin-left: auto; font: inherit; font-size: 12px; color: var(--dsw-alias-label-primary); background: var(--dsw-alias-bg-layer-2); border: 1px solid var(--dsw-alias-border-l1); border-radius: 6px; padding: 3px 6px; max-width: 240px; }',
+  // The δ-baseline caption sits at the card title's right edge, just left of
+  // the step picker (it takes the row's auto margin the picker used to own).
+  '.lc-br-hint { margin-left: auto; color: var(--dsw-alias-label-secondary); font-size: 11px; font-weight: 400; white-space: nowrap; }',
+  '.lc-br-pick { font: inherit; font-size: 12px; color: var(--dsw-alias-label-primary); background: var(--dsw-alias-bg-layer-2); border: 1px solid var(--dsw-alias-border-l1); border-radius: 6px; padding: 3px 6px; max-width: 240px; }',
   '.lc-br-meta { display: flex; flex-wrap: wrap; gap: 6px 16px; margin-bottom: 8px; color: var(--dsw-alias-label-secondary); }',
   '.lc-br-meta b { color: var(--dsw-alias-label-primary); }',
   '.lc-br-meta .lc-actual { color: var(--dsw-alias-state-success-primary); }',
@@ -216,10 +219,23 @@ export const STYLES = [
   '.lc-br-cat-on i { box-shadow: 0 0 0 1px var(--dsw-alias-brand-primary); }',
   '.lc-br-cat-row i { display: inline-block; width: 8px; height: 8px; border-radius: 2px; flex: none; transition: box-shadow 120ms ease; }',
   '.lc-br-cat-label { font-weight: 600; }',
-  '.lc-br-cat-count { color: var(--dsw-alias-label-secondary); font-size: 12px; flex: 1; }',
+  '.lc-br-cat-count { color: var(--dsw-alias-label-secondary); font-size: 12px; white-space: nowrap; }',
+  // Count + Δ pill form one attached group: the group absorbs the row's free
+  // space (tokens/percent stay right-aligned) with a tight 4px inner gap so
+  // the pill hugs the item count instead of standing at the row's 8px rhythm.
+  '.lc-br-count-grp { flex: 1; min-width: 0; display: inline-flex; align-items: center; gap: 4px; }',
   '.lc-br-chev { flex: none; width: 12px; color: var(--dsw-alias-label-secondary); transition: transform 120ms ease; }',
   '.lc-br-chev-on { transform: rotate(90deg); }',
   '.lc-br-tokens { flex: none; color: var(--dsw-alias-label-secondary); font-size: 12px; }',
+  // Δ pills on a category row: count and token swings vs the previous turn's
+  // last step, tinted by direction (added = success, freed = error — the same
+  // language as the events card's kind chips).
+  '.lc-br-delta, .lc-br-tdelta { flex: none; font-size: 11px; font-weight: 600; padding: 0 5px; border-radius: 4px; white-space: nowrap; }',
+  '.lc-br-delta-up, .lc-br-tdelta-up { color: var(--dsw-alias-state-success-primary); background: color-mix(in srgb, var(--dsw-alias-state-success-primary) 15%, transparent); }',
+  '.lc-br-delta-down, .lc-br-tdelta-down { color: var(--dsw-alias-state-error-primary); background: color-mix(in srgb, var(--dsw-alias-state-error-primary) 15%, transparent); }',
+  // The token Δ pill hugs the LEFT of the token figure (tight 4px gap, like
+  // the count group) while the figure itself keeps its right-aligned slot.
+  '.lc-br-tokens-grp { flex: none; min-width: 0; display: inline-flex; align-items: center; gap: 4px; }',
   '.lc-br-pct { flex: none; width: 36px; text-align: right; color: var(--dsw-alias-label-secondary); font-size: 12px; }',
   '.lc-br-body { border-top: 1px solid var(--dsw-alias-border-l1); padding: 4px 6px; display: flex; flex-direction: column; gap: 2px; }',
   '.lc-br-elem { border-radius: 6px; }',

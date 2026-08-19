@@ -18,8 +18,9 @@
  */
 
 import type * as ReactNS from 'react'
-import type { Category, ContextHeaders, ContextTimeline, HeaderTool, SurfaceNode } from '../../shared/types'
+import type { Category, ContextHeaders, ContextTimeline, HeaderTool, RequestRecord, SurfaceNode } from '../../shared/types'
 import { assemble } from '../assemble'
+import type { Assembled } from '../assemble'
 import { CATS, partsOf } from '../categories'
 import { React } from '../react'
 import type { ConversationNodeLike, UseSessionLike } from '../services'
@@ -339,6 +340,26 @@ function NodeContent(props: { node: SurfaceNode; conv: ConversationNodeLike | un
   return <div className="lc-br-content"><div className="lc-br-note">{props.hint}</div></div>
 }
 
+/** Group an assembled surface's nodes by category (for per-category counts). */
+function byCatOf(asm: Assembled): Partial<Record<Category, SurfaceNode[]>> {
+  const m: Partial<Record<Category, SurfaceNode[]>> = {}
+  for (const n of asm.nodes) (m[n.cat] ??= []).push(n)
+  return m
+}
+
+/** Count one category's elements in an assembled surface (header cats included). */
+function countOf(asm: Assembled, c: string): number {
+  if (c === 'system') return asm.header !== null && asm.header.system !== undefined ? 1 : 0
+  if (c === 'tools') return asm.header !== null ? asm.header.tools.length : 0
+  return byCatOf(asm)[c as Category]?.length ?? 0
+}
+
+/** The last request of `turn` in a seq-ordered timeline, or null. */
+function lastOfTurn(requests: RequestRecord[], turn: number): RequestRecord | null {
+  for (let i = requests.length - 1; i >= 0; i--) if ((requests[i].turn ?? 0) === turn) return requests[i]
+  return null
+}
+
 export function makeContextBrowser(
   kit: ViewKit,
   StackedBar: (props: StackedBarProps) => ReactNS.ReactElement,
@@ -466,14 +487,19 @@ export function makeContextBrowser(
       setOpenElem(null)
     }
 
-    const byCat: Partial<Record<Category, SurfaceNode[]>> = {}
-    for (const n of view.nodes) (byCat[n.cat] ??= []).push(n)
+    // δ baselines against the PREVIOUS TURN's last request — one stable unit
+    // whatever step (or live surface) is shown: a step of turn T reads
+    // against turn T−1's final step, avoiding the misleading "change" a
+    // same-turn neighbour would imply. Live refers to the most recent
+    // request, itself a turn's last step.
+    const refReq = req === null
+      ? requests.length > 0 ? requests[requests.length - 1] : null
+      : lastOfTurn(requests, (req.turn ?? 0) - 1)
+    const prevView = refReq !== null ? assemble(data, headers, refReq.seq) : null
 
-    const toolCount = (c: string): number => {
-      if (c === 'system') return view.header !== null && view.header.system !== undefined ? 1 : 0
-      if (c === 'tools') return view.header !== null ? view.header.tools.length : 0
-      return byCat[c as Category]?.length ?? 0
-    }
+    const byCat = byCatOf(view)
+
+    const toolCount = (c: string): number => countOf(view, c)
 
     const toggleCat = (c: string) => {
       // Empty categories stay shut — EXCEPT system/tools with a missing
@@ -568,6 +594,7 @@ export function makeContextBrowser(
       <div className="lc-card">
         <div className="lc-card-title">
           <span className="lc-card-title-text">{t('browser.title')}</span>
+          <span className="lc-br-hint">{t('browser.deltaHint')}</span>
           <select
             className="lc-br-pick"
             value={seq === null ? 'live' : String(seq)}
@@ -620,6 +647,13 @@ export function makeContextBrowser(
           {CATS.map(c => {
             const count = toolCount(c.key)
             const v = breakdown[c.key] || 0
+            // Δ vs the reference step: element-count badge (hidden when the
+            // count held), token swing in the badge's tooltip — the same two
+            // figures the row already shows, over the deepest step in scope.
+            const prevCount = prevView !== null ? countOf(prevView, c.key) : null
+            const countDelta = prevCount !== null ? count - prevCount : null
+            const prevTokens = refReq !== null ? (refReq[c.key] || 0) : null
+            const tokenDelta = prevTokens !== null ? v - prevTokens : null
             const openable = count > 0
               || ((c.key === 'system' || c.key === 'tools') && view.header === null)
             const open = openCat === c.key && openable
@@ -635,8 +669,27 @@ export function makeContextBrowser(
                   <span className={'lc-br-chev' + (open ? ' lc-br-chev-on' : '')}>{'▸'}</span>
                   <i style={{ background: c.color }} />
                   <span className="lc-br-cat-label">{catLabel(c.key)}</span>
-                  <span className="lc-br-cat-count">{t('browser.items', { n: count })}</span>
-                  <span className="lc-br-tokens">{'≈' + fmt(v)}</span>
+                  {/* Count + Δ pill sit as one attached group (tight inner gap),
+                      the group absorbs the row's free space so tokens/percent
+                      stay right-aligned. */}
+                  <span className="lc-br-count-grp">
+                    <span className="lc-br-cat-count">{t('browser.items', { n: count })}</span>
+                    {countDelta !== null && countDelta !== 0 ? (
+                      <span className={'lc-br-delta lc-br-delta-' + (countDelta > 0 ? 'up' : 'down')}>
+                        {(countDelta > 0 ? '+' : '') + countDelta}
+                      </span>
+                    ) : null}
+                  </span>
+                  {/* Token Δ pill hugs the left of the token figure — its own
+                      direction-colored pill, hidden while the count held. */}
+                  <span className="lc-br-tokens-grp">
+                    {tokenDelta !== null && tokenDelta !== 0 ? (
+                      <span className={'lc-br-tdelta lc-br-tdelta-' + (tokenDelta > 0 ? 'up' : 'down')}>
+                        {(tokenDelta > 0 ? '+' : '') + fmt(tokenDelta)}
+                      </span>
+                    ) : null}
+                    <span className="lc-br-tokens">{'≈' + fmt(v)}</span>
+                  </span>
                   <span className="lc-br-pct">{total > 0 ? Math.round(v / total * 100) + '%' : ''}</span>
                 </button>
                 {open ? <div className="lc-br-body">{catBody(c.key)}</div> : null}
