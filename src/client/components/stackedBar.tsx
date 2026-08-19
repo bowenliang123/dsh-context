@@ -109,12 +109,25 @@ export function makeStackedBar(kit: ViewKit): (props: StackedBarProps) => ReactN
           ) : null}
           {/* Hover reference frame: the occupied region (outside the free
               track) — the region the legend/tooltip percentages refer to.
-              Painted last so its border stays above the segments. */}
-          {showBox ? (
-            <div className="lc-occupied-box" style={{ width: usedPct + '%' }} />
-          ) : null}
+              Painted last so its border stays above the segments. Always
+              mounted (`.lc-occupied-box-on` toggles opacity) so the frame
+              fades out on leave instead of unmounting instantly. */}
+          <div
+            className={'lc-occupied-box' + (showBox ? ' lc-occupied-box-on' : '')}
+            style={{ width: usedPct + '%' }}
+          />
         </div>
-        {tip && props.tip !== false ? <div className="lc-bar-tip" style={{ left: tip.leftPct + '%' }}>{tip.text}</div> : null}
+        {/* The hover tooltip is always mounted too (opacity toggles via
+            `.lc-bar-tip-on`) so it fades in AND out; hidden it holds no
+            pointer events and no width of its own. */}
+        {props.tip !== false
+          ? (
+            <div
+              className={'lc-bar-tip' + (tip ? ' lc-bar-tip-on' : '')}
+              style={{ left: tip ? tip.leftPct + '%' : '50%' }}
+            >{tip ? tip.text : ''}</div>
+          )
+          : null}
       </div>
     )
   }

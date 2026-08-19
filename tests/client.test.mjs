@@ -104,6 +104,10 @@ assert.ok(localeRegistrations[0][1].zh && localeRegistrations[0][1].en, 'bilingu
 const styleTag = registered.get('dsh-context')
 assert.ok(styleTag, 'plugin-owned <style data-plugin="dsh-context"> injected')
 assert.ok(styleTag.textContent.includes('.lc-root'), 'styles content present')
+assert.ok(styleTag.textContent.includes('transition: background-color 120ms ease'), 'row hovers ease in/out')
+assert.ok(styleTag.textContent.includes('transition: filter 120ms ease, opacity 120ms ease'), 'composition bar hover eases in/out')
+assert.ok(styleTag.textContent.includes('lc-bar-tip-on'), 'composition tooltip fades in and out')
+assert.ok(styleTag.textContent.includes('lc-occupied-box-on'), 'occupied frame fades in and out')
 assert.equal(slotInjections.length, 2, 'view tab + input overlay injections')
 assert.equal(slotInjections[0][0], 'conversation.view')
 const registeredOpts = slotInjections[0][1]() // slots.inject callback returns the register result
@@ -468,13 +472,13 @@ assert.equal(segment.args[1].title, undefined, 'native title replaced by the cus
 assert.equal(typeof segment.args[1].onMouseEnter, 'function', 'segments carry onMouseEnter')
 segment.args[1].onMouseEnter({ clientX: 120 }) // fake pointer; ref is null in tests -> centered fallback
 tr = renderView()
-const tip = byClass(tr, 'lc-bar-tip')
+const tip = byClass(tr, 'lc-bar-tip-on')
 assert.equal(tip.length, 1, 'hovering a segment shows the tooltip')
 assert.match(textOf(tip[0]), /\(10%\)/, 'tooltip shows the segment share of the total')
 // The occupied-region reference frame appears on hover (there is a free
 // track here, so the legend % refers to the boxed part, not the bar width).
-assert.equal(byClass(tr, 'lc-occupied-box').length, 1, 'hovered segment frames the occupied region')
-const occBox = byClass(tr, 'lc-occupied-box')[0]
+assert.equal(byClass(tr, 'lc-occupied-box-on').length, 1, 'hovered segment frames the occupied region')
+const occBox = byClass(tr, 'lc-occupied-box-on')[0]
 assert.equal(typeof occBox.args[1].style.width, 'string', 'frame width follows the used share')
 assert.equal(typeof tip[0].args[1].style.left, 'string', 'tooltip is positioned along the pointer')
 
@@ -487,13 +491,13 @@ assert.equal(typeof chip0.args[1].onMouseEnter, 'function', 'legend chips carry 
 chip0.args[1].onMouseEnter()
 tr = renderView()
 assert.equal(byClass(tr, 'lc-stacked-seg-on').length, 2, 'hovering a chip highlights its segment (overview + mirrored browser bar)')
-assert.equal(byClass(tr, 'lc-bar-tip').length, 1, 'hovering a chip also shows the tooltip above its segment')
-assert.match(textOf(byClass(tr, 'lc-bar-tip')[0]), /\(10%\)/, 'chip-driven tooltip carries the share')
+assert.equal(byClass(tr, 'lc-bar-tip-on').length, 1, 'hovering a chip also shows the tooltip above its segment')
+assert.match(textOf(byClass(tr, 'lc-bar-tip-on')[0]), /\(10%\)/, 'chip-driven tooltip carries the share')
 chip0.args[1].onMouseLeave()
 tr = renderView()
 assert.equal(byClass(tr, 'lc-stacked-seg-on').length, 0, 'leaving the chip clears the segment highlight')
 assert.equal(byClass(tr, 'lc-chip-on').length, 0, 'leaving the chip clears the chip highlight')
-assert.equal(byClass(tr, 'lc-bar-tip').length, 0, 'leaving the chip clears the tooltip')
+assert.equal(byClass(tr, 'lc-bar-tip-on').length, 0, 'leaving the chip fades the tooltip out')
 // segment -> chip, on a different category
 const seg1 = byClass(tr, 'lc-stacked').find(s => s.args[1].style.height === '16px')
   .args.slice(2).flat().filter(s => s !== null)[1]
@@ -511,17 +515,17 @@ assert.ok(freeSeg, 'free window segment present when contextWindow > usage')
 assert.equal(typeof freeSeg.args[1].onMouseEnter, 'function', 'free segment carries onMouseEnter')
 freeSeg.args[1].onMouseEnter()
 tr = renderView()
-const freeTip = byClass(tr, 'lc-bar-tip')
+const freeTip = byClass(tr, 'lc-bar-tip-on')
 assert.equal(freeTip.length, 1, 'hovering the blank space shows the tooltip')
-assert.equal(byClass(tr, 'lc-occupied-box').length, 1, 'hovering the free track still frames the occupied region')
+assert.equal(byClass(tr, 'lc-occupied-box-on').length, 1, 'hovering the free track still frames the occupied region')
 assert.match(textOf(freeTip[0]), /Free window 45\.0k \(35%\)/, 'tooltip names the free window and its share')
 assert.equal(byClass(tr, 'lc-stacked-free-on').length, 1, 'free segment highlights on hover')
 assert.equal(byClass(tr, 'lc-chip-on').length, 0, 'no legend chip matches the free space')
 const stackEl = byClass(tr, 'lc-stacked').find(s => s.args[1].style.height === '16px')
 stackEl.args[1].onMouseLeave()
 tr = renderView()
-assert.equal(byClass(tr, 'lc-bar-tip').length, 0, 'leaving the stack clears the free tooltip')
-assert.equal(byClass(tr, 'lc-occupied-box').length, 0, 'leaving the stack clears the occupied frame')
+assert.equal(byClass(tr, 'lc-bar-tip-on').length, 0, 'leaving the stack fades the free tooltip out')
+assert.equal(byClass(tr, 'lc-occupied-box-on').length, 0, 'leaving the stack fades the occupied frame out')
 
 // ---- turn strip: one color block per turn, aligned with the bars above ----
 let turnBlocks = byClass(tr, 'lc-turn')
@@ -954,7 +958,7 @@ assert.equal(byClass(tr, 'lc-br-cat-on').length, 1, 'overview hover lights the b
 assert.match(textOf(byClass(tr, 'lc-br-cat-on')[0]), /assistant/, 'the echoed row is the assistant category')
 assert.equal(barSegsOn(brStack()).length, 1, 'the browser bar mirrors the overview hover')
 assert.equal(barSegsOn(brStack())[0].args[1].key, 'assistant', 'the mirrored segment is the assistant')
-assert.equal(byClass(tr, 'lc-bar-tip').length, 1, 'exactly one tooltip floats (only over the overview bar)')
+assert.equal(byClass(tr, 'lc-bar-tip-on').length, 1, 'exactly one tooltip floats (only over the overview bar)')
 ovrStack().args[1].onMouseLeave()
 tr = renderView()
 assert.equal(byClass(tr, 'lc-br-cat-on').length, 0, 'overview leave clears the browser row echo')

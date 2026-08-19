@@ -28,9 +28,16 @@ export const STYLES = [
   // sits outside it). pointer-events: none keeps hover on the segments/free.
   // Deliberately high-contrast (label-primary) and thick so the frame reads at
   // a glance, and the other parts dim underneath it (`.lc-stacked-dim`).
-  '.lc-occupied-box { position: absolute; top: 0; bottom: 0; left: 0; border: 2px dashed var(--dsw-alias-label-primary); border-radius: 5px; box-sizing: border-box; pointer-events: none; opacity: 1; box-shadow: 0 0 0 1px var(--dsw-alias-bg-layer-2); }',
-  '.lc-bar-tip { position: absolute; bottom: calc(100% + 6px); transform: translateX(-50%); z-index: 5; white-space: nowrap; background: var(--dsw-alias-bg-layer-2); border: 1px solid var(--dsw-alias-border-l1); border-radius: 6px; padding: 3px 8px; font-size: 12px; color: var(--dsw-alias-label-primary); box-shadow: 0 2px 8px rgba(0,0,0,0.18); pointer-events: none; }',
+  '.lc-occupied-box { position: absolute; top: 0; bottom: 0; left: 0; border: 2px dashed var(--dsw-alias-label-primary); border-radius: 5px; box-sizing: border-box; pointer-events: none; opacity: 0; box-shadow: 0 0 0 1px var(--dsw-alias-bg-layer-2); transition: opacity 120ms ease; }',
+  '.lc-occupied-box-on { opacity: 1; }',
+  '.lc-bar-tip { position: absolute; bottom: calc(100% + 6px); transform: translateX(-50%); z-index: 5; white-space: nowrap; background: var(--dsw-alias-bg-layer-2); border: 1px solid var(--dsw-alias-border-l1); border-radius: 6px; padding: 3px 8px; font-size: 12px; color: var(--dsw-alias-label-primary); box-shadow: 0 2px 8px rgba(0,0,0,0.18); pointer-events: none; opacity: 0; transition: opacity 120ms ease; }',
+  '.lc-bar-tip-on { opacity: 1; }',
   '.lc-stacked > div { height: 100%; }',
+  // Hover eases: the shared composition hover (dim + segment brighten, on the
+  // overview or the mirrored browser bar) glides in and out — same 120ms
+  // rhythm as the rest of the view.
+  '.lc-stacked-seg { transition: filter 120ms ease, opacity 120ms ease; }',
+  '.lc-stacked-free { transition: box-shadow 120ms ease, opacity 120ms ease; }',
   '.lc-stacked-seg-on { filter: brightness(1.18); }',
   '.lc-stacked-free-on { box-shadow: inset 0 0 0 1px var(--dsw-alias-label-secondary); border-radius: 3px; }',
   // Hover focus: everything except the hovered part (segment, legend chip, or
@@ -41,10 +48,14 @@ export const STYLES = [
   '.lc-stacked-dim .lc-stacked-free { opacity: 0.35; }',
   '.lc-stacked-dim .lc-stacked-free-on { opacity: 1; }',
   '.lc-legend { display: flex; flex-wrap: wrap; gap: 6px 14px; margin-top: 10px; }',
-  '.lc-chip { display: inline-flex; align-items: center; gap: 5px; color: var(--dsw-alias-label-primary); }',
+  '.lc-chip { display: inline-flex; align-items: center; gap: 5px; color: var(--dsw-alias-label-primary); padding: 1px 6px; border-radius: 6px; transition: background-color 120ms ease; }',
   '.lc-chip i, .lc-detail-row i, .lc-node i { display: inline-block; width: 8px; height: 8px; border-radius: 2px; }',
+  '.lc-chip i { transition: box-shadow 120ms ease; }',
   '.lc-chip em { font-style: normal; color: var(--dsw-alias-label-secondary); }',
-  '.lc-chip-on { font-weight: 600; }',
+  // The selected chip glows with the shared hover tint (smoothly, like the
+  // browser rows) instead of snapping its weight; the dot ring on top marks
+  // the exact segment.
+  '.lc-chip-on { font-weight: 600; background: var(--dsw-alias-interactive-bg-hover); }',
   '.lc-chip-on i { box-shadow: 0 0 0 1px var(--dsw-alias-brand-primary); }',
   '.lc-tools { margin-top: 10px; color: var(--dsw-alias-label-secondary); display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }',
   '.lc-tool-chip { background: var(--dsw-alias-bg-layer-2); border-radius: 4px; padding: 1px 7px; font-size: 12px; color: var(--dsw-alias-label-primary); }',
@@ -62,7 +73,7 @@ export const STYLES = [
   '.lc-grid { position: absolute; left: 0; right: 0; border-top: 1px dashed var(--dsw-alias-border-l1); pointer-events: none; }',
   '.lc-grid-top { top: 18px; }',
   '.lc-grid-mid { top: 74px; }',
-  '.lc-bar { position: relative; width: 14px; flex: none; height: 100%; display: flex; align-items: flex-end; cursor: pointer; border-radius: 2px; transition: opacity 120ms ease; }',
+  '.lc-bar { position: relative; width: 14px; flex: none; height: 100%; display: flex; align-items: flex-end; cursor: pointer; border-radius: 2px; transition: opacity 120ms ease, background-color 120ms ease; }',
   // Turn-aware dimming: while a turn is focused, bars OUTSIDE the active
   // turn fade to 35% and the whole current turn stays fully opaque.
   '.lc-chart-dim .lc-bar { opacity: 0.35; }',
@@ -173,14 +184,14 @@ export const STYLES = [
   '.lc-br-cats { margin-top: 10px; display: flex; flex-direction: column; gap: 4px; }',
   '.lc-br-cat { border: 1px solid var(--dsw-alias-border-l1); border-radius: 8px; background: var(--dsw-alias-bg-layer-2); overflow: hidden; }',
   '.lc-br-cat-empty { opacity: 0.55; }',
-  '.lc-br-cat-row { display: flex; align-items: center; gap: 8px; width: 100%; border: 0; background: transparent; color: var(--dsw-alias-label-primary); font: inherit; padding: 7px 10px; cursor: pointer; text-align: left; }',
+  '.lc-br-cat-row { display: flex; align-items: center; gap: 8px; width: 100%; border: 0; background: transparent; color: var(--dsw-alias-label-primary); font: inherit; padding: 7px 10px; cursor: pointer; text-align: left; transition: background-color 120ms ease; }',
   '.lc-br-cat-row:hover { background: var(--dsw-alias-interactive-bg-hover); }',
   // Current-composition hover echo: the category row lit by the shared hover
   // link (hovering the Current Composition card's bar/legend) looks hovered
   // too — same tint as the physical hover, plus a ring on its color dot.
   '.lc-br-cat-on { background: var(--dsw-alias-interactive-bg-hover); }',
   '.lc-br-cat-on i { box-shadow: 0 0 0 1px var(--dsw-alias-brand-primary); }',
-  '.lc-br-cat-row i { display: inline-block; width: 8px; height: 8px; border-radius: 2px; flex: none; }',
+  '.lc-br-cat-row i { display: inline-block; width: 8px; height: 8px; border-radius: 2px; flex: none; transition: box-shadow 120ms ease; }',
   '.lc-br-cat-label { font-weight: 600; }',
   '.lc-br-cat-count { color: var(--dsw-alias-label-secondary); font-size: 12px; flex: 1; }',
   '.lc-br-chev { flex: none; width: 12px; color: var(--dsw-alias-label-secondary); transition: transform 120ms ease; }',
@@ -190,7 +201,7 @@ export const STYLES = [
   '.lc-br-body { border-top: 1px solid var(--dsw-alias-border-l1); padding: 4px 6px; display: flex; flex-direction: column; gap: 2px; }',
   '.lc-br-elem { border-radius: 6px; }',
   '.lc-br-elem-on { background: var(--dsw-alias-interactive-bg-active); }',
-  '.lc-br-elem-row { display: flex; align-items: center; gap: 8px; width: 100%; border: 0; background: transparent; color: var(--dsw-alias-label-primary); font: inherit; font-size: 12px; padding: 5px 6px; cursor: pointer; text-align: left; border-radius: 6px; }',
+  '.lc-br-elem-row { display: flex; align-items: center; gap: 8px; width: 100%; border: 0; background: transparent; color: var(--dsw-alias-label-primary); font: inherit; font-size: 12px; padding: 5px 6px; cursor: pointer; text-align: left; border-radius: 6px; transition: background-color 120ms ease; }',
   '.lc-br-elem-row:hover { background: var(--dsw-alias-interactive-bg-hover); }',
   '.lc-br-tag { flex: none; font-size: 11px; color: var(--dsw-alias-label-secondary); background: var(--dsw-alias-bg-layer-1); border: 1px solid var(--dsw-alias-border-l1); border-radius: 4px; padding: 0 6px; max-width: 220px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }',
   '.lc-br-preview { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }',
