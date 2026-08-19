@@ -1,27 +1,23 @@
 /**
  * ContextModal — the /context command's centered dialog: the same data as
  * the Context tab (the pushed `contextTimeline` projection) distilled to
- * the overview (headline + composition bar + legend) and the last-10-turn
- * trend chart. Rendered from the `conversation.input.overlay` slot; opens
- * and closes through the per-session modal store (the trigger source flips
- * it, so no message ever enters the session history).
+ * the current-composition overview (headline + composition bar + legend)
+ * and the shared Context browser (browse any retained step's assembled
+ * surface). Rendered from the `conversation.input.overlay` slot; opens and
+ * closes through the per-session modal store (the trigger source flips it,
+ * so no message ever enters the session history).
  */
 
 import type * as ReactNS from 'react'
-import type { ContextEventRecord, RequestRecord } from '../../shared/types'
 import { headlineOf } from '../headline'
 import { modalStoreOf, takePendingConsume } from '../modalStore'
 import type { ClientCtx, SessionStandardProps, SessionsFace } from '../services'
-import { contextPressureOf, timelineOf } from '../services'
+import { contextPressureOf, headersOf, timelineOf } from '../services'
 import type { ViewKit } from '../viewkit'
-import { makeRequestDetail } from './requestDetail'
+import { makeContextBrowser } from './browser'
 import { makeLegend, makeStackedBar, AUTO_COMPACT_RATIO } from './stackedBar'
-import { aggregateByTurn, attachMarkers, makeTrendChart } from './trendChart'
 
 import { React } from '../react'
-
-/** How many of the most recent turns the modal's trend chart shows. */
-const TREND_TURNS = 10
 
 export interface ContextModalProps extends SessionStandardProps {
   /** Bound selector hook over the per-session open flag (hooks compartment). */
@@ -33,8 +29,11 @@ export function makeContextModal(ctx: ClientCtx, kit: ViewKit): (props: ContextM
   const sessions = ctx.get('sessions') as SessionsFace | undefined
   const StackedBar = makeStackedBar(kit)
   const Legend = makeLegend(kit)
-  const TrendChart = makeTrendChart(kit)
-  const RequestDetail = makeRequestDetail(kit, StackedBar)
+  // The /context popup reuses the SAME Context browser card as the Context
+  // tab — no duplicated browsing logic; picking, accordion, reconstruction
+  // and paging all ride the shared component (joining the modal overview's
+  // hover link while it shows the live step).
+  const ContextBrowser = makeContextBrowser(kit, StackedBar)
 
   return function ContextModal(props: ContextModalProps): ReactNS.ReactElement | null {
     const sessionId = typeof props.sessionId === 'string' ? props.sessionId : ''
@@ -48,8 +47,11 @@ export function makeContextModal(ctx: ClientCtx, kit: ViewKit): (props: ContextM
     const pressure = typeof props.useProjection === 'function'
       ? contextPressureOf(props.useProjection('contextPressure'))
       : null
-    const [selectedSeq, setSelectedSeq] = React.useState<number | null>(null)
-    const [hoveredSeq, setHoveredSeq] = React.useState<number | null>(null)
+    // Header-content epochs for the browser's system/tools sections (absent
+    // on older hosts -> tokens-only degradation, same as the Context tab).
+    const headers = typeof props.useProjection === 'function'
+      ? headersOf(props.useProjection('contextHeaders'))
+      : null
     const [hoverCat, setHoverCat] = React.useState<string | null>(null)
 
     const close = React.useCallback(() => {
@@ -84,25 +86,6 @@ export function makeContextModal(ctx: ClientCtx, kit: ViewKit): (props: ContextM
     }, [open, close])
 
     if (!open) return null
-
-    const requests = data !== null ? data.requests || [] : []
-    const events = data !== null ? data.events || [] : []
-    // One bar per turn (each turn shown by its last step), newest 10 only.
-    const turns = aggregateByTurn(requests).slice(-TREND_TURNS)
-    const markers = attachMarkers(turns, events)
-
-    let pinnedReq: RequestRecord | null = null
-    for (const req of turns) if (req.seq === selectedSeq) pinnedReq = req
-    let activeReq: RequestRecord | null = null
-    if (hoveredSeq !== null) {
-      for (const req of turns) if (req.seq === hoveredSeq) activeReq = req
-    }
-    if (activeReq === null) activeReq = pinnedReq
-    if (activeReq === null && turns.length > 0) activeReq = turns[turns.length - 1]
-    const markerOf = (req: RequestRecord): ContextEventRecord | undefined => {
-      const i = turns.indexOf(req)
-      return i >= 0 ? markers[i] : undefined
-    }
 
     const head = data !== null ? headlineOf(data, pressure) : null
 
@@ -141,26 +124,14 @@ export function makeContextModal(ctx: ClientCtx, kit: ViewKit): (props: ContextM
                 ? { ratio: AUTO_COMPACT_RATIO, label: t('overview.compactReserve', { pct: Math.round(AUTO_COMPACT_RATIO * 100) }) }
                 : undefined} />
               <Legend parts={head.parts} hoverKey={hoverCat} onHoverKey={setHoverCat} />
-
-              <div className="lc-card-title lc-modal-trend"><span className="lc-card-title-text">{t('trend.title')}</span></div>
-              {turns.length === 0 ? (
-                <div className="lc-empty">{t('trend.empty')}</div>
-              ) : (
-                <div>
-                  <TrendChart
-                    requests={turns}
-                    markers={markers}
-                    selectedSeq={pinnedReq !== null ? pinnedReq.seq : null}
-                    hoveredSeq={hoveredSeq}
-                    activeTurn={null}
-                    granularity="turn"
-                    onSelect={setSelectedSeq}
-                    onHover={setHoveredSeq}
-                    onHoverTurn={() => {}}
-                  />
-                  <RequestDetail request={activeReq} marker={activeReq !== null ? markerOf(activeReq) : undefined} />
-                </div>
-              )}
+              <ContextBrowser
+                data={data}
+                headers={headers}
+                useSession={props.useSession}
+                loadOlderHistory={props.loadOlderHistory}
+                hoverKey={hoverCat}
+                onHoverKey={setHoverCat}
+              />
             </div>
           )}
         </div>

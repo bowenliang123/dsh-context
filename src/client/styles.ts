@@ -207,7 +207,6 @@ export const STYLES = [
   '.lc-modal-title { font-weight: 600; font-size: 14px; }',
   '.lc-modal-close { margin-left: auto; border: 0; background: transparent; color: var(--dsw-alias-label-secondary); font-size: 18px; line-height: 1; padding: 2px 6px; border-radius: 6px; cursor: pointer; font-family: inherit; }',
   '.lc-modal-close:hover { color: var(--dsw-alias-label-primary); background: var(--dsw-alias-bg-layer-2); }',
-  '.lc-modal-trend { margin-top: 14px; }',
   // ---- Context browser card (progressive disclosure: category accordion ->
   // element rows -> per-kind content) ----
   // The δ-baseline caption sits at the card title's right edge, just left of

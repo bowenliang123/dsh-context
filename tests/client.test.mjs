@@ -156,7 +156,7 @@ assert.equal(injected.hooks.contextModal.getSnapshot(), false, 'modal closed ini
 
   // Candidates: leading-only, prefix-filtered, description localized.
   const req = (query, position = 'leading') => ({ query, position, signal: new AbortController().signal })
-  assert.deepEqual(await src.candidates({ sessionId: 's1' }, req('')), [{ name: 'context', description: '查看上下文的构成和变化' }])
+  assert.deepEqual(await src.candidates({ sessionId: 's1' }, req('')), [{ name: 'context', description: '查看当前上下文构成，浏览各步骤组成' }])
   assert.deepEqual((await src.candidates({ sessionId: 's1' }, req('cont'))).length, 1, 'prefix match')
   assert.deepEqual(await src.candidates({ sessionId: 's1' }, req('xyz')), [], 'non-prefix miss')
   assert.deepEqual(await src.candidates({ sessionId: 's1' }, req('', 'inline')), [], 'inline positions never offer the command')
@@ -1329,22 +1329,17 @@ loadOlderHolder = undefined
 
 console.log('✔ context browser auto-load test passed (loading note, one page pulled, joined content, no over-paging)')
 
-// ---- /context modal render: centered dialog with the same overview +
-// last-10-turn trend, driven by the modal store hook ----
+// ---- /context modal render: centered dialog with the current-composition
+// overview + the shared Context browser (which replaced the old last-10-turn
+// trend), driven by the modal store hook ----
 assert.ok(modalComponent !== null, 'overlay component captured')
-// 14 turns of growing totals; the modal must show exactly the last 10.
-const modalRequests = []
-for (let turn = 1; turn <= 14; turn++) {
-  modalRequests.push({
-    turn, step: 0, time: 1000 * turn, seq: turn * 10,
-    system: 10, tools: 20, user: 10 * turn, inject: 0, assistant: 15, tool: 20, total: 65 + 10 * turn,
-  })
-}
 const modalData = {
   ...snapshot,
   current: { system: 10, tools: 20, user: 140, inject: 0, assistant: 15, tool: 20, total: 205 },
-  requests: modalRequests,
-  events: [{ seq: 95, time: 9500, kind: 'compaction', tokens: 50, count: 2 }],
+  // No provider usage on the last request -> the headline falls back to the
+  // heuristic total (205), like the old trend-phase fixture.
+  requests: snapshot.requests.map(({ prompt, ...r }) => r),
+  events: [],
 }
 let modalOpen = false
 const renderModal = () => evaluate(modalComponent({
@@ -1357,17 +1352,15 @@ assert.equal(renderModal(), null, 'modal renders nothing while closed')
 modalOpen = true
 const modalTree = renderModal()
 assert.equal(byClass(modalTree, 'lc-modal-backdrop').length, 1, 'centered backdrop rendered')
-const modalBars = byClass(modalTree, 'lc-bar')
-assert.equal(modalBars.length, 10, 'trend shows exactly the last 10 turns')
-// First visible bar is turn 5 (seq 50); turns 1-4 are cut.
-const modalTurns = byClass(modalTree, 'lc-turn')
-assert.deepEqual(modalTurns.map(t => t.args[2]), ['T5', 'T6', 'T7', 'T8', 'T9', 'T10', 'T11', 'T12', 'T13', 'T14'], 'turn ticks 5..14')
-// The compaction (seq 95) attaches to the first request after it (turn 10).
-assert.equal(byClass(modalTree, 'lc-bar-marker').length, 1, '✂ marker rides the turn after the compaction')
 const modalOverview = byClass(modalTree, 'lc-overview-num')[0]
 assert.match(textOf(modalOverview), /205/, 'modal headline falls back to the heuristic total (no prompt on last request)')
 assert.match(textOf(modalOverview), /0%/, 'percent against the 128k window')
-assert.equal(byClass(modalTree, 'lc-modal-trend').length, 1, 'trend section title present')
+// The trend chart is gone; the shared Context browser hosts the modal's step
+// browsing instead (own picker + category accordion, opens on the live step).
+assert.equal(byClass(modalTree, 'lc-modal-trend').length, 0, 'the last-10-turn trend section is gone')
+assert.equal(byClass(modalTree, 'lc-br-cat-row').length, 6, 'context browser renders inside the modal')
+assert.equal(byClass(modalTree, 'lc-br-pick').length, 1, 'browser step picker rides the modal')
+assert.equal(byClass(modalTree, 'lc-br-pick')[0].args[1].value, 'live', 'browser opens on the live step')
 const closeBtn = byClass(modalTree, 'lc-modal-close')[0]
 assert.equal(closeBtn.args[1]['aria-label'], 'Close', 'close button localized')
 
@@ -1388,4 +1381,4 @@ assert.equal(bailCalls.length, 1, 'no pending guard -> no dispatch')
 modalOpen = false
 assert.equal(renderModal(), null, 'modal closes again')
 
-console.log('✔ modal render test passed (open/close, last-10-turn window, ✂ marker, headline, localized chrome, deferred token consume on close)')
+console.log('✔ modal render test passed (open/close, current overview, embedded context browser, localized chrome, deferred token consume on close)')
