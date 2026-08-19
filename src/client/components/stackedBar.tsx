@@ -159,8 +159,11 @@ export function makeLegend(kit: ViewKit): (props: {
               onMouseLeave={() => { if (props.onHoverKey !== undefined) props.onHoverKey(null) }}
             >
               <i style={{ background: p.color }} />
-              {catLabel(p.key) + ' ≈' + fmt(p.value)}
-              {total > 0 ? <em>{Math.round(p.value / total * 100) + '%'}</em> : null}
+              <span className="lc-chip-label">{catLabel(p.key)}</span>
+              <span className="lc-chip-nums">
+                {'≈' + fmt(p.value)}
+                {total > 0 ? <em>{Math.round(p.value / total * 100) + '%'}</em> : null}
+              </span>
             </span>
           )
         })}

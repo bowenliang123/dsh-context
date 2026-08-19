@@ -508,7 +508,9 @@ seg1.args[1].onMouseEnter({ clientX: 80 })
 tr = renderView()
 const chipsOn2 = byClass(tr, 'lc-chip-on')
 assert.equal(chipsOn2.length, 1, 'hovering another segment moves the chip highlight')
-assert.equal(chipsOn2[0].args[3], byClass(tr, 'lc-chip')[1].args[3], 'the matching chip is highlighted')
+// the label is now a styled span; compare its text (the highlighted chip's
+// category name must equal the matching chip's)
+assert.equal(textOf(chipsOn2[0].args[3]), textOf(byClass(tr, 'lc-chip')[1].args[3]), 'the matching chip is highlighted')
 assert.equal(byClass(tr, 'lc-stacked-seg-on').length, 2, 'the hovered segment is marked (overview + mirrored browser bar)')
 
 // ---- the free window space (blank track) is hoverable too ----

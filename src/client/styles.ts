@@ -52,8 +52,19 @@ export const STYLES = [
   '.lc-stacked-dim .lc-stacked-seg-on { opacity: 1; }',
   '.lc-stacked-dim .lc-stacked-free { opacity: 0.35; }',
   '.lc-stacked-dim .lc-stacked-free-on { opacity: 1; }',
-  '.lc-legend { display: flex; flex-wrap: wrap; gap: 6px 14px; margin-top: 10px; }',
-  '.lc-chip { display: inline-flex; align-items: center; gap: 5px; color: var(--dsw-alias-label-primary); padding: 1px 6px; border-radius: 6px; transition: background-color 120ms ease; }',
+  // Current-composition legend: an auto-flowing grid (as many columns as the
+  // card fits, narrowing flows to fewer) whose cells are label-left /
+  // numbers-right rows — each category a tidy "● 系统提示词  ≈2.0k  2%".
+  '.lc-legend { display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: 6px 14px; margin-top: 10px; }',
+  '.lc-chip { display: flex; align-items: center; gap: 5px; min-width: 0; color: var(--dsw-alias-label-primary); padding: 1px 6px; border-radius: 6px; cursor: pointer; transition: background-color 120ms ease; }',
+  // The category name is the row's emphasis: bold at rest (the chip is a
+  // legend label, not inline prose), ellipsized if a narrow cell squeezes it
+  // while the right-aligned figures stay intact.
+  '.lc-chip-label { font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }',
+  // The numeric group (≈tokens + percent) pins to the cell's right edge while
+  // the category label stays left; a baseline acts as the shared vertical
+  // rhythm for the two figures.
+  '.lc-chip-nums { margin-left: auto; flex: none; display: inline-flex; align-items: baseline; gap: 6px; white-space: nowrap; }',
   '.lc-chip i, .lc-detail-row i, .lc-node i { display: inline-block; width: 8px; height: 8px; border-radius: 2px; }',
   '.lc-chip i { transition: box-shadow 120ms ease; }',
   '.lc-chip em { font-style: normal; color: var(--dsw-alias-label-secondary); }',
