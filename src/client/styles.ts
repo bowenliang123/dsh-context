@@ -232,7 +232,7 @@ export const STYLES = [
   '.lc-ts-card-head { display: flex; align-items: center; gap: 8px; padding: 6px 10px; font-size: 11px; font-weight: 600; color: var(--dsw-alias-label-secondary); border-bottom: 1px solid var(--dsw-alias-border-l1); }',
   '.lc-ts-card-head b { color: var(--dsw-alias-label-primary); }',
   '.lc-ts-card-count { margin-left: auto; }',
-  '.lc-ts-desc-body { margin: 0; padding: 8px 10px; color: var(--dsw-alias-label-primary); font-size: 12px; line-height: 1.55; white-space: pre-wrap; word-break: break-word; }',
+  '.lc-ts-desc-body { margin: 0; padding: 8px 10px; color: var(--dsw-alias-label-primary); font-size: 12px; line-height: 1.55; white-space: pre-wrap; word-break: break-word; max-height: 160px; overflow-y: auto; scrollbar-width: thin; }',
   // Grid: name + type + required chip + description. Columns wrap on narrow
   // rows; the description cell spans the full second row so a long blurb
   // never breaks the one-line rhythm of name/type/required.
