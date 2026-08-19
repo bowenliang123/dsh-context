@@ -40,7 +40,7 @@ export function makeStatsBoard(kit: ViewKit): (props: {
     return (
       <div className="lc-card lc-col lc-col-stats">
         <div className="lc-card-title">
-          {t('stats.title')}
+          <span className="lc-card-title-text">{t('stats.title')}</span>
           <span className="lc-card-sub">{t('stats.hint')}</span>
         </div>
         <div className="lc-stats">

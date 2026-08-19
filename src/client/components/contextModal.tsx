@@ -140,7 +140,7 @@ export function makeContextModal(ctx: ClientCtx, kit: ViewKit): (props: ContextM
               <StackedBar parts={head.parts} height={16} max={head.window} hoverKey={hoverCat} onHoverKey={setHoverCat} />
               <Legend parts={head.parts} hoverKey={hoverCat} onHoverKey={setHoverCat} />
 
-              <div className="lc-card-title lc-modal-trend">{t('trend.title')}</div>
+              <div className="lc-card-title lc-modal-trend"><span className="lc-card-title-text">{t('trend.title')}</span></div>
               {turns.length === 0 ? (
                 <div className="lc-empty">{t('trend.empty')}</div>
               ) : (

@@ -211,7 +211,7 @@ export function makeContextView(ctx: ClientCtx, kit: ViewKit): (props: ContextVi
             {/* ---- overview ---- */}
             <div className="lc-card">
               <div className="lc-card-title">
-                {t('overview.title')}
+                <span className="lc-card-title-text">{t('overview.title')}</span>
                 <span className="lc-card-sub">
                   {(data.model ? data.model : '') + (data.provider ? ' · ' + data.provider : '')}
                 </span>
@@ -248,7 +248,7 @@ export function makeContextView(ctx: ClientCtx, kit: ViewKit): (props: ContextVi
             {/* ---- trend ---- */}
             <div className="lc-card">
               <div className="lc-card-title">
-                {t('trend.title')}
+                <span className="lc-card-title-text">{t('trend.title')}</span>
                 <span className="lc-card-sub">{t('trend.hint')}</span>
                 <div className="lc-gran">
                   <button
@@ -312,7 +312,7 @@ export function makeContextView(ctx: ClientCtx, kit: ViewKit): (props: ContextVi
         <div className="lc-cols">
           <div className="lc-card lc-col">
             <div className="lc-card-title">
-              {t('events.title')}
+              <span className="lc-card-title-text">{t('events.title')}</span>
               <div className="lc-kinds">
                 {EVENT_KINDS.map(k => (
                   <button
@@ -327,7 +327,7 @@ export function makeContextView(ctx: ClientCtx, kit: ViewKit): (props: ContextVi
           </div>
           <div className="lc-card lc-col">
             <div className="lc-card-title">
-              {t('nodes.title')}
+              <span className="lc-card-title-text">{t('nodes.title')}</span>
               <span className="lc-card-sub">{t('nodes.hint')}</span>
             </div>
             <NodeList nodes={nodes} dropped={data.droppedNodes || 0} />

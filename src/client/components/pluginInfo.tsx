@@ -44,7 +44,7 @@ export function makePluginInfo(kit: ViewKit): () => ReactNS.ReactElement {
     return (
       <div className="lc-card">
         <div className="lc-card-title">
-          {t('plugin.title')}
+          <span className="lc-card-title-text">{t('plugin.title')}</span>
           <span className="lc-card-sub">{t('plugin.hint')}</span>
         </div>
         <div className="lc-pi-grid">
