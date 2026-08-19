@@ -1,4 +1,4 @@
-<p align="center"><img src="https://raw.githubusercontent.com/bowenliang123/dsh-context/main/docs/social-preview.png" width="840" alt="Social preview"></p>
+![Social preview](docs/social-preview.png)
 
 # dsh-context
 
