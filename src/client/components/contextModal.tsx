@@ -15,7 +15,8 @@ import type { ClientCtx, SessionStandardProps, SessionsFace } from '../services'
 import { contextPressureOf, headersOf, timelineOf } from '../services'
 import type { ViewKit } from '../viewkit'
 import { makeContextBrowser } from './browser'
-import { makeLegend, makeStackedBar, AUTO_COMPACT_RATIO } from './stackedBar'
+import { makeCurrentComposition } from './currentComposition'
+import { makeLegend, makeStackedBar } from './stackedBar'
 
 import { React } from '../react'
 
@@ -25,14 +26,15 @@ export interface ContextModalProps extends SessionStandardProps {
 }
 
 export function makeContextModal(ctx: ClientCtx, kit: ViewKit): (props: ContextModalProps) => ReactNS.ReactElement | null {
-  const { t, fmt } = kit
+  const { t } = kit
   const sessions = ctx.get('sessions') as SessionsFace | undefined
   const StackedBar = makeStackedBar(kit)
   const Legend = makeLegend(kit)
-  // The /context popup reuses the SAME Context browser card as the Context
-  // tab — no duplicated browsing logic; picking, accordion, reconstruction
-  // and paging all ride the shared component (joining the modal overview's
-  // hover link while it shows the live step).
+  // The /context popup reuses the SAME cards as the Context tab — no
+  // duplicated browsing logic; picking, accordion, reconstruction and paging
+  // all ride the shared components (joining the modal overview's hover link
+  // while the browser shows the live step, and the tool chips jumping it).
+  const CurrentComposition = makeCurrentComposition(kit, StackedBar, Legend)
   const ContextBrowser = makeContextBrowser(kit, StackedBar)
 
   return function ContextModal(props: ContextModalProps): ReactNS.ReactElement | null {
@@ -53,6 +55,9 @@ export function makeContextModal(ctx: ClientCtx, kit: ViewKit): (props: ContextM
       ? headersOf(props.useProjection('contextHeaders'))
       : null
     const [hoverCat, setHoverCat] = React.useState<string | null>(null)
+    // One-shot tool-focus from the CurrentComposition card's chips into the
+    // embedded Context browser (label = category-only, chip = specific tool).
+    const [toolFocus, setToolFocus] = React.useState<{ tool?: string } | null>(null)
 
     const close = React.useCallback(() => {
       if (sessionId === '') return
@@ -88,17 +93,15 @@ export function makeContextModal(ctx: ClientCtx, kit: ViewKit): (props: ContextM
     if (!open) return null
 
     const head = data !== null ? headlineOf(data, pressure) : null
+    // The composition card carries the model/provider subtitle; keep the
+    // dialog header to just the title + close (model/provider below once).
+    const subtitle = data !== null ? (data.model ? data.model : '') + (data.provider ? ' · ' + data.provider : '') : ''
 
     return (
       <div className="lc-modal-backdrop" onClick={close}>
         <div className="lc-modal-card" onClick={ev => { ev.stopPropagation() }}>
           <div className="lc-modal-head">
             <span className="lc-modal-title">{t('tab')}</span>
-            {data !== null && (data.model || data.provider) ? (
-              <span className="lc-card-sub">
-                {(data.model ? data.model : '') + (data.provider ? ' · ' + data.provider : '')}
-              </span>
-            ) : null}
             <button className="lc-modal-close" aria-label={t('cmd.close')} onClick={close}>×</button>
           </div>
 
@@ -106,24 +109,14 @@ export function makeContextModal(ctx: ClientCtx, kit: ViewKit): (props: ContextM
             <div className="lc-empty">{t('loading')}</div>
           ) : (
             <div>
-              <div className="lc-overview-num">
-                <b>{fmt(head.tokens)}</b>
-                <span>
-                  {head.window
-                    ? ' / ' + fmt(head.window) + ' tokens'
-                    : ' ' + t('overview.estimate')}
-                </span>
-                {head.pct !== null ? (
-                  <span className="lc-overview-pct">
-                    <b>{head.pct + '%'}</b>
-                    {t('overview.used')}
-                  </span>
-                ) : null}
-              </div>
-              <StackedBar parts={head.parts} height={16} max={head.window} hoverKey={hoverCat} onHoverKey={setHoverCat} reserve={head.window != null && head.window > 0
-                ? { ratio: AUTO_COMPACT_RATIO, label: t('overview.compactReserve', { pct: Math.round(AUTO_COMPACT_RATIO * 100) }) }
-                : undefined} />
-              <Legend parts={head.parts} hoverKey={hoverCat} onHoverKey={setHoverCat} />
+              <CurrentComposition
+                head={head}
+                subtitle={subtitle}
+                hoverKey={hoverCat}
+                onHoverKey={setHoverCat}
+                tools={data.toolList}
+                onToolFocus={setToolFocus}
+              />
               <ContextBrowser
                 data={data}
                 headers={headers}
@@ -131,6 +124,8 @@ export function makeContextModal(ctx: ClientCtx, kit: ViewKit): (props: ContextM
                 loadOlderHistory={props.loadOlderHistory}
                 hoverKey={hoverCat}
                 onHoverKey={setHoverCat}
+                toolFocus={toolFocus}
+                onToolFocusHandled={() => { setToolFocus(null) }}
               />
             </div>
           )}

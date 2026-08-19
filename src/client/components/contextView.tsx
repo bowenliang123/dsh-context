@@ -17,12 +17,13 @@ import { contextPressureOf, headersOf, timelineOf, tokenUsageOf } from '../servi
 import type { ClientCtx } from '../services'
 import type { ViewKit } from '../viewkit'
 import { makeContextBrowser } from './browser'
+import { makeCurrentComposition } from './currentComposition'
 import { makeEventList } from './events'
 import { makeNodeList } from './nodes'
 import { makePluginInfo } from './pluginInfo'
 import { makeRequestDetail } from './requestDetail'
 import { makeStatsBoard } from './statsBoard'
-import { makeLegend, makeStackedBar, AUTO_COMPACT_RATIO } from './stackedBar'
+import { makeLegend, makeStackedBar } from './stackedBar'
 import { aggregateByTurn, attachMarkers, makeTrendChart } from './trendChart'
 
 import { React } from '../react'
@@ -43,9 +44,10 @@ const EVENT_KINDS = ['inject', 'compaction', 'prune', 'model'] as const
 export type ContextViewProps = SessionStandardProps
 
 export function makeContextView(ctx: ClientCtx, kit: ViewKit): (props: ContextViewProps) => ReactNS.ReactElement {
-  const { t, fmt, fmtTime, catLabel } = kit
+  const { t } = kit
   const StackedBar = makeStackedBar(kit)
   const Legend = makeLegend(kit)
+  const CurrentComposition = makeCurrentComposition(kit, StackedBar, Legend)
   const TrendChart = makeTrendChart(kit)
   const RequestDetail = makeRequestDetail(kit, StackedBar)
   const EventList = makeEventList(kit)
@@ -223,61 +225,15 @@ export function makeContextView(ctx: ClientCtx, kit: ViewKit): (props: ContextVi
                wraps to one column on narrow widths) ---- */}
         <div className="lc-cols">
           <div className="lc-col">
-            {/* ---- overview ---- */}
-            <div className="lc-card">
-              <div className="lc-card-title">
-                <span className="lc-card-title-text">{t('overview.title')}</span>
-                <span className="lc-card-sub">
-                  {(data.model ? data.model : '') + (data.provider ? ' · ' + data.provider : '')}
-                </span>
-              </div>
-              <div className="lc-overview-num">
-                <b>{fmt(head.tokens)}</b>
-                <span>
-                  {head.window
-                    ? ' / ' + fmt(head.window) + ' tokens'
-                    : ' ' + t('overview.estimate')}
-                </span>
-                {head.pct !== null ? (
-                  <span className="lc-overview-pct">
-                    <b>{head.pct + '%'}</b>
-                    {t('overview.used')}
-                  </span>
-                ) : null}
-              </div>
-              <StackedBar parts={head.parts} height={16} max={head.window} hoverKey={hoverCat} onHoverKey={setHoverCat} reserve={head.window != null && head.window > 0
-                ? { ratio: AUTO_COMPACT_RATIO, label: t('overview.compactReserve', { pct: Math.round(AUTO_COMPACT_RATIO * 100) }) }
-                : undefined} />
-              <Legend parts={head.parts} hoverKey={hoverCat} onHoverKey={setHoverCat} />
-              {(data.toolList && data.toolList.length > 0) ? (
-                <div className="lc-tools">
-                  <button
-                    type="button"
-                    className="lc-tools-label"
-                    onClick={() => { setToolFocus({}) }}
-                  >{t('tools.top')}</button>
-                  {data.toolList.slice().sort((a, b) => b.tokens - a.tokens).slice(0, 5).map(tool => {
-                    return (
-                      <button
-                        key={tool.name}
-                        type="button"
-                        className="lc-tool-chip"
-                        onClick={() => { setToolFocus({ tool: tool.name }) }}
-                      >{tool.name + ' ' + fmt(tool.tokens)}</button>
-                    )
-                  })}
-                  {data.toolList.length > 5
-                    ? (
-                      <button
-                        type="button"
-                        className="lc-tools-more"
-                        onClick={() => { setToolFocus({}) }}
-                      >{t('tools.more', { n: data.toolList.length })}</button>
-                    )
-                    : null}
-                </div>
-              ) : null}
-            </div>
+            {/* ---- overview (shared CurrentComposition card) ---- */}
+            <CurrentComposition
+              head={head}
+              subtitle={(data.model ? data.model : '') + (data.provider ? ' · ' + data.provider : '')}
+              hoverKey={hoverCat}
+              onHoverKey={setHoverCat}
+              tools={data.toolList}
+              onToolFocus={setToolFocus}
+            />
 
             {/* ---- trend ---- */}
             <div className="lc-card">
