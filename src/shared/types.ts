@@ -132,6 +132,27 @@ export interface ContextPressure {
   contextWindow?: number
 }
 
+/**
+ * The official token-meter `tokenUsage` projection (registered by
+ * `@deepseek-ai/dsh-token-meter` on the same `SessionProjectionMap`): durable
+ * cumulative provider-reported usage across the COMPLETE session log. The four
+ * buckets are disjoint (reasoning tokens are already inside `outputTokens`).
+ * The Client reads this key directly to compute the cache-hit share — the
+ * exact same data the chat stats line below the input box shows, same formula
+ * — instead of the Host mirroring it inside `contextTimeline`. Absent until a
+ * provider reports usage.
+ */
+export interface TokenUsage {
+  /** Billed prompt tokens that missed the provider cache. */
+  uncachedInputTokens: number
+  /** Billed output tokens (reasoning included). */
+  outputTokens: number
+  /** Billed prompt tokens served from the provider cache. */
+  cacheReadTokens: number
+  /** Billed prompt tokens written into the provider cache. */
+  cacheWriteTokens: number
+}
+
 /** One model-visible message on the surface, with its heuristic token price. */
 export interface SurfaceNode {
   seq: number

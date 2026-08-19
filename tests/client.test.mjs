@@ -285,6 +285,7 @@ assert.deepEqual(provideDescriptors[0].props, ['loadOlderHistory'], 'the contrib
 // session/projection frames.
 let dataValue = null
 let pressureValue = undefined
+let usageValue = undefined
 let headersValue = undefined
 // Optional session-snapshot hook + pagination verb holders: undefined until
 // the auto-load test arms them, so every earlier render exercises the
@@ -295,7 +296,8 @@ const renderView = () => evaluate(viewComponent({
   sessionId: 's1',
   useProjection: (key) => (key === 'contextTimeline' ? dataValue
     : (key === 'contextPressure' ? pressureValue
-      : (key === 'contextHeaders' ? headersValue : undefined))),
+      : (key === 'contextHeaders' ? headersValue
+        : (key === 'tokenUsage' ? usageValue : undefined)))),
   useSession: useSessionHolder,
   loadOlderHistory: loadOlderHolder,
 }))
@@ -389,12 +391,13 @@ assert.ok(byClass(tree, 'lc-turns').length === 1, 'turn tick row present')
 // fixture: 4 requests (turns 1,1,2,3), no events yet -> all event counters 0.
 const pkg = JSON.parse(await readFile(new URL('../package.json', import.meta.url), 'utf8'))
 const statVals = byClass(tree, 'lc-stat-value').map(n => n.args[2])
-assert.equal(statVals.length, 5, 'five stats cells (turns / steps / injections / compactions / prunes)')
+assert.equal(statVals.length, 6, 'six stats cells (turns / steps / injections / compactions / prunes / cache hit)')
 assert.equal(statVals[0], '3', 'turns counted by distinct turn')
 assert.equal(statVals[1], '4', 'steps = request count')
 assert.equal(statVals[2], '0', 'no injections yet')
 assert.equal(statVals[3], '0', 'no compactions yet')
 assert.equal(statVals[4], '0', 'no prunes yet')
+assert.equal(statVals[5], '—', 'no tokenUsage projection yet -> cache-hit cell shows a dash')
 
 // ---- plugin info card: two full-width rows; every row is itself a link ----
 function plainText(node) {
@@ -759,6 +762,25 @@ const statVals2 = byClass(tr, 'lc-stat-value').map(n => n.args[2])
 assert.equal(statVals2[2], '1', 'one injection counted')
 assert.equal(statVals2[3], '2', 'two compactions counted')
 assert.equal(statVals2[4], '2', 'two prunes counted')
+assert.equal(statVals2[5], '—', 'cache-hit cell still a dash before a tokenUsage projection lands')
+
+// the cache-hit cell reuses the OFFICIAL token-meter `tokenUsage` projection —
+// the exact same data the chat stats line below the input box reads, same
+// formula (cache reads over billed input = uncached + reads + writes).
+usageValue = { uncachedInputTokens: 10, outputTokens: 40, cacheReadTokens: 80, cacheWriteTokens: 10 }
+tr = renderView()
+const statVals3 = byClass(tr, 'lc-stat-value').map(n => n.args[2])
+assert.equal(statVals3.length, 6, 'six stats cells with the cache-hit cell')
+assert.equal(statVals3[5], '80.00%', 'cache hit = cacheRead / (uncached + cacheRead + cacheWrite), two decimals')
+assert.equal(statVals3[0], '3', 'turn count unchanged by the usage projection')
+assert.equal(statVals3[3], '2', 'compaction count unchanged by the usage projection')
+// truncation proof: 8334 / 25000 = 33.336% -> cut to 33.33%, never rounded up
+usageValue = { uncachedInputTokens: 10000, outputTokens: 40, cacheReadTokens: 8334, cacheWriteTokens: 6666 }
+tr = renderView()
+const statVals4 = byClass(tr, 'lc-stat-value').map(n => n.args[2])
+assert.equal(statVals4[5], '33.33%', 'two decimals are TRUNCATED, not rounded (33.336 -> 33.33)')
+usageValue = undefined
+tr = renderView()
 
 // the ✂ marker sits on the bar it attaches to and tooltips the event gap
 const barMark = byClass(tr, 'lc-bar-marker')

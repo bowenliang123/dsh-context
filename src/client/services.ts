@@ -11,7 +11,7 @@
  */
 
 import type { Context } from '@deepseek-ai/cordis'
-import type { ContextHeaders, ContextPressure, ContextTimeline } from '../shared/types'
+import type { ContextHeaders, ContextPressure, ContextTimeline, TokenUsage } from '../shared/types'
 
 export interface LocaleService {
   register(ns: string, dicts: Record<string, Record<string, string>>): () => void
@@ -107,6 +107,14 @@ export const timelineOf = (value: unknown): ContextTimeline | null => asRecord<C
  * back to their derived anchor, so the UI degrades gracefully.
  */
 export const contextPressureOf = (value: unknown): ContextPressure | null => asRecord<ContextPressure>(value)
+
+/**
+ * Narrow a delivered projection value to the official token-meter
+ * `tokenUsage` projection (durable cumulative provider usage). Absent key or
+ * value = the meter's projection is not composed (or no request has reported
+ * usage yet) — callers drop the cache-hit cell to a dash.
+ */
+export const tokenUsageOf = (value: unknown): TokenUsage | null => asRecord<TokenUsage>(value)
 
 /**
  * Narrow a delivered projection value to the plugin's `contextHeaders`

@@ -13,7 +13,7 @@ import type * as ReactNS from 'react'
 import type { ContextEventRecord, RequestRecord } from '../../shared/types'
 import { headlineOf } from '../headline'
 import type { LocaleService, SessionStandardProps } from '../services'
-import { contextPressureOf, headersOf, timelineOf } from '../services'
+import { contextPressureOf, headersOf, timelineOf, tokenUsageOf } from '../services'
 import type { ClientCtx } from '../services'
 import type { ViewKit } from '../viewkit'
 import { makeContextBrowser } from './browser'
@@ -68,6 +68,14 @@ export function makeContextView(ctx: ClientCtx, kit: ViewKit): (props: ContextVi
     // mirrors it. Absent key/value degrades to the derived fallback.
     const pressure = typeof props.useProjection === 'function'
       ? contextPressureOf(props.useProjection('contextPressure'))
+      : null
+    // Durable provider-reported usage comes from the OFFICIAL token-meter
+    // `tokenUsage` projection — the exact same data the chat stats line below
+    // the input box reads for its "缓存命中" figure, so the stats board's
+    // cache-hit cell reuses it verbatim. Absent key/value drops the cell to a
+    // dash instead of estimating.
+    const usage = typeof props.useProjection === 'function'
+      ? tokenUsageOf(props.useProjection('tokenUsage'))
       : null
     // The header-content companion projection (full system prompt + tool
     // schemas) for the Context browser card; absent key = older Host half,
@@ -206,7 +214,7 @@ export function makeContextView(ctx: ClientCtx, kit: ViewKit): (props: ContextVi
 
         {/* ---- session context stats + plugin info, side by side (7 : 3) ---- */}
         <div className="lc-cols lc-head">
-          <StatsBoard requests={requests} events={events} />
+          <StatsBoard requests={requests} events={events} usage={usage} />
           <PluginInfo />
         </div>
 
