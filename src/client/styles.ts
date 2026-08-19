@@ -222,4 +222,33 @@ export const STYLES = [
   '.lc-br-pre { margin: 0; padding: 8px 10px; background: var(--dsw-alias-bg-layer-2); border: 1px solid var(--dsw-alias-border-l1); border-radius: 6px; color: var(--dsw-alias-label-primary); font-size: 12px; line-height: 1.55; white-space: pre-wrap; word-break: break-word; max-height: 320px; overflow-y: auto; scrollbar-width: thin; }',
   '.lc-br-dim { color: var(--dsw-alias-label-secondary); }',
   '.lc-br-call { display: flex; flex-direction: column; gap: 4px; align-items: flex-start; }',
+  // ---- Tool schema body (browser card, tools category). The description
+  // and parameter table share one "card with a small title" chrome — a
+  // labeled bordered block so a reader can scan three stacked sections
+  // without losing track of which is which. The raw JSON sits below as a
+  // collapsed toggle (no card chrome — it's a debug view, not a primary
+  // section). ----
+  '.lc-ts-card { background: var(--dsw-alias-bg-layer-2); border: 1px solid var(--dsw-alias-border-l1); border-radius: 6px; overflow: hidden; }',
+  '.lc-ts-card-head { display: flex; align-items: center; gap: 8px; padding: 6px 10px; font-size: 11px; font-weight: 600; color: var(--dsw-alias-label-secondary); border-bottom: 1px solid var(--dsw-alias-border-l1); }',
+  '.lc-ts-card-head b { color: var(--dsw-alias-label-primary); }',
+  '.lc-ts-card-count { margin-left: auto; }',
+  '.lc-ts-desc-body { margin: 0; padding: 8px 10px; color: var(--dsw-alias-label-primary); font-size: 12px; line-height: 1.55; white-space: pre-wrap; word-break: break-word; }',
+  // Grid: name + type + required chip + description. Columns wrap on narrow
+  // rows; the description cell spans the full second row so a long blurb
+  // never breaks the one-line rhythm of name/type/required.
+  '.lc-ts-param-row { display: grid; grid-template-columns: 140px 90px 56px 1fr; column-gap: 10px; row-gap: 2px; padding: 6px 10px; border-top: 1px solid var(--dsw-alias-border-l1); font-size: 12px; align-items: baseline; }',
+  '.lc-ts-param-row:first-of-type { border-top: 0; }',
+  '.lc-ts-param-name { font-weight: 600; color: var(--dsw-alias-label-primary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }',
+  '.lc-ts-param-type { color: var(--dsw-alias-label-secondary); font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 11px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }',
+  '.lc-ts-param-req { color: var(--dsw-alias-state-warn-primary); font-size: 11px; font-weight: 600; }',
+  '.lc-ts-param-req-off { color: var(--dsw-alias-label-secondary); font-size: 11px; }',
+  '.lc-ts-param-desc { grid-column: 1 / -1; color: var(--dsw-alias-label-secondary); line-height: 1.5; }',
+  '.lc-ts-params-empty { padding: 8px 10px; color: var(--dsw-alias-label-secondary); font-size: 12px; }',
+  // Raw JSON toggle: a slim button that owns the open/closed state, sitting
+  // just under the parameter table. The <pre> itself only mounts when open
+  // (avoids stringifying the schema on every render and keeps the default
+  // body compact).
+  '.lc-ts-json { display: flex; flex-direction: column; gap: 4px; }',
+  '.lc-ts-json-toggle { align-self: flex-start; border: 0; background: transparent; color: var(--dsw-alias-label-secondary); font: inherit; font-size: 11px; padding: 0; cursor: pointer; }',
+  '.lc-ts-json-toggle:hover { color: var(--dsw-alias-label-primary); text-decoration: underline; }',
 ].join('\n')

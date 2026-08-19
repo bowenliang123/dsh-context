@@ -77,6 +77,14 @@ export const DICT_ZH: Record<string, string> = {
   'browser.noContent': '完整内容不在当前加载的消息窗口内（在聊天页加载更早历史后可查看）',
   'browser.loading': '正在从更早的会话历史加载完整内容…',
   'browser.preview': '预览',
+  // Tool schema browser card: parsed parameter table sits above the (collapsed
+  // by default) raw JSON so the common case — skimming arguments — stays
+  // scannable; the JSON is still one click away for the full payload.
+  'tool.desc': '描述',
+  'tool.params': '参数',
+  'tool.paramsEmpty': '（无参数）',
+  'tool.jsonToggle': '查看原始 JSON',
+  'tool.jsonHide': '收起',
 }
 
 export const DICT_EN: Record<string, string> = {
@@ -151,4 +159,12 @@ export const DICT_EN: Record<string, string> = {
   'browser.noContent': 'Full content is outside the loaded message window (load older history in Chat to view)',
   'browser.loading': 'Loading full content from older session history…',
   'browser.preview': 'Preview',
+  // Tool schema browser card: parsed parameter table sits above the (collapsed
+  // by default) raw JSON so the common case — skimming arguments — stays
+  // scannable; the JSON is still one click away for the full payload.
+  'tool.desc': 'Description',
+  'tool.params': 'Parameters',
+  'tool.paramsEmpty': '(no parameters)',
+  'tool.jsonToggle': 'View Raw JSON',
+  'tool.jsonHide': 'Collapse',
 }

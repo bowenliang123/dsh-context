@@ -229,7 +229,7 @@ const requireStateful = (spec) => {
 const m2 = { exports: {} }
 const pluginExports2 = factory(requireStateful, m2, globalThis.window, fakeDoc)
 
-const DICT_FOR_TEST = { 'tab': 'Context', 'loading': '…', 'error': 'x', 'detail.step': 'Turn {t} · Step {s}', 'gran.step': 'Step', 'gran.turn': 'Turn', 'detail.turn': 'Turn {t} · {n} steps', 'detail.lastStep': 'last step', 'overview.used': 'of context used', 'overview.free': 'Free window', 'events.at': 'Turn {t} · Step {s}', 'events.range': 'Turn {t} · Step {a}→{b}', 'events.rangeTo': 'Turn {a} · Step {as} → Turn {b} · Step {bs}', 'stats.recycleSub': '{c} compactions · {p} prunes', 'tip.step': 'Turn {t} · Step {s}', 'tip.turn': 'Turn {t} · {n} steps', 'tip.total': 'total ≈ {n}', 'tip.actual': ' (actual {n})', 'trend.title': 'History', 'trend.empty': 'empty trend', 'cmd.close': 'Close', 'cat.user': 'User', 'browser.live': 'Live (next request)', 'browser.liveNow': 'Live · next request', 'browser.items': '{n} items', 'browser.noContent': 'outside the loaded window', 'browser.loading': 'loading older history', 'browser.preview': 'preview', 'browser.noHeader': 'older plugin build' }
+const DICT_FOR_TEST = { 'tab': 'Context', 'loading': '…', 'error': 'x', 'detail.step': 'Turn {t} · Step {s}', 'gran.step': 'Step', 'gran.turn': 'Turn', 'detail.turn': 'Turn {t} · {n} steps', 'detail.lastStep': 'last step', 'overview.used': 'of context used', 'overview.free': 'Free window', 'events.at': 'Turn {t} · Step {s}', 'events.range': 'Turn {t} · Step {a}→{b}', 'events.rangeTo': 'Turn {a} · Step {as} → Turn {b} · Step {bs}', 'stats.recycleSub': '{c} compactions · {p} prunes', 'tip.step': 'Turn {t} · Step {s}', 'tip.turn': 'Turn {t} · {n} steps', 'tip.total': 'total ≈ {n}', 'tip.actual': ' (actual {n})', 'trend.title': 'History', 'trend.empty': 'empty trend', 'cmd.close': 'Close', 'cat.user': 'User', 'browser.live': 'Live (next request)', 'browser.liveNow': 'Live · next request', 'browser.items': '{n} items', 'browser.noContent': 'outside the loaded window', 'browser.loading': 'loading older history', 'browser.preview': 'preview', 'browser.noHeader': 'older plugin build', 'tool.desc': 'Description', 'tool.params': 'Parameters', 'tool.paramsEmpty': '(no parameters)', 'tool.jsonToggle': 'View Raw JSON', 'tool.jsonHide': 'Collapse' }
 let viewComponent = null
 let modalComponent = null
 let modalSource = null
@@ -816,10 +816,32 @@ headersValue = {
   headers: [{
     seq: 1, time: 900, system: 'SYSTEM-PROMPT-TEXT',
     // Listed in producer order (tiny BEFORE bash) — the tools section must
-    // re-rank them by token price, largest first.
+    // re-rank them by token price, largest first. `bash` carries a real
+    // JSON-Schema parameter object so the parsed parameter table has rows
+    // to render; `tiny` ships an empty-parameter schema (table falls back
+    // to the "no parameters" line).
     tools: [
       { name: 'tiny', tokens: 2, description: 'a tiny helper', schema: { name: 'tiny', parameters: { type: 'object' } } },
-      { name: 'bash', tokens: 5, description: 'run a command', schema: { name: 'bash', parameters: { type: 'object' } } },
+      {
+        name: 'bash', tokens: 5, description: 'run a command',
+        schema: {
+          name: 'bash',
+          parameters: {
+            type: 'object',
+            properties: {
+              command: { type: 'string', description: 'shell command to run' },
+              cwd: { type: 'string', description: 'working directory' },
+              timeout: { type: 'number' },
+              flags: {
+                type: 'array',
+                items: { type: 'string' },
+                description: 'extra flags',
+              },
+            },
+            required: ['command'],
+          },
+        },
+      },
     ],
   }],
 }
@@ -884,7 +906,44 @@ brSlots[2][1]('tool:bash')
 tr = renderView()
 const toolContent = textOf(byClass(tr, 'lc-br-content')[0])
 assert.match(toolContent, /run a command/, 'tool row expands to its description')
-assert.match(toolContent, /"parameters"/, 'tool row expands to the raw JSON schema')
+// The description sits inside its own titled card, with a "Description" head
+// and a body carrying the prose — the same chrome the parameter table uses.
+const descCards = byClass(tr, 'lc-ts-card').filter(c => {
+  const head = byClass(c, 'lc-ts-card-head')[0]
+  return head !== undefined && textOf(head).includes('Description')
+})
+assert.equal(descCards.length, 1, 'description is rendered inside a titled card')
+assert.match(textOf(byClass(descCards[0], 'lc-ts-desc-body')[0]), /run a command/, 'description card body carries the prose')
+// Parsed parameter table sits above the (still-collapsed) raw JSON: one row
+// per declared property, type labels carry the JSON-Schema type, required
+// ones marked with ✓, descriptions shown on a second line.
+const paramRows = byClass(tr, 'lc-ts-param-row')
+assert.equal(paramRows.length, 4, 'parameter table renders one row per property')
+const bashRowText = paramRows.map(r => textOf(r))
+assert.ok(bashRowText.some(s => /command/.test(s) && /string/.test(s) && /shell command to run/.test(s)),
+  'command row carries name + type + description')
+assert.ok(bashRowText.some(s => /command/.test(s) && /✓/.test(s)),
+  'command is marked required')
+assert.ok(bashRowText.some(s => /timeout/.test(s) && /number/.test(s) && !/✓/.test(s)),
+  'optional property shows type without the required mark')
+assert.ok(bashRowText.some(s => /flags/.test(s) && /array<string>/.test(s)),
+  'array parameters render their element type')
+// Raw JSON is collapsed by default — the toggle is visible but the schema
+// string does NOT appear in the rendered text yet.
+assert.equal(byClass(tr, 'lc-br-pre').filter(n => /"parameters"/.test(textOf(n))).length, 0,
+  'raw JSON stays collapsed behind the toggle by default')
+const toggle = byClass(tr, 'lc-ts-json-toggle')[0]
+assert.ok(toggle, 'JSON toggle button is rendered')
+assert.match(textOf(toggle), /View Raw JSON|查看原始 JSON/, 'toggle shows the open label')
+// Expanding the toggle reveals the schema; clicking again collapses it.
+toggle.args[1].onClick()
+tr = renderView()
+assert.match(textOf(byClass(tr, 'lc-br-pre')[0]), /"parameters"/, 'expanding reveals the raw JSON')
+const collapseToggle = byClass(tr, 'lc-ts-json-toggle')[0]
+assert.match(textOf(collapseToggle), /Collapse|收起/, 'toggle label flips to the hide label')
+collapseToggle.args[1].onClick()
+tr = renderView()
+assert.equal(byClass(tr, 'lc-br-pre').length, 0, 'collapsing the toggle removes the JSON block')
 
 // Without the contextHeaders key (older host), those sections degrade to a note.
 headersValue = undefined

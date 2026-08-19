@@ -67,6 +67,192 @@ export interface ContextBrowserProps {
   onToolFocusHandled?: () => void
 }
 
+/** The JSON Schema fragment describing one parameter's type, defensively narrowed. */
+interface ParamSchema {
+  type?: unknown
+  description?: unknown
+  // JSON Schema vocabulary used by tool inputs the browser needs to display
+  // meaningfully: enum values (render as a comma-joined inline list), an
+  // array's `items` (render the element type), and `anyOf`/`oneOf` (render
+  // the alternation as a `/`-joined list). Anything else falls back to a
+  // plain `type` string or `object` if absent.
+  enum?: unknown
+  items?: unknown
+  anyOf?: unknown
+  oneOf?: unknown
+}
+
+/** Flatten the `anyOf` / `oneOf` alternation into one displayable string. */
+function unionTypesOf(p: ParamSchema): string | null {
+  const branches: unknown[] = []
+  if (Array.isArray(p.anyOf)) branches.push(...p.anyOf)
+  if (Array.isArray(p.oneOf)) branches.push(...p.oneOf)
+  if (branches.length === 0) return null
+  const parts: string[] = []
+  for (const b of branches) {
+    if (b !== null && typeof b === 'object') parts.push(typeOf(b as ParamSchema))
+  }
+  return parts.length > 0 ? parts.join(' | ') : null
+}
+
+/**
+ * Derive a short, human-readable type label from a JSON Schema fragment.
+ * Arrays show their element type (`array<number>`); unions fold into
+ * `a | b`; enums collapse into `(enum)`. Returns `unknown` when the schema
+ * carries no usable signal — the row falls back to its description then.
+ */
+function typeOf(p: ParamSchema): string {
+  const u = unionTypesOf(p)
+  if (u !== null) return u
+  const t = p.type
+  if (t === 'array') {
+    const items = p.items
+    if (items !== null && typeof items === 'object') {
+      const inner = typeOf(items as ParamSchema)
+      return 'array<' + inner + '>'
+    }
+    return 'array'
+  }
+  if (typeof t === 'string') {
+    if (t === 'object') {
+      const props = (p as { properties?: unknown }).properties
+      if (props !== null && typeof props === 'object' && Object.keys(props as Object).length > 0) {
+        return 'object{' + Object.keys(props as Object).length + '}'
+      }
+    }
+    if (Array.isArray(p.enum) && p.enum.length > 0) {
+      return t + ' (enum)'
+    }
+    return t
+  }
+  if (Array.isArray(p.enum) && p.enum.length > 0) return '(enum)'
+  return 'unknown'
+}
+
+/**
+ * Locate the parameter-bearing object inside a raw tool schema. Producers
+ * may nest it under `parameters`, `input_schema`, `inputSchema`, or hand
+ * the schema as the bare JSON Schema (when `type === 'object'`).
+ */
+function paramsOf(schema: unknown): ParamSchema | null {
+  if (schema === null || typeof schema !== 'object') return null
+  const s = schema as Record<string, unknown>
+  const candidate = (v: unknown): ParamSchema | null =>
+    v !== null && typeof v === 'object' ? v as ParamSchema : null
+  const nested = candidate(s.parameters) ?? candidate(s.input_schema)
+    ?? candidate(s.inputSchema)
+  if (nested !== null) return nested
+  // Bare JSON Schema: a `{ type: 'object', properties: {...} }` at the root
+  // is itself the parameter object — no inner wrapper.
+  if (s.type === 'object' && s.properties !== undefined && typeof s.properties === 'object') {
+    return s as unknown as ParamSchema
+  }
+  return null
+}
+
+/**
+ * One row of the parsed parameter table — name (mono-styled, with a
+ * required chip), short type label, and the description on its own line
+ * (so a long blurb never breaks the name/type rhythm).
+ */
+function ParamRow(props: {
+  name: string
+  schema: ParamSchema
+  required: boolean
+}): ReactNS.ReactElement {
+  const typeLabel = typeOf(props.schema)
+  const desc = props.schema.description
+  return (
+    <div className="lc-ts-param-row">
+      <span className="lc-ts-param-name">{props.name}</span>
+      <span className="lc-ts-param-type">{typeLabel}</span>
+      <span className={props.required ? 'lc-ts-param-req' : 'lc-ts-param-req-off'}>
+        {props.required ? '✓' : '·'}
+      </span>
+      {typeof desc === 'string' && desc !== ''
+        ? <span className="lc-ts-param-desc">{desc}</span>
+        : null}
+    </div>
+  )
+}
+
+/**
+ * The full body of one expanded tool row: description, a parsed parameter
+ * table (when the schema carries one), and the raw JSON behind a toggle.
+ * Owns its own open/closed state for the JSON so two expanded tools stay
+ * independent.
+ */
+function ToolSchema(props: {
+  description: string | undefined
+  schema: unknown
+  /** Localized labels for the card titles, empty-state line, and toggle. */
+  labels: {
+    desc: string
+    title: string
+    empty: string
+    show: string
+    hide: string
+  }
+}): ReactNS.ReactElement {
+  const [jsonOpen, setJsonOpen] = React.useState(false)
+  const params = React.useMemo(() => paramsOf(props.schema), [props.schema])
+  // Pull `properties` + `required` out of the parameter object as plain
+  // values (avoids re-deriving the same shape in every row).
+  const rows = React.useMemo<{ name: string; schema: ParamSchema; required: boolean }[]>(() => {
+    if (params === null) return []
+    const props = (params as { properties?: unknown }).properties
+    if (props === null || typeof props !== 'object') return []
+    const req = Array.isArray((params as { required?: unknown }).required)
+      ? new Set(((params as { required: unknown[] }).required as unknown[])
+          .filter((x): x is string => typeof x === 'string'))
+      : new Set<string>()
+    const out: { name: string; schema: ParamSchema; required: boolean }[] = []
+    for (const k of Object.keys(props as Record<string, unknown>)) {
+      const v = (props as Record<string, unknown>)[k]
+      if (v === null || typeof v !== 'object') continue
+      out.push({ name: k, schema: v as ParamSchema, required: req.has(k) })
+    }
+    return out
+  }, [params])
+  const schemaJson = React.useMemo(
+    () => props.schema !== undefined ? JSON.stringify(props.schema, null, 2) : '',
+    [props.schema],
+  )
+  return (
+    <>
+      {props.description !== undefined ? (
+        <div className="lc-ts-card">
+          <div className="lc-ts-card-head">
+            <b>{props.labels.desc}</b>
+          </div>
+          <pre className="lc-ts-desc-body">{props.description}</pre>
+        </div>
+      ) : null}
+      {params !== null && rows.length > 0 ? (
+        <div className="lc-ts-card">
+          <div className="lc-ts-card-head">
+            <b>{props.labels.title}</b>
+            <span className="lc-ts-card-count">{rows.length}</span>
+          </div>
+          {rows.map(r => <ParamRow key={r.name} name={r.name} schema={r.schema} required={r.required} />)}
+        </div>
+      ) : params !== null ? (
+        <div className="lc-ts-params-empty">{props.labels.empty}</div>
+      ) : null}
+      {schemaJson !== '' ? (
+        <div className="lc-ts-json">
+          <button
+            type="button"
+            className="lc-ts-json-toggle"
+            onClick={() => { setJsonOpen(o => !o) }}
+          >{(jsonOpen ? '▾ ' : '▸ ') + (jsonOpen ? props.labels.hide : props.labels.show)}</button>
+          {jsonOpen ? <pre className="lc-br-pre lc-br-dim">{schemaJson}</pre> : null}
+        </div>
+      ) : null}
+    </>
+  )
+}
+
 /** One raw content block (text/reasoning/tool-result/…), rendered defensively. */
 function RawBlocks(props: { blocks: readonly unknown[] }): ReactNS.ReactElement {
   return (
@@ -329,12 +515,20 @@ export function makeContextBrowser(
         if (view.header === null) return <div className="lc-br-note">{t(headers === null ? 'browser.noHeader' : 'browser.noEpoch')}</div>
         // Schemas rank by token price (largest first), mirroring the overview's
         // "工具定义 Top" chips; the producer's header order is not meaningful.
+        // Localized labels for the per-tool parameter table / JSON toggle:
+        // passed in by the parent so the body component stays a pure function
+        // of its props (testable in isolation, no closure over `t`).
+        const labels = {
+          desc: t('tool.desc'),
+          title: t('tool.params'),
+          empty: t('tool.paramsEmpty'),
+          show: t('tool.jsonToggle'),
+          hide: t('tool.jsonHide'),
+        }
         return view.header.tools.slice().sort((a, b) => b.tokens - a.tokens).map((tool: HeaderTool) => {
-          const schema = tool.schema !== undefined ? JSON.stringify(tool.schema, null, 2) : ''
           return elemRow('tool:' + tool.name, null, tool.name, tool.tokens, undefined,
             <div className="lc-br-content">
-              {tool.description !== undefined ? <pre className="lc-br-pre">{tool.description}</pre> : null}
-              {schema !== '' ? <pre className="lc-br-pre lc-br-dim">{schema}</pre> : null}
+              <ToolSchema description={tool.description} schema={tool.schema} labels={labels} />
             </div>)
         })
       }
