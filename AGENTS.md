@@ -24,6 +24,9 @@ A DeepSeek Harness plugin for context insight, actions, and management.
 - Try best to use the existing classes, utilities, styles, events, presets and lifecycles provided by DeepSeek Harness.ess.
 - Use English in code comments and documentation.
 
+## Building
+- Run `npm run build` after code changes applied. It also helps developer to see the code changes in the browser.
+
 ## Dependency
 - Consider updating the dependencies to the latest version if possible, as the deepseek-harness is evolving rapidly.
 
