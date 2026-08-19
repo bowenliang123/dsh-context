@@ -102,7 +102,7 @@ export const DICT_EN: Record<string, string> = {
   'tools.more': 'of {n}',
   'trend.title': 'History',
   'gran.step': 'Step', 'gran.turn': 'Turn',
-  'trend.hint': 'hover a bar for details (click to pin), ✂ marks compaction/prune; scroll sideways to see earlier; Step/Turn switches granularity',
+  'trend.hint': 'Hover to view details, ✂ marks compaction/prune, Step/Turn switches granularity',
   'trend.empty': 'Send a message and each model request’s context makeup shows up here',
   'detail.step': 'Turn {t} · Step {s}',
   'detail.turn': 'Turn {t} · {n} steps',
