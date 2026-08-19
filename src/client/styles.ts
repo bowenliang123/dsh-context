@@ -63,7 +63,14 @@ export const STYLES = [
   '.lc-chip-on { font-weight: 600; background: var(--dsw-alias-interactive-bg-hover); }',
   '.lc-chip-on i { box-shadow: 0 0 0 1px var(--dsw-alias-brand-primary); }',
   '.lc-tools { margin-top: 10px; color: var(--dsw-alias-label-secondary); display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }',
-  '.lc-tool-chip { background: var(--dsw-alias-bg-layer-2); border-radius: 4px; padding: 1px 7px; font-size: 12px; color: var(--dsw-alias-label-primary); }',
+  // The overview tool list links into the Context browser: the "工具定义 Top"
+  // label, its "等 N 个" overflow link, and every tool chip are buttons, and
+  // hover underlines them (the chip already reads as a tag, so the underline
+  // is the only affordance).
+  '.lc-tools-label, .lc-tools-more { border: 0; background: transparent; padding: 0; color: var(--dsw-alias-label-secondary); font-family: inherit; font-size: 12px; cursor: pointer; }',
+  '.lc-tools-label:hover, .lc-tools-more:hover { text-decoration: underline; }',
+  '.lc-tool-chip { background: var(--dsw-alias-bg-layer-2); border: 0; border-radius: 4px; padding: 1px 7px; font: inherit; font-size: 12px; color: var(--dsw-alias-label-primary); cursor: pointer; }',
+  '.lc-tool-chip:hover { text-decoration: underline; }',
   '.lc-chartrow { display: flex; gap: 6px; align-items: stretch; }',
   '.lc-axis { position: relative; width: 40px; height: 150px; padding-top: 18px; box-sizing: border-box; color: var(--dsw-alias-label-secondary); font-size: 11px; }',
   '.lc-axis span { position: absolute; right: 0; line-height: 1; }',

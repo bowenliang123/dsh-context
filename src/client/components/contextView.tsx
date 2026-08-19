@@ -97,6 +97,13 @@ export function makeContextView(ctx: ClientCtx, kit: ViewKit): (props: ContextVi
         return p.length === 1 ? [...EVENT_KINDS] : p.filter(x => x !== k)
       })
     }
+    // Tool-link bridge to the Context browser: clicking the overview's
+    // "工具定义 Top" label (category focus) or one of its chips (specific
+    // tool focus) asks the browser to reveal the corresponding section.
+    // One-shot — the browser applies it and clears it back through
+    // `onToolFocusHandled`, so clicking the same chip again re-triggers.
+    const [toolFocus, setToolFocus] = React.useState<{ tool?: string } | null>(null)
+    const clearToolFocus = React.useCallback(() => { setToolFocus(null) }, [])
 
     // ---- page-scroller ownership (see `viewScroll` above) ----
     const rootRef = React.useRef<HTMLDivElement | null>(null)
@@ -234,12 +241,29 @@ export function makeContextView(ctx: ClientCtx, kit: ViewKit): (props: ContextVi
               <Legend parts={head.parts} hoverKey={hoverCat} onHoverKey={setHoverCat} />
               {(data.toolList && data.toolList.length > 0) ? (
                 <div className="lc-tools">
-                  {t('tools.top')}
+                  <button
+                    type="button"
+                    className="lc-tools-label"
+                    onClick={() => { setToolFocus({}) }}
+                  >{t('tools.top')}</button>
                   {data.toolList.slice().sort((a, b) => b.tokens - a.tokens).slice(0, 5).map(tool => {
-                    return <span key={tool.name} className="lc-tool-chip">{tool.name + ' ' + fmt(tool.tokens)}</span>
+                    return (
+                      <button
+                        key={tool.name}
+                        type="button"
+                        className="lc-tool-chip"
+                        onClick={() => { setToolFocus({ tool: tool.name }) }}
+                      >{tool.name + ' ' + fmt(tool.tokens)}</button>
+                    )
                   })}
                   {data.toolList.length > 5
-                    ? <span className="lc-card-sub">{' ' + t('tools.more', { n: data.toolList.length })}</span>
+                    ? (
+                      <button
+                        type="button"
+                        className="lc-tools-more"
+                        onClick={() => { setToolFocus({}) }}
+                      >{t('tools.more', { n: data.toolList.length })}</button>
+                    )
                     : null}
                 </div>
               ) : null}
@@ -304,6 +328,9 @@ export function makeContextView(ctx: ClientCtx, kit: ViewKit): (props: ContextVi
               // live step, gated inside the browser itself.
               hoverKey={hoverCat}
               onHoverKey={setHoverCat}
+              // Tool-link bridge from the overview ("工具定义 Top" chips).
+              toolFocus={toolFocus}
+              onToolFocusHandled={clearToolFocus}
             />
           </div>
         </div>

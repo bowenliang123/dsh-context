@@ -54,6 +54,17 @@ export interface ContextBrowserProps {
    */
   hoverKey?: string | null
   onHoverKey?: (key: string | null) => void
+  /**
+   * Overview tool-chip bridge: a click on the overview card's "工具定义 Top"
+   * label (`tool` omitted) or one of its chips (`tool: name`) asks this
+   * browser to reveal that section. A one-shot request — it is applied once
+   * (switch to the live surface, open the "tools" category, and when a
+   * specific tool is named expand its row), then handed back through
+   * `onToolFocusHandled` so the same chip can be clicked again.
+   */
+  toolFocus?: { tool?: string } | null
+  /** Called once a one-shot `toolFocus` request has been applied; the parent clears it. */
+  onToolFocusHandled?: () => void
 }
 
 /** One raw content block (text/reasoning/tool-result/…), rendered defensively. */
@@ -225,6 +236,18 @@ export function makeContextBrowser(
       setOpenCat(null)
       setOpenElem(null)
     }, [pinSeq])
+    // Overview tool-link bridge: apply a one-shot request (switch to the LIVE
+    // surface — the overview's Top chips rank the current header's tools —
+    // open the tools category, expand the clicked tool), then hand it back so
+    // the parent can issue the same focus again on the next click.
+    const toolFocus = props.toolFocus
+    React.useEffect(() => {
+      if (toolFocus === null || toolFocus === undefined) return
+      setSel('live')
+      setOpenCat('tools')
+      setOpenElem(toolFocus.tool !== undefined ? 'tool:' + toolFocus.tool : null)
+      if (props.onToolFocusHandled !== undefined) props.onToolFocusHandled()
+    }, [toolFocus, props.onToolFocusHandled])
     const awaiting = missingSeq !== null && !exhausted && loadOlderHistory !== undefined && hasMore
 
     const requests = data.requests || []
