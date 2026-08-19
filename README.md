@@ -37,7 +37,7 @@ Open any session and click the **Context / 上下文** tab:
 
 ### ⌨️ `/context` command — In-session Context Insight modal
 
-Type `/context` (or pick it from the `/` menu) and press Enter: a centered dialog shows the provider-anchored occupancy headline, the six-category composition bar, and the last-10-turn trend chart — hover or click a bar for its full breakdown, exactly like the tab.
+Type `/context` (or pick it from the `/` menu) and press Enter: a centered dialog shows the **Current Composition** card and the **Context browser** — the same composition bar, legend, and per-step browsing as the tab, so you can inspect what any request was assembled from without leaving the chat.
 
 ![Context command_entry](https://raw.githubusercontent.com/bowenliang123/dsh-context/main/docs/context-command-entry.png)
 
