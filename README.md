@@ -39,6 +39,8 @@ Open any session and click the **Context / 上下文** tab:
 
 Type `/context` (or pick it from the `/` menu) and press Enter: a centered dialog shows the provider-anchored occupancy headline, the six-category composition bar, and the last-10-turn trend chart — hover or click a bar for its full breakdown, exactly like the tab.
 
+![Context command_entry](https://raw.githubusercontent.com/bowenliang123/dsh-context/main/docs/context-command-entry.png)
+
 ![Context command](https://raw.githubusercontent.com/bowenliang123/dsh-context/main/docs/context-command.png)
 
 ## What you'll see
