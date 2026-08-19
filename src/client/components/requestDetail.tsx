@@ -23,7 +23,7 @@ export function makeRequestDetail(
   kit: ViewKit,
   StackedBar: (props: StackedBarProps) => ReactNS.ReactElement,
 ): (props: RequestDetailProps) => ReactNS.ReactElement | null {
-  const { t, tr, fmt, fmtTime, catLabel, eventLabel, eventAt } = kit
+  const { t, fmt, fmtTime, catLabel, eventLabel, eventAt } = kit
   return function RequestDetail(props: RequestDetailProps): ReactNS.ReactElement | null {
     const req = props.request
     if (!req) return null
@@ -32,8 +32,8 @@ export function makeRequestDetail(
     // the bar carries).
     const isTurn = req.stepCount !== undefined && req.stepCount > 1
     const head = isTurn
-      ? tr('detail.turn', { t: req.turn ?? 0, n: req.stepCount ?? 0 })
-      : tr('detail.step', { t: req.turn ?? 0, s: req.step ?? 0 })
+      ? t('detail.turn', { t: req.turn ?? 0, n: req.stepCount ?? 0 })
+      : t('detail.step', { t: req.turn ?? 0, s: req.step ?? 0 })
     // When this bar carries a boundary event (compaction/prune), the header
     // also shows WHERE the event happened: the gap between the request
     // before and the request after (e.g. "✂ Turn 49 · Step 2→3").
@@ -48,12 +48,12 @@ export function makeRequestDetail(
             : null}
           {isTurn ? <span className="lc-detail-tag">{t('detail.lastStep')}</span> : null}
           <span>{fmtTime(req.time)}</span>
-          <span>{tr('detail.estTotal', { n: fmt(req.total) })}</span>
+          <span>{t('detail.estTotal', { n: fmt(req.total) })}</span>
           {req.prompt !== undefined
-            ? <span className="lc-actual">{tr('detail.actual', { n: fmt(req.prompt) })}</span>
+            ? <span className="lc-actual">{t('detail.actual', { n: fmt(req.prompt) })}</span>
             : null}
           {req.output !== undefined
-            ? <span>{tr('detail.output', { n: fmt(req.output) })}</span>
+            ? <span>{t('detail.output', { n: fmt(req.output) })}</span>
             : null}
         </div>
         <StackedBar parts={partsOf(req)} height={10} />

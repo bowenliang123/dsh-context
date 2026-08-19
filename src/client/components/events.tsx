@@ -26,17 +26,17 @@ export const EVENT_ICONS: Record<string, string> = { compaction: '✂', prune: '
 
 export interface EventListProps { events: ContextEventRecord[] }
 
-/** Build the event text helpers bound to a translate pair (t, tr). */
-export function makeEventText(t: Translate, tr: Translate): {
+/** Build the event text helpers bound to the translate function. */
+export function makeEventText(t: Translate): {
   eventLabel: (ev: ContextEventRecord) => string
   eventAt: (ev: ContextEventRecord) => string | null
 } {
   function eventLabel(ev: ContextEventRecord): string {
-    if (ev.kind === 'compaction') return tr('ev.compaction', { n: ev.count || 0 })
+    if (ev.kind === 'compaction') return t('ev.compaction', { n: ev.count || 0 })
     if (ev.kind === 'prune') return t('ev.prune')
-    if (ev.kind === 'model') return tr('ev.model', { a: ev.from || '?', b: ev.to || '?' })
+    if (ev.kind === 'model') return t('ev.model', { a: ev.from || '?', b: ev.to || '?' })
     if (ev.kind === 'inject') {
-      if (ev.sub === 'skill') return tr('ev.skill', { name: ev.name || '?' })
+      if (ev.sub === 'skill') return t('ev.skill', { name: ev.name || '?' })
       const base = t('form.' + (ev.form || 'context'))
       return ev.name ? base + ' · ' + ev.name : base
     }

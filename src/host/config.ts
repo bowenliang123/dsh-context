@@ -61,22 +61,9 @@ export const Config = z.preprocess(
 )
 
 /** The resolved retention/slice bounds the fold operates under. */
-export interface FoldBounds {
-  maxRequestSteps: number
-  maxKeptTurns: number
-  maxEvents: number
-  maxNodes: number
-  maxArchiveNodes: number
-}
+export type FoldBounds = Required<Config>
 
 /** Validate (and default) the entry config into concrete fold bounds. */
 export function resolveBounds(config: Config | undefined): FoldBounds {
-  const parsed = Config.parse(config ?? {})
-  return {
-    maxRequestSteps: parsed.maxRequestSteps,
-    maxKeptTurns: parsed.maxKeptTurns,
-    maxEvents: parsed.maxEvents,
-    maxNodes: parsed.maxNodes,
-    maxArchiveNodes: parsed.maxArchiveNodes,
-  }
+  return Config.parse(config ?? {})
 }

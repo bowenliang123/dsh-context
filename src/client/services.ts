@@ -90,11 +90,14 @@ export type ClientCtx = Context & {
   slots: SlotsService
 }
 
-/** Narrow a delivered projection value to the context timeline. */
-export function timelineOf(value: unknown): ContextTimeline | null {
+/** Narrow an unknown projection value to a record, or null when it is not one. */
+function asRecord<T>(value: unknown): T | null {
   if (value === null || value === undefined || typeof value !== 'object') return null
-  return value as ContextTimeline
+  return value as T
 }
+
+/** Narrow a delivered projection value to the context timeline. */
+export const timelineOf = (value: unknown): ContextTimeline | null => asRecord<ContextTimeline>(value)
 
 /**
  * Narrow a delivered projection value to the official token-meter
@@ -103,10 +106,7 @@ export function timelineOf(value: unknown): ContextTimeline | null {
  * (e.g. a harness without the session-projection registry) — callers fall
  * back to their derived anchor, so the UI degrades gracefully.
  */
-export function contextPressureOf(value: unknown): ContextPressure | null {
-  if (value === null || value === undefined || typeof value !== 'object') return null
-  return value as ContextPressure
-}
+export const contextPressureOf = (value: unknown): ContextPressure | null => asRecord<ContextPressure>(value)
 
 /**
  * Narrow a delivered projection value to the plugin's `contextHeaders`
@@ -115,10 +115,8 @@ export function contextPressureOf(value: unknown): ContextPressure | null {
  * sections to tokens-only with a note.
  */
 export function headersOf(value: unknown): ContextHeaders | null {
-  if (value === null || value === undefined || typeof value !== 'object') return null
-  const headers = (value as ContextHeaders).headers
-  if (!Array.isArray(headers)) return null
-  return value as ContextHeaders
+  const headers = asRecord<ContextHeaders>(value)
+  return headers !== null && Array.isArray(headers.headers) ? headers : null
 }
 
 // ---- /context command faces (framework `inputTriggers` service) ----

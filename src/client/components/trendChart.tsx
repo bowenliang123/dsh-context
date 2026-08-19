@@ -74,7 +74,7 @@ export function attachMarkers(requests: RequestRecord[], events: ContextEventRec
 }
 
 export function makeTrendChart(kit: ViewKit): (props: TrendChartProps) => ReactNS.ReactElement {
-  const { t, tr, fmt, fmtTime, catLabel, eventLabel, eventAt } = kit
+  const { t, fmt, fmtTime, catLabel, eventLabel, eventAt } = kit
 
   // Plot height in px (the marker lane above it is 18px).
   const CHART_H = 112
@@ -171,10 +171,10 @@ export function makeTrendChart(kit: ViewKit): (props: TrendChartProps) => ReactN
     // per-category breakdown lives in the detail panel below.
     const tipOf = (req: RequestRecord): string => {
       const head = req.stepCount !== undefined && req.stepCount > 1
-        ? tr('tip.turn', { t: req.turn ?? 0, n: req.stepCount })
-        : tr('tip.step', { t: req.turn ?? 0, s: req.step ?? 0 })
-      return head + ' · ' + fmtTime(req.time) + ' · ' + tr('tip.total', { n: fmt(req.total) })
-        + (req.prompt !== undefined ? ' · ' + tr('tip.actual', { n: fmt(req.prompt) }) : '')
+        ? t('tip.turn', { t: req.turn ?? 0, n: req.stepCount })
+        : t('tip.step', { t: req.turn ?? 0, s: req.step ?? 0 })
+      return head + ' · ' + fmtTime(req.time) + ' · ' + t('tip.total', { n: fmt(req.total) })
+        + (req.prompt !== undefined ? ' · ' + t('tip.actual', { n: fmt(req.prompt) }) : '')
     }
     const hoveredIdx = props.hoveredSeq !== null ? requests.findIndex(r => r.seq === props.hoveredSeq) : -1
     const hoveredReq = hoveredIdx >= 0 ? requests[hoveredIdx] : null

@@ -146,7 +146,7 @@ export function makeContextBrowser(
   kit: ViewKit,
   StackedBar: (props: StackedBarProps) => ReactNS.ReactElement,
 ): (props: ContextBrowserProps) => ReactNS.ReactElement {
-  const { t, tr, fmt, fmtTime, catLabel } = kit
+  const { t, fmt, fmtTime, catLabel } = kit
   const nodeText = makeNodeText(kit)
   const catColor: Record<string, string> = {}
   for (const c of CATS) catColor[c.key] = c.color
@@ -355,7 +355,7 @@ export function makeContextBrowser(
             <option value="live">{t('browser.live')}</option>
             {requests.slice().reverse().map(r => (
               <option key={r.seq} value={String(r.seq)}>
-                {tr('detail.step', { t: r.turn ?? 0, s: r.step ?? 0 }) + ' · ' + fmtTime(r.time)}
+                {t('detail.step', { t: r.turn ?? 0, s: r.step ?? 0 }) + ' · ' + fmtTime(r.time)}
               </option>
             ))}
           </select>
@@ -363,13 +363,13 @@ export function makeContextBrowser(
 
         <div className="lc-br-meta">
           <b>{req !== null
-            ? tr('detail.step', { t: req.turn ?? 0, s: req.step ?? 0 })
+            ? t('detail.step', { t: req.turn ?? 0, s: req.step ?? 0 })
             : t('browser.liveNow')}</b>
           {req !== null ? <span>{fmtTime(req.time)}</span> : null}
           {hoverReq !== null ? <span className="lc-card-sub">{t('browser.preview')}</span> : null}
-          <span>{tr('detail.estTotal', { n: fmt(total) })}</span>
+          <span>{t('detail.estTotal', { n: fmt(total) })}</span>
           {req !== null && req.prompt !== undefined
-            ? <span className="lc-actual">{tr('detail.actual', { n: fmt(req.prompt) })}</span>
+            ? <span className="lc-actual">{t('detail.actual', { n: fmt(req.prompt) })}</span>
             : null}
         </div>
 
@@ -389,7 +389,7 @@ export function makeContextBrowser(
         </div>
 
         {view.missingLive > 0
-          ? <div className="lc-br-note">{tr('browser.missingLive', { n: view.missingLive })}</div>
+          ? <div className="lc-br-note">{t('browser.missingLive', { n: view.missingLive })}</div>
           : null}
         {view.approximate
           ? <div className="lc-br-note">{t('browser.approx')}</div>
@@ -414,7 +414,7 @@ export function makeContextBrowser(
                   <span className={'lc-br-chev' + (open ? ' lc-br-chev-on' : '')}>{'▸'}</span>
                   <i style={{ background: c.color }} />
                   <span className="lc-br-cat-label">{catLabel(c.key)}</span>
-                  <span className="lc-br-cat-count">{tr('browser.items', { n: count })}</span>
+                  <span className="lc-br-cat-count">{t('browser.items', { n: count })}</span>
                   <span className="lc-br-tokens">{'≈' + fmt(v)}</span>
                   <span className="lc-br-pct">{total > 0 ? Math.round(v / total * 100) + '%' : ''}</span>
                 </button>

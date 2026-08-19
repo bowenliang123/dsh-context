@@ -11,7 +11,7 @@ export function fmt(n: number | null | undefined): string {
 }
 
 export function fmtTime(t: number): string {
-  const d = new Date(t)
-  function p(x: number) { return (x < 10 ? '0' : '') + x }
-  return p(d.getHours()) + ':' + p(d.getMinutes()) + ':' + p(d.getSeconds())
+  // en-GB with a 24-hour clock renders the same local HH:MM:SS the manual
+  // zero-pad produced, without the hand-rolled p() helper.
+  return new Date(t).toLocaleTimeString('en-GB', { hour12: false })
 }

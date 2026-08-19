@@ -43,7 +43,7 @@ const EVENT_KINDS = ['inject', 'compaction', 'prune', 'model'] as const
 export type ContextViewProps = SessionStandardProps
 
 export function makeContextView(ctx: ClientCtx, kit: ViewKit): (props: ContextViewProps) => ReactNS.ReactElement {
-  const { t, tr, fmt, fmtTime, catLabel } = kit
+  const { t, fmt, fmtTime, catLabel } = kit
   const StackedBar = makeStackedBar(kit)
   const Legend = makeLegend(kit)
   const TrendChart = makeTrendChart(kit)
@@ -239,7 +239,7 @@ export function makeContextView(ctx: ClientCtx, kit: ViewKit): (props: ContextVi
                     return <span key={tool.name} className="lc-tool-chip">{tool.name + ' ' + fmt(tool.tokens)}</span>
                   })}
                   {data.toolList.length > 5
-                    ? <span className="lc-card-sub">{' ' + tr('tools.more', { n: data.toolList.length })}</span>
+                    ? <span className="lc-card-sub">{' ' + t('tools.more', { n: data.toolList.length })}</span>
                     : null}
                 </div>
               ) : null}

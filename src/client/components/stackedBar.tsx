@@ -27,7 +27,7 @@ export interface StackedBarProps {
 }
 
 export function makeStackedBar(kit: ViewKit): (props: StackedBarProps) => ReactNS.ReactElement {
-  const { t, tr, fmt, catLabel } = kit
+  const { t, fmt, catLabel } = kit
   return function StackedBar(props: StackedBarProps): ReactNS.ReactElement {
     // props.parts: [{key,color,value}]; optional props.max: when max exceeds
     // the parts' total, the remainder shows as an empty, hoverable track
@@ -66,7 +66,7 @@ export function makeStackedBar(kit: ViewKit): (props: StackedBarProps) => ReactN
               // "(pct%)" is a share of the OCCUPIED total — the dashed box
               // that appears on hover frames exactly this reference region.
               text: catLabel(p.key) + ' ≈' + fmt(p.value) + ' (' + Math.round(p.value / total * 100) + '%) '
-                + tr('overview.ofUsed'),
+                + t('overview.ofUsed'),
               leftPct: Math.max(12, Math.min(acc + pct / 2, 88)),
             }
             break
@@ -138,7 +138,7 @@ export function makeLegend(kit: ViewKit): (props: {
   hoverKey?: string | null
   onHoverKey?: (key: string | null) => void
 }) => ReactNS.ReactElement {
-  const { tr, fmt, catLabel } = kit
+  const { t, fmt, catLabel } = kit
   return function Legend(props: {
     parts: PartsPart[]
     hoverKey?: string | null
@@ -154,7 +154,7 @@ export function makeLegend(kit: ViewKit): (props: {
             <span
               key={p.key}
               className={'lc-chip' + (on ? ' lc-chip-on' : '')}
-              title={tr('overview.ofUsed')}
+              title={t('overview.ofUsed')}
               onMouseEnter={() => { if (props.onHoverKey !== undefined) props.onHoverKey(p.key) }}
               onMouseLeave={() => { if (props.onHoverKey !== undefined) props.onHoverKey(null) }}
             >

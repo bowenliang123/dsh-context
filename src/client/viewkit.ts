@@ -12,7 +12,6 @@ import type { Translate } from './i18n'
 
 export interface ViewKit {
   t: Translate
-  tr: Translate
   fmt: typeof fmt
   fmtTime: typeof fmtTime
   catLabel: (key: string) => string
@@ -22,10 +21,9 @@ export interface ViewKit {
 }
 
 export function makeViewKit(t: Translate): ViewKit {
-  const { eventLabel, eventAt } = makeEventText(t, t)
+  const { eventLabel, eventAt } = makeEventText(t)
   return {
     t,
-    tr: t,
     fmt,
     fmtTime,
     catLabel: (key: string) => t('cat.' + key),

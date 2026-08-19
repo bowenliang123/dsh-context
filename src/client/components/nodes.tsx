@@ -30,7 +30,7 @@ export function makeNodeText(kit: ViewKit): (n: SurfaceNode) => string {
 }
 
 export function makeNodeList(kit: ViewKit): (props: NodeListProps) => ReactNS.ReactElement {
-  const { t, tr, fmt, fmtTime } = kit
+  const { t, fmt, fmtTime } = kit
   const nodeText = makeNodeText(kit)
 
   return function NodeList(props: NodeListProps): ReactNS.ReactElement {
@@ -43,7 +43,7 @@ export function makeNodeList(kit: ViewKit): (props: NodeListProps) => ReactNS.Re
     return (
       <div className="lc-nodes">
         {props.dropped > 0
-          ? <div className="lc-nodes-more">{tr('nodes.more', { n: props.dropped })}</div>
+          ? <div className="lc-nodes-more">{t('nodes.more', { n: props.dropped })}</div>
           : null}
         {rows.map(n => {
           const text = nodeText(n)
