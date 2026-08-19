@@ -28,12 +28,14 @@ export const STYLES = [
   '.lc-stacked-wrap { position: relative; width: 100%; }',
   '.lc-stacked { display: flex; width: 100%; border-radius: 5px; overflow: hidden; background: rgba(128,128,128,0.18); position: relative; }',
   // Hover reference frame around the OCCUPIED region of the composition bar:
-  // dashes from the left edge to the used/window boundary, so the legend's
-  // "share of used" percentages visibly map to the boxed part (the free track
-  // sits outside it). pointer-events: none keeps hover on the segments/free.
-  // Deliberately high-contrast (label-primary) and thick so the frame reads at
-  // a glance, and the other parts dim underneath it (`.lc-stacked-dim`).
-  '.lc-occupied-box { position: absolute; top: 0; bottom: 0; left: 0; border: 2px dashed var(--dsw-alias-label-primary); border-radius: 5px; box-sizing: border-box; pointer-events: none; opacity: 0; box-shadow: 0 0 0 1px var(--dsw-alias-bg-layer-2); transition: opacity 120ms ease; }',
+  // a SOLID box from the left edge to the used/window boundary, so the
+  // legend's "share of used" percentages visibly map to the boxed part (the
+  // free track sits outside it). pointer-events: none keeps hover on the
+  // segments/free. A soft LIGHT-GRAY stroke — a gentle guide rather than a
+  // hard black box — that still reads through its 2px thickness against the
+  // dimmed parts underneath it (`.lc-stacked-dim`). The free track echoes
+  // the same weight with a dashed box, so the two read as one system.
+  '.lc-occupied-box { position: absolute; top: 0; bottom: 0; left: 0; border: 2px solid var(--dsw-alias-label-tertiary); border-radius: 5px; box-sizing: border-box; pointer-events: none; opacity: 0; box-shadow: 0 0 0 1px var(--dsw-alias-bg-layer-2); transition: opacity 120ms ease; }',
   '.lc-occupied-box-on { opacity: 1; }',
   '.lc-bar-tip { position: absolute; bottom: calc(100% + 6px); transform: translateX(-50%); z-index: 5; white-space: nowrap; background: var(--dsw-alias-bg-layer-2); border: 1px solid var(--dsw-alias-border-l1); border-radius: 6px; padding: 3px 8px; font-size: 12px; color: var(--dsw-alias-label-primary); box-shadow: 0 2px 8px rgba(0,0,0,0.18); pointer-events: none; opacity: 0; transition: opacity 120ms ease; }',
   '.lc-bar-tip-on { opacity: 1; }',
@@ -42,9 +44,12 @@ export const STYLES = [
   // overview or the mirrored browser bar) glides in and out — same 120ms
   // rhythm as the rest of the view.
   '.lc-stacked-seg { transition: filter 120ms ease, opacity 120ms ease; }',
-  '.lc-stacked-free { transition: box-shadow 120ms ease, opacity 120ms ease; }',
+  '.lc-stacked-free { box-sizing: border-box; transition: box-shadow 120ms ease, opacity 120ms ease; }',
   '.lc-stacked-seg-on { filter: brightness(1.18); }',
-  '.lc-stacked-free-on { box-shadow: inset 0 0 0 1px var(--dsw-alias-label-secondary); border-radius: 3px; }',
+  // The free track mirrors the occupied frame: a DASHED 2px box (the occupied
+  // frame is solid) at the same weight — border, not the old inset shadow, so
+  // the dash pattern renders; the base box-sizing keeps the width from shifting.
+  '.lc-stacked-free-on { border: 2px dashed var(--dsw-alias-label-secondary); border-radius: 3px; }',
   // Hover focus: everything except the hovered part (segment, legend chip, or
   // free track) recedes, so the composition highlight and the occupied-region
   // frame read clearly. The selected segment/free keeps full opacity.

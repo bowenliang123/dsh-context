@@ -38,7 +38,7 @@ export function makeStackedBar(kit: ViewKit): (props: StackedBarProps) => ReactN
     const free = props.max !== undefined && props.max > total ? props.max - total : 0
     // Segment widths are laid out against the FULL window (scale), but their
     // legend/tooltip percentages are shares of the OCCUPIED total — so on
-    // hover we frame the occupied region (width = used/scale) with a dashed
+    // hover we frame the occupied region (width = used/scale) with a solid
     // box that makes that reference frame visible. Only when a free track
     // exists (otherwise width already equals the percentage).
     const usedPct = scale > 0 ? total / scale * 100 : 0
@@ -63,7 +63,7 @@ export function makeStackedBar(kit: ViewKit): (props: StackedBarProps) => ReactN
           const pct = scale > 0 ? p.value / scale * 100 : 0
           if (p.key === props.hoverKey && p.value > 0) {
             tip = {
-              // "(pct%)" is a share of the OCCUPIED total — the dashed box
+              // "(pct%)" is a share of the OCCUPIED total — the solid box
               // that appears on hover frames exactly this reference region.
               text: catLabel(p.key) + ' ≈' + fmt(p.value) + ' (' + Math.round(p.value / total * 100) + '%) '
                 + t('overview.ofUsed'),
