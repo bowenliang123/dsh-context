@@ -327,7 +327,9 @@ export function makeContextBrowser(
       }
       if (c === 'tools') {
         if (view.header === null) return <div className="lc-br-note">{t(headers === null ? 'browser.noHeader' : 'browser.noEpoch')}</div>
-        return view.header.tools.map((tool: HeaderTool) => {
+        // Schemas rank by token price (largest first), mirroring the overview's
+        // "工具定义 Top" chips; the producer's header order is not meaningful.
+        return view.header.tools.slice().sort((a, b) => b.tokens - a.tokens).map((tool: HeaderTool) => {
           const schema = tool.schema !== undefined ? JSON.stringify(tool.schema, null, 2) : ''
           return elemRow('tool:' + tool.name, null, tool.name, tool.tokens, undefined,
             <div className="lc-br-content">

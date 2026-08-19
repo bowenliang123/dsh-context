@@ -815,7 +815,12 @@ dataValue = {
 headersValue = {
   headers: [{
     seq: 1, time: 900, system: 'SYSTEM-PROMPT-TEXT',
-    tools: [{ name: 'bash', tokens: 5, description: 'run a command', schema: { name: 'bash', parameters: { type: 'object' } } }],
+    // Listed in producer order (tiny BEFORE bash) — the tools section must
+    // re-rank them by token price, largest first.
+    tools: [
+      { name: 'tiny', tokens: 2, description: 'a tiny helper', schema: { name: 'tiny', parameters: { type: 'object' } } },
+      { name: 'bash', tokens: 5, description: 'run a command', schema: { name: 'bash', parameters: { type: 'object' } } },
+    ],
   }],
 }
 tr = renderView()
@@ -871,6 +876,10 @@ assert.match(textOf(byClass(tr, 'lc-br-body')[0]), /SYSTEM-PROMPT-TEXT/, 'system
 brSlots[1][1]('tools')
 tr = renderView()
 assert.match(textOf(byClass(tr, 'lc-br-body')[0]), /bash/, 'tools section lists the schema rows')
+const toolRowOrder = byClass(tr, 'lc-br-elem-row').map(r => textOf(r))
+assert.equal(toolRowOrder.length, 2, 'both schemas listed')
+assert.match(toolRowOrder[0], /bash/, 'tools ranked by tokens: largest first')
+assert.match(toolRowOrder[1], /tiny/, 'tools ranked by tokens: smallest last')
 brSlots[2][1]('tool:bash')
 tr = renderView()
 const toolContent = textOf(byClass(tr, 'lc-br-content')[0])
