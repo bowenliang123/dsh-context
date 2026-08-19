@@ -229,7 +229,7 @@ const requireStateful = (spec) => {
 const m2 = { exports: {} }
 const pluginExports2 = factory(requireStateful, m2, globalThis.window, fakeDoc)
 
-const DICT_FOR_TEST = { 'tab': 'Context', 'loading': '…', 'error': 'x', 'detail.step': 'Turn {t} · Step {s}', 'gran.step': 'Step', 'gran.turn': 'Turn', 'detail.turn': 'Turn {t} · {n} steps', 'detail.lastStep': 'last step', 'overview.splitEst': '· category split is estimated', 'overview.ofWindow': 'tokens (~{p}%)', 'overview.free': 'Free window', 'events.at': 'Turn {t} · Step {s}', 'events.range': 'Turn {t} · Step {a}→{b}', 'events.rangeTo': 'Turn {a} · Step {as} → Turn {b} · Step {bs}', 'stats.recycleSub': '{c} compactions · {p} prunes', 'tip.step': 'Turn {t} · Step {s}', 'tip.turn': 'Turn {t} · {n} steps', 'tip.total': 'total ≈ {n}', 'tip.actual': ' (actual {n})', 'trend.title': 'History', 'trend.empty': 'empty trend', 'cmd.close': 'Close', 'cat.user': 'User', 'browser.live': 'Live (next request)', 'browser.liveNow': 'Live · next request', 'browser.items': '{n} items', 'browser.noContent': 'outside the loaded window', 'browser.loading': 'loading older history', 'browser.preview': 'preview', 'browser.noHeader': 'older plugin build' }
+const DICT_FOR_TEST = { 'tab': 'Context', 'loading': '…', 'error': 'x', 'detail.step': 'Turn {t} · Step {s}', 'gran.step': 'Step', 'gran.turn': 'Turn', 'detail.turn': 'Turn {t} · {n} steps', 'detail.lastStep': 'last step', 'overview.used': 'of context used', 'overview.free': 'Free window', 'events.at': 'Turn {t} · Step {s}', 'events.range': 'Turn {t} · Step {a}→{b}', 'events.rangeTo': 'Turn {a} · Step {as} → Turn {b} · Step {bs}', 'stats.recycleSub': '{c} compactions · {p} prunes', 'tip.step': 'Turn {t} · Step {s}', 'tip.turn': 'Turn {t} · {n} steps', 'tip.total': 'total ≈ {n}', 'tip.actual': ' (actual {n})', 'trend.title': 'History', 'trend.empty': 'empty trend', 'cmd.close': 'Close', 'cat.user': 'User', 'browser.live': 'Live (next request)', 'browser.liveNow': 'Live · next request', 'browser.items': '{n} items', 'browser.noContent': 'outside the loaded window', 'browser.loading': 'loading older history', 'browser.preview': 'preview', 'browser.noHeader': 'older plugin build' }
 let viewComponent = null
 let modalComponent = null
 let modalSource = null
@@ -787,8 +787,9 @@ assert.equal(byClass(tr, 'lc-event').length, 0, 'event list restored to the empt
 const overviewNum = byClass(tr, 'lc-overview-num')[0]
 assert.ok(overviewNum, 'overview number row present')
 assert.match(textOf(overviewNum), /83\.0k/, 'headline shows the provider-based occupancy')
-assert.match(textOf(overviewNum), /tokens \(~65%\)/, 'occupancy percent matches the chat ring formula')
-assert.match(textOf(overviewNum), /· category split is estimated/, 'no conflicting heuristic percentage next to the headline')
+assert.match(textOf(overviewNum), /\/ 128\.0k tokens/, 'window shown next to the occupancy')
+assert.match(textOf(overviewNum), /65%/, 'occupancy percent is the emphasized figure of the line')
+assert.ok(!/~65%/.test(textOf(overviewNum)), 'no conflicting heuristic percentage next to the headline')
 
 // ---- the OFFICIAL token-meter `contextPressure` projection wins over the
 // derived fallback (the chat ring's own value, read as a second projection) ----
@@ -796,7 +797,7 @@ pressureValue = { pressureTokens: 90000, projectedTokens: 90010, contextWindow: 
 tr = renderView()
 const overviewNum2 = byClass(tr, 'lc-overview-num')[0]
 assert.match(textOf(overviewNum2), /90\.0k/, 'official contextPressure projection is the headline when present')
-assert.match(textOf(overviewNum2), /tokens \(~45%\)/, 'contextPressure window is the percent denominator')
+assert.match(textOf(overviewNum2), /45%/, 'contextPressure window is the percent denominator')
 pressureValue = undefined
 dataValue = snapshot
 tr = renderView()
@@ -1073,7 +1074,7 @@ assert.deepEqual(modalTurns.map(t => t.args[2]), ['T5', 'T6', 'T7', 'T8', 'T9', 
 assert.equal(byClass(modalTree, 'lc-bar-marker').length, 1, '✂ marker rides the turn after the compaction')
 const modalOverview = byClass(modalTree, 'lc-overview-num')[0]
 assert.match(textOf(modalOverview), /205/, 'modal headline falls back to the heuristic total (no prompt on last request)')
-assert.match(textOf(modalOverview), /tokens \(~0%\)/, 'percent against the 128k window')
+assert.match(textOf(modalOverview), /0%/, 'percent against the 128k window')
 assert.equal(byClass(modalTree, 'lc-modal-trend').length, 1, 'trend section title present')
 const closeBtn = byClass(modalTree, 'lc-modal-close')[0]
 assert.equal(closeBtn.args[1]['aria-label'], 'Close', 'close button localized')

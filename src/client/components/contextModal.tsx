@@ -29,7 +29,7 @@ export interface ContextModalProps extends SessionStandardProps {
 }
 
 export function makeContextModal(ctx: ClientCtx, kit: ViewKit): (props: ContextModalProps) => ReactNS.ReactElement | null {
-  const { t, tr, fmt } = kit
+  const { t, fmt } = kit
   const sessions = ctx.get('sessions') as SessionsFace | undefined
   const StackedBar = makeStackedBar(kit)
   const Legend = makeLegend(kit)
@@ -127,10 +127,15 @@ export function makeContextModal(ctx: ClientCtx, kit: ViewKit): (props: ContextM
                 <b>{fmt(head.tokens)}</b>
                 <span>
                   {head.window
-                    ? ' / ' + fmt(head.window) + ' ' + tr('overview.ofWindow', { p: head.pct ?? 0 })
+                    ? ' / ' + fmt(head.window) + ' tokens'
                     : ' ' + t('overview.estimate')}
                 </span>
-                {!head.estimated ? <span className="lc-card-sub">{t('overview.splitEst')}</span> : null}
+                {head.pct !== null ? (
+                  <span className="lc-overview-pct">
+                    <b>{head.pct + '%'}</b>
+                    {t('overview.used')}
+                  </span>
+                ) : null}
               </div>
               <StackedBar parts={head.parts} height={16} max={head.window} hoverKey={hoverCat} onHoverKey={setHoverCat} />
               <Legend parts={head.parts} hoverKey={hoverCat} onHoverKey={setHoverCat} />

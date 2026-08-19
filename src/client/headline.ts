@@ -25,8 +25,6 @@ export interface Headline {
   pct: number | null
   /** Composition parts anchored to the provider total when one exists. */
   parts: PartsPart[]
-  /** True when no provider anchor applied (parts sum to the heuristic total). */
-  estimated: boolean
 }
 
 export function headlineOf(data: ContextTimeline, pressure: ContextPressure | null = null): Headline {
@@ -53,5 +51,5 @@ export function headlineOf(data: ContextTimeline, pressure: ContextPressure | nu
   const tokens = occupancyTokens ?? current.total
   const pct = window !== undefined && window > 0 ? Math.min(100, Math.round(tokens / window * 100)) : null
   const parts = anchoredParts(partsOf(current), occupancyTokens !== null && tokens > 0 ? tokens : null)
-  return { tokens, window, pct, parts, estimated: occupancyTokens === null }
+  return { tokens, window, pct, parts }
 }

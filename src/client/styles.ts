@@ -17,9 +17,13 @@ export const STYLES = [
   '.lc-gran-btn { border: 0; background: transparent; color: var(--dsw-alias-label-secondary); font-size: 11px; line-height: 1; padding: 3px 8px; border-radius: 5px; cursor: pointer; font-family: inherit; }',
   '.lc-gran-btn:hover { color: var(--dsw-alias-label-primary); }',
   '.lc-gran-on, .lc-gran-on:hover { background: var(--dsw-alias-button-primary-fill); color: var(--dsw-alias-label-primary-foreground); }',
-  '.lc-overview-num { margin-bottom: 8px; }',
-  '.lc-overview-num b { font-size: 20px; }',
+  '.lc-overview-num { display: flex; align-items: baseline; gap: 6px; margin-bottom: 8px; }',
+  '.lc-overview-num > b { font-size: 20px; }',
   '.lc-overview-num span { color: var(--dsw-alias-label-secondary); }',
+  // The used-percentage figure is the emphasis of the line: pushed to the
+  // right edge, large and primary-colored, with a small "used" caption.
+  '.lc-overview-pct { margin-left: auto; font-size: 11px; }',
+  '.lc-overview-pct b { font-size: 20px; color: var(--dsw-alias-label-primary); margin-right: 4px; }',
   '.lc-stacked-wrap { position: relative; width: 100%; }',
   '.lc-stacked { display: flex; width: 100%; border-radius: 5px; overflow: hidden; background: rgba(128,128,128,0.18); position: relative; }',
   // Hover reference frame around the OCCUPIED region of the composition bar:
