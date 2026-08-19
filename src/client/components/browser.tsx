@@ -313,7 +313,9 @@ export function makeContextBrowser(
             </div>)
         })
       }
-      const nodes = byCat[c as Category] ?? []
+      // Surface-node categories carry per-element timestamps; list them
+      // newest first, mirroring the NodeList card.
+      const nodes = (byCat[c as Category] ?? []).slice().reverse()
       return nodes.map(n => {
         // Tag/preview split: the compact chip carries the compact fact (tool
         // name, injection form), the preview line carries the text — each
