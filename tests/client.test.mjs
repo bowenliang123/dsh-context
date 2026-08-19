@@ -230,7 +230,7 @@ const m2 = { exports: {} }
 const pluginExports2 = factory(requireStateful, m2, globalThis.window, fakeDoc)
 
 const DICT_FOR_TEST = { 'tab': 'Context', 'loading': '…', 'error': 'x', 'detail.step': 'Turn {t} · Step {s}', 'gran.step': 'Step', 'gran.turn': 'Turn', 'detail.turn': 'Turn {t} · {n} steps', 'detail.lastStep': 'last step', 'overview.used': 'of context used', 'overview.free': 'Free window', 'events.at': 'Turn {t} · Step {s}', 'events.range': 'Turn {t} · Step {a}→{b}', 'events.rangeTo': 'Turn {a} · Step {as} → Turn {b} · Step {bs}', 'stats.recycleSub': '{c} compactions · {p} prunes', 'tip.step': 'Turn {t} · Step {s}', 'tip.turn': 'Turn {t} · {n} steps', 'tip.total': 'total ≈ {n}', 'tip.actual': ' (actual {n})', 'trend.title': 'History', 'trend.empty': 'empty trend', 'cmd.close': 'Close', 'cat.user': 'User', 'browser.live': 'Live (next request)', 'browser.liveNow': 'Live · next request', 'browser.items': '{n} items', 'browser.noContent': 'outside the loaded window', 'browser.loading': 'loading older history', 'browser.preview': 'preview', 'browser.noHeader': 'older plugin build',
-'browser.deltaHint': 'vs previous turn', 'tool.desc': 'Description', 'tool.params': 'Parameters', 'tool.paramsEmpty': '(no parameters)', 'tool.jsonToggle': 'View Raw JSON', 'tool.jsonHide': 'Collapse' }
+'browser.deltaHint': 'vs previous turn', 'overview.compactReserve': 'compact reserve {pct}%', 'tool.desc': 'Description', 'tool.params': 'Parameters', 'tool.paramsEmpty': '(no parameters)', 'tool.jsonToggle': 'View Raw JSON', 'tool.jsonHide': 'Collapse' }
 let viewComponent = null
 let modalComponent = null
 let modalSource = null
@@ -532,6 +532,24 @@ stackEl.args[1].onMouseLeave()
 tr = renderView()
 assert.equal(byClass(tr, 'lc-bar-tip-on').length, 0, 'leaving the stack fades the free tooltip out')
 assert.equal(byClass(tr, 'lc-occupied-box-on').length, 0, 'leaving the stack fades the occupied frame out')
+
+// ---- auto-compaction reserve band: the rightmost (1−0.8) of the window is
+// striped headroom; hovering it explains the area instead of the free track.
+// fixture: max 128000 (window) > 83017 used -> scale = window -> 80%/20%.
+const reserveEl = byClass(tr, 'lc-reserve')[0]
+assert.ok(reserveEl, 'auto-compaction reserve band rendered when the window is known')
+assert.equal(reserveEl.args[1].style.left, '80%', 'reserve starts at the 80% threshold')
+assert.equal(reserveEl.args[1].style.width, '20%', 'reserve covers the rightmost 20% of the window')
+assert.equal(typeof reserveEl.args[1].onMouseEnter, 'function', 'reserve band is hoverable')
+reserveEl.args[1].onMouseEnter()
+tr = renderView()
+const reserveTip = byClass(tr, 'lc-bar-tip-on')
+assert.equal(reserveTip.length, 1, 'hovering the reserve shows its explanation')
+assert.match(textOf(reserveTip[0]), /compact reserve 80%/, 'reserve tooltip names the compaction threshold')
+assert.equal(byClass(tr, 'lc-occupied-box-on').length, 0, 'reserve hover clears the segment reference frame')
+reserveEl.args[1].onMouseLeave()
+tr = renderView()
+assert.equal(byClass(tr, 'lc-bar-tip-on').length, 0, 'leaving the reserve hides its tooltip')
 
 // ---- turn strip: one color block per turn, aligned with the bars above ----
 let turnBlocks = byClass(tr, 'lc-turn')

@@ -49,6 +49,12 @@ export const STYLES = [
   // The free track mirrors the occupied frame: a DASHED 2px box (the occupied
   // frame is solid) at the same weight — border, not the old inset shadow, so
   // the dash pattern renders; the base box-sizing keeps the width from shifting.
+  // Auto-compaction reserve band: the rightmost (1−ratio) of the window,
+  // striped diagonally like a warning plate so it reads as "headroom, not
+  // real usage" rather than plain free space. Sits above the track/segments
+  // (overlay visible even past the threshold) with its own pointer so the
+  // hover explains it (help cursor signals "more info").
+  '.lc-reserve { position: absolute; top: 0; bottom: 0; z-index: 1; pointer-events: auto; cursor: help; background: repeating-linear-gradient(45deg, color-mix(in srgb, var(--dsw-alias-state-warn-primary) 24%, transparent) 0 5px, transparent 5px 10px); }',
   '.lc-stacked-free-on { border: 2px dashed var(--dsw-alias-label-secondary); border-radius: 3px; }',
   // Hover focus: everything except the hovered part (segment, legend chip, or
   // free track) recedes, so the composition highlight and the occupied-region

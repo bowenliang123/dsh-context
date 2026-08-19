@@ -22,7 +22,7 @@ import { makeNodeList } from './nodes'
 import { makePluginInfo } from './pluginInfo'
 import { makeRequestDetail } from './requestDetail'
 import { makeStatsBoard } from './statsBoard'
-import { makeLegend, makeStackedBar } from './stackedBar'
+import { makeLegend, makeStackedBar, AUTO_COMPACT_RATIO } from './stackedBar'
 import { aggregateByTurn, attachMarkers, makeTrendChart } from './trendChart'
 
 import { React } from '../react'
@@ -245,7 +245,9 @@ export function makeContextView(ctx: ClientCtx, kit: ViewKit): (props: ContextVi
                   </span>
                 ) : null}
               </div>
-              <StackedBar parts={head.parts} height={16} max={head.window} hoverKey={hoverCat} onHoverKey={setHoverCat} />
+              <StackedBar parts={head.parts} height={16} max={head.window} hoverKey={hoverCat} onHoverKey={setHoverCat} reserve={head.window != null && head.window > 0
+                ? { ratio: AUTO_COMPACT_RATIO, label: t('overview.compactReserve', { pct: Math.round(AUTO_COMPACT_RATIO * 100) }) }
+                : undefined} />
               <Legend parts={head.parts} hoverKey={hoverCat} onHoverKey={setHoverCat} />
               {(data.toolList && data.toolList.length > 0) ? (
                 <div className="lc-tools">
