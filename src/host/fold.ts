@@ -444,8 +444,6 @@ export function applyTimeline(state: TimelineState, event: TimelineEvent, bounds
       const s = ensure()
       const total = s.systemTokens + s.toolsTokens + s.sums.user + s.sums.inject + s.sums.assistant + s.sums.tool
       const record: RequestRecord = {
-        turn: data && typeof data.turn === 'number' ? data.turn : undefined,
-        step: data && typeof data.step === 'number' ? data.step : undefined,
         time: event.time, seq: event.seq,
         system: s.systemTokens,
         tools: s.toolsTokens,
@@ -455,6 +453,12 @@ export function applyTimeline(state: TimelineState, event: TimelineEvent, bounds
         tool: s.sums.tool,
         total,
       }
+      // `turn`/`step` are optional in the durable vocabulary (and on replay);
+      // write them only on a real number so an absent value never materializes
+      // an `undefined` property (plain-JSON persisted-state precondition — see
+      // TimelineState) — the same trap that broke the projection cache here.
+      if (data && typeof data.turn === 'number') record.turn = data.turn
+      if (data && typeof data.step === 'number') record.step = data.step
       if (usage && typeof usage.inputTokens === 'number') {
         // Official TokenUsage semantics (dsh-llm): the buckets are disjoint —
         // inputTokens is uncached input only, cache read/write are separate,
