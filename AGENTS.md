@@ -25,7 +25,8 @@ A DeepSeek Harness plugin for context insight, actions, and management.
 - Use English in code comments and documentation.
 
 ## Building
-- Run `npm run build` after code changes applied. It also helps developer to see the code changes in the browser.
+- Run `pnpm run build` after code changes applied.
+- Run `pnpm run watch` to keep hot-reloaded on dsh with local plugin installed. It also helps developer to see the code changes in the browser.
 
 ## Dependency
 - Consider updating the dependencies to the latest version if possible, as the deepseek-harness is evolving rapidly.
