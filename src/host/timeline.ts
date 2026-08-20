@@ -126,6 +126,14 @@ export function createContextTimelineDefinition(config: Config): ProjectionDefin
     // 3 since 0.12: the removed-node archive (`archived` + `archiveFloor`)
     // joined the persisted state for the Context browser's per-step
     // reconstruction — cached rows predate the shape and are refolded.
-    stateVersion: 3,
+    // 4 since 0.18: the persisted state no longer carries `undefined`-valued
+    // properties (model/provider/lastModel/contextWindow are absent until
+    // known; pendingShadowedSeqs is deleted when consumed). The previous
+    // shape violated the plain-JSON persisted-state precondition and failed
+    // EVERY session-projection-cache write (TypeError: projection checkpoint
+    // is not losslessly JSON-serializable) — which also starved the `title`
+    // projection row and broke the session list after a restart. The bump
+    // discards old cached rows and refolds them clean.
+    stateVersion: 4,
   }
 }

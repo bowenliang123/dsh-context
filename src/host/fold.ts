@@ -69,10 +69,20 @@ export interface TimelineState {
   systemTokens: number
   toolsTokens: number
   toolList: { name: string; tokens: number }[]
-  model: string | undefined
-  provider: string | undefined
-  lastModel: string | undefined
-  contextWindow: number | undefined
+  /**
+   * The projection-cache precondition is plain JSON: a property whose value
+   * is `undefined` makes the whole checkpoint unserializable
+   * (`snapshotJsonValue` rejects it), which fails EVERY cache write for the
+   * session — including the `title` projection row that powers the session
+   * list after a restart. Optional fields therefore use absent properties
+   * (`model`/`provider`/`lastModel`/`contextWindow` are simply not set until
+   * a value is known) instead of `undefined`-valued ones. Reads via
+   * `state.model` are identical for both shapes (`undefined` on miss).
+   */
+  model?: string
+  provider?: string
+  lastModel?: string
+  contextWindow?: number
   requests: RequestRecord[]
   events: ContextEventRecord[]
   /**
@@ -93,6 +103,8 @@ export interface TimelineState {
    * producer's shadow price covers exactly these seqs — which can differ
    * from the replacement's declared range (pruned replacement nodes keep
    * their own seqs, beyond the range end) — so removal must follow the seqs.
+   * Absent until armed, and REMOVED (not set to `undefined`) when consumed,
+   * to keep the state plain JSON for the projection cache.
    */
   pendingShadowedSeqs?: number[]
 }
@@ -173,10 +185,6 @@ export function createTimelineState(): TimelineState {
     systemTokens: 0,
     toolsTokens: 0,
     toolList: [],
-    model: undefined,
-    provider: undefined,
-    lastModel: undefined,
-    contextWindow: undefined,
     requests: [],
     events: [],
     archived: [],
@@ -268,8 +276,12 @@ function applySurface(
   // The metering event armed the shadowed seqs for the replacement that must
   // follow it synchronously; consume them here (any later surface event
   // would expire them, mirroring the official shadow-price protocol).
+  // DELETE the armed field — assigning `undefined` would leave an
+  // `undefined`-valued property behind, which violates the plain-JSON
+  // persisted-state precondition (see TimelineState) and would fail the
+  // whole session's projection-cache write.
   const shadowedSeqs = st.pendingShadowedSeqs
-  st.pendingShadowedSeqs = undefined
+  delete st.pendingShadowedSeqs
 
   const op = ev.surfaceOp as { op?: string; start?: number; end?: number } | null | undefined
   if (op !== null && typeof op === 'object' && op.op === 'replace') {
@@ -360,6 +372,9 @@ export function applyTimeline(state: TimelineState, event: TimelineEvent, bounds
       // Current route/model: the durable request envelope is the source of
       // truth (request/context is only route/capacity metadata, appended
       // AFTER request/header per request — see agent-loop buildRequestHeader).
+      // Optional fields are set via conditional spread so a still-unknown
+      // value never materializes an `undefined` property (plain-JSON state
+      // precondition — see TimelineState).
       if (header.config && typeof header.config.model === 'string') s.model = header.config.model
       if (header.config && typeof header.config.provider === 'string') s.provider = header.config.provider
       // A model switch has no dedicated durable event: it is a request
@@ -377,7 +392,9 @@ export function applyTimeline(state: TimelineState, event: TimelineEvent, bounds
       // Route/capacity metadata: request/context is logged only when the
       // route or capacity changes (appended after request/header), so it
       // updates the CURRENT route display — it never fires a model-switch
-      // event on its own (see the request/header case).
+      // event on its own (see the request/header case). All three fields
+      // are only written on a real value (plain-JSON state — see
+      // TimelineState), so no `undefined` property can materialize here.
       if (data && typeof data.contextWindow === 'number') s.contextWindow = data.contextWindow
       if (data && typeof data.model === 'string') s.model = data.model
       if (data && typeof data.provider === 'string') s.provider = data.provider
@@ -427,8 +444,6 @@ export function applyTimeline(state: TimelineState, event: TimelineEvent, bounds
       const s = ensure()
       const total = s.systemTokens + s.toolsTokens + s.sums.user + s.sums.inject + s.sums.assistant + s.sums.tool
       const record: RequestRecord = {
-        turn: data && typeof data.turn === 'number' ? data.turn : undefined,
-        step: data && typeof data.step === 'number' ? data.step : undefined,
         time: event.time, seq: event.seq,
         system: s.systemTokens,
         tools: s.toolsTokens,
@@ -438,6 +453,12 @@ export function applyTimeline(state: TimelineState, event: TimelineEvent, bounds
         tool: s.sums.tool,
         total,
       }
+      // `turn`/`step` are optional in the durable vocabulary (and on replay);
+      // write them only on a real number so an absent value never materializes
+      // an `undefined` property (plain-JSON persisted-state precondition — see
+      // TimelineState) — the same trap that broke the projection cache here.
+      if (data && typeof data.turn === 'number') record.turn = data.turn
+      if (data && typeof data.step === 'number') record.step = data.step
       if (usage && typeof usage.inputTokens === 'number') {
         // Official TokenUsage semantics (dsh-llm): the buckets are disjoint —
         // inputTokens is uncached input only, cache read/write are separate,

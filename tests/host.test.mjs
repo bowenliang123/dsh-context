@@ -13,6 +13,7 @@
  */
 import assert from 'node:assert/strict'
 import { apply } from '../lib/index.js'
+import { snapshotJsonValue } from '@deepseek-ai/dsh-session'
 
 const defs = new Map()
 const disposers = []
@@ -363,4 +364,33 @@ const usageLog = drive([
 assert.equal(usageLog.requests[0].prompt, 1000, 'prompt side sums the disjoint input buckets')
 assert.equal(usageLog.requests[0].output, 30, 'output is outputTokens (reasoning already inside)')
 
-console.log('✔ host half functional test passed (projection unit, fold semantics, attribution, retention, shadow-price seqs, reference stability, determinism, config bounds, inject pinning, model switch, usage mapping)')
+// -- plain-JSON persisted state (R7): the projection-cache precondition.
+// Every `apply` result must survive the harness's lossless-JSON snapshotter;
+// an `undefined`-valued property ANYWHERE in the unit state rejects the whole
+// session's checkpoint write (TypeError: projection checkpoint is not
+// losslessly JSON-serializable), starving unrelated rows — including the
+// `title` projection that powers the session list after a restart. Fold the
+// live log (arm-then-consumed shadowed seqs included — live.events arms at
+// seq 10 and consumes via the seq 11 surface event) PLUS one
+// `assistant/message` whose data intentionally LACKS numeric turn/step (they
+// are optional in the durable vocabulary), so no tolerated-absence branch can
+// ever leave an `undefined`-valued property behind. Check every intermediate
+// state through the REAL harness snapshotter.
+const jsonLog = [...live.events, { seq: 99, type: 'assistant/message', time: 9999, data: { message: { content: [{ type: 'text', text: 'no turn/step here' }] } } }]
+const jsonStates = []
+let jsonSt = def.init()
+for (const ev of jsonLog) {
+  jsonSt = def.apply(jsonSt, ev)
+  jsonStates.push(jsonSt)
+}
+for (const [i, st] of jsonStates.entries()) {
+  const cloned = snapshotJsonValue(st)
+  assert.ok(cloned !== undefined, `state after event ${i + 1} is losslessly JSON-serializable (plain-JSON projection-cache precondition)`)
+  assert.deepEqual(cloned, JSON.parse(JSON.stringify(st)), `state after event ${i + 1} round-trips losslessly`)
+}
+// And the armed-but-unconsumed intermediate (compaction arm alone) must also
+// stay serializable.
+const armed = def.apply(def.init(), { seq: 1, type: 'compaction/summary', time: 1000, data: { shadowedSeqs: [2], shadowedTokenCount: 10 } })
+assert.ok(snapshotJsonValue(armed) !== undefined, 'armed pendingShadowedSeqs state is still plain JSON')
+
+console.log('✔ host half functional test passed (projection unit, fold semantics, attribution, retention, shadow-price seqs, reference stability, determinism, config bounds, inject pinning, model switch, usage mapping, plain-JSON state)')
