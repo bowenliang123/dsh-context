@@ -26,6 +26,8 @@ import { React } from '../react'
 import type { ConversationNodeLike, UseSessionLike } from '../services'
 import type { ViewKit } from '../viewkit'
 import { makeNodeText } from './nodes'
+import { makeRichText } from './richText'
+import type { RichKit, RichMode } from './richText'
 import type { StackedBarProps } from './stackedBar'
 
 export interface ContextBrowserProps {
@@ -181,11 +183,14 @@ function ParamRow(props: {
  * The full body of one expanded tool row: description, a parsed parameter
  * table (when the schema carries one), and the raw JSON behind a toggle.
  * Owns its own open/closed state for the JSON so two expanded tools stay
- * independent.
+ * independent. The description card carries the shared raw/markdown view
+ * toggle in its head (per-card state via `rich.useRichMode`).
  */
 function ToolSchema(props: {
   description: string | undefined
   schema: unknown
+  /** Rich-text toggle kit (description card: raw <pre> vs markdown). */
+  rich: RichKit
   /** Localized labels for the card titles, empty-state line, and toggle. */
   labels: {
     desc: string
@@ -195,7 +200,9 @@ function ToolSchema(props: {
     hide: string
   }
 }): ReactNS.ReactElement {
+  const { rich } = props
   const [jsonOpen, setJsonOpen] = React.useState(false)
+  const [descMode, setDescMode] = rich.useRichMode()
   const params = React.useMemo(() => paramsOf(props.schema), [props.schema])
   // Pull `properties` + `required` out of the parameter object as plain
   // values (avoids re-deriving the same shape in every row).
@@ -225,8 +232,14 @@ function ToolSchema(props: {
         <div className="lc-ts-card">
           <div className="lc-ts-card-head">
             <b>{props.labels.desc}</b>
+            <rich.RichSwitch mode={descMode} onPick={setDescMode} inHead />
           </div>
-          <pre className="lc-ts-desc-body">{props.description}</pre>
+          <rich.RichText
+            text={props.description}
+            mode={descMode}
+            rawClass="lc-ts-desc-body"
+            mdClass="lc-ts-desc-md"
+          />
         </div>
       ) : null}
       {params !== null && rows.length > 0 ? (
@@ -255,17 +268,23 @@ function ToolSchema(props: {
 }
 
 /** One raw content block (text/reasoning/tool-result/…), rendered defensively. */
-function RawBlocks(props: { blocks: readonly unknown[] }): ReactNS.ReactElement {
+function RawBlocks(props: { blocks: readonly unknown[]; mode: RichMode; rich: RichKit }): ReactNS.ReactElement {
+  const { rich } = props
   return (
     <>
       {props.blocks.map((b, i) => {
         const blk = b as { type?: string; text?: unknown; content?: unknown }
         if (blk !== null && typeof blk === 'object'
           && (blk.type === 'text' || blk.type === 'reasoning') && typeof blk.text === 'string') {
-          return <pre key={i} className={'lc-br-pre' + (blk.type === 'reasoning' ? ' lc-br-dim' : '')}>{blk.text}</pre>
+          // Reasoning stays raw in either mode (plain model trace, not
+          // prose); text blocks follow the card's view mode.
+          if (blk.type === 'reasoning') {
+            return <pre key={i} className="lc-br-pre lc-br-dim">{blk.text}</pre>
+          }
+          return <rich.RichText key={i} text={blk.text} mode={props.mode} />
         }
         if (blk !== null && typeof blk === 'object' && blk.type === 'tool-result' && Array.isArray(blk.content)) {
-          return <RawBlocks key={i} blocks={blk.content as unknown[]} />
+          return <RawBlocks key={i} blocks={blk.content as unknown[]} mode={props.mode} rich={rich} />
         }
         return <pre key={i} className="lc-br-pre lc-br-dim">{JSON.stringify(b, null, 2)}</pre>
       })}
@@ -274,23 +293,36 @@ function RawBlocks(props: { blocks: readonly unknown[] }): ReactNS.ReactElement 
 }
 
 /** The actual content of one surface element, joined from the conversation snapshot. */
-function NodeContent(props: { node: SurfaceNode; conv: ConversationNodeLike | undefined; hint: string }): ReactNS.ReactElement {
-  const { node, conv } = props
+function NodeContent(props: { node: SurfaceNode; conv: ConversationNodeLike | undefined; hint: string; rich: RichKit }): ReactNS.ReactElement {
+  const { node, conv, rich } = props
+  // The raw/markdown toggle serves the prose categories (user / assistant /
+  // injection bodies); tool results stay raw (structured payload, not prose).
+  const richable = node.cat === 'user' || node.cat === 'assistant' || node.cat === 'inject'
+  const wrap = (render: (mode: RichMode) => ReactNS.ReactNode): ReactNS.ReactElement =>
+    richable
+      ? <rich.RichCard render={render} />
+      : <div className="lc-br-content">{render('raw')}</div>
+
   if (conv === undefined) {
-    return (
-      <div className="lc-br-content">
-        {node.text !== undefined && node.text !== '' ? <pre className="lc-br-pre">{node.text}</pre> : null}
+    if (node.text === undefined || node.text === '') {
+      return <div className="lc-br-content"><div className="lc-br-note">{props.hint}</div></div>
+    }
+    return wrap(mode => (
+      <>
+        <rich.RichText text={node.text ?? ''} mode={mode} />
         <div className="lc-br-note">{props.hint}</div>
-      </div>
-    )
+      </>
+    ))
   }
   if (conv.kind === 'assistant' && Array.isArray(conv.blocks)) {
-    return (
-      <div className="lc-br-content">
-        {conv.blocks.map((b, i) => {
+    // Captured once: the render-prop closure below cannot narrow the prop.
+    const blocks = conv.blocks
+    return wrap(mode => (
+      <>
+        {blocks.map((b, i) => {
           const blk = b as { kind?: string; text?: unknown; name?: unknown; argsRaw?: unknown }
           if (blk.kind === 'text' && typeof blk.text === 'string') {
-            return <pre key={i} className="lc-br-pre">{blk.text}</pre>
+            return <rich.RichText key={i} text={blk.text} mode={mode} />
           }
           if (blk.kind === 'reasoning' && typeof blk.text === 'string') {
             return <pre key={i} className="lc-br-pre lc-br-dim">{blk.text}</pre>
@@ -307,8 +339,8 @@ function NodeContent(props: { node: SurfaceNode; conv: ConversationNodeLike | un
           }
           return null
         })}
-      </div>
-    )
+      </>
+    ))
   }
   if (conv.kind === 'tool-result') {
     return (
@@ -321,21 +353,21 @@ function NodeContent(props: { node: SurfaceNode; conv: ConversationNodeLike | un
             </div>
           )
           : null}
-        {Array.isArray(conv.content) ? <RawBlocks blocks={conv.content} /> : null}
+        {Array.isArray(conv.content) ? <RawBlocks blocks={conv.content} mode="raw" rich={rich} /> : null}
       </div>
     )
   }
   if (conv.kind === 'compaction') {
-    return (
-      <div className="lc-br-content">
+    return wrap(mode => (
+      <>
         {typeof conv.summary === 'string' && conv.summary !== ''
-          ? <pre className="lc-br-pre">{conv.summary}</pre>
+          ? <rich.RichText text={conv.summary} mode={mode} />
           : null}
-      </div>
-    )
+      </>
+    ))
   }
   if (Array.isArray(conv.content)) {
-    return <div className="lc-br-content"><RawBlocks blocks={conv.content} /></div>
+    return wrap(mode => <RawBlocks blocks={conv.content as unknown[]} mode={mode} rich={rich} />)
   }
   return <div className="lc-br-content"><div className="lc-br-note">{props.hint}</div></div>
 }
@@ -366,6 +398,7 @@ export function makeContextBrowser(
 ): (props: ContextBrowserProps) => ReactNS.ReactElement {
   const { t, fmt, fmtTime, catLabel } = kit
   const nodeText = makeNodeText(kit)
+  const rich = makeRichText(kit)
   const catColor: Record<string, string> = {}
   for (const c of CATS) catColor[c.key] = c.color
 
@@ -535,7 +568,7 @@ export function makeContextBrowser(
         const system = view.header.system
         if (system === undefined) return null
         return elemRow('sys', null, system.replace(/\s+/g, ' ').trim().slice(0, 80), breakdown.system, undefined,
-          <div className="lc-br-content"><pre className="lc-br-pre">{system}</pre></div>)
+          <rich.RichCard render={mode => <rich.RichText text={system} mode={mode} />} />)
       }
       if (c === 'tools') {
         if (view.header === null) return <div className="lc-br-note">{t(headers === null ? 'browser.noHeader' : 'browser.noEpoch')}</div>
@@ -554,7 +587,7 @@ export function makeContextBrowser(
         return view.header.tools.slice().sort((a, b) => b.tokens - a.tokens).map((tool: HeaderTool) => {
           return elemRow('tool:' + tool.name, null, tool.name, tool.tokens, undefined,
             <div className="lc-br-content">
-              <ToolSchema description={tool.description} schema={tool.schema} labels={labels} />
+              <ToolSchema description={tool.description} schema={tool.schema} rich={rich} labels={labels} />
             </div>)
         })
       }
@@ -580,6 +613,7 @@ export function makeContextBrowser(
           <NodeContent
             node={n}
             conv={bySeq.get(n.seq)}
+            rich={rich}
             // This row's body renders only while it is the open element, so
             // `awaiting` (open seq missing, pagination armed) means THIS join
             // is the one pages are being pulled for.

@@ -293,4 +293,35 @@ export const STYLES = [
   '.lc-ts-json { display: flex; flex-direction: column; gap: 4px; }',
   '.lc-ts-json-toggle { align-self: flex-start; border: 0; background: transparent; color: var(--dsw-alias-label-secondary); font: inherit; font-size: 11px; padding: 0; cursor: pointer; }',
   '.lc-ts-json-toggle:hover { color: var(--dsw-alias-label-primary); text-decoration: underline; }',
+  // ---- Raw/markdown view switch (detail cards: system prompt, tool
+  // description, user/assistant message + injection bodies). A segmented
+  // pill mirroring the trend chart's 步骤/轮次 control (`lc-gran`), riding
+  // the card's top-right corner as a self-end item of the content column
+  // (no absolute overlay, so it never covers text); the `in-head` variant
+  // sits at the right end of the tool description card's title row. The
+  // markdown box reuses the raw <pre> chrome minus the pre whitespace. ----
+  '.lc-rich-seg { align-self: flex-end; display: flex; gap: 2px; background: var(--dsw-alias-bg-layer-2); border: 1px solid var(--dsw-alias-border-l1); border-radius: 6px; padding: 1px; }',
+  '.lc-rich-seg-btn { border: 0; background: transparent; color: var(--dsw-alias-label-secondary); font-size: 11px; line-height: 1; padding: 3px 8px; border-radius: 5px; cursor: pointer; font-family: inherit; }',
+  '.lc-rich-seg-btn:hover { color: var(--dsw-alias-label-primary); }',
+  '.lc-rich-seg-on, .lc-rich-seg-on:hover { background: var(--dsw-alias-button-primary-fill); color: var(--dsw-alias-label-primary-foreground); }',
+  '.lc-rich-seg-head { align-self: auto; margin-left: auto; }',
+  '.lc-br-md { padding: 4px 10px; background: var(--dsw-alias-bg-layer-2); border: 1px solid var(--dsw-alias-border-l1); border-radius: 6px; color: var(--dsw-alias-label-primary); font-size: 12px; line-height: 1.55; word-break: break-word; max-height: 320px; overflow-y: auto; scrollbar-width: thin; }',
+  '.lc-ts-desc-md { padding: 4px 10px; color: var(--dsw-alias-label-primary); font-size: 12px; line-height: 1.55; word-break: break-word; max-height: 160px; overflow-y: auto; scrollbar-width: thin; }',
+  // The shared markdown renderer sizes its root/headings for chat bubbles;
+  // inside a detail card the base size sits one step ABOVE the raw text
+  // (13px vs 12px — a proportional face at 13px matches the visual weight
+  // of the raw view's 12px monospace) and the heading scale collapses to a
+  // weight-only bump (specificity beats the renderer's one-class rules).
+  // Inline code keeps the FULL size too — the renderer shrinks it to
+  // 0.875em (!important) and table code to 13px, both visibly off. Its
+  // `font` shorthand also drags in a ~22px line-height, TALLER than the
+  // 13px/1.55 paragraph line (~20px), so a code chip wrapping onto the
+  // next line sticks to the neighbor line's chip; pin the chip just under
+  // the paragraph line (1.3em + 1px padding ≈ 19px) to reopen the gap.
+  '.lc-br-md > div, .lc-ts-desc-md > div { font-size: 13px; line-height: 1.55; }',
+  '.lc-br-md div :is(h1, h2, h3, h4, h5, h6), .lc-ts-desc-md div :is(h1, h2, h3, h4, h5, h6) { font-size: 13px; font-weight: 600; margin: 10px 0 4px; }',
+  '.lc-br-md div p, .lc-ts-desc-md div p { margin: 6px 0; }',
+  '.lc-br-md div pre, .lc-ts-desc-md div pre { margin: 6px 0; }',
+  '.lc-br-md div :not(pre) > code, .lc-ts-desc-md div :not(pre) > code { font-size: 1em !important; line-height: 1.3; padding: 1px 5px; box-decoration-break: clone; }',
+  '.lc-br-md div table code, .lc-ts-desc-md div table code { font-size: inherit; }',
 ].join('\n')

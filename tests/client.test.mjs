@@ -47,10 +47,13 @@ globalThis.document = fakeDoc
 
 // The module table answers the platform seeds this bundle uses ('react' and
 // the shared primitives singleton); everything else rides ctx or is inlined.
-// Icons are stubbed as inert elements (glyph rendering is never asserted).
+// Icons are stubbed as inert elements (glyph rendering is never asserted);
+// MarkdownText resolves to a plain div carrying its source text, so the
+// raw/markdown toggle assertions can find it by class and text.
 const fakePrimitives = {
   IconPlusOutline16: (p) => ({ kind: 'icon', name: 'IconPlusOutline16', props: p }),
   IconBranchOutline16: (p) => ({ kind: 'icon', name: 'IconBranchOutline16', props: p }),
+  MarkdownText: (p) => ({ kind: 'element', args: ['div', { className: 'lc-md-stub' }, p.text] }),
 }
 const require = (spec) => {
   assert.ok(spec === 'react' || spec === '@deepseek-ai/dsh-client-ui-primitives',
@@ -230,7 +233,7 @@ const m2 = { exports: {} }
 const pluginExports2 = factory(requireStateful, m2, globalThis.window, fakeDoc)
 
 const DICT_FOR_TEST = { 'tab': 'Context', 'loading': '…', 'error': 'x', 'detail.step': 'Turn {t} · Step {s}', 'gran.step': 'Step', 'gran.turn': 'Turn', 'detail.turn': 'Turn {t} · {n} steps', 'detail.lastStep': 'last step', 'overview.used': 'of context used', 'overview.free': 'Free window', 'events.at': 'Turn {t} · Step {s}', 'events.range': 'Turn {t} · Step {a}→{b}', 'events.rangeTo': 'Turn {a} · Step {as} → Turn {b} · Step {bs}', 'stats.recycleSub': '{c} compactions · {p} prunes', 'tip.step': 'Turn {t} · Step {s}', 'tip.turn': 'Turn {t} · {n} steps', 'tip.total': 'total ≈ {n}', 'tip.actual': ' (actual {n})', 'trend.title': 'History', 'trend.empty': 'empty trend', 'cmd.close': 'Close', 'cat.user': 'User', 'browser.live': 'Live (next request)', 'browser.liveNow': 'Live · next request', 'browser.items': '{n} items', 'browser.noContent': 'outside the loaded window', 'browser.loading': 'loading older history', 'browser.preview': 'preview', 'browser.noHeader': 'older plugin build',
-'browser.deltaHint': 'vs previous turn', 'overview.compactReserve': 'compact reserve {pct}%', 'tool.desc': 'Description', 'tool.params': 'Parameters', 'tool.paramsEmpty': '(no parameters)', 'tool.jsonToggle': 'View Raw JSON', 'tool.jsonHide': 'Collapse' }
+'browser.deltaHint': 'vs previous turn', 'overview.compactReserve': 'compact reserve {pct}%', 'tool.desc': 'Description', 'tool.params': 'Parameters', 'tool.paramsEmpty': '(no parameters)', 'tool.jsonToggle': 'View Raw JSON', 'tool.jsonHide': 'Collapse', 'rich.raw': 'Raw', 'rich.md': 'Markdown', 'rich.toMd': 'View as Markdown', 'rich.toRaw': 'View Raw Text' }
 let viewComponent = null
 let modalComponent = null
 let modalSource = null
@@ -913,6 +916,27 @@ tr = renderView()
 assert.equal(byClass(tr, 'lc-br-content').length, 1, 'element content area open')
 assert.match(textOf(byClass(tr, 'lc-br-content')[0]), /first message/, 'content falls back to the node preview')
 assert.match(textOf(byClass(tr, 'lc-br-content')[0]), /outside the loaded window/, 'window note follows the fallback preview')
+// The message detail card carries the raw/markdown switch too (a segmented
+// pill like the trend chart's Step/Turn), defaulting to MARKDOWN: the
+// preview renders through MarkdownText while the window note stays.
+const msgSeg = byClass(byClass(tr, 'lc-br-content')[0], 'lc-rich-seg')[0]
+assert.ok(msgSeg, 'message detail card carries the raw/markdown switch')
+const msgSegBtns = byClass(msgSeg, 'lc-rich-seg-btn')
+assert.deepEqual(msgSegBtns.map(b => textOf(b)), ['Raw', 'Markdown'], 'one segment per view')
+assert.match(msgSegBtns[1].args[1].className, /lc-rich-seg-on/, 'markdown segment is active by default')
+assert.equal(msgSegBtns[0].args[1].title, 'View Raw Text', 'raw segment tooltip')
+assert.equal(msgSegBtns[1].args[1].title, 'View as Markdown', 'markdown segment tooltip')
+assert.equal(textOf(byClass(tr, 'lc-md-stub')[0]), 'first message', 'markdown view carries the message text')
+assert.match(textOf(byClass(tr, 'lc-br-content')[0]), /outside the loaded window/, 'window note stays in markdown mode')
+// The Raw segment restores the raw <pre>; picking Markdown again flips back.
+msgSegBtns[0].args[1].onClick()
+tr = renderView()
+assert.equal(byClass(tr, 'lc-md-stub').length, 0, 'raw mode drops the markdown renderer')
+assert.match(textOf(byClass(tr, 'lc-br-pre')[0]), /first message/, 'raw view carries the message text')
+assert.match(byClass(tr, 'lc-rich-seg-btn')[0].args[1].className, /lc-rich-seg-on/, 'raw segment lights up')
+byClass(tr, 'lc-rich-seg-btn')[1].args[1].onClick()
+tr = renderView()
+assert.equal(byClass(tr, 'lc-md-stub').length, 1, 'switching back restores the markdown view')
 
 // Pick step seq 2 (Turn 1 · Step 1): the reconstruction includes the archived
 // node (gone 3 > 2) — the accordion resets on picking, so reopen the category.
@@ -938,6 +962,24 @@ tr = renderView()
 brSlots[2][1]('sys')
 tr = renderView()
 assert.match(textOf(byClass(tr, 'lc-br-body')[0]), /SYSTEM-PROMPT-TEXT/, 'system section shows the full prompt')
+
+// Raw/markdown view switch on the system-prompt detail card, defaulting to
+// MARKDOWN; the Raw segment restores the raw <pre> and Markdown flips back.
+assert.ok(byClass(tr, 'lc-rich-seg').length >= 1, 'system detail card carries the raw/markdown switch')
+const sysSegBtns = () => byClass(byClass(tr, 'lc-rich-seg')[0], 'lc-rich-seg-btn')
+assert.match(sysSegBtns()[1].args[1].className, /lc-rich-seg-on/, 'markdown segment is active by default')
+const sysMd = byClass(tr, 'lc-md-stub')
+assert.equal(sysMd.length, 1, 'markdown mode renders the prompt through MarkdownText')
+assert.equal(textOf(sysMd[0]), 'SYSTEM-PROMPT-TEXT', 'markdown view carries the same source text')
+assert.equal(byClass(tr, 'lc-br-body')[0] && byClass(byClass(tr, 'lc-br-body')[0], 'lc-br-pre').length, 0,
+  'markdown mode drops the raw <pre>')
+sysSegBtns()[0].args[1].onClick()
+tr = renderView()
+assert.equal(byClass(tr, 'lc-md-stub').length, 0, 'raw mode drops the markdown renderer')
+assert.match(textOf(byClass(tr, 'lc-br-pre')[0]), /SYSTEM-PROMPT-TEXT/, 'raw view shows the prompt')
+sysSegBtns()[1].args[1].onClick()
+tr = renderView()
+assert.equal(byClass(tr, 'lc-md-stub').length, 1, 'switching back restores the markdown view')
 brSlots[1][1]('tools')
 tr = renderView()
 assert.match(textOf(byClass(tr, 'lc-br-body')[0]), /bash/, 'tools section lists the schema rows')
@@ -956,7 +998,20 @@ const descCards = byClass(tr, 'lc-ts-card').filter(c => {
   return head !== undefined && textOf(head).includes('Description')
 })
 assert.equal(descCards.length, 1, 'description is rendered inside a titled card')
-assert.match(textOf(byClass(descCards[0], 'lc-ts-desc-body')[0]), /run a command/, 'description card body carries the prose')
+// The description card head carries the same raw/markdown switch, also
+// defaulting to MARKDOWN; the Raw segment restores the raw body (and back).
+const descSeg = byClass(descCards[0], 'lc-rich-seg')[0]
+assert.ok(descSeg, 'description card head carries the raw/markdown switch')
+const descMd = byClass(descCards[0], 'lc-ts-desc-md')
+assert.equal(descMd.length, 1, 'description defaults to the markdown view')
+assert.equal(textOf(byClass(descMd[0], 'lc-md-stub')[0]), 'run a command', 'markdown view carries the description text')
+byClass(descSeg, 'lc-rich-seg-btn')[0].args[1].onClick()
+tr = renderView()
+assert.equal(byClass(tr, 'lc-ts-desc-md').length, 0, 'raw mode drops the markdown body')
+assert.match(textOf(byClass(tr, 'lc-ts-desc-body')[0]), /run a command/, 'raw view carries the prose')
+byClass(tr, 'lc-rich-seg-btn')[1].args[1].onClick()
+tr = renderView()
+assert.equal(byClass(tr, 'lc-ts-desc-md').length, 1, 'switching back restores the markdown view')
 // Parsed parameter table sits above the (still-collapsed) raw JSON: one row
 // per declared property, type labels carry the JSON-Schema type, required
 // ones marked with ✓, descriptions shown on a second line.

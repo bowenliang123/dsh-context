@@ -88,6 +88,12 @@ export const DICT_ZH: Record<string, string> = {
   'tool.paramsEmpty': '（无参数）',
   'tool.jsonToggle': '查看原始 JSON',
   'tool.jsonHide': '收起',
+  // Detail-card view switch (system prompt / tool description / message and
+  // injection bodies): a segmented pill — segment labels + tooltips.
+  'rich.raw': '原文',
+  'rich.md': 'Markdown',
+  'rich.toMd': '按 Markdown 渲染查看',
+  'rich.toRaw': '查看原始文本',
 }
 
 export const DICT_EN: Record<string, string> = {
@@ -173,4 +179,10 @@ export const DICT_EN: Record<string, string> = {
   'tool.paramsEmpty': '(no parameters)',
   'tool.jsonToggle': 'View Raw JSON',
   'tool.jsonHide': 'Collapse',
+  // Detail-card view switch (system prompt / tool description / message and
+  // injection bodies): a segmented pill — segment labels + tooltips.
+  'rich.raw': 'Raw',
+  'rich.md': 'Markdown',
+  'rich.toMd': 'View as Markdown',
+  'rich.toRaw': 'View Raw Text',
 }
