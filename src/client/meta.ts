@@ -1,6 +1,6 @@
 /**
  * Plugin self-metadata for the Plugin info card. Version is substituted at
- * build time (esbuild `define` in scripts/build.mjs, read from package.json);
+ * build time (tsup `define` in tsup.config.ts, read from package.json);
  * the typeof guard keeps a dev/test bundle built without defines working.
  */
 

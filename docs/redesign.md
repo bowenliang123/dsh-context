@@ -166,8 +166,8 @@ rule. Client components read them through the framework-standard
 
 ### 3.1 Solid (keep)
 
-- **Packaging**: `dsh.bundle` + `dsh.client` split, esbuild closure bundle, zero
-  runtime deps — still the sanctioned way to ship a two-half plugin.
+- **Packaging**: `dsh.bundle` + `dsh.client` split, tsup closure bundle, single
+  runtime dependency (zod) — still the sanctioned way to ship a two-half plugin.
 - **Fold design**: per-session incremental state resuming from `st.n`; bounded
   history (`MAX_REQUEST_STEPS`/`MAX_KEPT_TURNS`, trimmed by whole turns) — a
   correct and cheap replay discipline.
@@ -467,7 +467,7 @@ words (`react`, `@deepseek-ai/dsh-client-ui-primitives`) so the injected
 (`IconPlusOutline16`) and model-switch (`IconBranchOutline16`) event glyphs now
 use the shared primitives; compaction/prune keep the ✂ marker.
 
-- Keep the standalone esbuild build (this package is an independent npm
+- Keep the standalone tsup build (this package is an independent npm
   plugin; the first-party `tsdown.client.ts` preset is harness-workspace
   bound), but:
   1. add the used seed words (`@deepseek-ai/dsh-client-ui-primitives`,

@@ -4,8 +4,8 @@
  * entire key/value cell is one hit target. Row 1 (Plugin name + version) →
  * the repo's releases page, row 2 (the short owner/repo label) → the repo
  * root; hovering a row underlines its value. Metadata is baked into the
- * bundle from package.json via esbuild `define` (see src/client/meta.ts +
- * scripts/build.mjs). One live check rides on top: the card asks the npm
+ * bundle from package.json via tsup `define` (see src/client/meta.ts +
+ * tsup.config.ts). One live check rides on top: the card asks the npm
  * registry for the latest published version (cached with a 1-hour TTL, see
  * ../latestVersion.ts) and shows an `↑ vX.Y.Z` chip when it is newer.
  *

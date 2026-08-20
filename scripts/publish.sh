@@ -25,7 +25,7 @@ export NPM_CONFIG_CACHE="${NPM_CONFIG_CACHE:-$ROOT/.npm-cache}"
 mkdir -p "$NPM_CONFIG_CACHE"
 
 echo "==> building lib/ artifacts"
-node scripts/build.mjs
+pnpm run build
 
 NAME="$(node -p "require('./package.json').name")"
 CURRENT="$(node -p "require('./package.json').version")"

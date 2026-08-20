@@ -25,7 +25,7 @@
     "LICENSE"
   ],
   "scripts": {
-    "build": "node scripts/build.mjs",
+    "build": "tsup",
     "register": "bash scripts/register.sh",
     "typecheck": "tsc --noEmit",
     "test": "npm run typecheck && node tests/host.test.mjs && node tests/client.test.mjs",
@@ -61,17 +61,31 @@
   "dependencies": {
     "zod": "^4.4.3"
   },
+  "peerDependencies": {
+    "@deepseek-ai/cordis": "^4.0.1",
+    "@deepseek-ai/dsh-client-ui-primitives": "^0.1.0-rc.8",
+    "@deepseek-ai/dsh-session": "^0.1.0-rc.8",
+    "react": "^18.3.1"
+  },
+  "peerDependenciesMeta": {
+    "@deepseek-ai/dsh-client-ui-primitives": {
+      "optional": true
+    },
+    "react": {
+      "optional": true
+    }
+  },
   "devDependencies": {
     "@deepseek-ai/cordis": "^4.0.1",
-    "@deepseek-ai/dsh-client-ui-primitives": "0.1.0-rc.8",
-    "@deepseek-ai/dsh-session": "0.1.0-rc.8",
-    "@deepseek-ai/dsh-session-projection": "0.1.0-rc.8",
+    "@deepseek-ai/dsh-client-ui-primitives": "^0.1.0-rc.8",
+    "@deepseek-ai/dsh-session": "^0.1.0-rc.8",
+    "@deepseek-ai/dsh-session-projection": "^0.1.0-rc.8",
     "@types/react": "^18.3.31",
-    "esbuild": "^0.28.2",
     "jsdom": "^30.0.1",
     "playwright-core": "^1.62.1",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
+    "tsup": "^8.5.1",
     "typescript": "^7.0.2"
   },
   "packageManager": "pnpm@11.9.0"
