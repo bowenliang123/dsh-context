@@ -116,8 +116,13 @@ export const STYLES = [
   '.lc-chart-dim .lc-turn-on { opacity: 1; }',
   '.lc-chart-tip { position: absolute; top: 0; transform: translateX(-50%); z-index: 5; white-space: nowrap; background: var(--dsw-alias-bg-layer-2); border: 1px solid var(--dsw-alias-border-l1); border-radius: 6px; padding: 3px 8px; font-size: 12px; color: var(--dsw-alias-label-primary); box-shadow: 0 2px 8px rgba(0,0,0,0.18); pointer-events: none; }',
   '.lc-bar:hover { background: var(--dsw-alias-bg-layer-2); }',
-  '.lc-bar-selected { outline: 2px solid var(--dsw-alias-brand-primary); outline-offset: 1px; }',
+  // Hovering previews a bar with a thin dashed frame; a CLICKED (locked)
+  // bar must always show the strong solid frame, so the selected rule is
+  // declared LAST (equal specificity) — otherwise the dashed hover frame
+  // would keep overriding it while the pointer is still on the just-clicked
+  // bar and the lock would only become visible after the pointer leaves.
   '.lc-bar-hovered { outline: 1px dashed var(--dsw-alias-brand-primary); outline-offset: 1px; }',
+  '.lc-bar-selected { outline: 2px solid var(--dsw-alias-label-primary); outline-offset: 1px; }',
   '.lc-bar-in-turn { background: rgba(128,128,128,0.14); }',
   '.lc-bar-stack { display: flex; flex-direction: column-reverse; width: 100%; }',
   '.lc-bar-stack > div { width: 100%; }',
