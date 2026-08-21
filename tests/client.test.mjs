@@ -68,15 +68,14 @@ const require = (spec) => {
 }
 
 // ---- materialize the bundle the way the loader does ----
-// Extract the factory body (between the handoff's factory opening and the
-// loader-facing `return module.exports;`) and evaluate it with our own
-// module/exports so the closure shape matches the real bundle.
-const start = bundle.indexOf('factory: (require) => {') + 'factory: (require) => {'.length
-const end = bundle.indexOf('    return module.exports;')
-const factory = new Function('require', 'module', 'window', 'document',
-  bundle.slice(start, end) + '\n    return module.exports;')
-const m = { exports: {} }
-const pluginExports = factory(require, m, globalThis.window, fakeDoc)
+// Run the bundle verbatim: it registers itself through the boot handoff
+// (window.__ModuleLoader__.load), and the loader materializes the plugin by
+// invoking the captured factory with the module-table require. The factory
+// body declares its own module/exports (the bundle intro), so no string
+// surgery on the artifact — the test stays decoupled from bundler layout.
+new Function(bundle)()
+assert.ok(handoff !== null, 'bundle must register through __ModuleLoader__.load')
+const pluginExports = handoff.factory(require)
 
 assert.equal(pluginExports.name, 'dsh-context')
 assert.deepEqual(pluginExports.inject, ['slots', 'locale'])
@@ -241,8 +240,7 @@ const requireStateful = (spec) => {
     `bundle must only require platform modules (got "${spec}")`)
   return spec === 'react' ? statefulReact : fakePrimitives
 }
-const m2 = { exports: {} }
-const pluginExports2 = factory(requireStateful, m2, globalThis.window, fakeDoc)
+const pluginExports2 = handoff.factory(requireStateful)
 
 const DICT_FOR_TEST = { 'tab': 'Context', 'loading': '…', 'error': 'ERR:', 'error.retry': 'retry', 'detail.step': 'Turn {t} · Step {s}', 'gran.step': 'Step', 'gran.turn': 'Turn', 'detail.turn': 'Turn {t} · {n} steps', 'detail.lastStep': 'last step', 'overview.used': 'of context used', 'overview.free': 'Free window', 'events.at': 'Turn {t} · Step {s}', 'events.range': 'Turn {t} · Step {a}→{b}', 'events.rangeTo': 'Turn {a} · Step {as} → Turn {b} · Step {bs}', 'stats.recycleSub': '{c} compactions · {p} prunes', 'tip.step': 'Turn {t} · Step {s}', 'tip.turn': 'Turn {t} · {n} steps', 'tip.total': 'total ≈ {n}', 'tip.actual': ' (actual {n})', 'trend.title': 'History', 'trend.empty': 'empty trend', 'cmd.close': 'Close', 'cat.user': 'User', 'browser.live': 'Live (next request)', 'browser.liveNow': 'Live · next request', 'browser.items': '{n} items', 'browser.noContent': 'outside the loaded window', 'browser.loading': 'loading older history', 'browser.preview': 'preview', 'browser.noHeader': 'older plugin build',
 'browser.deltaHint': 'vs previous turn', 'overview.compactReserve': 'compact reserve {pct}%', 'tool.desc': 'Description', 'tool.params': 'Parameters', 'tool.paramsEmpty': '(no parameters)', 'tool.jsonToggle': 'View Raw JSON', 'tool.jsonHide': 'Collapse', 'rich.raw': 'Raw', 'rich.md': 'Markdown', 'rich.toMd': 'View as Markdown', 'rich.toRaw': 'View Raw Text', 'attach.images': 'Images', 'attach.other': 'Other content', 'attach.image': 'Image', 'attach.open': 'Open full image', 'attach.loading': '…', 'attach.loadFailed': 'Load failed · click to retry', 'attach.orig': 'original {d}' }

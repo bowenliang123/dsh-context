@@ -13,8 +13,8 @@
  * standard prop on every session-scope slot component). No polling, no RPC,
  * no client-side cache.
  *
- * This module is the body of the package's `./client` bundle: tsup
- * (tsup.config.ts) bundles it (external `react` — the browser module table
+ * This module is the body of the package's `./client` bundle: tsdown
+ * (tsdown.config.ts) bundles it (external `react` — the browser module table
  * supplies it via the injected `require`) into the web boot handoff
  * (`window.__ModuleLoader__.load({id, factory})`). All imports from other
  * client modules are inlined by the bundler; everything here is zero-runtime

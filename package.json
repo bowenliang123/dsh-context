@@ -25,8 +25,8 @@
     "LICENSE"
   ],
   "scripts": {
-    "build": "tsup",
-    "watch": "tsup --watch",
+    "build": "tsdown",
+    "watch": "tsdown --watch",
     "register": "bash scripts/register.sh",
     "typecheck": "tsc --noEmit",
     "test": "npm run typecheck && node tests/host.test.mjs && node tests/client.test.mjs",
@@ -59,7 +59,6 @@
     "ui"
   ],
   "license": "Apache-2.0",
-  "dependencies": {},
   "peerDependencies": {
     "@deepseek-ai/cordis": "^4.0.1",
     "@deepseek-ai/dsh-client-ui-primitives": "^0.1.0-rc.7",
@@ -88,7 +87,7 @@
     "playwright-core": "^1.62.1",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
-    "tsup": "^8.5.1",
+    "tsdown": "^0.22.14",
     "typescript": "^7.0.2"
   },
   "packageManager": "pnpm@11.9.0"
