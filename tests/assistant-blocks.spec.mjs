@@ -2,9 +2,10 @@
  * Assistant block cards: a mixed reply splits thinking / answer / tool-call
  * into SEPARATE cards. The prose cards each carry their OWN raw/markdown
  * switch — toggling one leaves the other untouched; the tool-call card
- * parses its arguments into name/type/value rows (mirroring the tool
+ * parses its arguments into name/value rows (mirroring the tool
  * definition's parameter card), falling back to the raw payload when the
- * arguments are not a parseable JSON object.
+ * arguments are not a parseable JSON object. A tool RESULT renders its
+ * call half through the same card (`←` arrow) with the payload below.
  */
 import assert from 'node:assert/strict'
 import { test } from 'vitest'
@@ -47,21 +48,21 @@ test('assistant blocks: thinking/answer/tool-call split into cards, prose switch
   assert.equal(byClass(tr, 'lc-md-stub').length, 2, 'both prose cards render markdown by default')
 
   // The tool call is its own card: head names the tool with the argument
-  // count, the body lists parsed arguments as name/type/value rows — and no
+  // count, the body lists parsed arguments as name/value rows — and no
   // raw/markdown switch.
   const callCard = cards[2]
   assert.match(textOf(byClass(callCard, 'lc-ts-card-head')[0]), /→ bash/, 'tool-call card names the tool')
   assert.match(textOf(byClass(callCard, 'lc-ts-card-count')[0]), /^1$/, 'argument count badge')
-  const argRow = byClass(callCard, 'lc-ts-param-row')[0]
-  assert.equal(textOf(byClass(argRow, 'lc-ts-param-name')[0]), 'command', 'argument named')
-  assert.equal(textOf(byClass(argRow, 'lc-ts-param-type')[0]), 'string', 'argument typed')
-  assert.equal(textOf(byClass(argRow, 'lc-ts-param-desc')[0]), 'ls', 'argument value shown')
+  const argRow = byClass(callCard, 'lc-ts-arg-row')[0]
+  assert.equal(textOf(byClass(argRow, 'lc-ts-param-name')[0]), 'command', 'argument named on the left')
+  assert.equal(textOf(byClass(argRow, 'lc-ts-arg-val')[0]), 'ls', 'argument value on the right')
+  assert.equal(byClass(callCard, 'lc-ts-param-type').length, 0, 'argument rows carry no type column')
   assert.equal(byClass(callCard, 'lc-rich-seg').length, 0, 'tool-call card has no raw/markdown switch')
 
   // Unparseable arguments fall back to the raw payload inside the same card.
   const badCard = cards[3]
   assert.match(textOf(byClass(badCard, 'lc-ts-card-head')[0]), /→ write/, 'fallback card names the tool')
-  assert.equal(byClass(badCard, 'lc-ts-param-row').length, 0, 'fallback card has no argument rows')
+  assert.equal(byClass(badCard, 'lc-ts-arg-row').length, 0, 'fallback card has no argument rows')
   assert.match(textOf(byClass(badCard, 'lc-br-pre')[0]), /\{bad json/, 'fallback card shows the raw payload')
 
   // Flip the THINKING card to raw: only its own view changes.
@@ -85,4 +86,32 @@ test('assistant blocks: thinking/answer/tool-call split into cards, prose switch
   assert.equal(byClass(tr, 'lc-md-stub').length, 1, 'thinking card flips back to markdown alone')
 
   console.log('✔ assistant block card test passed (split cards, independent switches, parsed call args)')
+})
+
+test('tool result: the call half renders as a card with name/value argument rows', async () => {
+  bed.dataValue = {
+    ...snapshot,
+    nodes: [...snapshot.nodes, { seq: 3, cat: 'tool', tool: 'bash', tokens: 8, time: 66000 }],
+  }
+  bed.useSessionHolder = (sel) => sel({
+    nodes: [{
+      kind: 'tool-result', seq: 3,
+      call: { name: 'bash', argsRaw: '{"command":"ls -la"}' },
+      content: [{ type: 'text', text: 'RESULT-TEXT' }],
+    }],
+  })
+  brSlots[1][1]('tool') // openCat('tool')
+  brSlots[2][1]('n3')   // expand the tool-result element
+  const tr = renderView()
+
+  const callCard = byClass(tr, 'lc-ts-card')[0]
+  assert.ok(callCard, 'the tool result opens with a call card')
+  assert.match(textOf(byClass(callCard, 'lc-ts-card-head')[0]), /← bash/, 'call card names the tool with the result arrow')
+  const argRow = byClass(callCard, 'lc-ts-arg-row')[0]
+  assert.equal(textOf(byClass(argRow, 'lc-ts-param-name')[0]), 'command', 'argument named on the left')
+  assert.equal(textOf(byClass(argRow, 'lc-ts-arg-val')[0]), 'ls -la', 'argument value on the right')
+  assert.equal(byClass(callCard, 'lc-ts-param-type').length, 0, 'no type column')
+  assert.match(textOf(tr), /RESULT-TEXT/, 'the result payload still renders below the card')
+
+  console.log('✔ tool-result call card test passed (← card, name/value rows, payload below)')
 })

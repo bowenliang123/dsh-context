@@ -328,13 +328,14 @@ function BlockCard(props: { label: string; text: string; rich: RichKit }): React
 }
 
 /**
- * One assistant tool call as its own card, mirroring the tool-definition
- * parameter card: the head names the call target (with the parsed argument
- * count), the body lists the arguments as name/type/value rows. Arguments
- * that are not a parseable JSON object fall back to the raw payload inside
- * the same card.
+ * One tool call as its own card, mirroring the tool-definition parameter
+ * card: the head names the call target (with the parsed argument count),
+ * the body lists the arguments as name/value rows. Arguments that are not
+ * a parseable JSON object fall back to the raw payload inside the same
+ * card. Shared by assistant tool-call blocks (`→`) and the call half of a
+ * tool result (`←`).
  */
-function ToolCallCard(props: { name: string; argsRaw: unknown }): ReactNS.ReactElement {
+function ToolCallCard(props: { name: string; argsRaw: unknown; arrow?: string }): ReactNS.ReactElement {
   const args = React.useMemo<Record<string, unknown> | null>(() => {
     if (typeof props.argsRaw !== 'string' || props.argsRaw === '') return null
     try {
@@ -349,7 +350,7 @@ function ToolCallCard(props: { name: string; argsRaw: unknown }): ReactNS.ReactE
   return (
     <div className="lc-ts-card">
       <div className="lc-ts-card-head">
-        <b>{'→ ' + props.name}</b>
+        <b className="lc-ts-call-name">{(props.arrow ?? '→') + ' ' + props.name}</b>
         {args !== null ? <span className="lc-ts-card-count">{Object.keys(args).length}</span> : null}
       </div>
       {args !== null
@@ -361,17 +362,16 @@ function ToolCallCard(props: { name: string; argsRaw: unknown }): ReactNS.ReactE
   )
 }
 
-/** One parsed call argument: name, value type, and the value itself (full-width line). */
+/** One parsed call argument: the name on the left, the value on the right. */
 function CallArgRow(props: { name: string; value: unknown }): ReactNS.ReactElement {
   const v = props.value
   const text = typeof v === 'string' ? v
     : v === undefined ? ''
       : JSON.stringify(v)
   return (
-    <div className="lc-ts-param-row">
+    <div className="lc-ts-arg-row">
       <span className="lc-ts-param-name">{props.name}</span>
-      <span className="lc-ts-param-type">{v === null ? 'null' : Array.isArray(v) ? 'array' : typeof v}</span>
-      <span className="lc-ts-param-desc">{text}</span>
+      <span className="lc-ts-arg-val">{text}</span>
     </div>
   )
 }
@@ -435,12 +435,7 @@ function NodeContent(props: {
     return (
       <div className="lc-br-content">
         {conv.call != null
-          ? (
-            <div className="lc-br-call">
-              <span className="lc-br-tag">{'← ' + conv.call.name}</span>
-              {conv.call.argsRaw !== '' ? <pre className="lc-br-pre lc-br-dim">{conv.call.argsRaw}</pre> : null}
-            </div>
-          )
+          ? <ToolCallCard arrow="←" name={conv.call.name} argsRaw={conv.call.argsRaw} />
           : null}
         {Array.isArray(conv.content) ? <RawBlocks blocks={conv.content} mode="raw" rich={rich} img={img} /> : null}
       </div>

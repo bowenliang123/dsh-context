@@ -345,7 +345,6 @@
 .lc-br-content { padding: 2px 6px 8px 26px; display: flex; flex-direction: column; gap: 6px; }
 .lc-br-pre { margin: 0; padding: 8px 10px; background: var(--dsw-alias-bg-layer-2); border: 1px solid var(--dsw-alias-border-l1); border-radius: 6px; color: var(--dsw-alias-label-primary); font-size: 12px; line-height: 1.55; white-space: pre-wrap; word-break: break-word; max-height: 320px; overflow-y: auto; scrollbar-width: thin; }
 .lc-br-dim { color: var(--dsw-alias-label-secondary); }
-.lc-br-call { display: flex; flex-direction: column; gap: 4px; align-items: flex-start; }
 /*
  Assistant-message block title: a slim label line above each block
  (thinking / answer) so a mixed reply stays scannable — same weight and
@@ -364,6 +363,9 @@
 .lc-ts-card { background: var(--dsw-alias-bg-layer-2); border: 1px solid var(--dsw-alias-border-l1); border-radius: 6px; overflow: hidden; }
 .lc-ts-card-head { display: flex; align-items: center; gap: 8px; padding: 6px 10px; font-size: 11px; font-weight: 600; color: var(--dsw-alias-label-secondary); border-bottom: 1px solid var(--dsw-alias-border-l1); }
 .lc-ts-card-head b { color: var(--dsw-alias-label-primary); }
+/* Tool-call card heads name the call target a step up from the slim label
+ line (mono: it is an identifier, not prose). */
+.lc-ts-call-name { font-size: 13px; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
 .lc-ts-card-count { margin-left: auto; }
 .lc-ts-desc-body { margin: 0; padding: 8px 10px; color: var(--dsw-alias-label-primary); font-size: 12px; line-height: 1.55; white-space: pre-wrap; word-break: break-word; max-height: 160px; overflow-y: auto; scrollbar-width: thin; }
 /*
@@ -379,6 +381,18 @@
 .lc-ts-param-req-off { color: var(--dsw-alias-label-secondary); font-size: 11px; }
 .lc-ts-param-desc { grid-column: 1 / -1; color: var(--dsw-alias-label-secondary); line-height: 1.5; }
 .lc-ts-params-empty { padding: 8px 10px; color: var(--dsw-alias-label-secondary); font-size: 12px; }
+/*
+ Tool-call argument rows (assistant tool calls + the call half of a tool
+ result): the name sits in a narrow left column, the value takes the rest
+ of the row — wrapped, mono-styled, height-capped so one huge payload
+ (e.g. a full file write) never blows the card open.
+ */
+.lc-ts-arg-row { display: grid; grid-template-columns: minmax(0, 96px) 1fr; column-gap: 12px; padding: 6px 10px; border-top: 1px solid var(--dsw-alias-border-l1); font-size: 12px; align-items: start; }
+.lc-ts-arg-row:first-of-type { border-top: 0; }
+/* Arg rows override the shared name cell: wrap long names instead of
+ truncating them (the schema table keeps its one-line ellipsis). */
+.lc-ts-arg-row .lc-ts-param-name { overflow: visible; text-overflow: unset; white-space: normal; overflow-wrap: anywhere; }
+.lc-ts-arg-val { color: var(--dsw-alias-label-primary); font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12px; line-height: 1.55; white-space: pre-wrap; word-break: break-word; max-height: 200px; overflow-y: auto; scrollbar-width: thin; }
 /*
  Raw JSON toggle: a slim button that owns the open/closed state, sitting
  just under the parameter table. The <pre> itself only mounts when open
