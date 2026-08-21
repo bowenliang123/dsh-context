@@ -25,7 +25,7 @@ const CLIENT_FOOTER = `
 `
 
 export default defineConfig([
-  // ---- host half: bundled TS -> ESM. zod is shipped as a real dependency;
+  // ---- host half: bundled TS -> ESM. zod is a peer dependency;
   // @deepseek-ai/dsh-session is the harness-provided runtime contract
   // (declared as a peer), so both stay external and resolve at runtime from
   // the installation's single instance. ----
