@@ -42,6 +42,7 @@ A DeepSeek Harness plugin for context insight, actions, and management.
 - Generate one-time temp files in the `.tmp` directory, and properly clean them up right after use.
 
 ## Releasing
+- Version X.Y.Z, 大版本.次版本.小版本。
 - Releases are cut by tagging: `git tag vX.Y.Z && gh release create vX.Y.Z`.
 - A [GitHub Actions workflow](.github/workflows/release.yml) then builds, tests, and publishes the package to npm automatically via [npm Trusted Publishing (OIDC)](https://docs.npmjs.com/trusted-publishers) — no long-lived token needed, provenance included.
 - Write the release notes from the [release template](.github/release_template.md)
