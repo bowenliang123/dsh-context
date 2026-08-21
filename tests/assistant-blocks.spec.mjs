@@ -1,7 +1,10 @@
 /**
- * Assistant block cards: a mixed reply splits thinking / answer into
- * SEPARATE cards, each carrying its OWN raw/markdown switch — toggling one
- * card leaves the other untouched; tool calls stay raw.
+ * Assistant block cards: a mixed reply splits thinking / answer / tool-call
+ * into SEPARATE cards. The prose cards each carry their OWN raw/markdown
+ * switch — toggling one leaves the other untouched; the tool-call card
+ * parses its arguments into name/type/value rows (mirroring the tool
+ * definition's parameter card), falling back to the raw payload when the
+ * arguments are not a parseable JSON object.
  */
 import assert from 'node:assert/strict'
 import { test } from 'vitest'
@@ -13,13 +16,14 @@ bed.dataValue = snapshot
 renderView() // mount the ContextBrowser fiber before addressing its hooks
 const brSlots = bed.brSlots()
 
-test('assistant blocks: thinking/answer split into cards with independent raw/markdown switches', async () => {
+test('assistant blocks: thinking/answer/tool-call split into cards, prose switches independent', async () => {
   bed.useSessionHolder = (sel) => sel({
     nodes: [{
       kind: 'assistant', seq: 2, blocks: [
         { kind: 'reasoning', text: 'THINKING-TRACE' },
         { kind: 'text', text: 'ANSWER-TEXT' },
         { kind: 'tool-call', name: 'bash', argsRaw: '{"command":"ls"}' },
+        { kind: 'tool-call', name: 'write', argsRaw: '{bad json' },
       ],
     }],
   })
@@ -28,24 +32,37 @@ test('assistant blocks: thinking/answer split into cards with independent raw/ma
   let tr = renderView()
 
   let cards = byClass(tr, 'lc-ts-card')
-  assert.equal(cards.length, 2, 'thinking and answer render as two separate cards')
+  assert.equal(cards.length, 4, 'thinking, answer, and two tool calls render as four separate cards')
   assert.match(textOf(cards[0]), /Reasoning/, 'first card titled Reasoning')
   assert.match(textOf(cards[1]), /Response/, 'second card titled Response')
   assert.match(textOf(cards[0]), /THINKING-TRACE/, 'thinking card carries the reasoning text')
   assert.match(textOf(cards[1]), /ANSWER-TEXT/, 'answer card carries the reply text')
 
-  // Each card owns a switch; markdown is the default on BOTH.
-  const segsOf = () => byClass(tr, 'lc-ts-card').map(c => byClass(c, 'lc-rich-seg')[0])
-  assert.ok(segsOf().every(s => s !== undefined), 'each card carries its own raw/markdown switch')
+  // Each PROSE card owns a switch; markdown is the default on BOTH.
+  const segsOf = () => byClass(tr, 'lc-ts-card').slice(0, 2).map(c => byClass(c, 'lc-rich-seg')[0])
+  assert.ok(segsOf().every(s => s !== undefined), 'each prose card carries its own raw/markdown switch')
   for (const s of segsOf()) {
     assert.match(byClass(s, 'lc-rich-seg-btn')[1].args[1].className, /lc-rich-seg-on/, 'markdown segment active by default')
   }
-  assert.equal(byClass(tr, 'lc-md-stub').length, 2, 'both cards render markdown by default')
+  assert.equal(byClass(tr, 'lc-md-stub').length, 2, 'both prose cards render markdown by default')
 
-  // The tool call keeps its raw form (no card, no switch).
-  assert.equal(byClass(tr, 'lc-br-call').length, 1, 'tool call keeps the raw call row')
-  assert.match(textOf(byClass(tr, 'lc-br-call')[0]), /→ bash/, 'tool call names the tool')
-  assert.match(textOf(byClass(tr, 'lc-br-call')[0]), /"command":"ls"/, 'tool call args stay raw')
+  // The tool call is its own card: head names the tool with the argument
+  // count, the body lists parsed arguments as name/type/value rows — and no
+  // raw/markdown switch.
+  const callCard = cards[2]
+  assert.match(textOf(byClass(callCard, 'lc-ts-card-head')[0]), /→ bash/, 'tool-call card names the tool')
+  assert.match(textOf(byClass(callCard, 'lc-ts-card-count')[0]), /^1$/, 'argument count badge')
+  const argRow = byClass(callCard, 'lc-ts-param-row')[0]
+  assert.equal(textOf(byClass(argRow, 'lc-ts-param-name')[0]), 'command', 'argument named')
+  assert.equal(textOf(byClass(argRow, 'lc-ts-param-type')[0]), 'string', 'argument typed')
+  assert.equal(textOf(byClass(argRow, 'lc-ts-param-desc')[0]), 'ls', 'argument value shown')
+  assert.equal(byClass(callCard, 'lc-rich-seg').length, 0, 'tool-call card has no raw/markdown switch')
+
+  // Unparseable arguments fall back to the raw payload inside the same card.
+  const badCard = cards[3]
+  assert.match(textOf(byClass(badCard, 'lc-ts-card-head')[0]), /→ write/, 'fallback card names the tool')
+  assert.equal(byClass(badCard, 'lc-ts-param-row').length, 0, 'fallback card has no argument rows')
+  assert.match(textOf(byClass(badCard, 'lc-br-pre')[0]), /\{bad json/, 'fallback card shows the raw payload')
 
   // Flip the THINKING card to raw: only its own view changes.
   byClass(segsOf()[0], 'lc-rich-seg-btn')[0].args[1].onClick()
@@ -60,12 +77,12 @@ test('assistant blocks: thinking/answer split into cards with independent raw/ma
   byClass(segsOf()[1], 'lc-rich-seg-btn')[0].args[1].onClick()
   tr = renderView()
   cards = byClass(tr, 'lc-ts-card')
-  assert.equal(byClass(tr, 'lc-md-stub').length, 0, 'both cards raw after both flips')
+  assert.equal(byClass(tr, 'lc-md-stub').length, 0, 'both prose cards raw after both flips')
   assert.match(textOf(byClass(cards[1], 'lc-ts-desc-body')[0]), /ANSWER-TEXT/, 'answer card shows the raw text')
   // ...and back to markdown independently.
   byClass(segsOf()[0], 'lc-rich-seg-btn')[1].args[1].onClick()
   tr = renderView()
   assert.equal(byClass(tr, 'lc-md-stub').length, 1, 'thinking card flips back to markdown alone')
 
-  console.log('✔ assistant block card test passed (split cards, independent raw/markdown switches)')
+  console.log('✔ assistant block card test passed (split cards, independent switches, parsed call args)')
 })

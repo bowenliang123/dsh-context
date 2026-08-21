@@ -91,6 +91,8 @@ export function byClass(root, className) {
 
 export function textOf(node) {
   if (typeof node === 'string') return node
+  // React renders number children as text (booleans it does not).
+  if (typeof node === 'number') return String(node)
   if (node === null || node === undefined || typeof node !== 'object') return ''
   if (node.kind === 'element') return node.args.slice(2).map(textOf).join('')
   if (Array.isArray(node)) return node.map(textOf).join('')
@@ -99,6 +101,7 @@ export function textOf(node) {
 
 export function plainText(node) {
   if (typeof node === 'string') return node
+  if (typeof node === 'number') return String(node)
   if (node === null || node === undefined || typeof node !== 'object') return ''
   if (node.kind === 'element') return node.args.slice(2).map(plainText).join('')
   if (Array.isArray(node)) return node.map(plainText).join('')

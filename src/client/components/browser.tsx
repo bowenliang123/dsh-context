@@ -327,6 +327,55 @@ function BlockCard(props: { label: string; text: string; rich: RichKit }): React
   )
 }
 
+/**
+ * One assistant tool call as its own card, mirroring the tool-definition
+ * parameter card: the head names the call target (with the parsed argument
+ * count), the body lists the arguments as name/type/value rows. Arguments
+ * that are not a parseable JSON object fall back to the raw payload inside
+ * the same card.
+ */
+function ToolCallCard(props: { name: string; argsRaw: unknown }): ReactNS.ReactElement {
+  const args = React.useMemo<Record<string, unknown> | null>(() => {
+    if (typeof props.argsRaw !== 'string' || props.argsRaw === '') return null
+    try {
+      const parsed: unknown = JSON.parse(props.argsRaw)
+      return parsed !== null && typeof parsed === 'object' && !Array.isArray(parsed)
+        ? parsed as Record<string, unknown>
+        : null
+    } catch {
+      return null
+    }
+  }, [props.argsRaw])
+  return (
+    <div className="lc-ts-card">
+      <div className="lc-ts-card-head">
+        <b>{'→ ' + props.name}</b>
+        {args !== null ? <span className="lc-ts-card-count">{Object.keys(args).length}</span> : null}
+      </div>
+      {args !== null
+        ? Object.keys(args).map(k => <CallArgRow key={k} name={k} value={args[k]} />)
+        : typeof props.argsRaw === 'string' && props.argsRaw !== ''
+          ? <pre className="lc-br-pre lc-br-dim">{props.argsRaw}</pre>
+          : null}
+    </div>
+  )
+}
+
+/** One parsed call argument: name, value type, and the value itself (full-width line). */
+function CallArgRow(props: { name: string; value: unknown }): ReactNS.ReactElement {
+  const v = props.value
+  const text = typeof v === 'string' ? v
+    : v === undefined ? ''
+      : JSON.stringify(v)
+  return (
+    <div className="lc-ts-param-row">
+      <span className="lc-ts-param-name">{props.name}</span>
+      <span className="lc-ts-param-type">{v === null ? 'null' : Array.isArray(v) ? 'array' : typeof v}</span>
+      <span className="lc-ts-param-desc">{text}</span>
+    </div>
+  )
+}
+
 /** The actual content of one surface element, joined from the conversation snapshot. */
 function NodeContent(props: {
   node: SurfaceNode
@@ -359,8 +408,9 @@ function NodeContent(props: {
     ))
   }
   if (conv.kind === 'assistant' && Array.isArray(conv.blocks)) {
-    // Thinking and answer blocks render as SEPARATE cards, each owning its
-    // raw/markdown switch; tool calls and images keep their raw forms.
+    // Thinking, answer, and tool-call blocks render as SEPARATE cards (the
+    // prose cards own a raw/markdown switch, the call card parses its
+    // arguments into rows); images keep their raw form.
     return (
       <div className="lc-br-content">
         {conv.blocks.map((b, i) => {
@@ -372,14 +422,7 @@ function NodeContent(props: {
             return <BlockCard key={i} label={props.labels.thinking} text={blk.text} rich={rich} />
           }
           if (blk.kind === 'tool-call') {
-            return (
-              <div key={i} className="lc-br-call">
-                <span className="lc-br-tag">{'→ ' + (blk.name ?? '?')}</span>
-                {typeof blk.argsRaw === 'string' && blk.argsRaw !== ''
-                  ? <pre className="lc-br-pre lc-br-dim">{blk.argsRaw}</pre>
-                  : null}
-              </div>
-            )
+            return <ToolCallCard key={i} name={blk.name ?? '?'} argsRaw={blk.argsRaw} />
           }
           const image = imageRefOf(b)
           if (image !== null) return <img.Card key={i} attachment={image} load={img.load} />
