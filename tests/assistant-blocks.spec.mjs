@@ -91,27 +91,89 @@ test('assistant blocks: thinking/answer/tool-call split into cards, prose switch
 test('tool result: the call half renders as a card with name/value argument rows', async () => {
   bed.dataValue = {
     ...snapshot,
-    nodes: [...snapshot.nodes, { seq: 3, cat: 'tool', tool: 'bash', tokens: 8, time: 66000 }],
+    nodes: [
+      ...snapshot.nodes,
+      { seq: 3, cat: 'tool', tool: 'bash', tokens: 8, time: 66000 },
+      // A text-less assistant turn (a pure tool call): its collapsed row
+      // previews with the call's own description line.
+      { seq: 4, cat: 'assistant', tokens: 5, calls: ['bash'], time: 67000 },
+      // Path-taking tools (read / edit) preview with the target path.
+      { seq: 5, cat: 'tool', tool: 'read', tokens: 6, time: 68000 },
+      { seq: 6, cat: 'assistant', tokens: 5, calls: ['edit'], time: 69000 },
+    ],
   }
   bed.useSessionHolder = (sel) => sel({
-    nodes: [{
-      kind: 'tool-result', seq: 3,
-      call: { name: 'bash', argsRaw: '{"command":"ls -la"}' },
-      content: [{ type: 'text', text: 'RESULT-TEXT' }],
-    }],
+    nodes: [
+      {
+        kind: 'tool-result', seq: 3,
+        call: { name: 'bash', argsRaw: '{"command":"ls -la","description":"LIST-FILES"}' },
+        content: [{ type: 'text', text: 'RESULT-TEXT' }],
+      },
+      {
+        kind: 'assistant', seq: 4,
+        blocks: [{ kind: 'tool-call', name: 'bash', argsRaw: '{"command":"ls","description":"LIST-FILES-ASST"}' }],
+      },
+      {
+        kind: 'tool-result', seq: 5,
+        call: { name: 'read', argsRaw: '{"file_path":"/tmp/a.ts"}' },
+        content: [{ type: 'text', text: 'FILE-CONTENT' }],
+      },
+      {
+        kind: 'assistant', seq: 6,
+        blocks: [{ kind: 'tool-call', name: 'edit', argsRaw: '{"file_path":"/tmp/b.ts","old_string":"x","new_string":"y"}' }],
+      },
+    ],
   })
   brSlots[1][1]('tool') // openCat('tool')
+  let tr = renderView()
+
+  // The collapsed row leads with an INVERTED chip naming the tool, then
+  // previews with the call's own summary line instead of the generic
+  // result label: bash's `description`, a read call's target path.
+  const toolRows = byClass(tr, 'lc-br-elem-row')
+  assert.equal(toolRows.length, 2, 'both tool results listed (newest first)')
+  const readRowText = textOf(toolRows[0])
+  assert.ok(readRowText.includes('/tmp/a.ts'), 'read result previews the target path')
+  assert.doesNotMatch(readRowText, /node\.toolResult/, 'generic result label replaced by the path')
+  assert.equal(textOf(byClass(toolRows[0], 'lc-br-tag')[0]), 'read', 'read row leads with its tool-name chip')
+  const toolRow = toolRows[1]
+  const rowText = textOf(toolRow)
+  assert.match(rowText, /LIST-FILES/, 'collapsed row previews the call description')
+  assert.doesNotMatch(rowText, /node\.toolResult/, 'generic result label replaced')
+  const toolTag = byClass(toolRow, 'lc-br-tag')[0]
+  assert.equal(textOf(toolTag), 'bash', 'tool row leads with the tool-name chip')
+  assert.match(toolTag.args[1].className, /lc-br-tag-inv/, 'tool-name chip is inverted')
+
   brSlots[2][1]('n3')   // expand the tool-result element
-  const tr = renderView()
+  tr = renderView()
 
   const callCard = byClass(tr, 'lc-ts-card')[0]
   assert.ok(callCard, 'the tool result opens with a call card')
   assert.match(textOf(byClass(callCard, 'lc-ts-card-head')[0]), /← bash/, 'call card names the tool with the result arrow')
+  assert.match(textOf(byClass(callCard, 'lc-ts-card-count')[0]), /^2$/, 'both arguments counted')
   const argRow = byClass(callCard, 'lc-ts-arg-row')[0]
   assert.equal(textOf(byClass(argRow, 'lc-ts-param-name')[0]), 'command', 'argument named on the left')
   assert.equal(textOf(byClass(argRow, 'lc-ts-arg-val')[0]), 'ls -la', 'argument value on the right')
   assert.equal(byClass(callCard, 'lc-ts-param-type').length, 0, 'no type column')
   assert.match(textOf(tr), /RESULT-TEXT/, 'the result payload still renders below the card')
+
+  // The text-less ASSISTANT turns preview the same way: an inverted
+  // tool-name breadcrumb chip leads, then the call's summary (bash's
+  // description, an edit call's target path) — while a turn WITH text
+  // keeps the text preview (no chip: it made no calls).
+  brSlots[1][1]('assistant')
+  tr = renderView()
+  const asstRows = byClass(tr, 'lc-br-elem-row')
+  assert.equal(asstRows.length, 3, 'all three assistant turns listed (newest first)')
+  const editTag = byClass(asstRows[0], 'lc-br-tag')[0]
+  assert.equal(textOf(editTag), 'edit', 'edit turn leads with its tool-name chip')
+  assert.match(editTag.args[1].className, /lc-br-tag-inv/, 'assistant chip is inverted too')
+  assert.ok(textOf(asstRows[0]).includes('/tmp/b.ts'), 'edit turn previews the target path')
+  const asstTag = byClass(asstRows[1], 'lc-br-tag')[0]
+  assert.equal(textOf(asstTag), 'bash', 'assistant row leads with the tool-name chip')
+  assert.match(textOf(asstRows[1]), /LIST-FILES-ASST/, 'text-less turn previews the call description')
+  assert.equal(byClass(asstRows[2], 'lc-br-tag').length, 0, 'text-bearing turn carries no chip')
+  assert.match(textOf(asstRows[2]), /second message/, 'text-bearing turn keeps its text preview')
 
   console.log('✔ tool-result call card test passed (← card, name/value rows, payload below)')
 })

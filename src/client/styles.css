@@ -340,6 +340,10 @@
 .lc-br-elem-row { display: flex; align-items: center; gap: 8px; width: 100%; border: 0; background: transparent; color: var(--dsw-alias-label-primary); font: inherit; font-size: 12px; padding: 5px 6px; cursor: pointer; text-align: left; border-radius: 6px; transition: background-color 120ms ease; }
 .lc-br-elem-row:hover { background: var(--dsw-alias-interactive-bg-hover); }
 .lc-br-tag { flex: none; font-size: 11px; color: var(--dsw-alias-label-secondary); background: var(--dsw-alias-bg-layer-1); border: 1px solid var(--dsw-alias-border-l1); border-radius: 4px; padding: 0 6px; max-width: 220px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* Inverted tool-name breadcrumb (tool results + assistant turns with
+ calls): label/surface tokens swap, so it reads black-on-white in light
+ mode and white-on-black in dark mode; mono — these are identifiers. */
+.lc-br-tag-inv { color: var(--dsw-alias-bg-layer-1); background: var(--dsw-alias-label-primary); border-color: transparent; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
 .lc-br-preview { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .lc-br-time { flex: none; color: var(--dsw-alias-label-secondary); font-size: 11px; }
 .lc-br-content { padding: 2px 6px 8px 26px; display: flex; flex-direction: column; gap: 6px; }

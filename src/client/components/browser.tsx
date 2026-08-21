@@ -328,6 +328,63 @@ function BlockCard(props: { label: string; text: string; rich: RichKit }): React
 }
 
 /**
+ * Parse a call's raw argument payload into an object; null when the payload
+ * is missing, malformed, or not a JSON object (callers fall back to the raw
+ * text).
+ */
+function parseArgs(raw: unknown): Record<string, unknown> | null {
+  if (typeof raw !== 'string' || raw === '') return null
+  try {
+    const parsed: unknown = JSON.parse(raw)
+    return parsed !== null && typeof parsed === 'object' && !Array.isArray(parsed)
+      ? parsed as Record<string, unknown>
+      : null
+  } catch {
+    return null
+  }
+}
+
+/**
+ * The one-line summary a call's arguments carry about the call: a
+ * bash-style `description` says what it does; path-taking tools (edit /
+ * read / write) name their target via `file_path`/`path`/`filePath`. Null
+ * when the arguments hold neither — the row then falls back to the generic
+ * label.
+ */
+function summaryIn(args: Record<string, unknown> | null): string | null {
+  if (args === null) return null
+  for (const k of ['description', 'file_path', 'path', 'filePath']) {
+    const v = args[k]
+    if (typeof v === 'string' && v !== '') return v
+  }
+  return null
+}
+
+/**
+ * The summary of a tool result's own call — the collapsed row's preview.
+ * Null when the call summarizes to nothing.
+ */
+function callSummaryOf(conv: ConversationNodeLike | undefined): string | null {
+  return summaryIn(parseArgs(conv?.call?.argsRaw))
+}
+
+/**
+ * The first call summary inside an assistant message's tool-call blocks —
+ * the collapsed-row preview for a text-less assistant turn. Null when no
+ * block summarizes.
+ */
+function blockSummaryOf(conv: ConversationNodeLike | undefined): string | null {
+  if (conv === undefined || !Array.isArray(conv.blocks)) return null
+  for (const b of conv.blocks) {
+    const blk = b !== null && typeof b === 'object' ? b as { kind?: string; argsRaw?: unknown } : null
+    if (blk === null || blk.kind !== 'tool-call') continue
+    const s = summaryIn(parseArgs(blk.argsRaw))
+    if (s !== null) return s
+  }
+  return null
+}
+
+/**
  * One tool call as its own card, mirroring the tool-definition parameter
  * card: the head names the call target (with the parsed argument count),
  * the body lists the arguments as name/value rows. Arguments that are not
@@ -336,17 +393,7 @@ function BlockCard(props: { label: string; text: string; rich: RichKit }): React
  * tool result (`←`).
  */
 function ToolCallCard(props: { name: string; argsRaw: unknown; arrow?: string }): ReactNS.ReactElement {
-  const args = React.useMemo<Record<string, unknown> | null>(() => {
-    if (typeof props.argsRaw !== 'string' || props.argsRaw === '') return null
-    try {
-      const parsed: unknown = JSON.parse(props.argsRaw)
-      return parsed !== null && typeof parsed === 'object' && !Array.isArray(parsed)
-        ? parsed as Record<string, unknown>
-        : null
-    } catch {
-      return null
-    }
-  }, [props.argsRaw])
+  const args = React.useMemo(() => parseArgs(props.argsRaw), [props.argsRaw])
   return (
     <div className="lc-ts-card">
       <div className="lc-ts-card-head">
@@ -688,13 +735,14 @@ export function makeContextBrowser(
     const elemRow = (
       key: string, tag: string | null, preview: string,
       tokens: number, time: number | undefined, body: ReactNS.ReactNode,
+      inv = false,
     ) => {
       const open = openElem === key
       return (
         <div key={key} className={'lc-br-elem' + (open ? ' lc-br-elem-on' : '')}>
           <button type="button" className="lc-br-elem-row" onClick={() => { toggleElem(key) }}>
             <span className={'lc-br-chev' + (open ? ' lc-br-chev-on' : '')}>{'▸'}</span>
-            {tag !== null ? <span className="lc-br-tag">{tag}</span> : null}
+            {tag !== null ? <span className={'lc-br-tag' + (inv ? ' lc-br-tag-inv' : '')}>{tag}</span> : null}
             <span className="lc-br-preview">{preview}</span>
             {time !== undefined ? <span className="lc-br-time">{fmtTime(time)}</span> : null}
             <span className="lc-br-tokens">{'≈' + fmt(tokens)}</span>
@@ -739,12 +787,32 @@ export function makeContextBrowser(
       return nodes.map((n) => {
         // Tag/preview split: the compact chip carries the compact fact (tool
         // name, injection form), the preview line carries the text — each
-        // fact shown once. Skill/calls previews already name themselves.
+        // fact shown once. Tool-bearing rows (tool results, assistant turns
+        // with calls) lead with an INVERTED breadcrumb chip naming the
+        // tool(s) so they scan apart from prose rows.
         let tag: string | null = null
+        let inv = false
         let preview = nodeText(n)
         if (n.cat === 'tool') {
           tag = (n.tool ?? '?') + (n.err ? ' ⚠' : '')
-          preview = t('node.toolResult') + (n.err ? ' ⚠' : '')
+          inv = true
+          // A call that summarizes itself (bash's `description`, the path
+          // of an edit/read call) previews with that line in the collapsed
+          // row; the generic result label only when the call says nothing.
+          preview = callSummaryOf(bySeq.get(n.seq)) ?? (t('node.toolResult') + (n.err ? ' ⚠' : ''))
+        } else if (n.cat === 'assistant' && Array.isArray(n.calls) && n.calls.length > 0) {
+          // Call targets join as a breadcrumb (`bash › write`); the preview
+          // then carries the reply text, or the first call's own summary
+          // (description / target path) for a text-less turn.
+          tag = n.calls.join(' › ')
+          inv = true
+          preview = (n.text !== undefined && n.text !== '' ? n.text : null)
+            ?? blockSummaryOf(bySeq.get(n.seq))
+            ?? t('node.empty')
+        } else if (n.cat === 'assistant' && (n.text === undefined || n.text === '')) {
+          // No call list on the surface node: a text-less turn can still
+          // preview a self-summarizing call found in the conversation join.
+          preview = blockSummaryOf(bySeq.get(n.seq)) ?? preview
         } else if (n.cat === 'inject' && !n.skill) {
           tag = t('form.' + (n.form || 'context'))
           if (n.text !== undefined && n.text !== '') {
@@ -772,7 +840,7 @@ export function makeContextBrowser(
             hint={bySeq.get(n.seq) === undefined && awaiting
               ? t('browser.loading')
               : t('browser.noContent')}
-          />)
+          />, inv)
       })
     }
 
