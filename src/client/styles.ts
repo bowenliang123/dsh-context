@@ -288,6 +288,11 @@ export const STYLES = [
   '.lc-br-pre { margin: 0; padding: 8px 10px; background: var(--dsw-alias-bg-layer-2); border: 1px solid var(--dsw-alias-border-l1); border-radius: 6px; color: var(--dsw-alias-label-primary); font-size: 12px; line-height: 1.55; white-space: pre-wrap; word-break: break-word; max-height: 320px; overflow-y: auto; scrollbar-width: thin; }',
   '.lc-br-dim { color: var(--dsw-alias-label-secondary); }',
   '.lc-br-call { display: flex; flex-direction: column; gap: 4px; align-items: flex-start; }',
+  // Assistant-message block title: a slim label line above each block
+  // (thinking / answer) so a mixed reply stays scannable — same weight and
+  // tone as the tool-schema card heads, without an extra bordered card.
+  '.lc-br-blk { display: flex; flex-direction: column; gap: 4px; }',
+  '.lc-br-blk-label { font-size: 11px; font-weight: 600; color: var(--dsw-alias-label-secondary); }',
   // ---- Tool schema body (browser card, tools category). The description
   // and parameter table share one "card with a small title" chrome — a
   // labeled bordered block so a reader can scan three stacked sections

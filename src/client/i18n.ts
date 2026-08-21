@@ -99,6 +99,11 @@ export const DICT_ZH: Record<string, string> = {
   'rich.md': 'Markdown',
   'rich.toMd': '按 Markdown 渲染查看',
   'rich.toRaw': '查看原始文本',
+  // Assistant-message block titles inside the detail card: the reasoning
+  // trace and the response each carry a small label (Reasoning / Response,
+  // mirroring the harness's own block + locale vocabulary).
+  'block.thinking': '思考',
+  'block.answer': '回答',
 }
 
 export const DICT_EN: Record<string, string> = {
@@ -195,4 +200,9 @@ export const DICT_EN: Record<string, string> = {
   'rich.md': 'Markdown',
   'rich.toMd': 'View as Markdown',
   'rich.toRaw': 'View Raw Text',
+  // Assistant-message block titles inside the detail card: the reasoning
+  // trace and the response each carry a small label (Reasoning / Response,
+  // mirroring the harness's own block + locale vocabulary).
+  'block.thinking': 'Reasoning',
+  'block.answer': 'Response',
 }

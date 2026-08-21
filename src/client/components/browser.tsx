@@ -293,7 +293,7 @@ function RawBlocks(props: { blocks: readonly unknown[]; mode: RichMode; rich: Ri
 }
 
 /** The actual content of one surface element, joined from the conversation snapshot. */
-function NodeContent(props: { node: SurfaceNode; conv: ConversationNodeLike | undefined; hint: string; rich: RichKit }): ReactNS.ReactElement {
+function NodeContent(props: { node: SurfaceNode; conv: ConversationNodeLike | undefined; hint: string; rich: RichKit; labels: { thinking: string; answer: string } }): ReactNS.ReactElement {
   const { node, conv, rich } = props
   // The raw/markdown toggle serves the prose categories (user / assistant /
   // injection bodies); tool results stay raw (structured payload, not prose).
@@ -322,10 +322,20 @@ function NodeContent(props: { node: SurfaceNode; conv: ConversationNodeLike | un
         {blocks.map((b, i) => {
           const blk = b as { kind?: string; text?: unknown; name?: unknown; argsRaw?: unknown }
           if (blk.kind === 'text' && typeof blk.text === 'string') {
-            return <rich.RichText key={i} text={blk.text} mode={mode} />
+            return (
+              <div key={i} className="lc-br-blk">
+                <div className="lc-br-blk-label">{props.labels.answer}</div>
+                <rich.RichText text={blk.text} mode={mode} />
+              </div>
+            )
           }
           if (blk.kind === 'reasoning' && typeof blk.text === 'string') {
-            return <pre key={i} className="lc-br-pre lc-br-dim">{blk.text}</pre>
+            return (
+              <div key={i} className="lc-br-blk">
+                <div className="lc-br-blk-label">{props.labels.thinking}</div>
+                <pre className="lc-br-pre lc-br-dim">{blk.text}</pre>
+              </div>
+            )
           }
           if (blk.kind === 'tool-call') {
             return (
@@ -614,6 +624,9 @@ export function makeContextBrowser(
             node={n}
             conv={bySeq.get(n.seq)}
             rich={rich}
+            // Localized assistant-block titles (thinking / answer), handed
+            // in by the parent so the body stays a pure function of props.
+            labels={{ thinking: t('block.thinking'), answer: t('block.answer') }}
             // This row's body renders only while it is the open element, so
             // `awaiting` (open seq missing, pagination armed) means THIS join
             // is the one pages are being pulled for.
