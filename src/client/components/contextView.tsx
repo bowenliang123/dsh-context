@@ -98,6 +98,9 @@ export function makeContextView(ctx: ClientCtx, kit: ViewKit): (props: ContextVi
     const [hoverTurn, setHoverTurn] = React.useState<number | null>(null)
     const [tick, setTick] = React.useState(0)
     const [granularity, setGranularity] = React.useState<'step' | 'turn'>('step')
+    // Turn strip click target: the chart switches to turn granularity and
+    // scroll-centers this turn's bar, then clears it via onFocusTurnHandled.
+    const [focusTurn, setFocusTurn] = React.useState<number | null>(null)
     // Shared hover link between the composition bar and its legend below.
     const [hoverCat, setHoverCat] = React.useState<string | null>(null)
     // Kind picker for the events column, every kind picked by default (all
@@ -302,9 +305,12 @@ export function makeContextView(ctx: ClientCtx, kit: ViewKit): (props: ContextVi
                       hoveredSeq={hoveredSeq}
                       activeTurn={activeTurn}
                       granularity={granularity}
+                      focusTurn={focusTurn}
                       onSelect={setSelectedSeq}
                       onHover={setHoveredSeq}
                       onHoverTurn={setHoverTurn}
+                      onPickTurn={(turn) => { setGranularity('turn'); setFocusTurn(turn) }}
+                      onFocusTurnHandled={() => { setFocusTurn(null) }}
                     />
                     <RequestDetail request={activeReq} marker={activeReq !== null ? markerOf(activeReq) : undefined} />
                   </div>

@@ -24,9 +24,14 @@ export interface TrendChartProps {
   activeTurn: number | null
   /** Display granularity; a switch re-anchors the chart at the newest bars. */
   granularity: 'step' | 'turn'
+  /** A strip-clicked turn pending scroll-centering; null once handled. */
+  focusTurn: number | null
   onSelect: (seq: number | null) => void
   onHover: (seq: number | null) => void
   onHoverTurn: (turn: number | null) => void
+  /** Strip click: jump to turn granularity focused on that turn. */
+  onPickTurn: (turn: number) => void
+  onFocusTurnHandled: () => void
 }
 
 /**
@@ -212,6 +217,17 @@ export function makeTrendChart(kit: ViewKit): (props: TrendChartProps) => ReactN
         lastGranRef.current = props.granularity
         scrolledOnce.current = false // re-anchor on every granularity switch
       }
+      // A strip click carries a focus turn: center its bar instead of the
+      // default newest-anchor. Consumed once — also when the granularity
+      // was already 'turn' (no re-anchor happens on that render).
+      if (props.focusTurn !== null) {
+        const gi = groups.findIndex(g => g.turn === props.focusTurn)
+        if (gi >= 0) {
+          scrolledOnce.current = true
+          el.scrollLeft = Math.max(0, gi * (BAR_W + BAR_GAP) + BAR_W / 2 - el.clientWidth / 2)
+        }
+        props.onFocusTurnHandled()
+      }
       if (!scrolledOnce.current) {
         scrolledOnce.current = true
         el.scrollLeft = el.scrollWidth
@@ -304,6 +320,7 @@ export function makeTrendChart(kit: ViewKit): (props: TrendChartProps) => ReactN
                   }}
                   title={`T${grp.turn}`}
                   onMouseEnter={() => { props.onHoverTurn(grp.turn) }}
+                  onClick={() => { props.onPickTurn(grp.turn) }}
                 >{`T${grp.turn}`}</span>
               )
             })}
