@@ -56,6 +56,35 @@ export interface ConversationNodeLike {
   summary?: string | null
 }
 
+/**
+ * A durable image attachment reference, as far as this plugin consumes it
+ * (dsh's `ImageAttachmentRef`, minimally re-typed so the plugin stays free
+ * of an attachment-package dependency). The durable log holds only this ref
+ * — never inline bytes. Since dsh 0.1.1 the width/height/bytes describe the
+ * NORMALIZED raster (long edge 2048px); `originalDimensions` carries the
+ * pre-normalization size when normalization reduced the image.
+ */
+export interface ImageRefLike {
+  attachmentId: string
+  name?: string
+  bytes?: number
+  width?: number
+  height?: number
+  originalDimensions?: { width: number; height: number }
+}
+
+/** Loads a session-authorized display URL for one durable image reference. */
+export type ImageLoader = (attachment: ImageRefLike) => Promise<string>
+
+/**
+ * The harness conversation client service (`ctx.conversation`), minimally
+ * typed for image resolution — the same call the chat view's own message
+ * images ride on.
+ */
+export interface ConversationFace {
+  resolveImage(sessionId: string, attachment: ImageRefLike): Promise<string>
+}
+
 /** The conversation-snapshot selector hook, minimally typed for this plugin. */
 export type UseSessionLike = <T>(
   selector: (snapshot: {

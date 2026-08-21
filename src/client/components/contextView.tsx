@@ -14,7 +14,7 @@ import type { ContextEventRecord, RequestRecord } from '../../shared/types'
 import { headlineOf } from '../headline'
 import type { LocaleService, SessionStandardProps } from '../services'
 import { contextPressureOf, headersOf, timelineOf, tokenUsageOf } from '../services'
-import type { ClientCtx } from '../services'
+import type { ClientCtx, ConversationFace, ImageRefLike } from '../services'
 import type { ViewKit } from '../viewkit'
 import { makeContextBrowser } from './browser'
 import { makeCurrentComposition } from './currentComposition'
@@ -122,6 +122,18 @@ export function makeContextView(ctx: ClientCtx, kit: ViewKit): (props: ContextVi
     // `onToolFocusHandled`, so clicking the same chip again re-triggers.
     const [toolFocus, setToolFocus] = React.useState<{ tool?: string } | null>(null)
     const clearToolFocus = React.useCallback(() => { setToolFocus(null) }, [])
+
+    // Session-authorized durable-image loader for the Context browser's
+    // attachment cards, resolved through the harness conversation service —
+    // the same `resolveImage` the chat history's message images ride on.
+    // Absent service (or a missing session id) degrades the cards to
+    // metadata-only, never an error.
+    const loadImage = React.useMemo(() => {
+      if (typeof sessionId !== 'string' || sessionId === '') return undefined
+      const conversation = ctx.get('conversation') as ConversationFace | undefined
+      if (conversation === undefined || typeof conversation.resolveImage !== 'function') return undefined
+      return (attachment: ImageRefLike) => conversation.resolveImage(sessionId, attachment)
+    }, [sessionId])
 
     // ---- page-scroller ownership (see `viewScroll` above) ----
     const rootRef = React.useRef<HTMLDivElement | null>(null)
@@ -314,6 +326,7 @@ export function makeContextView(ctx: ClientCtx, kit: ViewKit): (props: ContextVi
               // Tool-link bridge from the overview ("工具定义 Top" chips).
               toolFocus={toolFocus}
               onToolFocusHandled={clearToolFocus}
+              loadImage={loadImage}
             />
           </div>
         </div>

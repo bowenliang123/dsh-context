@@ -86,6 +86,14 @@ Six collapsible category sections (system prompt, tool schemas, user messages, i
 - **Linked with the history chart** — hover any bar in the History card and the browser previews that step instantly; leave the chart and it returns to your own pick. Keep a category open while scrubbing to compare one category across steps.
 - **Honest about coverage** — steps before a compaction are reconstructed from the removed-message archive, and the card says so when a step's makeup is only approximate. Elements older than the loaded chat window page older history in automatically when you expand them, and live injections (AGENTS.md, session-start context, …) are always listed — never a token sum without its items.
 
+### 🖼 Multimodal — image attachments in full view (DeepSeek Harness 0.1.1+)
+
+Fully adapted to DeepSeek Harness 0.1.1's multimodal pipeline and the vision capability of **DeepSeek-V4-Flash-Vision-Exp**. A user message carrying images expands into a card layout — prose in the text card (with the usual raw/Markdown toggle), each image attachment as a thumbnail card with its name, normalized dimensions (plus the pre-normalization size when 0.1.1's image pipeline downscaled it) and stored size, and anything unrecognized as raw content:
+
+![Context browser rendering image attachments](https://raw.githubusercontent.com/bowenliang123/dsh-context/main/docs/context-browser-images.png)
+
+Images load through the harness's own session-authorized loader — the same one the chat history uses — and degrade to metadata-only cards when it is unavailable. Image blocks in assistant messages and tool results (e.g. `read_image` output) now render too, instead of being silently dropped.
+
 ## Like it?
 
 If `dsh-context` helped you understand what your agent is carrying around, a ⭐ on [GitHub](https://github.com/bowenliang123/dsh-context) is much appreciated — and issues/PRs are welcome!

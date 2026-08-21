@@ -26,9 +26,12 @@ import { React } from '../react'
 import type { ConversationNodeLike, UseSessionLike } from '../services'
 import type { ViewKit } from '../viewkit'
 import { makeNodeText } from './nodes'
+import { imageRefOf, makeImageCard } from './images'
+import type { ImageKit } from './images'
 import { makeRichText } from './richText'
 import type { RichKit, RichMode } from './richText'
 import type { StackedBarProps } from './stackedBar'
+import type { ImageLoader, ImageRefLike } from '../services'
 
 export interface ContextBrowserProps {
   data: ContextTimeline
@@ -68,6 +71,11 @@ export interface ContextBrowserProps {
   toolFocus?: { tool?: string } | null
   /** Called once a one-shot `toolFocus` request has been applied; the parent clears it. */
   onToolFocusHandled?: () => void
+  /**
+   * Session-authorized image URL loader (built by the Context view from the
+   * harness conversation service). Absent = image cards render metadata only.
+   */
+  loadImage?: ImageLoader
 }
 
 /** The JSON Schema fragment describing one parameter's type, defensively narrowed. */
@@ -267,9 +275,9 @@ function ToolSchema(props: {
   )
 }
 
-/** One raw content block (text/reasoning/tool-result/…), rendered defensively. */
-function RawBlocks(props: { blocks: readonly unknown[]; mode: RichMode; rich: RichKit }): ReactNS.ReactElement {
-  const { rich } = props
+/** One raw content block (text/reasoning/tool-result/image/…), rendered defensively. */
+function RawBlocks(props: { blocks: readonly unknown[]; mode: RichMode; rich: RichKit; img: ImageKit }): ReactNS.ReactElement {
+  const { rich, img } = props
   return (
     <>
       {props.blocks.map((b, i) => {
@@ -283,8 +291,10 @@ function RawBlocks(props: { blocks: readonly unknown[]; mode: RichMode; rich: Ri
           }
           return <rich.RichText key={i} text={blk.text} mode={props.mode} />
         }
+        const image = imageRefOf(b)
+        if (image !== null) return <img.Card key={i} attachment={image} load={img.load} />
         if (blk !== null && typeof blk === 'object' && blk.type === 'tool-result' && Array.isArray(blk.content)) {
-          return <RawBlocks key={i} blocks={blk.content as unknown[]} mode={props.mode} rich={rich} />
+          return <RawBlocks key={i} blocks={blk.content as unknown[]} mode={props.mode} rich={rich} img={img} />
         }
         return <pre key={i} className="lc-br-pre lc-br-dim">{JSON.stringify(b, null, 2)}</pre>
       })}
@@ -293,8 +303,15 @@ function RawBlocks(props: { blocks: readonly unknown[]; mode: RichMode; rich: Ri
 }
 
 /** The actual content of one surface element, joined from the conversation snapshot. */
-function NodeContent(props: { node: SurfaceNode; conv: ConversationNodeLike | undefined; hint: string; rich: RichKit; labels: { thinking: string; answer: string } }): ReactNS.ReactElement {
-  const { node, conv, rich } = props
+function NodeContent(props: {
+  node: SurfaceNode
+  conv: ConversationNodeLike | undefined
+  hint: string
+  rich: RichKit
+  img: ImageKit
+  labels: { thinking: string; answer: string; images: string; other: string }
+}): ReactNS.ReactElement {
+  const { node, conv, rich, img } = props
   // The raw/markdown toggle serves the prose categories (user / assistant /
   // injection bodies); tool results stay raw (structured payload, not prose).
   const richable = node.cat === 'user' || node.cat === 'assistant' || node.cat === 'inject'
@@ -347,6 +364,8 @@ function NodeContent(props: { node: SurfaceNode; conv: ConversationNodeLike | un
               </div>
             )
           }
+          const image = imageRefOf(b)
+          if (image !== null) return <img.Card key={i} attachment={image} load={img.load} />
           return null
         })}
       </>
@@ -363,7 +382,7 @@ function NodeContent(props: { node: SurfaceNode; conv: ConversationNodeLike | un
             </div>
           )
           : null}
-        {Array.isArray(conv.content) ? <RawBlocks blocks={conv.content} mode="raw" rich={rich} /> : null}
+        {Array.isArray(conv.content) ? <RawBlocks blocks={conv.content} mode="raw" rich={rich} img={img} /> : null}
       </div>
     )
   }
@@ -377,7 +396,61 @@ function NodeContent(props: { node: SurfaceNode; conv: ConversationNodeLike | un
     ))
   }
   if (Array.isArray(conv.content)) {
-    return wrap(mode => <RawBlocks blocks={conv.content as unknown[]} mode={mode} rich={rich} />)
+    const blocks = conv.content as unknown[]
+    // User messages get the card layout: prose in the toggle-served text
+    // card, durable image refs as attachment cards (thumbnail + name + dims
+    // + size), and anything else as a raw JSON card. A text-only message
+    // renders exactly as before — one rich card and nothing else.
+    if (node.cat !== 'user') {
+      return wrap(mode => <RawBlocks blocks={blocks} mode={mode} rich={rich} img={img} />)
+    }
+    const texts: string[] = []
+    const images: ImageRefLike[] = []
+    const others: unknown[] = []
+    for (const b of blocks) {
+      const blk = b as { type?: string; text?: unknown } | null
+      if (blk !== null && typeof blk === 'object' && blk.type === 'text' && typeof blk.text === 'string') {
+        texts.push(blk.text)
+        continue
+      }
+      const image = imageRefOf(b)
+      if (image !== null) { images.push(image); continue }
+      others.push(b)
+    }
+    return (
+      <div className="lc-br-content">
+        {texts.length > 0 ? (
+          // Un-padded RichCard: the outer lc-br-content already owns the
+          // body indent, so the text card aligns with the attachment cards
+          // instead of sitting one indent deeper.
+          <rich.RichCard className="lc-br-rich-inline" render={mode => (
+            <>
+              {texts.map((text, i) => <rich.RichText key={i} text={text} mode={mode} />)}
+            </>
+          )} />
+        ) : null}
+        {images.length > 0 ? (
+          <div className="lc-ts-card">
+            <div className="lc-ts-card-head">
+              <b>{props.labels.images}</b>
+              <span className="lc-ts-card-count">{images.length}</span>
+            </div>
+            <div className="lc-att-grid">
+              {images.map((a, i) => <img.Card key={a.attachmentId + ':' + i} attachment={a} load={img.load} />)}
+            </div>
+          </div>
+        ) : null}
+        {others.length > 0 ? (
+          <div className="lc-ts-card">
+            <div className="lc-ts-card-head">
+              <b>{props.labels.other}</b>
+              <span className="lc-ts-card-count">{others.length}</span>
+            </div>
+            {others.map((b, i) => <pre key={i} className="lc-br-pre lc-br-dim">{JSON.stringify(b, null, 2)}</pre>)}
+          </div>
+        ) : null}
+      </div>
+    )
   }
   return <div className="lc-br-content"><div className="lc-br-note">{props.hint}</div></div>
 }
@@ -409,6 +482,7 @@ export function makeContextBrowser(
   const { t, fmt, fmtTime, catLabel } = kit
   const nodeText = makeNodeText(kit)
   const rich = makeRichText(kit)
+  const ImageCard = makeImageCard(kit)
   const catColor: Record<string, string> = {}
   for (const c of CATS) catColor[c.key] = c.color
 
@@ -624,9 +698,16 @@ export function makeContextBrowser(
             node={n}
             conv={bySeq.get(n.seq)}
             rich={rich}
-            // Localized assistant-block titles (thinking / answer), handed
-            // in by the parent so the body stays a pure function of props.
-            labels={{ thinking: t('block.thinking'), answer: t('block.answer') }}
+            img={{ Card: ImageCard, load: props.loadImage }}
+            // Localized block/section titles (thinking / answer / image and
+            // other-content cards), handed in by the parent so the body
+            // stays a pure function of props.
+            labels={{
+              thinking: t('block.thinking'),
+              answer: t('block.answer'),
+              images: t('attach.images'),
+              other: t('attach.other'),
+            }}
             // This row's body renders only while it is the open element, so
             // `awaiting` (open seq missing, pagination armed) means THIS join
             // is the one pages are being pulled for.

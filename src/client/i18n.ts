@@ -104,6 +104,16 @@ export const DICT_ZH: Record<string, string> = {
   // mirroring the harness's own block + locale vocabulary).
   'block.thinking': '思考',
   'block.answer': '回答',
+  // Attachment cards in a message detail: image refs render as thumbnail
+  // cards (name + normalized dims + stored size), anything unrecognized
+  // falls into the generic raw-JSON card.
+  'attach.images': '图片附件',
+  'attach.other': '其他内容',
+  'attach.image': '图片',
+  'attach.open': '查看原图',
+  'attach.loading': '…',
+  'attach.loadFailed': '加载失败 · 点击重试',
+  'attach.orig': '原图 {d}',
 }
 
 export const DICT_EN: Record<string, string> = {
@@ -205,4 +215,14 @@ export const DICT_EN: Record<string, string> = {
   // mirroring the harness's own block + locale vocabulary).
   'block.thinking': 'Reasoning',
   'block.answer': 'Response',
+  // Attachment cards in a message detail: image refs render as thumbnail
+  // cards (name + normalized dims + stored size), anything unrecognized
+  // falls into the generic raw-JSON card.
+  'attach.images': 'Images',
+  'attach.other': 'Other content',
+  'attach.image': 'Image',
+  'attach.open': 'Open full image',
+  'attach.loading': '…',
+  'attach.loadFailed': 'Load failed · click to retry',
+  'attach.orig': 'original {d}',
 }

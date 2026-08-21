@@ -245,14 +245,19 @@ const m2 = { exports: {} }
 const pluginExports2 = factory(requireStateful, m2, globalThis.window, fakeDoc)
 
 const DICT_FOR_TEST = { 'tab': 'Context', 'loading': '…', 'error': 'ERR:', 'error.retry': 'retry', 'detail.step': 'Turn {t} · Step {s}', 'gran.step': 'Step', 'gran.turn': 'Turn', 'detail.turn': 'Turn {t} · {n} steps', 'detail.lastStep': 'last step', 'overview.used': 'of context used', 'overview.free': 'Free window', 'events.at': 'Turn {t} · Step {s}', 'events.range': 'Turn {t} · Step {a}→{b}', 'events.rangeTo': 'Turn {a} · Step {as} → Turn {b} · Step {bs}', 'stats.recycleSub': '{c} compactions · {p} prunes', 'tip.step': 'Turn {t} · Step {s}', 'tip.turn': 'Turn {t} · {n} steps', 'tip.total': 'total ≈ {n}', 'tip.actual': ' (actual {n})', 'trend.title': 'History', 'trend.empty': 'empty trend', 'cmd.close': 'Close', 'cat.user': 'User', 'browser.live': 'Live (next request)', 'browser.liveNow': 'Live · next request', 'browser.items': '{n} items', 'browser.noContent': 'outside the loaded window', 'browser.loading': 'loading older history', 'browser.preview': 'preview', 'browser.noHeader': 'older plugin build',
-'browser.deltaHint': 'vs previous turn', 'overview.compactReserve': 'compact reserve {pct}%', 'tool.desc': 'Description', 'tool.params': 'Parameters', 'tool.paramsEmpty': '(no parameters)', 'tool.jsonToggle': 'View Raw JSON', 'tool.jsonHide': 'Collapse', 'rich.raw': 'Raw', 'rich.md': 'Markdown', 'rich.toMd': 'View as Markdown', 'rich.toRaw': 'View Raw Text' }
+'browser.deltaHint': 'vs previous turn', 'overview.compactReserve': 'compact reserve {pct}%', 'tool.desc': 'Description', 'tool.params': 'Parameters', 'tool.paramsEmpty': '(no parameters)', 'tool.jsonToggle': 'View Raw JSON', 'tool.jsonHide': 'Collapse', 'rich.raw': 'Raw', 'rich.md': 'Markdown', 'rich.toMd': 'View as Markdown', 'rich.toRaw': 'View Raw Text', 'attach.images': 'Images', 'attach.other': 'Other content', 'attach.image': 'Image', 'attach.open': 'Open full image', 'attach.loading': '…', 'attach.loadFailed': 'Load failed · click to retry', 'attach.orig': 'original {d}' }
 let viewComponent = null
 let modalComponent = null
 let modalSource = null
 const bailCalls = []
 const provideDescriptors = []
+// Conversation-service holder (drives resolveImage for image cards):
+// undefined until the image-card test arms it, so every earlier render
+// exercises the metadata-only degradation.
+let conversationHolder = undefined
 const fakeCtx2 = {
   get: (name) => {
+    if (name === 'conversation') return conversationHolder
     if (name === 'inputTriggers') return { registerSource: (s) => { modalSource = s; return () => {} } }
     if (name === 'sessions') return {
       scope: (id) => id === 's1' ? { bail: (...args) => { bailCalls.push(args); return true } } : undefined,
@@ -1447,6 +1452,64 @@ useSessionHolder = undefined
 loadOlderHolder = undefined
 
 console.log('✔ context browser auto-load test passed (loading note, one page pulled, joined content, no over-paging)')
+
+// ---- Image attachment cards: a user message carrying durable image refs
+// renders the card layout — prose in the text card, images as thumbnail
+// cards (name + dims + stored size), unrecognized blocks in a raw JSON
+// card. Thumbnails load through the conversation service's resolveImage;
+// without that service the cards degrade to metadata-only. ----
+useSessionHolder = (sel) => sel({
+  nodes: [{
+    kind: 'user', seq: 1, content: [
+      { type: 'text', text: 'WHAT-IS-THIS' },
+      { type: 'image', attachment: { attachmentId: 'a1', mediaType: 'image/png', bytes: 153600, width: 2048, height: 1365, name: 'screenshot.png', originalDimensions: { width: 6000, height: 4000 } } },
+      { type: 'image', attachment: { attachmentId: 'a2', mediaType: 'image/jpeg', bytes: 512000, width: 800, height: 600 } },
+      { type: 'file', uri: 'file://x' },
+    ],
+  }],
+})
+dataValue = snapshot
+brSlots[1][1]('user') // openCat('user')
+brSlots[2][1]('n1')   // expand the user element
+let trImg = renderView()
+// Metadata-only degradation (no conversation service armed): two attachment
+// cards (images + other), two image items, placeholder tiles, no <img>.
+assert.equal(byClass(trImg, 'lc-ts-card').length, 2, 'images card + other-content card rendered')
+assert.equal(byClass(trImg, 'lc-att-item').length, 2, 'one item per image ref')
+assert.equal(byClass(trImg, 'lc-att-thumb').length, 2, 'one tile per image')
+assert.equal(byClass(trImg, 'lc-att-ph').length, 2, 'placeholder tiles without the loader')
+const imgCardText = textOf(byClass(trImg, 'lc-ts-card')[0])
+assert.match(imgCardText, /screenshot\.png/, 'named image shows its display name')
+assert.match(imgCardText, /2048×1365/, 'normalized dims shown')
+assert.match(imgCardText, /original 6000×4000/, 'pre-normalization dims shown when present')
+assert.match(imgCardText, /153\.6 kB/, 'stored byte size shown')
+assert.match(imgCardText, /Image/, 'unnamed image falls back to the generic label')
+assert.match(imgCardText, /800×600/, 'second image dims shown')
+assert.match(textOf(byClass(trImg, 'lc-ts-card')[1]), /file:\/\/x/, 'unrecognized blocks keep the raw JSON card')
+assert.match(textOf(byClass(trImg, 'lc-br-content')[0]), /WHAT-IS-THIS/, 'prose stays in the text card')
+assert.equal(byClass(trImg, 'lc-att-thumb')[0].args.slice(2).filter(c => c !== null && typeof c === 'object' && c.args[0] === 'img').length, 0, 'no thumbnail img without the loader')
+// Arm the conversation service: the loader resolves a display URL per ref.
+conversationHolder = { resolveImage: async (sid, att) => 'blob:' + att.attachmentId }
+trImg = renderView()
+// Drive every ImageCard's load effect (slot 3 = its useEffect), then flush.
+for (const [key, slots] of hookStates) {
+  if (key.includes('ImageCard') && slots[3] !== undefined) slots[3].effect()
+}
+await new Promise(r => setTimeout(r, 0))
+await new Promise(r => setTimeout(r, 0))
+trImg = renderView()
+const thumbImgs = byClass(trImg, 'lc-att-thumb')
+  .flatMap(t => t.args.slice(2))
+  .filter(c => c !== null && typeof c === 'object' && c.args[0] === 'img')
+assert.deepEqual(thumbImgs.map(i => i.args[1].src), ['blob:a1', 'blob:a2'], 'thumbnails resolve through resolveImage')
+assert.equal(thumbImgs[0].args[1].alt, 'screenshot.png', 'thumbnail alt carries the display name')
+conversationHolder = undefined
+useSessionHolder = undefined
+brSlots[1][1](null)
+brSlots[2][1](null)
+trImg = renderView()
+
+console.log('✔ image attachment card test passed (card layout, metadata degradation, resolveImage thumbnails)')
 
 // ---- /context modal render: centered dialog with the current-composition
 // overview + the shared Context browser (which replaced the old last-10-turn
