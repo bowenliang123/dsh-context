@@ -56,7 +56,9 @@ export default defineConfig([
     platform: 'node',
     target: 'es2024',
     fixedExtension: false,
-    dts: false,
+    // The host half's Config/projection types are the integration contract
+    // other plugins and tooling compile against; ship them next to the JS.
+    dts: true,
     clean: true,
     deps: {
       neverBundle: isProductionDependency,
