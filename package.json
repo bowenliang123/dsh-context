@@ -33,10 +33,9 @@
     "watch": "tsdown --watch",
     "register": "bash scripts/register.sh",
     "typecheck": "tsc --noEmit",
-    "test": "npm run typecheck && node tests/host.test.mjs && node tests/client.test.mjs",
+    "test": "npm run typecheck && vitest run",
     "release": "bash scripts/publish.sh",
     "hooks": "bash scripts/install-hooks.sh",
-    "repro": "node tests/repro-real-react.mjs",
     "social-preview": "node docs/social-preview/generate.mjs"
   },
   "dsh": {
@@ -92,7 +91,8 @@
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
     "tsdown": "^0.22.14",
-    "typescript": "^7.0.2"
+    "typescript": "^7.0.2",
+    "vitest": "^4.1.11"
   },
   "packageManager": "pnpm@11.9.0"
 }
