@@ -110,6 +110,8 @@ assert.ok(styleTag.textContent.includes('.lc-root'), 'styles content present')
 assert.ok(styleTag.textContent.includes('transition: background-color 120ms ease'), 'row hovers ease in/out')
 assert.ok(styleTag.textContent.includes('transition: filter 120ms ease, opacity 120ms ease'), 'composition bar hover eases in/out')
 assert.ok(styleTag.textContent.includes('lc-bar-tip-on'), 'composition tooltip fades in and out')
+assert.ok(styleTag.textContent.includes('lc-stat-tip'), 'stats cell tooltip bubble styles present')
+assert.ok(styleTag.textContent.includes('lc-stat-tipped:hover .lc-stat-tip'), 'stats tooltip reveals on cell hover')
 assert.ok(styleTag.textContent.includes('lc-occupied-box-on'), 'occupied frame fades in and out')
 assert.equal(slotInjections.length, 2, 'view tab + input overlay injections')
 assert.equal(slotInjections[0][0], 'conversation.view')
@@ -395,13 +397,14 @@ assert.ok(byClass(tree, 'lc-turns').length === 1, 'turn tick row present')
 // fixture: 4 requests (turns 1,1,2,3), no events yet -> all event counters 0.
 const pkg = JSON.parse(await readFile(new URL('../package.json', import.meta.url), 'utf8'))
 const statVals = byClass(tree, 'lc-stat-value').map(n => n.args[2])
-assert.equal(statVals.length, 6, 'six stats cells (turns / steps / injections / compactions / prunes / cache hit)')
+assert.equal(statVals.length, 7, 'seven stats cells (turns / steps / injections / compactions / prunes / cache hit / cost)')
 assert.equal(statVals[0], '3', 'turns counted by distinct turn')
 assert.equal(statVals[1], '4', 'steps = request count')
 assert.equal(statVals[2], '0', 'no injections yet')
 assert.equal(statVals[3], '0', 'no compactions yet')
 assert.equal(statVals[4], '0', 'no prunes yet')
 assert.equal(statVals[5], '—', 'no tokenUsage projection yet -> cache-hit cell shows a dash')
+assert.equal(statVals[6], '—', 'no cost totals yet -> cost cell shows a dash')
 
 // ---- plugin info card: two full-width rows; every row is itself a link ----
 function plainText(node) {
@@ -794,8 +797,9 @@ assert.equal(statVals2[5], '—', 'cache-hit cell still a dash before a tokenUsa
 usageValue = { uncachedInputTokens: 10, outputTokens: 40, cacheReadTokens: 80, cacheWriteTokens: 10 }
 tr = renderView()
 const statVals3 = byClass(tr, 'lc-stat-value').map(n => n.args[2])
-assert.equal(statVals3.length, 6, 'six stats cells with the cache-hit cell')
+assert.equal(statVals3.length, 7, 'seven stats cells with the cache-hit and cost cells')
 assert.equal(statVals3[5], '80.00%', 'cache hit = cacheRead / (uncached + cacheRead + cacheWrite), two decimals')
+assert.equal(statVals3[6], '—', 'cost cell stays a dash without cost totals')
 assert.equal(statVals3[0], '3', 'turn count unchanged by the usage projection')
 assert.equal(statVals3[3], '2', 'compaction count unchanged by the usage projection')
 // truncation proof: 8334 / 25000 = 33.336% -> cut to 33.33%, never rounded up
@@ -804,6 +808,28 @@ tr = renderView()
 const statVals4 = byClass(tr, 'lc-stat-value').map(n => n.args[2])
 assert.equal(statVals4[5], '33.33%', 'two decimals are TRUNCATED, not rounded (33.336 -> 33.33)')
 usageValue = undefined
+
+// the cost cell prices the host-folded cumulative totals with the hardcoded
+// DeepSeek V4 list prices (test host has no getLocale -> USD): 1M off-peak
+// flash cache reads ($0.007) + 1M off-peak misses ($0.22) = $0.227 -> $0.23
+const prevData = dataValue
+dataValue = { ...prevData, cost: { flash: { off: { uncached: 1000000, cacheRead: 1000000, cacheWrite: 0, output: 0 } } } }
+tr = renderView()
+const statVals5 = byClass(tr, 'lc-stat-value').map(n => n.args[2])
+assert.equal(statVals5[6], '$0.23', 'cost = (cacheRead x hit + uncached x miss) at the off-peak flash rate')
+const costCell = byClass(tr, 'lc-stat')[6]
+assert.equal(byClass(tr, 'lc-stat-q').length, 1, 'cost cell label shows the "?" affordance')
+// The explanation is a styled DOM bubble (the native `title` attribute is
+// invisible in the harness GUI): intro sentence + the price list built from
+// cost.ts (test dict falls back to keys; no locale -> USD rates).
+const costTipEls = byClass(tr, 'lc-stat-tip')
+assert.equal(costTipEls.length, 1, 'cost cell carries a styled explanation bubble')
+const tipText = plainText(costTipEls[0])
+assert.match(tipText, /stats\.costTip/, 'bubble explains the whole-session estimate')
+assert.match(tipText, /stats\.costPriceHead/, 'bubble sections the price list under its own head')
+assert.match(tipText, /\$0\.014|\$0\.44/, 'bubble lists the peak flash input rate ($0.014 hit / $0.44 miss per 1M)')
+assert.match(tipText, /\$0\.007|\$0\.22/, 'bubble lists the off-peak flash input rate (half price)')
+dataValue = prevData
 tr = renderView()
 
 // the ✂ marker sits on the bar it attaches to and tooltips the event gap

@@ -19,7 +19,7 @@
  *   the request/event records are the raw material of `buildTimelineView`.
  */
 
-import type { Category, ContextEventRecord, RequestRecord, Snapshot, SurfaceNode } from '../shared/types'
+import type { Category, ContextEventRecord, CostFamilyUsage, RequestRecord, SessionCostUsage, Snapshot, SurfaceNode } from '../shared/types'
 import type { FoldBounds } from './config'
 import {
   estimateMessage,
@@ -93,6 +93,14 @@ export interface TimelineState {
    * serve steps the requests trim already forgot).
    */
   archived: SurfaceNode[]
+  /**
+   * Session-cost raw material: cumulative billed-token totals per DeepSeek
+   * V4 model family and pricing period (see SessionCostUsage). Running
+   * totals — never trimmed, so the estimate always covers the COMPLETE
+   * session log even after the request/event retention bounds cut in.
+   * Absent until a v4-flash / v4-pro request reports usage.
+   */
+  cost?: SessionCostUsage
   /** Newest `gone` among archive entries dropped by the retention bounds. */
   archiveFloor?: number
   callNames: Record<string, string>
@@ -331,6 +339,51 @@ interface UsageLike {
 }
 
 /**
+ * The DeepSeek V4 model family a model name prices as — matched on the NAME
+ * alone (provider-agnostic: official API, proxies, OpenRouter spellings like
+ * `deepseek/deepseek-v4-flash` all land here). Null for any other model:
+ * non-V4 usage is simply not priced.
+ */
+function costFamilyOf(model: string | undefined): 'flash' | 'pro' | null {
+  if (model === undefined) return null
+  const m = model.toLowerCase()
+  if (!m.includes('v4')) return null
+  if (m.includes('flash')) return 'flash'
+  if (m.includes('pro')) return 'pro'
+  return null
+}
+
+/** DeepSeek's UTC peak windows: 01:00-04:00 and 06:00-10:00 (off-peak is half price). */
+function isPeakUtc(time: number): boolean {
+  const h = new Date(time).getUTCHours()
+  return (h >= 1 && h < 4) || (h >= 6 && h < 10)
+}
+
+/**
+ * Fold one billed request into the session-cost totals, cloning along the
+ * mutated path only (the untouched branch stays shared with the persisted
+ * previous state — the apply contract never mutates it in place).
+ */
+function accumulateCost(st: TimelineState, time: number, usage: UsageLike): void {
+  const family = costFamilyOf(st.model)
+  if (family === null) return
+  const prev: SessionCostUsage = st.cost ?? {}
+  const fam: CostFamilyUsage = prev[family] ?? {}
+  const period = isPeakUtc(time) ? 'peak' : 'off'
+  const b = fam[period] ?? { uncached: 0, cacheRead: 0, cacheWrite: 0, output: 0 }
+  const nextFam: CostFamilyUsage = { ...fam }
+  nextFam[period] = {
+    uncached: b.uncached + (usage.inputTokens ?? 0),
+    cacheRead: b.cacheRead + (usage.cacheReadTokens ?? 0),
+    cacheWrite: b.cacheWrite + (usage.cacheWriteTokens ?? 0),
+    output: b.output + (usage.outputTokens ?? 0),
+  }
+  const next: SessionCostUsage = { ...prev }
+  next[family] = nextFam
+  st.cost = next
+}
+
+/**
  * Advance the fold over ONE committed session event under the projection
  * contract. Uninteresting events return the same reference (`Object.is` gates
  * the change feed); any change returns a new reference over a lazy shallow
@@ -467,6 +520,9 @@ export function applyTimeline(state: TimelineState, event: TimelineEvent, bounds
         // exists in the durable vocabulary.
         record.prompt = usage.inputTokens + (usage.cacheReadTokens || 0) + (usage.cacheWriteTokens || 0)
         if (typeof usage.outputTokens === 'number') record.output = usage.outputTokens
+        // Session-cost raw material: the SAME billed buckets, attributed to
+        // the current model family and the request's pricing period.
+        accumulateCost(s, event.time, usage)
       }
       s.requests.push(record)
       // `deriveEventMessage` returns `data.message` for assistant/message, or
@@ -539,6 +595,23 @@ export function buildTimelineView(state: TimelineState, bounds: FoldBounds): Sna
     nodes: [],
     droppedNodes: 0,
     archive: state.archived.map(n => ({ ...n })),
+  }
+  // The cost totals ride the wire as COPIES (same rule as requests/events:
+  // the served value must never alias persisted state).
+  if (state.cost !== undefined) {
+    const copyFam = (f: CostFamilyUsage | undefined): CostFamilyUsage | undefined => {
+      if (f === undefined) return undefined
+      const out: CostFamilyUsage = {}
+      if (f.peak !== undefined) out.peak = { ...f.peak }
+      if (f.off !== undefined) out.off = { ...f.off }
+      return out
+    }
+    const cost: SessionCostUsage = {}
+    const flash = copyFam(state.cost.flash)
+    if (flash !== undefined) cost.flash = flash
+    const pro = copyFam(state.cost.pro)
+    if (pro !== undefined) cost.pro = pro
+    result.cost = cost
   }
   // The served slice: the newest `maxNodes` tail PLUS every live inject node
   // older than the tail. Injections (AGENTS.md, session-start context, …)

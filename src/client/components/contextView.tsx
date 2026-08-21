@@ -211,12 +211,21 @@ export function makeContextView(ctx: ClientCtx, kit: ViewKit): (props: ContextVi
     // Shared with the /context popup (headline.ts).
     const head = headlineOf(data, pressure)
 
+    // The cost cell prices in the locale's currency (zh -> CNY, else USD);
+    // read the active locale at render time — the locale subscription above
+    // already re-renders on a switch. Older hosts without getLocale fall
+    // back to USD.
+    const localeSvc = ctx.get('locale') as LocaleService | undefined
+    const activeLocale = localeSvc !== undefined && typeof localeSvc.getLocale === 'function'
+      ? localeSvc.getLocale().active
+      : 'en'
+
     return (
       <div className="lc-root" ref={rootRef}>
 
         {/* ---- session context stats + plugin info, side by side (7 : 3) ---- */}
         <div className="lc-cols lc-head">
-          <StatsBoard requests={requests} events={events} usage={usage} />
+          <StatsBoard requests={requests} events={events} usage={usage} cost={data.cost} locale={activeLocale} />
           <PluginInfo />
         </div>
 

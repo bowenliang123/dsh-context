@@ -76,6 +76,12 @@ export interface Snapshot {
   requests: RequestRecord[]
   events: ContextEventRecord[]
   /**
+   * Cumulative session-cost raw material (per-family, per-period billed
+   * token totals — see SessionCostUsage). Absent until a DeepSeek V4
+   * request reports usage.
+   */
+  cost?: SessionCostUsage
+  /**
    * The served live surface: the newest `maxNodes` tail PLUS every live
    * inject node older than the tail (injections land first and are few, so
    * they are pinned — otherwise a long session would price them while the
@@ -151,6 +157,42 @@ export interface TokenUsage {
   cacheReadTokens: number
   /** Billed prompt tokens written into the provider cache. */
   cacheWriteTokens: number
+}
+
+/**
+ * Cumulative billed-token totals for one pricing bucket of the session-cost
+ * estimate (host-folded, never trimmed — running totals over the COMPLETE
+ * session log, immune to the request/event retention bounds).
+ */
+export interface CostBucketTotals {
+  /** Billed prompt tokens that missed the provider cache. */
+  uncached: number
+  /** Billed prompt tokens served from the provider cache. */
+  cacheRead: number
+  /** Billed prompt tokens written into the provider cache. */
+  cacheWrite: number
+  /** Billed output tokens (reasoning included). */
+  output: number
+}
+
+/** One model family's totals split by DeepSeek's UTC pricing period. */
+export interface CostFamilyUsage {
+  /** Peak windows: 01:00-04:00 and 06:00-10:00 UTC. */
+  peak?: CostBucketTotals
+  /** All other hours (half the peak rate). */
+  off?: CostBucketTotals
+}
+
+/**
+ * The session-cost estimate's raw material: cumulative provider-reported
+ * token totals per DeepSeek V4 model family (matched on the model NAME,
+ * provider-agnostic) and pricing period. The Client prices these with its
+ * hardcoded list-price table in the locale's currency. Absent until a
+ * deepseek-v4-flash / deepseek-v4-pro request reports usage.
+ */
+export interface SessionCostUsage {
+  flash?: CostFamilyUsage
+  pro?: CostFamilyUsage
 }
 
 /** One model-visible message on the surface, with its heuristic token price. */

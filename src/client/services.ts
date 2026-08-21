@@ -17,6 +17,8 @@ export interface LocaleService {
   register(ns: string, dicts: Record<string, Record<string, string>>): () => void
   bind(ns: string): (key: string, params?: Record<string, string | number>) => string
   subscribe(fn: () => void): () => void
+  /** The current immutable locale snapshot (harness locale runtime). */
+  getLocale?(): { active: string }
 }
 
 export interface SlotRegistration {

@@ -13,6 +13,23 @@ export const STYLES = [
   '.lc-stat-label { color: var(--dsw-alias-label-secondary); font-size: 11px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }',
   '.lc-stat-value { color: var(--dsw-alias-label-primary); font-size: 14px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; text-align: center; }',
   '.lc-stat-sub { color: var(--dsw-alias-label-secondary); font-size: 11px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }',
+  // Stats cell tooltip (cost cell): the explanation renders as styled DOM
+  // because the harness GUI never shows the native `title` tooltip. A "?"
+  // marker after the label signals the affordance; hovering ANYWHERE on the
+  // cell reveals the bubble BELOW it (the cell is the tip's position frame).
+  // The bubble may overlay the card content underneath — nothing below clips
+  // it, and z-index 6 matches the chart tips — so it can exceed the card
+  // without being cut off. Same chrome as `.lc-bar-tip`: layer-2 fill, border,
+  // 6px radius, soft shadow, 120ms opacity ease.
+  '.lc-stat-tipped { position: relative; }',
+  '.lc-stat-q { display: inline-block; margin-left: 4px; width: 11px; height: 11px; line-height: 11px; border-radius: 50%; text-align: center; font-size: 9px; font-weight: 700; font-style: normal; color: var(--dsw-alias-label-secondary); background: var(--dsw-alias-bg-layer-1); border: 1px solid var(--dsw-alias-border-l1); cursor: help; }',
+  '.lc-stat-tipped:hover .lc-stat-q { color: var(--dsw-alias-label-primary); border-color: var(--dsw-alias-label-primary); }',
+  '.lc-stat-tip { position: absolute; top: calc(100% + 6px); left: 0; z-index: 6; width: max-content; max-width: 280px; background: var(--dsw-alias-bg-layer-2); border: 1px solid var(--dsw-alias-border-l1); border-radius: 6px; padding: 6px 10px; font-size: 12px; line-height: 1.5; font-weight: 400; color: var(--dsw-alias-label-primary); box-shadow: 0 2px 8px rgba(0,0,0,0.18); pointer-events: none; opacity: 0; transition: opacity 120ms ease; }',
+  '.lc-stat-tipped:hover .lc-stat-tip { opacity: 1; }',
+  '.lc-stat-tip-prices { display: block; margin-top: 5px; border-top: 1px dashed var(--dsw-alias-border-l1); padding-top: 5px; }',
+  '.lc-stat-tip-head { display: block; font-weight: 600; }',
+  '.lc-stat-tip-row { display: block; margin-top: 2px; }',
+  '.lc-stat-tip-model { color: var(--dsw-alias-label-primary); }',
   '.lc-card-sub { font-weight: 400; color: var(--dsw-alias-label-secondary); font-size: 12px; }',
   '.lc-gran, .lc-kinds { margin-left: auto; display: flex; gap: 2px; background: var(--dsw-alias-bg-layer-2); border: 1px solid var(--dsw-alias-border-l1); border-radius: 6px; padding: 1px; }',
   '.lc-gran-btn { border: 0; background: transparent; color: var(--dsw-alias-label-secondary); font-size: 11px; line-height: 1; padding: 3px 8px; border-radius: 5px; cursor: pointer; font-family: inherit; }',

@@ -85,6 +85,18 @@ const currentSchema = z.object({
   total: z.number().int().nonnegative(),
 }).strict()
 
+const costBucketsSchema = z.object({
+  uncached: z.number().int().nonnegative(),
+  cacheRead: z.number().int().nonnegative(),
+  cacheWrite: z.number().int().nonnegative(),
+  output: z.number().int().nonnegative(),
+}).strict()
+
+const costFamilySchema = z.object({
+  peak: costBucketsSchema.optional(),
+  off: costBucketsSchema.optional(),
+}).strict()
+
 const contextTimelineSchema = z.object({
   ok: z.literal(true),
   model: z.string().optional(),
@@ -94,6 +106,7 @@ const contextTimelineSchema = z.object({
   toolList: z.array(z.object({ name: z.string(), tokens: z.number().int().nonnegative() }).strict()),
   requests: z.array(requestRecordSchema),
   events: z.array(contextEventSchema),
+  cost: z.object({ flash: costFamilySchema.optional(), pro: costFamilySchema.optional() }).strict().optional(),
   nodes: z.array(surfaceNodeSchema),
   droppedNodes: z.number().int().nonnegative(),
   archive: z.array(surfaceNodeSchema),
@@ -134,6 +147,9 @@ export function createContextTimelineDefinition(config: Config): ProjectionDefin
     // is not losslessly JSON-serializable) — which also starved the `title`
     // projection row and broke the session list after a restart. The bump
     // discards old cached rows and refolds them clean.
-    stateVersion: 4,
+    // 5: the session-cost totals (`cost` — per-family/per-period billed
+    // tokens) joined the persisted state; cached rows predate the shape and
+    // are refolded.
+    stateVersion: 5,
   }
 }

@@ -363,6 +363,44 @@ const usageLog = drive([
 ])
 assert.equal(usageLog.requests[0].prompt, 1000, 'prompt side sums the disjoint input buckets')
 assert.equal(usageLog.requests[0].output, 30, 'output is outputTokens (reasoning already inside)')
+assert.equal(usageLog.cost, undefined, 'no model name -> nothing priced into the cost totals')
+assert.equal(v.cost, undefined, 'a non-flash/pro model (deepseek-v4) is not priced')
+
+// -- session-cost totals (cumulative, per family x UTC pricing period) --
+// Peak windows are 01:00-04:00 and 06:00-10:00 UTC. The model NAME decides
+// the family, provider-agnostically (an OpenRouter-style spelling counts).
+const PEAK = Date.UTC(2026, 0, 5, 2, 0, 0) // 02:00 UTC -> peak
+const OFF = Date.UTC(2026, 0, 5, 12, 0, 0) // 12:00 UTC -> off-peak
+const costLog = drive([
+  { seq: 1, type: 'request/header', time: PEAK - 1000, data: { header: { config: { model: 'deepseek/deepseek-v4-flash', provider: 'openrouter' } } } },
+  { seq: 2, type: 'assistant/message', time: PEAK, data: { turn: 1, step: 1, usage: { inputTokens: 800, cacheReadTokens: 150, cacheWriteTokens: 50, outputTokens: 30 }, message: { content: [] } } },
+  { seq: 3, type: 'assistant/message', time: PEAK + 1000, data: { turn: 1, step: 2, usage: { inputTokens: 200, outputTokens: 10 }, message: { content: [] } } },
+  { seq: 4, type: 'assistant/message', time: OFF, data: { turn: 1, step: 3, usage: { inputTokens: 100, cacheReadTokens: 900 }, message: { content: [] } } },
+])
+assert.deepEqual(costLog.cost.flash.peak, { uncached: 1000, cacheRead: 150, cacheWrite: 50, output: 40 },
+  'same-period requests accumulate; missing buckets count as 0')
+assert.deepEqual(costLog.cost.flash.off, { uncached: 100, cacheRead: 900, cacheWrite: 0, output: 0 },
+  'off-peak requests land in their own period bucket')
+assert.equal(costLog.cost.pro, undefined, 'no pro usage -> no pro branch')
+// A model switch re-attributes later requests to the new family.
+const costSwitch = drive([
+  { seq: 1, type: 'request/header', time: OFF - 1000, data: { header: { config: { model: 'deepseek-v4-flash', provider: 'deepseek' } } } },
+  { seq: 2, type: 'assistant/message', time: OFF, data: { turn: 1, step: 1, usage: { inputTokens: 100 }, message: { content: [] } } },
+  { seq: 3, type: 'request/header', time: OFF + 1000, data: { reason: 'change', header: { config: { model: 'deepseek-v4-pro', provider: 'deepseek' } } } },
+  { seq: 4, type: 'assistant/message', time: OFF + 2000, data: { turn: 1, step: 2, usage: { inputTokens: 300, outputTokens: 20 }, message: { content: [] } } },
+])
+assert.deepEqual(costSwitch.cost.flash.off.uncached, 100, 'usage before the switch stays on flash')
+assert.deepEqual(costSwitch.cost.pro.off, { uncached: 300, cacheRead: 0, cacheWrite: 0, output: 20 }, 'usage after the switch prices as pro')
+// The wire value must not alias persisted state (same rule as requests/events).
+{
+  let st = def.init()
+  for (const ev of [
+    { seq: 1, type: 'request/header', time: 1000, data: { header: { config: { model: 'deepseek-v4-flash', provider: 'deepseek' } } } },
+    { seq: 2, type: 'assistant/message', time: OFF, data: { turn: 1, step: 1, usage: { inputTokens: 100 }, message: { content: [] } } },
+  ]) st = def.apply(st, ev)
+  const view = def.view(st)
+  assert.ok(view.cost.flash.off !== st.cost.flash.off, 'view() copies the cost totals, never aliases persisted state')
+}
 
 // -- plain-JSON persisted state (R7): the projection-cache precondition.
 // Every `apply` result must survive the harness's lossless-JSON snapshotter;
@@ -393,4 +431,4 @@ for (const [i, st] of jsonStates.entries()) {
 const armed = def.apply(def.init(), { seq: 1, type: 'compaction/summary', time: 1000, data: { shadowedSeqs: [2], shadowedTokenCount: 10 } })
 assert.ok(snapshotJsonValue(armed) !== undefined, 'armed pendingShadowedSeqs state is still plain JSON')
 
-console.log('✔ host half functional test passed (projection unit, fold semantics, attribution, retention, shadow-price seqs, reference stability, determinism, config bounds, inject pinning, model switch, usage mapping, plain-JSON state)')
+console.log('✔ host half functional test passed (projection unit, fold semantics, attribution, retention, shadow-price seqs, reference stability, determinism, config bounds, inject pinning, model switch, usage mapping, session-cost totals, plain-JSON state)')

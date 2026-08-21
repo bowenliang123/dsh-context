@@ -1,15 +1,24 @@
 /**
  * StatsBoard — the session context statistics card above the composition:
  * conversation size (turns/steps), context churn (compaction count,
- * prune count, injection count), and the cache-hit share. The counts cover
- * the retained history window, matching the History chart; the cache-hit
- * figure reuses the official token-meter `tokenUsage` projection verbatim —
- * the exact same data and formula as the chat stats line below the input box.
- * JSX component.
+ * prune count, injection count), the cache-hit share, and the estimated
+ * cumulative session cost. The counts cover the retained history window,
+ * matching the History chart; the cache-hit figure reuses the official
+ * token-meter `tokenUsage` projection verbatim — the exact same data and
+ * formula as the chat stats line below the input box — and the cost cell
+ * prices the host-folded cumulative billed-token totals (complete session
+ * log) with the hardcoded DeepSeek V4 list prices (cost.ts), in the
+ * locale's currency. The cost cell's hover bubble (a "?" marker plus a
+ * styled DOM tip — the harness GUI never shows native `title` tooltips)
+ * explains the whole-session estimate and lists the per-1M-token price
+ * table straight from cost.ts, so the printed rates can never drift from
+ * the math. JSX component.
  */
 
 import type * as ReactNS from 'react'
-import type { ContextEventRecord, RequestRecord, TokenUsage } from '../../shared/types'
+import type { ContextEventRecord, RequestRecord, SessionCostUsage, TokenUsage } from '../../shared/types'
+import { estimateSessionCost, formatCost, formatPriceRate, sessionPrices } from '../cost'
+import type { CostCurrency } from '../cost'
 import type { ViewKit } from '../viewkit'
 
 import { React } from '../react'
@@ -35,12 +44,18 @@ export function makeStatsBoard(kit: ViewKit): (props: {
   requests: RequestRecord[]
   events: ContextEventRecord[]
   usage: TokenUsage | null
+  /** Session-cost raw material from the timeline (undefined: nothing priced). */
+  cost?: SessionCostUsage
+  /** Active locale id — zh prices in CNY, everything else in USD. */
+  locale: string
 }) => ReactNS.ReactElement {
   const { t, fmt } = kit
   return function StatsBoard(props: {
     requests: RequestRecord[]
     events: ContextEventRecord[]
     usage: TokenUsage | null
+    cost?: SessionCostUsage
+    locale: string
   }): ReactNS.ReactElement {
     const turns = new Set<number>()
     let steps = 0, compactions = 0, prunes = 0, injects = 0
@@ -54,10 +69,37 @@ export function makeStatsBoard(kit: ViewKit): (props: {
       else if (ev.kind === 'inject') injects++
     }
     const hit = props.usage !== null ? cacheHitPercent(props.usage) : null
-    const cell = (label: string, value: string) => (
-      <div className="lc-stat">
-        <span className="lc-stat-label">{label}</span>
+    const currency: CostCurrency = props.locale === 'zh' ? 'cny' : 'usd'
+    const cost = estimateSessionCost(props.cost, currency)
+    const fmtRate = (n: number) => formatPriceRate(n, currency)
+    // Cost-cell tooltip content: the intro sentence (whole-session estimate,
+    // peak/off-peak windows) followed by the actual per-1M-token price list
+    // for the locale's currency, straight from cost.ts's PRICES table.
+    const costTip: ReactNS.ReactNode = [
+      t('stats.costTip'),
+      <span key="prices" className="lc-stat-tip-prices">
+        <span className="lc-stat-tip-head">{t('stats.costPriceHead')}</span>
+        {sessionPrices(currency).map(r => (
+          <span key={r.family} className="lc-stat-tip-row">
+            <b className="lc-stat-tip-model">{r.family}</b>
+            {' '}{t('stats.costHit')} {fmtRate(r.peak.hit)}/{fmtRate(r.off.hit)}
+            {' · '}{t('stats.costMiss')} {fmtRate(r.peak.miss)}/{fmtRate(r.off.miss)}
+            {' · '}{t('stats.costOut')} {fmtRate(r.peak.out)}/{fmtRate(r.off.out)}
+          </span>
+        ))}
+      </span>,
+    ]
+    // A cell may carry an explanation bubble: the label then shows a "?"
+    // marker and the styled tip (`.lc-stat-tip`, revealed on cell hover) —
+    // the native `title` attribute is invisible in the harness GUI.
+    const cell = (label: string, value: string, tip?: ReactNS.ReactNode) => (
+      <div className={'lc-stat' + (tip === undefined ? '' : ' lc-stat-tipped')}>
+        <span className="lc-stat-label">
+          {label}
+          {tip !== undefined && <i className="lc-stat-q" aria-hidden="true">?</i>}
+        </span>
         <b className="lc-stat-value">{value}</b>
+        {tip !== undefined && <span className="lc-stat-tip" role="tooltip">{tip}</span>}
       </div>
     )
     return (
@@ -73,6 +115,7 @@ export function makeStatsBoard(kit: ViewKit): (props: {
           {cell(t('stats.compactions'), fmt(compactions))}
           {cell(t('stats.prunes'), fmt(prunes))}
           {cell(t('stats.cacheHit'), hit === null ? '—' : hit + '%')}
+          {cell(t('stats.cost'), cost === null ? '—' : formatCost(cost, currency), costTip)}
         </div>
       </div>
     )
