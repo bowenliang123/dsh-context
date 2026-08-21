@@ -12,7 +12,7 @@
 import type * as ReactNS from 'react'
 import type { ContextEventRecord, RequestRecord } from '../../shared/types'
 import { headlineOf } from '../headline'
-import type { LocaleService, SessionStandardProps } from '../services'
+import type { SessionStandardProps } from '../services'
 import { contextPressureOf, headersOf, timelineOf, tokenUsageOf } from '../services'
 import type { ClientCtx, ConversationFace, ImageRefLike } from '../services'
 import type { ViewKit } from '../viewkit'
@@ -106,7 +106,7 @@ export function makeContextView(ctx: ClientCtx, kit: ViewKit): (props: ContextVi
     // among several removes it.
     const [pickedKinds, setPickedKinds] = React.useState<string[]>([...EVENT_KINDS])
     const toggleKind = (k: string) => {
-      setPickedKinds(p => {
+      setPickedKinds((p) => {
         // All picked -> narrow to this kind only (that's the "点击后只显示该分类" entry).
         if (p.length === EVENT_KINDS.length) return [k]
         // Unpicked -> add it (A -> A+B -> ...).
@@ -172,9 +172,9 @@ export function makeContextView(ctx: ClientCtx, kit: ViewKit): (props: ContextVi
 
     // Re-render on locale switch.
     React.useEffect(() => {
-      const localeSvc = ctx.get('locale') as LocaleService | undefined
+      const localeSvc = ctx.get('locale')
       if (!localeSvc) return undefined
-      return localeSvc.subscribe(() => setTick(x => x + 1))
+      return localeSvc.subscribe(() => { setTick(x => x + 1) })
     }, [])
 
     void tick
@@ -183,12 +183,12 @@ export function makeContextView(ctx: ClientCtx, kit: ViewKit): (props: ContextVi
       return <div className="lc-root" ref={rootRef}><div className="lc-empty">{t('loading')}</div></div>
     }
 
-    const requests = data.requests || []
-    const events = data.events || []
+    const requests = data.requests
+    const events = data.events
     // The events column filters to the picked kinds (all picked = all shown);
     // the stats board keeps the full log regardless.
     const shownEvents = pickedKinds.length === EVENT_KINDS.length ? events : events.filter(e => pickedKinds.includes(e.kind))
-    const nodes = data.nodes || []
+    const nodes = data.nodes
     // Display granularity: one bar per step (default) or one bar per turn
     // (each turn shown by its LAST step's record).
     const displayRequests = granularity === 'turn' ? aggregateByTurn(requests) : requests
@@ -235,7 +235,7 @@ export function makeContextView(ctx: ClientCtx, kit: ViewKit): (props: ContextVi
     // read the active locale at render time — the locale subscription above
     // already re-renders on a switch. Older hosts without getLocale fall
     // back to USD.
-    const localeSvc = ctx.get('locale') as LocaleService | undefined
+    const localeSvc = ctx.get('locale')
     const activeLocale = localeSvc !== undefined && typeof localeSvc.getLocale === 'function'
       ? localeSvc.getLocale().active
       : 'en'

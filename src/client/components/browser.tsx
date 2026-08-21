@@ -96,12 +96,12 @@ interface ParamSchema {
 /** Flatten the `anyOf` / `oneOf` alternation into one displayable string. */
 function unionTypesOf(p: ParamSchema): string | null {
   const branches: unknown[] = []
-  if (Array.isArray(p.anyOf)) branches.push(...p.anyOf)
-  if (Array.isArray(p.oneOf)) branches.push(...p.oneOf)
+  if (Array.isArray(p.anyOf)) branches.push(...p.anyOf as unknown[])
+  if (Array.isArray(p.oneOf)) branches.push(...p.oneOf as unknown[])
   if (branches.length === 0) return null
   const parts: string[] = []
   for (const b of branches) {
-    if (b !== null && typeof b === 'object') parts.push(typeOf(b as ParamSchema))
+    if (b !== null && typeof b === 'object') parts.push(typeOf(b))
   }
   return parts.length > 0 ? parts.join(' | ') : null
 }
@@ -119,7 +119,7 @@ function typeOf(p: ParamSchema): string {
   if (t === 'array') {
     const items = p.items
     if (items !== null && typeof items === 'object') {
-      const inner = typeOf(items as ParamSchema)
+      const inner = typeOf(items)
       return 'array<' + inner + '>'
     }
     return 'array'
@@ -127,8 +127,8 @@ function typeOf(p: ParamSchema): string {
   if (typeof t === 'string') {
     if (t === 'object') {
       const props = (p as { properties?: unknown }).properties
-      if (props !== null && typeof props === 'object' && Object.keys(props as Object).length > 0) {
-        return 'object{' + Object.keys(props as Object).length + '}'
+      if (props !== null && typeof props === 'object' && Object.keys(props).length > 0) {
+        return `object{${Object.keys(props).length}}`
       }
     }
     if (Array.isArray(p.enum) && p.enum.length > 0) {
@@ -149,14 +149,14 @@ function paramsOf(schema: unknown): ParamSchema | null {
   if (schema === null || typeof schema !== 'object') return null
   const s = schema as Record<string, unknown>
   const candidate = (v: unknown): ParamSchema | null =>
-    v !== null && typeof v === 'object' ? v as ParamSchema : null
+    v !== null && typeof v === 'object' ? v : null
   const nested = candidate(s.parameters) ?? candidate(s.input_schema)
     ?? candidate(s.inputSchema)
   if (nested !== null) return nested
   // Bare JSON Schema: a `{ type: 'object', properties: {...} }` at the root
   // is itself the parameter object — no inner wrapper.
   if (s.type === 'object' && s.properties !== undefined && typeof s.properties === 'object') {
-    return s as unknown as ParamSchema
+    return s
   }
   return null
 }
@@ -219,14 +219,14 @@ function ToolSchema(props: {
     const props = (params as { properties?: unknown }).properties
     if (props === null || typeof props !== 'object') return []
     const req = Array.isArray((params as { required?: unknown }).required)
-      ? new Set(((params as { required: unknown[] }).required as unknown[])
-          .filter((x): x is string => typeof x === 'string'))
+      ? new Set(((params as { required: unknown[] }).required)
+        .filter((x): x is string => typeof x === 'string'))
       : new Set<string>()
     const out: { name: string; schema: ParamSchema; required: boolean }[] = []
-    for (const k of Object.keys(props as Record<string, unknown>)) {
+    for (const k of Object.keys(props)) {
       const v = (props as Record<string, unknown>)[k]
       if (v === null || typeof v !== 'object') continue
-      out.push({ name: k, schema: v as ParamSchema, required: req.has(k) })
+      out.push({ name: k, schema: v, required: req.has(k) })
     }
     return out
   }, [params])
@@ -281,8 +281,8 @@ function RawBlocks(props: { blocks: readonly unknown[]; mode: RichMode; rich: Ri
   return (
     <>
       {props.blocks.map((b, i) => {
-        const blk = b as { type?: string; text?: unknown; content?: unknown }
-        if (blk !== null && typeof blk === 'object'
+        const blk = b !== null && typeof b === 'object' ? b as { type?: string; text?: unknown; content?: unknown } : null
+        if (blk !== null
           && (blk.type === 'text' || blk.type === 'reasoning') && typeof blk.text === 'string') {
           // Reasoning stays raw in either mode (plain model trace, not
           // prose); text blocks follow the card's view mode.
@@ -293,7 +293,7 @@ function RawBlocks(props: { blocks: readonly unknown[]; mode: RichMode; rich: Ri
         }
         const image = imageRefOf(b)
         if (image !== null) return <img.Card key={i} attachment={image} load={img.load} />
-        if (blk !== null && typeof blk === 'object' && blk.type === 'tool-result' && Array.isArray(blk.content)) {
+        if (blk !== null && blk.type === 'tool-result' && Array.isArray(blk.content)) {
           return <RawBlocks key={i} blocks={blk.content as unknown[]} mode={props.mode} rich={rich} img={img} />
         }
         return <pre key={i} className="lc-br-pre lc-br-dim">{JSON.stringify(b, null, 2)}</pre>
@@ -364,7 +364,7 @@ function NodeContent(props: {
     return (
       <div className="lc-br-content">
         {conv.blocks.map((b, i) => {
-          const blk = b as { kind?: string; text?: unknown; name?: unknown; argsRaw?: unknown }
+          const blk = b as { kind?: string; text?: unknown; name?: string; argsRaw?: unknown }
           if (blk.kind === 'text' && typeof blk.text === 'string') {
             return <BlockCard key={i} label={props.labels.answer} text={blk.text} rich={rich} />
           }
@@ -374,7 +374,7 @@ function NodeContent(props: {
           if (blk.kind === 'tool-call') {
             return (
               <div key={i} className="lc-br-call">
-                <span className="lc-br-tag">{'→ ' + String(blk.name ?? '?')}</span>
+                <span className="lc-br-tag">{'→ ' + (blk.name ?? '?')}</span>
                 {typeof blk.argsRaw === 'string' && blk.argsRaw !== ''
                   ? <pre className="lc-br-pre lc-br-dim">{blk.argsRaw}</pre>
                   : null}
@@ -453,7 +453,7 @@ function NodeContent(props: {
               <span className="lc-ts-card-count">{images.length}</span>
             </div>
             <div className="lc-att-grid">
-              {images.map((a, i) => <img.Card key={a.attachmentId + ':' + i} attachment={a} load={img.load} />)}
+              {images.map((a, i) => <img.Card key={`${a.attachmentId}:${i}`} attachment={a} load={img.load} />)}
             </div>
           </div>
         ) : null}
@@ -591,7 +591,7 @@ export function makeContextBrowser(
     }, [toolFocus, props.onToolFocusHandled])
     const awaiting = missingSeq !== null && !exhausted && loadOlderHistory !== undefined && hasMore
 
-    const requests = data.requests || []
+    const requests = data.requests
     // Trend-chart hover linkage: the bar under the pointer transiently
     // previews its step (unknown seq = trimmed out of retention, ignored);
     // the picker's own selection resumes when the pointer leaves the chart.
@@ -644,10 +644,13 @@ export function makeContextBrowser(
       setOpenCat(openCat === c ? null : c)
       setOpenElem(null)
     }
-    const toggleElem = (key: string) => setOpenElem(openElem === key ? null : key)
+    const toggleElem = (key: string) => { setOpenElem(openElem === key ? null : key) }
 
     /** One expandable element row (preview line; content when open). */
-    const elemRow = (key: string, tag: string | null, preview: string, tokens: number, time: number | undefined, body: ReactNS.ReactNode) => {
+    const elemRow = (
+      key: string, tag: string | null, preview: string,
+      tokens: number, time: number | undefined, body: ReactNS.ReactNode,
+    ) => {
       const open = openElem === key
       return (
         <div key={key} className={'lc-br-elem' + (open ? ' lc-br-elem-on' : '')}>
@@ -695,7 +698,7 @@ export function makeContextBrowser(
       // Surface-node categories carry per-element timestamps; list them
       // newest first, mirroring the NodeList card.
       const nodes = (byCat[c as Category] ?? []).slice().reverse()
-      return nodes.map(n => {
+      return nodes.map((n) => {
         // Tag/preview split: the compact chip carries the compact fact (tool
         // name, injection form), the preview line carries the text — each
         // fact shown once. Skill/calls previews already name themselves.
@@ -710,7 +713,7 @@ export function makeContextBrowser(
             preview = n.form === 'snapshot' ? t('node.snapshot') + n.text : n.text
           }
         }
-        return elemRow('n' + n.seq, tag, preview, n.tokens, n.time,
+        return elemRow(`n${n.seq}`, tag, preview, n.tokens, n.time,
           <NodeContent
             node={n}
             conv={bySeq.get(n.seq)}
@@ -743,7 +746,7 @@ export function makeContextBrowser(
           <select
             className="lc-br-pick"
             value={seq === null ? 'live' : String(seq)}
-            onChange={e => { pick(e.target.value) }}
+            onChange={(e) => { pick(e.target.value) }}
           >
             <option value="live">{t('browser.live')}</option>
             {requests.slice().reverse().map(r => (
@@ -789,7 +792,7 @@ export function makeContextBrowser(
           : null}
 
         <div className="lc-br-cats">
-          {CATS.map(c => {
+          {CATS.map((c) => {
             const count = toolCount(c.key)
             const v = breakdown[c.key] || 0
             // Δ vs the reference step: element-count badge (hidden when the
@@ -821,7 +824,7 @@ export function makeContextBrowser(
                     <span className="lc-br-cat-count">{t('browser.items', { n: count })}</span>
                     {countDelta !== null && countDelta !== 0 ? (
                       <span className={'lc-br-delta lc-br-delta-' + (countDelta > 0 ? 'up' : 'down')}>
-                        {(countDelta > 0 ? '+' : '') + countDelta}
+                        {`${countDelta > 0 ? '+' : ''}${countDelta}`}
                       </span>
                     ) : null}
                   </span>
@@ -835,7 +838,7 @@ export function makeContextBrowser(
                     ) : null}
                     <span className="lc-br-tokens">{'≈' + fmt(v)}</span>
                   </span>
-                  <span className="lc-br-pct">{total > 0 ? Math.round(v / total * 100) + '%' : ''}</span>
+                  <span className="lc-br-pct">{total > 0 ? `${Math.round(v / total * 100)}%` : ''}</span>
                 </button>
                 {open ? <div className="lc-br-body">{catBody(c.key)}</div> : null}
               </div>

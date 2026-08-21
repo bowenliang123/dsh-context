@@ -45,7 +45,7 @@ export function makeNodeList(kit: ViewKit): (props: NodeListProps) => ReactNS.Re
         {props.dropped > 0
           ? <div className="lc-nodes-more">{t('nodes.more', { n: props.dropped })}</div>
           : null}
-        {rows.map(n => {
+        {rows.map((n) => {
           const text = nodeText(n)
           return (
             <div key={n.seq} className="lc-node">

@@ -82,12 +82,12 @@ export function makeImageCard(kit: ViewKit): ImageKit['Card'] {
 
     const name = attachment.name ?? t('attach.image')
     const dims = attachment.width !== undefined && attachment.height !== undefined
-      ? attachment.width + '×' + attachment.height
+      ? `${attachment.width}×${attachment.height}`
       : null
     const orig = attachment.originalDimensions
     const facts: string[] = []
     if (dims !== null) facts.push(dims)
-    if (orig !== undefined) facts.push(t('attach.orig', { d: orig.width + '×' + orig.height }))
+    if (orig !== undefined) facts.push(t('attach.orig', { d: `${orig.width}×${orig.height}` }))
     if (attachment.bytes !== undefined) facts.push(fmtBytes(attachment.bytes))
 
     const open = (): void => {

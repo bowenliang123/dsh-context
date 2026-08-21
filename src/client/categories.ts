@@ -19,7 +19,7 @@ export const CATS: { key: Category | 'system' | 'tools'; color: string }[] = [
 ]
 
 export function partsOf(breakdown: Snapshot['current'] | RequestRecord): PartsPart[] {
-  return CATS.map(c => {
+  return CATS.map((c) => {
     return { key: c.key, color: c.color, value: breakdown[c.key] || 0 }
   })
 }

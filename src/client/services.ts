@@ -11,7 +11,7 @@
  */
 
 import type { Context } from '@deepseek-ai/cordis'
-import type { ContextHeaders, ContextPressure, ContextTimeline, SessionCostUsage, TokenUsage } from '../shared/types'
+import type { ContextHeaders, ContextPressure, ContextTimeline, TokenUsage } from '../shared/types'
 
 export interface LocaleService {
   register(ns: string, dicts: Record<string, Record<string, string>>): () => void
@@ -121,10 +121,15 @@ export type ClientCtx = Context & {
   slots: SlotsService
 }
 
-/** Narrow an unknown projection value to a record, or null when it is not one. */
-function asRecord<T>(value: unknown): T | null {
+/**
+ * Narrow an unknown projection value to a string-keyed record, or null when
+ * it is not one. The boundary type is Record<string, unknown> on purpose:
+ * every field read below must re-prove itself (the no-white-screen
+ * guarantee), so no field may borrow the wire type before its check.
+ */
+function asRecord(value: unknown): Record<string, unknown> | null {
   if (value === null || value === undefined || typeof value !== 'object') return null
-  return value as T
+  return value as Record<string, unknown>
 }
 
 /**
@@ -155,7 +160,7 @@ function objectsOf<T>(value: unknown): T[] {
  * during render and unmounting the conversation view.
  */
 export function timelineOf(value: unknown): ContextTimeline | null {
-  const data = asRecord<ContextTimeline>(value)
+  const data = asRecord(value)
   if (data === null) return null
   const current = data.current
   // The wire shape check for the cheap pass-through path: `current` must be
@@ -173,12 +178,12 @@ export function timelineOf(value: unknown): ContextTimeline | null {
     && Array.isArray(data.toolList)) {
     // Well-formed: pass the delivered value through untouched (cheap, and
     // reference-stable so plain re-renders stay zero-copy).
-    return data
+    return data as unknown as ContextTimeline
   }
   // Malformed: rebuild with safe defaults, keeping every usable piece.
-  const safeCurrent: Record<string, unknown> = current !== null && typeof current === 'object' ? current : {}
+  const safeCurrent: Record<string, unknown> = current !== null && typeof current === 'object' ? current as Record<string, unknown> : {}
   const cost = typeof data.cost === 'object' && data.cost !== null && !Array.isArray(data.cost)
-    ? data.cost as SessionCostUsage
+    ? data.cost as ContextTimeline['cost']
     : undefined
   return {
     ok: true,
@@ -213,7 +218,10 @@ export function timelineOf(value: unknown): ContextTimeline | null {
  * (e.g. a harness without the session-projection registry) — callers fall
  * back to their derived anchor, so the UI degrades gracefully.
  */
-export const contextPressureOf = (value: unknown): ContextPressure | null => asRecord<ContextPressure>(value)
+export function contextPressureOf(value: unknown): ContextPressure | null {
+  const data: unknown = asRecord(value)
+  return data as ContextPressure | null
+}
 
 /**
  * Narrow a delivered projection value to the official token-meter
@@ -221,7 +229,10 @@ export const contextPressureOf = (value: unknown): ContextPressure | null => asR
  * value = the meter's projection is not composed (or no request has reported
  * usage yet) — callers drop the cache-hit cell to a dash.
  */
-export const tokenUsageOf = (value: unknown): TokenUsage | null => asRecord<TokenUsage>(value)
+export function tokenUsageOf(value: unknown): TokenUsage | null {
+  const data: unknown = asRecord(value)
+  return data as TokenUsage | null
+}
 
 /**
  * Narrow a delivered projection value to the plugin's `contextHeaders`
@@ -235,15 +246,15 @@ export const tokenUsageOf = (value: unknown): TokenUsage | null => asRecord<Toke
  * and the card falls back to its tokens-only note.
  */
 export function headersOf(value: unknown): ContextHeaders | null {
-  const headers = asRecord<ContextHeaders>(value)
+  const headers = asRecord(value)
   if (headers === null || !Array.isArray(headers.headers)) return null
-  for (const h of headers.headers) {
+  for (const h of headers.headers as unknown[]) {
     if (h === null || typeof h !== 'object') return null
     const entry = h as { tools?: unknown; system?: unknown }
     if (!Array.isArray(entry.tools)) return null
     if (entry.system !== undefined && typeof entry.system !== 'string') return null
   }
-  return headers
+  return headers as unknown as ContextHeaders
 }
 
 // ---- /context command faces (framework `inputTriggers` service) ----

@@ -54,7 +54,7 @@ export function assemble(data: ContextTimeline, headers: ContextHeaders | null, 
     for (const n of data.nodes) {
       if (n.seq < seq) picked.push(n)
     }
-    for (const n of data.archive || []) {
+    for (const n of data.archive) {
       if (n.seq < seq && n.gone !== undefined && n.gone > seq) picked.push(n)
     }
     nodes = picked

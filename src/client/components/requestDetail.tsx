@@ -58,17 +58,17 @@ export function makeRequestDetail(
         </div>
         <StackedBar parts={partsOf(req)} height={10} />
         <div className="lc-detail-rows">
-          {CATS.map(c => {
+          {CATS.map((c) => {
             const v = req[c.key] || 0
             return (
               <div key={c.key} className="lc-detail-row">
                 <i style={{ background: c.color }} />
                 <span className="lc-detail-label">{catLabel(c.key)}</span>
                 <span className="lc-bar-track">
-                  <span className="lc-bar-fill" style={{ width: (req.total > 0 ? v / req.total * 100 : 0) + '%', background: c.color }} />
+                  <span className="lc-bar-fill" style={{ width: `${req.total > 0 ? v / req.total * 100 : 0}%`, background: c.color }} />
                 </span>
                 <span className="lc-detail-num">{'≈' + fmt(v)}</span>
-                <span className="lc-detail-pct">{req.total > 0 ? Math.round(v / req.total * 100) + '%' : ''}</span>
+                <span className="lc-detail-pct">{req.total > 0 ? `${Math.round(v / req.total * 100)}%` : ''}</span>
               </div>
             )
           })}

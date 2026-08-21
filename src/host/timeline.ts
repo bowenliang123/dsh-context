@@ -195,5 +195,5 @@ export function createContextTimelineDefinition(config: Config): ProjectionDefin
     // are refolded.
     stateVersion: 5,
   }
-  return definition as unknown as ProjectionDefinition<'contextTimeline', TimelineState>
+  return definition
 }

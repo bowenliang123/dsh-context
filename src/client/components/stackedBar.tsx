@@ -71,12 +71,14 @@ export function makeStackedBar(kit: ViewKit): (props: StackedBarProps) => ReactN
     // slice whether or not a free track exists (once used exceeds the window,
     // the stripes sit over the outermost segments).
     const reserve = props.reserve !== undefined && props.max !== undefined && props.max > 0
-      ? props.reserve
+      // Carry the checked max into the object: the non-null reserve below
+      // then proves max is present, no assertion needed.
+      ? { ...props.reserve, max: props.max }
       : null
     // Round to one decimal: the ratios are float-y (0.8 × max / scale) and a
     // style % with a long decimal tail is noise (would render the same).
-    const reserveLeft = reserve !== null ? Math.round(props.max! * reserve.ratio / scale * 1000) / 10 : 0
-    const reserveWidth = reserve !== null ? Math.round((1 - reserve.ratio) * props.max! / scale * 1000) / 10 : 0
+    const reserveLeft = reserve !== null ? Math.round(reserve.max * reserve.ratio / scale * 1000) / 10 : 0
+    const reserveWidth = reserve !== null ? Math.round((1 - reserve.ratio) * reserve.max / scale * 1000) / 10 : 0
 
     // The tooltip is DERIVED from the shared hover key, so hovering either a
     // segment or its legend chip lights the same segment and shows the same
@@ -94,7 +96,7 @@ export function makeStackedBar(kit: ViewKit): (props: StackedBarProps) => ReactN
       if (props.hoverKey === 'free' && free > 0) {
         const pct = scale > 0 ? free / scale * 100 : 0
         tip = {
-          text: t('overview.free') + ' ' + fmt(free) + ' (' + Math.round(pct) + '%)',
+          text: `${t('overview.free')} ${fmt(free)} (${Math.round(pct)}%)`,
           leftPct: Math.max(12, Math.min((total / scale * 100) + pct / 2, 88)),
         }
       } else {
@@ -105,7 +107,7 @@ export function makeStackedBar(kit: ViewKit): (props: StackedBarProps) => ReactN
             tip = {
               // "(pct%)" is a share of the OCCUPIED total — the solid box
               // that appears on hover frames exactly this reference region.
-              text: catLabel(p.key) + ' ≈' + fmt(p.value) + ' (' + Math.round(p.value / total * 100) + '%) '
+              text: `${catLabel(p.key)} ≈${fmt(p.value)} (${Math.round(p.value / total * 100)}%) `
                 + t('overview.ofUsed'),
               leftPct: Math.max(12, Math.min(acc + pct / 2, 88)),
             }
@@ -122,21 +124,21 @@ export function makeStackedBar(kit: ViewKit): (props: StackedBarProps) => ReactN
           // Hover focus: dim everything except the hovered part and show the
           // occupied-region frame (`.lc-stacked-dim` + `.lc-occupied-box`).
           className={'lc-stacked' + (hovering ? ' lc-stacked-dim' : '')}
-          style={{ height: (props.height || 14) + 'px' }}
+          style={{ height: `${props.height || 14}px` }}
           onMouseLeave={() => {
             if (props.onHoverKey !== undefined) props.onHoverKey(null)
             setReserveOn(false)
           }}
         >
           {total > 0
-            ? props.parts.map(p => {
+            ? props.parts.map((p) => {
               if (!p.value) return null
               const on = props.hoverKey !== undefined && props.hoverKey === p.key
               return (
                 <div
                   key={p.key}
                   className={'lc-stacked-seg' + (on ? ' lc-stacked-seg-on' : '')}
-                  style={{ width: (p.value / scale * 100) + '%', background: p.color }}
+                  style={{ width: `${p.value / scale * 100}%`, background: p.color }}
                   onMouseEnter={() => { if (props.onHoverKey !== undefined) props.onHoverKey(p.key) }}
                 />
               )
@@ -146,7 +148,7 @@ export function makeStackedBar(kit: ViewKit): (props: StackedBarProps) => ReactN
             <div
               key="free"
               className={'lc-stacked-free' + (props.hoverKey === 'free' ? ' lc-stacked-free-on' : '')}
-              style={{ width: (free / scale * 100) + '%' }}
+              style={{ width: `${free / scale * 100}%` }}
               onMouseEnter={() => { if (props.onHoverKey !== undefined) props.onHoverKey('free') }}
             />
           ) : null}
@@ -158,12 +160,12 @@ export function makeStackedBar(kit: ViewKit): (props: StackedBarProps) => ReactN
           {reserve !== null ? (
             <div
               className="lc-reserve"
-              style={{ left: reserveLeft + '%', width: reserveWidth + '%' }}
+              style={{ left: `${reserveLeft}%`, width: `${reserveWidth}%` }}
               onMouseEnter={() => {
                 setReserveOn(true)
                 if (props.onHoverKey !== undefined) props.onHoverKey(null)
               }}
-              onMouseLeave={() => setReserveOn(false)}
+              onMouseLeave={() => { setReserveOn(false) }}
             />
           ) : null}
           {/* Hover reference frame: the occupied region (outside the free
@@ -173,7 +175,7 @@ export function makeStackedBar(kit: ViewKit): (props: StackedBarProps) => ReactN
               fades out on leave instead of unmounting instantly. */}
           <div
             className={'lc-occupied-box' + (showBox ? ' lc-occupied-box-on' : '')}
-            style={{ width: usedPct + '%' }}
+            style={{ width: `${usedPct}%` }}
           />
         </div>
         {/* The hover tooltip is always mounted too (opacity toggles via
@@ -183,7 +185,7 @@ export function makeStackedBar(kit: ViewKit): (props: StackedBarProps) => ReactN
           ? (
             <div
               className={'lc-bar-tip' + (tip ? ' lc-bar-tip-on' : '')}
-              style={{ left: tip ? tip.leftPct + '%' : '50%' }}
+              style={{ left: tip ? `${tip.leftPct}%` : '50%' }}
             >{tip ? tip.text : ''}</div>
           )
           : null}
@@ -207,7 +209,7 @@ export function makeLegend(kit: ViewKit): (props: {
     for (const p of props.parts) total += p.value
     return (
       <div className="lc-legend">
-        {props.parts.map(p => {
+        {props.parts.map((p) => {
           const on = props.hoverKey !== undefined && props.hoverKey === p.key
           return (
             <span
@@ -221,7 +223,7 @@ export function makeLegend(kit: ViewKit): (props: {
               <span className="lc-chip-label">{catLabel(p.key)}</span>
               <span className="lc-chip-nums">
                 {'≈' + fmt(p.value)}
-                {total > 0 ? <em>{Math.round(p.value / total * 100) + '%'}</em> : null}
+                {total > 0 ? <em>{`${Math.round(p.value / total * 100)}%`}</em> : null}
               </span>
             </span>
           )

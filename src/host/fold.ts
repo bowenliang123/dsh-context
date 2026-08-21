@@ -404,7 +404,7 @@ export function applyTimeline(state: TimelineState, event: TimelineEvent, bounds
     callNames: { ...state.callNames },
   }
 
-  const data = event.data as Record<string, unknown> | undefined
+  const data = event.data
   switch (event.type) {
     case 'request/header': {
       const header = (data?.header ?? {}) as {
@@ -454,9 +454,9 @@ export function applyTimeline(state: TimelineState, event: TimelineEvent, bounds
       break
     }
     case 'tool/call': {
-      if (data && data.callId !== undefined && typeof data.name === 'string') {
+      if (data && typeof data.callId === 'string' && typeof data.name === 'string') {
         const s = ensure()
-        s.callNames[String(data.callId)] = data.name
+        s.callNames[data.callId] = data.name
       }
       break
     }
@@ -654,8 +654,9 @@ export function buildTimelineView(state: TimelineState, bounds: FoldBounds): Sna
   let ri = 0
   for (const ev of events) {
     while (ri < requests.length && requests[ri].seq <= ev.seq) ri++
-    const next = requests[ri]
-    const prev = ri > 0 ? requests[ri - 1] : undefined
+    // .at() keeps the past-the-end case visible to the type system.
+    const next = requests.at(ri)
+    const prev = ri > 0 ? requests.at(ri - 1) : undefined
     if (next !== undefined && typeof next.turn === 'number' && typeof next.step === 'number') {
       ev.turn = next.turn
       ev.step = next.step

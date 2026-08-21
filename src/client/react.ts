@@ -5,5 +5,8 @@
 
 import type * as ReactNS from 'react'
 
-export const React: typeof ReactNS = require('react')
+// The loader contract: a closure-factory bundle has no ESM imports; the
+// browser module table answers this injected require.
+// oxlint-disable-next-line typescript/no-require-imports
+export const React: typeof ReactNS = require('react') as typeof ReactNS
 export const h = React.createElement

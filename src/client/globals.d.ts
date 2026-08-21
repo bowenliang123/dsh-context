@@ -5,9 +5,9 @@
  * is what the loader reads. Declared here so the strict typecheck sees them.
  */
 
-declare function require(id: string): any
-declare var module: { exports: Record<string, unknown> }
-declare var exports: Record<string, unknown>
+declare function require(id: string): unknown
+declare let module: { exports: Record<string, unknown> }
+declare let exports: Record<string, unknown>
 
 // Stylesheet imports resolve through the bundle's CSS channels (see
 // tsdown.config.ts): side-effect global sheets, ?inline text, and

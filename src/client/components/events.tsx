@@ -16,7 +16,6 @@
 import type * as ReactNS from 'react'
 import type { ContextEventRecord } from '../../shared/types'
 import { IconBranchOutline16, IconPlusOutline16 } from '@deepseek-ai/dsh-client-ui-primitives'
-import { fmt } from '../format'
 import type { Translate } from '../i18n'
 import type { ViewKit } from '../viewkit'
 
@@ -35,12 +34,11 @@ export function makeEventText(t: Translate): {
     if (ev.kind === 'compaction') return t('ev.compaction', { n: ev.count || 0 })
     if (ev.kind === 'prune') return t('ev.prune')
     if (ev.kind === 'model') return t('ev.model', { a: ev.from || '?', b: ev.to || '?' })
-    if (ev.kind === 'inject') {
-      if (ev.sub === 'skill') return t('ev.skill', { name: ev.name || '?' })
-      const base = t('form.' + (ev.form || 'context'))
-      return ev.name ? base + ' · ' + ev.name : base
-    }
-    return ev.kind
+    // The kind union narrows to 'inject' here; a future kind breaks the
+    // compile (ev.sub ev.form ev.name are inject-only), forcing a label.
+    if (ev.sub === 'skill') return t('ev.skill', { name: ev.name || '?' })
+    const base = t('form.' + (ev.form || 'context'))
+    return ev.name ? base + ' · ' + ev.name : base
   }
 
   /**
@@ -90,7 +88,7 @@ export function makeEventList(kit: ViewKit): (props: EventListProps) => ReactNS.
       }
       sync()
       window.addEventListener('resize', sync)
-      return () => window.removeEventListener('resize', sync)
+      return () => { window.removeEventListener('resize', sync) }
     })
     const sorted = props.events.slice().reverse()
     return (
@@ -100,9 +98,9 @@ export function makeEventList(kit: ViewKit): (props: EventListProps) => ReactNS.
           const at = eventAt(ev)
           const glyph = ev.kind === 'inject' ? <IconPlusOutline16 />
             : ev.kind === 'model' ? <IconBranchOutline16 />
-            : EVENT_ICONS[ev.kind] || '•'
+              : EVENT_ICONS[ev.kind] || '•'
           return (
-            <div key={ev.seq + '-' + i} className="lc-event">
+            <div key={`${ev.seq}-${i}`} className="lc-event">
               <span className={'lc-event-icon lc-event-' + ev.kind}>{glyph}</span>
               <span className={'lc-kind lc-kind-' + ev.kind}>{t('kind.' + ev.kind)}</span>
               <span className="lc-event-label">{label}</span>

@@ -50,14 +50,14 @@ export const DEFAULT_BOUNDS: Required<Config> = {
  * Tolerates `undefined` (a patch row without a `config:` block — defaults win).
  */
 export const Config = z.preprocess(
-  (v) => v ?? {},
+  v => v ?? {},
   z.object({
     maxRequestSteps: z.number().int().min(1).default(DEFAULT_BOUNDS.maxRequestSteps),
     maxKeptTurns: z.number().int().min(1).default(DEFAULT_BOUNDS.maxKeptTurns),
     maxEvents: z.number().int().min(1).default(DEFAULT_BOUNDS.maxEvents),
     maxNodes: z.number().int().min(1).default(DEFAULT_BOUNDS.maxNodes),
     maxArchiveNodes: z.number().int().min(1).default(DEFAULT_BOUNDS.maxArchiveNodes),
-  }).strict()
+  }).strict(),
 )
 
 /** The resolved retention/slice bounds the fold operates under. */

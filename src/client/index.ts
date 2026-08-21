@@ -34,7 +34,7 @@ import { makeViewKit } from './viewkit'
 // loader and the HMR receiver claim tags carrying data-plugin).
 import './styles.css'
 
-import { React, h } from './react'
+import { h } from './react'
 
 const NS = 'dsh-context'
 

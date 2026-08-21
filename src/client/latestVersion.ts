@@ -21,8 +21,8 @@ export function fetchLatestVersion(): Promise<string | null> {
     cached = {
       at: Date.now(),
       promise: fetch(REGISTRY_URL)
-        .then((res) => (res.ok ? res.json() : null))
-        .then((body) => (body && typeof body.version === 'string' ? body.version : null))
+        .then(res => (res.ok ? res.json() as Promise<{ version?: unknown }> : null))
+        .then(body => (body !== null && typeof body.version === 'string' ? body.version : null))
         .catch(() => null),
     }
   }
@@ -32,7 +32,7 @@ export function fetchLatestVersion(): Promise<string | null> {
 /** Numeric semver compare (pre-release suffix ignored): is `latest` strictly newer than `current`? */
 export function isNewerVersion(latest: string, current: string): boolean {
   const parse = (v: string): number[] =>
-    v.replace(/^v/, '').split('-', 1)[0].split('.').map((n) => parseInt(n, 10) || 0)
+    v.replace(/^v/, '').split('-', 1)[0].split('.').map(n => parseInt(n, 10) || 0)
   const a = parse(latest)
   const b = parse(current)
   for (let i = 0; i < Math.max(a.length, b.length); i++) {

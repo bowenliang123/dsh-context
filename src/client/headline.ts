@@ -36,7 +36,7 @@ export function headlineOf(data: ContextTimeline, pressure: ContextPressure | nu
   const projected = pressure !== null && typeof pressure.projectedTokens === 'number'
     ? pressure.projectedTokens
     : undefined
-  const requests = data.requests || []
+  const requests = data.requests
   const lastReq = requests.length > 0 ? requests[requests.length - 1] : null
   // Fallback anchor: the newest request's provider prompt plus the heuristic
   // surface movement since it was logged (same shape as the projection, one

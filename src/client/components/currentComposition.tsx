@@ -65,12 +65,19 @@ export function makeCurrentComposition(
           </span>
           {head.pct !== null ? (
             <span className="lc-overview-pct">
-              <b>{head.pct + '%'}</b>
+              <b>{`${head.pct}%`}</b>
               {t('overview.used')}
             </span>
           ) : null}
         </div>
-        <StackedBar parts={head.parts} height={16} max={head.window} hoverKey={props.hoverKey} onHoverKey={props.onHoverKey} reserve={reserve} />
+        <StackedBar
+          parts={head.parts}
+          height={16}
+          max={head.window}
+          hoverKey={props.hoverKey}
+          onHoverKey={props.onHoverKey}
+          reserve={reserve}
+        />
         <Legend parts={head.parts} hoverKey={props.hoverKey} onHoverKey={props.onHoverKey} />
         {props.tools !== undefined && props.tools.length > 0 ? (
           <div className="lc-tools">

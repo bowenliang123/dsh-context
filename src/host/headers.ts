@@ -57,11 +57,9 @@ const contextHeadersStateSchema = contextHeadersSchema
 /** Fold one `request/header` payload into an epoch record (display-priced). */
 function recordOf(event: SessionEvent): HeaderRecord | null {
   if (event.type !== 'request/header') return null
-  const header = (event.data as { header?: unknown }).header as {
-    system?: unknown
-    tools?: unknown[]
-  } | undefined
-  if (header === null || typeof header !== 'object') return null
+  const rawHeader = (event.data as { header?: unknown }).header
+  if (rawHeader === null || rawHeader === undefined || typeof rawHeader !== 'object') return null
+  const header = rawHeader as { system?: unknown; tools?: unknown[] }
   const tools = Array.isArray(header.tools) ? header.tools : []
   const record: HeaderRecord = {
     seq: event.seq,
@@ -113,12 +111,12 @@ export function createContextHeadersDefinition(): ProjectionDefinition<'contextH
       if (record === null) return state
       // The agent loop already suppresses unchanged headers; a cheap guard
       // against the same epoch arriving twice in a row (e.g. resume replays).
-      const last = state.headers[state.headers.length - 1]
+      const last = state.headers.at(-1)
       if (last !== undefined && last.seq === record.seq) return state
       const headers = [...state.headers, record]
       return { headers: headers.length > HEADERS_MAX ? headers.slice(-HEADERS_MAX) : headers }
     },
     stateVersion: 1,
   }
-  return definition as unknown as ProjectionDefinition<'contextHeaders', HeadersState>
+  return definition
 }

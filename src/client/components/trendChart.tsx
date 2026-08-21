@@ -60,7 +60,7 @@ export function aggregateByTurn(requests: RequestRecord[]): RequestRecord[] {
  * and the detail panel so both show the SAME event for a request.
  */
 export function attachMarkers(requests: RequestRecord[], events: ContextEventRecord[]): (ContextEventRecord | undefined)[] {
-  const markers: (ContextEventRecord | undefined)[] = new Array(requests.length)
+  const markers: (ContextEventRecord | undefined)[] = new Array<ContextEventRecord | undefined>(requests.length)
   for (const ev of events) {
     if (ev.kind !== 'compaction' && ev.kind !== 'prune') continue
     for (let r = 0; r < requests.length; r++) {
@@ -74,7 +74,7 @@ export function attachMarkers(requests: RequestRecord[], events: ContextEventRec
 }
 
 export function makeTrendChart(kit: ViewKit): (props: TrendChartProps) => ReactNS.ReactElement {
-  const { t, fmt, fmtTime, catLabel, eventLabel, eventAt } = kit
+  const { t, fmt, fmtTime, eventLabel, eventAt } = kit
 
   // Plot height in px (the marker lane above it is 18px).
   const CHART_H = 112
@@ -219,7 +219,7 @@ export function makeTrendChart(kit: ViewKit): (props: TrendChartProps) => ReactN
                     + (selected ? ' lc-bar-selected' : '')
                     + (hovered ? ' lc-bar-hovered' : '')
                     + (inTurn ? ' lc-bar-in-turn' : '')}
-                  style={{ width: BAR_W + 'px' }}
+                  style={{ width: `${BAR_W}px` }}
                   onClick={() => { props.onSelect(selected ? null : req.seq) }}
                   onMouseEnter={() => { props.onHover(req.seq) }}
                 >
@@ -232,12 +232,12 @@ export function makeTrendChart(kit: ViewKit): (props: TrendChartProps) => ReactN
                     >{'✂'}</span>
                   ) : null}
                   <div className="lc-bar-stack">
-                    {CATS.map(c => {
+                    {CATS.map((c) => {
                       const v = (req[c.key] || 0) * anchorOf(req)
                       if (!v) return null
                       // px heights: the stack's height is content-driven, so
                       // percentage heights would collapse against an indefinite base.
-                      return <div key={c.key} style={{ height: Math.max(1, Math.round(v / maxTotal * CHART_H)) + 'px', background: c.color }} />
+                      return <div key={c.key} style={{ height: `${Math.max(1, Math.round(v / maxTotal * CHART_H))}px`, background: c.color }} />
                     })}
                   </div>
                 </div>
@@ -249,7 +249,7 @@ export function makeTrendChart(kit: ViewKit): (props: TrendChartProps) => ReactN
           {hoveredReq !== null ? (
             <div
               className="lc-chart-tip"
-              style={{ left: (hoveredIdx * (BAR_W + BAR_GAP) + BAR_W / 2) + 'px' }}
+              style={{ left: `${hoveredIdx * (BAR_W + BAR_GAP) + BAR_W / 2}px` }}
             >{tipOf(hoveredReq)}</div>
           ) : null}
           {/* Turn strip: one COLOR BLOCK per turn, spanning exactly its bars'
@@ -266,15 +266,15 @@ export function makeTrendChart(kit: ViewKit): (props: TrendChartProps) => ReactN
               const blockW = grp.agg ? BAR_W : grp.span * (BAR_W + BAR_GAP) - BAR_GAP
               return (
                 <span
-                  key={'turn-' + gi}
+                  key={`turn-${gi}`}
                   className={'lc-turn' + (on ? ' lc-turn-on' : '')}
                   style={{
-                    width: blockW + 'px',
+                    width: `${blockW}px`,
                     background: TURN_FILLS[gi % TURN_FILLS.length],
                   }}
-                  title={'T' + grp.turn}
+                  title={`T${grp.turn}`}
                   onMouseEnter={() => { props.onHoverTurn(grp.turn) }}
-                >{'T' + grp.turn}</span>
+                >{`T${grp.turn}`}</span>
               )
             })}
           </div>

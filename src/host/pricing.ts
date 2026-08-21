@@ -28,15 +28,14 @@ function estimateBlocks(blocks: ContentBlock[] | undefined): number {
   let tokens = 0
   if (!Array.isArray(blocks)) return 0
   for (const block of blocks) {
-    if (block === null || typeof block !== 'object') continue
     switch (block.type) {
       case 'text':
       case 'reasoning':
-        tokens += Math.ceil(String(block.text || '').length / CHARS_PER_TOKEN) + BLOCK_OVERHEAD
+        tokens += Math.ceil((block.text || '').length / CHARS_PER_TOKEN) + BLOCK_OVERHEAD
         break
       case 'tool-call':
-        tokens += Math.ceil(String(block.name || '').length / CHARS_PER_TOKEN)
-          + Math.ceil(String(block.arguments || '').length / CHARS_PER_TOKEN) + BLOCK_OVERHEAD
+        tokens += Math.ceil((block.name || '').length / CHARS_PER_TOKEN)
+          + Math.ceil((block.arguments || '').length / CHARS_PER_TOKEN) + BLOCK_OVERHEAD
         break
       case 'tool-result':
         tokens += estimateBlocks(block.content) + BLOCK_OVERHEAD
@@ -76,7 +75,7 @@ export function estimateToolSchema(tool: unknown): number {
 export function firstText(blocks: ContentBlock[] | undefined): string {
   if (!Array.isArray(blocks)) return ''
   for (const b of blocks) {
-    if (b && b.type === 'text' && typeof b.text === 'string' && b.text.trim() !== '') {
+    if (b.type === 'text' && typeof b.text === 'string' && b.text.trim() !== '') {
       return b.text.replace(/\s+/g, ' ').trim().slice(0, 80)
     }
   }
@@ -87,7 +86,7 @@ export function toolCallNames(blocks: ContentBlock[] | undefined): string[] {
   const names: string[] = []
   if (!Array.isArray(blocks)) return names
   for (const b of blocks) {
-    if (b && b.type === 'tool-call' && typeof b.name === 'string') names.push(b.name)
+    if (b.type === 'tool-call' && typeof b.name === 'string') names.push(b.name)
   }
   return names
 }
@@ -98,12 +97,16 @@ export interface MessageSource {
   name?: string
   plugin?: string
   summary?: string
-  sections?: { name?: string }[]
+  // Entries stay nullable: any plugin may author a snapshot source, so the
+  // fold's preview read must not trust the element shape.
+  sections?: ({ name?: string } | null)[]
 }
 
-export function isInjection(source: MessageSource | undefined): source is MessageSource {
+export function isInjection(source: MessageSource | null | undefined): source is MessageSource {
   // plugin context (AGENTS.md, snapshots, notices, …) and user-explicit skill
-  // invocations both ride user-role messages with a declared form.
-  return source !== null && typeof source === 'object'
+  // invocations both ride user-role messages with a declared form. `null`
+  // stays in the parameter type: a foreign message may carry it, and the
+  // fold must not crash on it.
+  return source !== null && source !== undefined
     && (source.kind === 'plugin' || source.kind === 'skill-invocation' || typeof source.form === 'string')
 }

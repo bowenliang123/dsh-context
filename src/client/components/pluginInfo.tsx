@@ -35,7 +35,9 @@ export function makePluginInfo(kit: ViewKit): () => ReactNS.ReactElement {
       // Dev bundles carry a `0.0.0-dev` placeholder version: skip the check.
       if (PLUGIN_VERSION.includes('-dev')) return
       let on = true
-      fetchLatestVersion().then((v) => { if (on && v) setLatest(v) })
+      // Fire-and-forget: fetchLatestVersion never rejects (every failure
+      // narrows to null), and the `on` flag drops late results.
+      void fetchLatestVersion().then((v) => { if (on && v) setLatest(v) })
       return () => { on = false }
     }, [])
     const update = latest !== null && isNewerVersion(latest, PLUGIN_VERSION) ? latest : null
