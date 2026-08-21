@@ -1,6 +1,8 @@
 import { readFileSync } from 'node:fs'
+import { readFile } from 'node:fs/promises'
 import { isBuiltin } from 'node:module'
-import { join } from 'node:path'
+import { basename, dirname, join, resolve as resolvePath } from 'node:path'
+import { transform } from 'lightningcss'
 import { defineConfig } from 'tsdown'
 
 // Read the manifest from cwd: the config file's own URL is not guaranteed to
@@ -46,6 +48,106 @@ const isProductionDependency = (specifier: string): boolean =>
   productionPatterns.some(pattern => pattern.test(specifier))
 
 const NODE_ENV = process.env.NODE_ENV ?? 'production'
+
+// ---- CSS channels, mirrored from the official preset ---------------------
+// (packages/client/tsdown.client.ts). The virtual-id wrapper keeps stylesheets
+// away from tsdown's own css pipeline: its guard matches ids ending in `.css`,
+// so the virtual id must not. `.module.css` yields a hashed class map and
+// injects a tagged style at factory execution; `.css?inline` exports compiled
+// text; a plain `.css` import injects the sheet unhashed (the plugin's own
+// lc-* namespace stays the anti-collision discipline).
+const CSS_VIRTUAL_PREFIX = '\0dsh-css:'
+const GLOBAL_CSS_VIRTUAL_PREFIX = '\0dsh-global-css:'
+const INLINE_CSS_VIRTUAL_PREFIX = '\0dsh-inline-css:'
+const CSS_VIRTUAL_SUFFIX = '.mjs'
+const INLINE_CSS_QUERY = '?inline'
+
+/** Emit one plugin-owned style injector and an optional CSS Modules export. */
+function styleInjectionModule(
+  id: string,
+  fileId: string,
+  css: string,
+  classMap?: Readonly<Record<string, string>>,
+): string {
+  const source = [
+    `const css = ${JSON.stringify(css)};`,
+    `const tagId = ${JSON.stringify(`${id}/${basename(fileId)}`)};`,
+    'if (typeof document !== \'undefined\' && document.querySelector(\'style[data-plugin-css=\' + JSON.stringify(tagId) + \']\') === null) {',
+    '  const tag = document.createElement(\'style\');',
+    `  tag.dataset.plugin = ${JSON.stringify(id)};`,
+    '  tag.dataset.pluginCss = tagId;',
+    '  tag.textContent = css;',
+    '  document.head.appendChild(tag);',
+    '}',
+  ]
+  source.push(classMap === undefined ? 'export {};' : `export default ${JSON.stringify(classMap)};`)
+  return source.join('\n')
+}
+
+/** Resolve a stylesheet import against the importing source file. */
+function sourceAssetPath(source: string, importer: string): string {
+  return resolvePath(dirname(importer), source)
+}
+
+function cssChannels(id: string) {
+  return [{
+    name: 'dsh-css-modules-inline',
+    resolveId(source: string, importer: string | undefined) {
+      if (!source.endsWith('.module.css')) return null
+      const abs = importer !== undefined ? sourceAssetPath(source, importer) : source
+      return CSS_VIRTUAL_PREFIX + abs + CSS_VIRTUAL_SUFFIX
+    },
+    async load(this: { addWatchFile(file: string): void }, virtualId: string) {
+      if (!virtualId.startsWith(CSS_VIRTUAL_PREFIX)) return null
+      const fileId = virtualId.slice(CSS_VIRTUAL_PREFIX.length, -CSS_VIRTUAL_SUFFIX.length)
+      // The virtual id otherwise hides the physical stylesheet from the watch graph.
+      this.addWatchFile(fileId)
+      const source = await readFile(fileId)
+      const { code, exports: cssExports } = transform({
+        filename: fileId,
+        code: source,
+        cssModules: { pattern: '[hash]_[local]' },
+        minify: true,
+      })
+      const classMap: Record<string, string> = {}
+      const exportEntries = Object.entries(cssExports ?? {})
+        .sort(([left], [right]) => (left < right ? -1 : left > right ? 1 : 0))
+      for (const [local, exp] of exportEntries) classMap[local] = exp.name
+      return styleInjectionModule(id, fileId, code.toString(), classMap)
+    },
+  }, {
+    name: 'dsh-css-text-inline',
+    resolveId(source: string, importer: string | undefined) {
+      if (!source.endsWith(`.css${INLINE_CSS_QUERY}`)) return null
+      const stylesheet = source.slice(0, -INLINE_CSS_QUERY.length)
+      const abs = importer !== undefined ? sourceAssetPath(stylesheet, importer) : stylesheet
+      return INLINE_CSS_VIRTUAL_PREFIX + abs + CSS_VIRTUAL_SUFFIX
+    },
+    async load(this: { addWatchFile(file: string): void }, virtualId: string) {
+      if (!virtualId.startsWith(INLINE_CSS_VIRTUAL_PREFIX)) return null
+      const fileId = virtualId.slice(INLINE_CSS_VIRTUAL_PREFIX.length, -CSS_VIRTUAL_SUFFIX.length)
+      this.addWatchFile(fileId)
+      const source = await readFile(fileId)
+      const { code } = transform({ filename: fileId, code: source, minify: true })
+      return `export default ${JSON.stringify(code.toString())};`
+    },
+  }, {
+    name: 'dsh-css-global-inline',
+    resolveId(source: string, importer: string | undefined) {
+      if (!source.endsWith('.css') || source.endsWith('.module.css')) return null
+      const abs = importer !== undefined ? sourceAssetPath(source, importer) : source
+      return GLOBAL_CSS_VIRTUAL_PREFIX + abs + CSS_VIRTUAL_SUFFIX
+    },
+    async load(this: { addWatchFile(file: string): void }, virtualId: string) {
+      if (!virtualId.startsWith(GLOBAL_CSS_VIRTUAL_PREFIX)) return null
+      const fileId = virtualId.slice(GLOBAL_CSS_VIRTUAL_PREFIX.length, -CSS_VIRTUAL_SUFFIX.length)
+      this.addWatchFile(fileId)
+      const source = await readFile(fileId)
+      const { code } = transform({ filename: fileId, code: source, minify: true })
+      return styleInjectionModule(id, fileId, code.toString())
+    },
+  }]
+}
 
 export default defineConfig([
   {
@@ -96,8 +198,7 @@ export default defineConfig([
       ),
     },
     plugins: [{
-      name: 'dsh-client-bundle-purity',
-      resolveId(source: string) {
+      name: 'dsh-client-bundle-purity',      resolveId(source: string) {
         if (!source.startsWith('@deepseek-ai/')) return null
         if (isRequested(source)) return null
         if (VENDORED_LIBRARY.test(source)) return null
@@ -108,7 +209,7 @@ export default defineConfig([
           + '(type-only imports are erased and never reach this gate)',
         )
       },
-    }],
+    }, ...cssChannels(pkg.name)],
     outputOptions: {
       entryFileNames: 'client.js',
       // The closure-factory handoff every `dsh.client` package's ./client

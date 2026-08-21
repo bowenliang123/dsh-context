@@ -1,0 +1,445 @@
+/*
+ * Theme-native styles. Imported for side effects by src/client/index.ts;
+ * the bundle's CSS channel (mirroring the official tsdown preset's
+ * global-stylesheet loader) minifies the sheet and injects it as a
+ * plugin-owned <style data-plugin> tag when the factory materializes.
+ * Class names keep the flat lc-* namespace as the anti-collision
+ * discipline; --dsw-alias-* theme tokens only.
+ */
+.lc-root { padding: 16px 20px 32px; overflow-y: auto; height: 100%; box-sizing: border-box; color: var(--dsw-alias-label-primary); font-size: 13px; }
+.lc-card { background: var(--dsw-alias-bg-layer-1); border: 1px solid var(--dsw-alias-border-l1); border-radius: 10px; padding: 14px 16px; margin-bottom: 14px; }
+.lc-card-title { font-weight: 600; margin-bottom: 10px; display: flex; align-items: baseline; gap: 8px; }
+.lc-card-title-text { flex: none; white-space: nowrap; }
+.lc-stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(92px, 1fr)); gap: 8px; }
+.lc-stat { background: var(--dsw-alias-bg-layer-2); border: 1px solid var(--dsw-alias-border-l1); border-radius: 8px; padding: 8px 10px; display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.lc-stat-label { color: var(--dsw-alias-label-secondary); font-size: 11px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.lc-stat-value { color: var(--dsw-alias-label-primary); font-size: 14px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; text-align: center; }
+.lc-stat-sub { color: var(--dsw-alias-label-secondary); font-size: 11px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+/*
+ Stats cell tooltip (cost cell): the explanation renders as styled DOM
+ because the harness GUI never shows the native `title` tooltip. A "?"
+ marker after the label signals the affordance; hovering ANYWHERE on the
+ cell reveals the bubble BELOW it (the cell is the tip's position frame).
+ The bubble may overlay the card content underneath — nothing below clips
+ it, and z-index 6 matches the chart tips — so it can exceed the card
+ without being cut off. Same chrome as `.lc-bar-tip`: layer-2 fill, border,
+ 6px radius, soft shadow, 120ms opacity ease.
+ */
+.lc-stat-tipped { position: relative; }
+.lc-stat-q { display: inline-block; margin-left: 4px; width: 11px; height: 11px; line-height: 11px; border-radius: 50%; text-align: center; font-size: 9px; font-weight: 700; font-style: normal; color: var(--dsw-alias-label-secondary); background: var(--dsw-alias-bg-layer-1); border: 1px solid var(--dsw-alias-border-l1); cursor: help; }
+.lc-stat-tipped:hover .lc-stat-q { color: var(--dsw-alias-label-primary); border-color: var(--dsw-alias-label-primary); }
+.lc-stat-tip { position: absolute; top: calc(100% + 6px); left: 0; z-index: 6; width: max-content; max-width: 280px; background: var(--dsw-alias-bg-layer-2); border: 1px solid var(--dsw-alias-border-l1); border-radius: 6px; padding: 6px 10px; font-size: 12px; line-height: 1.5; font-weight: 400; color: var(--dsw-alias-label-primary); box-shadow: 0 2px 8px rgba(0,0,0,0.18); pointer-events: none; opacity: 0; transition: opacity 120ms ease; }
+.lc-stat-tipped:hover .lc-stat-tip { opacity: 1; }
+.lc-stat-tip-prices { display: block; margin-top: 5px; border-top: 1px dashed var(--dsw-alias-border-l1); padding-top: 5px; }
+.lc-stat-tip-head { display: block; font-weight: 600; }
+.lc-stat-tip-row { display: block; margin-top: 2px; }
+.lc-stat-tip-model { color: var(--dsw-alias-label-primary); }
+.lc-card-sub { font-weight: 400; color: var(--dsw-alias-label-secondary); font-size: 12px; }
+.lc-gran, .lc-kinds { margin-left: auto; display: flex; gap: 2px; background: var(--dsw-alias-bg-layer-2); border: 1px solid var(--dsw-alias-border-l1); border-radius: 6px; padding: 1px; }
+.lc-gran-btn { border: 0; background: transparent; color: var(--dsw-alias-label-secondary); font-size: 11px; line-height: 1; padding: 3px 8px; border-radius: 5px; cursor: pointer; font-family: inherit; }
+.lc-gran-btn:hover { color: var(--dsw-alias-label-primary); }
+.lc-gran-on, .lc-gran-on:hover { background: var(--dsw-alias-button-primary-fill); color: var(--dsw-alias-label-primary-foreground); }
+.lc-overview-num { display: flex; align-items: baseline; gap: 6px; margin-bottom: 8px; }
+.lc-overview-num > b { font-size: 20px; }
+.lc-overview-num span { color: var(--dsw-alias-label-secondary); }
+/*
+ The used-percentage figure is the emphasis of the line: pushed to the
+ right edge, large and primary-colored, with a small "used" caption.
+ */
+.lc-overview-pct { margin-left: auto; font-size: 11px; }
+.lc-overview-pct b { font-size: 20px; color: var(--dsw-alias-label-primary); margin-right: 4px; }
+.lc-stacked-wrap { position: relative; width: 100%; }
+.lc-stacked { display: flex; width: 100%; border-radius: 5px; overflow: hidden; background: rgba(128,128,128,0.18); position: relative; }
+/*
+ Hover reference frame around the OCCUPIED region of the composition bar:
+ a SOLID box from the left edge to the used/window boundary, so the
+ legend's "share of used" percentages visibly map to the boxed part (the
+ free track sits outside it). pointer-events: none keeps hover on the
+ segments/free. A soft LIGHT-GRAY stroke — a gentle guide rather than a
+ hard black box — that still reads through its 2px thickness against the
+ dimmed parts underneath it (`.lc-stacked-dim`). The free track echoes
+ the same weight with a dashed box, so the two read as one system.
+ */
+.lc-occupied-box { position: absolute; top: 0; bottom: 0; left: 0; border: 2px solid var(--dsw-alias-label-tertiary); border-radius: 5px; box-sizing: border-box; pointer-events: none; opacity: 0; box-shadow: 0 0 0 1px var(--dsw-alias-bg-layer-2); transition: opacity 120ms ease; }
+.lc-occupied-box-on { opacity: 1; }
+.lc-bar-tip { position: absolute; bottom: calc(100% + 6px); transform: translateX(-50%); z-index: 5; white-space: nowrap; background: var(--dsw-alias-bg-layer-2); border: 1px solid var(--dsw-alias-border-l1); border-radius: 6px; padding: 3px 8px; font-size: 12px; color: var(--dsw-alias-label-primary); box-shadow: 0 2px 8px rgba(0,0,0,0.18); pointer-events: none; opacity: 0; transition: opacity 120ms ease; }
+.lc-bar-tip-on { opacity: 1; }
+.lc-stacked > div { height: 100%; }
+/*
+ Hover eases: the shared composition hover (dim + segment brighten, on the
+ overview or the mirrored browser bar) glides in and out — same 120ms
+ rhythm as the rest of the view.
+ */
+.lc-stacked-seg { transition: filter 120ms ease, opacity 120ms ease; }
+.lc-stacked-free { box-sizing: border-box; transition: box-shadow 120ms ease, opacity 120ms ease; }
+.lc-stacked-seg-on { filter: brightness(1.18); }
+/*
+ The free track mirrors the occupied frame: a DASHED 2px box (the occupied
+ frame is solid) at the same weight — border, not the old inset shadow, so
+ the dash pattern renders; the base box-sizing keeps the width from shifting.
+ Auto-compaction reserve band: the rightmost (1−ratio) of the window,
+ striped diagonally like a warning plate so it reads as "headroom, not
+ real usage" rather than plain free space. Sits above the track/segments
+ (overlay visible even past the threshold) with its own pointer so the
+ hover explains it (help cursor signals "more info").
+ */
+.lc-reserve { position: absolute; top: 0; bottom: 0; z-index: 1; pointer-events: auto; cursor: help; background: repeating-linear-gradient(45deg, color-mix(in srgb, var(--dsw-alias-state-warn-primary) 24%, transparent) 0 5px, transparent 5px 10px); }
+.lc-stacked-free-on { border: 2px dashed var(--dsw-alias-label-secondary); border-radius: 3px; }
+/*
+ Hover focus: everything except the hovered part (segment, legend chip, or
+ free track) recedes, so the composition highlight and the occupied-region
+ frame read clearly. The selected segment/free keeps full opacity.
+ */
+.lc-stacked-dim .lc-stacked-seg { opacity: 0.35; }
+.lc-stacked-dim .lc-stacked-seg-on { opacity: 1; }
+.lc-stacked-dim .lc-stacked-free { opacity: 0.35; }
+.lc-stacked-dim .lc-stacked-free-on { opacity: 1; }
+/*
+ Current-composition legend: an auto-flowing grid (as many columns as the
+ card fits, narrowing flows to fewer) whose cells are label-left /
+ numbers-right rows — each category a tidy "● 系统提示词  ≈2.0k  2%".
+ */
+.lc-legend { display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: 6px 14px; margin-top: 10px; }
+.lc-chip { display: flex; align-items: center; gap: 5px; min-width: 0; color: var(--dsw-alias-label-primary); padding: 1px 6px; border-radius: 6px; cursor: pointer; transition: background-color 120ms ease; }
+/*
+ The category name is the row's emphasis: bold at rest (the chip is a
+ legend label, not inline prose), ellipsized if a narrow cell squeezes it
+ while the right-aligned figures stay intact.
+ */
+.lc-chip-label { font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+/*
+ The numeric group (≈tokens + percent) pins to the cell's right edge while
+ the category label stays left; a baseline acts as the shared vertical
+ rhythm for the two figures.
+ */
+.lc-chip-nums { margin-left: auto; flex: none; display: inline-flex; align-items: baseline; gap: 6px; white-space: nowrap; }
+.lc-chip i, .lc-detail-row i, .lc-node i { display: inline-block; width: 8px; height: 8px; border-radius: 2px; }
+.lc-chip i { transition: box-shadow 120ms ease; }
+.lc-chip em { font-style: normal; color: var(--dsw-alias-label-secondary); }
+/*
+ The selected chip glows with the shared hover tint (smoothly, like the
+ browser rows) instead of snapping its weight; the dot ring on top marks
+ the exact segment.
+ */
+.lc-chip-on { font-weight: 600; background: var(--dsw-alias-interactive-bg-hover); }
+.lc-chip-on i { box-shadow: 0 0 0 1px var(--dsw-alias-brand-primary); }
+.lc-tools { margin-top: 10px; color: var(--dsw-alias-label-secondary); display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+/*
+ The overview tool list links into the Context browser: the "工具定义 Top"
+ label, its "等 N 个" overflow link, and every tool chip are buttons, and
+ hover underlines them (the chip already reads as a tag, so the underline
+ is the only affordance).
+ */
+.lc-tools-label, .lc-tools-more { border: 0; background: transparent; padding: 0; color: var(--dsw-alias-label-secondary); font-family: inherit; font-size: 12px; cursor: pointer; }
+.lc-tools-label:hover, .lc-tools-more:hover { text-decoration: underline; }
+.lc-tool-chip { background: var(--dsw-alias-bg-layer-2); border: 0; border-radius: 4px; padding: 1px 7px; font: inherit; font-size: 12px; color: var(--dsw-alias-label-primary); cursor: pointer; }
+.lc-tool-chip:hover { text-decoration: underline; }
+.lc-chartrow { display: flex; gap: 6px; align-items: stretch; }
+.lc-axis { position: relative; width: 40px; height: 150px; padding-top: 18px; box-sizing: border-box; color: var(--dsw-alias-label-secondary); font-size: 11px; }
+.lc-axis span { position: absolute; right: 0; line-height: 1; }
+.lc-axis-top { top: 13px; }
+.lc-axis-mid { top: 69px; }
+.lc-axis-bot { top: 125px; }
+.lc-chart-scroll { position: relative; flex: 1; overflow-x: auto; overflow-y: hidden; min-width: 0; scrollbar-width: thin; }
+.lc-chart-fade { position: absolute; top: 0; bottom: 0; width: 26px; pointer-events: none; z-index: 2; }
+.lc-chart-fade-l { left: 0; background: linear-gradient(to right, var(--dsw-alias-bg-layer-1), transparent); }
+.lc-chart-fade-r { right: 0; background: linear-gradient(to left, var(--dsw-alias-bg-layer-1), transparent); }
+.lc-chart { position: relative; display: flex; align-items: flex-end; gap: 2px; height: 130px; padding-top: 18px; box-sizing: border-box; width: max-content; min-width: 100%; }
+.lc-grid { position: absolute; left: 0; right: 0; border-top: 1px dashed var(--dsw-alias-border-l1); pointer-events: none; }
+.lc-grid-top { top: 18px; }
+.lc-grid-mid { top: 74px; }
+.lc-bar { position: relative; width: 14px; flex: none; height: 100%; display: flex; align-items: flex-end; cursor: pointer; border-radius: 2px; transition: opacity 120ms ease, background-color 120ms ease; }
+/*
+ Turn-aware dimming: while a turn is focused, bars OUTSIDE the active
+ turn fade to 35% and the whole current turn stays fully opaque.
+ */
+.lc-chart-dim .lc-bar { opacity: 0.35; }
+.lc-chart-dim .lc-bar-in-turn { opacity: 1; }
+.lc-chart-dim .lc-turn { opacity: 0.35; }
+.lc-chart-dim .lc-turn-on { opacity: 1; }
+.lc-chart-tip { position: absolute; top: 0; transform: translateX(-50%); z-index: 5; white-space: nowrap; background: var(--dsw-alias-bg-layer-2); border: 1px solid var(--dsw-alias-border-l1); border-radius: 6px; padding: 3px 8px; font-size: 12px; color: var(--dsw-alias-label-primary); box-shadow: 0 2px 8px rgba(0,0,0,0.18); pointer-events: none; }
+.lc-bar:hover { background: var(--dsw-alias-bg-layer-2); }
+/*
+ Hovering previews a bar with a thin dashed frame; a CLICKED (locked)
+ bar must always show the strong solid frame, so the selected rule is
+ declared LAST (equal specificity) — otherwise the dashed hover frame
+ would keep overriding it while the pointer is still on the just-clicked
+ bar and the lock would only become visible after the pointer leaves.
+ */
+.lc-bar-hovered { outline: 1px dashed var(--dsw-alias-brand-primary); outline-offset: 1px; }
+.lc-bar-selected { outline: 2px solid var(--dsw-alias-label-primary); outline-offset: 1px; }
+.lc-bar-in-turn { background: rgba(128,128,128,0.14); }
+.lc-bar-stack { display: flex; flex-direction: column-reverse; width: 100%; }
+.lc-bar-stack > div { width: 100%; }
+.lc-bar-marker { position: absolute; top: -16px; left: 50%; transform: translateX(-50%); font-size: 11px; color: var(--dsw-alias-state-warn-primary); }
+/*
+ Turn strip: NEUTRAL zebra fills (inline, see TURN_FILLS) with secondary
+ text — never the category palette, or the strip reads as a detached
+ bottom segment of the bars above it.
+ */
+.lc-turns { display: flex; gap: 2px; width: max-content; min-width: 100%; margin-top: 4px; }
+.lc-turn { flex: none; box-sizing: border-box; text-align: center; font-size: 10px; line-height: 14px; font-weight: 600; color: var(--dsw-alias-label-secondary); border-radius: 3px; height: 14px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; cursor: default; transition: filter 120ms, opacity 120ms; }
+.lc-turn-on { filter: brightness(1.35); color: var(--dsw-alias-label-primary); }
+.lc-detail { margin-top: 12px; border-top: 1px solid var(--dsw-alias-border-l1); padding-top: 12px; }
+.lc-detail-head { display: flex; flex-wrap: wrap; gap: 6px 16px; margin-bottom: 8px; color: var(--dsw-alias-label-secondary); }
+.lc-detail-head b { color: var(--dsw-alias-label-primary); }
+.lc-detail-marker { color: var(--dsw-alias-state-warn-primary); font-size: 11px; background: var(--dsw-alias-bg-layer-2); border-radius: 6px; padding: 1px 7px; }
+.lc-detail-head .lc-actual { color: var(--dsw-alias-state-success-primary); }
+.lc-detail-tag { background: var(--dsw-alias-bg-layer-2); border: 1px solid var(--dsw-alias-border-l1); border-radius: 4px; padding: 0 6px; font-size: 11px; color: var(--dsw-alias-label-secondary); }
+.lc-detail-rows { margin-top: 10px; display: grid; grid-template-columns: 1fr 1fr; gap: 4px 24px; }
+.lc-detail-row { display: flex; align-items: center; gap: 8px; }
+.lc-detail-label { min-width: 70px; white-space: nowrap; color: var(--dsw-alias-label-secondary); }
+.lc-bar-track { flex: 1; height: 5px; border-radius: 3px; background: rgba(128,128,128,0.18); overflow: hidden; display: block; }
+.lc-bar-fill { display: block; height: 100%; border-radius: 3px; }
+.lc-detail-num { width: 44px; text-align: right; }
+.lc-detail-pct { width: 34px; text-align: right; color: var(--dsw-alias-label-secondary); }
+/*
+ Section rows share one 14px vertical rhythm, owned by the ROW (flex gap
+ covers the wrapped-row axis too), never by the cards inside: a card that
+ IS a column (head, events/messages) drops its own bottom margin, and a
+ card stacked inside a wrapper column (overview + trend) keeps its margin
+ as the inner gap but the last one drops it — so every section boundary
+ measures exactly one 14px, whichever way the flex wraps.
+ */
+.lc-cols { display: flex; gap: 14px; flex-wrap: wrap; margin-bottom: 14px; }
+.lc-col { flex: 1; min-width: 280px; }
+.lc-cols > .lc-card { margin-bottom: 0; }
+.lc-col > .lc-card:last-child { margin-bottom: 0; }
+/*
+ Head row: stats board + plugin info sit side by side under the shared
+ `lc-cols` flex — stats takes ~7/10 of the row, plugin info ~3/10, both
+ wrap onto their own line when the available width falls below each card's
+ min-width (so a narrow viewport keeps both readable). Both children are
+ `.lc-card` themselves (rendered by StatsBoard / PluginInfo); the flex
+ sizing lives on the head row's direct children so the existing card
+ chrome doesn't change.
+ */
+.lc-head > .lc-card:first-child { flex: 7 1 0; min-width: 360px; }
+.lc-head > .lc-card:last-child { flex: 3 1 0; min-width: 220px; }
+/*
+ Plugin info: two full-width rows (Plugin / GitHub), each one horizontal
+ line with the label on the left and the value on the right — a compact
+ definition list rather than a multi-cell grid.
+ */
+.lc-pi-grid { display: grid; grid-template-columns: 1fr; gap: 8px; }
+/*
+ The row IS the link: an `<a>` with the label + value on one baseline.
+ Hovering a row underlines its value — the only hover affordance.
+ */
+.lc-pi-row { display: flex; flex-direction: row; justify-content: space-between; align-items: baseline; gap: 12px; min-width: 0; text-decoration: none; color: inherit; }
+.lc-pi-row:hover .lc-pi-value { text-decoration: underline; }
+/*
+ Upgrade chip appended to the Plugin value when the npm registry has a
+ newer version than the baked-in one.
+ */
+.lc-pi-update { color: var(--dsw-alias-state-warn-primary); font-size: 11px; margin-left: 6px; white-space: nowrap; }
+.lc-pi-label { flex: none; color: var(--dsw-alias-label-secondary); font-size: 11px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+/*
+ min-width: 0 lets the value shrink inside the flex row and truncate with
+ an ellipsis; without it a narrow card pushes the value over the label.
+ */
+.lc-pi-value { min-width: 0; color: var(--dsw-alias-label-primary); font-size: 13px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; text-align: right; }
+.lc-events, .lc-nodes { display: flex; flex-direction: column; gap: 2px; max-height: 320px; overflow-y: auto; }
+.lc-event { display: flex; align-items: center; gap: 8px; padding: 3px 0; }
+.lc-event-icon { width: 18px; text-align: center; color: var(--dsw-alias-state-warn-primary); }
+.lc-event-icon.lc-event-inject { color: #a855f7; }
+.lc-event-icon.lc-event-model { color: var(--dsw-alias-brand-primary); }
+/*
+ Kind chip: the event classification at a glance; the tint matches the
+ impact direction (inject = adds context, compaction/prune = frees it,
+ model switch = neutral), mirroring the token sign colors below.
+ */
+.lc-kind { flex: none; font-size: 10px; font-weight: 600; padding: 1px 6px; border-radius: 4px; white-space: nowrap; }
+.lc-kind-inject { background: color-mix(in srgb, var(--dsw-alias-state-success-primary) 15%, transparent); color: var(--dsw-alias-state-success-primary); }
+.lc-kind-compaction { background: color-mix(in srgb, var(--dsw-alias-state-error-primary) 15%, transparent); color: var(--dsw-alias-state-error-primary); }
+.lc-kind-prune { background: color-mix(in srgb, #8b5cf6 15%, transparent); color: #8b5cf6; }
+.lc-kind-model { background: color-mix(in srgb, var(--dsw-alias-brand-primary) 15%, transparent); color: var(--dsw-alias-brand-primary); }
+.lc-event-label { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.lc-event-at { flex: none; color: var(--dsw-alias-label-secondary); font-size: 11px; white-space: nowrap; }
+.lc-event-tokens { color: var(--dsw-alias-state-success-primary); font-weight: 600; white-space: nowrap; }
+.lc-event-tokens.lc-up { color: var(--dsw-alias-state-warn-primary); }
+.lc-event-time { color: var(--dsw-alias-label-secondary); font-size: 12px; }
+.lc-node { display: flex; align-items: center; gap: 8px; padding: 3px 0; }
+.lc-node-preview { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--dsw-alias-label-primary); }
+.lc-node-time { color: var(--dsw-alias-label-secondary); font-size: 12px; min-width: 54px; text-align: right; }
+.lc-node-tokens { color: var(--dsw-alias-label-secondary); }
+.lc-nodes-more { color: var(--dsw-alias-label-secondary); padding: 3px 0; }
+.lc-empty { color: var(--dsw-alias-label-secondary); padding: 18px 0; text-align: center; }
+/*
+ Error-boundary fallback card: the tab degrades to this instead of
+ white-screening; the message runs in mono on a padded chip, and Retry
+ re-mounts the subtree once a healthy value arrives.
+ */
+.lc-error { display: flex; flex-direction: column; align-items: center; gap: 8px; padding: 40px 16px; }
+.lc-error-msg { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12px; color: var(--dsw-alias-state-error-primary); background: var(--dsw-alias-bg-layer-2); border: 1px solid var(--dsw-alias-border-l1); border-radius: 6px; padding: 4px 8px; max-width: 100%; overflow-wrap: anywhere; }
+.lc-error-retry { border: 1px solid var(--dsw-alias-border-l1); background: var(--dsw-alias-bg-layer-2); color: var(--dsw-alias-label-primary); font: inherit; font-size: 12px; padding: 4px 14px; border-radius: 6px; cursor: pointer; }
+.lc-error-retry:hover { border-color: var(--dsw-alias-label-primary); }
+.lc-foot { color: var(--dsw-alias-label-secondary); font-size: 12px; margin-top: 4px; }
+/*
+ ---- /context modal (centered dialog; escapes the composer anchor via fixed positioning) ----
+ */
+.lc-modal-backdrop { position: fixed; inset: 0; z-index: 200; background: rgba(0, 0, 0, 0.45); display: flex; align-items: center; justify-content: center; }
+.lc-modal-card { width: min(720px, calc(100vw - 48px)); max-height: min(82vh, 760px); overflow-y: auto; box-sizing: border-box; background: var(--dsw-alias-bg-layer-1); border: 1px solid var(--dsw-alias-border-l1); border-radius: 12px; box-shadow: var(--dsw-shadow-lv3, 0 12px 32px rgba(0, 0, 0, 0.4)); padding: 16px 18px 18px; color: var(--dsw-alias-label-primary); font-size: 13px; }
+.lc-modal-head { display: flex; align-items: baseline; gap: 8px; margin-bottom: 12px; }
+.lc-modal-title { font-weight: 600; font-size: 14px; }
+.lc-modal-close { margin-left: auto; border: 0; background: transparent; color: var(--dsw-alias-label-secondary); font-size: 18px; line-height: 1; padding: 2px 6px; border-radius: 6px; cursor: pointer; font-family: inherit; }
+.lc-modal-close:hover { color: var(--dsw-alias-label-primary); background: var(--dsw-alias-bg-layer-2); }
+/*
+ ---- Context browser card (progressive disclosure: category accordion ->
+ element rows -> per-kind content) ----
+ The δ-baseline caption sits at the card title's right edge, just left of
+ the step picker (it takes the row's auto margin the picker used to own).
+ */
+.lc-br-hint { margin-left: auto; color: var(--dsw-alias-label-secondary); font-size: 11px; font-weight: 400; white-space: nowrap; }
+.lc-br-pick { font: inherit; font-size: 12px; color: var(--dsw-alias-label-primary); background: var(--dsw-alias-bg-layer-2); border: 1px solid var(--dsw-alias-border-l1); border-radius: 6px; padding: 3px 6px; max-width: 240px; }
+.lc-br-meta { display: flex; flex-wrap: wrap; gap: 6px 16px; margin-bottom: 8px; color: var(--dsw-alias-label-secondary); }
+.lc-br-meta b { color: var(--dsw-alias-label-primary); }
+.lc-br-meta .lc-actual { color: var(--dsw-alias-state-success-primary); }
+.lc-br-note { margin-top: 8px; color: var(--dsw-alias-label-secondary); font-size: 12px; }
+.lc-br-cats { margin-top: 10px; display: flex; flex-direction: column; gap: 4px; }
+.lc-br-cat { border: 1px solid var(--dsw-alias-border-l1); border-radius: 8px; background: var(--dsw-alias-bg-layer-2); overflow: hidden; }
+.lc-br-cat-empty { opacity: 0.55; }
+.lc-br-cat-row { display: flex; align-items: center; gap: 8px; width: 100%; border: 0; background: transparent; color: var(--dsw-alias-label-primary); font: inherit; padding: 7px 10px; cursor: pointer; text-align: left; transition: background-color 120ms ease; }
+.lc-br-cat-row:hover { background: var(--dsw-alias-interactive-bg-hover); }
+/*
+ Current-composition hover echo: the category row lit by the shared hover
+ link (hovering the Current Composition card's bar/legend) looks hovered
+ too — same tint as the physical hover, plus a ring on its color dot.
+ */
+.lc-br-cat-on { background: var(--dsw-alias-interactive-bg-hover); }
+.lc-br-cat-on i { box-shadow: 0 0 0 1px var(--dsw-alias-brand-primary); }
+.lc-br-cat-row i { display: inline-block; width: 8px; height: 8px; border-radius: 2px; flex: none; transition: box-shadow 120ms ease; }
+.lc-br-cat-label { font-weight: 600; }
+.lc-br-cat-count { color: var(--dsw-alias-label-secondary); font-size: 12px; white-space: nowrap; }
+/*
+ Count + Δ pill form one attached group: the group absorbs the row's free
+ space (tokens/percent stay right-aligned) with a tight 4px inner gap so
+ the pill hugs the item count instead of standing at the row's 8px rhythm.
+ */
+.lc-br-count-grp { flex: 1; min-width: 0; display: inline-flex; align-items: center; gap: 4px; }
+.lc-br-chev { flex: none; width: 12px; color: var(--dsw-alias-label-secondary); transition: transform 120ms ease; }
+.lc-br-chev-on { transform: rotate(90deg); }
+.lc-br-tokens { flex: none; color: var(--dsw-alias-label-secondary); font-size: 12px; }
+/*
+ Δ pills on a category row: count and token swings vs the previous turn's
+ last step, tinted by direction (added = success, freed = error — the same
+ language as the events card's kind chips).
+ */
+.lc-br-delta, .lc-br-tdelta { flex: none; font-size: 11px; font-weight: 600; padding: 0 5px; border-radius: 4px; white-space: nowrap; }
+.lc-br-delta-up, .lc-br-tdelta-up { color: var(--dsw-alias-state-success-primary); background: color-mix(in srgb, var(--dsw-alias-state-success-primary) 15%, transparent); }
+.lc-br-delta-down, .lc-br-tdelta-down { color: var(--dsw-alias-state-error-primary); background: color-mix(in srgb, var(--dsw-alias-state-error-primary) 15%, transparent); }
+/*
+ The token Δ pill hugs the LEFT of the token figure (tight 4px gap, like
+ the count group) while the figure itself keeps its right-aligned slot.
+ */
+.lc-br-tokens-grp { flex: none; min-width: 0; display: inline-flex; align-items: center; gap: 4px; }
+.lc-br-pct { flex: none; width: 36px; text-align: right; color: var(--dsw-alias-label-secondary); font-size: 12px; }
+.lc-br-body { border-top: 1px solid var(--dsw-alias-border-l1); padding: 4px 6px; display: flex; flex-direction: column; gap: 2px; }
+.lc-br-elem { border-radius: 6px; }
+.lc-br-elem-on { background: var(--dsw-alias-interactive-bg-active); }
+.lc-br-elem-row { display: flex; align-items: center; gap: 8px; width: 100%; border: 0; background: transparent; color: var(--dsw-alias-label-primary); font: inherit; font-size: 12px; padding: 5px 6px; cursor: pointer; text-align: left; border-radius: 6px; transition: background-color 120ms ease; }
+.lc-br-elem-row:hover { background: var(--dsw-alias-interactive-bg-hover); }
+.lc-br-tag { flex: none; font-size: 11px; color: var(--dsw-alias-label-secondary); background: var(--dsw-alias-bg-layer-1); border: 1px solid var(--dsw-alias-border-l1); border-radius: 4px; padding: 0 6px; max-width: 220px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.lc-br-preview { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.lc-br-time { flex: none; color: var(--dsw-alias-label-secondary); font-size: 11px; }
+.lc-br-content { padding: 2px 6px 8px 26px; display: flex; flex-direction: column; gap: 6px; }
+.lc-br-pre { margin: 0; padding: 8px 10px; background: var(--dsw-alias-bg-layer-2); border: 1px solid var(--dsw-alias-border-l1); border-radius: 6px; color: var(--dsw-alias-label-primary); font-size: 12px; line-height: 1.55; white-space: pre-wrap; word-break: break-word; max-height: 320px; overflow-y: auto; scrollbar-width: thin; }
+.lc-br-dim { color: var(--dsw-alias-label-secondary); }
+.lc-br-call { display: flex; flex-direction: column; gap: 4px; align-items: flex-start; }
+/*
+ Assistant-message block title: a slim label line above each block
+ (thinking / answer) so a mixed reply stays scannable — same weight and
+ tone as the tool-schema card heads, without an extra bordered card.
+ */
+.lc-br-blk { display: flex; flex-direction: column; gap: 4px; }
+.lc-br-blk-label { font-size: 11px; font-weight: 600; color: var(--dsw-alias-label-secondary); }
+/*
+ ---- Tool schema body (browser card, tools category). The description
+ and parameter table share one "card with a small title" chrome — a
+ labeled bordered block so a reader can scan three stacked sections
+ without losing track of which is which. The raw JSON sits below as a
+ collapsed toggle (no card chrome — it's a debug view, not a primary
+ section). ----
+ */
+.lc-ts-card { background: var(--dsw-alias-bg-layer-2); border: 1px solid var(--dsw-alias-border-l1); border-radius: 6px; overflow: hidden; }
+.lc-ts-card-head { display: flex; align-items: center; gap: 8px; padding: 6px 10px; font-size: 11px; font-weight: 600; color: var(--dsw-alias-label-secondary); border-bottom: 1px solid var(--dsw-alias-border-l1); }
+.lc-ts-card-head b { color: var(--dsw-alias-label-primary); }
+.lc-ts-card-count { margin-left: auto; }
+.lc-ts-desc-body { margin: 0; padding: 8px 10px; color: var(--dsw-alias-label-primary); font-size: 12px; line-height: 1.55; white-space: pre-wrap; word-break: break-word; max-height: 160px; overflow-y: auto; scrollbar-width: thin; }
+/*
+ Grid: name + type + required chip + description. Columns wrap on narrow
+ rows; the description cell spans the full second row so a long blurb
+ never breaks the one-line rhythm of name/type/required.
+ */
+.lc-ts-param-row { display: grid; grid-template-columns: 140px 90px 56px 1fr; column-gap: 10px; row-gap: 2px; padding: 6px 10px; border-top: 1px solid var(--dsw-alias-border-l1); font-size: 12px; align-items: baseline; }
+.lc-ts-param-row:first-of-type { border-top: 0; }
+.lc-ts-param-name { font-weight: 600; color: var(--dsw-alias-label-primary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.lc-ts-param-type { color: var(--dsw-alias-label-secondary); font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 11px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.lc-ts-param-req { color: var(--dsw-alias-state-warn-primary); font-size: 11px; font-weight: 600; }
+.lc-ts-param-req-off { color: var(--dsw-alias-label-secondary); font-size: 11px; }
+.lc-ts-param-desc { grid-column: 1 / -1; color: var(--dsw-alias-label-secondary); line-height: 1.5; }
+.lc-ts-params-empty { padding: 8px 10px; color: var(--dsw-alias-label-secondary); font-size: 12px; }
+/*
+ Raw JSON toggle: a slim button that owns the open/closed state, sitting
+ just under the parameter table. The <pre> itself only mounts when open
+ (avoids stringifying the schema on every render and keeps the default
+ body compact).
+ */
+.lc-ts-json { display: flex; flex-direction: column; gap: 4px; }
+.lc-ts-json-toggle { align-self: flex-start; border: 0; background: transparent; color: var(--dsw-alias-label-secondary); font: inherit; font-size: 11px; padding: 0; cursor: pointer; }
+.lc-ts-json-toggle:hover { color: var(--dsw-alias-label-primary); text-decoration: underline; }
+/*
+ ---- Raw/markdown view switch (detail cards: system prompt, tool
+ description, user/assistant message + injection bodies). A segmented
+ pill mirroring the trend chart's 步骤/轮次 control (`lc-gran`), riding
+ the card's top-right corner as a self-end item of the content column
+ (no absolute overlay, so it never covers text); the `in-head` variant
+ sits at the right end of the tool description card's title row. The
+ markdown box reuses the raw <pre> chrome minus the pre whitespace. ----
+ */
+.lc-rich-seg { align-self: flex-end; display: flex; gap: 2px; background: var(--dsw-alias-bg-layer-2); border: 1px solid var(--dsw-alias-border-l1); border-radius: 6px; padding: 1px; }
+.lc-rich-seg-btn { border: 0; background: transparent; color: var(--dsw-alias-label-secondary); font-size: 11px; line-height: 1; padding: 3px 8px; border-radius: 5px; cursor: pointer; font-family: inherit; }
+.lc-rich-seg-btn:hover { color: var(--dsw-alias-label-primary); }
+.lc-rich-seg-on, .lc-rich-seg-on:hover { background: var(--dsw-alias-button-primary-fill); color: var(--dsw-alias-label-primary-foreground); }
+.lc-rich-seg-head { align-self: auto; margin-left: auto; }
+.lc-br-md { padding: 4px 10px; background: var(--dsw-alias-bg-layer-2); border: 1px solid var(--dsw-alias-border-l1); border-radius: 6px; color: var(--dsw-alias-label-primary); font-size: 12px; line-height: 1.55; word-break: break-word; max-height: 320px; overflow-y: auto; scrollbar-width: thin; }
+.lc-ts-desc-md { padding: 4px 10px; color: var(--dsw-alias-label-primary); font-size: 12px; line-height: 1.55; word-break: break-word; max-height: 160px; overflow-y: auto; scrollbar-width: thin; }
+/*
+ The shared markdown renderer sizes its root/headings for chat bubbles;
+ inside a detail card the base size sits one step ABOVE the raw text
+ (13px vs 12px — a proportional face at 13px matches the visual weight
+ of the raw view's 12px monospace) and the heading scale collapses to a
+ weight-only bump (specificity beats the renderer's one-class rules).
+ Inline code keeps the FULL size too — the renderer shrinks it to
+ 0.875em (!important) and table code to 13px, both visibly off. Its
+ `font` shorthand also drags in a ~22px line-height, TALLER than the
+ 13px/1.55 paragraph line (~20px), so a code chip wrapping onto the
+ next line sticks to the neighbor line's chip; pin the chip just under
+ the paragraph line (1.3em + 1px padding ≈ 19px) to reopen the gap.
+ */
+.lc-br-md > div, .lc-ts-desc-md > div { font-size: 13px; line-height: 1.55; }
+.lc-br-md div :is(h1, h2, h3, h4, h5, h6), .lc-ts-desc-md div :is(h1, h2, h3, h4, h5, h6) { font-size: 13px; font-weight: 600; margin: 10px 0 4px; }
+.lc-br-md div p, .lc-ts-desc-md div p { margin: 6px 0; }
+.lc-br-md div pre, .lc-ts-desc-md div pre { margin: 6px 0; }
+.lc-br-md div :not(pre) > code, .lc-ts-desc-md div :not(pre) > code { font-size: 1em !important; line-height: 1.3; padding: 1px 5px; box-decoration-break: clone; }
+.lc-br-md div table code, .lc-ts-desc-md div table code { font-size: inherit; }
+/*
+ Un-padded RichCard variant: used when the text card is one section
+ among several (attachment cards) inside an already-indented body.
+ */
+.lc-br-rich-inline { display: flex; flex-direction: column; gap: 6px; }
+/*
+ ---- Attachment cards (image refs in a message detail). The card chrome
+ reuses the tool-schema sections' `lc-ts-card`/`lc-ts-card-head`; only the
+ image grid and tile are new. Each image is a 64px cover tile (the chat
+ history's tile size) beside a name + dims + size column. ----
+ */
+.lc-ts-card .lc-br-pre { margin: 8px 10px; }
+.lc-att-grid { display: flex; flex-wrap: wrap; gap: 10px; padding: 8px 10px; }
+.lc-att-item { display: flex; gap: 8px; align-items: center; min-width: 0; }
+.lc-att-thumb { width: 64px; height: 64px; flex: none; padding: 0; display: flex; align-items: center; justify-content: center; border: 1px solid var(--dsw-alias-border-l1); border-radius: 6px; overflow: hidden; background: var(--dsw-alias-bg-layer-1); cursor: pointer; font: inherit; }
+.lc-att-thumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.lc-att-ph, .lc-att-err { font-size: 10px; color: var(--dsw-alias-label-secondary); text-align: center; padding: 2px; }
+.lc-att-meta { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.lc-att-name { font-size: 12px; color: var(--dsw-alias-label-primary); max-width: 200px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.lc-att-dims { font-size: 11px; color: var(--dsw-alias-label-secondary); }

@@ -77,7 +77,8 @@ test('client HMR safety: fiber dispose removes every registration', async () => 
   plugin.apply(ctx)
 
   const styleTag = () => document.head.querySelector('style[data-plugin="dsh-context"]')
-  assert.ok(styleTag() !== null, 'plugin-owned style tag injected into the real document')
+  assert.ok(styleTag() !== null, 'plugin-owned style tag injected into the real document at materialization')
+  assert.ok(styleTag().dataset.pluginCss !== undefined, 'style tag carries data-plugin-css (the official tag id)')
   assert.equal(localeActive.length, 1, 'dictionaries registered')
   assert.equal(slotRemovers.length, 2, 'view tab + input overlay slots registered')
   assert.equal(sources.length, 1, '/context trigger source registered')
@@ -88,9 +89,12 @@ test('client HMR safety: fiber dispose removes every registration', async () => 
   // slot inject removers are returned to cordis directly, not via ctx.effect
   for (const row of [...slotRemovers]) slotRemovers.length = 0 // cordis removes slot rows on dispose
 
-  assert.ok(styleTag() === null, 'style tag removed on dispose')
   assert.equal(localeActive.length, 0, 'dictionaries unregistered on dispose')
   assert.equal(sources.length, 0, 'trigger source removed on dispose')
   assert.equal(provides.length, 0, 'prop contribution removed on dispose')
   assert.equal(slotRemovers.length, 0, 'slot rows removed on dispose')
+  // The style tag is NOT fiber-scoped (official behavior): it is injected at
+  // factory materialization and the HMR receiver claims/removes tags by
+  // data-plugin before re-materializing the rebuilt bundle.
+  assert.ok(styleTag() !== null, 'style tag lifecycle rides the HMR receiver, not the fiber')
 })

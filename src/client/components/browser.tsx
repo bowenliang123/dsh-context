@@ -302,6 +302,31 @@ function RawBlocks(props: { blocks: readonly unknown[]; mode: RichMode; rich: Ri
   )
 }
 
+/**
+ * One assistant-message block (thinking / answer) as its own card: the
+ * title row carries the block label plus the block's OWN raw/markdown
+ * switch (per-card state via `rich.useRichMode`, mirroring the tool
+ * description card), so a mixed reply's parts toggle independently.
+ */
+function BlockCard(props: { label: string; text: string; rich: RichKit }): ReactNS.ReactElement {
+  const { rich } = props
+  const [mode, setMode] = rich.useRichMode()
+  return (
+    <div className="lc-ts-card">
+      <div className="lc-ts-card-head">
+        <b>{props.label}</b>
+        <rich.RichSwitch mode={mode} onPick={setMode} inHead />
+      </div>
+      <rich.RichText
+        text={props.text}
+        mode={mode}
+        rawClass="lc-ts-desc-body"
+        mdClass="lc-ts-desc-md"
+      />
+    </div>
+  )
+}
+
 /** The actual content of one surface element, joined from the conversation snapshot. */
 function NodeContent(props: {
   node: SurfaceNode

@@ -30,6 +30,9 @@ importers:
       jsdom:
         specifier: ^30.0.1
         version: 30.0.1
+      lightningcss:
+        specifier: ^1.33.0
+        version: 1.33.0
       playwright-core:
         specifier: ^1.62.1
         version: 1.62.1

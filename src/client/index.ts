@@ -26,9 +26,13 @@ import { registerContextCommand } from './command'
 import { makeContextModal } from './components/contextModal'
 import { modalStoreOf } from './modalStore'
 import type { ClientCtx, SessionsFace } from './services'
-import { STYLES } from './styles'
 import { makeContextView } from './components/contextView'
 import { makeViewKit } from './viewkit'
+
+// Theme-native styles: the bundle's global-CSS channel injects the sheet as
+// a plugin-owned <style data-plugin> tag at factory execution (the web boot
+// loader and the HMR receiver claim tags carrying data-plugin).
+import './styles.css'
 
 import { React, h } from './react'
 
@@ -43,18 +47,6 @@ function apply(ctx: ClientCtx): void {
     return ctx.locale.register(NS, { zh: DICT_ZH, en: DICT_EN })
   }, 'dsh-context: dictionaries')
   const t = ctx.locale.bind(NS)
-
-  // Theme-native styles, injected as a plugin-owned <style> tag (the web
-  // boot loader claims and removes tags carrying data-plugin on unload).
-  ctx.effect(() => {
-    const tag = document.createElement('style')
-    tag.setAttribute('data-plugin', 'dsh-context')
-    tag.textContent = STYLES
-    document.head.appendChild(tag)
-    return () => {
-      if (tag.parentNode !== null) tag.parentNode.removeChild(tag)
-    }
-  }, 'dsh-context: styles')
 
   const kit = makeViewKit(t)
   const ContextView = makeContextView(ctx, kit)

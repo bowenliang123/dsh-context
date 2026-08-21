@@ -16,6 +16,16 @@ export function makeFakeDoc() {
     createElement: (tag) => {
       const el = { tagName: tag, attrs: {}, textContent: '', parentNode: null }
       el.setAttribute = (k, v) => { el.attrs[k] = String(v) }
+      // The bundle's CSS injector writes tag.dataset.plugin / .pluginCss;
+      // mirror dataset writes into attrs so registration tracking sees them.
+      el.dataset = new Proxy({}, {
+        set: (t, k, v) => {
+          const attr = 'data-' + String(k).replace(/[A-Z]/g, (c) => '-' + c.toLowerCase())
+          el.attrs[attr] = String(v)
+          t[k] = v
+          return true
+        },
+      })
       return el
     },
     head: {
@@ -24,6 +34,9 @@ export function makeFakeDoc() {
         registered.set(el.attrs['data-plugin'], el)
       },
     },
+    // The injector's dedupe guard queries for an existing tag; the fake
+    // document never has one (each bed boots a fresh document).
+    querySelector: () => null,
     querySelectorAll: () => [],
   }
   return { fakeDoc, registered }

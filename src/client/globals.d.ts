@@ -8,3 +8,12 @@
 declare function require(id: string): any
 declare var module: { exports: Record<string, unknown> }
 declare var exports: Record<string, unknown>
+
+// Stylesheet imports resolve through the bundle's CSS channels (see
+// tsdown.config.ts): side-effect global sheets, ?inline text, and
+// CSS Modules class maps.
+declare module '*.css'
+declare module '*.module.css' {
+  const classes: Record<string, string>
+  export default classes
+}

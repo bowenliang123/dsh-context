@@ -84,18 +84,21 @@ test('client bundle: handoff, dicts, styles, slot registration, /context command
   }
   pluginExports.apply(fakeCtx)
 
-  assert.equal(effects.length, 4, 'dictionaries + styles + loadOlderHistory prop + /context command effects')
+  assert.equal(effects.length, 3, 'dictionaries + loadOlderHistory prop + /context command effects (styles inject at bundle materialization)')
   assert.deepEqual(localeRegistrations[0][0], 'dsh-context')
   assert.ok(localeRegistrations[0][1].zh && localeRegistrations[0][1].en, 'bilingual dicts')
+  // The sheet rides the bundle's CSS channel: injected at factory execution,
+  // lightningcss-minified (`120ms ease` -> `.12s`), tagged data-plugin.
   const styleTag = registered.get('dsh-context')
   assert.ok(styleTag, 'plugin-owned <style data-plugin="dsh-context"> injected')
+  assert.equal(styleTag.attrs['data-plugin-css'], 'dsh-context/styles.css', 'style tag carries the official data-plugin-css tag id')
   assert.ok(styleTag.textContent.includes('.lc-root'), 'styles content present')
-  assert.ok(styleTag.textContent.includes('transition: background-color 120ms ease'), 'row hovers ease in/out')
-  assert.ok(styleTag.textContent.includes('transition: filter 120ms ease, opacity 120ms ease'), 'composition bar hover eases in/out')
-  assert.ok(styleTag.textContent.includes('lc-bar-tip-on'), 'composition tooltip fades in and out')
-  assert.ok(styleTag.textContent.includes('lc-stat-tip'), 'stats cell tooltip bubble styles present')
-  assert.ok(styleTag.textContent.includes('lc-stat-tipped:hover .lc-stat-tip'), 'stats tooltip reveals on cell hover')
-  assert.ok(styleTag.textContent.includes('lc-occupied-box-on'), 'occupied frame fades in and out')
+  assert.ok(styleTag.textContent.includes('.lc-br-elem-row') && styleTag.textContent.includes('transition:background-color'), 'row hovers ease in/out')
+  assert.ok(styleTag.textContent.includes('.lc-stacked-seg') && styleTag.textContent.includes('transition:filter'), 'composition bar hover eases in/out')
+  assert.ok(styleTag.textContent.includes('.lc-bar-tip-on'), 'composition tooltip fades in and out')
+  assert.ok(styleTag.textContent.includes('.lc-stat-tip'), 'stats cell tooltip bubble styles present')
+  assert.ok(styleTag.textContent.includes('.lc-stat-tipped:hover .lc-stat-tip'), 'stats tooltip reveals on cell hover')
+  assert.ok(styleTag.textContent.includes('.lc-occupied-box-on'), 'occupied frame fades in and out')
   assert.equal(slotInjections.length, 2, 'view tab + input overlay injections')
   assert.equal(slotInjections[0][0], 'conversation.view')
   const registeredOpts = slotInjections[0][1]() // slots.inject callback returns the register result
