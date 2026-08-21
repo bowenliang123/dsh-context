@@ -337,8 +337,10 @@ function NodeContent(props: {
   labels: { thinking: string; answer: string; images: string; other: string }
 }): ReactNS.ReactElement {
   const { node, conv, rich, img } = props
-  // The raw/markdown toggle serves the prose categories (user / assistant /
-  // injection bodies); tool results stay raw (structured payload, not prose).
+  // The raw/markdown toggle serves the prose bodies (user / injection text,
+  // compaction summaries); assistant thinking/answer blocks each carry
+  // their own per-card switch (BlockCard); tool results stay raw
+  // (structured payload, not prose).
   const richable = node.cat === 'user' || node.cat === 'assistant' || node.cat === 'inject'
   const wrap = (render: (mode: RichMode) => ReactNS.ReactNode): ReactNS.ReactElement =>
     richable
@@ -357,27 +359,17 @@ function NodeContent(props: {
     ))
   }
   if (conv.kind === 'assistant' && Array.isArray(conv.blocks)) {
-    // Captured once: the render-prop closure below cannot narrow the prop.
-    const blocks = conv.blocks
-    return wrap(mode => (
-      <>
-        {blocks.map((b, i) => {
+    // Thinking and answer blocks render as SEPARATE cards, each owning its
+    // raw/markdown switch; tool calls and images keep their raw forms.
+    return (
+      <div className="lc-br-content">
+        {conv.blocks.map((b, i) => {
           const blk = b as { kind?: string; text?: unknown; name?: unknown; argsRaw?: unknown }
           if (blk.kind === 'text' && typeof blk.text === 'string') {
-            return (
-              <div key={i} className="lc-br-blk">
-                <div className="lc-br-blk-label">{props.labels.answer}</div>
-                <rich.RichText text={blk.text} mode={mode} />
-              </div>
-            )
+            return <BlockCard key={i} label={props.labels.answer} text={blk.text} rich={rich} />
           }
           if (blk.kind === 'reasoning' && typeof blk.text === 'string') {
-            return (
-              <div key={i} className="lc-br-blk">
-                <div className="lc-br-blk-label">{props.labels.thinking}</div>
-                <pre className="lc-br-pre lc-br-dim">{blk.text}</pre>
-              </div>
-            )
+            return <BlockCard key={i} label={props.labels.thinking} text={blk.text} rich={rich} />
           }
           if (blk.kind === 'tool-call') {
             return (
@@ -393,8 +385,8 @@ function NodeContent(props: {
           if (image !== null) return <img.Card key={i} attachment={image} load={img.load} />
           return null
         })}
-      </>
-    ))
+      </div>
+    )
   }
   if (conv.kind === 'tool-result') {
     return (
