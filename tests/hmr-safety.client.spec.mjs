@@ -19,6 +19,7 @@ test('client HMR safety: fiber dispose removes every registration', async () => 
   window.__ModuleLoader__ = { load(h) { handoff = h } }
   const fakeReact = {
     createElement: (...args) => ({ kind: 'element', args }),
+    memo: (fn) => fn,
     // The ErrorBoundary extends React.Component at module scope.
     Component: class Component {
       constructor(props) { this.props = props }

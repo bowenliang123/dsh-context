@@ -172,6 +172,8 @@ export async function bootViewBed() {
     },
     // Memo values are recomputed every render in tests (no staleness assertions).
     useMemo: (fn) => fn(),
+    // Same no-memoization stance for component memo: the plain function.
+    memo: (fn) => fn,
     useRef(init) {
       // Like React: the SAME ref object is returned on every render (stored
       // in the fiber slot), so tree ref props and effect closures agree.

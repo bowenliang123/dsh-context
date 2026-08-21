@@ -190,11 +190,16 @@ export function makeContextView(ctx: ClientCtx, kit: ViewKit): (props: ContextVi
     const shownEvents = pickedKinds.length === EVENT_KINDS.length ? events : events.filter(e => pickedKinds.includes(e.kind))
     const nodes = data.nodes
     // Display granularity: one bar per step (default) or one bar per turn
-    // (each turn shown by its LAST step's record).
-    const displayRequests = granularity === 'turn' ? aggregateByTurn(requests) : requests
+    // (each turn shown by its LAST step's record). Memoized so hover-driven
+    // re-renders keep the bar props identity-stable (the chart's memoized
+    // bars then skip reconciliation; turn-mode aggregation allocates).
+    const displayRequests = React.useMemo(
+      () => (granularity === 'turn' ? aggregateByTurn(requests) : requests),
+      [requests, granularity],
+    )
     // Boundary events attach to the first request after them; the same
     // attachment drives the ✂ marker above the bar and the detail chip.
-    const markers = attachMarkers(displayRequests, events)
+    const markers = React.useMemo(() => attachMarkers(displayRequests, events), [displayRequests, events])
     const markerOf = (req: RequestRecord): ContextEventRecord | undefined => {
       const i = displayRequests.indexOf(req)
       return i >= 0 ? markers[i] : undefined
@@ -288,8 +293,9 @@ export function makeContextView(ctx: ClientCtx, kit: ViewKit): (props: ContextVi
                       // Remount per session: switching sessions re-anchors the chart
                       // at the newest bars instead of inheriting stale scroll state.
                       key={sessionId}
-                      // The host caps the log at 160 requests; render them ALL so
-                      // earlier turns/steps stay reachable via horizontal scroll.
+                      // Render ALL retained requests (bounded by the host's
+                      // maxKeptTurns/maxRequestSteps config) so earlier
+                      // turns/steps stay reachable via horizontal scroll.
                       requests={displayRequests}
                       markers={markers}
                       selectedSeq={pinnedReq ? pinnedReq.seq : null}

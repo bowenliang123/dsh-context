@@ -89,17 +89,73 @@ export function makeTrendChart(kit: ViewKit): (props: TrendChartProps) => ReactN
   // a detached, misaligned bottom segment of the composition bars.
   const TURN_FILLS = ['rgba(128,128,128,0.12)', 'rgba(128,128,128,0.26)']
 
+  // Anchor each bar to the provider-reported prompt size when the request
+  // carried usage: the heuristic categories keep their ratios but the bar
+  // HEIGHT tracks the real billed tokens (matching the overview card and
+  // the official chat ring) instead of the underpriced raw estimate.
+  const anchorOf = (req: RequestRecord): number =>
+    typeof req.prompt === 'number' && req.prompt > 0 && req.total > 0 ? req.prompt / req.total : 1
+  const barTotalOf = (req: RequestRecord): number =>
+    typeof req.prompt === 'number' && req.prompt > 0 ? req.prompt : req.total
+
+  interface ChartBarProps {
+    req: RequestRecord
+    /** The boundary event attached to this bar, if any. */
+    marker: ContextEventRecord | undefined
+    selected: boolean
+    hovered: boolean
+    inTurn: boolean
+    maxTotal: number
+    onSelect: (seq: number | null) => void
+    onHover: (seq: number | null) => void
+  }
+
+  // Memoized so a hover/selection change re-renders only the bars whose
+  // flags flipped: the retained log renders in full (no windowing), so a
+  // long session's chart is thousands of nodes and the pointer path is hot.
+  // `req`/`marker` keep stable identities between projection pushes (the
+  // parent memoizes its turn-aggregation), so the default shallow compare
+  // suffices.
+  const ChartBar = React.memo(function ChartBar(props: ChartBarProps): ReactNS.ReactElement {
+    const { req, marker } = props
+    const markerAt = marker !== undefined ? eventAt(marker) : null
+    return (
+      <div
+        // Uniform column width in BOTH granularities: turn aggregates
+        // keep the same fixed width as step bars.
+        className={'lc-bar'
+          + (props.selected ? ' lc-bar-selected' : '')
+          + (props.hovered ? ' lc-bar-hovered' : '')
+          + (props.inTurn ? ' lc-bar-in-turn' : '')}
+        data-seq={req.seq}
+        style={{ width: `${BAR_W}px` }}
+        onClick={() => { props.onSelect(props.selected ? null : req.seq) }}
+        onMouseEnter={() => { props.onHover(req.seq) }}
+      >
+        {/* The ✂ tooltip names the event AND where it happened: the
+            gap between the request before and the request after. */}
+        {marker !== undefined ? (
+          <span
+            className="lc-bar-marker"
+            title={'✂ ' + (markerAt !== null ? markerAt + ' — ' : '') + eventLabel(marker)}
+          >{'✂'}</span>
+        ) : null}
+        <div className="lc-bar-stack">
+          {CATS.map((c) => {
+            const v = (req[c.key] || 0) * anchorOf(req)
+            if (!v) return null
+            // px heights: the stack's height is content-driven, so
+            // percentage heights would collapse against an indefinite base.
+            return <div key={c.key} style={{ height: `${Math.max(1, Math.round(v / props.maxTotal * CHART_H))}px`, background: c.color }} />
+          })}
+        </div>
+      </div>
+    )
+  })
+
   return function TrendChart(props: TrendChartProps): ReactNS.ReactElement {
     const requests = props.requests
     const markers = props.markers
-    // Anchor each bar to the provider-reported prompt size when the request
-    // carried usage: the heuristic categories keep their ratios but the bar
-    // HEIGHT tracks the real billed tokens (matching the overview card and
-    // the official chat ring) instead of the underpriced raw estimate.
-    const anchorOf = (req: RequestRecord): number =>
-      typeof req.prompt === 'number' && req.prompt > 0 && req.total > 0 ? req.prompt / req.total : 1
-    const barTotalOf = (req: RequestRecord): number =>
-      typeof req.prompt === 'number' && req.prompt > 0 ? req.prompt : req.total
     let maxTotal = 1
     for (const req of requests) {
       const bt = barTotalOf(req)
@@ -204,45 +260,19 @@ export function makeTrendChart(kit: ViewKit): (props: TrendChartProps) => ReactN
           >
             <div className="lc-grid lc-grid-top" />
             <div className="lc-grid lc-grid-mid" />
-            {requests.map((req, i) => {
-              const marker = markers[i]
-              const markerAt = marker !== undefined ? eventAt(marker) : null
-              const selected = props.selectedSeq === req.seq
-              const hovered = props.hoveredSeq === req.seq
-              const inTurn = props.activeTurn !== null && (req.turn ?? 0) === props.activeTurn
-              return (
-                <div
-                  key={req.seq}
-                  // Uniform column width in BOTH granularities: turn aggregates
-                  // keep the same fixed width as step bars.
-                  className={'lc-bar'
-                    + (selected ? ' lc-bar-selected' : '')
-                    + (hovered ? ' lc-bar-hovered' : '')
-                    + (inTurn ? ' lc-bar-in-turn' : '')}
-                  style={{ width: `${BAR_W}px` }}
-                  onClick={() => { props.onSelect(selected ? null : req.seq) }}
-                  onMouseEnter={() => { props.onHover(req.seq) }}
-                >
-                  {/* The ✂ tooltip names the event AND where it happened: the
-                      gap between the request before and the request after. */}
-                  {marker !== undefined ? (
-                    <span
-                      className="lc-bar-marker"
-                      title={'✂ ' + (markerAt !== null ? markerAt + ' — ' : '') + eventLabel(marker)}
-                    >{'✂'}</span>
-                  ) : null}
-                  <div className="lc-bar-stack">
-                    {CATS.map((c) => {
-                      const v = (req[c.key] || 0) * anchorOf(req)
-                      if (!v) return null
-                      // px heights: the stack's height is content-driven, so
-                      // percentage heights would collapse against an indefinite base.
-                      return <div key={c.key} style={{ height: `${Math.max(1, Math.round(v / maxTotal * CHART_H))}px`, background: c.color }} />
-                    })}
-                  </div>
-                </div>
-              )
-            })}
+            {requests.map((req, i) => (
+              <ChartBar
+                key={req.seq}
+                req={req}
+                marker={markers[i]}
+                selected={props.selectedSeq === req.seq}
+                hovered={props.hoveredSeq === req.seq}
+                inTurn={props.activeTurn !== null && (req.turn ?? 0) === props.activeTurn}
+                maxTotal={maxTotal}
+                onSelect={props.onSelect}
+                onHover={props.onHover}
+              />
+            ))}
           </div>
           {/* Instant hover tooltip, glued to its bar's column (it lives in the
               scrolling content, so it follows the bar while the chart scrolls). */}

@@ -78,8 +78,8 @@ test('context view: trend chart, stats board, plugin info, hover linking, granul
   assert.match(detailStep(tr), /Turn 2/, 'hovering a bar links the detail below to it')
   const hovered = byClass(tr, 'lc-bar-hovered')
   assert.equal(hovered.length, 1, 'exactly one hovered bar')
-  assert.equal(hovered[0].args[1].key, 3, 'hovered bar is seq 3')
-  const bar3 = byClass(tr, 'lc-bar').find(b => b.args[1].key === 3)
+  assert.equal(hovered[0].args[1]['data-seq'], 3, 'hovered bar is seq 3')
+  const bar3 = byClass(tr, 'lc-bar').find(b => b.args[1]['data-seq'] === 3)
   assert.equal(typeof bar3.args[1].onMouseEnter, 'function', 'bars carry onMouseEnter')
   assert.equal(typeof bar3.args[1].onClick, 'function', 'bars carry onClick')
   // the instant custom tooltip replaces the delayed native title
@@ -193,7 +193,7 @@ test('context view: trend chart, stats board, plugin info, hover linking, granul
   tr = renderView()
   const inTurn = byClass(tr, 'lc-bar-in-turn')
   assert.equal(inTurn.length, 2, 'hovering T1 highlights its two bars')
-  assert.deepEqual(inTurn.map(b => b.args[1].key), [1, 2], 'highlighted bars are seq 1 and 2')
+  assert.deepEqual(inTurn.map(b => b.args[1]['data-seq']), [1, 2], 'highlighted bars are seq 1 and 2')
   const onBlocks = byClass(tr, 'lc-turn-on')
   assert.equal(onBlocks.length, 1, 'exactly one turn block highlighted')
   assert.equal(onBlocks[0].args[2], 'T1', 'highlighted block is T1')
@@ -237,7 +237,7 @@ test('context view: trend chart, stats board, plugin info, hover linking, granul
 
   // turn bars keep the uniform column width and align with their strip blocks
   const turnBars = byClass(tr, 'lc-bar')
-  const t1Bar = turnBars.find(b => b.args[1].key === 2)
+  const t1Bar = turnBars.find(b => b.args[1]['data-seq'] === 2)
   assert.ok(t1Bar, 'T1 is aggregated into its last step (seq 2)')
   for (const b of turnBars) assert.equal(b.args[1].style.width, '14px', 'every turn bar keeps the uniform column width')
   const turnBlocks2 = byClass(tr, 'lc-turn')

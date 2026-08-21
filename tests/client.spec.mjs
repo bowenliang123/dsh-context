@@ -18,6 +18,7 @@ const fakeReact = {
   createElement: (...args) => ({ kind: 'element', args }),
   useState: (init) => [init, () => {}],
   useEffect: () => {},
+  memo: (fn) => fn,
   // The ErrorBoundary extends React.Component; a minimal base keeps the
   // class construction working (props assigned, state merge via setState).
   Component: class Component {
