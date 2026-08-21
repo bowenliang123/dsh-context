@@ -44,5 +44,5 @@ A DeepSeek Harness plugin for context insight, actions, and management.
 ## Releasing
 - Version X.Y.Z, 大版本.次版本.小版本。
 - Releases are cut by tagging: `git tag vX.Y.Z && gh release create vX.Y.Z`.
-- A [GitHub Actions workflow](.github/workflows/release.yml) then builds, tests, and publishes the package to npm automatically via [npm Trusted Publishing (OIDC)](https://docs.npmjs.com/trusted-publishers) — no long-lived token needed, provenance included.
+- A [GitHub Actions workflow](.github/workflows/release.yml) then builds, tests, and publishes the package to npm automatically by github workflow. Agent don't have to do or check it manually.
 - Write the release notes from the [release template](.github/release_template.md)
