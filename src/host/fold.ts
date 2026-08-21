@@ -103,6 +103,12 @@ export interface TimelineState {
   cost?: SessionCostUsage
   /** Newest `gone` among archive entries dropped by the retention bounds. */
   archiveFloor?: number
+  /**
+   * Tool callId → name, armed by `tool/call` and DELETED when its
+   * `tool/result` folds in (one result per call, in log order) — the map
+   * stays at pending-call size instead of growing for the session's whole
+   * lifetime (it is persisted state, shallow-copied by every fold step).
+   */
   callNames: Record<string, string>
   /**
    * Seq list of the surface nodes the next replacement will shadow, armed by
@@ -265,6 +271,17 @@ function applySurface(
     const blockId = block?.toolCallId
     if (srcName) node.tool = srcName
     else if (typeof blockId === 'string') node.tool = st.callNames[blockId]
+    // Consume-once: the entry is never looked up again after its result
+    // folds in (see TimelineState.callNames). Rebuild without the used ids
+    // (no dynamic delete, per repo lint) — consume-once holds the map at
+    // pending-call size, so the copy is trivial.
+    if (typeof srcId === 'string' || typeof blockId === 'string') {
+      const kept: Record<string, string> = {}
+      for (const k in st.callNames) {
+        if (k !== srcId && k !== blockId) kept[k] = st.callNames[k]
+      }
+      st.callNames = kept
+    }
     if (data?.error) node.err = true
   } else if (source?.kind === 'skill-invocation') {
     node.skill = typeof source.name === 'string' ? source.name : '?'

@@ -86,6 +86,14 @@ test('host half: projection unit, fold semantics, attribution, retention, determ
   assert.equal(toolNode.tool, 'bash', 'tool result node names its tool (via source.callId)')
   assert.equal(asstNode.text, 'Hi!', 'assistant node carries its text preview')
 
+  // callNames is consume-once: the entry leaves the persisted state when its
+  // tool/result folds in, instead of growing for the session's lifetime.
+  {
+    let st = def.init()
+    for (const ev of live.events) st = def.apply(st, ev)
+    assert.equal(st.callNames.c1, undefined, 'call name entry deleted once its result folded in')
+  }
+
   // -- occupancy is NOT folded by the host anymore (R3): the client reads the
   // official token-meter `contextPressure` projection (token-meter owns
   // estimation and replay); the timeline wire carries only the heuristic
