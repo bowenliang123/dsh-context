@@ -23,6 +23,7 @@ A DeepSeek Harness plugin for context insight, actions, and management.
 - Always consider the minimal change and the most performance efficient implementation.
 - Try best to use the existing classes, utilities, styles, events, presets and lifecycles provided by DeepSeek Harness.ess.
 - Use English in code comments and documentation.
+- Smaller, less-coupling and modulized code and tests are preferred for better maintainability and testability.
 - Avoid adding unnecessary code comments (unless for the pinned major decision or for those provide significant value) and code duplication.
 
 ## Building
