@@ -56,7 +56,7 @@ test('context browser: picker, accordion, reconstruction, header content, deltas
   const brKey = [...hookStates.keys()].find(k => k.includes('ContextBrowser'))
   assert.ok(brKey, 'ContextBrowser fiber registered')
   const brSlots = hookStates.get(brKey) // sel(0) openCat(1) openElem(2)
-  const ctxSlots = bed.ctxSlots() // selected(0) hovered(1) hoverTurn(2) tick(3) gran(4) hoverCat(5)
+  const ctxSlots = bed.ctxSlots() // selected(0) hovered(1) hoverTurn(2) tick(3) gran(4) focusTurn(5) hoverCat(6)
 
   // Live view (default): six category rows; message counts follow the live nodes.
   assert.equal(byClass(tr, 'lc-br-cat-row').length, 6, 'six category sections (system/tools + four message cats)')

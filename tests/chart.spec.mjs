@@ -63,7 +63,7 @@ test('context view: trend chart, stats board, plugin info, hover linking, granul
   // no JS state needed, so no onMouseEnter/onMouseLeave handlers.
 
   // ---- hover linking: hovering a trend bar updates the detail below ----
-  const ctxSlots = hookStates.get(ctxKey) // selected(0) hovered(1) hoverTurn(2) tick(3) gran(4) hoverCat(5)
+  const ctxSlots = hookStates.get(ctxKey) // selected(0) hovered(1) hoverTurn(2) tick(3) gran(4) focusTurn(5) hoverCat(6)
   const detailStep = (tr) => {
     const head = byClass(tr, 'lc-detail-head')[0]
     return head === undefined ? '' : textOf(head).trim()
