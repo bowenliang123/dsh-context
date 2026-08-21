@@ -11,7 +11,7 @@
  */
 
 import type { Context } from '@deepseek-ai/cordis'
-import type { ContextHeaders, ContextPressure, ContextTimeline, TokenUsage } from '../shared/types'
+import type { ContextHeaders, ContextPressure, ContextTimeline, SessionCostUsage, TokenUsage } from '../shared/types'
 
 export interface LocaleService {
   register(ns: string, dicts: Record<string, Record<string, string>>): () => void
@@ -98,8 +98,84 @@ function asRecord<T>(value: unknown): T | null {
   return value as T
 }
 
-/** Narrow a delivered projection value to the context timeline. */
-export const timelineOf = (value: unknown): ContextTimeline | null => asRecord<ContextTimeline>(value)
+/**
+ * Safe finite-number read: a missing/non-numeric/NaN field degrades to 0
+ * instead of leaking into the UI as NaN percentages or broken arithmetic.
+ */
+export function numOf(value: unknown): number {
+  return typeof value === 'number' && Number.isFinite(value) ? value : 0
+}
+
+/** The usable (non-null object) entries of a delivered list; [] when the field is not a list. */
+function objectsOf<T>(value: unknown): T[] {
+  if (!Array.isArray(value)) return []
+  return value.filter((v): v is T => v !== null && typeof v === 'object')
+}
+
+/**
+ * Narrow a delivered projection value to a RENDER-SAFE context timeline —
+ * the client's no-white-screen guarantee against backend/parse failures.
+ *
+ * A value that is not a record at all (capability absent, nothing delivered
+ * yet) stays `null` and callers show the loading screen. A record that fails
+ * the wire shape (corrupt checkpoint restore, a failed/older host payload,
+ * plugin drift) is SANITIZED instead of rejected: every collection becomes
+ * an array, non-object entries are dropped, `current` becomes a numeric
+ * breakdown, and wrong-typed scalars are dropped or zeroed — so the whole
+ * tab still renders with every usable piece of data instead of throwing
+ * during render and unmounting the conversation view.
+ */
+export function timelineOf(value: unknown): ContextTimeline | null {
+  const data = asRecord<ContextTimeline>(value)
+  if (data === null) return null
+  const current = data.current
+  // The wire shape check for the cheap pass-through path: `current` must be
+  // a full numeric breakdown (the host always sends all seven fields), and
+  // every collection must be a real list. Anything else takes the slow path
+  // and is rebuilt into the safe shape below.
+  const numericBreakdown = current !== null && typeof current === 'object'
+    && ['system', 'tools', 'user', 'inject', 'assistant', 'tool', 'total']
+      .every(k => typeof (current as Record<string, unknown>)[k] === 'number')
+  if (numericBreakdown
+    && Array.isArray(data.requests)
+    && Array.isArray(data.events)
+    && Array.isArray(data.nodes)
+    && Array.isArray(data.archive)
+    && Array.isArray(data.toolList)) {
+    // Well-formed: pass the delivered value through untouched (cheap, and
+    // reference-stable so plain re-renders stay zero-copy).
+    return data
+  }
+  // Malformed: rebuild with safe defaults, keeping every usable piece.
+  const safeCurrent: Record<string, unknown> = current !== null && typeof current === 'object' ? current : {}
+  const cost = typeof data.cost === 'object' && data.cost !== null && !Array.isArray(data.cost)
+    ? data.cost as SessionCostUsage
+    : undefined
+  return {
+    ok: true,
+    ...(typeof data.model === 'string' ? { model: data.model } : {}),
+    ...(typeof data.provider === 'string' ? { provider: data.provider } : {}),
+    ...(typeof data.contextWindow === 'number' ? { contextWindow: data.contextWindow } : {}),
+    current: {
+      system: numOf(safeCurrent.system),
+      tools: numOf(safeCurrent.tools),
+      user: numOf(safeCurrent.user),
+      inject: numOf(safeCurrent.inject),
+      assistant: numOf(safeCurrent.assistant),
+      tool: numOf(safeCurrent.tool),
+      total: numOf(safeCurrent.total),
+    },
+    toolList: objectsOf(data.toolList),
+    requests: objectsOf(data.requests),
+    events: objectsOf(data.events),
+    nodes: objectsOf(data.nodes),
+    droppedNodes: numOf(data.droppedNodes),
+    archive: objectsOf(data.archive),
+    ...(cost !== undefined ? { cost } : {}),
+    ...(typeof data.surfaceFloor === 'number' ? { surfaceFloor: data.surfaceFloor } : {}),
+    ...(typeof data.archiveFloor === 'number' ? { archiveFloor: data.archiveFloor } : {}),
+  }
+}
 
 /**
  * Narrow a delivered projection value to the official token-meter
@@ -123,10 +199,22 @@ export const tokenUsageOf = (value: unknown): TokenUsage | null => asRecord<Toke
  * (request-header content epochs). Absent key = an older Host half without
  * the companion unit — the Context browser degrades its system/tools
  * sections to tokens-only with a note.
+ *
+ * Entry-level shape is checked too: a malformed epoch (corrupt payload with
+ * a missing tools list or wrong-typed system prompt) would crash the
+ * browser's tools/sections reads, so the WHOLE projection degrades to null
+ * and the card falls back to its tokens-only note.
  */
 export function headersOf(value: unknown): ContextHeaders | null {
   const headers = asRecord<ContextHeaders>(value)
-  return headers !== null && Array.isArray(headers.headers) ? headers : null
+  if (headers === null || !Array.isArray(headers.headers)) return null
+  for (const h of headers.headers) {
+    if (h === null || typeof h !== 'object') return null
+    const entry = h as { tools?: unknown; system?: unknown }
+    if (!Array.isArray(entry.tools)) return null
+    if (entry.system !== undefined && typeof entry.system !== 'string') return null
+  }
+  return headers
 }
 
 // ---- /context command faces (framework `inputTriggers` service) ----

@@ -16,9 +16,10 @@ import { contextPressureOf, headersOf, timelineOf } from '../services'
 import type { ViewKit } from '../viewkit'
 import { makeContextBrowser } from './browser'
 import { makeCurrentComposition } from './currentComposition'
+import { makeErrorBoundary } from './errorBoundary'
 import { makeLegend, makeStackedBar } from './stackedBar'
 
-import { React } from '../react'
+import { React, h } from '../react'
 
 export interface ContextModalProps extends SessionStandardProps {
   /** Bound selector hook over the per-session open flag (hooks compartment). */
@@ -36,8 +37,13 @@ export function makeContextModal(ctx: ClientCtx, kit: ViewKit): (props: ContextM
   // while the browser shows the live step, and the tool chips jumping it).
   const CurrentComposition = makeCurrentComposition(kit, StackedBar, Legend)
   const ContextBrowser = makeContextBrowser(kit, StackedBar)
+  const ErrorBoundary = makeErrorBoundary(t)
 
-  return function ContextModal(props: ContextModalProps): ReactNS.ReactElement | null {
+  // The body holds all hooks and data reads inside the error boundary (same
+  // arrangement as the Context tab): a corrupt projection value or framework
+  // surprise degrades to a styled error card inside the dialog instead of
+  // breaking the conversation input overlay around it.
+  function ContextModalBody(props: ContextModalProps): ReactNS.ReactElement | null {
     const sessionId = typeof props.sessionId === 'string' ? props.sessionId : ''
     const open = typeof props.useContextModal === 'function' ? props.useContextModal(s => s) : false
     const data = typeof props.useProjection === 'function'
@@ -132,5 +138,9 @@ export function makeContextModal(ctx: ClientCtx, kit: ViewKit): (props: ContextM
         </div>
       </div>
     )
+  }
+
+  return function ContextModal(props: ContextModalProps): ReactNS.ReactElement | null {
+    return h(ErrorBoundary, null, h(ContextModalBody, props))
   }
 }

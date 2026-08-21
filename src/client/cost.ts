@@ -12,6 +12,7 @@
  */
 
 import type { CostBucketTotals, SessionCostUsage } from '../shared/types'
+import { numOf } from './services'
 
 /** Per-1M-token rates: cache-hit input, cache-miss input, output. */
 export interface PriceTriple { hit: number; miss: number; out: number }
@@ -46,7 +47,7 @@ export function estimateSessionCost(usage: SessionCostUsage | null | undefined, 
       const b: CostBucketTotals | undefined = fam[period]
       if (b === undefined) continue
       const p: PriceTriple = PRICES[currency][family][period]
-      total += (b.cacheRead * p.hit + (b.uncached + b.cacheWrite) * p.miss + b.output * p.out) / 1e6
+      total += (numOf(b.cacheRead) * p.hit + (numOf(b.uncached) + numOf(b.cacheWrite)) * p.miss + numOf(b.output) * p.out) / 1e6
       any = true
     }
   }

@@ -26,7 +26,8 @@ import { makeStatsBoard } from './statsBoard'
 import { makeLegend, makeStackedBar } from './stackedBar'
 import { aggregateByTurn, attachMarkers, makeTrendChart } from './trendChart'
 
-import { React } from '../react'
+import { React, h } from '../react'
+import { makeErrorBoundary } from './errorBoundary'
 
 // The context page scrolls inside the conversation's shared page scroller
 // (`[data-conversation-scroll]`) — the same container the chat auto-scrolls
@@ -55,8 +56,15 @@ export function makeContextView(ctx: ClientCtx, kit: ViewKit): (props: ContextVi
   const StatsBoard = makeStatsBoard(kit)
   const PluginInfo = makePluginInfo(kit)
   const ContextBrowser = makeContextBrowser(kit, StackedBar)
+  const ErrorBoundary = makeErrorBoundary(t)
 
-  return function ContextView(props: ContextViewProps): ReactNS.ReactElement {
+  // The data-driven body lives inside the error boundary: any render error
+  // (a corrupt projection value that slips past the timelineOf shape guard,
+  // a framework surprise) degrades to a styled error card inside the tab
+  // instead of white-screening the whole conversation view. The boundary is
+  // a separate component with NO hooks of its own, so the body's hook order
+  // and the loading/data control flow stay exactly as they were.
+  function ContextViewBody(props: ContextViewProps): ReactNS.ReactElement {
     const sessionId = props.sessionId
     // The finished value the harness pushes for this session: the
     // `contextTimeline` projection key (capability-absent until a value
@@ -339,5 +347,11 @@ export function makeContextView(ctx: ClientCtx, kit: ViewKit): (props: ContextVi
         <div className="lc-foot">{t('footer')}</div>
       </div>
     )
+  }
+
+  return function ContextView(props: ContextViewProps): ReactNS.ReactElement {
+    // The whole body — hooks, projection reads, derivation, and all child
+    // cards — renders under the boundary (see ContextViewBody above).
+    return h(ErrorBoundary, null, h(ContextViewBody, props))
   }
 }

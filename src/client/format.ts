@@ -13,5 +13,9 @@ export function fmt(n: number | null | undefined): string {
 export function fmtTime(t: number): string {
   // en-GB with a 24-hour clock renders the same local HH:MM:SS the manual
   // zero-pad produced, without the hand-rolled p() helper.
-  return new Date(t).toLocaleTimeString('en-GB', { hour12: false })
+  // An invalid timestamp (garbage from a corrupt payload) must show a dash,
+  // never throw — `toLocaleTimeString` raises RangeError on Invalid Date.
+  const d = new Date(t)
+  if (isNaN(d.getTime())) return '—'
+  return d.toLocaleTimeString('en-GB', { hour12: false })
 }

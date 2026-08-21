@@ -19,6 +19,7 @@ import type * as ReactNS from 'react'
 import type { ContextEventRecord, RequestRecord, SessionCostUsage, TokenUsage } from '../../shared/types'
 import { estimateSessionCost, formatCost, formatPriceRate, sessionPrices } from '../cost'
 import type { CostCurrency } from '../cost'
+import { numOf } from '../services'
 import type { ViewKit } from '../viewkit'
 
 import { React } from '../react'
@@ -31,12 +32,16 @@ import { React } from '../react'
  * round). Null when no input was billed. A tiny epsilon keeps a double stored
  * a hair below a cent boundary (e.g. 80.00 as 79.9999999999…) from losing its
  * last digit — with integer token counts no genuine value ever sits that close
- * to a boundary, so the epsilon can only absorb float noise.
+ * to a boundary, so the epsilon can only absorb float noise. Bucket reads go
+ * through numOf so a malformed payload degrades to a dash instead of NaN text.
  */
 function cacheHitPercent(usage: TokenUsage): string | null {
-  const billed = usage.uncachedInputTokens + usage.cacheReadTokens + usage.cacheWriteTokens
+  const uncached = numOf(usage.uncachedInputTokens)
+  const reads = numOf(usage.cacheReadTokens)
+  const writes = numOf(usage.cacheWriteTokens)
+  const billed = uncached + reads + writes
   if (billed === 0) return null
-  const hundredths = Math.trunc((usage.cacheReadTokens / billed) * 10000 + 1e-9)
+  const hundredths = Math.trunc((reads / billed) * 10000 + 1e-9)
   return `${Math.floor(hundredths / 100)}.${String(hundredths % 100).padStart(2, '0')}`
 }
 

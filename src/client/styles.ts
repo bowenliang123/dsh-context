@@ -221,6 +221,13 @@ export const STYLES = [
   '.lc-node-tokens { color: var(--dsw-alias-label-secondary); }',
   '.lc-nodes-more { color: var(--dsw-alias-label-secondary); padding: 3px 0; }',
   '.lc-empty { color: var(--dsw-alias-label-secondary); padding: 18px 0; text-align: center; }',
+  // Error-boundary fallback card: the tab degrades to this instead of
+  // white-screening; the message runs in mono on a padded chip, and Retry
+  // re-mounts the subtree once a healthy value arrives.
+  '.lc-error { display: flex; flex-direction: column; align-items: center; gap: 8px; padding: 40px 16px; }',
+  '.lc-error-msg { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12px; color: var(--dsw-alias-state-error-primary); background: var(--dsw-alias-bg-layer-2); border: 1px solid var(--dsw-alias-border-l1); border-radius: 6px; padding: 4px 8px; max-width: 100%; overflow-wrap: anywhere; }',
+  '.lc-error-retry { border: 1px solid var(--dsw-alias-border-l1); background: var(--dsw-alias-bg-layer-2); color: var(--dsw-alias-label-primary); font: inherit; font-size: 12px; padding: 4px 14px; border-radius: 6px; cursor: pointer; }',
+  '.lc-error-retry:hover { border-color: var(--dsw-alias-label-primary); }',
   '.lc-foot { color: var(--dsw-alias-label-secondary); font-size: 12px; margin-top: 4px; }',
   // ---- /context modal (centered dialog; escapes the composer anchor via fixed positioning) ----
   '.lc-modal-backdrop { position: fixed; inset: 0; z-index: 200; background: rgba(0, 0, 0, 0.45); display: flex; align-items: center; justify-content: center; }',

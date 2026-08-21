@@ -31,6 +31,12 @@ const fakeReact = {
   createElement: (...args) => ({ kind: 'element', args }),
   useState: (init) => [init, () => {}],
   useEffect: () => {},
+  // The ErrorBoundary extends React.Component; a minimal base keeps the
+  // class construction working (props assigned, state merge via setState).
+  Component: class Component {
+    constructor(props) { this.props = props }
+    setState(partial) { this.state = { ...this.state, ...partial } }
+  },
 }
 
 let handoff = null
@@ -225,6 +231,10 @@ const statefulReact = {
     currentHooks[i] = { effect: fn }
     return currentHooks[i]
   },
+  Component: class Component {
+    constructor(props) { this.props = props }
+    setState(partial) { this.state = { ...this.state, ...partial } }
+  },
 }
 const requireStateful = (spec) => {
   assert.ok(spec === 'react' || spec === '@deepseek-ai/dsh-client-ui-primitives',
@@ -234,7 +244,7 @@ const requireStateful = (spec) => {
 const m2 = { exports: {} }
 const pluginExports2 = factory(requireStateful, m2, globalThis.window, fakeDoc)
 
-const DICT_FOR_TEST = { 'tab': 'Context', 'loading': '…', 'error': 'x', 'detail.step': 'Turn {t} · Step {s}', 'gran.step': 'Step', 'gran.turn': 'Turn', 'detail.turn': 'Turn {t} · {n} steps', 'detail.lastStep': 'last step', 'overview.used': 'of context used', 'overview.free': 'Free window', 'events.at': 'Turn {t} · Step {s}', 'events.range': 'Turn {t} · Step {a}→{b}', 'events.rangeTo': 'Turn {a} · Step {as} → Turn {b} · Step {bs}', 'stats.recycleSub': '{c} compactions · {p} prunes', 'tip.step': 'Turn {t} · Step {s}', 'tip.turn': 'Turn {t} · {n} steps', 'tip.total': 'total ≈ {n}', 'tip.actual': ' (actual {n})', 'trend.title': 'History', 'trend.empty': 'empty trend', 'cmd.close': 'Close', 'cat.user': 'User', 'browser.live': 'Live (next request)', 'browser.liveNow': 'Live · next request', 'browser.items': '{n} items', 'browser.noContent': 'outside the loaded window', 'browser.loading': 'loading older history', 'browser.preview': 'preview', 'browser.noHeader': 'older plugin build',
+const DICT_FOR_TEST = { 'tab': 'Context', 'loading': '…', 'error': 'ERR:', 'error.retry': 'retry', 'detail.step': 'Turn {t} · Step {s}', 'gran.step': 'Step', 'gran.turn': 'Turn', 'detail.turn': 'Turn {t} · {n} steps', 'detail.lastStep': 'last step', 'overview.used': 'of context used', 'overview.free': 'Free window', 'events.at': 'Turn {t} · Step {s}', 'events.range': 'Turn {t} · Step {a}→{b}', 'events.rangeTo': 'Turn {a} · Step {as} → Turn {b} · Step {bs}', 'stats.recycleSub': '{c} compactions · {p} prunes', 'tip.step': 'Turn {t} · Step {s}', 'tip.turn': 'Turn {t} · {n} steps', 'tip.total': 'total ≈ {n}', 'tip.actual': ' (actual {n})', 'trend.title': 'History', 'trend.empty': 'empty trend', 'cmd.close': 'Close', 'cat.user': 'User', 'browser.live': 'Live (next request)', 'browser.liveNow': 'Live · next request', 'browser.items': '{n} items', 'browser.noContent': 'outside the loaded window', 'browser.loading': 'loading older history', 'browser.preview': 'preview', 'browser.noHeader': 'older plugin build',
 'browser.deltaHint': 'vs previous turn', 'overview.compactReserve': 'compact reserve {pct}%', 'tool.desc': 'Description', 'tool.params': 'Parameters', 'tool.paramsEmpty': '(no parameters)', 'tool.jsonToggle': 'View Raw JSON', 'tool.jsonHide': 'Collapse', 'rich.raw': 'Raw', 'rich.md': 'Markdown', 'rich.toMd': 'View as Markdown', 'rich.toRaw': 'View Raw Text' }
 let viewComponent = null
 let modalComponent = null
@@ -310,11 +320,37 @@ const renderView = () => evaluate(viewComponent({
 
 /** Invoke function-typed elements so hooks run and the tree materializes.
  * Hooks are keyed by the component's fiber path (e.g. root/ContextView#0/
- * StackedBar#0), so distinct instances of the same component keep state. */
+ * StackedBar#0), so distinct instances of the same component keep state.
+ * Class components (the ErrorBoundary) are simulated with a React-like
+ * lifecycle: an instance is created from the prototype with props + empty
+ * state, render errors are caught through the static getDerivedStateFromError
+ * (the boundary protocol) and the fallback re-renders, and instances are
+ * registered so tests can inspect the caught error. */
+const classInstances = new Map()
 function evaluate(node, path = '', fnIdx = 0) {
   if (node === null || typeof node !== 'object') return node
   if (node.kind === 'element') {
     const [type, props, ...children] = node.args
+    if (typeof type === 'function' && type.prototype !== undefined && typeof type.prototype.render === 'function') {
+      const key = path + '/' + (type.name || 'anon') + '#' + fnIdx
+      // The fake createElement keeps children in args, not props; real React
+      // puts them on props.children (single child as-is, several as an
+      // array), which the class instance's render() reads. Constructing with
+      // `new` runs the real constructor, so props AND the initial state are
+      // exactly what React would set.
+      const childrenOf = children.length === 0 ? {} : children.length === 1 ? { children: children[0] } : { children }
+      const inst = new type(Object.assign({}, props || {}, childrenOf))
+      classInstances.set(key, inst)
+      try {
+        return evaluate(inst.render(), key)
+      } catch (err) {
+        if (typeof type.getDerivedStateFromError === 'function') {
+          inst.state = type.getDerivedStateFromError(err)
+          return evaluate(inst.render(), key)
+        }
+        throw err
+      }
+    }
     if (typeof type === 'function') {
       const key = path + '/' + (type.name || 'anon') + '#' + fnIdx
       currentHooks = hookStates.get(key)
@@ -377,7 +413,9 @@ const snapshot = {
 }
 // Deliver the timeline like a session/projection frame: swap the holder the
 // useProjection stub reads, then re-render the view.
-const ctxKey = [...hookStates.keys()].find(k => k.includes('ContextView'))
+// The ContextView fiber: the boundary wrapper owns an EMPTY hook slot array,
+// so the data-driven body's fiber is the one carrying the view hooks.
+const ctxKey = [...hookStates.keys()].find(k => k.includes('ContextView') && hookStates.get(k).length > 0)
 assert.ok(ctxKey, 'ContextView fiber registered')
 dataValue = snapshot
 const tree = renderView()
@@ -1463,3 +1501,76 @@ modalOpen = false
 assert.equal(renderModal(), null, 'modal closes again')
 
 console.log('✔ modal render test passed (open/close, current overview, embedded context browser, localized chrome, deferred token consume on close)')
+
+// ---- backend-parse-failure resilience: a corrupt/foreign `contextTimeline`
+// value must never white-screen the tab. The projection is sanitized into a
+// render-safe shape — the tab shows the WHOLE UI with every usable piece —
+// and any residual render error is caught by the error boundary (a styled
+// error card, not an unmounted conversation view). ----
+
+// A non-record value (capability absent, nothing delivered yet): loading.
+dataValue = 'not-even-an-object'
+tr = renderView()
+assert.equal(textOf(byClass(tr, 'lc-empty')[0]), '…', 'a non-record value keeps the loading screen')
+
+// A garbage payload: wrong-typed scalars drop, non-list collections degrade
+// to [], non-object entries are dropped, and the breakdown zeroes out.
+dataValue = {
+  ok: false,
+  model: 42,
+  current: null,
+  requests: ['junk', { seq: 1, turn: 1, time: 10, system: 1, tools: 2, user: 3, inject: 0, assistant: 4, tool: 0, total: 10 }],
+  events: [null, { kind: 'inject', seq: 1, time: 5 }],
+  nodes: [null, { seq: 1, cat: 'user', tokens: 10, text: 'talk', time: NaN }],
+  archive: { bogus: true },
+  toolList: [null, { name: 'bash', tokens: 5 }],
+  droppedNodes: -3,
+  cost: ['not-a-record'],
+  surfaceFloor: 'x',
+}
+tr = renderView() // must not throw
+assert.equal(byClass(tr, 'lc-bar').length, 1, 'the usable request entry still renders a trend bar')
+assert.equal(byClass(tr, 'lc-stat-value').length, 7, 'stats board still renders')
+const statValsM = byClass(tr, 'lc-stat-value').map(n => n.args[2])
+assert.equal(statValsM[0], '1', 'turns count survives (non-array requests degraded, entries filtered)')
+assert.equal(statValsM[1], '1', 'steps count survives')
+assert.equal(statValsM[5], '—', 'cache hit degrades to a dash')
+assert.equal(statValsM[6], '—', 'cost degrades to a dash (non-record cost dropped)')
+assert.equal(byClass(tr, 'lc-event').length, 1, 'the usable event entry still shows')
+assert.equal(byClass(tr, 'lc-node').length, 1, 'the usable node entry still shows')
+assert.equal(textOf(byClass(tr, 'lc-node-time')[0]), '—', 'an invalid timestamp shows a dash instead of throwing')
+assert.equal(byClass(tr, 'lc-tool-chip').length, 1, 'the usable tool entry still shows')
+assert.equal(byClass(tr, 'lc-br-cat-row').length, 6, 'the context browser still renders all six sections')
+
+// The /context modal degrades identically: sanitized empty data renders the
+// dialog shell with full sections instead of throwing.
+const brokenModalTree = evaluate(modalComponent({
+  sessionId: 's1',
+  useProjection: (key) => (key === 'contextTimeline'
+    ? { current: 'x', requests: 5, nodes: null, toolList: 7, events: {}, archive: 'z' }
+    : undefined),
+  useContextModal: (sel) => sel(true),
+}))
+assert.equal(byClass(brokenModalTree, 'lc-modal-card').length, 1, 'the modal shell stays intact')
+assert.equal(byClass(brokenModalTree, 'lc-br-cat-row').length, 6, 'the modal degrades to full sections with sanitized data')
+
+// A projection reader that THROWS (a broker/framework failure) lands in the
+// error boundary's styled card — not a white screen — with the boundary
+// protocol recording the offending error.
+const boomTree = evaluate(viewComponent({
+  sessionId: 's1',
+  useProjection: () => { throw new Error('boom-parse') },
+}))
+assert.equal(byClass(boomTree, 'lc-error').length, 1, 'a throwing reader degrades to the error card')
+assert.match(textOf(byClass(boomTree, 'lc-error')[0]), /ERR:.*boom-parse/, 'the card carries the offending message')
+assert.equal(byClass(boomTree, 'lc-error-retry').length, 1, 'the card offers Retry')
+const boundaryKey = [...classInstances.keys()].find(k => k.includes('ErrorBoundary'))
+assert.ok(boundaryKey, 'boundary instance registered')
+assert.match(classInstances.get(boundaryKey).state.error.message, /boom-parse/, 'the boundary protocol recorded the error')
+
+// restore state for any later tests
+dataValue = snapshot
+tr = renderView()
+assert.equal(byClass(tr, 'lc-bar').length, 4, 'snapshot restored after the resilience tests')
+
+console.log('✔ backend-parse-failure resilience test passed (sanitized render of corrupt payloads, degraded modal, error boundary card)')
