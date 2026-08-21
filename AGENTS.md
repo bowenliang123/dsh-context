@@ -42,6 +42,9 @@ A DeepSeek Harness plugin for context insight, actions, and management.
 ## Temp files
 - Generate one-time temp files in the `.tmp` directory, and properly clean them up right after use.
 
+## Git
+- When asked to commit, please commit the possibly mixed changes separately for each purpose.
+
 ## Releasing
 - Version X.Y.Z, 大版本.次版本.小版本。
 - Releases are cut by tagging: `git tag vX.Y.Z && gh release create vX.Y.Z`.
