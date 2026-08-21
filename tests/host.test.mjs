@@ -431,4 +431,40 @@ for (const [i, st] of jsonStates.entries()) {
 const armed = def.apply(def.init(), { seq: 1, type: 'compaction/summary', time: 1000, data: { shadowedSeqs: [2], shadowedTokenCount: 10 } })
 assert.ok(snapshotJsonValue(armed) !== undefined, 'armed pendingShadowedSeqs state is still plain JSON')
 
+// -- dual-contract compatibility (dsh 0.1.1-rc.1+): each unit carries the
+// NEW contract fields alongside the old ones. `stateSchema` validates the
+// PERSISTED fold state before a checkpoint row seeds a fold; `wire`
+// (viewSchema + view) is the ONLY channel through which the 0.1.1-rc.1+
+// registry delivers a unit to the browser — a unit without `wire` is
+// host-only and its key never reaches the client (the Context tab would stay
+// on its loading screen forever). Both fields are load-bearing --
+assert.equal(typeof def.stateSchema, 'object', 'timeline: 0.1.1+ contract field stateSchema present')
+assert.ok(def.stateSchema && typeof def.stateSchema.parse === 'function', 'timeline: stateSchema is a validator')
+assert.ok(def.wire !== undefined && typeof def.wire === 'object', 'timeline: 0.1.1+ client view (wire) present')
+assert.ok(def.wire.viewSchema && typeof def.wire.viewSchema.parse === 'function', 'timeline: wire.viewSchema is a validator')
+assert.equal(typeof def.wire.view, 'function', 'timeline: wire.view is the client view')
+assert.equal(def.wire.view, def.view, 'timeline: old view and wire.view are the same projection')
+assert.equal(typeof hdef.stateSchema, 'object', 'headers: 0.1.1+ contract field stateSchema present')
+assert.ok(hdef.wire !== undefined && hdef.wire.viewSchema && typeof hdef.wire.view === 'function', 'headers: wire block present and complete')
+
+// Every intermediate fold state passes the state validator (the persisted
+// cache seeds folds from these rows), and the wire view through `wire`
+// reproduces the old `view` output exactly.
+for (const [i, st] of jsonStates.entries()) {
+  assert.deepEqual(def.stateSchema.parse(st), st, `timeline: stateSchema round-trips persisted state after event ${i + 1}`)
+  assert.deepEqual(def.wire.viewSchema.parse(def.wire.view(st)), def.view(st),
+    `timeline: wire view equals the old view through the wire schema (state ${i + 1})`)
+}
+assert.ok(snapshotJsonValue(def.stateSchema.parse(armed)) !== undefined, 'timeline: armed state passes the state schema and stays plain JSON')
+assert.deepEqual(hdef.stateSchema.parse(hdef.init()), { headers: [] }, 'headers: stateSchema accepts the empty state')
+{
+  let st = hdef.init()
+  for (const ev of [
+    { seq: 1, type: 'request/header', time: 1000, data: { reason: 'initial', header: { system: 'You are an agent.', tools: [{ name: 'bash', parameters: { type: 'object' } }] } } },
+    { seq: 2, type: 'request/header', time: 3000, data: { reason: 'change', header: { system: 'You are another agent.', tools: [] } } },
+  ]) st = hdef.apply(st, ev)
+  assert.deepEqual(hdef.stateSchema.parse(st), st, 'headers: stateSchema round-trips persisted state')
+  assert.deepEqual(hdef.wire.viewSchema.parse(hdef.wire.view(st)), hdef.view(st), 'headers: wire view equals the old view')
+}
+
 console.log('✔ host half functional test passed (projection unit, fold semantics, attribution, retention, shadow-price seqs, reference stability, determinism, config bounds, inject pinning, model switch, usage mapping, session-cost totals, plain-JSON state)')

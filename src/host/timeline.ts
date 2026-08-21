@@ -22,6 +22,7 @@ import type { ProjectionDefinition } from '@deepseek-ai/dsh-session-projection'
 import type { SessionEvent } from '@deepseek-ai/dsh-session'
 import type { Config } from './config'
 import { resolveBounds } from './config'
+import type { CompatProjectionDefinition } from './compat'
 import type { ContextTimeline } from '../shared/types'
 import { applyTimeline, buildTimelineView, createTimelineState } from './fold'
 import type { TimelineState } from './fold'
@@ -115,6 +116,36 @@ const contextTimelineSchema = z.object({
 }).strict() as unknown as z.ZodType<ContextTimeline>
 
 /**
+ * The persisted fold-state schema (the dsh 0.1.1-rc.1+ `stateSchema`
+ * contract). Validates the plain-JSON `TimelineState` before a checkpoint
+ * row seeds a fold — the same shape guarantee the projection cache's
+ * plain-JSON precondition already enforces at write time.
+ */
+const timelineStateSchema = z.object({
+  surface: z.array(surfaceNodeSchema),
+  sums: z.object({
+    user: z.number().int().nonnegative(),
+    inject: z.number().int().nonnegative(),
+    assistant: z.number().int().nonnegative(),
+    tool: z.number().int().nonnegative(),
+  }).strict(),
+  systemTokens: z.number().int().nonnegative(),
+  toolsTokens: z.number().int().nonnegative(),
+  toolList: z.array(z.object({ name: z.string(), tokens: z.number().int().nonnegative() }).strict()),
+  model: z.string().optional(),
+  provider: z.string().optional(),
+  lastModel: z.string().optional(),
+  contextWindow: z.number().optional(),
+  requests: z.array(requestRecordSchema),
+  events: z.array(contextEventSchema),
+  archived: z.array(surfaceNodeSchema),
+  cost: z.object({ flash: costFamilySchema.optional(), pro: costFamilySchema.optional() }).strict().optional(),
+  archiveFloor: z.number().optional(),
+  callNames: z.record(z.string(), z.string()),
+  pendingShadowedSeqs: z.array(z.number()).optional(),
+}) as unknown as z.ZodType<TimelineState>
+
+/**
  * The context-timeline projection unit, created per plugin instance with its
  * config-resolved retention bounds (config.ts), and registered on
  * `ctx.sessionProjections`. Registry lifecycle notes (mirrored from the
@@ -123,15 +154,27 @@ const contextTimelineSchema = z.object({
  * absence. `stateVersion` must be bumped whenever the persisted state shape
  * or fold semantics change (invalidation of cached rows); config-only
  * changes never require it (bounds tune retention, not state shape).
+ *
+ * The definition carries BOTH session-projection contracts (see compat.ts):
+ * `schema`/`view` for dsh <= 0.1.0-rc.8, `stateSchema`/`wire` for
+ * dsh >= 0.1.1-rc.1 — each registry reads its own fields off the same unit.
+ * Without the `wire` block the 0.1.1-rc.1+ registry treats the unit as
+ * host-only and never delivers `contextTimeline` to the browser (the Context
+ * tab would stay on its loading screen forever).
  */
 export function createContextTimelineDefinition(config: Config): ProjectionDefinition<'contextTimeline', TimelineState> {
   const bounds = resolveBounds(config)
-  return {
+  const view = (state: TimelineState): ContextTimeline => buildTimelineView(state, bounds)
+  const definition: CompatProjectionDefinition<'contextTimeline', TimelineState> = {
     key: 'contextTimeline',
+    // dsh <= 0.1.0-rc.8 contract: one schema validates the wire payload, `view` is top-level.
     schema: contextTimelineSchema,
+    view,
+    // dsh >= 0.1.1-rc.1 contract: `stateSchema` validates persisted state, the client view lives in `wire`.
+    stateSchema: timelineStateSchema,
+    wire: { viewSchema: contextTimelineSchema, view },
     init: () => createTimelineState(),
     apply: (state: TimelineState, event: SessionEvent) => applyTimeline(state, event as Parameters<typeof applyTimeline>[1], bounds),
-    view: (state: TimelineState) => buildTimelineView(state, bounds),
     // 2 since 0.11: the occupancy mirror (pressureTokens/sampledSurfaceTokens/
     // occupancyWindow) left the persisted state — the client now reads the
     // official token-meter `contextPressure` projection instead. Old cached
@@ -152,4 +195,5 @@ export function createContextTimelineDefinition(config: Config): ProjectionDefin
     // are refolded.
     stateVersion: 5,
   }
+  return definition as unknown as ProjectionDefinition<'contextTimeline', TimelineState>
 }
