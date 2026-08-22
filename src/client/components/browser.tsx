@@ -783,7 +783,9 @@ export function makeContextBrowser(
         let tag: string | null = null
         let preview = nodeText(n)
         if (n.cat === 'tool') {
-          tag = (n.tool ?? '?') + (n.err ? ' ⚠' : '')
+          // A `skill`-tool result is a loaded skill: label it by NAME (not the
+          // generic tool name) so it scans apart from ordinary tool results.
+          tag = n.skill ? t('node.skillTag', { name: n.skill }) : (n.tool ?? '?') + (n.err ? ' ⚠' : '')
           // A call that summarizes itself (bash's `description`, the path
           // of an edit/read call) previews with that line in the collapsed
           // row; the generic result label only when the call says nothing.

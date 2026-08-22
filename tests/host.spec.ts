@@ -517,3 +517,41 @@ test('host HMR safety: fiber dispose removes both projection registrations', () 
   for (const remove of removers) remove() // simulate fiber dispose
   assert.equal(defs.size, 0, 'fiber dispose removes every registration')
 })
+
+test('host: a skill-tool result is tagged and surfaced as a Skill injection while staying a tool result', () => {
+  const defs = new Map()
+  const fakeCtx = {
+    inject(list, cb) { cb(this) },
+    effect() { return () => {} },
+    sessionProjections: { register(d) { defs.set(d.key, d); return () => {} } },
+  }
+  apply(fakeCtx)
+  const def = defs.get('contextTimeline')
+  const drive = (events) => {
+    let st = def.init()
+    for (const ev of events) st = def.apply(st, ev)
+    return def.view(st)
+  }
+  const events = [
+    { seq: 1, type: 'request/header', time: 1000, data: { header: { system: 's', tools: [{ name: 'skill' }], config: { model: 'deepseek-v4' } } } },
+    { seq: 2, type: 'tool/call', time: 4000, data: { callId: 'c1', name: 'skill', arguments: '{"name":"code-review"}' } },
+    { seq: 3, type: 'tool/result', time: 4100, data: { callId: 'c1', message: {
+      source: { kind: 'tool', callId: 'c1' },
+      content: [{ type: 'tool-result', toolCallId: 'c1', content: [{ type: 'text', text: '<skill_content name="code-review">\n<skill_instructions>Run a thorough review.</skill_instructions>\n</skill_content>' }] }],
+    } } },
+    { seq: 4, type: 'assistant/message', time: 5000, data: { turn: 1, step: 1, usage: { inputTokens: 10 }, message: { content: [{ type: 'text', text: 'ok' }] } } },
+  ]
+  const v = drive(events)
+  const node = v.nodes.find(n => n.seq === 3)
+  assert.equal(node.cat, 'tool', 'skill tool result stays a tool node (skill is a tool)')
+  assert.equal(node.tool, 'skill', 'node names the skill tool')
+  assert.equal(node.skill, 'code-review', 'node is tagged with the loaded skill name')
+  const inject = v.events.find(e => e.kind === 'inject')
+  assert.ok(inject, 'skill load emits an inject event (so it lists in Context Events)')
+  assert.equal(inject.sub, 'skill', 'event sub-carries the skill kind')
+  assert.equal(inject.name, 'code-review', 'event names the loaded skill')
+  assert.equal(inject.form, 'instructions', 'event uses the instructions form')
+  assert.ok(inject.tokens > 0, 'event carries the skill content token cost')
+  assert.equal(inject.turn, 1, 'inject attributed to the turn that consumed it')
+  assert.equal(inject.step, 1, 'inject attributed to the step that consumed it')
+})
