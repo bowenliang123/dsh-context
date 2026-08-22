@@ -41,16 +41,17 @@ test('image attachment cards: card layout, metadata degradation, resolveImage th
   assert.equal(byClass(trImg, 'lc-att-ph').length, 2, 'placeholder tiles without the loader')
   const imgCardText = textOf(byClass(trImg, 'lc-ts-card')[0])
   assert.match(imgCardText, /screenshot\.png/, 'named image shows its display name')
-  assert.match(imgCardText, /2048×1365/, 'normalized dims shown')
-  assert.match(imgCardText, /original 6000×4000/, 'pre-normalization dims shown when present')
-  assert.match(imgCardText, /153\.6 kB/, 'stored byte size shown')
+  assert.match(imgCardText, /Raw6000×4000/, 'pre-normalization dims shown when present')
+  assert.match(imgCardText, /Sent2048×1365 · 153\.6 kB/, 'normalized dims + stored byte size shown')
   assert.match(imgCardText, /Image/, 'unnamed image falls back to the generic label')
-  assert.match(imgCardText, /800×600/, 'second image dims shown')
-  // Token-cost badges: the official DeepSeek image calculator on the stored
+  assert.match(imgCardText, /Sent800×600 · 512\.0 kB/, 'second image dims + size shown')
+  // Token-cost rows: the official DeepSeek image calculator on the stored
   // dims (2048×1365 → 313, 800×600 → 341), shown on every card.
-  assert.match(imgCardText, /≈313 tokens/, 'first image shows its estimated token cost')
-  assert.match(imgCardText, /≈341 tokens/, 'second image shows its estimated token cost')
-  assert.equal(byClass(trImg, 'lc-att-tokens').length, 2, 'one token badge per image card')
+  assert.match(imgCardText, /Token≈313/, 'first image shows its estimated token cost')
+  assert.match(imgCardText, /Token≈341/, 'second image shows its estimated token cost')
+  // Labeled rows: raw + sent + token on the first card, sent + token on the
+  // second (no originalDimensions recorded → no Raw row).
+  assert.equal(byClass(trImg, 'lc-att-row').length, 5, 'one labeled row per known fact')
   assert.match(textOf(byClass(trImg, 'lc-ts-card')[1]), /file:\/\/x/, 'unrecognized blocks keep the raw JSON card')
   assert.match(textOf(byClass(trImg, 'lc-br-content')[0]), /WHAT-IS-THIS/, 'prose stays in the text card')
   assert.equal(byClass(trImg, 'lc-att-thumb')[0].args.slice(2).filter(c => c !== null && typeof c === 'object' && c.args[0] === 'img').length, 0, 'no thumbnail img without the loader')

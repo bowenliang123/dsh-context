@@ -105,16 +105,18 @@ export const DICT_ZH: Record<string, string> = {
   'block.thinking': '思考',
   'block.answer': '回答',
   // Attachment cards in a message detail: image refs render as thumbnail
-  // cards (name + normalized dims + stored size + estimated token cost),
-  // anything unrecognized falls into the generic raw-JSON card.
+  // cards (name + one labeled row per known fact — raw dims, sent dims +
+  // size, estimated token cost), anything unrecognized falls into the
+  // generic raw-JSON card.
   'attach.images': '图片附件',
   'attach.other': '其他内容',
   'attach.image': '图片',
   'attach.open': '查看原图',
   'attach.loading': '…',
   'attach.loadFailed': '加载失败 · 点击重试',
-  'attach.orig': '原图 {d}',
-  'attach.tokens': '≈{n} tokens',
+  'attach.raw': '原图',
+  'attach.sent': '发送',
+  'attach.token': 'Token',
   'attach.tokensTip': '按 DeepSeek 官方图片尺寸换算（单图上限 384 tokens）估算的 token 消耗',
 }
 
@@ -218,15 +220,17 @@ export const DICT_EN: Record<string, string> = {
   'block.thinking': 'Reasoning',
   'block.answer': 'Response',
   // Attachment cards in a message detail: image refs render as thumbnail
-  // cards (name + normalized dims + stored size + estimated token cost),
-  // anything unrecognized falls into the generic raw-JSON card.
+  // cards (name + one labeled row per known fact — raw dims, sent dims +
+  // size, estimated token cost), anything unrecognized falls into the
+  // generic raw-JSON card.
   'attach.images': 'Images',
   'attach.other': 'Other content',
   'attach.image': 'Image',
   'attach.open': 'Open full image',
   'attach.loading': '…',
   'attach.loadFailed': 'Load failed · click to retry',
-  'attach.orig': 'original {d}',
-  'attach.tokens': '≈{n} tokens',
+  'attach.raw': 'Raw',
+  'attach.sent': 'Sent',
+  'attach.token': 'Token',
   'attach.tokensTip': 'Estimated token cost via DeepSeek\'s official image-size conversion (384-token cap per image)',
 }

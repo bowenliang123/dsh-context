@@ -59,8 +59,10 @@ export function imageRefOf(block: unknown): ImageRefLike | null {
 /**
  * One attachment card: a 64px cover tile (click opens the full image in a
  * new tab; load failures retry on click) beside a metadata column — display
- * name, normalized dimensions (plus the pre-normalization size dsh 0.1.1
- * records), and the stored byte size.
+ * name, then one labeled row per known fact: Raw (the pre-normalization
+ * raster dsh 0.1.1 records when normalization reduced the image), Sent (the
+ * normalized raster the model receives, with its stored byte size), and the
+ * estimated provider-billed tokens. Unknown facts leave no row behind.
  */
 export function makeImageCard(kit: ViewKit): ImageKit['Card'] {
   const { t, fmt } = kit
@@ -82,20 +84,28 @@ export function makeImageCard(kit: ViewKit): ImageKit['Card'] {
     }, [attachment, load, attempt])
 
     const name = attachment.name ?? t('attach.image')
-    const dims = attachment.width !== undefined && attachment.height !== undefined
-      ? `${attachment.width}×${attachment.height}`
+    const dimsOf = (w: number | undefined, h: number | undefined): string | null =>
+      w !== undefined && h !== undefined ? `${w}×${h}` : null
+    const rows: Array<{ label: string; value: string; tip?: string }> = []
+    // No byte size is stored for the raw raster — dims only.
+    const raw = attachment.originalDimensions !== undefined
+      ? dimsOf(attachment.originalDimensions.width, attachment.originalDimensions.height)
       : null
-    const orig = attachment.originalDimensions
-    const facts: string[] = []
-    if (dims !== null) facts.push(dims)
-    if (orig !== undefined) facts.push(t('attach.orig', { d: `${orig.width}×${orig.height}` }))
-    if (attachment.bytes !== undefined) facts.push(fmtBytes(attachment.bytes))
+    if (raw !== null) rows.push({ label: t('attach.raw'), value: raw })
+    const sent = dimsOf(attachment.width, attachment.height)
+    if (sent !== null) {
+      rows.push({
+        label: t('attach.sent'),
+        value: attachment.bytes !== undefined ? `${sent} · ${fmtBytes(attachment.bytes)}` : sent,
+      })
+    }
     // Estimated provider-billed tokens for this image (the official DeepSeek
     // docs calculator on the stored dimensions; 117-384 per the vision
     // guide's cap). Shown whenever the normalized dimensions are known.
     const tokens = attachment.width !== undefined && attachment.height !== undefined
       ? estimateImageTokens(attachment.width, attachment.height)
       : null
+    if (tokens !== null) rows.push({ label: t('attach.token'), value: `≈${fmt(tokens)}`, tip: t('attach.tokensTip') })
 
     const open = (): void => {
       if (src === null) return
@@ -119,10 +129,11 @@ export function makeImageCard(kit: ViewKit): ImageKit['Card'] {
         </button>
         <div className="lc-att-meta">
           <span className="lc-att-name" title={name}>{name}</span>
-          {facts.length > 0 ? <span className="lc-att-dims">{facts.join(' · ')}</span> : null}
-          {tokens !== null
-            ? <span className="lc-att-tokens" title={t('attach.tokensTip')}>{t('attach.tokens', { n: fmt(tokens) })}</span>
-            : null}
+          {rows.map(r => (
+            <span key={r.label} className="lc-att-row" title={r.tip}>
+              <b className="lc-att-row-label">{r.label}</b>{r.value}
+            </span>
+          ))}
         </div>
       </div>
     )
