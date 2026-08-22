@@ -46,6 +46,11 @@ test('image attachment cards: card layout, metadata degradation, resolveImage th
   assert.match(imgCardText, /153\.6 kB/, 'stored byte size shown')
   assert.match(imgCardText, /Image/, 'unnamed image falls back to the generic label')
   assert.match(imgCardText, /800×600/, 'second image dims shown')
+  // Token-cost badges: the official DeepSeek image calculator on the stored
+  // dims (2048×1365 → 313, 800×600 → 341), shown on every card.
+  assert.match(imgCardText, /≈313 tokens/, 'first image shows its estimated token cost')
+  assert.match(imgCardText, /≈341 tokens/, 'second image shows its estimated token cost')
+  assert.equal(byClass(trImg, 'lc-att-tokens').length, 2, 'one token badge per image card')
   assert.match(textOf(byClass(trImg, 'lc-ts-card')[1]), /file:\/\/x/, 'unrecognized blocks keep the raw JSON card')
   assert.match(textOf(byClass(trImg, 'lc-br-content')[0]), /WHAT-IS-THIS/, 'prose stays in the text card')
   assert.equal(byClass(trImg, 'lc-att-thumb')[0].args.slice(2).filter(c => c !== null && typeof c === 'object' && c.args[0] === 'img').length, 0, 'no thumbnail img without the loader')

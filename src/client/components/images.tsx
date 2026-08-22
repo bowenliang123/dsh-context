@@ -13,6 +13,7 @@ import type * as ReactNS from 'react'
 import { fmtBytes } from '../format'
 import { React } from '../react'
 import type { ImageLoader, ImageRefLike } from '../services'
+import { estimateImageTokens } from '../../shared/imageTokens'
 import type { ViewKit } from '../viewkit'
 
 /** The image-rendering handoff threaded through the browser's bodies. */
@@ -62,7 +63,7 @@ export function imageRefOf(block: unknown): ImageRefLike | null {
  * records), and the stored byte size.
  */
 export function makeImageCard(kit: ViewKit): ImageKit['Card'] {
-  const { t } = kit
+  const { t, fmt } = kit
   return function ImageCard(props: { attachment: ImageRefLike; load?: ImageLoader }): ReactNS.ReactElement {
     const { attachment, load } = props
     const [src, setSrc] = React.useState<string | null>(null)
@@ -89,6 +90,12 @@ export function makeImageCard(kit: ViewKit): ImageKit['Card'] {
     if (dims !== null) facts.push(dims)
     if (orig !== undefined) facts.push(t('attach.orig', { d: `${orig.width}×${orig.height}` }))
     if (attachment.bytes !== undefined) facts.push(fmtBytes(attachment.bytes))
+    // Estimated provider-billed tokens for this image (the official DeepSeek
+    // docs calculator on the stored dimensions; 117-384 per the vision
+    // guide's cap). Shown whenever the normalized dimensions are known.
+    const tokens = attachment.width !== undefined && attachment.height !== undefined
+      ? estimateImageTokens(attachment.width, attachment.height)
+      : null
 
     const open = (): void => {
       if (src === null) return
@@ -113,6 +120,9 @@ export function makeImageCard(kit: ViewKit): ImageKit['Card'] {
         <div className="lc-att-meta">
           <span className="lc-att-name" title={name}>{name}</span>
           {facts.length > 0 ? <span className="lc-att-dims">{facts.join(' · ')}</span> : null}
+          {tokens !== null
+            ? <span className="lc-att-tokens" title={t('attach.tokensTip')}>{t('attach.tokens', { n: fmt(tokens) })}</span>
+            : null}
         </div>
       </div>
     )

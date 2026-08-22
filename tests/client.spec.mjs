@@ -100,6 +100,7 @@ test('client bundle: handoff, dicts, styles, slot registration, /context command
   assert.ok(styleTag.textContent.includes('.lc-stat-tip'), 'stats cell tooltip bubble styles present')
   assert.ok(styleTag.textContent.includes('.lc-stat-tipped:hover .lc-stat-tip'), 'stats tooltip reveals on cell hover')
   assert.ok(styleTag.textContent.includes('.lc-occupied-box-on'), 'occupied frame fades in and out')
+  assert.ok(styleTag.textContent.includes('grid-template-columns:repeat(2,minmax(0,1fr))'), 'image attachment grid is two equal-width columns')
   assert.equal(slotInjections.length, 2, 'view tab + input overlay injections')
   assert.equal(slotInjections[0][0], 'conversation.view')
   const registeredOpts = slotInjections[0][1]() // slots.inject callback returns the register result

@@ -449,15 +449,18 @@
 /*
  ---- Attachment cards (image refs in a message detail). The card chrome
  reuses the tool-schema sections' `lc-ts-card`/`lc-ts-card-head`; only the
- image grid and tile are new. Each image is a 64px cover tile (the chat
- history's tile size) beside a name + dims + size column. ----
+ image grid and tile are new. The grid is two EQUAL-WIDTH columns
+ (minmax(0,…) so long names shrink instead of stretching the track); each
+ image is a 64px cover tile (the chat history's tile size) beside a name +
+ dims + size + estimated token cost column. ----
  */
 .lc-ts-card .lc-br-pre { margin: 8px 10px; }
-.lc-att-grid { display: flex; flex-wrap: wrap; gap: 10px; padding: 8px 10px; }
+.lc-att-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; padding: 8px 10px; }
 .lc-att-item { display: flex; gap: 8px; align-items: center; min-width: 0; }
 .lc-att-thumb { width: 64px; height: 64px; flex: none; padding: 0; display: flex; align-items: center; justify-content: center; border: 1px solid var(--dsw-alias-border-l1); border-radius: 6px; overflow: hidden; background: var(--dsw-alias-bg-layer-1); cursor: pointer; font: inherit; }
 .lc-att-thumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
 .lc-att-ph, .lc-att-err { font-size: 10px; color: var(--dsw-alias-label-secondary); text-align: center; padding: 2px; }
 .lc-att-meta { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
-.lc-att-name { font-size: 12px; color: var(--dsw-alias-label-primary); max-width: 200px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.lc-att-name { font-size: 12px; color: var(--dsw-alias-label-primary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .lc-att-dims { font-size: 11px; color: var(--dsw-alias-label-secondary); }
+.lc-att-tokens { font-size: 11px; color: var(--dsw-alias-label-secondary); font-variant-numeric: tabular-nums; }
