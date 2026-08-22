@@ -370,10 +370,17 @@ function costFamilyOf(model: string | undefined): 'flash' | 'pro' | null {
   return null
 }
 
-/** DeepSeek's UTC peak windows: 01:00-04:00 and 06:00-10:00 (off-peak is half price). */
+/**
+ * DeepSeek's peak windows (Beijing Time, UTC+8): 09:00-12:00 and 14:00-18:00
+ * on weekdays; off-peak (half the peak rate) covers all other hours plus all
+ * of Saturday and Sunday.
+ */
 function isPeakUtc(time: number): boolean {
-  const h = new Date(time).getUTCHours()
-  return (h >= 1 && h < 4) || (h >= 6 && h < 10)
+  const bj = new Date(time + 8 * 3600_000)
+  const day = bj.getUTCDay()
+  if (day === 0 || day === 6) return false
+  const h = bj.getUTCHours()
+  return (h >= 9 && h < 12) || (h >= 14 && h < 18)
 }
 
 /**

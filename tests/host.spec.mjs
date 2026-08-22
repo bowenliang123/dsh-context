@@ -375,11 +375,12 @@ test('host half: projection unit, fold semantics, attribution, retention, determ
   assert.equal(usageLog.cost, undefined, 'no model name -> nothing priced into the cost totals')
   assert.equal(v.cost, undefined, 'a non-flash/pro model (deepseek-v4) is not priced')
 
-  // -- session-cost totals (cumulative, per family x UTC pricing period) --
-  // Peak windows are 01:00-04:00 and 06:00-10:00 UTC. The model NAME decides
-  // the family, provider-agnostically (an OpenRouter-style spelling counts).
-  const PEAK = Date.UTC(2026, 0, 5, 2, 0, 0) // 02:00 UTC -> peak
-  const OFF = Date.UTC(2026, 0, 5, 12, 0, 0) // 12:00 UTC -> off-peak
+  // -- session-cost totals (cumulative, per family x pricing period) --
+  // Peak windows are 09:00-12:00 and 14:00-18:00 Beijing Time (UTC+8) on
+  // weekdays; weekends bill at off-peak all day. The model NAME decides the
+  // family, provider-agnostically (an OpenRouter-style spelling counts).
+  const PEAK = Date.UTC(2026, 0, 5, 2, 0, 0) // Monday 02:00 UTC = 10:00 BJT -> peak
+  const OFF = Date.UTC(2026, 0, 5, 12, 0, 0) // Monday 12:00 UTC = 20:00 BJT -> off-peak
   const costLog = drive([
     { seq: 1, type: 'request/header', time: PEAK - 1000, data: { header: { config: { model: 'deepseek/deepseek-v4-flash', provider: 'openrouter' } } } },
     { seq: 2, type: 'assistant/message', time: PEAK, data: { turn: 1, step: 1, usage: { inputTokens: 800, cacheReadTokens: 150, cacheWriteTokens: 50, outputTokens: 30 }, message: { content: [] } } },
@@ -391,6 +392,18 @@ test('host half: projection unit, fold semantics, attribution, retention, determ
   assert.deepEqual(costLog.cost.flash.off, { uncached: 100, cacheRead: 900, cacheWrite: 0, output: 0 },
     'off-peak requests land in their own period bucket')
   assert.equal(costLog.cost.pro, undefined, 'no pro usage -> no pro branch')
+  // Weekends (Beijing Time) bill at off-peak all day, even inside the weekday
+  // peak windows; the boundary flips at Saturday 00:00 BJT = Friday 16:00 UTC.
+  const SAT_PEAK_HOUR = Date.UTC(2026, 0, 3, 2, 0, 0) // Saturday 10:00 BJT
+  const FRI_BEFORE_SAT = Date.UTC(2026, 0, 2, 16, 0, 0) // Saturday 00:00 BJT
+  const weekendLog = drive([
+    { seq: 1, type: 'request/header', time: FRI_BEFORE_SAT - 1000, data: { header: { config: { model: 'deepseek-v4-flash', provider: 'deepseek' } } } },
+    { seq: 2, type: 'assistant/message', time: SAT_PEAK_HOUR, data: { turn: 1, step: 1, usage: { inputTokens: 100 }, message: { content: [] } } },
+    { seq: 3, type: 'assistant/message', time: FRI_BEFORE_SAT, data: { turn: 1, step: 2, usage: { inputTokens: 200 }, message: { content: [] } } },
+  ])
+  assert.deepEqual(weekendLog.cost.flash.off, { uncached: 300, cacheRead: 0, cacheWrite: 0, output: 0 },
+    'weekend requests price at the off-peak rate all day')
+  assert.equal(weekendLog.cost.flash.peak, undefined, 'no peak bucket accrues over the weekend')
   // A model switch re-attributes later requests to the new family.
   const costSwitch = drive([
     { seq: 1, type: 'request/header', time: OFF - 1000, data: { header: { config: { model: 'deepseek-v4-flash', provider: 'deepseek' } } } },

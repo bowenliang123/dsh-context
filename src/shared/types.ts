@@ -191,11 +191,11 @@ export interface CostBucketTotals {
   output: number
 }
 
-/** One model family's totals split by DeepSeek's UTC pricing period. */
+/** One model family's totals split by DeepSeek's pricing period (Beijing Time). */
 export interface CostFamilyUsage {
-  /** Peak windows: 01:00-04:00 and 06:00-10:00 UTC. */
+  /** Peak windows: 09:00-12:00 and 14:00-18:00 Beijing Time, weekdays only. */
   peak?: CostBucketTotals
-  /** All other hours (half the peak rate). */
+  /** All other hours plus all of Saturday/Sunday (half the peak rate). */
   off?: CostBucketTotals
 }
 

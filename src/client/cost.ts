@@ -5,8 +5,9 @@
  * https://api-docs.deepseek.com/quick_start/pricing/ (USD) and
  * https://api-docs.deepseek.com/zh-cn/quick_start/pricing/ (CNY).
  *
- * Peak windows are 01:00-04:00 and 06:00-10:00 UTC (off-peak is half the
- * peak rate); the Host already split the totals by period, so pricing here
+ * Peak windows are 09:00-12:00 and 14:00-18:00 Beijing Time on weekdays
+ * (off-peak is half the peak rate; weekends bill at off-peak all day); the
+ * Host already split the totals by period, so pricing here
  * is a pure lookup. Both currencies the UI ships are tabulated — the locale
  * picks which one the stats board shows.
  */
