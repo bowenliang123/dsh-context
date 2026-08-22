@@ -250,8 +250,7 @@ function applySurface(
   message: MessageLike | null | undefined,
 ): SurfaceNode {
   const cat = categoryOf(type, message ?? undefined)
-  // Restored checkpoints from older builds may lack `images` — normalize.
-  st.images = (st.images ?? 0) + imageCountOf(message?.content)
+  st.images = st.images + imageCountOf(message?.content)
   const node: SurfaceNode = {
     seq: ev.seq,
     time: ev.time,
@@ -624,7 +623,7 @@ export function buildTimelineView(state: TimelineState, bounds: FoldBounds): Sna
       total: surfaceTotal + state.systemTokens + state.toolsTokens,
     },
     toolList: state.toolList,
-    images: state.images ?? 0,
+    images: state.images,
     requests: state.requests.map(r => ({ ...r })),
     events: state.events.map(e => ({ ...e })),
     nodes: [],
