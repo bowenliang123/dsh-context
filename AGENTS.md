@@ -34,7 +34,7 @@ A DeepSeek Harness plugin for context insight, actions, and management.
 - Consider updating the dependencies to the latest version if possible, as the deepseek-harness is evolving rapidly.
 
 ## Compatibility
-- Must install and work correctly on `@deepseek-ai/dsh` **0.1.0-rc7+** and **0.1.2-rc2+** — no regressions in styles, message parsing, or any user-visible behavior.
+- Must be able to install and work correctly on `@deepseek-ai/dsh` **0.1.0-rc7+** and **0.1.2-rc2+** — no regressions in runtime dependencies, message parsing, or any user-visible behavior.
 - Low-level logic (e.g. token counting) should track the implementation of the newest supported dsh version.
 
 ## I18n
