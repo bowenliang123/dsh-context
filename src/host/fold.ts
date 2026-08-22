@@ -234,6 +234,35 @@ interface MessageLike {
   error?: boolean
 }
 
+/**
+ * The first full text block, recursing through nested content blocks (a tool
+ * result wraps its text in a `tool-result` block). Unlike `firstText` this
+ * must NOT truncate/normalize: the skill name is matched off the raw
+ * `<skill_content name="…">` wrapper.
+ */
+function nestedText(blocks: ContentBlock[] | undefined): string {
+  if (!Array.isArray(blocks)) return ''
+  for (const block of blocks) {
+    if (block.type === 'text' && typeof block.text === 'string' && block.text !== '') return block.text
+    if (block.content !== undefined) {
+      const nested = nestedText(block.content)
+      if (nested !== '') return nested
+    }
+  }
+  return ''
+}
+
+/**
+ * The skill name a `skill`-tool result carries. Loaded skills are rendered as
+ * `<skill_content name="…">…</skill_content>` in the result's text, so the name
+ * is recovered from the content rather than trusted from the call envelope.
+ */
+function skillNameOf(msg: MessageLike | null | undefined): string {
+  const text = nestedText(msg?.content)
+  const match = text.match(/<skill_content\s+name="([^"]+)"/)
+  return match === null ? '' : match[1]
+}
+
 function applySurface(
   st: TimelineState,
   ev: SurfaceEventLike,
@@ -504,7 +533,22 @@ export function applyTimeline(state: TimelineState, event: TimelineEvent, bounds
       // the envelope would miss all content).
       const toolMsg = deriveEventMessage(event as never) as MessageLike | null
       const s = ensure()
-      applySurface(s, event, event.type, data, toolMsg)
+      const node = applySurface(s, event, event.type, data, toolMsg)
+      // A skill load via the `skill` tool returns the loaded skill's
+      // instructions as a tool result — content the harness injected into the
+      // model's context. Keep it a tool result (that is what it is), but make
+      // it findable: tag the node with the skill name so the browser can label
+      // the row, and record an inject event so a `Skill 注入（name）` entry
+      // shows in the Context Events card instead of being buried among
+      // ordinary tool results. `node.tool` resolves to the tool name `skill`;
+      // the skill NAME comes from the rendered `<skill_content name="…">`.
+      if (node.cat === 'tool' && node.tool === 'skill') {
+        const name = skillNameOf(toolMsg)
+        if (name !== '') {
+          node.skill = name
+          s.events.push({ seq: event.seq, time: event.time, kind: 'inject', form: 'instructions', sub: 'skill', name, tokens: node.tokens })
+        }
+      }
       break
     }
     case 'assistant/message': {
