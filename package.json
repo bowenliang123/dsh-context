@@ -23,7 +23,9 @@
     "./package.json": "./package.json"
   },
   "files": [
-    "lib",
+    "lib/client.js",
+    "lib/index.js",
+    "lib/index.d.ts",
     "cordis.patch.yml",
     "README.md",
     "LICENSE"
