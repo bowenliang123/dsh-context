@@ -800,6 +800,17 @@ export function makeContextBrowser(
           // No call list on the surface node: a text-less turn can still
           // preview a self-summarizing call found in the conversation join.
           preview = blockSummaryOf(bySeq.get(n.seq)) ?? preview
+        } else if (n.cat === 'user') {
+          // A user message with image uploads gains an Image chip on its
+          // collapsed row (detected via the conversation join, like the
+          // expanded body does); expanded, the body shows the grid anyway.
+          const conv = bySeq.get(n.seq)
+          const imgCount = conv !== undefined && Array.isArray(conv.content)
+            ? conv.content.filter(b => imageRefOf(b) !== null).length
+            : 0
+          if (imgCount > 0 && openElem !== `n${n.seq}`) {
+            tag = t('attach.image') + (imgCount > 1 ? ' ×' + String(imgCount) : '')
+          }
         } else if (n.cat === 'inject' && !n.skill) {
           tag = t('form.' + (n.form || 'context'))
           if (n.text !== undefined && n.text !== '') {

@@ -31,8 +31,16 @@ test('image attachment cards: card layout, metadata degradation, resolveImage th
   })
   bed.dataValue = snapshot
   brSlots[1][1]('user') // openCat('user')
+  // The collapsed row of an image-carrying user message gains an Image chip
+  // (count appended when several); the chip leaves once the expanded body
+  // shows the image grid itself.
+  const trCollapsed = renderView()
+  const chips = byClass(trCollapsed, 'lc-br-tag')
+  assert.equal(chips.length, 1, 'one Image chip on the collapsed row')
+  assert.equal(textOf(chips[0]), 'Image ×2', 'chip names the attachment count')
   brSlots[2][1]('n1')   // expand the user element
   let trImg = renderView()
+  assert.equal(byClass(trImg, 'lc-br-tag').length, 0, 'chip leaves once the body shows the image grid')
   // Metadata-only degradation (no conversation service armed): three section
   // cards (content text + images + other), two image items, placeholder
   // tiles, no <img>.
