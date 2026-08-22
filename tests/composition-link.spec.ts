@@ -5,7 +5,7 @@
  */
 import assert from 'node:assert/strict'
 import { test } from 'vitest'
-import { bootViewBed, byClass, catRowOf, textOf } from './helpers/viewBed.mjs'
+import { bootViewBed, byClass, catRowOf, textOf } from './helpers/viewBed'
 
 const bed = await bootViewBed()
 const { renderView, snapshot } = bed

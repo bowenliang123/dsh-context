@@ -40,7 +40,7 @@
     "test": "npm run typecheck && vitest run",
     "release": "bash scripts/publish.sh",
     "hooks": "bash scripts/install-hooks.sh",
-    "social-preview": "node docs/social-preview/generate.mjs"
+    "social-preview": "node docs/social-preview/generate.ts"
   },
   "dsh": {
     "bundle": {

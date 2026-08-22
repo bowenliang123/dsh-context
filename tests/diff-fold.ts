@@ -25,7 +25,7 @@
  * canonicalHeader is identity — stored headers are already canonical).
  *
  * Usage:
- *   bun tests/diff-fold.mjs <session.jsonl> [more.jsonl...]
+ *   bun tests/diff-fold.ts <session.jsonl> [more.jsonl...]
  *   zstd -dc ~/.dsh/sessions/<ws>/<sid>/session.jsonl.zstd > /tmp/s.jsonl
  *
  * Exit code 0 when every log matches, 1 otherwise.
@@ -89,7 +89,7 @@ function imageDeltaOf(blocks) {
 
 const files = process.argv.slice(2)
 if (files.length === 0) {
-  console.error('usage: bun tests/diff-fold.mjs <session.jsonl> [...]')
+  console.error('usage: bun tests/diff-fold.ts <session.jsonl> [...]')
   process.exit(2)
 }
 

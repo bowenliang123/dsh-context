@@ -8,7 +8,7 @@
 import assert from 'node:assert/strict'
 import { readFile } from 'node:fs/promises'
 import { test } from 'vitest'
-import { bootViewBed, FAKE_PRIMITIVES, makeFakeDoc } from './helpers/viewBed.mjs'
+import { bootViewBed, FAKE_PRIMITIVES, makeFakeDoc } from './helpers/viewBed'
 
 const bundle = await readFile(new URL('../lib/client.js', import.meta.url), 'utf8')
 

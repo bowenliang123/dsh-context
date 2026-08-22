@@ -11,7 +11,7 @@ import assert from 'node:assert/strict'
 import { readFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { test } from 'vitest'
-import { FAKE_PRIMITIVES } from './helpers/viewBed.mjs'
+import { FAKE_PRIMITIVES } from './helpers/viewBed'
 
 test('client HMR safety: fiber dispose removes every registration', async () => {
   const bundle = await readFile(join(process.cwd(), 'lib/client.js'), 'utf8')
