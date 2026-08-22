@@ -13,7 +13,7 @@ import type * as ReactNS from 'react'
 import type { ContextEventRecord, RequestRecord } from '../../shared/types'
 import { headlineOf } from '../headline'
 import type { SessionStandardProps } from '../services'
-import { contextPressureOf, headersOf, timelineOf, tokenUsageOf } from '../services'
+import { contextBreakdownOf, contextPressureOf, headersOf, timelineOf, tokenUsageOf } from '../services'
 import type { ClientCtx, ConversationFace, ImageRefLike } from '../services'
 import type { ViewKit } from '../viewkit'
 import { makeContextBrowser } from './browser'
@@ -86,6 +86,14 @@ export function makeContextView(ctx: ClientCtx, kit: ViewKit): (props: ContextVi
     // dash instead of estimating.
     const usage = typeof props.useProjection === 'function'
       ? tokenUsageOf(props.useProjection('tokenUsage'))
+      : null
+    // Heuristic composition counts come from the OFFICIAL token-meter
+    // `contextBreakdown` projection — the exact system/tools/messages rows
+    // the chat ring's click-open panel shows, so the overview legend reads
+    // identically by construction. Absent key degrades to the fold's own
+    // sums (same fixed estimator) inside headlineOf.
+    const breakdown = typeof props.useProjection === 'function'
+      ? contextBreakdownOf(props.useProjection('contextBreakdown'))
       : null
     // The header-content companion projection (full system prompt + tool
     // schemas) for the Context browser card; absent key = older Host half,
@@ -236,8 +244,9 @@ export function makeContextView(ctx: ClientCtx, kit: ViewKit): (props: ContextVi
     // the fixed 4-chars/token heuristic can undercount by ~10-15% on
     // CJK-heavy sessions — so this is the headline, and the heuristic
     // composition below is anchored to it (proportions stay heuristic).
-    // Shared with the /context popup (headline.ts).
-    const head = headlineOf(data, pressure)
+    // Shared with the /context popup (headline.ts). The composition counts
+    // ride the official `contextBreakdown` rows (the chat ring panel).
+    const head = headlineOf(data, pressure, breakdown)
 
     // The cost cell prices in the locale's currency (zh -> CNY, else USD);
     // read the active locale at render time — the locale subscription above

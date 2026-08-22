@@ -498,6 +498,29 @@ test('context view: trend chart, stats board, plugin info, hover linking, granul
   bed.dataValue = snapshot
   tr = renderView()
 
+  // ---- the OFFICIAL token-meter `contextBreakdown` projection drives the
+  // legend counts (the chat ring panel's rows): system/tools read it
+  // verbatim, the message bucket subdivides by the fold ratios, and the four
+  // surface categories always sum exactly to the delivered messageTokens ----
+  // Fixture fold sums: user 30 / inject 5 / assistant 15 / tool 20 (70).
+  bed.breakdownValue = { systemTokens: 111, toolsTokens: 222, messageTokens: 600 }
+  tr = renderView()
+  const chipsBd = byClass(tr, 'lc-chip')
+  // Chip layout: [icon, label, nums] with nums = ['≈N', <em>share%</em>] —
+  // read the ≈ text node directly (a flat textOf would glue the share on).
+  const chipVal = (i) => chipsBd[i].args[4].args[2]
+  assert.equal(chipVal(0), '≈111', 'system chip shows the official systemTokens')
+  assert.equal(chipVal(1), '≈222', 'tools chip shows the official toolsTokens')
+  // 600 subdivided by 30/5/15/20 of 70 -> 257/43/129/171 (residue to user).
+  assert.equal(chipVal(2), '≈257', 'user chip subdivides the official messageTokens')
+  assert.equal(chipVal(5), '≈171', 'tool chip subdivides the official messageTokens')
+  const msgSum = [2, 3, 4, 5]
+    .map(i => Number(chipVal(i).slice(1)))
+    .reduce((a, b) => a + b, 0)
+  assert.equal(msgSum, 600, 'surface categories sum exactly to the official message figure')
+  bed.breakdownValue = undefined
+  tr = renderView()
+
   console.log('✔ chart render test passed (context stats board, free window hover, fixed-width bars, scroll container, turn ranges, hover linking, overview tooltip, turn strip, granularity toggle, edge fades, full history, right-anchored default, message times, event range labels, detail marker chip, overview actual)')
 
   // ---- Context browser card: step picker + category accordion + element

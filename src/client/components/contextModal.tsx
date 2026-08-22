@@ -12,7 +12,7 @@ import type * as ReactNS from 'react'
 import { headlineOf } from '../headline'
 import { modalStoreOf, takePendingConsume } from '../modalStore'
 import type { ClientCtx, SessionStandardProps, SessionsFace } from '../services'
-import { contextPressureOf, headersOf, timelineOf } from '../services'
+import { contextBreakdownOf, contextPressureOf, headersOf, timelineOf } from '../services'
 import type { ViewKit } from '../viewkit'
 import { makeContextBrowser } from './browser'
 import { makeCurrentComposition } from './currentComposition'
@@ -54,6 +54,12 @@ export function makeContextModal(ctx: ClientCtx, kit: ViewKit): (props: ContextM
     // value degrades to the derived fallback inside headlineOf.
     const pressure = typeof props.useProjection === 'function'
       ? contextPressureOf(props.useProjection('contextPressure'))
+      : null
+    // Heuristic composition counts from the official token-meter
+    // `contextBreakdown` projection (the chat ring panel's rows); absent
+    // value degrades to the fold's own sums inside headlineOf.
+    const breakdown = typeof props.useProjection === 'function'
+      ? contextBreakdownOf(props.useProjection('contextBreakdown'))
       : null
     // Header-content epochs for the browser's system/tools sections (absent
     // on older hosts -> tokens-only degradation, same as the Context tab).
@@ -98,7 +104,7 @@ export function makeContextModal(ctx: ClientCtx, kit: ViewKit): (props: ContextM
 
     if (!open) return null
 
-    const head = data !== null ? headlineOf(data, pressure) : null
+    const head = data !== null ? headlineOf(data, pressure, breakdown) : null
     // The composition card carries the model/provider subtitle; keep the
     // dialog header to just the title + close (model/provider below once).
     const subtitle = data !== null ? (data.model ? data.model : '') + (data.provider ? ' · ' + data.provider : '') : ''

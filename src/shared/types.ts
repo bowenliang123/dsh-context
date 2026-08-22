@@ -139,6 +139,22 @@ export interface ContextPressure {
 }
 
 /**
+ * The official token-meter `contextBreakdown` projection: the heuristic
+ * composition rows the chat ring's click-open panel shows (system prompt,
+ * tool schemas, conversation). The Client reads this key directly so the
+ * composition card's proportions AND counts stay identical to the panel's
+ * by construction; the message bucket is subdivided into the plugin's four
+ * surface categories by the fold's per-category ratios. Absent key/value =
+ * an older harness without the meter's projection units — callers fall back
+ * to the fold's own sums (identical estimator, minus the image correction).
+ */
+export interface ContextBreakdown {
+  systemTokens: number
+  toolsTokens: number
+  messageTokens: number
+}
+
+/**
  * The official token-meter `tokenUsage` projection (registered by
  * `@deepseek-ai/dsh-token-meter` on the same `SessionProjectionMap`): durable
  * cumulative provider-reported usage across the COMPLETE session log. The four

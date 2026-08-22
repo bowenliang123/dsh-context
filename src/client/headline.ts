@@ -4,17 +4,17 @@
  * capacity it scales against, and the composition parts anchored to that
  * total (heuristic ratios, provider-anchored sum).
  *
- * The provider anchor is the OFFICIAL token-meter `contextPressure`
- * projection (read via `useProjection('contextPressure')`) — the same
- * "projectedTokens" the chat's context ring displays; the Host no longer
- * mirrors it inside `contextTimeline`. When the projection is absent (older
- * harness, or the meter is not composed), the headline falls back to the
- * newest request's provider prompt plus the heuristic surface movement since
- * it was logged, and finally to the raw heuristic total.
+ * Two official token-meter projections feed it, the same keys the chat's
+ * composer ring reads: `contextPressure` supplies the anchored total (the
+ * ring's percentage), and `contextBreakdown` supplies the composition
+ * counts (the ring panel's system/tools/messages `~` rows) so the legend
+ * figures stay identical to the panel's by construction. Either key absent
+ * (older harness, meter not composed) degrades to the fold's own sums —
+ * the same fixed estimator.
  */
 
-import type { ContextPressure, ContextTimeline } from '../shared/types'
-import { anchoredParts, partsOf, type PartsPart } from './categories'
+import type { ContextBreakdown, ContextPressure, ContextTimeline } from '../shared/types'
+import { anchoredParts, officialParts, type PartsPart } from './categories'
 
 export interface Headline {
   /** Best-known occupancy of the next request (projected ?? derived ?? heuristic total). */
@@ -23,11 +23,19 @@ export interface Headline {
   window?: number
   /** tokens / window, clamped to 100; null without a window. */
   pct: number | null
-  /** Composition parts anchored to the provider total when one exists. */
+  /**
+   * Composition parts: `value` is the provider-anchored bar width (the
+   * ring's fill), `raw` the official heuristic count (the ring panel's
+   * rows) shown by the legend and tooltips.
+   */
   parts: PartsPart[]
 }
 
-export function headlineOf(data: ContextTimeline, pressure: ContextPressure | null = null): Headline {
+export function headlineOf(
+  data: ContextTimeline,
+  pressure: ContextPressure | null = null,
+  breakdown: ContextBreakdown | null = null,
+): Headline {
   const current = data.current
   // The official projection's whole value is the newest usage sample carried
   // forward by the heuristic surface movement since it was taken — the same
@@ -50,6 +58,9 @@ export function headlineOf(data: ContextTimeline, pressure: ContextPressure | nu
     : data.contextWindow
   const tokens = occupancyTokens ?? current.total
   const pct = window !== undefined && window > 0 ? Math.min(100, Math.round(tokens / window * 100)) : null
-  const parts = anchoredParts(partsOf(current), occupancyTokens !== null && tokens > 0 ? tokens : null)
+  const parts = anchoredParts(
+    officialParts(current, breakdown),
+    occupancyTokens !== null && tokens > 0 ? tokens : null,
+  )
   return { tokens, window, pct, parts }
 }

@@ -101,13 +101,18 @@ export function makeStackedBar(kit: ViewKit): (props: StackedBarProps) => ReactN
         }
       } else {
         let acc = 0
+        // Counts come from the part's heuristic `raw` figure (the ring
+        // panel's rows); widths ride the anchored `value` (the ring's fill).
+        let rawTotal = 0
+        for (const p of props.parts) rawTotal += p.raw ?? p.value
         for (const p of props.parts) {
           const pct = scale > 0 ? p.value / scale * 100 : 0
           if (p.key === props.hoverKey && p.value > 0) {
+            const count = p.raw ?? p.value
             tip = {
               // "(pct%)" is a share of the OCCUPIED total — the solid box
               // that appears on hover frames exactly this reference region.
-              text: `${catLabel(p.key)} ≈${fmt(p.value)} (${Math.round(p.value / total * 100)}%) `
+              text: `${catLabel(p.key)} ≈${fmt(count)} (${rawTotal > 0 ? Math.round(count / rawTotal * 100) : 0}%) `
                 + t('overview.ofUsed'),
               leftPct: Math.max(12, Math.min(acc + pct / 2, 88)),
             }
@@ -205,11 +210,15 @@ export function makeLegend(kit: ViewKit): (props: {
     hoverKey?: string | null
     onHoverKey?: (key: string | null) => void
   }): ReactNS.ReactElement {
+    // The legend reports the heuristic counts (`raw` — the chat ring panel's
+    // rows), never the anchored bar widths, so its figures read identically
+    // to the official context meter.
     let total = 0
-    for (const p of props.parts) total += p.value
+    for (const p of props.parts) total += p.raw ?? p.value
     return (
       <div className="lc-legend">
         {props.parts.map((p) => {
+          const count = p.raw ?? p.value
           const on = props.hoverKey !== undefined && props.hoverKey === p.key
           return (
             <span
@@ -222,8 +231,8 @@ export function makeLegend(kit: ViewKit): (props: {
               <i style={{ background: p.color }} />
               <span className="lc-chip-label">{catLabel(p.key)}</span>
               <span className="lc-chip-nums">
-                {'≈' + fmt(p.value)}
-                {total > 0 ? <em>{`${Math.round(p.value / total * 100)}%`}</em> : null}
+                {'≈' + fmt(count)}
+                {total > 0 ? <em>{`${Math.round(count / total * 100)}%`}</em> : null}
               </span>
             </span>
           )

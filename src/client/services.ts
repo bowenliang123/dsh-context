@@ -11,7 +11,7 @@
  */
 
 import type { Context } from '@deepseek-ai/cordis'
-import type { ContextHeaders, ContextPressure, ContextTimeline, TokenUsage } from '../shared/types'
+import type { ContextBreakdown, ContextHeaders, ContextPressure, ContextTimeline, TokenUsage } from '../shared/types'
 
 export interface LocaleService {
   register(ns: string, dicts: Record<string, Record<string, string>>): () => void
@@ -221,6 +221,23 @@ export function timelineOf(value: unknown): ContextTimeline | null {
 export function contextPressureOf(value: unknown): ContextPressure | null {
   const data: unknown = asRecord(value)
   return data as ContextPressure | null
+}
+
+/**
+ * Narrow a delivered projection value to the official token-meter
+ * `contextBreakdown` projection (the heuristic composition rows of the chat
+ * ring's panel). Every figure must be a finite number — a partial/corrupt
+ * value degrades to null so the composition card falls back to the fold's
+ * own sums instead of mixing sources.
+ */
+export function contextBreakdownOf(value: unknown): ContextBreakdown | null {
+  const data = asRecord(value)
+  if (data === null) return null
+  const { systemTokens, toolsTokens, messageTokens } = data
+  if (typeof systemTokens !== 'number' || !Number.isFinite(systemTokens)) return null
+  if (typeof toolsTokens !== 'number' || !Number.isFinite(toolsTokens)) return null
+  if (typeof messageTokens !== 'number' || !Number.isFinite(messageTokens)) return null
+  return { systemTokens, toolsTokens, messageTokens }
 }
 
 /**
