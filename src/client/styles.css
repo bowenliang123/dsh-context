@@ -206,6 +206,17 @@
 .lc-cols > .lc-card { margin-bottom: 0; }
 .lc-col > .lc-card:last-child { margin-bottom: 0; }
 /*
+ Context tab's main split: the right column is a flex column whose single
+ card (the Context browser) stretches to the column's full height — the
+ shared `lc-cols` stretch already levels the two columns, so the browser's
+ default height matches the left column (composition + history stacked)
+ instead of shrinking to its content; longer content still grows past it.
+ The /context modal renders the browser without this wrapper and stays
+ content-sized.
+ */
+.lc-col-browser { display: flex; flex-direction: column; }
+.lc-col-browser > .lc-card { flex: 1; }
+/*
  Head row: stats board + plugin info sit side by side under the shared
  `lc-cols` flex — stats takes ~7/10 of the row, plugin info ~3/10, both
  wrap onto their own line when the available width falls below each card's

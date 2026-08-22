@@ -328,8 +328,11 @@ export function makeContextView(ctx: ClientCtx, kit: ViewKit): (props: ContextVi
           </div>
 
           {/* ---- context browser: the assembled content of the live surface
-                 or a picked step; follows the trend chart's hovered bar ---- */}
-          <div className="lc-col">
+                 or a picked step; follows the trend chart's hovered bar.
+                 `lc-col-browser` stretches the card to the left column's
+                 height (Context tab only — the /context modal stays
+                 content-sized) ---- */}
+          <div className="lc-col lc-col-browser">
             <ContextBrowser
               data={data}
               headers={headers}
