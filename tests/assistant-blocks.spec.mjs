@@ -63,7 +63,7 @@ test('assistant blocks: thinking/answer/tool-call split into cards, prose switch
   const badCard = cards[3]
   assert.match(textOf(byClass(badCard, 'lc-ts-card-head')[0]), /→ write/, 'fallback card names the tool')
   assert.equal(byClass(badCard, 'lc-ts-arg-row').length, 0, 'fallback card has no argument rows')
-  assert.match(textOf(byClass(badCard, 'lc-br-pre')[0]), /\{bad json/, 'fallback card shows the raw payload')
+  assert.match(textOf(byClass(badCard, 'lc-ts-desc-body')[0]), /\{bad json/, 'fallback card shows the raw payload')
 
   // Flip the THINKING card to raw: only its own view changes.
   byClass(segsOf()[0], 'lc-rich-seg-btn')[0].args[1].onClick()
@@ -142,7 +142,7 @@ test('tool result: the call half renders as a card with name/value argument rows
   assert.doesNotMatch(rowText, /node\.toolResult/, 'generic result label replaced')
   const toolTag = byClass(toolRow, 'lc-br-tag')[0]
   assert.equal(textOf(toolTag), 'bash', 'tool row leads with the tool-name chip')
-  assert.match(toolTag.args[1].className, /lc-br-tag-inv/, 'tool-name chip is inverted')
+  assert.ok(!/lc-br-tag-inv/.test(toolTag.args[1].className), 'tool-name chip uses the shared subtle tag style')
 
   brSlots[2][1]('n3')   // expand the tool-result element
   tr = renderView()
@@ -157,8 +157,8 @@ test('tool result: the call half renders as a card with name/value argument rows
   assert.equal(byClass(callCard, 'lc-ts-param-type').length, 0, 'no type column')
   assert.match(textOf(tr), /RESULT-TEXT/, 'the result payload still renders below the card')
 
-  // The text-less ASSISTANT turns preview the same way: an inverted
-  // tool-name breadcrumb chip leads, then the call's summary (bash's
+  // The text-less ASSISTANT turns preview the same way: a tool-name
+  // breadcrumb chip leads, then the call's summary (bash's
   // description, an edit call's target path) — while a turn WITH text
   // keeps the text preview (no chip: it made no calls).
   brSlots[1][1]('assistant')
@@ -167,7 +167,7 @@ test('tool result: the call half renders as a card with name/value argument rows
   assert.equal(asstRows.length, 3, 'all three assistant turns listed (newest first)')
   const editTag = byClass(asstRows[0], 'lc-br-tag')[0]
   assert.equal(textOf(editTag), 'edit', 'edit turn leads with its tool-name chip')
-  assert.match(editTag.args[1].className, /lc-br-tag-inv/, 'assistant chip is inverted too')
+  assert.ok(!/lc-br-tag-inv/.test(editTag.args[1].className), 'assistant chip shares the subtle tag style too')
   assert.ok(textOf(asstRows[0]).includes('/tmp/b.ts'), 'edit turn previews the target path')
   const asstTag = byClass(asstRows[1], 'lc-br-tag')[0]
   assert.equal(textOf(asstTag), 'bash', 'assistant row leads with the tool-name chip')

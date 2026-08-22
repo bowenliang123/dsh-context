@@ -105,6 +105,7 @@ export const DICT_ZH: Record<string, string> = {
   // mirroring the harness's own block + locale vocabulary).
   'block.thinking': '思考',
   'block.answer': '回答',
+  'block.content': '内容', 'block.result': '结果', 'block.summary': '摘要',
   // Attachment cards in a message detail: image refs render as thumbnail
   // cards (name + one labeled row per known fact — raw dims, sent dims +
   // size, estimated token cost), anything unrecognized falls into the
@@ -221,6 +222,7 @@ export const DICT_EN: Record<string, string> = {
   // mirroring the harness's own block + locale vocabulary).
   'block.thinking': 'Reasoning',
   'block.answer': 'Response',
+  'block.content': 'Content', 'block.result': 'Result', 'block.summary': 'Summary',
   // Attachment cards in a message detail: image refs render as thumbnail
   // cards (name + one labeled row per known fact — raw dims, sent dims +
   // size, estimated token cost), anything unrecognized falls into the

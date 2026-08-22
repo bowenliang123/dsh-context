@@ -33,13 +33,14 @@ test('image attachment cards: card layout, metadata degradation, resolveImage th
   brSlots[1][1]('user') // openCat('user')
   brSlots[2][1]('n1')   // expand the user element
   let trImg = renderView()
-  // Metadata-only degradation (no conversation service armed): two attachment
-  // cards (images + other), two image items, placeholder tiles, no <img>.
-  assert.equal(byClass(trImg, 'lc-ts-card').length, 2, 'images card + other-content card rendered')
+  // Metadata-only degradation (no conversation service armed): three section
+  // cards (content text + images + other), two image items, placeholder
+  // tiles, no <img>.
+  assert.equal(byClass(trImg, 'lc-ts-card').length, 3, 'content + images + other-content cards rendered')
   assert.equal(byClass(trImg, 'lc-att-item').length, 2, 'one item per image ref')
   assert.equal(byClass(trImg, 'lc-att-thumb').length, 2, 'one tile per image')
   assert.equal(byClass(trImg, 'lc-att-ph').length, 2, 'placeholder tiles without the loader')
-  const imgCardText = textOf(byClass(trImg, 'lc-ts-card')[0])
+  const imgCardText = textOf(byClass(trImg, 'lc-ts-card')[1])
   assert.match(imgCardText, /screenshot\.png/, 'named image shows its display name')
   assert.match(imgCardText, /Raw6000×4000/, 'pre-normalization dims shown when present')
   assert.match(imgCardText, /Sent2048×1365 · 153\.6 kB/, 'normalized dims + stored byte size shown')
@@ -52,7 +53,7 @@ test('image attachment cards: card layout, metadata degradation, resolveImage th
   // Labeled rows: raw + sent + token on the first card, sent + token on the
   // second (no originalDimensions recorded → no Raw row).
   assert.equal(byClass(trImg, 'lc-att-row').length, 5, 'one labeled row per known fact')
-  assert.match(textOf(byClass(trImg, 'lc-ts-card')[1]), /file:\/\/x/, 'unrecognized blocks keep the raw JSON card')
+  assert.match(textOf(byClass(trImg, 'lc-ts-card')[2]), /file:\/\/x/, 'unrecognized blocks keep the raw JSON card')
   assert.match(textOf(byClass(trImg, 'lc-br-content')[0]), /WHAT-IS-THIS/, 'prose stays in the text card')
   assert.equal(byClass(trImg, 'lc-att-thumb')[0].args.slice(2).filter(c => c !== null && typeof c === 'object' && c.args[0] === 'img').length, 0, 'no thumbnail img without the loader')
   // Arm the conversation service: the loader resolves a display URL per ref.

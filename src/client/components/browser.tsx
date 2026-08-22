@@ -6,8 +6,9 @@
  *   step picker + composition bar
  *     → six category sections (accordion: dot, label, element count, tokens)
  *       → element rows (one per message / prompt / tool schema)
- *         → the element's ACTUAL content, rendered per kind (text, reasoning,
- *           tool call + result, injection notice, system prompt, JSON schema).
+ *         → the element's ACTUAL content as a uniform stack of SECTION cards
+ *           (Section: labeled head + body) — prose, tool calls, parameter
+ *           rows, image grids, and raw JSON all share that one frame.
  *
  * Data sources: the `contextTimeline` projection (structure + token prices,
  * per-step reconstruction via the removed-node archive), the `contextHeaders`
@@ -29,7 +30,7 @@ import { makeNodeText } from './nodes'
 import { imageRefOf, makeImageCard } from './images'
 import type { ImageKit } from './images'
 import { makeRichText } from './richText'
-import type { RichKit, RichMode } from './richText'
+import type { RichKit } from './richText'
 import type { StackedBarProps } from './stackedBar'
 import type { ImageLoader, ImageRefLike } from '../services'
 
@@ -188,18 +189,72 @@ function ParamRow(props: {
 }
 
 /**
+ * Section — the ONE detail chrome of the Context browser: a labeled card
+ * (`lc-ts-card`) whose head carries the section title on the left and the
+ * extras on the right (a count badge and/or the Raw/MD switch), with the
+ * body below. Every expanded element renders as a stack of these — prose,
+ * tool calls, parameter rows, image grids, and raw JSON all share the same
+ * frame, so the reader scans one repeating anatomy instead of a different
+ * layout per content kind.
+ */
+function Section(props: {
+  label: string
+  /** Head class for identifier-style titles (tool-call names: mono, larger). */
+  labelClass?: string
+  /** Count badge at the head's right edge (omitted when undefined). */
+  count?: number
+  /** Head actions (the Raw/MD switch), between the title and the count. */
+  actions?: ReactNS.ReactNode
+  children: ReactNS.ReactNode
+}): ReactNS.ReactElement {
+  return (
+    <div className="lc-ts-card">
+      <div className="lc-ts-card-head">
+        <b className={props.labelClass}>{props.label}</b>
+        {props.actions ?? null}
+        {props.count !== undefined ? <span className="lc-ts-card-count">{props.count}</span> : null}
+      </div>
+      {props.children}
+    </div>
+  )
+}
+
+/**
+ * TextSection — a prose Section (system prompt, message/injection/summary
+ * body, thinking, answer, tool description): the head's right edge carries
+ * the Raw/MD switch and the body follows the per-card mode.
+ */
+function TextSection(props: { label: string; text: string; rich: RichKit }): ReactNS.ReactElement {
+  const { rich } = props
+  const [mode, setMode] = rich.useRichMode()
+  return (
+    <Section label={props.label} actions={<rich.RichSwitch mode={mode} onPick={setMode} />}>
+      <rich.RichText text={props.text} mode={mode} />
+    </Section>
+  )
+}
+
+/** RawSection — a dimmed text Section without a view switch (structured payloads: tool results, raw JSON). */
+function RawSection(props: { label: string; text: string }): ReactNS.ReactElement {
+  return (
+    <Section label={props.label}>
+      <pre className="lc-ts-desc-body lc-br-dim">{props.text}</pre>
+    </Section>
+  )
+}
+
+/**
  * The full body of one expanded tool row: description, a parsed parameter
  * table (when the schema carries one), and the raw JSON behind a toggle.
  * Owns its own open/closed state for the JSON so two expanded tools stay
- * independent. The description card carries the shared raw/markdown view
- * toggle in its head (per-card state via `rich.useRichMode`).
+ * independent.
  */
 function ToolSchema(props: {
   description: string | undefined
   schema: unknown
-  /** Rich-text toggle kit (description card: raw <pre> vs markdown). */
+  /** Rich-text toggle kit (description section: raw <pre> vs markdown). */
   rich: RichKit
-  /** Localized labels for the card titles, empty-state line, and toggle. */
+  /** Localized labels for the section titles, empty-state line, and toggle. */
   labels: {
     desc: string
     title: string
@@ -210,7 +265,6 @@ function ToolSchema(props: {
 }): ReactNS.ReactElement {
   const { rich } = props
   const [jsonOpen, setJsonOpen] = React.useState(false)
-  const [descMode, setDescMode] = rich.useRichMode()
   const params = React.useMemo(() => paramsOf(props.schema), [props.schema])
   // Pull `properties` + `required` out of the parameter object as plain
   // values (avoids re-deriving the same shape in every row).
@@ -237,27 +291,12 @@ function ToolSchema(props: {
   return (
     <>
       {props.description !== undefined ? (
-        <div className="lc-ts-card">
-          <div className="lc-ts-card-head">
-            <b>{props.labels.desc}</b>
-            <rich.RichSwitch mode={descMode} onPick={setDescMode} inHead />
-          </div>
-          <rich.RichText
-            text={props.description}
-            mode={descMode}
-            rawClass="lc-ts-desc-body"
-            mdClass="lc-ts-desc-md"
-          />
-        </div>
+        <TextSection label={props.labels.desc} text={props.description} rich={rich} />
       ) : null}
       {params !== null && rows.length > 0 ? (
-        <div className="lc-ts-card">
-          <div className="lc-ts-card-head">
-            <b>{props.labels.title}</b>
-            <span className="lc-ts-card-count">{rows.length}</span>
-          </div>
+        <Section label={props.labels.title} count={rows.length}>
           {rows.map(r => <ParamRow key={r.name} name={r.name} schema={r.schema} required={r.required} />)}
-        </div>
+        </Section>
       ) : params !== null ? (
         <div className="lc-ts-params-empty">{props.labels.empty}</div>
       ) : null}
@@ -268,63 +307,99 @@ function ToolSchema(props: {
             className="lc-ts-json-toggle"
             onClick={() => { setJsonOpen(o => !o) }}
           >{(jsonOpen ? '▾ ' : '▸ ') + (jsonOpen ? props.labels.hide : props.labels.show)}</button>
-          {jsonOpen ? <pre className="lc-br-pre lc-br-dim">{schemaJson}</pre> : null}
+          {jsonOpen ? <pre className="lc-ts-desc-body lc-br-dim">{schemaJson}</pre> : null}
         </div>
       ) : null}
     </>
   )
 }
 
-/** One raw content block (text/reasoning/tool-result/image/…), rendered defensively. */
-function RawBlocks(props: { blocks: readonly unknown[]; mode: RichMode; rich: RichKit; img: ImageKit }): ReactNS.ReactElement {
-  const { rich, img } = props
-  return (
-    <>
-      {props.blocks.map((b, i) => {
-        const blk = b !== null && typeof b === 'object' ? b as { type?: string; text?: unknown; content?: unknown } : null
-        if (blk !== null
-          && (blk.type === 'text' || blk.type === 'reasoning') && typeof blk.text === 'string') {
-          // Reasoning stays raw in either mode (plain model trace, not
-          // prose); text blocks follow the card's view mode.
-          if (blk.type === 'reasoning') {
-            return <pre key={i} className="lc-br-pre lc-br-dim">{blk.text}</pre>
-          }
-          return <rich.RichText key={i} text={blk.text} mode={props.mode} />
-        }
-        const image = imageRefOf(b)
-        if (image !== null) return <img.Card key={i} attachment={image} load={img.load} />
-        if (blk !== null && blk.type === 'tool-result' && Array.isArray(blk.content)) {
-          return <RawBlocks key={i} blocks={blk.content as unknown[]} mode={props.mode} rich={rich} img={img} />
-        }
-        return <pre key={i} className="lc-br-pre lc-br-dim">{JSON.stringify(b, null, 2)}</pre>
-      })}
-    </>
-  )
+/** Localized section labels for one element body. */
+interface DetailLabels {
+  thinking: string
+  answer: string
+  content: string
+  result: string
+  summary: string
+  images: string
+  other: string
 }
 
 /**
- * One assistant-message block (thinking / answer) as its own card: the
- * title row carries the block label plus the block's OWN raw/markdown
- * switch (per-card state via `rich.useRichMode`, mirroring the tool
- * description card), so a mixed reply's parts toggle independently.
+ * Render one message's content blocks as a uniform Section stack. Both
+ * block vocabularies normalize here — raw durable blocks (`type`: text /
+ * reasoning / tool-call / tool-result / image, arguments) and the
+ * conversation snapshot's assistant blocks (`kind`: text / reasoning /
+ * tool-call / image, argsRaw). Consecutive images group into one grid
+ * section; `richable` bodies (messages, injections) carry the Raw/MD
+ * switch while tool-result payloads stay raw (structured data, not prose)
+ * and dim; nested tool-result blocks flatten into the same flow.
  */
-function BlockCard(props: { label: string; text: string; rich: RichKit }): ReactNS.ReactElement {
-  const { rich } = props
-  const [mode, setMode] = rich.useRichMode()
-  return (
-    <div className="lc-ts-card">
-      <div className="lc-ts-card-head">
-        <b>{props.label}</b>
-        <rich.RichSwitch mode={mode} onPick={setMode} inHead />
-      </div>
-      <rich.RichText
-        text={props.text}
-        mode={mode}
-        rawClass="lc-ts-desc-body"
-        mdClass="lc-ts-desc-md"
-      />
-    </div>
-  )
+function BlocksBody(props: {
+  blocks: readonly unknown[]
+  richable: boolean
+  /** Section label for prose text blocks (answer / content / result). */
+  textLabel: string
+  rich: RichKit
+  img: ImageKit
+  labels: DetailLabels
+}): ReactNS.ReactElement {
+  const { rich, img, labels } = props
+  const out: ReactNS.ReactNode[] = []
+  let images: ImageRefLike[] = []
+  const flushImages = (): void => {
+    if (images.length === 0) return
+    const group = images
+    images = []
+    out.push(
+      <Section key={'img' + String(out.length)} label={labels.images} count={group.length}>
+        <div className="lc-att-grid">
+          {group.map((a, i) => <img.Card key={`${a.attachmentId}:${i}`} attachment={a} load={img.load} />)}
+        </div>
+      </Section>,
+    )
+  }
+  for (const b of props.blocks) {
+    const image = imageRefOf(b)
+    if (image !== null) { images.push(image); continue }
+    flushImages()
+    const blk = b !== null && typeof b === 'object'
+      ? b as { type?: unknown; kind?: unknown; text?: unknown; name?: unknown; argsRaw?: unknown; arguments?: unknown; content?: unknown }
+      : null
+    const blockKind = blk !== null
+      ? typeof blk.type === 'string' ? blk.type : typeof blk.kind === 'string' ? blk.kind : ''
+      : ''
+    if ((blockKind === 'text' || blockKind === 'reasoning') && typeof blk?.text === 'string') {
+      const label = blockKind === 'reasoning' ? labels.thinking : props.textLabel
+      out.push(props.richable
+        ? <TextSection key={out.length} label={label} text={blk.text} rich={rich} />
+        : <RawSection key={out.length} label={label} text={blk.text} />)
+      continue
+    }
+    if (blockKind === 'tool-call') {
+      out.push(<ToolCallCard
+        key={out.length}
+        name={typeof blk?.name === 'string' ? blk.name : '?'}
+        argsRaw={blk?.argsRaw ?? blk?.arguments}
+      />)
+      continue
+    }
+    if (blockKind === 'tool-result' && Array.isArray(blk?.content)) {
+      out.push(<BlocksBody
+        key={out.length}
+        blocks={blk.content as unknown[]}
+        richable={false}
+        textLabel={labels.result}
+        rich={rich}
+        img={img}
+        labels={labels}
+      />)
+      continue
+    }
+    out.push(<RawSection key={out.length} label={labels.other} text={JSON.stringify(b, null, 2)} />)
+  }
+  flushImages()
+  return <>{out}</>
 }
 
 /**
@@ -385,27 +460,27 @@ function blockSummaryOf(conv: ConversationNodeLike | undefined): string | null {
 }
 
 /**
- * One tool call as its own card, mirroring the tool-definition parameter
- * card: the head names the call target (with the parsed argument count),
- * the body lists the arguments as name/value rows. Arguments that are not
- * a parseable JSON object fall back to the raw payload inside the same
- * card. Shared by assistant tool-call blocks (`→`) and the call half of a
- * tool result (`←`).
+ * One tool call as a Section, mirroring the tool-definition parameter
+ * card: the head names the call target (mono, with the parsed argument
+ * count), the body lists the arguments as name/value rows. Arguments that
+ * are not a parseable JSON object fall back to the raw payload inside the
+ * same card. Shared by assistant tool-call blocks (`→`) and the call half
+ * of a tool result (`←`).
  */
 function ToolCallCard(props: { name: string; argsRaw: unknown; arrow?: string }): ReactNS.ReactElement {
   const args = React.useMemo(() => parseArgs(props.argsRaw), [props.argsRaw])
   return (
-    <div className="lc-ts-card">
-      <div className="lc-ts-card-head">
-        <b className="lc-ts-call-name">{(props.arrow ?? '→') + ' ' + props.name}</b>
-        {args !== null ? <span className="lc-ts-card-count">{Object.keys(args).length}</span> : null}
-      </div>
+    <Section
+      label={(props.arrow ?? '→') + ' ' + props.name}
+      labelClass="lc-ts-call-name"
+      count={args !== null ? Object.keys(args).length : undefined}
+    >
       {args !== null
         ? Object.keys(args).map(k => <CallArgRow key={k} name={k} value={args[k]} />)
         : typeof props.argsRaw === 'string' && props.argsRaw !== ''
-          ? <pre className="lc-br-pre lc-br-dim">{props.argsRaw}</pre>
+          ? <pre className="lc-ts-desc-body lc-br-dim">{props.argsRaw}</pre>
           : null}
-    </div>
+    </Section>
   )
 }
 
@@ -423,138 +498,57 @@ function CallArgRow(props: { name: string; value: unknown }): ReactNS.ReactEleme
   )
 }
 
-/** The actual content of one surface element, joined from the conversation snapshot. */
+/**
+ * The actual content of one surface element, joined from the conversation
+ * snapshot — rendered as a uniform Section stack (see BlocksBody); the
+ * element row's open body wraps the stack in `lc-br-content`.
+ */
 function NodeContent(props: {
   node: SurfaceNode
   conv: ConversationNodeLike | undefined
   hint: string
   rich: RichKit
   img: ImageKit
-  labels: { thinking: string; answer: string; images: string; other: string }
+  labels: DetailLabels
 }): ReactNS.ReactElement {
-  const { node, conv, rich, img } = props
-  // The raw/markdown toggle serves the prose bodies (user / injection text,
-  // compaction summaries); assistant thinking/answer blocks each carry
-  // their own per-card switch (BlockCard); tool results stay raw
-  // (structured payload, not prose).
-  const richable = node.cat === 'user' || node.cat === 'assistant' || node.cat === 'inject'
-  const wrap = (render: (mode: RichMode) => ReactNS.ReactNode): ReactNS.ReactElement =>
-    richable
-      ? <rich.RichCard render={render} />
-      : <div className="lc-br-content">{render('raw')}</div>
-
+  const { node, conv, rich, img, labels } = props
   if (conv === undefined) {
+    // The join missed (node outside the loaded window): the 80-char preview
+    // still shows as a plain content section, with the window note below.
     if (node.text === undefined || node.text === '') {
-      return <div className="lc-br-content"><div className="lc-br-note">{props.hint}</div></div>
+      return <div className="lc-br-note">{props.hint}</div>
     }
-    return wrap(mode => (
+    return (
       <>
-        <rich.RichText text={node.text ?? ''} mode={mode} />
+        <TextSection label={labels.content} text={node.text} rich={rich} />
         <div className="lc-br-note">{props.hint}</div>
       </>
-    ))
+    )
   }
   if (conv.kind === 'assistant' && Array.isArray(conv.blocks)) {
-    // Thinking, answer, and tool-call blocks render as SEPARATE cards (the
-    // prose cards own a raw/markdown switch, the call card parses its
-    // arguments into rows); images keep their raw form.
-    return (
-      <div className="lc-br-content">
-        {conv.blocks.map((b, i) => {
-          const blk = b as { kind?: string; text?: unknown; name?: string; argsRaw?: unknown }
-          if (blk.kind === 'text' && typeof blk.text === 'string') {
-            return <BlockCard key={i} label={props.labels.answer} text={blk.text} rich={rich} />
-          }
-          if (blk.kind === 'reasoning' && typeof blk.text === 'string') {
-            return <BlockCard key={i} label={props.labels.thinking} text={blk.text} rich={rich} />
-          }
-          if (blk.kind === 'tool-call') {
-            return <ToolCallCard key={i} name={blk.name ?? '?'} argsRaw={blk.argsRaw} />
-          }
-          const image = imageRefOf(b)
-          if (image !== null) return <img.Card key={i} attachment={image} load={img.load} />
-          return null
-        })}
-      </div>
-    )
+    return <BlocksBody blocks={conv.blocks} richable textLabel={labels.answer} rich={rich} img={img} labels={labels} />
   }
   if (conv.kind === 'tool-result') {
     return (
-      <div className="lc-br-content">
+      <>
         {conv.call != null
           ? <ToolCallCard arrow="←" name={conv.call.name} argsRaw={conv.call.argsRaw} />
           : null}
-        {Array.isArray(conv.content) ? <RawBlocks blocks={conv.content} mode="raw" rich={rich} img={img} /> : null}
-      </div>
+        {Array.isArray(conv.content)
+          ? <BlocksBody blocks={conv.content} richable={false} textLabel={labels.result} rich={rich} img={img} labels={labels} />
+          : null}
+      </>
     )
   }
   if (conv.kind === 'compaction') {
-    return wrap(mode => (
-      <>
-        {typeof conv.summary === 'string' && conv.summary !== ''
-          ? <rich.RichText text={conv.summary} mode={mode} />
-          : null}
-      </>
-    ))
+    return typeof conv.summary === 'string' && conv.summary !== ''
+      ? <TextSection label={labels.summary} text={conv.summary} rich={rich} />
+      : <></>
   }
   if (Array.isArray(conv.content)) {
-    const blocks = conv.content as unknown[]
-    // User messages get the card layout: prose in the toggle-served text
-    // card, durable image refs as attachment cards (thumbnail + name + dims
-    // + size), and anything else as a raw JSON card. A text-only message
-    // renders exactly as before — one rich card and nothing else.
-    if (node.cat !== 'user') {
-      return wrap(mode => <RawBlocks blocks={blocks} mode={mode} rich={rich} img={img} />)
-    }
-    const texts: string[] = []
-    const images: ImageRefLike[] = []
-    const others: unknown[] = []
-    for (const b of blocks) {
-      const blk = b as { type?: string; text?: unknown } | null
-      if (blk !== null && typeof blk === 'object' && blk.type === 'text' && typeof blk.text === 'string') {
-        texts.push(blk.text)
-        continue
-      }
-      const image = imageRefOf(b)
-      if (image !== null) { images.push(image); continue }
-      others.push(b)
-    }
-    return (
-      <div className="lc-br-content">
-        {texts.length > 0 ? (
-          // Un-padded RichCard: the outer lc-br-content already owns the
-          // body indent, so the text card aligns with the attachment cards
-          // instead of sitting one indent deeper.
-          <rich.RichCard className="lc-br-rich-inline" render={mode => (
-            <>
-              {texts.map((text, i) => <rich.RichText key={i} text={text} mode={mode} />)}
-            </>
-          )} />
-        ) : null}
-        {images.length > 0 ? (
-          <div className="lc-ts-card">
-            <div className="lc-ts-card-head">
-              <b>{props.labels.images}</b>
-              <span className="lc-ts-card-count">{images.length}</span>
-            </div>
-            <div className="lc-att-grid">
-              {images.map((a, i) => <img.Card key={`${a.attachmentId}:${i}`} attachment={a} load={img.load} />)}
-            </div>
-          </div>
-        ) : null}
-        {others.length > 0 ? (
-          <div className="lc-ts-card">
-            <div className="lc-ts-card-head">
-              <b>{props.labels.other}</b>
-              <span className="lc-ts-card-count">{others.length}</span>
-            </div>
-            {others.map((b, i) => <pre key={i} className="lc-br-pre lc-br-dim">{JSON.stringify(b, null, 2)}</pre>)}
-          </div>
-        ) : null}
-      </div>
-    )
+    return <BlocksBody blocks={conv.content} richable textLabel={labels.content} rich={rich} img={img} labels={labels} />
   }
-  return <div className="lc-br-content"><div className="lc-br-note">{props.hint}</div></div>
+  return <div className="lc-br-note">{props.hint}</div>
 }
 
 /** Group an assembled surface's nodes by category (for per-category counts). */
@@ -731,23 +725,23 @@ export function makeContextBrowser(
     }
     const toggleElem = (key: string) => { setOpenElem(openElem === key ? null : key) }
 
-    /** One expandable element row (preview line; content when open). */
+    /** One expandable element row (preview line; the open body is the
+     * uniform indented section stack — `lc-br-content`). */
     const elemRow = (
       key: string, tag: string | null, preview: string,
       tokens: number, time: number | undefined, body: ReactNS.ReactNode,
-      inv = false,
     ) => {
       const open = openElem === key
       return (
         <div key={key} className={'lc-br-elem' + (open ? ' lc-br-elem-on' : '')}>
           <button type="button" className="lc-br-elem-row" onClick={() => { toggleElem(key) }}>
             <span className={'lc-br-chev' + (open ? ' lc-br-chev-on' : '')}>{'▸'}</span>
-            {tag !== null ? <span className={'lc-br-tag' + (inv ? ' lc-br-tag-inv' : '')}>{tag}</span> : null}
+            {tag !== null ? <span className="lc-br-tag">{tag}</span> : null}
             <span className="lc-br-preview">{preview}</span>
             {time !== undefined ? <span className="lc-br-time">{fmtTime(time)}</span> : null}
             <span className="lc-br-tokens">{'≈' + fmt(tokens)}</span>
           </button>
-          {open ? body : null}
+          {open ? <div className="lc-br-content">{body}</div> : null}
         </div>
       )
     }
@@ -758,7 +752,7 @@ export function makeContextBrowser(
         const system = view.header.system
         if (system === undefined) return null
         return elemRow('sys', null, system.replace(/\s+/g, ' ').trim().slice(0, 80), breakdown.system, undefined,
-          <rich.RichCard render={mode => <rich.RichText text={system} mode={mode} />} />)
+          <TextSection label={catLabel('system')} text={system} rich={rich} />)
       }
       if (c === 'tools') {
         if (view.header === null) return <div className="lc-br-note">{t(headers === null ? 'browser.noHeader' : 'browser.noEpoch')}</div>
@@ -776,9 +770,7 @@ export function makeContextBrowser(
         }
         return view.header.tools.slice().sort((a, b) => b.tokens - a.tokens).map((tool: HeaderTool) => {
           return elemRow('tool:' + tool.name, null, tool.name, tool.tokens, undefined,
-            <div className="lc-br-content">
-              <ToolSchema description={tool.description} schema={tool.schema} rich={rich} labels={labels} />
-            </div>)
+            <ToolSchema description={tool.description} schema={tool.schema} rich={rich} labels={labels} />)
         })
       }
       // Surface-node categories carry per-element timestamps; list them
@@ -786,16 +778,12 @@ export function makeContextBrowser(
       const nodes = (byCat[c as Category] ?? []).slice().reverse()
       return nodes.map((n) => {
         // Tag/preview split: the compact chip carries the compact fact (tool
-        // name, injection form), the preview line carries the text — each
-        // fact shown once. Tool-bearing rows (tool results, assistant turns
-        // with calls) lead with an INVERTED breadcrumb chip naming the
-        // tool(s) so they scan apart from prose rows.
+        // name, injection form) — one shared subtle chip style — and the
+        // preview line carries the text, each fact shown once.
         let tag: string | null = null
-        let inv = false
         let preview = nodeText(n)
         if (n.cat === 'tool') {
           tag = (n.tool ?? '?') + (n.err ? ' ⚠' : '')
-          inv = true
           // A call that summarizes itself (bash's `description`, the path
           // of an edit/read call) previews with that line in the collapsed
           // row; the generic result label only when the call says nothing.
@@ -805,7 +793,6 @@ export function makeContextBrowser(
           // then carries the reply text, or the first call's own summary
           // (description / target path) for a text-less turn.
           tag = n.calls.join(' › ')
-          inv = true
           preview = (n.text !== undefined && n.text !== '' ? n.text : null)
             ?? blockSummaryOf(bySeq.get(n.seq))
             ?? t('node.empty')
@@ -825,12 +812,15 @@ export function makeContextBrowser(
             conv={bySeq.get(n.seq)}
             rich={rich}
             img={{ Card: ImageCard, load: props.loadImage }}
-            // Localized block/section titles (thinking / answer / image and
-            // other-content cards), handed in by the parent so the body
-            // stays a pure function of props.
+            // Localized section titles (thinking / answer / content /
+            // result / summary / image and other-content cards), handed in
+            // by the parent so the body stays a pure function of props.
             labels={{
               thinking: t('block.thinking'),
               answer: t('block.answer'),
+              content: t('block.content'),
+              result: t('block.result'),
+              summary: t('block.summary'),
               images: t('attach.images'),
               other: t('attach.other'),
             }}
@@ -840,7 +830,7 @@ export function makeContextBrowser(
             hint={bySeq.get(n.seq) === undefined && awaiting
               ? t('browser.loading')
               : t('browser.noContent')}
-          />, inv)
+          />)
       })
     }
 

@@ -350,30 +350,20 @@
 .lc-br-elem-on { background: var(--dsw-alias-interactive-bg-active); }
 .lc-br-elem-row { display: flex; align-items: center; gap: 8px; width: 100%; border: 0; background: transparent; color: var(--dsw-alias-label-primary); font: inherit; font-size: 12px; padding: 5px 6px; cursor: pointer; text-align: left; border-radius: 6px; transition: background-color 120ms ease; }
 .lc-br-elem-row:hover { background: var(--dsw-alias-interactive-bg-hover); }
+/* The ONE element-row chip (tool name, injection form): subtle secondary
+ label on the layer-1 surface — the same tag for every row kind. */
 .lc-br-tag { flex: none; font-size: 11px; color: var(--dsw-alias-label-secondary); background: var(--dsw-alias-bg-layer-1); border: 1px solid var(--dsw-alias-border-l1); border-radius: 4px; padding: 0 6px; max-width: 220px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-/* Inverted tool-name breadcrumb (tool results + assistant turns with
- calls): label/surface tokens swap, so it reads black-on-white in light
- mode and white-on-black in dark mode; mono — these are identifiers. */
-.lc-br-tag-inv { color: var(--dsw-alias-bg-layer-1); background: var(--dsw-alias-label-primary); border-color: transparent; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
 .lc-br-preview { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .lc-br-time { flex: none; color: var(--dsw-alias-label-secondary); font-size: 11px; }
 .lc-br-content { padding: 2px 6px 8px 26px; display: flex; flex-direction: column; gap: 6px; }
-.lc-br-pre { margin: 0; padding: 8px 10px; background: var(--dsw-alias-bg-layer-2); border: 1px solid var(--dsw-alias-border-l1); border-radius: 6px; color: var(--dsw-alias-label-primary); font-size: 12px; line-height: 1.55; white-space: pre-wrap; word-break: break-word; max-height: 320px; overflow-y: auto; scrollbar-width: thin; }
 .lc-br-dim { color: var(--dsw-alias-label-secondary); }
 /*
- Assistant-message block title: a slim label line above each block
- (thinking / answer) so a mixed reply stays scannable — same weight and
- tone as the tool-schema card heads, without an extra bordered card.
- */
-.lc-br-blk { display: flex; flex-direction: column; gap: 4px; }
-.lc-br-blk-label { font-size: 11px; font-weight: 600; color: var(--dsw-alias-label-secondary); }
-/*
- ---- Tool schema body (browser card, tools category). The description
- and parameter table share one "card with a small title" chrome — a
- labeled bordered block so a reader can scan three stacked sections
- without losing track of which is which. The raw JSON sits below as a
- collapsed toggle (no card chrome — it's a debug view, not a primary
- section). ----
+ ---- Detail sections (the expanded element's content stack). EVERYTHING in
+ an open element body is a Section: the same card with a labeled head
+ (title left; count badge / Raw-MD switch right) over a body — prose, tool
+ calls, parameter rows, image grids, and raw JSON share this one frame.
+ The raw-schema JSON sits below the cards as a collapsed toggle (no card
+ chrome — it's a debug view, not a primary section). ----
  */
 .lc-ts-card { background: var(--dsw-alias-bg-layer-2); border: 1px solid var(--dsw-alias-border-l1); border-radius: 6px; overflow: hidden; }
 .lc-ts-card-head { display: flex; align-items: center; gap: 8px; padding: 6px 10px; font-size: 11px; font-weight: 600; color: var(--dsw-alias-label-secondary); border-bottom: 1px solid var(--dsw-alias-border-l1); }
@@ -382,7 +372,10 @@
  line (mono: it is an identifier, not prose). */
 .lc-ts-call-name { font-size: 13px; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
 .lc-ts-card-count { margin-left: auto; }
-.lc-ts-desc-body { margin: 0; padding: 8px 10px; color: var(--dsw-alias-label-primary); font-size: 12px; line-height: 1.55; white-space: pre-wrap; word-break: break-word; max-height: 160px; overflow-y: auto; scrollbar-width: thin; }
+/* The ONE text body chrome (raw <pre> and rendered markdown alike): plain
+ padded text on the section card, internally scrolled past the cap. `dim`
+ tones down non-prose payloads (reasoning traces, raw JSON). */
+.lc-ts-desc-body { margin: 0; padding: 8px 10px; color: var(--dsw-alias-label-primary); font-size: 12px; line-height: 1.55; white-space: pre-wrap; word-break: break-word; max-height: 320px; overflow-y: auto; scrollbar-width: thin; }
 /*
  Grid: name + type + required chip + description. Columns wrap on narrow
  rows; the description cell spans the full second row so a long blurb
@@ -418,21 +411,16 @@
 .lc-ts-json-toggle { align-self: flex-start; border: 0; background: transparent; color: var(--dsw-alias-label-secondary); font: inherit; font-size: 11px; padding: 0; cursor: pointer; }
 .lc-ts-json-toggle:hover { color: var(--dsw-alias-label-primary); text-decoration: underline; }
 /*
- ---- Raw/markdown view switch (detail cards: system prompt, tool
- description, user/assistant message + injection bodies). A segmented
- pill mirroring the trend chart's 步骤/轮次 control (`lc-gran`), riding
- the card's top-right corner as a self-end item of the content column
- (no absolute overlay, so it never covers text); the `in-head` variant
- sits at the right end of the tool description card's title row. The
- markdown box reuses the raw <pre> chrome minus the pre whitespace. ----
+ ---- Raw/markdown view switch: a segmented pill mirroring the trend
+ chart's 步骤/轮次 control (`lc-gran`), always at a section head's right
+ edge. The markdown body shares the raw text chrome minus the pre
+ whitespace. ----
  */
-.lc-rich-seg { align-self: flex-end; display: flex; gap: 2px; background: var(--dsw-alias-bg-layer-2); border: 1px solid var(--dsw-alias-border-l1); border-radius: 6px; padding: 1px; }
+.lc-rich-seg { margin-left: auto; display: flex; gap: 2px; background: var(--dsw-alias-bg-layer-2); border: 1px solid var(--dsw-alias-border-l1); border-radius: 6px; padding: 1px; }
 .lc-rich-seg-btn { border: 0; background: transparent; color: var(--dsw-alias-label-secondary); font-size: 11px; line-height: 1; padding: 3px 8px; border-radius: 5px; cursor: pointer; font-family: inherit; }
 .lc-rich-seg-btn:hover { color: var(--dsw-alias-label-primary); }
 .lc-rich-seg-on, .lc-rich-seg-on:hover { background: var(--dsw-alias-button-primary-fill); color: var(--dsw-alias-label-primary-foreground); }
-.lc-rich-seg-head { align-self: auto; margin-left: auto; }
-.lc-br-md { padding: 4px 10px; background: var(--dsw-alias-bg-layer-2); border: 1px solid var(--dsw-alias-border-l1); border-radius: 6px; color: var(--dsw-alias-label-primary); font-size: 12px; line-height: 1.55; word-break: break-word; max-height: 320px; overflow-y: auto; scrollbar-width: thin; }
-.lc-ts-desc-md { padding: 4px 10px; color: var(--dsw-alias-label-primary); font-size: 12px; line-height: 1.55; word-break: break-word; max-height: 160px; overflow-y: auto; scrollbar-width: thin; }
+.lc-ts-desc-md { padding: 4px 10px; color: var(--dsw-alias-label-primary); font-size: 12px; line-height: 1.55; word-break: break-word; max-height: 320px; overflow-y: auto; scrollbar-width: thin; }
 /*
  The shared markdown renderer sizes its root/headings for chat bubbles;
  inside a detail card the base size sits one step ABOVE the raw text
@@ -446,26 +434,20 @@
  next line sticks to the neighbor line's chip; pin the chip just under
  the paragraph line (1.3em + 1px padding ≈ 19px) to reopen the gap.
  */
-.lc-br-md > div, .lc-ts-desc-md > div { font-size: 13px; line-height: 1.55; }
-.lc-br-md div :is(h1, h2, h3, h4, h5, h6), .lc-ts-desc-md div :is(h1, h2, h3, h4, h5, h6) { font-size: 13px; font-weight: 600; margin: 10px 0 4px; }
-.lc-br-md div p, .lc-ts-desc-md div p { margin: 6px 0; }
-.lc-br-md div pre, .lc-ts-desc-md div pre { margin: 6px 0; }
-.lc-br-md div :not(pre) > code, .lc-ts-desc-md div :not(pre) > code { font-size: 1em !important; line-height: 1.3; padding: 1px 5px; box-decoration-break: clone; }
-.lc-br-md div table code, .lc-ts-desc-md div table code { font-size: inherit; }
+.lc-ts-desc-md > div { font-size: 13px; line-height: 1.55; }
+.lc-ts-desc-md div :is(h1, h2, h3, h4, h5, h6) { font-size: 13px; font-weight: 600; margin: 10px 0 4px; }
+.lc-ts-desc-md div p { margin: 6px 0; }
+.lc-ts-desc-md div pre { margin: 6px 0; }
+.lc-ts-desc-md div :not(pre) > code { font-size: 1em !important; line-height: 1.3; padding: 1px 5px; box-decoration-break: clone; }
+.lc-ts-desc-md div table code { font-size: inherit; }
 /*
- Un-padded RichCard variant: used when the text card is one section
- among several (attachment cards) inside an already-indented body.
- */
-.lc-br-rich-inline { display: flex; flex-direction: column; gap: 6px; }
-/*
- ---- Attachment cards (image refs in a message detail). The card chrome
- reuses the tool-schema sections' `lc-ts-card`/`lc-ts-card-head`; only the
- image grid and tile are new. The grid is two EQUAL-WIDTH columns
+ ---- Attachment cards (image refs in a message detail): tiles live in the
+ shared Section frame (`lc-ts-card`/`lc-ts-card-head`); only the grid and
+ tile are new. The grid is two EQUAL-WIDTH columns
  (minmax(0,…) so long names shrink instead of stretching the track); each
  image is a 64px cover tile (the chat history's tile size) beside a name +
  dims + size + estimated token cost column. ----
  */
-.lc-ts-card .lc-br-pre { margin: 8px 10px; }
 .lc-att-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; padding: 8px 10px; }
 .lc-att-item { display: flex; gap: 8px; align-items: center; min-width: 0; }
 .lc-att-thumb { width: 64px; height: 64px; flex: none; padding: 0; display: flex; align-items: center; justify-content: center; border: 1px solid var(--dsw-alias-border-l1); border-radius: 6px; overflow: hidden; background: var(--dsw-alias-bg-layer-1); cursor: pointer; font: inherit; }

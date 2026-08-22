@@ -244,14 +244,14 @@ export async function bootViewBed() {
     if (node === null || typeof node !== 'object') return node
     if (node.kind === 'element') {
       const [type, props, ...children] = node.args
+      // The fake createElement keeps children in args; real React puts them
+      // on props.children (single child as-is, several as an array) — merge
+      // them back for BOTH component kinds, exactly what React would pass.
+      const childrenOf = children.length === 0 ? {} : children.length === 1 ? { children: children[0] } : { children }
       if (typeof type === 'function' && type.prototype !== undefined && typeof type.prototype.render === 'function') {
         const key = path + '/' + (type.name || 'anon') + '#' + fnIdx
-        // The fake createElement keeps children in args, not props; real React
-        // puts them on props.children (single child as-is, several as an
-        // array), which the class instance's render() reads. Constructing with
-        // `new` runs the real constructor, so props AND the initial state are
-        // exactly what React would set.
-        const childrenOf = children.length === 0 ? {} : children.length === 1 ? { children: children[0] } : { children }
+        // Constructing with `new` runs the real constructor, so props AND
+        // the initial state are exactly what React would set.
         const inst = new type(Object.assign({}, props || {}, childrenOf))
         bed.classInstances.set(key, inst)
         try {
@@ -272,7 +272,7 @@ export async function bootViewBed() {
           bed.hookStates.set(key, currentHooks)
         }
         hookCursor = 0
-        return evaluate(type(props), key)
+        return evaluate(type(Object.assign({}, props || {}, childrenOf)), key)
       }
       const kids = []
       let f = 0

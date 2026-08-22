@@ -93,7 +93,7 @@ test('context browser: picker, accordion, reconstruction, header content, deltas
   msgSegBtns[0].args[1].onClick()
   tr = renderView()
   assert.equal(byClass(tr, 'lc-md-stub').length, 0, 'raw mode drops the markdown renderer')
-  assert.match(textOf(byClass(tr, 'lc-br-pre')[0]), /first message/, 'raw view carries the message text')
+  assert.match(textOf(byClass(tr, 'lc-ts-desc-body')[0]), /first message/, 'raw view carries the message text')
   assert.match(byClass(tr, 'lc-rich-seg-btn')[0].args[1].className, /lc-rich-seg-on/, 'raw segment lights up')
   byClass(tr, 'lc-rich-seg-btn')[1].args[1].onClick()
   tr = renderView()
@@ -132,12 +132,12 @@ test('context browser: picker, accordion, reconstruction, header content, deltas
   const sysMd = byClass(tr, 'lc-md-stub')
   assert.equal(sysMd.length, 1, 'markdown mode renders the prompt through MarkdownText')
   assert.equal(textOf(sysMd[0]), 'SYSTEM-PROMPT-TEXT', 'markdown view carries the same source text')
-  assert.equal(byClass(tr, 'lc-br-body')[0] && byClass(byClass(tr, 'lc-br-body')[0], 'lc-br-pre').length, 0,
+  assert.equal(byClass(tr, 'lc-br-body')[0] && byClass(byClass(tr, 'lc-br-body')[0], 'lc-ts-desc-body').length, 0,
     'markdown mode drops the raw <pre>')
   sysSegBtns()[0].args[1].onClick()
   tr = renderView()
   assert.equal(byClass(tr, 'lc-md-stub').length, 0, 'raw mode drops the markdown renderer')
-  assert.match(textOf(byClass(tr, 'lc-br-pre')[0]), /SYSTEM-PROMPT-TEXT/, 'raw view shows the prompt')
+  assert.match(textOf(byClass(tr, 'lc-ts-desc-body')[0]), /SYSTEM-PROMPT-TEXT/, 'raw view shows the prompt')
   sysSegBtns()[1].args[1].onClick()
   tr = renderView()
   assert.equal(byClass(tr, 'lc-md-stub').length, 1, 'switching back restores the markdown view')
@@ -189,7 +189,7 @@ test('context browser: picker, accordion, reconstruction, header content, deltas
     'array parameters render their element type')
   // Raw JSON is collapsed by default — the toggle is visible but the schema
   // string does NOT appear in the rendered text yet.
-  assert.equal(byClass(tr, 'lc-br-pre').filter(n => /"parameters"/.test(textOf(n))).length, 0,
+  assert.equal(byClass(tr, 'lc-ts-desc-body').filter(n => /"parameters"/.test(textOf(n))).length, 0,
     'raw JSON stays collapsed behind the toggle by default')
   const toggle = byClass(tr, 'lc-ts-json-toggle')[0]
   assert.ok(toggle, 'JSON toggle button is rendered')
@@ -197,12 +197,12 @@ test('context browser: picker, accordion, reconstruction, header content, deltas
   // Expanding the toggle reveals the schema; clicking again collapses it.
   toggle.args[1].onClick()
   tr = renderView()
-  assert.match(textOf(byClass(tr, 'lc-br-pre')[0]), /"parameters"/, 'expanding reveals the raw JSON')
+  assert.match(textOf(byClass(tr, 'lc-ts-desc-body')[0]), /"parameters"/, 'expanding reveals the raw JSON')
   const collapseToggle = byClass(tr, 'lc-ts-json-toggle')[0]
   assert.match(textOf(collapseToggle), /Collapse|收起/, 'toggle label flips to the hide label')
   collapseToggle.args[1].onClick()
   tr = renderView()
-  assert.equal(byClass(tr, 'lc-br-pre').length, 0, 'collapsing the toggle removes the JSON block')
+  assert.equal(byClass(tr, 'lc-ts-desc-body').length, 0, 'collapsing the toggle removes the JSON block')
 
   // Without the contextHeaders key (older host), those sections degrade to a note.
   bed.headersValue = undefined
