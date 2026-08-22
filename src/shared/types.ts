@@ -253,6 +253,12 @@ export interface RequestRecord {
    * per turn shows its LAST step's record). The Host never sets it.
    */
   stepCount?: number
+  /**
+   * Delta-view signed net change, set by the Client's deltaOf (only present
+   * on the delta-transformed records the TrendChart plots). The Host never
+   * sets it.
+   */
+  net?: number
 }
 
 /** A notable context event (compaction, prune, injection, model switch). */

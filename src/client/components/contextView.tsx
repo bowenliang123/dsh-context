@@ -106,6 +106,9 @@ export function makeContextView(ctx: ClientCtx, kit: ViewKit): (props: ContextVi
     const [hoverTurn, setHoverTurn] = React.useState<number | null>(null)
     const [tick, setTick] = React.useState(0)
     const [granularity, setGranularity] = React.useState<'step' | 'turn'>('step')
+    // Delta display mode: when on, the history chart plots each request's
+    // incremental diff instead of its cumulative composition.
+    const [deltaMode, setDeltaMode] = React.useState(false)
     // Turn strip click target: the chart switches to turn granularity and
     // scroll-centers this turn's bar, then clears it via onFocusTurnHandled.
     const [focusTurn, setFocusTurn] = React.useState<number | null>(null)
@@ -296,6 +299,13 @@ export function makeContextView(ctx: ClientCtx, kit: ViewKit): (props: ContextVi
                     onClick={() => { setGranularity('turn') }}
                   >{t('gran.turn')}</button>
                 </div>
+                <div className="lc-gran">
+                  <button
+                    className={'lc-gran-btn' + (deltaMode ? ' lc-gran-on' : '')}
+                    title={t('gran.deltaHint')}
+                    onClick={() => { setDeltaMode(d => !d) }}
+                  >{t('gran.delta')}</button>
+                </div>
               </div>
               {displayRequests.length === 0
                 ? <div className="lc-empty">{t('trend.empty')}</div>
@@ -314,6 +324,7 @@ export function makeContextView(ctx: ClientCtx, kit: ViewKit): (props: ContextVi
                       hoveredSeq={hoveredSeq}
                       activeTurn={activeTurn}
                       granularity={granularity}
+                      delta={deltaMode}
                       focusTurn={focusTurn}
                       onSelect={setSelectedSeq}
                       onHover={setHoveredSeq}
