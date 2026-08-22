@@ -2,7 +2,17 @@
  * Token pricing — the same fixed-density heuristic as the harness's own
  * token-meter (`dsh-token-meter/estimate.ts`): ~4 chars ≈ 1 token, +4 per
  * content block, +4 role framing. Pure functions over message payloads.
+ *
+ * One deliberate refinement over the meter: `image` blocks. The meter prices
+ * them through its generic JSON branch (~40 tokens for the durable ref),
+ * while DeepSeek's vision model actually bills 117-384 tokens per image by
+ * pixel dimensions (https://api-docs.deepseek.com/zh-cn/guides/vision/).
+ * Image blocks therefore price through the official docs calculator port
+ * (shared/imageTokens.ts), falling back to the meter's JSON price when the
+ * attachment's dimensions are unknown.
  */
+
+import { estimateImageTokens } from '../shared/imageTokens'
 
 const CHARS_PER_TOKEN = 4
 const BLOCK_OVERHEAD = 4
@@ -22,6 +32,9 @@ export interface ContentBlock {
   arguments?: string
   content?: ContentBlock[]
   callId?: string
+  /** dsh 0.1.1 multimodal image block payload (durable attachment ref; the
+   * log is untrusted input, so the fold re-proves its shape — null included). */
+  attachment?: { width?: unknown; height?: unknown } | null
 }
 
 function estimateBlocks(blocks: ContentBlock[] | undefined): number {
@@ -40,6 +53,17 @@ function estimateBlocks(blocks: ContentBlock[] | undefined): number {
       case 'tool-result':
         tokens += estimateBlocks(block.content) + BLOCK_OVERHEAD
         break
+      case 'image': {
+        // Real vision billing by pixel dimensions (see the module header);
+        // unknown dims degrade to the meter's generic JSON price.
+        const ref = block.attachment
+        const priced = ref !== null && typeof ref === 'object'
+          && typeof ref.width === 'number' && typeof ref.height === 'number'
+          ? estimateImageTokens(ref.width, ref.height)
+          : null
+        tokens += (priced ?? Math.ceil(JSON.stringify(block).length / CHARS_PER_TOKEN)) + BLOCK_OVERHEAD
+        break
+      }
       default:
         tokens += BLOCK_OVERHEAD + Math.ceil(JSON.stringify(block).length / CHARS_PER_TOKEN)
     }

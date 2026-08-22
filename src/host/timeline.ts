@@ -193,7 +193,11 @@ export function createContextTimelineDefinition(config: Config): ProjectionDefin
     // 5: the session-cost totals (`cost` — per-family/per-period billed
     // tokens) joined the persisted state; cached rows predate the shape and
     // are refolded.
-    stateVersion: 5,
+    // 6: image blocks price through the official DeepSeek docs calculator
+    // (real vision billing by pixel dimensions) instead of the token-meter's
+    // generic JSON branch — cached rows carry the old underpriced image
+    // nodes and are refolded.
+    stateVersion: 6,
   }
   return definition
 }

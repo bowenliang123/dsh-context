@@ -11,6 +11,13 @@
  * (`pricing.ts`, a mirror of the meter's estimator) — this check keeps that
  * mirror honest against the official projection over real event logs.
  *
+ * ONE deliberate divergence, accounted for below: since 0.24 the plugin
+ * prices `image` blocks through the official DeepSeek docs image-token
+ * calculator (real vision billing, 117-384 by pixel dims) where the meter
+ * uses its generic JSON branch (~40 for the durable ref). The checker
+ * replays a parallel image-delta surface so image-bearing logs still match
+ * EXACTLY: expected plugin surface = messageTokens + Σ live image deltas.
+ *
  * The official projection is imported from a dsh SOURCE checkout (env
  * DSH_REPO, default ~/dev/deepseek-harness). The checkout needs no install:
  * the needed token-meter/session sources are copied to a temp dir with their
@@ -28,6 +35,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { pathToFileURL } from 'node:url'
 import { apply } from '../lib/index.js'
+import { estimateImageTokens } from '../src/shared/imageTokens.ts'
 
 const DSH_REPO = process.env.DSH_REPO || `${process.env.HOME}/dev/deepseek-harness`
 
@@ -54,6 +62,30 @@ const stub: any = new Proxy(() => stub, { get: () => stub, apply: () => stub })
 export const z = stub
 `)
 const { contextBreakdownProjectionDefinition } = await import(pathToFileURL(join(dir, 'breakdown-projection.ts')).href)
+const { isSurfaceEvent, deriveEventMessage } = await import(pathToFileURL(join(dir, 'surface.ts')).href)
+
+/**
+ * The image-pricing divergence of one message's content: per image block
+ * with known dims, corrected (official calculator) minus the meter's JSON
+ * price of the whole block. Unknown dims price identically on both sides.
+ */
+function imageDeltaOf(blocks) {
+  let delta = 0
+  if (!Array.isArray(blocks)) return 0
+  for (const block of blocks) {
+    if (block === null || typeof block !== 'object') continue
+    if (block.type === 'image') {
+      const a = block.attachment
+      if (a !== null && typeof a === 'object' && typeof a.width === 'number' && typeof a.height === 'number') {
+        const corrected = estimateImageTokens(a.width, a.height)
+        if (corrected !== null) delta += corrected - Math.ceil(JSON.stringify(block).length / 4)
+      }
+    } else if (block.type === 'tool-result') {
+      delta += imageDeltaOf(block.content)
+    }
+  }
+  return delta
+}
 
 const files = process.argv.slice(2)
 if (files.length === 0) {
@@ -71,32 +103,63 @@ for (const file of files) {
     if (ev !== null && typeof ev === 'object' && typeof ev.seq === 'number') events.push(ev)
   }
 
-  // Official fold: token-meter's contextBreakdown projection, verbatim.
+  // Official fold: token-meter's contextBreakdown projection, verbatim
+  // (dsh 0.1.1 moved the client view under `wire`; read either contract).
+  const officialView = contextBreakdownProjectionDefinition.wire?.view
+    ?? contextBreakdownProjectionDefinition.view
   let st = contextBreakdownProjectionDefinition.init()
   for (const ev of events) st = contextBreakdownProjectionDefinition.apply(st, ev)
-  const breakdown = contextBreakdownProjectionDefinition.view(st)
+  const breakdown = officialView(st)
 
   // Plugin fold through its public projection unit (same mounting as host.test).
-  let def = null
+  const defs = new Map()
   apply({
     inject(list, cb) { cb(this) },
     effect(fn) { fn(); return () => {} },
-    sessionProjections: { register(d) { def = d; return () => {} } },
+    sessionProjections: { register(d) { defs.set(d.key, d); return () => {} } },
   })
+  const def = defs.get('contextTimeline')
   let mine = def.init()
   for (const ev of events) mine = def.apply(mine, ev)
   const view = def.view(mine)
   const surfaceTotal = view.current.total - view.current.system - view.current.tools
 
+  // Parallel image-delta surface: replay the same surface ops, tracking the
+  // per-node image divergence the plugin's corrected pricing introduces.
+  let live = []
+  let shadowedSeqs = null
+  for (const ev of events) {
+    if (ev.type === 'compaction/summary' || ev.type === 'compaction/prune') {
+      shadowedSeqs = Array.isArray(ev.data?.shadowedSeqs) ? ev.data.shadowedSeqs : null
+      continue
+    }
+    if (!isSurfaceEvent(ev)) { shadowedSeqs = null; continue }
+    const msg = deriveEventMessage(ev)
+    const delta = msg === null ? 0 : imageDeltaOf(msg.content)
+    const op = ev.surfaceOp
+    if (op !== 'append') {
+      if (Array.isArray(shadowedSeqs) && shadowedSeqs.length > 0) {
+        const shadowed = new Set(shadowedSeqs)
+        live = live.filter(n => !shadowed.has(n.seq))
+      } else {
+        live = live.filter(n => n.seq < op.start || n.seq > op.end)
+      }
+    }
+    shadowedSeqs = null
+    live.push({ seq: ev.seq, delta })
+  }
+  const imageDelta = live.reduce((sum, n) => sum + n.delta, 0)
+
   const match = view.current.system === breakdown.systemTokens
     && view.current.tools === breakdown.toolsTokens
-    && surfaceTotal === breakdown.messageTokens
+    && surfaceTotal === breakdown.messageTokens + imageDelta
   if (!match) failed = 1
   console.log(
     (match ? 'MATCH    ' : 'MISMATCH ')
     + file
     + ' official=' + String(breakdown.systemTokens) + '/' + String(breakdown.toolsTokens) + '/' + String(breakdown.messageTokens)
-    + ' plugin=' + String(view.current.system) + '/' + String(view.current.tools) + '/' + String(surfaceTotal),
+    + ' plugin=' + String(view.current.system) + '/' + String(view.current.tools) + '/' + String(surfaceTotal)
+    + (imageDelta !== 0 ? ' imageDelta=' + String(imageDelta) : ''),
   )
 }
 process.exit(failed)
