@@ -105,6 +105,7 @@ const contextTimelineSchema = z.object({
   contextWindow: z.number().optional(),
   current: currentSchema,
   toolList: z.array(z.object({ name: z.string(), tokens: z.number().int().nonnegative() }).strict()),
+  images: z.number().int().nonnegative().optional(),
   requests: z.array(requestRecordSchema),
   events: z.array(contextEventSchema),
   cost: z.object({ flash: costFamilySchema.optional(), pro: costFamilySchema.optional() }).strict().optional(),
@@ -140,6 +141,7 @@ const timelineStateSchema = z.object({
   events: z.array(contextEventSchema),
   archived: z.array(surfaceNodeSchema),
   cost: z.object({ flash: costFamilySchema.optional(), pro: costFamilySchema.optional() }).strict().optional(),
+  images: z.number().int().nonnegative().optional(),
   archiveFloor: z.number().optional(),
   callNames: z.record(z.string(), z.string()),
   pendingShadowedSeqs: z.array(z.number()).optional(),
@@ -197,7 +199,9 @@ export function createContextTimelineDefinition(config: Config): ProjectionDefin
     // (real vision billing by pixel dimensions) instead of the token-meter's
     // generic JSON branch — cached rows carry the old underpriced image
     // nodes and are refolded.
-    stateVersion: 6,
+    // 7: the whole-session image-block count (`images`) joined the persisted
+    // state; cached rows predate the shape and are refolded.
+    stateVersion: 7,
   }
   return definition
 }

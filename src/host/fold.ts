@@ -27,6 +27,7 @@ import {
   estimateToolsTotal,
   estimateToolSchema,
   firstText,
+  imageCountOf,
   isInjection,
   toolCallNames,
 } from './pricing'
@@ -101,6 +102,12 @@ export interface TimelineState {
    * Absent until a v4-flash / v4-pro request reports usage.
    */
   cost?: SessionCostUsage
+  /**
+   * Cumulative image-block count over the COMPLETE session log (user uploads
+   * plus tool-result images, nested blocks included) — running total, never
+   * trimmed, so the stats board's image cell stays whole-session like cost.
+   */
+  images: number
   /** Newest `gone` among archive entries dropped by the retention bounds. */
   archiveFloor?: number
   /**
@@ -203,6 +210,7 @@ export function createTimelineState(): TimelineState {
     events: [],
     archived: [],
     callNames: {},
+    images: 0,
   }
 }
 
@@ -242,6 +250,8 @@ function applySurface(
   message: MessageLike | null | undefined,
 ): SurfaceNode {
   const cat = categoryOf(type, message ?? undefined)
+  // Restored checkpoints from older builds may lack `images` — normalize.
+  st.images = (st.images ?? 0) + imageCountOf(message?.content)
   const node: SurfaceNode = {
     seq: ev.seq,
     time: ev.time,
@@ -614,6 +624,7 @@ export function buildTimelineView(state: TimelineState, bounds: FoldBounds): Sna
       total: surfaceTotal + state.systemTokens + state.toolsTokens,
     },
     toolList: state.toolList,
+    images: state.images ?? 0,
     requests: state.requests.map(r => ({ ...r })),
     events: state.events.map(e => ({ ...e })),
     nodes: [],

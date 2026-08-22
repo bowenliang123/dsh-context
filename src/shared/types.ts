@@ -73,6 +73,12 @@ export interface Snapshot {
     contextWindow?: number
   }
   toolList: { name: string; tokens: number }[]
+  /**
+   * Cumulative image-block count over the COMPLETE session log (user uploads
+   * plus tool-result images) — never trimmed, like `cost`. Absent from older
+   * hosts; clients treat absence as zero.
+   */
+  images?: number
   requests: RequestRecord[]
   events: ContextEventRecord[]
   /**

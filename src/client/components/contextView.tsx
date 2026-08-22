@@ -262,7 +262,7 @@ export function makeContextView(ctx: ClientCtx, kit: ViewKit): (props: ContextVi
 
         {/* ---- session context stats + plugin info, side by side (7 : 3) ---- */}
         <div className="lc-cols lc-head">
-          <StatsBoard requests={requests} events={events} usage={usage} cost={data.cost} locale={activeLocale} />
+          <StatsBoard requests={requests} events={events} usage={usage} images={data.images} cost={data.cost} locale={activeLocale} />
           <PluginInfo />
         </div>
 

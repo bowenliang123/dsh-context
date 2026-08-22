@@ -70,6 +70,8 @@ test('host fold: image blocks price by the official DeepSeek image token formula
   assert.equal(n5.tokens, 201 + 4 + 4 + 4, 'nested tool-result image priced by dims')
   // Category sums carry the corrected figures.
   assert.equal(v.current.user, n1.tokens + n2.tokens + n3.tokens)
+  // Whole-session image count: three user uploads + the nested tool-result image.
+  assert.equal(v.images, 4, 'image blocks counted across user messages and tool results')
 
   // Compaction shadows the two image messages: the fold subtracts its own
   // corrected prices, keeping the surface sum internally consistent.
@@ -84,6 +86,7 @@ test('host fold: image blocks price by the official DeepSeek image token formula
   const kept = v2.nodes.find(n => n.seq === 2)
   const summary = v2.nodes.find(n => n.seq === 4)
   assert.equal(v2.current.user, kept.tokens + summary.tokens, 'shadowed image leaves no residue')
+  assert.equal(v2.images, 1, 'the image count is cumulative — compaction does not decrement it')
   console.log('✔ host fold image pricing passed (official formula, JSON fallback, nesting, compaction shadow)')
 })
 

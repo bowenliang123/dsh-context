@@ -96,6 +96,21 @@ export function estimateToolSchema(tool: unknown): number {
 
 // ---- content extraction (display previews for surface nodes) ----------------
 
+/**
+ * Count image blocks in a message payload, recursing into nested content
+ * (tool-result blocks carry their inner blocks) — feeds the stats board's
+ * whole-session image-file cell.
+ */
+export function imageCountOf(blocks: ContentBlock[] | undefined): number {
+  let count = 0
+  if (!Array.isArray(blocks)) return 0
+  for (const block of blocks) {
+    if (block.type === 'image') count++
+    else if (Array.isArray(block.content)) count += imageCountOf(block.content)
+  }
+  return count
+}
+
 export function firstText(blocks: ContentBlock[] | undefined): string {
   if (!Array.isArray(blocks)) return ''
   for (const b of blocks) {

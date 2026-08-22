@@ -1,7 +1,8 @@
 /**
  * StatsBoard — the session context statistics card above the composition:
  * conversation size (turns/steps), context churn (compaction count,
- * prune count, injection count), the cache-hit share, and the estimated
+ * prune count, injection count), the whole-session image-file count, the
+ * cache-hit share, and the estimated
  * cumulative session cost. The counts cover the retained history window,
  * matching the History chart; the cache-hit figure reuses the official
  * token-meter `tokenUsage` projection verbatim — the exact same data and
@@ -49,6 +50,8 @@ export function makeStatsBoard(kit: ViewKit): (props: {
   requests: RequestRecord[]
   events: ContextEventRecord[]
   usage: TokenUsage | null
+  /** Cumulative session image-block count (whole log; absent on older hosts). */
+  images?: number
   /** Session-cost raw material from the timeline (undefined: nothing priced). */
   cost?: SessionCostUsage
   /** Active locale id — zh prices in CNY, everything else in USD. */
@@ -59,6 +62,7 @@ export function makeStatsBoard(kit: ViewKit): (props: {
     requests: RequestRecord[]
     events: ContextEventRecord[]
     usage: TokenUsage | null
+    images?: number
     cost?: SessionCostUsage
     locale: string
   }): ReactNS.ReactElement {
@@ -119,6 +123,7 @@ export function makeStatsBoard(kit: ViewKit): (props: {
           {cell(t('stats.injects'), fmt(injects))}
           {cell(t('stats.compactions'), fmt(compactions))}
           {cell(t('stats.prunes'), fmt(prunes))}
+          {cell(t('stats.images'), fmt(props.images ?? 0))}
           {cell(t('stats.cacheHit'), hit === null ? '—' : hit + '%')}
           {cell(t('stats.cost'), cost === null ? '—' : formatCost(cost, currency), costTip)}
         </div>

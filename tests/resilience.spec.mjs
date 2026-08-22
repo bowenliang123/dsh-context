@@ -42,12 +42,13 @@ test('backend-parse-failure resilience: sanitized render of corrupt payloads, de
   }
   tr = renderView() // must not throw
   assert.equal(byClass(tr, 'lc-bar').length, 1, 'the usable request entry still renders a trend bar')
-  assert.equal(byClass(tr, 'lc-stat-value').length, 7, 'stats board still renders')
+  assert.equal(byClass(tr, 'lc-stat-value').length, 8, 'stats board still renders')
   const statValsM = byClass(tr, 'lc-stat-value').map(n => n.args[2])
   assert.equal(statValsM[0], '1', 'turns count survives (non-array requests degraded, entries filtered)')
   assert.equal(statValsM[1], '1', 'steps count survives')
-  assert.equal(statValsM[5], '—', 'cache hit degrades to a dash')
-  assert.equal(statValsM[6], '—', 'cost degrades to a dash (non-record cost dropped)')
+  assert.equal(statValsM[5], '0', 'image cell falls back to zero when absent')
+  assert.equal(statValsM[6], '—', 'cache hit degrades to a dash')
+  assert.equal(statValsM[7], '—', 'cost degrades to a dash (non-record cost dropped)')
   assert.equal(byClass(tr, 'lc-event').length, 1, 'the usable event entry still shows')
   assert.equal(byClass(tr, 'lc-node').length, 1, 'the usable node entry still shows')
   assert.equal(textOf(byClass(tr, 'lc-node-time')[0]), '—', 'an invalid timestamp shows a dash instead of throwing')
