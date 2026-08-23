@@ -35,15 +35,16 @@ test('context view: trend chart, stats board, plugin info, hover linking, granul
   // fixture: 4 requests (turns 1,1,2,3), no events yet -> all event counters 0.
   const pkg = JSON.parse(await readFile(new URL('../package.json', import.meta.url), 'utf8'))
   const statVals = byClass(tree, 'lc-stat-value').map(n => n.args[2])
-  assert.equal(statVals.length, 8, 'eight stats cells (turns / steps / injections / compactions / prunes / images / cache hit / cost)')
+  assert.equal(statVals.length, 9, 'nine stats cells (turns / steps / injections / compactions / prunes / tool calls / images / cache hit / cost)')
   assert.equal(statVals[0], '3', 'turns counted by distinct turn')
   assert.equal(statVals[1], '4', 'steps = request count')
   assert.equal(statVals[2], '0', 'no injections yet')
   assert.equal(statVals[3], '0', 'no compactions yet')
   assert.equal(statVals[4], '0', 'no prunes yet')
-  assert.equal(statVals[5], '0', 'no image blocks in the fixture log')
-  assert.equal(statVals[6], '—', 'no tokenUsage projection yet -> cache-hit cell shows a dash')
-  assert.equal(statVals[7], '—', 'no cost totals yet -> cost cell shows a dash')
+  assert.equal(statVals[5], '0', 'no tool calls in the fixture log')
+  assert.equal(statVals[6], '0', 'no image blocks in the fixture log')
+  assert.equal(statVals[7], '—', 'no tokenUsage projection yet -> cache-hit cell shows a dash')
+  assert.equal(statVals[8], '—', 'no cost totals yet -> cost cell shows a dash')
 
   // ---- plugin info card: two full-width rows; every row is itself a link ----
   const piLabels = byClass(tree, 'lc-pi-label').map(n => n.args[2])
@@ -414,8 +415,9 @@ test('context view: trend chart, stats board, plugin info, hover linking, granul
   assert.equal(statVals2[2], '1', 'one injection counted')
   assert.equal(statVals2[3], '2', 'two compactions counted')
   assert.equal(statVals2[4], '2', 'two prunes counted')
-  assert.equal(statVals2[5], '0', 'image cell still zero')
-  assert.equal(statVals2[6], '—', 'cache-hit cell still a dash before a tokenUsage projection lands')
+  assert.equal(statVals2[5], '0', 'tool-call cell still zero')
+  assert.equal(statVals2[6], '0', 'image cell still zero')
+  assert.equal(statVals2[7], '—', 'cache-hit cell still a dash before a tokenUsage projection lands')
 
   // the cache-hit cell reuses the OFFICIAL token-meter `tokenUsage` projection —
   // the exact same data the chat stats line below the input box reads, same
@@ -423,16 +425,16 @@ test('context view: trend chart, stats board, plugin info, hover linking, granul
   bed.usageValue = { uncachedInputTokens: 10, outputTokens: 40, cacheReadTokens: 80, cacheWriteTokens: 10 }
   tr = renderView()
   const statVals3 = byClass(tr, 'lc-stat-value').map(n => n.args[2])
-  assert.equal(statVals3.length, 8, 'eight stats cells with the cache-hit and cost cells')
-  assert.equal(statVals3[6], '80.00%', 'cache hit = cacheRead / (uncached + cacheRead + cacheWrite), two decimals')
-  assert.equal(statVals3[7], '—', 'cost cell stays a dash without cost totals')
+  assert.equal(statVals3.length, 9, 'nine stats cells with the cache-hit and cost cells')
+  assert.equal(statVals3[7], '80.00%', 'cache hit = cacheRead / (uncached + cacheRead + cacheWrite), two decimals')
+  assert.equal(statVals3[8], '—', 'cost cell stays a dash without cost totals')
   assert.equal(statVals3[0], '3', 'turn count unchanged by the usage projection')
   assert.equal(statVals3[3], '2', 'compaction count unchanged by the usage projection')
   // truncation proof: 8334 / 25000 = 33.336% -> cut to 33.33%, never rounded up
   bed.usageValue = { uncachedInputTokens: 10000, outputTokens: 40, cacheReadTokens: 8334, cacheWriteTokens: 6666 }
   tr = renderView()
   const statVals4 = byClass(tr, 'lc-stat-value').map(n => n.args[2])
-  assert.equal(statVals4[6], '33.33%', 'two decimals are TRUNCATED, not rounded (33.336 -> 33.33)')
+  assert.equal(statVals4[7], '33.33%', 'two decimals are TRUNCATED, not rounded (33.336 -> 33.33)')
   bed.usageValue = undefined
 
   // the cost cell prices the host-folded cumulative totals with the hardcoded
@@ -442,8 +444,8 @@ test('context view: trend chart, stats board, plugin info, hover linking, granul
   bed.dataValue = { ...prevData, cost: { flash: { off: { uncached: 1000000, cacheRead: 1000000, cacheWrite: 0, output: 0 } } } }
   tr = renderView()
   const statVals5 = byClass(tr, 'lc-stat-value').map(n => n.args[2])
-  assert.equal(statVals5[7], '$0.23', 'cost = (cacheRead x hit + uncached x miss) at the off-peak flash rate')
-  const costCell = byClass(tr, 'lc-stat')[7]
+  assert.equal(statVals5[8], '$0.23', 'cost = (cacheRead x hit + uncached x miss) at the off-peak flash rate')
+  const costCell = byClass(tr, 'lc-stat')[8]
   assert.equal(byClass(tr, 'lc-stat-q').length, 1, 'cost cell label shows the "?" affordance')
   // The explanation is a styled DOM bubble (the native `title` attribute is
   // invisible in the harness GUI): intro sentence + the price list built from

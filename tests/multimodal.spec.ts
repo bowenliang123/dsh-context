@@ -72,6 +72,9 @@ test('host fold: image blocks price by the official DeepSeek image token formula
   assert.equal(v.current.user, n1.tokens + n2.tokens + n3.tokens)
   // Whole-session image count: three user uploads + the nested tool-result image.
   assert.equal(v.images, 4, 'image blocks counted across user messages and tool results')
+  // Tool calls: only results LIVE in the current context count — the one
+  // tool/result folded above is on the surface.
+  assert.equal(v.toolCalls, 1, 'a tool call with a live result counts')
 
   // Compaction shadows the two image messages: the fold subtracts its own
   // corrected prices, keeping the surface sum internally consistent.
@@ -87,6 +90,27 @@ test('host fold: image blocks price by the official DeepSeek image token formula
   const summary = v2.nodes.find(n => n.seq === 4)
   assert.equal(v2.current.user, kept.tokens + summary.tokens, 'shadowed image leaves no residue')
   assert.equal(v2.images, 1, 'the image count is cumulative — compaction does not decrement it')
+  assert.equal(v2.toolCalls, 0, 'no tool results on the surface -> zero tool calls')
+
+  // A tool result compacted OUT of the surface stops counting; a call still
+  // in flight (no result folded) never counted.
+  const v3 = drive([
+    { seq: 1, type: 'tool/call', time: 1000, data: { callId: 'c1', name: 'read', arguments: '{}' } },
+    { seq: 2, type: 'tool/result', time: 1100, data: { callId: 'c1', message: { source: { kind: 'tool', callId: 'c1' }, content: [
+      { type: 'tool-result', toolCallId: 'c1', content: [{ type: 'text', text: 'file body' }] },
+    ] } } },
+    { seq: 3, type: 'tool/call', time: 1200, data: { callId: 'c2', name: 'bash', arguments: '{}' } },
+  ])
+  assert.equal(v3.toolCalls, 1, 'the in-flight call (c2) has no result in context -> not counted')
+  const v4 = drive([
+    { seq: 1, type: 'tool/call', time: 1000, data: { callId: 'c1', name: 'read', arguments: '{}' } },
+    { seq: 2, type: 'tool/result', time: 1100, data: { callId: 'c1', message: { source: { kind: 'tool', callId: 'c1' }, content: [
+      { type: 'tool-result', toolCallId: 'c1', content: [{ type: 'text', text: 'file body' }] },
+    ] } } },
+    { seq: 3, type: 'compaction/summary', time: 3000, data: { shadowedTokenCount: 999, shadowedSeqs: [2] } },
+    { seq: 4, type: 'user/message', time: 3100, surfaceOp: { op: 'replace', start: 2, end: 2 }, data: { content: [{ type: 'text', text: 'summary' }] } },
+  ])
+  assert.equal(v4.toolCalls, 0, 'a result compacted out of the context stops counting')
   console.log('✔ host fold image pricing passed (official formula, JSON fallback, nesting, compaction shadow)')
 })
 

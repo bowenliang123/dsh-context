@@ -205,6 +205,7 @@ export function timelineOf(value: unknown): ContextTimeline | null {
     nodes: objectsOf(data.nodes),
     droppedNodes: numOf(data.droppedNodes),
     ...(typeof data.images === 'number' ? { images: data.images } : {}),
+    ...(typeof data.toolCalls === 'number' ? { toolCalls: data.toolCalls } : {}),
     archive: objectsOf(data.archive),
     ...(cost !== undefined ? { cost } : {}),
     ...(typeof data.surfaceFloor === 'number' ? { surfaceFloor: data.surfaceFloor } : {}),

@@ -671,6 +671,11 @@ export function buildTimelineView(state: TimelineState, bounds: FoldBounds): Sna
     },
     toolList: state.toolList,
     images: state.images,
+    // Tool calls WITH A RESULT live in the current context: one `tool/result`
+    // folds to exactly one `tool` surface node, so live tool nodes are the
+    // count. Calls still in flight (no result yet) and results compacted or
+    // pruned out of the surface are both excluded.
+    toolCalls: state.surface.reduce((n, node) => node.cat === 'tool' ? n + 1 : n, 0),
     requests: state.requests.map(r => ({ ...r })),
     events: state.events.map(e => ({ ...e })),
     nodes: [],

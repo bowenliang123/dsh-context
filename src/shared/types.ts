@@ -79,6 +79,13 @@ export interface Snapshot {
    * hosts; clients treat absence as zero.
    */
   images?: number
+  /**
+   * Tool calls whose result is live in the CURRENT context (one `tool/result`
+   * folds to one `tool` surface node). Calls still in flight and results
+   * compacted/pruned out of the surface are not counted. Absent from older
+   * hosts; clients treat absence as zero.
+   */
+  toolCalls?: number
   requests: RequestRecord[]
   events: ContextEventRecord[]
   /**

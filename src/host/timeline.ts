@@ -106,6 +106,7 @@ const contextTimelineSchema = z.object({
   current: currentSchema,
   toolList: z.array(z.object({ name: z.string(), tokens: z.number().int().nonnegative() }).strict()),
   images: z.number().int().nonnegative().optional(),
+  toolCalls: z.number().int().nonnegative().optional(),
   requests: z.array(requestRecordSchema),
   events: z.array(contextEventSchema),
   cost: z.object({ flash: costFamilySchema.optional(), pro: costFamilySchema.optional() }).strict().optional(),
@@ -201,6 +202,8 @@ export function createContextTimelineDefinition(config: Config): ProjectionDefin
     // nodes and are refolded.
     // 7: the whole-session image-block count (`images`) joined the persisted
     // state; cached rows predate the shape and are refolded.
+    // (The stats board's tool-call cell is a VIEW-TIME count of live `tool`
+    // surface nodes — no persisted field, so no version bump.)
     stateVersion: 7,
   }
   return definition
