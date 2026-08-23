@@ -71,9 +71,9 @@ export function makeEventText(t: Translate): {
 export function makeEventList(kit: ViewKit): (props: EventListProps) => ReactNS.ReactElement {
   const { t, fmt, fmtTime, eventLabel, eventAt } = kit
   return function EventList(props: EventListProps): ReactNS.ReactElement {
-    if (props.events.length === 0) {
-      return <div className="lc-empty">{t('events.empty')}</div>
-    }
+    // Hooks stay unconditional (Rules of Hooks): events going empty ->
+    // non-empty in one mounted instance must not grow the hook count — an
+    // early return above these hooks is a React #310 class bug (issue #12).
     const rootRef = React.useRef<HTMLDivElement | null>(null)
     // Attach the native tooltip only where the ellipsis actually truncates:
     // re-sync after every render (events/width change) and on window resize,
@@ -90,6 +90,9 @@ export function makeEventList(kit: ViewKit): (props: EventListProps) => ReactNS.
       window.addEventListener('resize', sync)
       return () => { window.removeEventListener('resize', sync) }
     })
+    if (props.events.length === 0) {
+      return <div className="lc-empty">{t('events.empty')}</div>
+    }
     const sorted = props.events.slice().reverse()
     return (
       <div className="lc-events" ref={rootRef}>

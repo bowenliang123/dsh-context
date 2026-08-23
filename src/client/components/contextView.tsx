@@ -193,16 +193,17 @@ export function makeContextView(ctx: ClientCtx, kit: ViewKit): (props: ContextVi
 
     void tick
 
-    if (!data) {
-      return <div className="lc-root" ref={rootRef}><div className="lc-empty">{t('loading')}</div></div>
-    }
-
-    const requests = data.requests
-    const events = data.events
+    // Hooks stay unconditional (Rules of Hooks): the projection value can
+    // arrive AFTER a loading first render, and an early return above these
+    // useMemos would grow the hook count between renders — React #310
+    // (issue #12). Fall back to empty collections while data is absent; the
+    // loading return sits below the last hook instead.
+    const requests = data ? data.requests : []
+    const events = data ? data.events : []
     // The events column filters to the picked kinds (all picked = all shown);
     // the stats board keeps the full log regardless.
     const shownEvents = pickedKinds.length === EVENT_KINDS.length ? events : events.filter(e => pickedKinds.includes(e.kind))
-    const nodes = data.nodes
+    const nodes = data ? data.nodes : []
     // Display granularity: one bar per step (default) or one bar per turn
     // (each turn shown by its LAST step's record). Memoized so hover-driven
     // re-renders keep the bar props identity-stable (the chart's memoized
@@ -214,6 +215,11 @@ export function makeContextView(ctx: ClientCtx, kit: ViewKit): (props: ContextVi
     // Boundary events attach to the first request after them; the same
     // attachment drives the ✂ marker above the bar and the detail chip.
     const markers = React.useMemo(() => attachMarkers(displayRequests, events), [displayRequests, events])
+
+    if (!data) {
+      return <div className="lc-root" ref={rootRef}><div className="lc-empty">{t('loading')}</div></div>
+    }
+
     const markerOf = (req: RequestRecord): ContextEventRecord | undefined => {
       const i = displayRequests.indexOf(req)
       return i >= 0 ? markers[i] : undefined
