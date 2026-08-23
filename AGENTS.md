@@ -9,9 +9,10 @@ A DeepSeek Harness plugin for context insight, actions, and management.
   - Dive deep in to the code when you are preparing for development
   - Github: deepseek-ai/deepseek-harness
   - NPM: @deepseek-ai/dsh
-  - Local code: 
+  - Local git clone of [dsh](https://github.com/deepseek-ai/deepseek-harness):
     - may be found in the `~/dev/deepseek-harness` directory
     - `git pull` on the `main` branch to update
+    - commits and tags are available for reference and comparison
 
 - DeepSeek Harness Plugin:
   - docs:
