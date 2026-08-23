@@ -94,6 +94,7 @@ test('real-React jsdom mount: rapid step<->turn toggles never hit React #185', a
   let viewComponent = null
   const ctx = {
     get: () => undefined,
+    inject: () => {},
     effect: (fn) => { fn(); return () => {} },
     locale: {
       register: (ns, dicts) => { localeRegs.push(dicts); return () => {} },

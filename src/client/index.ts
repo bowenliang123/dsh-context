@@ -24,8 +24,10 @@
 import { DICT_EN, DICT_ZH } from './i18n'
 import { registerContextCommand } from './command'
 import { makeContextModal } from './components/contextModal'
+import { makeSettingsCard } from './components/settingsCard'
 import { modalStoreOf } from './modalStore'
 import type { ClientCtx, SessionsFace } from './services'
+import { createContextSettings, type DefaultGranularity, type SettingsScopeBinderFace } from './settings'
 import { makeContextView } from './components/contextView'
 import { makeViewKit } from './viewkit'
 
@@ -49,7 +51,8 @@ function apply(ctx: ClientCtx): void {
   const t = ctx.locale.bind(NS)
 
   const kit = makeViewKit(t)
-  const ContextView = makeContextView(ctx, kit)
+  const settings = createContextSettings()
+  const ContextView = makeContextView(ctx, kit, settings)
 
   // Contribute the history-pagination verb as a standard prop, so the
   // Context browser can pull older conversation pages on demand when the
@@ -90,6 +93,30 @@ function apply(ctx: ClientCtx): void {
         inject: (sessionId: string) => ({ hooks: { contextModal: modalStoreOf(sessionId) } }) },
       props => h(ContextModal, props),
     )
+  })
+
+  // Per-user display preferences: bind the Host-served `dsh-context`
+  // namespace and claim its Plugin configuration card. Optional composition
+  // — a deployment without the settings surface keeps the schema defaults
+  // and shows no card.
+  ctx.inject(['settingsScope'], (raw) => {
+    const c = raw as ClientCtx & { settingsScope?: SettingsScopeBinderFace }
+    const binder = c.settingsScope
+    if (binder === undefined) return
+    c.effect(() => settings.attach(binder.bind({ namespace: NS })), 'dsh-context: settings scope')
+    const SettingsCard = makeSettingsCard(kit)
+    c.slots.inject('settings.plugin.item', () => {
+      return c.slots.register(
+        { name: 'settings.plugin.item', key: NS, locale: NS,
+          inject: () => ({
+            hooks: { contextSettings: settings.store },
+            choose: (granularity: DefaultGranularity) => { settings.choose(granularity) },
+          }) },
+        // Root-scope keyed slot: no sessionId on these props — the face
+        // (hooks + choose) arrives through the registration's inject.
+        props => h(SettingsCard, props as unknown as Parameters<typeof SettingsCard>[0]),
+      )
+    })
   })
 }
 

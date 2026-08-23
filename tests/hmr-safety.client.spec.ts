@@ -56,6 +56,7 @@ test('client HMR safety: fiber dispose removes every registration', async () => 
       }
       return undefined
     },
+    inject() { /* no settingsScope composed: the settings wiring never fires */ },
     effect(fn) { const d = fn(); effectDisposers.push(d); return d },
     locale: {
       register(ns, dicts) {

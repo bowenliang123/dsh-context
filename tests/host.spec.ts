@@ -19,7 +19,10 @@ test('host half: projection unit, fold semantics, attribution, retention, determ
   const defs = new Map()
   const disposers = []
   const fakeCtx = {
-    inject(list, cb) { cb(this) }, // ctx.inject(['sessionProjections'], ...)
+    // Cordis semantics: the inject callback runs only once every requested
+    // service exists (this fake composes sessionProjections but no settings
+    // provider, so the optional settings wiring stays inert).
+    inject(list, cb) { if (list.every(d => this[d] !== undefined)) cb(this) },
     effect(fn) { disposers.push(fn()); return () => {} },
     sessionProjections: {
       register(d) { defs.set(d.key, d); return () => {} },
@@ -556,7 +559,7 @@ test('host HMR safety: fiber dispose removes both projection registrations', () 
   const defs = new Map()
   const removers = []
   const ctx = {
-    inject(list, cb) { cb(this) },
+    inject(list, cb) { if (list.every(d => this[d] !== undefined)) cb(this) },
     effect(fn) { fn(); return () => {} },
     sessionProjections: {
       register(d) {
@@ -576,7 +579,7 @@ test('host HMR safety: fiber dispose removes both projection registrations', () 
 test('host: a skill-tool result is tagged and surfaced as a Skill injection while staying a tool result', () => {
   const defs = new Map()
   const fakeCtx = {
-    inject(list, cb) { cb(this) },
+    inject(list, cb) { if (list.every(d => this[d] !== undefined)) cb(this) },
     effect() { return () => {} },
     sessionProjections: { register(d) { defs.set(d.key, d); return () => {} } },
   }
@@ -614,7 +617,7 @@ test('host: a skill-tool result is tagged and surfaced as a Skill injection whil
 test('host: a skill-tool result is still tagged when its tool/call event is gone (trimmed/replay)', () => {
   const defs = new Map()
   const fakeCtx = {
-    inject(list, cb) { cb(this) },
+    inject(list, cb) { if (list.every(d => this[d] !== undefined)) cb(this) },
     effect() { return () => {} },
     sessionProjections: { register(d) { defs.set(d.key, d); return () => {} } },
   }

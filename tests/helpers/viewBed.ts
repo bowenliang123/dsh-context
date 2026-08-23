@@ -55,7 +55,7 @@ export const FAKE_PRIMITIVES = {
 }
 
 export const DICT_FOR_TEST = { 'tab': 'Context', 'loading': '…', 'error': 'ERR:', 'error.retry': 'retry', 'detail.step': 'Turn {t} · Step {s}', 'gran.step': 'Step', 'gran.turn': 'Turn', 'detail.turn': 'Turn {t} · {n} steps', 'detail.lastStep': 'last step', 'overview.used': 'of context used', 'overview.free': 'Free window', 'events.at': 'Turn {t} · Step {s}', 'events.range': 'Turn {t} · Step {a}→{b}', 'events.rangeTo': 'Turn {a} · Step {as} → Turn {b} · Step {bs}', 'form.notice': 'Notice', 'ev.mode.plan.on': 'Plan mode on', 'stats.recycleSub': '{c} compactions · {p} prunes', 'tip.step': 'Turn {t} · Step {s}', 'tip.turn': 'Turn {t} · {n} steps', 'tip.total': 'total ≈ {n}', 'tip.actual': ' (actual {n})', 'trend.title': 'History', 'trend.empty': 'empty trend', 'cmd.close': 'Close', 'cat.user': 'User', 'browser.live': 'Live (next request)', 'browser.liveNow': 'Live · next request', 'browser.items': '{n} items', 'browser.noContent': 'outside the loaded window', 'browser.loading': 'loading older history', 'browser.preview': 'preview', 'browser.noHeader': 'older plugin build',
-  'browser.deltaHint': 'vs previous turn', 'overview.compactReserve': 'compact reserve {pct}%', 'tool.desc': 'Description', 'tool.params': 'Parameters', 'tool.paramsEmpty': '(no parameters)', 'tool.jsonToggle': 'View Raw JSON', 'tool.jsonHide': 'Collapse', 'rich.raw': 'Raw', 'rich.md': 'Markdown', 'rich.toMd': 'View as Markdown', 'rich.toRaw': 'View Raw Text', 'block.thinking': 'Reasoning', 'block.answer': 'Response', 'attach.images': 'Images', 'attach.other': 'Other content', 'attach.image': 'Image', 'attach.open': 'Open full image', 'attach.preview': 'Image preview', 'attach.close': 'Close', 'attach.loading': '…', 'attach.loadFailed': 'Load failed · click to retry', 'attach.raw': 'Raw', 'attach.sent': 'Sent', 'attach.token': 'Token', 'attach.tokensTip': 'estimated tokens' }
+  'browser.deltaHint': 'vs previous turn', 'overview.compactReserve': 'compact reserve {pct}%', 'tool.desc': 'Description', 'tool.params': 'Parameters', 'tool.paramsEmpty': '(no parameters)', 'tool.jsonToggle': 'View Raw JSON', 'tool.jsonHide': 'Collapse', 'rich.raw': 'Raw', 'rich.md': 'Markdown', 'rich.toMd': 'View as Markdown', 'rich.toRaw': 'View Raw Text', 'block.thinking': 'Reasoning', 'block.answer': 'Response', 'attach.images': 'Images', 'attach.other': 'Other content', 'attach.image': 'Image', 'attach.open': 'Open full image', 'attach.preview': 'Image preview', 'attach.close': 'Close', 'attach.loading': '…', 'attach.loadFailed': 'Load failed · click to retry', 'attach.raw': 'Raw', 'attach.sent': 'Sent', 'attach.token': 'Token', 'attach.tokensTip': 'estimated tokens', 'settings.title': 'Context', 'settings.desc': 'Display preferences for the Context panel', 'settings.gran': 'Default trend granularity', 'settings.readOnly': 'Settings are read-only in this environment' }
 
 /** Base timeline fixture: 4 requests across 3 turns, 2 live nodes. */
 export const snapshot = {
@@ -121,7 +121,7 @@ export function catRowOf(tr, label) {
  * @returns the bed: holders the tests arm, captured registrations, the
  * render/evaluate drivers, and fiber-slot accessors.
  */
-export async function bootViewBed() {
+export async function bootViewBed(options = {}) {
   const bundle = await readFile(new URL('../../lib/client.js', import.meta.url), 'utf8')
   const { fakeDoc } = makeFakeDoc()
   let handoff = null
@@ -146,6 +146,9 @@ export async function bootViewBed() {
     modalSource: null,
     viewComponent: null,
     modalComponent: null,
+    settingsCardComponent: null,
+    settingsCardRegistration: null,
+    settingsScopeHolder: options.settingsScope,
     hookStates: new Map(), // component fn -> [value, setter][] slots
     classInstances: new Map(),
   }
@@ -217,6 +220,13 @@ export async function bootViewBed() {
       }
       return undefined
     },
+    // Cordis semantics: the inject callback runs once every requested service
+    // exists — here that means a settingsScope holder was armed before apply.
+    inject: (deps, fn) => {
+      const list = Array.isArray(deps) ? deps : Object.keys(deps)
+      if (list.includes('settingsScope') && bed.settingsScopeHolder !== undefined) fn(fakeCtx)
+    },
+    get settingsScope() { return bed.settingsScopeHolder },
     effect: (fn) => { fn(); return () => {} },
     locale: {
       register: () => () => {},
@@ -231,6 +241,10 @@ export async function bootViewBed() {
       register: (opts, component) => {
         if (opts.name === 'conversation.view') bed.viewComponent = component
         if (opts.name === 'conversation.input.overlay') bed.modalComponent = component
+        if (opts.name === 'settings.plugin.item') {
+          bed.settingsCardComponent = component
+          bed.settingsCardRegistration = opts
+        }
         return opts
       },
     },

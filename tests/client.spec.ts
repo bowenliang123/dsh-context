@@ -77,6 +77,7 @@ test('client bundle: handoff, dicts, styles, slot registration, /context command
         return s
       },
     },
+    inject: () => {}, // no settingsScope composed: the settings wiring never fires
     slots: {
       inject: (name, fn) => { slotInjections.push([name, fn]) },
       register: (opts, component) => {
@@ -141,6 +142,7 @@ test('client bundle: handoff, dicts, styles, slot registration, /context command
         },
         subscribe: () => () => {},
       },
+      inject: () => {},
       slots: { inject: () => {}, register: () => ({}) },
     }
     pluginExports.apply(ctx3)

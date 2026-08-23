@@ -20,7 +20,7 @@ import { headlineOf } from '../src/client/headline.ts'
 
 const defs = new Map()
 apply({
-  inject(list, cb) { cb(this) },
+  inject(list, cb) { if (list.every(d => this[d] !== undefined)) cb(this) },
   effect(fn) { fn(); return () => {} },
   sessionProjections: { register(d) { defs.set(d.key, d); return () => {} } },
 })

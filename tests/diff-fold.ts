@@ -114,7 +114,7 @@ for (const file of files) {
   // Plugin fold through its public projection unit (same mounting as host.test).
   const defs = new Map()
   apply({
-    inject(list, cb) { cb(this) },
+    inject(list, cb) { if (list.every(d => this[d] !== undefined)) cb(this) },
     effect(fn) { fn(); return () => {} },
     sessionProjections: { register(d) { defs.set(d.key, d); return () => {} } },
   })

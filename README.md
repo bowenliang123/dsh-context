@@ -43,6 +43,10 @@ Type `/context` (or pick it from the `/` menu) and press Enter: a centered dialo
 
 ![Context command](https://raw.githubusercontent.com/bowenliang123/dsh-context/main/docs/context-command.png)
 
+### ⚙️ Settings — per-user preferences
+
+In **Settings → Plugins → Plugin configuration**, the **Context / 上下文** card holds this plugin's per-user preferences — currently the **default trend granularity** (Step/Turn) the Context tab opens with. In-chart toggling stays per-view and never overwrites the stored preference. The card appears only when the Host half is installed and the settings document is writable (a remote browser keeps settings process-local and shows no card).
+
 ## What you'll see
 
 ### 📊 Context stats — the session at a glance

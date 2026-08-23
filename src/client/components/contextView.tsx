@@ -15,6 +15,7 @@ import { headlineOf } from '../headline'
 import type { SessionStandardProps } from '../services'
 import { contextBreakdownOf, contextPressureOf, headersOf, timelineOf, tokenUsageOf } from '../services'
 import type { ClientCtx, ConversationFace, ImageRefLike } from '../services'
+import type { ContextSettings } from '../settings'
 import type { ViewKit } from '../viewkit'
 import { makeContextBrowser } from './browser'
 import { makeCurrentComposition } from './currentComposition'
@@ -44,7 +45,11 @@ const EVENT_KINDS = ['inject', 'compaction', 'prune', 'model', 'mode'] as const
 
 export type ContextViewProps = SessionStandardProps
 
-export function makeContextView(ctx: ClientCtx, kit: ViewKit): (props: ContextViewProps) => ReactNS.ReactElement {
+export function makeContextView(
+  ctx: ClientCtx,
+  kit: ViewKit,
+  settings: ContextSettings,
+): (props: ContextViewProps) => ReactNS.ReactElement {
   const { t } = kit
   const StackedBar = makeStackedBar(kit)
   const Legend = makeLegend(kit)
@@ -105,7 +110,10 @@ export function makeContextView(ctx: ClientCtx, kit: ViewKit): (props: ContextVi
     const [hoveredSeq, setHoveredSeq] = React.useState<number | null>(null)
     const [hoverTurn, setHoverTurn] = React.useState<number | null>(null)
     const [tick, setTick] = React.useState(0)
-    const [granularity, setGranularity] = React.useState<'step' | 'turn'>('step')
+    // The per-user default (Settings → Plugins → dsh-context card) decides the
+    // granularity a freshly mounted view opens with; in-chart toggling stays
+    // mount-local and never writes back.
+    const [granularity, setGranularity] = React.useState<'step' | 'turn'>(() => settings.defaultGranularity())
     // Trend display mode: 'total' plots each request's cumulative
     // composition, 'diff' plots its incremental change vs the previous one.
     const [trendMode, setTrendMode] = React.useState<'total' | 'diff'>('total')
