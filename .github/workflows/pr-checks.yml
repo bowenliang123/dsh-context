@@ -1,0 +1,37 @@
+name: PR Checks
+
+on:
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: pr-checks-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  pr-checks:
+    name: PR checks
+    runs-on: ubuntu-latest
+    environment: pr-checks
+    steps:
+      - uses: actions/checkout@v7
+
+      # Reads the pinned pnpm version from `packageManager` in package.json.
+      - uses: pnpm/action-setup@v6
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '24'
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      # Client tests mount the built bundle (tests/helpers/viewBed.ts reads
+      # lib/client.js), so the build must precede the test run.
+      - name: Build
+        run: pnpm run build
+
+      - name: Test (typecheck + vitest)
+        run: pnpm test
