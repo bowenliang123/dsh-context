@@ -10,3 +10,10 @@ import type * as ReactNS from 'react'
 // oxlint-disable-next-line typescript/no-require-imports
 export const React: typeof ReactNS = require('react') as typeof ReactNS
 export const h = React.createElement
+
+// react-dom rides the same platform seed; only the portal API is used (the
+// image lightbox escapes transformed ancestors by portaling to body).
+// oxlint-disable-next-line typescript/no-require-imports
+export const ReactDOM = require('react-dom') as {
+  createPortal: (children: ReactNS.ReactNode, container: Element) => ReactNS.ReactPortal
+}

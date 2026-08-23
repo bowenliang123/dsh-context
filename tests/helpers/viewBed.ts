@@ -50,11 +50,12 @@ export function makeFakeDoc() {
 export const FAKE_PRIMITIVES = {
   IconPlusOutline16: (p) => ({ kind: 'icon', name: 'IconPlusOutline16', props: p }),
   IconBranchOutline16: (p) => ({ kind: 'icon', name: 'IconBranchOutline16', props: p }),
+  IconCloseOutline16: (p) => ({ kind: 'icon', name: 'IconCloseOutline16', props: p }),
   MarkdownText: (p) => ({ kind: 'element', args: ['div', { className: 'lc-md-stub' }, p.text] }),
 }
 
 export const DICT_FOR_TEST = { 'tab': 'Context', 'loading': '…', 'error': 'ERR:', 'error.retry': 'retry', 'detail.step': 'Turn {t} · Step {s}', 'gran.step': 'Step', 'gran.turn': 'Turn', 'detail.turn': 'Turn {t} · {n} steps', 'detail.lastStep': 'last step', 'overview.used': 'of context used', 'overview.free': 'Free window', 'events.at': 'Turn {t} · Step {s}', 'events.range': 'Turn {t} · Step {a}→{b}', 'events.rangeTo': 'Turn {a} · Step {as} → Turn {b} · Step {bs}', 'stats.recycleSub': '{c} compactions · {p} prunes', 'tip.step': 'Turn {t} · Step {s}', 'tip.turn': 'Turn {t} · {n} steps', 'tip.total': 'total ≈ {n}', 'tip.actual': ' (actual {n})', 'trend.title': 'History', 'trend.empty': 'empty trend', 'cmd.close': 'Close', 'cat.user': 'User', 'browser.live': 'Live (next request)', 'browser.liveNow': 'Live · next request', 'browser.items': '{n} items', 'browser.noContent': 'outside the loaded window', 'browser.loading': 'loading older history', 'browser.preview': 'preview', 'browser.noHeader': 'older plugin build',
-  'browser.deltaHint': 'vs previous turn', 'overview.compactReserve': 'compact reserve {pct}%', 'tool.desc': 'Description', 'tool.params': 'Parameters', 'tool.paramsEmpty': '(no parameters)', 'tool.jsonToggle': 'View Raw JSON', 'tool.jsonHide': 'Collapse', 'rich.raw': 'Raw', 'rich.md': 'Markdown', 'rich.toMd': 'View as Markdown', 'rich.toRaw': 'View Raw Text', 'block.thinking': 'Reasoning', 'block.answer': 'Response', 'attach.images': 'Images', 'attach.other': 'Other content', 'attach.image': 'Image', 'attach.open': 'Open full image', 'attach.loading': '…', 'attach.loadFailed': 'Load failed · click to retry', 'attach.raw': 'Raw', 'attach.sent': 'Sent', 'attach.token': 'Token', 'attach.tokensTip': 'estimated tokens' }
+  'browser.deltaHint': 'vs previous turn', 'overview.compactReserve': 'compact reserve {pct}%', 'tool.desc': 'Description', 'tool.params': 'Parameters', 'tool.paramsEmpty': '(no parameters)', 'tool.jsonToggle': 'View Raw JSON', 'tool.jsonHide': 'Collapse', 'rich.raw': 'Raw', 'rich.md': 'Markdown', 'rich.toMd': 'View as Markdown', 'rich.toRaw': 'View Raw Text', 'block.thinking': 'Reasoning', 'block.answer': 'Response', 'attach.images': 'Images', 'attach.other': 'Other content', 'attach.image': 'Image', 'attach.open': 'Open full image', 'attach.preview': 'Image preview', 'attach.close': 'Close', 'attach.loading': '…', 'attach.loadFailed': 'Load failed · click to retry', 'attach.raw': 'Raw', 'attach.sent': 'Sent', 'attach.token': 'Token', 'attach.tokensTip': 'estimated tokens' }
 
 /** Base timeline fixture: 4 requests across 3 turns, 2 live nodes. */
 export const snapshot = {
@@ -153,6 +154,8 @@ export async function bootViewBed() {
   let hookCursor = 0
   const statefulReact = {
     createElement: (...args) => ({ kind: 'element', args }),
+    // Fragment marker: evaluate() flattens it to its evaluated children.
+    Fragment: 'lc-fragment',
     useCallback: (fn) => fn,
     useState(init) {
       const i = hookCursor++
@@ -195,9 +198,12 @@ export async function bootViewBed() {
     },
   }
   const requireStateful = (spec) => {
-    assert.ok(spec === 'react' || spec === '@deepseek-ai/dsh-client-ui-primitives',
+    assert.ok(spec === 'react' || spec === 'react-dom' || spec === '@deepseek-ai/dsh-client-ui-primitives',
       `bundle must only require platform modules (got "${spec}")`)
-    return spec === 'react' ? statefulReact : FAKE_PRIMITIVES
+    if (spec === 'react') return statefulReact
+    // Portals flatten to their tree: the lightbox stays walkable in tests.
+    if (spec === 'react-dom') return { createPortal: (node) => node }
+    return FAKE_PRIMITIVES
   }
   const pluginExports = handoff.factory(requireStateful)
 
@@ -244,6 +250,22 @@ export async function bootViewBed() {
     if (node === null || typeof node !== 'object') return node
     if (node.kind === 'element') {
       const [type, props, ...children] = node.args
+      // A fragment flattens to its evaluated children (an array), which every
+      // tree walker here already understands.
+      if (type === statefulReact.Fragment) {
+        const kids = []
+        let f = 0
+        const walkFragment = (c) => {
+          if (Array.isArray(c)) { for (const x of c) walkFragment(x); return }
+          if (c !== null && typeof c === 'object' && c.kind === 'element' && typeof c.args[0] === 'function') {
+            kids.push(evaluate(c, path, f++))
+          } else {
+            kids.push(evaluate(c, path, f))
+          }
+        }
+        for (const c of children) walkFragment(c)
+        return kids
+      }
       // The fake createElement keeps children in args; real React puts them
       // on props.children (single child as-is, several as an array) — merge
       // them back for BOTH component kinds, exactly what React would pass.

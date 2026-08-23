@@ -9,6 +9,7 @@ import { test } from 'vitest'
 import { readFile } from 'node:fs/promises'
 import { JSDOM } from 'jsdom'
 import React from 'react'
+import * as ReactDOM from 'react-dom'
 import { createRoot } from 'react-dom/client'
 
 test('real-React jsdom mount: rapid step<->turn toggles never hit React #185', async () => {
@@ -56,11 +57,13 @@ test('real-React jsdom mount: rapid step<->turn toggles never hit React #185', a
   }
   const require = (spec) => {
     if (spec === 'react') return React
+    if (spec === 'react-dom') return ReactDOM
     if (spec === '@deepseek-ai/dsh-client-ui-primitives') {
       // Glyph-only usage in this bundle; render inert svgs (never asserted).
       return {
         IconPlusOutline16: (p) => React.createElement('svg', p, null),
         IconBranchOutline16: (p) => React.createElement('svg', p, null),
+        IconCloseOutline16: (p) => React.createElement('svg', p, null),
       }
     }
     throw new Error(`unexpected module: ${spec}`)

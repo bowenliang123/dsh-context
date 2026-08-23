@@ -64,12 +64,20 @@ test('image attachment cards: card layout, metadata degradation, resolveImage th
   assert.match(textOf(byClass(trImg, 'lc-ts-card')[2]), /file:\/\/x/, 'unrecognized blocks keep the raw JSON card')
   assert.match(textOf(byClass(trImg, 'lc-br-content')[0]), /WHAT-IS-THIS/, 'prose stays in the text card')
   assert.equal(byClass(trImg, 'lc-att-thumb')[0].args.slice(2).filter(c => c !== null && typeof c === 'object' && c.args[0] === 'img').length, 0, 'no thumbnail img without the loader')
+  // The whole card is the click target (a single button wrapping tile +
+  // metadata); clicking before anything loads opens nothing.
+  const cardEl = byClass(trImg, 'lc-att-item')[0]
+  assert.equal(cardEl.args[0], 'button', 'the whole card is one button')
+  cardEl.args[1].onClick()
+  trImg = renderView()
+  assert.equal(byClass(trImg, 'lc-att-lightbox').length, 0, 'no preview without a loaded image')
   // Arm the conversation service: the loader resolves a display URL per ref.
   bed.conversationHolder = { resolveImage: async (sid, att) => 'blob:' + att.attachmentId }
   trImg = renderView()
-  // Drive every ImageCard's load effect (slot 3 = its useEffect), then flush.
+  // Drive every ImageCard's load effect (slot 4 = its useEffect, after the
+  // src/error/attempt/preview states), then flush.
   for (const [key, slots] of hookStates) {
-    if (key.includes('ImageCard') && slots[3] !== undefined) slots[3].effect()
+    if (key.includes('ImageCard') && slots[4] !== undefined) slots[4].effect()
   }
   await new Promise(r => setTimeout(r, 0))
   await new Promise(r => setTimeout(r, 0))
@@ -78,6 +86,16 @@ test('image attachment cards: card layout, metadata degradation, resolveImage th
     .flatMap(t => t.args.slice(2))
     .filter(c => c !== null && typeof c === 'object' && c.args[0] === 'img')
   assert.deepEqual(thumbImgs.map(i => i.args[1].src), ['blob:a1', 'blob:a2'], 'thumbnails resolve through resolveImage')
+  // Clicking the loaded card opens the chat-style lightbox preview (no new
+  // tab); the mask press closes it again.
+  byClass(trImg, 'lc-att-item')[0].args[1].onClick()
+  trImg = renderView()
+  assert.equal(byClass(trImg, 'lc-att-lightbox').length, 1, 'click opens the lightbox preview')
+  assert.equal(byClass(trImg, 'lc-att-lightbox-img')[0].args[1].src, 'blob:a1', 'lightbox shows the clicked image')
+  assert.equal(byClass(trImg, 'lc-att-lightbox-close').length, 1, 'lightbox has a close control')
+  byClass(trImg, 'lc-att-lightbox-mask')[0].args[1].onMouseDown()
+  trImg = renderView()
+  assert.equal(byClass(trImg, 'lc-att-lightbox').length, 0, 'mask press closes the preview')
 
-  console.log('✔ image attachment card test passed (card layout, metadata degradation, resolveImage thumbnails)')
+  console.log('✔ image attachment card test passed (card layout, metadata degradation, resolveImage thumbnails, lightbox preview)')
 })

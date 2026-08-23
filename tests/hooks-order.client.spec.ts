@@ -19,6 +19,7 @@ import { test } from 'vitest'
 import { readFile } from 'node:fs/promises'
 import { JSDOM } from 'jsdom'
 import React from 'react'
+import * as ReactDOM from 'react-dom'
 import { createRoot } from 'react-dom/client'
 
 const bundle = await readFile(new URL('../lib/client.js', import.meta.url), 'utf8')
@@ -31,10 +32,12 @@ function boot() {
   globalThis.window.__ModuleLoader__ = { load(h) { handoff = h } }
   const require = (spec) => {
     if (spec === 'react') return React
+    if (spec === 'react-dom') return ReactDOM
     if (spec === '@deepseek-ai/dsh-client-ui-primitives') {
       return {
         IconPlusOutline16: (p) => React.createElement('svg', p, null),
         IconBranchOutline16: (p) => React.createElement('svg', p, null),
+        IconCloseOutline16: (p) => React.createElement('svg', p, null),
       }
     }
     throw new Error(`unexpected module: ${spec}`)

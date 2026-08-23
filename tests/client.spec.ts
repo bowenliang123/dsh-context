@@ -40,9 +40,11 @@ globalThis.window = {
 globalThis.document = fakeDoc
 
 const require = (spec) => {
-  assert.ok(spec === 'react' || spec === '@deepseek-ai/dsh-client-ui-primitives',
+  assert.ok(spec === 'react' || spec === 'react-dom' || spec === '@deepseek-ai/dsh-client-ui-primitives',
     `bundle must only require platform modules (got "${spec}")`)
-  return spec === 'react' ? fakeReact : FAKE_PRIMITIVES
+  if (spec === 'react') return fakeReact
+  if (spec === 'react-dom') return { createPortal: () => null }
+  return FAKE_PRIMITIVES
 }
 
 // ---- materialize the bundle the way the loader does ----
