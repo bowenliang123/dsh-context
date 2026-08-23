@@ -164,10 +164,16 @@ export function injectionSourceName(source: MessageSource): string {
 }
 
 export function isInjection(source: MessageSource | null | undefined): source is MessageSource {
-  // plugin context (AGENTS.md, snapshots, notices, …) and user-explicit skill
-  // invocations both ride user-role messages with a declared form. `null`
-  // stays in the parameter type: a foreign message may carry it, and the
-  // fold must not crash on it.
+  // Mirrors the dsh transcript's classification (ui-conversation
+  // conversation-nodes/message.ts): a user/message is injected context when
+  // its durable source kind is anything but 'user' — plugin context, skill
+  // invocations/catalogs, goal continuation rounds, team relays, and any
+  // future producer kind all land here ('user-rpc' keeps kind 'user', so
+  // transport annotations never flip the class). The form check stays as a
+  // fallback for a foreign source that declares a form without a readable
+  // kind. `null` stays in the parameter type: a foreign message may carry
+  // it, and the fold must not crash on it.
   return source !== null && source !== undefined
-    && (source.kind === 'plugin' || source.kind === 'skill-invocation' || typeof source.form === 'string')
+    && ((typeof source.kind === 'string' && source.kind !== '' && source.kind !== 'user')
+      || typeof source.form === 'string')
 }

@@ -123,6 +123,21 @@ test('host half: projection unit, fold semantics, attribution, retention, determ
   assert.equal(labels.events[1].name, 'skill-catalog', 'a nameless producer falls back to its durable kind')
   assert.equal(labels.events[2].name, 'plugin', 'a plugin source without an id falls back to its kind')
 
+  // -- injection classification mirrors the dsh transcript: any non-'user'
+  // source kind is injected context, whatever its form --
+  const cls = drive([
+    { seq: 1, type: 'user/message', time: 1000, data: { source: { kind: 'goal', goalId: 'g1', revision: 1, round: 2 }, content: [{ type: 'text', text: 'goal continuation round prompt' }] } },
+    { seq: 2, type: 'user/message', time: 2000, data: { source: { kind: 'user', rpcId: 'r1' }, content: [{ type: 'text', text: 'a real user message with transport annotations' }] } },
+  ])
+  const goalNode = cls.nodes.find(n => n.seq === 1)
+  const userNode = cls.nodes.find(n => n.seq === 2)
+  assert.equal(goalNode.cat, 'inject', 'a formless goal continuation round is injected context (dsh parity)')
+  assert.equal(userNode.cat, 'user', "kind 'user' stays a user message even with extra source fields")
+  assert.equal(cls.events.length, 1, 'only the goal message records an inject event')
+  assert.equal(cls.events[0].name, 'goal', 'a formless producer names itself by its kind')
+  assert.ok(cls.current.inject > 0 && cls.current.user > 0, 'token sums follow the classification')
+
+
   const compactEv = v.events.find(e => e.kind === 'compaction' && e.seq === 8)
   assert.ok(compactEv, 'compaction event present')
   assert.equal(compactEv.turn, undefined, 'compaction with no following request yet stays unlabeled')
