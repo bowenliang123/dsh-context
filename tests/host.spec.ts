@@ -163,6 +163,7 @@ test('host half: projection unit, fold semantics, attribution, retention, determ
   assert.equal(compactEv.step, undefined, 'no step for a trailing event')
   assert.equal(compactEv.fromTurn, 1, 'trailing event still knows the request before it')
   assert.equal(compactEv.fromStep, 1, 'trailing event keeps its from-step')
+  assert.equal(compactEv.tokens, 5000, 'a metering event with no synchronous replacement keeps the gross shadow price')
 
   // -- determinism + reference-stability of the projection contract --
   // Unrelated events must return the SAME state reference (Object.is gates the
@@ -236,6 +237,10 @@ test('host half: projection unit, fold semantics, attribution, retention, determ
   assert.equal(shadow.current.tool, 13, 'shadowed seqs beyond the range end are removed too (only the replacement survives)')
   assert.equal(shadow.current.user, 18, 'unrelated nodes keep their price (40 chars: 10 + 4 + 4)')
   assert.equal(shadow.current.total, 18 + 13, 'total reflects the seq-based removal')
+  // the prune row reads as the NET freed amount — what the trend chart's bar
+  // drop shows — not the gross shadow price: 64 shadowed - 13 replacement
+  const pruneEv = shadow.events.find(e => e.kind === 'prune')
+  assert.equal(pruneEv.tokens, 51, 'prune event shows net freed (removed nodes minus the synchronous replacement)')
   // no tool/call events in this log, so no call name is registered — the tool
   // label stays empty (never a crash)
   assert.equal(shadow.nodes.find(n => n.seq === 5).tool, undefined, 'no registered call name -> no tool label')

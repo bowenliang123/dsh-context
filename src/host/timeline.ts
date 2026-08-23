@@ -147,6 +147,7 @@ const timelineStateSchema = z.object({
   archiveFloor: z.number().optional(),
   callNames: z.record(z.string(), z.string()),
   pendingShadowedSeqs: z.array(z.number()).optional(),
+  pendingShadowEventSeq: z.number().optional(),
 }) as unknown as z.ZodType<TimelineState>
 
 /**

@@ -123,6 +123,14 @@ export interface TimelineState {
    * to keep the state plain JSON for the projection cache.
    */
   pendingShadowedSeqs?: number[]
+  /**
+   * The seq of the compaction/prune event that armed `pendingShadowedSeqs` —
+   * the shadowed path rewrites that event's `tokens` from the gross shadow
+   * price to the NET freed amount (removed nodes minus the synchronous
+   * replacement), so the row matches the drop the trend chart shows. Same
+   * arm/remove lifecycle as `pendingShadowedSeqs`.
+   */
+  pendingShadowEventSeq?: number
 }
 
 /** Keep only the trailing `maxTurns` turn-runs of a request timeline. */
@@ -341,7 +349,9 @@ function applySurface(
   // persisted-state precondition (see TimelineState) and would fail the
   // whole session's projection-cache write.
   const shadowedSeqs = st.pendingShadowedSeqs
+  const shadowEventSeq = st.pendingShadowEventSeq
   delete st.pendingShadowedSeqs
+  delete st.pendingShadowEventSeq
 
   const op = ev.surfaceOp as { op?: string; start?: number; end?: number } | null | undefined
   if (op !== null && typeof op === 'object' && op.op === 'replace') {
@@ -362,6 +372,15 @@ function applySurface(
       st.surface = kept
       st.sums[cat] += node.tokens
       st.surface.push(node)
+      // Rewrite the metering event's row from its gross shadow price to the
+      // NET freed amount (the replacement re-adds its own tokens), so the
+      // number matches the drop the trend chart shows. The record is cloned:
+      // the events array's elements are shared with the persisted state.
+      if (shadowEventSeq !== undefined) {
+        const removedSum = removed.reduce((sum, n) => sum + n.tokens, 0)
+        const i = st.events.findIndex(e => e.seq === shadowEventSeq)
+        if (i >= 0) st.events[i] = { ...st.events[i], tokens: Math.max(0, removedSum - node.tokens) }
+      }
       return node
     }
     let si = -1
@@ -635,6 +654,7 @@ export function applyTimeline(state: TimelineState, event: TimelineEvent, bounds
       // event synchronously shadows exactly these node seqs.
       if (data && Array.isArray(data.shadowedSeqs)) {
         s.pendingShadowedSeqs = data.shadowedSeqs.filter((x): x is number => typeof x === 'number')
+        s.pendingShadowEventSeq = event.seq
       }
       s.events.push({
         seq: event.seq, time: event.time, kind: event.type === 'compaction/summary' ? 'compaction' : 'prune',
