@@ -28,5 +28,10 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
+      # Client tests mount the built bundle (tests/helpers/viewBed.ts reads
+      # lib/client.js), so the build must precede the test run.
+      - name: Build
+        run: pnpm run build
+
       - name: Test (typecheck + vitest)
         run: pnpm test
