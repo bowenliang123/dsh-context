@@ -23,14 +23,19 @@ export const SETTINGS_NAMESPACE = 'dsh-context'
 /** Trend-chart granularity the Context tab opens with. */
 export type DefaultGranularity = 'step' | 'turn'
 
+/** Trend-chart display mode the Context tab opens with. */
+export type DefaultTrendMode = 'total' | 'diff'
+
 /** The `dsh-context` settings section. */
 export interface PluginSettings {
   defaultGranularity: DefaultGranularity
+  defaultTrendMode: DefaultTrendMode
 }
 
 /** Section schema: also the wire envelope the browser scope validates against. */
 export const SettingsSchema: z<PluginSettings> = z.object({
   defaultGranularity: z.union(['step', 'turn']).default('step'),
+  defaultTrendMode: z.union(['total', 'diff']).default('total'),
 })
 
 /** Serve the namespace while a settings provider is composed; inert otherwise. */

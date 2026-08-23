@@ -116,7 +116,9 @@ export function makeContextView(
     const [granularity, setGranularity] = React.useState<'step' | 'turn'>(() => settings.defaultGranularity())
     // Trend display mode: 'total' plots each request's cumulative
     // composition, 'diff' plots its incremental change vs the previous one.
-    const [trendMode, setTrendMode] = React.useState<'total' | 'diff'>('total')
+    // Like the granularity above, the per-user default is read at mount and
+    // in-chart toggling never writes back.
+    const [trendMode, setTrendMode] = React.useState<'total' | 'diff'>(() => settings.defaultTrendMode())
     // Turn strip click target: the chart switches to turn granularity and
     // scroll-centers this turn's bar, then clears it via onFocusTurnHandled.
     const [focusTurn, setFocusTurn] = React.useState<number | null>(null)

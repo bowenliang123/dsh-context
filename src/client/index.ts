@@ -27,7 +27,7 @@ import { makeContextModal } from './components/contextModal'
 import { makeSettingsCard } from './components/settingsCard'
 import { modalStoreOf } from './modalStore'
 import type { ClientCtx, SessionsFace } from './services'
-import { createContextSettings, type DefaultGranularity, type SettingsScopeBinderFace } from './settings'
+import { createContextSettings, type SettingsField, type SettingsScopeBinderFace } from './settings'
 import { makeContextView } from './components/contextView'
 import { makeViewKit } from './viewkit'
 
@@ -110,10 +110,10 @@ function apply(ctx: ClientCtx): void {
         { name: 'settings.plugin.item', key: NS, locale: NS,
           inject: () => ({
             hooks: { contextSettings: settings.store },
-            choose: (granularity: DefaultGranularity) => { settings.choose(granularity) },
+            set: (field: SettingsField, value: string) => { settings.set(field, value) },
           }) },
         // Root-scope keyed slot: no sessionId on these props — the face
-        // (hooks + choose) arrives through the registration's inject.
+        // (hooks + set) arrives through the registration's inject.
         props => h(SettingsCard, props as unknown as Parameters<typeof SettingsCard>[0]),
       )
     })

@@ -1,13 +1,14 @@
 /**
  * User-settings seam tests: the Host half serves the `dsh-context` namespace
  * (Settings → Plugins → Plugin configuration pairs it with the browser card
- * by key), and the browser half binds it for the default trend granularity —
- * read at view mount, written by the card through the settings scope.
+ * by key), and the browser half binds it for the default trend granularity
+ * and display mode — read at view mount, written by the card through the
+ * settings scope.
  */
 import assert from 'node:assert/strict'
 import { test } from 'vitest'
 import { apply } from '../lib/index.js'
-import { bootViewBed, byClass } from './helpers/viewBed.ts'
+import { bootViewBed, byClass, textOf } from './helpers/viewBed.ts'
 
 /** A fake ctx.settingsScope binder over one fixed namespace section. */
 function fakeBinder(value, { status = 'ready', writable = true } = {}) {
@@ -26,6 +27,17 @@ function fakeBinder(value, { status = 'ready', writable = true } = {}) {
   return { writes, scope, binder }
 }
 
+/** Render the captured card against one bed's store, expanded via the header. */
+function cardRig(bed) {
+  const face = bed.settingsCardRegistration.inject()
+  const store = face.hooks.contextSettings
+  const render = () => bed.evaluate(bed.settingsCardComponent({
+    useContextSettings: (sel) => sel(store.getSnapshot()),
+    set: face.set,
+  }))
+  return { face, store, render }
+}
+
 test('host half: registers the dsh-context settings namespace when a provider is composed', () => {
   const registrations = []
   const fakeCtx = {
@@ -37,16 +49,17 @@ test('host half: registers the dsh-context settings namespace when a provider is
   apply(fakeCtx)
   assert.equal(registrations.length, 1, 'one settings namespace registered')
   assert.equal(registrations[0].ns, 'dsh-context', 'namespace key the browser card is keyed on')
-  assert.deepEqual(registrations[0].schema({}), { defaultGranularity: 'step' }, 'schema fills the step default')
+  assert.deepEqual(registrations[0].schema({}), { defaultGranularity: 'step', defaultTrendMode: 'total' }, 'schema fills both defaults')
   assert.throws(() => registrations[0].schema({ defaultGranularity: 'week' }), 'schema rejects unknown granularity')
+  assert.throws(() => registrations[0].schema({ defaultTrendMode: 'net' }), 'schema rejects unknown trend mode')
 })
 
-test('client half: default granularity comes from the settings scope at mount', async () => {
-  const { binder } = fakeBinder({ defaultGranularity: 'turn' })
+test('client half: default granularity and trend mode come from the settings scope at mount', async () => {
+  const { binder } = fakeBinder({ defaultGranularity: 'turn', defaultTrendMode: 'diff' })
   const bed = await bootViewBed({ settingsScope: binder })
-  // The ContextView fiber's hook slots: gran is index 4 (see chart.spec).
-  const gran = bed.ctxSlots()[4][0]
-  assert.equal(gran, 'turn', 'a freshly mounted view opens with the stored granularity')
+  // The ContextView fiber's hook slots: gran is index 4, trend mode 5 (see chart.spec).
+  assert.equal(bed.ctxSlots()[4][0], 'turn', 'a freshly mounted view opens with the stored granularity')
+  assert.equal(bed.ctxSlots()[5][0], 'diff', 'a freshly mounted view opens with the stored trend mode')
   bed.dataValue = bed.snapshot
   const tree = bed.renderView()
   const granRow = byClass(tree, 'lc-gran')[0].args.slice(2)
@@ -55,56 +68,55 @@ test('client half: default granularity comes from the settings scope at mount', 
   assert.equal(on[0].args[2], 'Turn', 'the turn option renders active')
 })
 
-test('client half: no settings surface -> no card, step default (degraded)', async () => {
+test('client half: no settings surface -> no card, schema defaults (degraded)', async () => {
   const bed = await bootViewBed()
   assert.equal(bed.settingsCardComponent, null, 'no card registered without settingsScope')
   assert.equal(bed.ctxSlots()[4][0], 'step', 'granularity falls back to the schema default')
+  assert.equal(bed.ctxSlots()[5][0], 'total', 'trend mode falls back to the schema default')
 })
 
-test('client half: the Plugin configuration card reads and writes the preference', async () => {
-  const { writes, binder } = fakeBinder({ defaultGranularity: 'step' })
+test('client half: the Plugin configuration card reads and writes both preferences', async () => {
+  const { writes, binder } = fakeBinder({ defaultGranularity: 'step', defaultTrendMode: 'total' })
   const bed = await bootViewBed({ settingsScope: binder })
   assert.equal(bed.settingsCardRegistration.key, 'dsh-context', 'card keyed by the served namespace')
 
-  const face = bed.settingsCardRegistration.inject()
-  const store = face.hooks.contextSettings
-  const render = () => bed.evaluate(bed.settingsCardComponent({
-    useContextSettings: (sel) => sel(store.getSnapshot()),
-    choose: face.choose,
-  }))
-
-  const tree = render()
+  const { store, render } = cardRig(bed)
+  let tree = render()
   assert.equal(tree.args[0], 'li', 'the card is a list item inside the section ul')
-  const options = byClass(tree, 'lc-gran-btn')
-  assert.equal(options.length, 2, 'step/turn segmented control')
-  assert.equal(options[0].args[1].disabled, false, 'writable scope enables the control')
-  assert.ok(String(options[0].args[1].className).includes('lc-gran-on'), 'step renders active')
+  assert.equal(byClass(tree, 'lc-settings-head').length, 1, 'the header renders while collapsed')
+  assert.equal(byClass(tree, 'lc-settings-row').length, 0, 'collapsed by default like the official plugin cards')
+
+  byClass(tree, 'lc-settings-head')[0].args[1].onClick() // disclose the controls
+  tree = render()
+  assert.equal(byClass(tree, 'lc-settings-row').length, 2, 'granularity + trend-mode preference rows')
+  const menus = byClass(tree, 'lc-menu')
+  assert.equal(menus.length, 2, 'each row is a Menu dropdown')
+  assert.equal(menus[0].args[1]['data-selected'], 'step', 'the stored granularity is selected')
+  const pill = byClass(menus[0], 'lc-settings-select')[0]
+  assert.equal(pill.args[1].disabled, false, 'writable scope enables the control')
+  assert.equal(textOf(pill), 'Step', 'the selector pill names the active option')
   assert.equal(byClass(tree, 'lc-settings-note').length, 0, 'no read-only note when writable')
 
-  options[1].args[1].onClick() // choose Turn
+  menus[0].args[1].onSelect('turn') // choose Turn
   assert.deepEqual(writes, [['defaultGranularity', 'turn']], 'the choice lands as a fenced scope write')
   assert.equal(store.getSnapshot().granularity, 'turn', 'local echo before the write settles')
-  const rerendered = render()
-  assert.ok(String(byClass(rerendered, 'lc-gran-btn')[1].args[1].className).includes('lc-gran-on'), 'turn renders active after the choice')
+  tree = render()
+  assert.equal(byClass(tree, 'lc-menu')[0].args[1]['data-selected'], 'turn', 'turn renders selected after the choice')
+
+  byClass(tree, 'lc-menu')[1].args[1].onSelect('diff') // choose Diff
+  assert.deepEqual(writes[1], ['defaultTrendMode', 'diff'], 'the trend-mode choice lands as a fenced scope write')
+  assert.equal(store.getSnapshot().mode, 'diff', 'local echo before the write settles')
 })
 
 test('client half: card states — read-only note and unavailable absence', async () => {
   const ro = await bootViewBed({ settingsScope: fakeBinder({ defaultGranularity: 'step' }, { writable: false }).binder })
-  const roFace = ro.settingsCardRegistration.inject()
-  const roStore = roFace.hooks.contextSettings
-  const roTree = ro.evaluate(ro.settingsCardComponent({
-    useContextSettings: (sel) => sel(roStore.getSnapshot()),
-    choose: roFace.choose,
-  }))
+  const roRig = cardRig(ro)
+  byClass(roRig.render(), 'lc-settings-head')[0].args[1].onClick() // disclose
+  const roTree = roRig.render()
   assert.equal(byClass(roTree, 'lc-settings-note').length, 1, 'read-only scope shows the note')
-  assert.equal(byClass(roTree, 'lc-gran-btn')[0].args[1].disabled, true, 'read-only scope disables the control')
+  assert.equal(byClass(roTree, 'lc-settings-select')[0].args[1].disabled, true, 'read-only scope disables the control')
 
   const off = await bootViewBed({ settingsScope: fakeBinder(undefined, { status: 'unavailable' }).binder })
-  const offFace = off.settingsCardRegistration.inject()
-  const offStore = offFace.hooks.contextSettings
-  const offTree = off.evaluate(off.settingsCardComponent({
-    useContextSettings: (sel) => sel(offStore.getSnapshot()),
-    choose: offFace.choose,
-  }))
+  const offTree = cardRig(off).render()
   assert.equal(offTree, null, 'an unserved namespace shows no trace of the card')
 })

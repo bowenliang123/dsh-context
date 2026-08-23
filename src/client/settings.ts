@@ -1,10 +1,10 @@
 /**
  * The plugin's user-settings binding (browser half). The Host-served
  * `dsh-context` namespace carries per-user display preferences; the Context
- * tab reads the default trend granularity at mount, and the Plugin
- * configuration card (Settings → Plugins) writes it through the settings
- * scope. Both degrade to the schema default when the settings surface is
- * absent (older host) or read-only (remote browser in memory mode).
+ * tab reads them at mount, and the Plugin configuration card (Settings →
+ * Plugins) writes them through the settings scope. Both degrade to the
+ * schema defaults when the settings surface is absent (older host) or
+ * read-only (remote browser in memory mode).
  *
  * The scope faces are minimally re-typed here (the services.ts discipline):
  * the runtime service comes from the user's harness, and type-only imports
@@ -13,6 +13,10 @@
  */
 
 export type DefaultGranularity = 'step' | 'turn'
+export type DefaultTrendMode = 'total' | 'diff'
+
+/** The section fields the card edits, as the Host schema names them. */
+export type SettingsField = 'defaultGranularity' | 'defaultTrendMode'
 
 /** The bound settings scope (ctx.settingsScope.bind result), as consumed. */
 export interface SettingsScopeLike {
@@ -31,6 +35,7 @@ export interface SettingsState {
   /** Scope sync: loading until the first Host section, unavailable when unserved. */
   status: 'loading' | 'ready' | 'unavailable'
   granularity: DefaultGranularity
+  mode: DefaultTrendMode
   writable: boolean
 }
 
@@ -39,24 +44,31 @@ export interface ContextSettings {
   store: { subscribe(listener: () => void): () => void; getSnapshot(): SettingsState }
   /** The granularity a freshly mounted view opens with. */
   defaultGranularity(): DefaultGranularity
+  /** The trend display mode a freshly mounted view opens with. */
+  defaultTrendMode(): DefaultTrendMode
   /** Attach the bound namespace scope; returns the subscription disposer. */
   attach(scope: SettingsScopeLike): () => void
-  /** Persist one granularity choice (local echo, then the fenced scope write). */
-  choose(granularity: DefaultGranularity): void
+  /** Persist one preference choice (local echo, then the fenced scope write). */
+  set(field: SettingsField, value: string): void
 }
 
-function granularityOf(value: unknown): DefaultGranularity | undefined {
-  if (value === null || typeof value !== 'object') return undefined
-  const g = (value as { defaultGranularity?: unknown }).defaultGranularity
-  return g === 'step' || g === 'turn' ? g : undefined
+/** Read the known preferences out of a raw section; unknown/absent fields drop out. */
+function prefsOf(value: unknown): { granularity?: DefaultGranularity; mode?: DefaultTrendMode } {
+  if (value === null || typeof value !== 'object') return {}
+  const v = value as Record<string, unknown>
+  return {
+    ...(v.defaultGranularity === 'step' || v.defaultGranularity === 'turn' ? { granularity: v.defaultGranularity } : {}),
+    ...(v.defaultTrendMode === 'total' || v.defaultTrendMode === 'diff' ? { mode: v.defaultTrendMode } : {}),
+  }
 }
 
 export function createContextSettings(): ContextSettings {
-  let state: SettingsState = { status: 'loading', granularity: 'step', writable: false }
+  let state: SettingsState = { status: 'loading', granularity: 'step', mode: 'total', writable: false }
   let scope: SettingsScopeLike | undefined
   const listeners = new Set<() => void>()
   const publish = (next: SettingsState): void => {
-    if (next.status === state.status && next.granularity === state.granularity && next.writable === state.writable) return
+    if (next.status === state.status && next.granularity === state.granularity
+      && next.mode === state.mode && next.writable === state.writable) return
     state = next
     for (const listener of listeners) listener()
   }
@@ -69,23 +81,26 @@ export function createContextSettings(): ContextSettings {
       getSnapshot: () => state,
     },
     defaultGranularity: () => state.granularity,
+    defaultTrendMode: () => state.mode,
     attach(bound) {
       scope = bound
       const sync = (): void => {
         const snap = bound.getSnapshot()
+        const prefs = prefsOf(snap.value)
         publish({
           status: snap.status === 'ready' || snap.status === 'unavailable' ? snap.status : 'loading',
           // A section without the field (older Host half) keeps the default.
-          granularity: granularityOf(snap.value) ?? state.granularity,
+          granularity: prefs.granularity ?? state.granularity,
+          mode: prefs.mode ?? state.mode,
           writable: snap.writable,
         })
       }
       sync()
       return bound.subscribe(sync)
     },
-    choose(granularity) {
-      publish({ ...state, granularity })
-      void scope?.set('defaultGranularity', granularity)
+    set(field, value) {
+      publish({ ...state, ...prefsOf({ [field]: value }) })
+      void scope?.set(field, value)
     },
   }
 }
