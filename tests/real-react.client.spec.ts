@@ -135,13 +135,15 @@ test('real-React jsdom mount: rapid step<->turn toggles never hit React #185', a
     const scroller = container.querySelector('.lc-chart-scroll')
     scroller.__clientW = 800
     const buttons = [...container.querySelectorAll('.lc-gran .lc-gran-btn')]
-    assert.equal(buttons.length, 2, 'toggle buttons rendered')
+    // Two toggle groups: granularity (Step/Turn) + display mode (Total/Diff);
+    // the first two buttons are the granularity pair exercised below.
+    assert.equal(buttons.length, 4, 'toggle buttons rendered')
     // Rapid toggles: the overflow state flips each time (wide step chart vs
     // narrow turn chart), which used to cascade setEdges dispatches inside the
     // no-deps layout effect until React #185 (maximum update depth) fired.
     for (let i = 0; i < 8; i++) {
       const btns = [...container.querySelectorAll('.lc-gran .lc-gran-btn')]
-      assert.equal(btns.length, 2, `toggle buttons still mounted after ${i} switches`)
+      assert.equal(btns.length, 4, `toggle buttons still mounted after ${i} switches`)
       btns[i % 2].click()
       await new Promise(r => setTimeout(r, 20))
     }

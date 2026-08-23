@@ -260,8 +260,8 @@ export interface RequestRecord {
    */
   stepCount?: number
   /**
-   * Delta-view signed net change, set by the Client's deltaOf (only present
-   * on the delta-transformed records the TrendChart plots). The Host never
+   * Diff-mode signed net change, set by the Client's diffOf (only present
+   * on the diff-transformed records the TrendChart plots). The Host never
    * sets it.
    */
   net?: number

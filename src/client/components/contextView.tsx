@@ -106,9 +106,9 @@ export function makeContextView(ctx: ClientCtx, kit: ViewKit): (props: ContextVi
     const [hoverTurn, setHoverTurn] = React.useState<number | null>(null)
     const [tick, setTick] = React.useState(0)
     const [granularity, setGranularity] = React.useState<'step' | 'turn'>('step')
-    // Delta display mode: when on, the history chart plots each request's
-    // incremental diff instead of its cumulative composition.
-    const [deltaMode, setDeltaMode] = React.useState(false)
+    // Trend display mode: 'total' plots each request's cumulative
+    // composition, 'diff' plots its incremental change vs the previous one.
+    const [trendMode, setTrendMode] = React.useState<'total' | 'diff'>('total')
     // Turn strip click target: the chart switches to turn granularity and
     // scroll-centers this turn's bar, then clears it via onFocusTurnHandled.
     const [focusTurn, setFocusTurn] = React.useState<number | null>(null)
@@ -289,22 +289,27 @@ export function makeContextView(ctx: ClientCtx, kit: ViewKit): (props: ContextVi
               <div className="lc-card-title">
                 <span className="lc-card-title-text">{t('trend.title')}</span>
                 <span className="lc-card-sub">{t('trend.hint')}</span>
-                <div className="lc-gran">
-                  <button
-                    className={'lc-gran-btn' + (granularity === 'step' ? ' lc-gran-on' : '')}
-                    onClick={() => { setGranularity('step') }}
-                  >{t('gran.step')}</button>
-                  <button
-                    className={'lc-gran-btn' + (granularity === 'turn' ? ' lc-gran-on' : '')}
-                    onClick={() => { setGranularity('turn') }}
-                  >{t('gran.turn')}</button>
-                </div>
-                <div className="lc-gran">
-                  <button
-                    className={'lc-gran-btn' + (deltaMode ? ' lc-gran-on' : '')}
-                    title={t('gran.deltaHint')}
-                    onClick={() => { setDeltaMode(d => !d) }}
-                  >{t('gran.delta')}</button>
+                <div className="lc-trend-ctl">
+                  <div className="lc-gran">
+                    <button
+                      className={'lc-gran-btn' + (granularity === 'step' ? ' lc-gran-on' : '')}
+                      onClick={() => { setGranularity('step') }}
+                    >{t('gran.step')}</button>
+                    <button
+                      className={'lc-gran-btn' + (granularity === 'turn' ? ' lc-gran-on' : '')}
+                      onClick={() => { setGranularity('turn') }}
+                    >{t('gran.turn')}</button>
+                  </div>
+                  <div className="lc-gran" title={t('gran.modeHint')}>
+                    <button
+                      className={'lc-gran-btn' + (trendMode === 'total' ? ' lc-gran-on' : '')}
+                      onClick={() => { setTrendMode('total') }}
+                    >{t('gran.total')}</button>
+                    <button
+                      className={'lc-gran-btn' + (trendMode === 'diff' ? ' lc-gran-on' : '')}
+                      onClick={() => { setTrendMode('diff') }}
+                    >{t('gran.diff')}</button>
+                  </div>
                 </div>
               </div>
               {displayRequests.length === 0
@@ -324,7 +329,7 @@ export function makeContextView(ctx: ClientCtx, kit: ViewKit): (props: ContextVi
                       hoveredSeq={hoveredSeq}
                       activeTurn={activeTurn}
                       granularity={granularity}
-                      delta={deltaMode}
+                      mode={trendMode}
                       focusTurn={focusTurn}
                       onSelect={setSelectedSeq}
                       onHover={setHoveredSeq}

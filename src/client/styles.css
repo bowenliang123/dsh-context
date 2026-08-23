@@ -36,6 +36,11 @@
 .lc-stat-tip-model { color: var(--dsw-alias-label-primary); }
 .lc-card-sub { font-weight: 400; color: var(--dsw-alias-label-secondary); font-size: 12px; }
 .lc-gran, .lc-kinds { margin-left: auto; display: flex; gap: 2px; background: var(--dsw-alias-bg-layer-2); border: 1px solid var(--dsw-alias-border-l1); border-radius: 6px; padding: 1px; }
+/* A title carrying TWO toggle groups wraps them so the auto-margin push
+   happens once — two bare .lc-gran siblings would split the free space
+   between their auto margins and drift apart. */
+.lc-trend-ctl { margin-left: auto; display: flex; gap: 6px; align-items: center; }
+.lc-trend-ctl .lc-gran { margin-left: 0; }
 .lc-gran-btn { border: 0; background: transparent; color: var(--dsw-alias-label-secondary); font-size: 11px; line-height: 1; padding: 3px 8px; border-radius: 5px; cursor: pointer; font-family: inherit; }
 .lc-gran-btn:hover { color: var(--dsw-alias-label-primary); }
 .lc-gran-on, .lc-gran-on:hover { background: var(--dsw-alias-button-primary-fill); color: var(--dsw-alias-label-primary-foreground); }
