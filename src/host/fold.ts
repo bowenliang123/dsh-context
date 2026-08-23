@@ -28,6 +28,7 @@ import {
   estimateToolSchema,
   firstText,
   imageCountOf,
+  injectionSourceName,
   isInjection,
   toolCallNames,
 } from './pricing'
@@ -532,8 +533,11 @@ export function applyTimeline(state: TimelineState, event: TimelineEvent, bounds
         if (source.kind === 'skill-invocation') {
           rec.sub = 'skill'
           rec.name = typeof source.name === 'string' ? source.name : '?'
-        } else if (typeof source.plugin === 'string' && source.plugin !== '') {
-          rec.name = source.plugin
+        } else {
+          // Producer label mirroring the dsh transcript row: instruction file
+          // paths, the plugin id, or the bare source kind (skill-catalog, …).
+          const label = injectionSourceName(source)
+          if (label !== '') rec.name = label
         }
         s.events.push(rec)
       }

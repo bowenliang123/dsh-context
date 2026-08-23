@@ -139,6 +139,28 @@ export interface MessageSource {
   // Entries stay nullable: any plugin may author a snapshot source, so the
   // fold's preview read must not trust the element shape.
   sections?: ({ name?: string } | null)[]
+  // agent-instructions reconciliation entries (same nullable-entry caution).
+  changes?: ({ path?: string } | null)[]
+}
+
+/**
+ * Producer label for an injection event, mirroring the dsh transcript's
+ * context provenance (client-runtime context-provenance.ts): workspace
+ * instructions name the files they were reconciled from, a plugin source its
+ * plugin id, and any other producer its own durable kind. Returns '' when
+ * the source carries no readable identity at all.
+ */
+export function injectionSourceName(source: MessageSource): string {
+  if (source.kind === 'agent-instructions' && Array.isArray(source.changes)) {
+    const paths: string[] = []
+    for (const change of source.changes) {
+      const path = change?.path
+      if (typeof path === 'string' && path !== '' && !paths.includes(path)) paths.push(path)
+    }
+    if (paths.length > 0) return paths.join(', ')
+  }
+  if (typeof source.plugin === 'string' && source.plugin !== '') return source.plugin
+  return typeof source.kind === 'string' && source.kind !== '' ? source.kind : ''
 }
 
 export function isInjection(source: MessageSource | null | undefined): source is MessageSource {

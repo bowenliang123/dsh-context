@@ -107,6 +107,22 @@ test('host half: projection unit, fold semantics, attribution, retention, determ
   assert.equal(injectEv.turn, 1, 'inject before step 1\'s call lands on Turn 1')
   assert.equal(injectEv.step, 1, 'inject lands on Step 1')
   assert.equal(injectEv.fromTurn, undefined, 'no request before the first inject')
+  assert.equal(injectEv.name, 'dsh-agent-presets', 'plugin-sourced inject names its plugin')
+
+  // -- inject event producer labels mirror the dsh transcript provenance --
+  const labels = drive([
+    { seq: 1, type: 'user/message', time: 1000, data: { source: { kind: 'agent-instructions', form: 'instructions', changes: [
+      { action: 'set', scope: 'workspace', path: 'AGENTS.md' },
+      { action: 'set', scope: 'workspace/sub', path: 'CLAUDE.md' },
+      { action: 'set', scope: 'workspace', path: 'AGENTS.md' },
+    ] }, content: [{ type: 'text', text: 'instructions' }] } },
+    { seq: 2, type: 'user/message', time: 2000, data: { source: { kind: 'skill-catalog', form: 'catalog', entries: [] }, content: [{ type: 'text', text: 'catalog' }] } },
+    { seq: 3, type: 'user/message', time: 3000, data: { source: { kind: 'plugin', form: 'notice', summary: 'no plugin id' }, content: [{ type: 'text', text: 'notice' }] } },
+  ])
+  assert.equal(labels.events[0].name, 'AGENTS.md, CLAUDE.md', 'agent-instructions names its distinct change paths in order')
+  assert.equal(labels.events[1].name, 'skill-catalog', 'a nameless producer falls back to its durable kind')
+  assert.equal(labels.events[2].name, 'plugin', 'a plugin source without an id falls back to its kind')
+
   const compactEv = v.events.find(e => e.kind === 'compaction' && e.seq === 8)
   assert.ok(compactEv, 'compaction event present')
   assert.equal(compactEv.turn, undefined, 'compaction with no following request yet stays unlabeled')
