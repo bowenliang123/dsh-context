@@ -364,7 +364,7 @@ test('context view: trend chart, stats board, plugin info, hover linking, granul
       { seq: 6, kind: 'prune', time: 1500, tokens: 60, fromTurn: 1, fromStep: 0, turn: 1, step: 1 },
       { seq: 7, kind: 'prune', time: 2000, tokens: 100, fromTurn: 1, fromStep: 1, turn: 2, step: 0 },
       { seq: 8, kind: 'model', time: 3000, from: 'a', to: 'b', turn: 1, step: 1 },
-      { seq: 9, kind: 'inject', time: 4000, tokens: 5, form: 'notice', turn: 2, step: 0 },
+      { seq: 9, kind: 'inject', time: 4000, tokens: 5, form: 'notice', name: 'dsh-agent-presets', detail: 'Skill injected (code-review)', turn: 2, step: 0 },
       { seq: 10, kind: 'compaction', time: 5000, tokens: 5000, count: 4, fromTurn: 2, fromStep: 0 }, // no request after -> unlabeled
     ],
   }
@@ -380,6 +380,9 @@ test('context view: trend chart, stats board, plugin info, hover linking, granul
   assert.equal(atLabels[2].args[2], 'Turn 1 · Step 1 → Turn 2 · Step 0', 'cross-turn boundary shows the gap')
   assert.equal(atLabels[3].args[2], 'Turn 1 · Step 0→1', 'same-turn boundary compresses to a step range')
   assert.equal(atLabels[4].args[2], 'Turn 1 · Step 0 → Turn 2 · Step 0', 'oldest boundary event shows its gap')
+  const evLabels = byClass(tr, 'lc-event-label')
+  assert.equal(evLabels[1].args[2], 'Notice · dsh-agent-presets · Skill injected (code-review)',
+    'a notice row reads title · producer · one-line account, like the dsh transcript')
 
   // the events card header carries the four kind buttons as a picker, all
   // picked by default: clicking an unpicked kind adds it (A -> A+B -> ...),

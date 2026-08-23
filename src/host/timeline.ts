@@ -69,6 +69,7 @@ const contextEventSchema = z.object({
   count: z.number().optional(),
   sub: z.string().optional(),
   name: z.string().optional(),
+  detail: z.string().optional(),
   from: z.string().optional(),
   to: z.string().optional(),
   fromTurn: z.number().optional(),

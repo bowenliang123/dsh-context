@@ -538,6 +538,11 @@ export function applyTimeline(state: TimelineState, event: TimelineEvent, bounds
           // paths, the plugin id, or the bare source kind (skill-catalog, …).
           const label = injectionSourceName(source)
           if (label !== '') rec.name = label
+          // A notice carries the producer's bounded one-line account; show it
+          // after the source name, as the dsh transcript row does.
+          if (source.form === 'notice' && typeof source.summary === 'string' && source.summary !== '') {
+            rec.detail = source.summary
+          }
         }
         s.events.push(rec)
       }

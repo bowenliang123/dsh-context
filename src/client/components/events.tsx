@@ -38,7 +38,10 @@ export function makeEventText(t: Translate): {
     // compile (ev.sub ev.form ev.name are inject-only), forcing a label.
     if (ev.sub === 'skill') return t('ev.skill', { name: ev.name || '?' })
     const base = t('form.' + (ev.form || 'context'))
-    return ev.name ? base + ' · ' + ev.name : base
+    // The dsh transcript row's shape: title · producer · one-line account.
+    let label = ev.name ? base + ' · ' + ev.name : base
+    if (ev.detail) label += ' · ' + ev.detail
+    return label
   }
 
   /**

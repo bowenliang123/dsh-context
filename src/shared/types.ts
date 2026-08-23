@@ -287,6 +287,8 @@ export interface ContextEventRecord {
   count?: number
   sub?: string
   name?: string
+  /** One-line producer account (notice-form summary), shown after the name. */
+  detail?: string
   from?: string
   to?: string
   /** Turn/step of the request logged right BEFORE the event (host-stamped). */

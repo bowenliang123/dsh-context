@@ -122,6 +122,8 @@ test('host half: projection unit, fold semantics, attribution, retention, determ
   assert.equal(labels.events[0].name, 'AGENTS.md, CLAUDE.md', 'agent-instructions names its distinct change paths in order')
   assert.equal(labels.events[1].name, 'skill-catalog', 'a nameless producer falls back to its durable kind')
   assert.equal(labels.events[2].name, 'plugin', 'a plugin source without an id falls back to its kind')
+  assert.equal(labels.events[2].detail, 'no plugin id', 'a notice carries its one-line summary onto the event row')
+  assert.equal(labels.events[0].detail, undefined, 'non-notice forms carry no detail')
 
   // -- injection classification mirrors the dsh transcript: any non-'user'
   // source kind is injected context, whatever its form --
