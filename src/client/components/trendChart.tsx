@@ -24,6 +24,8 @@ export interface TrendChartProps {
   activeTurn: number | null
   /** Display granularity; a switch re-anchors the chart at the newest bars. */
   granularity: 'step' | 'turn'
+  /** Display mode: cumulative totals ('total') or per-request incremental diff ('diff'). */
+  mode: 'total' | 'diff'
   /** A strip-clicked turn pending scroll-centering; null once handled. */
   focusTurn: number | null
   onSelect: (seq: number | null) => void
@@ -103,6 +105,33 @@ export function makeTrendChart(kit: ViewKit): (props: TrendChartProps) => ReactN
   const barTotalOf = (req: RequestRecord): number =>
     typeof req.prompt === 'number' && req.prompt > 0 ? req.prompt : req.total
 
+  /**
+   * Transform one request into its per-request incremental diff for the
+   * diff mode. Each category becomes |current − previous| (the magnitude of
+   * change, stacked like the cumulative bars), `total` becomes the summed
+   * magnitude, and `net` keeps the signed change for the tooltip. The first
+   * request (no previous) diff from empty is zero, so the diff mode's scale
+   * is driven purely by inter-request changes rather than the initial
+   * cumulative baseline. Provider prompt/output are dropped: they are
+   * per-request values, not diffs.
+   */
+  const diffOf = (req: RequestRecord, prev: RequestRecord | null): RequestRecord => {
+    const out = { ...req }
+    let churn = 0
+    let net = 0
+    for (const c of CATS) {
+      const d = prev !== null ? (req[c.key] || 0) - (prev[c.key] || 0) : 0
+      out[c.key] = Math.abs(d)
+      churn += Math.abs(d)
+      net += d
+    }
+    out.total = churn
+    out.net = net
+    delete out.prompt
+    delete out.output
+    return out
+  }
+
   interface ChartBarProps {
     req: RequestRecord
     /** The boundary event attached to this bar, if any. */
@@ -159,7 +188,14 @@ export function makeTrendChart(kit: ViewKit): (props: TrendChartProps) => ReactN
   })
 
   return function TrendChart(props: TrendChartProps): ReactNS.ReactElement {
-    const requests = props.requests
+    const diff = props.mode === 'diff'
+    // Diff mode swaps the cumulative records for per-request diffs. Memoized
+    // so hover-driven re-renders keep the bar props identity-stable (same
+    // reason the parent memoizes its turn aggregation).
+    const requests = React.useMemo(
+      () => (diff ? props.requests.map((req, i) => diffOf(req, i > 0 ? props.requests[i - 1] : null)) : props.requests),
+      [props.requests, diff],
+    )
     const markers = props.markers
     let maxTotal = 1
     for (const req of requests) {
@@ -245,6 +281,12 @@ export function makeTrendChart(kit: ViewKit): (props: TrendChartProps) => ReactN
       const head = req.stepCount !== undefined && req.stepCount > 1
         ? t('tip.turn', { t: req.turn ?? 0, n: req.stepCount })
         : t('tip.step', { t: req.turn ?? 0, s: req.step ?? 0 })
+      if (diff) {
+        // Diff mode: the bar height is the summed magnitude, but the hover
+        // tip reports the SIGNED net change so growth vs shrink is explicit.
+        const n = req.net ?? 0
+        return head + ' · ' + fmtTime(req.time) + ' · ' + t('tip.diff', { n: (n > 0 ? '+' : '') + fmt(n) })
+      }
       return head + ' · ' + fmtTime(req.time) + ' · ' + t('tip.total', { n: fmt(req.total) })
         + (req.prompt !== undefined ? ' · ' + t('tip.actual', { n: fmt(req.prompt) }) : '')
     }

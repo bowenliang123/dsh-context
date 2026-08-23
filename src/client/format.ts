@@ -5,9 +5,11 @@
 
 export function fmt(n: number | null | undefined): string {
   if (n === undefined || n === null || isNaN(n)) return '—'
-  if (n >= 1e6) return (n / 1e6).toFixed(1) + 'M'
-  if (n >= 1000) return (n / 1000).toFixed(1) + 'k'
-  return String(Math.round(n))
+  const sign = n < 0 ? '-' : ''
+  const a = Math.abs(n)
+  if (a >= 1e6) return sign + (a / 1e6).toFixed(1) + 'M'
+  if (a >= 1000) return sign + (a / 1000).toFixed(1) + 'k'
+  return sign + String(Math.round(a))
 }
 
 /** Byte sizes for attachment metadata (1 kB = 1000 B, matching the k/M style of `fmt`). */
