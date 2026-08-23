@@ -68,10 +68,12 @@ test('host fold: image blocks price by the official DeepSeek image token formula
   const n5 = v.nodes.find(n => n.seq === 5)
   // tool-result: outer +4, nested image 201+4 (512×512 → 201), role +4.
   assert.equal(n5.tokens, 201 + 4 + 4 + 4, 'nested tool-result image priced by dims')
+  assert.equal(n5.imgs, 1, 'the image count rides the surface node (nested blocks included)')
   // Category sums carry the corrected figures.
   assert.equal(v.current.user, n1.tokens + n2.tokens + n3.tokens)
-  // Whole-session image count: three user uploads + the nested tool-result image.
-  assert.equal(v.images, 4, 'image blocks counted across user messages and tool results')
+  // Image count: the three user uploads + the nested tool-result image, all
+  // live on the surface.
+  assert.equal(v.images, 4, 'image blocks counted across live user messages and tool results')
   // Tool calls: only results LIVE in the current context count — the one
   // tool/result folded above is on the surface.
   assert.equal(v.toolCalls, 1, 'a tool call with a live result counts')
@@ -89,7 +91,7 @@ test('host fold: image blocks price by the official DeepSeek image token formula
   const kept = v2.nodes.find(n => n.seq === 2)
   const summary = v2.nodes.find(n => n.seq === 4)
   assert.equal(v2.current.user, kept.tokens + summary.tokens, 'shadowed image leaves no residue')
-  assert.equal(v2.images, 1, 'the image count is cumulative — compaction does not decrement it')
+  assert.equal(v2.images, 0, 'images of a compacted message stop counting (current context only)')
   assert.equal(v2.toolCalls, 0, 'no tool results on the surface -> zero tool calls')
 
   // A tool result compacted OUT of the surface stops counting; a call still

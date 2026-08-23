@@ -74,9 +74,10 @@ export interface Snapshot {
   }
   toolList: { name: string; tokens: number }[]
   /**
-   * Cumulative image-block count over the COMPLETE session log (user uploads
-   * plus tool-result images) — never trimmed, like `cost`. Absent from older
-   * hosts; clients treat absence as zero.
+   * Image blocks live in the CURRENT context (user uploads plus tool-result
+   * images, nested blocks included) — the sum over the live surface nodes'
+   * `imgs`, so compaction/prune shrink it. Absent from older hosts; clients
+   * treat absence as zero.
    */
   images?: number
   /**
@@ -231,6 +232,8 @@ export interface SurfaceNode {
   time?: number
   cat: Category
   tokens: number
+  /** Image blocks inside this node's message (absent when zero). */
+  imgs?: number
   /**
    * Removal marker, present only on `archive` entries: the seq of the
    * replacement surface event that shadowed this node (compaction/prune).

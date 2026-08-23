@@ -1,9 +1,9 @@
 /**
  * StatsBoard — the session context statistics card above the composition:
  * conversation size (turns/steps), context churn (compaction count,
- * prune count, injection count), the tool calls with a result live in the
- * current context, the whole-session image-file count, the cache-hit share,
- * and the estimated cumulative session cost. The counts cover the retained history window,
+ * prune count, injection count), the tool calls with a result and the image
+ * blocks live in the current context, the cache-hit share, and the
+ * estimated cumulative session cost. The counts cover the retained history window,
  * matching the History chart; the cache-hit figure reuses the official
  * token-meter `tokenUsage` projection verbatim — the exact same data and
  * formula as the chat stats line below the input box — and the cost cell
@@ -52,7 +52,7 @@ export function makeStatsBoard(kit: ViewKit): (props: {
   usage: TokenUsage | null
   /** Tool calls with a result live in the current context (absent on older hosts). */
   toolCalls?: number
-  /** Cumulative session image-block count (whole log; absent on older hosts). */
+  /** Image blocks live in the current context (absent on older hosts). */
   images?: number
   /** Session-cost raw material from the timeline (undefined: nothing priced). */
   cost?: SessionCostUsage

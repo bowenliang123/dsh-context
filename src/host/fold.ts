@@ -102,12 +102,6 @@ export interface TimelineState {
    * Absent until a v4-flash / v4-pro request reports usage.
    */
   cost?: SessionCostUsage
-  /**
-   * Cumulative image-block count over the COMPLETE session log (user uploads
-   * plus tool-result images, nested blocks included) — running total, never
-   * trimmed, so the stats board's image cell stays whole-session like cost.
-   */
-  images: number
   /** Newest `gone` among archive entries dropped by the retention bounds. */
   archiveFloor?: number
   /**
@@ -210,7 +204,6 @@ export function createTimelineState(): TimelineState {
     events: [],
     archived: [],
     callNames: {},
-    images: 0,
   }
 }
 
@@ -279,7 +272,6 @@ function applySurface(
   message: MessageLike | null | undefined,
 ): SurfaceNode {
   const cat = categoryOf(type, message ?? undefined)
-  st.images = st.images + imageCountOf(message?.content)
   const node: SurfaceNode = {
     seq: ev.seq,
     time: ev.time,
@@ -289,6 +281,10 @@ function applySurface(
     // `estimateMessage(null, true)` short-circuits before ROLE_OVERHEAD.
     tokens: estimateMessage(message, type === 'assistant/message'),
   }
+  // Image blocks ride the NODE (absent when zero): the stats board's image
+  // cell sums the live surface, so a compacted message's images stop counting.
+  const imgs = imageCountOf(message?.content)
+  if (imgs > 0) node.imgs = imgs
   const source = message?.source
   const form = source?.form
   if (typeof form === 'string') node.form = form
@@ -670,7 +666,9 @@ export function buildTimelineView(state: TimelineState, bounds: FoldBounds): Sna
       total: surfaceTotal + state.systemTokens + state.toolsTokens,
     },
     toolList: state.toolList,
-    images: state.images,
+    // Image blocks live in the current context: per-node `imgs` summed over
+    // the live surface (compacted/pruned messages stop contributing).
+    images: state.surface.reduce((n, node) => n + (node.imgs ?? 0), 0),
     // Tool calls WITH A RESULT live in the current context: one `tool/result`
     // folds to exactly one `tool` surface node, so live tool nodes are the
     // count. Calls still in flight (no result yet) and results compacted or

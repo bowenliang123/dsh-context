@@ -33,6 +33,7 @@ const surfaceNodeSchema = z.object({
   time: z.number().optional(),
   cat: z.enum(['user', 'inject', 'assistant', 'tool']),
   tokens: z.number().int().nonnegative(),
+  imgs: z.number().int().nonnegative().optional(),
   gone: z.number().int().nonnegative().optional(),
   form: z.string().optional(),
   text: z.string().optional(),
@@ -142,7 +143,6 @@ const timelineStateSchema = z.object({
   events: z.array(contextEventSchema),
   archived: z.array(surfaceNodeSchema),
   cost: z.object({ flash: costFamilySchema.optional(), pro: costFamilySchema.optional() }).strict().optional(),
-  images: z.number().int().nonnegative().optional(),
   archiveFloor: z.number().optional(),
   callNames: z.record(z.string(), z.string()),
   pendingShadowedSeqs: z.array(z.number()).optional(),
@@ -202,9 +202,10 @@ export function createContextTimelineDefinition(config: Config): ProjectionDefin
     // nodes and are refolded.
     // 7: the whole-session image-block count (`images`) joined the persisted
     // state; cached rows predate the shape and are refolded.
-    // (The stats board's tool-call cell is a VIEW-TIME count of live `tool`
-    // surface nodes — no persisted field, so no version bump.)
-    stateVersion: 7,
+    // 8: the image count moved OFF the persisted counter onto per-node `imgs`
+    // (the stats cell now sums the LIVE surface — current context only, like
+    // the tool-call cell); cached rows predate the shape and are refolded.
+    stateVersion: 8,
   }
   return definition
 }
