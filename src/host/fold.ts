@@ -558,7 +558,10 @@ export function applyTimeline(state: TimelineState, event: TimelineEvent, bounds
       // shows in the Context Events card instead of being buried among
       // ordinary tool results. `node.tool` resolves to the tool name `skill`;
       // the skill NAME comes from the rendered `<skill_content name="…">`.
-      if (node.cat === 'tool' && node.tool === 'skill') {
+      // When the tool/call event is gone (trimmed window, replay) the name is
+      // unresolvable — fall back to the wrapper alone: it only appears in
+      // genuine skill results, and a missed tag is worse than a content guess.
+      if (node.tool === 'skill' || node.tool === undefined) {
         const name = skillNameOf(toolMsg)
         if (name !== '') {
           node.skill = name

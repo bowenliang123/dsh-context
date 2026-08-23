@@ -555,3 +555,42 @@ test('host: a skill-tool result is tagged and surfaced as a Skill injection whil
   assert.equal(inject.turn, 1, 'inject attributed to the turn that consumed it')
   assert.equal(inject.step, 1, 'inject attributed to the step that consumed it')
 })
+
+test('host: a skill-tool result is still tagged when its tool/call event is gone (trimmed/replay)', () => {
+  const defs = new Map()
+  const fakeCtx = {
+    inject(list, cb) { cb(this) },
+    effect() { return () => {} },
+    sessionProjections: { register(d) { defs.set(d.key, d); return () => {} } },
+  }
+  apply(fakeCtx)
+  const def = defs.get('contextTimeline')
+  const drive = (events) => {
+    let st = def.init()
+    for (const ev of events) st = def.apply(st, ev)
+    return def.view(st)
+  }
+  // No tool/call event: callNames never learns 'c1', so node.tool stays
+  // unresolved and the rendered <skill_content> wrapper is the only signal.
+  const events = [
+    { seq: 1, type: 'request/header', time: 1000, data: { header: { system: 's', tools: [], config: { model: 'deepseek-v4' } } } },
+    { seq: 2, type: 'tool/result', time: 4100, data: { callId: 'c1', message: {
+      source: { kind: 'tool', callId: 'c1' },
+      content: [{ type: 'tool-result', toolCallId: 'c1', content: [{ type: 'text', text: '<skill_content name="code-review">\n<skill_instructions>Run a thorough review.</skill_instructions>\n</skill_content>' }] }],
+    } } },
+    // An ordinary tool result without the wrapper stays untagged.
+    { seq: 3, type: 'tool/result', time: 4200, data: { callId: 'c2', message: {
+      source: { kind: 'tool', callId: 'c2' },
+      content: [{ type: 'tool-result', toolCallId: 'c2', content: [{ type: 'text', text: 'plain output' }] }],
+    } } },
+  ]
+  const v = drive(events)
+  const skillNode = v.nodes.find(n => n.seq === 2)
+  assert.equal(skillNode.tool, undefined, 'tool name unresolvable without the call event')
+  assert.equal(skillNode.skill, 'code-review', 'wrapper fallback still tags the loaded skill')
+  const plainNode = v.nodes.find(n => n.seq === 3)
+  assert.equal(plainNode.skill, undefined, 'no wrapper, no tag')
+  const injects = v.events.filter(e => e.kind === 'inject')
+  assert.equal(injects.length, 1, 'exactly one inject event')
+  assert.equal(injects[0].name, 'code-review', 'fallback event names the loaded skill')
+})
