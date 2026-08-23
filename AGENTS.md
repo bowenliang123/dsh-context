@@ -50,6 +50,9 @@ A DeepSeek Harness plugin for context insight, actions, and management.
 ## Git
 - When asked to commit, please commit the possibly mixed changes separately for each purpose.
 
+## Tool Usage
+- Use `read` tool before using the `edit` tool, avoiding errors like "Error: edit requires reading '/path/file' first — read the file, then retry."
+
 ## Releasing
 - Version X.Y.Z, 大版本.次版本.小版本。
 - Releases are cut by tagging: `git tag vX.Y.Z && gh release create vX.Y.Z`.
