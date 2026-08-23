@@ -281,7 +281,7 @@ export interface RequestRecord {
 export interface ContextEventRecord {
   seq: number
   time: number
-  kind: 'compaction' | 'prune' | 'inject' | 'model'
+  kind: 'compaction' | 'prune' | 'inject' | 'model' | 'mode'
   form?: string
   tokens?: number
   count?: number

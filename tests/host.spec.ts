@@ -139,6 +139,23 @@ test('host half: projection unit, fold semantics, attribution, retention, determ
   assert.equal(cls.events[0].name, 'goal', 'a formless producer names itself by its kind')
   assert.ok(cls.current.inject > 0 && cls.current.user > 0, 'token sums follow the classification')
 
+  // -- plan/mode is a context-composition event (the guidance section joins
+  // every request while active); a resume with a different model records the
+  // switch the user made between sessions --
+  const hdr = (seq, model, reason) => ({ seq, type: 'request/header', time: seq * 1000, data: { header: { system: 's', tools: [], config: { model } }, reason } })
+  const modes = drive([
+    hdr(1, 'deepseek-v4', 'initial'),
+    { seq: 2, type: 'plan/mode', time: 1500, data: { active: true } },
+    hdr(3, 'deepseek-v4', 'change'), // same model -> no switch event
+    { seq: 4, type: 'plan/mode', time: 3500, data: { active: false } },
+    hdr(5, 'deepseek-v4-pro', 'resume'), // resumed onto another model
+  ])
+  assert.deepEqual(modes.events.map(e => [e.kind, e.name ?? `${e.from}->${e.to}`]), [
+    ['mode', 'plan.on'],
+    ['mode', 'plan.off'],
+    ['model', 'deepseek-v4->deepseek-v4-pro'],
+  ], 'plan toggles record mode events; a same-model change stays silent; a resume onto another model records the switch')
+
 
   const compactEv = v.events.find(e => e.kind === 'compaction' && e.seq === 8)
   assert.ok(compactEv, 'compaction event present')

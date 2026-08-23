@@ -39,8 +39,8 @@ import { makeErrorBoundary } from './errorBoundary'
 // restore it once the content renders — first visits start at the top.
 const viewScroll = new Map<string, number>()
 
-// The four event kinds, in display order (toggles + filter share the list).
-const EVENT_KINDS = ['inject', 'compaction', 'prune', 'model'] as const
+// The event kinds, in display order (toggles + filter share the list).
+const EVENT_KINDS = ['inject', 'compaction', 'prune', 'model', 'mode'] as const
 
 export type ContextViewProps = SessionStandardProps
 

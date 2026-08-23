@@ -384,21 +384,21 @@ test('context view: trend chart, stats board, plugin info, hover linking, granul
   assert.equal(evLabels[1].args[2], 'Notice · dsh-agent-presets · Skill injected (code-review)',
     'a notice row reads title · producer · one-line account, like the dsh transcript')
 
-  // the events card header carries the four kind buttons as a picker, all
+  // the events card header carries the kind buttons as a picker, all
   // picked by default: clicking an unpicked kind adds it (A -> A+B -> ...),
   // clicking a picked one removes it, clicking the last one resets to all
   let kindsRow = byClass(tr, 'lc-kinds')
   assert.equal(kindsRow.length, 1, 'events card shows the kind buttons inline')
   const kindBtns = () => byClass(tr, 'lc-kinds')[0].args.slice(2)
-  assert.equal(kindBtns().length, 4, 'four kind buttons (注入/压缩/剪枝/切换)')
-  assert.equal(onBtns(kindBtns()).length, 4, 'all four kinds are picked by default')
+  assert.equal(kindBtns().length, 5, 'five kind buttons (注入/压缩/剪枝/切换/模式)')
+  assert.equal(onBtns(kindBtns()).length, 5, 'all five kinds are picked by default')
   assert.equal(byClass(tr, 'lc-event').length, 6, 'default shows every event')
   const click = (i) => { kindBtns()[i].args[1].onClick(); tr = renderView() }
   click(0) // pick-only 注入
   assert.equal(byClass(tr, 'lc-event').length, 1, 'clicking 注入 among all shows only injections')
   assert.ok(String(kindBtns()[0].args[1].className || '').includes('lc-gran-on'), 'picked button is highlighted')
   assert.ok(String(kindBtns()[0].args[1].className || '').includes('lc-kind-inject'), 'highlight carries the kind color')
-  assert.equal(onBtns(kindBtns()).length, 1, 'the other three turned off')
+  assert.equal(onBtns(kindBtns()).length, 1, 'the other four turned off')
   click(1) // add 压缩
   assert.equal(byClass(tr, 'lc-event').length, 3, 'adding 压缩 shows 注入 + 压缩')
   click(2) // add 剪枝
@@ -411,7 +411,27 @@ test('context view: trend chart, stats board, plugin info, hover linking, granul
   assert.equal(byClass(tr, 'lc-event').length, 1, 'only 切换 stays picked')
   click(3) // remove the last one -> reset to all
   assert.equal(byClass(tr, 'lc-event').length, 6, 'removing the last picked kind restores all')
-  assert.equal(onBtns(kindBtns()).length, 4, 'all four kinds picked again')
+  assert.equal(onBtns(kindBtns()).length, 5, 'all five kinds picked again')
+
+  // -- a plan/mode toggle is a neutral mode event, filtered by its chip --
+  const fullEvents = bed.dataValue.events
+  bed.dataValue = {
+    ...snapshot,
+    events: [
+      { seq: 3, kind: 'mode', time: 1200, name: 'plan.on', turn: 2, step: 0 },
+      { seq: 9, kind: 'inject', time: 4000, tokens: 5, form: 'notice', turn: 2, step: 0 },
+    ],
+  }
+  tr = renderView()
+  const modeLabels = byClass(tr, 'lc-event-label')
+  assert.equal(modeLabels.length, 2, 'mode + inject rows render')
+  assert.equal(modeLabels[1].args[2], 'Plan mode on', 'mode row reads its plan-mode label')
+  click(0) // pick-only 注入 among all
+  assert.equal(byClass(tr, 'lc-event').length, 1, 'the mode row filters out with its own kind')
+  click(4) // add 模式
+  assert.equal(byClass(tr, 'lc-event').length, 2, 'adding 模式 shows 注入 + 模式')
+  bed.dataValue = { ...snapshot, events: fullEvents }
+  tr = renderView()
 
   // the stats board picks up the event counters
   const statVals2 = byClass(tr, 'lc-stat-value').map(n => n.args[2])

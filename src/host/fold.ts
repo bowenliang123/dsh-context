@@ -491,9 +491,11 @@ export function applyTimeline(state: TimelineState, event: TimelineEvent, bounds
       if (header.config && typeof header.config.provider === 'string') s.provider = header.config.provider
       // A model switch has no dedicated durable event: it is a request
       // header that differs from the previous one, logged with reason
-      // 'change' ('initial' opens a session, 'resume' reopens it). Firing
-      // only here keeps the model event list equal to the durable record.
-      if (data?.reason === 'change' && s.model && s.lastModel && s.model !== s.lastModel) {
+      // 'change' ('initial' opens a session, 'resume' reopens it). A resume
+      // carrying a different model is a real switch the user made between
+      // sessions — lastModel survived in the projection state, so record it
+      // too. Firing only on a real diff keeps the list equal to the record.
+      if ((data?.reason === 'change' || data?.reason === 'resume') && s.model && s.lastModel && s.model !== s.lastModel) {
         s.events.push({ seq: event.seq, time: event.time, kind: 'model', from: s.lastModel, to: s.model })
       }
       if (s.model) s.lastModel = s.model
@@ -615,6 +617,15 @@ export function applyTimeline(state: TimelineState, event: TimelineEvent, bounds
       // message — same rule as dsh's surface fold).
       const asstMsg = deriveEventMessage(event as never) as MessageLike | null
       applySurface(s, event, event.type, data, asstMsg)
+      break
+    }
+    case 'plan/mode': {
+      // Plan mode adds a guidance section to every model request while
+      // active — a real context-composition change, so it earns an event.
+      if (data && typeof data.active === 'boolean') {
+        const s = ensure()
+        s.events.push({ seq: event.seq, time: event.time, kind: 'mode', name: data.active ? 'plan.on' : 'plan.off' })
+      }
       break
     }
     case 'compaction/summary':

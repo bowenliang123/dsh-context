@@ -63,7 +63,7 @@ const requestRecordSchema = z.object({
 const contextEventSchema = z.object({
   seq: z.number(),
   time: z.number(),
-  kind: z.enum(['compaction', 'prune', 'inject', 'model']),
+  kind: z.enum(['compaction', 'prune', 'inject', 'model', 'mode']),
   form: z.string().optional(),
   tokens: z.number().optional(),
   count: z.number().optional(),
