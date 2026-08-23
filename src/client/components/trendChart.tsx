@@ -219,6 +219,21 @@ export function makeTrendChart(kit: ViewKit): (props: TrendChartProps) => ReactN
       grp.span += req.stepCount ?? 1
     }
 
+    // Prefix geometry of the strip blocks in content px: the scroll handler
+    // re-centers each label inside its block's VISIBLE slice analytically,
+    // so it only measures the handful of labels currently on screen.
+    const turnOffsets: number[] = []
+    const turnWidths: number[] = []
+    {
+      let x = 0
+      for (const grp of groups) {
+        const w = grp.agg ? BAR_W : grp.span * (BAR_W + BAR_GAP) - BAR_GAP
+        turnOffsets.push(x)
+        turnWidths.push(w)
+        x += w + BAR_GAP
+      }
+    }
+
     // Default anchor: the newest bars at the RIGHT edge. The first layout
     // after mount scrolls unconditionally; a GRANULARITY SWITCH re-anchors
     // the same way (returning to step mode must show the newest bars, not
@@ -246,6 +261,38 @@ export function makeTrendChart(kit: ViewKit): (props: TrendChartProps) => ReactN
       edgesRef.current = { left, right }
       setEdges({ left, right })
     }
+    /**
+     * Keep each turn label centered within its block's VISIBLE slice, so a
+     * label never scrolls out of view while any part of its block remains
+     * on screen. Blocks narrower than their label stay put (the label is
+     * already ellipsized). Reads (offsetWidth) are gathered before writes
+     * (transform) to avoid layout thrash on the scroll path; out-of-view
+     * blocks need no measurement at all.
+     */
+    const updateTurnLabels = (el: HTMLDivElement): void => {
+      const labels = el.querySelectorAll<HTMLElement>('.lc-turn-label')
+      const n = Math.min(labels.length, turnOffsets.length)
+      const sl = el.scrollLeft
+      const vr = sl + el.clientWidth
+      const writes: [HTMLElement, string][] = []
+      for (let i = 0; i < n; i++) {
+        const off = turnOffsets[i]
+        const w = turnWidths[i]
+        const visL = Math.max(off, sl)
+        const visR = Math.min(off + w, vr)
+        let dx = 0
+        if (visR > visL) {
+          const lw = labels[i].offsetWidth
+          if (lw < w) {
+            const center = (visL + visR) / 2 - off
+            dx = Math.min(Math.max(center, lw / 2), w - lw / 2) - w / 2
+          }
+        }
+        const next = dx !== 0 ? `translateX(${dx}px)` : ''
+        if (labels[i].style.transform !== next) writes.push([labels[i], next])
+      }
+      for (const [label, next] of writes) label.style.transform = next
+    }
     React.useLayoutEffect(() => {
       const el = scrollRef.current
       if (el === null) return
@@ -271,6 +318,7 @@ export function makeTrendChart(kit: ViewKit): (props: TrendChartProps) => ReactN
         el.scrollLeft = el.scrollWidth
       }
       updateEdges(el)
+      updateTurnLabels(el)
     })
 
     // Compact single-line hover tooltip (shown instantly by the custom
@@ -305,7 +353,10 @@ export function makeTrendChart(kit: ViewKit): (props: TrendChartProps) => ReactN
           // bars and strip blocks OUTSIDE the active turn fade to 35%.
           className={'lc-chart-scroll' + (props.activeTurn !== null ? ' lc-chart-dim' : '')}
           ref={scrollRef}
-          onScroll={(e: ReactNS.UIEvent<HTMLDivElement>) => { updateEdges(e.currentTarget) }}
+          onScroll={(e: ReactNS.UIEvent<HTMLDivElement>) => {
+            updateEdges(e.currentTarget)
+            updateTurnLabels(e.currentTarget)
+          }}
         >
           {/* Edge fades: visible whenever more history sits beyond the viewport,
               so the horizontal scroll affordance is obvious. */}
@@ -351,19 +402,18 @@ export function makeTrendChart(kit: ViewKit): (props: TrendChartProps) => ReactN
               // blocks span their steps' columns. The flex gap between blocks
               // mirrors the bar gap, so blocks always line up with the bars.
               const on = props.activeTurn === grp.turn
-              const blockW = grp.agg ? BAR_W : grp.span * (BAR_W + BAR_GAP) - BAR_GAP
               return (
                 <span
                   key={`turn-${gi}`}
                   className={'lc-turn' + (on ? ' lc-turn-on' : '')}
                   style={{
-                    width: `${blockW}px`,
+                    width: `${turnWidths[gi]}px`,
                     background: TURN_FILLS[gi % TURN_FILLS.length],
                   }}
                   title={`T${grp.turn}`}
                   onMouseEnter={() => { props.onHoverTurn(grp.turn) }}
                   onClick={() => { props.onPickTurn(grp.turn) }}
-                >{`T${grp.turn}`}</span>
+                ><span className="lc-turn-label">{`T${grp.turn}`}</span></span>
               )
             })}
           </div>
