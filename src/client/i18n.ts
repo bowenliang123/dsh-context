@@ -72,7 +72,7 @@ export const DICT_ZH: Record<string, string> = {
   'node.empty': '(空回复)',
   'node.nonText': '(非文本消息)',
   'node.snapshot': '快照: ',
-  'node.skillTag': 'Skill · {name}',
+  'node.skillTag': '技能 · {name}',
   'cmd.desc': '查看当前上下文构成，浏览各步骤组成',
   'cmd.close': '关闭',
   'browser.title': '上下文浏览器',
