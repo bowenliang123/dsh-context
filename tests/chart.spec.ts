@@ -60,11 +60,15 @@ test('context view: trend chart, stats board, plugin info, hover linking, granul
 
   let tr = renderView()
   assert.match(detailStep(tr), /Turn 3/, 'detail defaults to the newest request (Turn 3)')
+  assert.match(detailStep(tr), /Actual Prompt 83\.0k/, 'detail shows the billed prompt of the newest request')
+  assert.match(detailStep(tr), /Cache 99\.39%/, 'step-level cache hit = cacheRead / billed prompt, two decimals (truncated)')
+  assert.ok(!detailStep(tr).includes('Estimated') && !detailStep(tr).includes('estTotal'), 'the heuristic estimate line is gone from the step detail')
   assert.equal(byClass(tr, 'lc-bar-hovered').length, 0, 'no hovered bar initially')
 
   ctxSlots[1][1](3)
   tr = renderView()
   assert.match(detailStep(tr), /Turn 2/, 'hovering a bar links the detail below to it')
+  assert.ok(!detailStep(tr).includes('Cache'), 'a usage-less request shows no cache figure')
   const hovered = byClass(tr, 'lc-bar-hovered')
   assert.equal(hovered.length, 1, 'exactly one hovered bar')
   assert.equal(hovered[0].args[1]['data-seq'], 3, 'hovered bar is seq 3')

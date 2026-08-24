@@ -1,6 +1,7 @@
 import type * as ReactNS from 'react'
 import type { ContextEventRecord, RequestRecord } from '../../shared/types'
 import { partsOf, CATS } from '../categories'
+import { cacheHitPercent } from '../format'
 import type { StackedBarProps } from './stackedBar'
 import type { ViewKit } from '../viewkit'
 
@@ -37,12 +38,16 @@ export function makeRequestDetail(
             : null}
           {isTurn ? <span className="lc-detail-tag">{t('detail.lastStep')}</span> : null}
           <span>{fmtTime(req.time)}</span>
-          <span>{t('detail.estTotal', { n: fmt(req.total) })}</span>
           {req.prompt !== undefined
             ? <span className="lc-actual">{t('detail.actual', { n: fmt(req.prompt) })}</span>
             : null}
           {req.output !== undefined
             ? <span>{t('detail.output', { n: fmt(req.output) })}</span>
+            : null}
+          {/* Step-level cache hit: the cache-served half of the billed prompt; absent on hosts
+              that do not fold `cacheRead` (and on usage-less requests) — the figure drops out. */}
+          {req.prompt !== undefined && req.cacheRead !== undefined
+            ? <span className="lc-cache">{t('detail.cache', { n: cacheHitPercent(req.cacheRead, req.prompt) ?? '—' })}</span>
             : null}
         </div>
         <StackedBar parts={partsOf(req)} height={10} />

@@ -603,6 +603,9 @@ export function applyTimeline(state: TimelineState, event: TimelineEvent, bounds
         // already includes reasoningTokens. No separate prompt/output field
         // exists in the durable vocabulary.
         record.prompt = usage.inputTokens + (usage.cacheReadTokens || 0) + (usage.cacheWriteTokens || 0)
+        // Cache-hit share of the billed prompt (the step line's 缓存 figure):
+        // keep the cache-served half of `prompt`; absent = no cache buckets.
+        if (typeof usage.cacheReadTokens === 'number') record.cacheRead = usage.cacheReadTokens
         if (typeof usage.outputTokens === 'number') record.output = usage.outputTokens
         accumulateCost(s, event.time, usage)
       }

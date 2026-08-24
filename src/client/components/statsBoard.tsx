@@ -8,25 +8,22 @@ import type * as ReactNS from 'react'
 import type { ContextEventRecord, RequestRecord, SessionCostUsage, TokenUsage } from '../../shared/types'
 import { estimateSessionCost, formatCost, formatPriceRate, sessionPrices } from '../cost'
 import type { CostCurrency } from '../cost'
+import { cacheHitPercent as cacheHitPercentOf } from '../format'
 import { numOf } from '../services'
 import type { ViewKit } from '../viewkit'
 
 import { React } from '../react'
 
 /**
- * Cache-hit share of billed prompt-side input — same three disjoint buckets as the harness chat line (`cacheReadTokens` over uncached +
- * reads + writes), but deliberately TRUNCATES to two decimals (cut, not round), unlike that line's integer rounding; null when nothing was
- * billed. The 1e-9 epsilon absorbs only float noise (integer token counts never sit that close to a boundary); `numOf` keeps malformed
- * payloads at a dash.
+ * Cache-hit share of billed prompt-side input — same three disjoint buckets
+ * as the harness chat line (`cacheReadTokens` over uncached + reads + writes)
+ * and the step line's 缓存 figure; null when nothing was billed.
  */
 function cacheHitPercent(usage: TokenUsage): string | null {
   const uncached = numOf(usage.uncachedInputTokens)
   const reads = numOf(usage.cacheReadTokens)
   const writes = numOf(usage.cacheWriteTokens)
-  const billed = uncached + reads + writes
-  if (billed === 0) return null
-  const hundredths = Math.trunc((reads / billed) * 10000 + 1e-9)
-  return `${Math.floor(hundredths / 100)}.${String(hundredths % 100).padStart(2, '0')}`
+  return cacheHitPercentOf(reads, uncached + reads + writes)
 }
 
 export function makeStatsBoard(kit: ViewKit): (props: {

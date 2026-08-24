@@ -401,6 +401,7 @@ test('host half: projection unit, fold semantics, attribution, retention, determ
     { seq: 1, type: 'assistant/message', time: 1000, data: { turn: 1, step: 1, usage: { inputTokens: 800, cacheReadTokens: 150, cacheWriteTokens: 50, outputTokens: 30, reasoningTokens: 10 }, message: { content: [] } } },
   ])
   assert.equal(usageLog.requests[0].prompt, 1000, 'prompt side sums the disjoint input buckets')
+  assert.equal(usageLog.requests[0].cacheRead, 150, 'cache-served prompt tokens ride the request record (hit-rate numerator)')
   assert.equal(usageLog.requests[0].output, 30, 'output is outputTokens (reasoning already inside)')
   assert.equal(usageLog.cost, undefined, 'no model name -> nothing priced into the cost totals')
   assert.equal(v.cost, undefined, 'a non-flash/pro model (deepseek-v4) is not priced')
@@ -479,6 +480,23 @@ test('host half: projection unit, fold semantics, attribution, retention, determ
   // stay serializable.
   const armed = def.apply(def.init(), { seq: 1, type: 'compaction/summary', time: 1000, data: { shadowedSeqs: [2], shadowedTokenCount: 10 } })
   assert.ok(snapshotJsonValue(armed) !== undefined, 'armed pendingShadowedSeqs state is still plain JSON')
+  // `cacheRead` follows the same absence rule: present only when the provider
+  // reported cache-served tokens (a real 0 included); usage-less requests
+  // never materialize an `undefined`-valued property.
+  {
+    let st = def.init()
+    for (const ev of [
+      { seq: 1, type: 'assistant/message', time: 1000, data: { turn: 1, step: 1, usage: { inputTokens: 100, cacheReadTokens: 900 }, message: { content: [] } } },
+      { seq: 2, type: 'assistant/message', time: 2000, data: { turn: 1, step: 2, message: { content: [] } } },
+    ]) st = def.apply(st, ev)
+    assert.equal(st.requests[0].cacheRead, 900, 'cacheRead folds from cacheReadTokens')
+    assert.ok(!('cacheRead' in st.requests[1]), 'usage-less requests keep cacheRead absent (plain-JSON precondition)')
+    assert.ok(snapshotJsonValue(st) !== undefined, 'cacheRead-carrying state stays losslessly serializable')
+    assert.equal(def.stateSchema.parse(st).requests[0].cacheRead, 900, 'stateSchema round-trips cacheRead')
+    const view = def.view(st)
+    assert.equal(view.requests[0].cacheRead, 900, 'cacheRead rides the wire view')
+    assert.ok(!('cacheRead' in view.requests[1]), 'wire view keeps cacheRead absent')
+  }
 
   // -- dual-contract compatibility (dsh 0.1.1-rc.1+): each unit carries the
   // NEW contract fields alongside the old ones. `stateSchema` validates the

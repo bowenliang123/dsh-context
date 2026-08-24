@@ -237,6 +237,12 @@ export interface RequestRecord {
   tool: number
   total: number
   prompt?: number
+  /**
+   * Billed cache-read (served) prompt tokens of this request — the
+   * hit-rate numerator against `prompt` (input + cacheRead + cacheWrite).
+   * Absent on older hosts / usage-less requests; zero is a real value.
+   */
+  cacheRead?: number
   output?: number
   /**
    * Turn-mode aggregate marker, set by the Client's aggregateByTurn (one bar

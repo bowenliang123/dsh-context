@@ -56,6 +56,7 @@ const requestRecordSchema = z.object({
   tool: z.number().int().nonnegative(),
   total: z.number().int().nonnegative(),
   prompt: z.number().int().nonnegative().optional(),
+  cacheRead: z.number().int().nonnegative().optional(),
   output: z.number().int().nonnegative().optional(),
   stepCount: z.number().int().positive().optional(),
 }).strict()
@@ -192,7 +193,8 @@ export function createContextTimelineDefinition(config: Config): ProjectionDefin
     // 6: image blocks reprice via the official vision calculator instead of the meter's generic JSON branch; cached rows refolded.
     // 7: the whole-session image count (`images`) joined the state; cached rows refolded.
     // 8: the image count moved to per-node `imgs` (live-surface cell); cached rows refolded.
-    stateVersion: 8,
+    // 9: per-request billed cache-read tokens (`cacheRead`) joined request records; cached rows refolded.
+    stateVersion: 9,
   }
   return definition
 }
