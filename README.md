@@ -46,7 +46,7 @@ Type `/context` (or pick it from the `/` menu) and press Enter: a centered dialo
 
 ### ⚙️ Settings — per-user preferences
 
-In **Settings → Plugins → Plugin configuration**, the **Context / 上下文** card holds this plugin's per-user preferences — currently the **default trend granularity** (Step/Turn) the Context tab opens with. In-chart toggling stays per-view and never overwrites the stored preference. The card appears only when the Host half is installed and the settings document is writable (a remote browser keeps settings process-local and shows no card).
+In **Settings → Plugins → Plugin configuration**, the **Context / 上下文** card holds this plugin's per-user preferences — the **default trend granularity** (Step/Turn) and the **default trend mode** (Total/Delta) the Context tab opens with. In-chart toggling stays per-view and never overwrites the stored preference. The card appears only when the Host half is installed and the settings document is writable (a remote browser keeps settings process-local and shows no card).
 
 ## What you'll see
 
@@ -62,7 +62,7 @@ The headline occupancy and the composition counts read the **same official token
 
 ### 📈 History — watch the window grow (and get compacted)
 
-One stacked bar per model request, finer than per-message. Toggle between **Turn** and **Step** granularity, scroll sideways through the session, hover any bar for a quick tooltip, and click to pin the full breakdown — including provider-reported actual prompt/output tokens next to the estimate. **Hovering a bar also drives the Context browser beside it** — the browser previews that step's assembled context in real time as you scrub across the history. **✂ marks where compaction or pruning happened** — watch the bars drop:
+One stacked bar per model request, finer than per-message. Toggle between **Turn** and **Step** granularity and between **Total** (each request's cumulative size) and **Delta** (each request's incremental change) views, scroll sideways through the session, hover any bar for a quick tooltip, and click to pin the full breakdown — including provider-reported actual prompt/output tokens next to the estimate. **Hovering a bar also drives the Context browser beside it** — the browser previews that step's assembled context in real time as you scrub across the history. **✂ marks where compaction or pruning happened** — watch the bars drop:
 
 ![History chart with a pinned request](https://raw.githubusercontent.com/bowenliang123/dsh-context/main/docs/history-detail.png)
 
@@ -71,6 +71,10 @@ Above: a real session that grew to ~563k tokens across 48 turns, then compaction
 In **Step** granularity, hovering any bar shows that single step's context info instantly — its turn/step, timestamp, and estimated vs. provider-reported token counts:
 
 ![History chart with a step hover tooltip](https://raw.githubusercontent.com/bowenliang123/dsh-context/main/docs/history-step-hover.png)
+
+Switch the chart from **Total** to **Delta** and each bar becomes the *change* that request made to the window instead of its cumulative size: diverging stacks pile up from the solid zero baseline when the window grew and hang below it when it shrank, tooltips read `Δ ±Nk`, and the pinned detail card re-prices every category as a signed delta — so you can tell exactly which part of a request added (or reclaimed) tokens. Below, Turn 5's first step grew the window by **+1.6k**: injected context **+803**, the user message **+649**, the assistant reply **+178** — and nothing else moved:
+
+![History chart in Delta mode](https://raw.githubusercontent.com/bowenliang123/dsh-context/main/docs/history-delta.png)
 
 ### ⚡ Context events — when and why the window changed
 
@@ -92,6 +96,11 @@ Six collapsible category sections (system prompt, tool schemas, user messages, i
 
 - **Linked with the history chart** — hover any bar in the History card and the browser previews that step instantly; leave the chart and it returns to your own pick. Keep a category open while scrubbing to compare one category across steps.
 - **Honest about coverage** — steps before a compaction are reconstructed from the removed-message archive, and the card says so when a step's makeup is only approximate. Elements older than the loaded chat window page older history in automatically when you expand them, and live injections (AGENTS.md, session-start context, …) are always listed — never a token sum without its items.
+- **Diff against the previous turn** — switch the picker to **vs previous turn** and every category gets signed delta badges (`+N` items, `+Nk` tokens), so one glance tells you what the conversation added since the end of the last turn.
+
+Tool results open into the full call and response: the tool's name and arguments with its **OK/error** status on top, the result body with its line count and a **Raw / Markdown** display toggle, and any image payload (e.g. `read_image` output) rendered as a thumbnail card with its name, dimensions, stored size, and estimated token cost — instead of a flattened blob of text:
+
+![Context browser showing a tool result with Raw/Markdown toggle and an image payload](https://raw.githubusercontent.com/bowenliang123/dsh-context/main/docs/context-browser-tool-result.png)
 
 ### 🖼 Multimodal — image attachments in full view (DeepSeek Harness 0.1.1+)
 
