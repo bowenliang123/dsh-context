@@ -326,3 +326,62 @@ test('tool result: persistent-shell death markers mark the run FAILED, a clean s
 
   console.log('✔ persistent-shell marker test passed (shell death fails, clean exit stays a notice)')
 })
+
+test('tool result: a terminal job_output status line marks a killed/failed background job FAILED', async () => {
+  bed.dataValue = {
+    ...snapshot,
+    nodes: [
+      ...snapshot.nodes,
+      // job_output always ends its read with the tool-jobs `[status: ...]` line; killed/failed settle with
+      // isError false, so the line is the only failure signal.
+      { seq: 3, cat: 'tool', tool: 'job_output', tokens: 8, time: 66000 },
+      { seq: 4, cat: 'tool', tool: 'job_output', tokens: 8, time: 67000 },
+      { seq: 5, cat: 'tool', tool: 'job_output', tokens: 8, time: 68000 },
+      { seq: 6, cat: 'tool', tool: 'job_output', tokens: 8, time: 69000 },
+    ],
+  }
+  bed.useSessionHolder = (sel) => sel({
+    nodes: [
+      {
+        kind: 'tool-result', seq: 3,
+        call: { name: 'job_output', argsRaw: '{"job_id":"j1"}' },
+        content: [{ type: 'text', text: 'partial output\n[status: killed]' }],
+      },
+      {
+        kind: 'tool-result', seq: 4,
+        call: { name: 'job_output', argsRaw: '{"job_id":"j2"}' },
+        content: [{ type: 'text', text: 'boom\n[status: failed, exited 1]' }],
+      },
+      {
+        kind: 'tool-result', seq: 5,
+        call: { name: 'job_output', argsRaw: '{"job_id":"j3"}' },
+        content: [{ type: 'text', text: 'all done\n[status: completed]' }],
+      },
+      {
+        kind: 'tool-result', seq: 6,
+        call: { name: 'job_output', argsRaw: '{"job_id":"j4","wait":true}' },
+        content: [{ type: 'text', text: '(no new output)\n[status: running]' }],
+      },
+    ],
+  })
+  brSlots[1][1]('tool')
+  let tr = renderView()
+  const toolRows = byClass(tr, 'lc-br-elem-row')
+  assert.equal(toolRows.length, 4, 'all four job_output reads listed (newest first)')
+  assert.equal(byClass(toolRows[0], 'lc-br-err-dot').length, 0, 'running job stays a notice')
+  assert.equal(byClass(toolRows[1], 'lc-br-err-dot').length, 0, 'completed job carries no error dot')
+  assert.equal(byClass(toolRows[2], 'lc-br-err-dot').length, 1, 'failed job carries the red error dot')
+  assert.equal(byClass(toolRows[3], 'lc-br-err-dot').length, 1, 'killed job carries the red error dot')
+
+  brSlots[2][1]('n4')
+  tr = renderView()
+  const errPill = byClass(tr, 'lc-ts-call-err')[0]
+  assert.ok(errPill, 'failed job read carries the red Failed pill')
+  assert.doesNotMatch(textOf(errPill), /exit/, 'a job status line carries no exit code for the pill')
+
+  brSlots[2][1]('n5')
+  tr = renderView()
+  assert.ok(byClass(tr, 'lc-ts-call-ok')[0], 'completed job read keeps the green OK pill')
+
+  console.log('✔ job status-line test passed (killed/failed fail, completed/running stay notices)')
+})

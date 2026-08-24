@@ -362,8 +362,11 @@ function callSummaryOf(conv: ConversationNodeLike | undefined): string | null {
  * - persistent shells: `[shell killed by signal: X]`, `[shell exited: code N]` — riding LAST, after the
  *   `[exit code: N]` of the command whose failure killed the shell, so the command marker is re-checked
  *   on the preceding text
+ * - job_output: `[status: killed]` / `[status: failed, detail]` — the tool-jobs status line always terminates
+ *   the read; a killed/failed background job settles with `isError` false, so only the line flags the loss
  * End-anchored like dsh's own parseExitStatus, so marker text quoted inside the output (e.g. a cat'ed log)
- * is not a failure. A clean shell exit (code 0 or code-less) is a session-loss notice, not a failure.
+ * is not a failure. A clean shell exit (code 0 or code-less) or a live/completed job status is a notice,
+ * not a failure.
  * The parsed exit code feeds the FAILED run-state pill.
  */
 function tailStatusOf(conv: ConversationNodeLike | undefined): { fail: boolean; exit: number | null } {
@@ -383,6 +386,7 @@ function tailStatusOf(conv: ConversationNodeLike | undefined): { fail: boolean; 
     const exit = /\[exit code:\s*(\d+)\]$/.exec(tail)
     if (exit !== null) return { fail: true, exit: Number(exit[1]) }
     if (/\[killed by signal: [^\]\n]+\]$/.test(tail)) return { fail: true, exit: null }
+    if (/\[status: (?:killed|failed)(?:, [^\]\n]*)?\]$/.test(tail)) return { fail: true, exit: null }
   }
   return { fail: false, exit: null }
 }
