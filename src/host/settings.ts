@@ -20,13 +20,10 @@ import z from '@deepseek-ai/schemastery'
 /** The namespace is the join key between the Host registration and the browser card. */
 export const SETTINGS_NAMESPACE = 'dsh-context'
 
-/** Trend-chart granularity the Context tab opens with. */
 export type DefaultGranularity = 'step' | 'turn'
 
-/** Trend-chart display mode the Context tab opens with. */
 export type DefaultTrendMode = 'total' | 'diff'
 
-/** The `dsh-context` settings section. */
 export interface PluginSettings {
   defaultGranularity: DefaultGranularity
   defaultTrendMode: DefaultTrendMode

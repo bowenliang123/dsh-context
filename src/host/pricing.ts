@@ -18,7 +18,6 @@ const CHARS_PER_TOKEN = 4
 const BLOCK_OVERHEAD = 4
 const ROLE_OVERHEAD = 4
 
-/** Whole-array tool-schema price (the header's tools total). */
 export function estimateToolsTotal(tools: unknown[]): number {
   return tools.length > 0
     ? Math.ceil(JSON.stringify(tools).length / CHARS_PER_TOKEN) + BLOCK_OVERHEAD
@@ -54,8 +53,6 @@ function estimateBlocks(blocks: ContentBlock[] | undefined): number {
         tokens += estimateBlocks(block.content) + BLOCK_OVERHEAD
         break
       case 'image': {
-        // Real vision billing by pixel dimensions (see the module header);
-        // unknown dims degrade to the meter's generic JSON price.
         const ref = block.attachment
         const priced = ref !== null && typeof ref === 'object'
           && typeof ref.width === 'number' && typeof ref.height === 'number'
@@ -94,12 +91,9 @@ export function estimateToolSchema(tool: unknown): number {
   return Math.ceil(JSON.stringify(tool).length / CHARS_PER_TOKEN) + BLOCK_OVERHEAD
 }
 
-// ---- content extraction (display previews for surface nodes) ----------------
-
 /**
- * Count image blocks in a message payload, recursing into nested content
- * (tool-result blocks carry their inner blocks) — feeds the stats board's
- * whole-session image-file cell.
+  * Count image blocks in a message payload, recursing into nested content (tool-result blocks carry their inner blocks) — seeds each node's
+  * `imgs`, which the stats board's image cell sums over the LIVE surface (compacted/pruned messages stop counting).
  */
 export function imageCountOf(blocks: ContentBlock[] | undefined): number {
   let count = 0

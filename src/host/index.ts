@@ -25,7 +25,6 @@ import { createContextTimelineDefinition } from './timeline'
 
 export const name = 'dsh-context'
 
-/** Required services: the session-projection registry that drives the unit. */
 export const inject = ['sessionProjections']
 
 /**
@@ -36,10 +35,7 @@ export { Config } from './config'
 
 export function apply(ctx: Context, config: Config): void {
   ctx.sessionProjections.register(createContextTimelineDefinition(config))
-  // The header-content companion unit (full system prompt + tool schemas —
-  // rare changes, so its pushes stay off the per-event hot path).
   ctx.sessionProjections.register(createContextHeadersDefinition())
-  // Per-user display preferences (Settings → Plugins card); optional seam.
   installSettings(ctx)
 }
 

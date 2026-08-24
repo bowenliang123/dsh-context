@@ -1,17 +1,8 @@
 /**
- * Shared wire contract — the snapshot model exchanged between the Host and
- * Client halves.
- *
- * The Host half no longer serves this over a custom RPC channel: it is the
- * `view()` payload of the `contextTimeline` session projection, registered on
- * the harness's `ctx.sessionProjections` registry. The registry drives
- * `apply(state, event)` over every committed session event, persists the state
- * through `ctx.sessionProjectionCache`, and pushes the finished value to the
- * browser as a `session/projection` frame (with a tail-page baseline), where
- * the Client reads it through the framework-standard `useProjection` seat.
- *
- * TYPE-ONLY host-side module: both halves import these as `import type`, so
- * nothing from here ever reaches the runtime bundles.
+  * Shared wire contract — the snapshot model exchanged between the Host and Client halves. Delivered as the `view()` payload of the
+  * `contextTimeline`/`contextHeaders` session projections (registered on `ctx.sessionProjections`; the registry pushes finished views as
+  * `session/projection` frames — see host/timeline.ts). TYPE-ONLY host-side module: both halves import these as `import type`, so nothing
+  * from here ever reaches the runtime bundles.
  */
 
 import type {} from '@deepseek-ai/dsh-session-projection/types'
@@ -37,7 +28,6 @@ declare module '@deepseek-ai/dsh-session-projection/types' {
   }
 }
 
-/** The five priced context categories (plus system/tools handled separately). */
 export type Category = 'user' | 'inject' | 'assistant' | 'tool'
 
 export interface Snapshot {
@@ -61,15 +51,10 @@ export interface Snapshot {
    * instead. Kept optional for wire compatibility with older clients.
    */
   occupancy?: {
-    /** Provider-reported prompt size of the most recent request (input + cache). */
     pressureTokens?: number
-    /** Heuristic total over the current model-visible surface. */
     surfaceTokens: number
-    /** `surfaceTokens` at the newest usage sample. */
     sampledSurfaceTokens?: number
-    /** pressureTokens + surface movement since the sample (clamped ≥ 0). */
     projectedTokens?: number
-    /** Newest recorded route capacity (last-wins). */
     contextWindow?: number
   }
   toolList: { name: string; tokens: number }[]
@@ -96,10 +81,9 @@ export interface Snapshot {
    */
   cost?: SessionCostUsage
   /**
-   * The served live surface: the newest `maxNodes` tail PLUS every live
-   * inject node older than the tail (injections land first and are few, so
-   * they are pinned — otherwise a long session would price them while the
-   * browser could list none). Seq-ordered, oldest first.
+     * The served live surface: the newest `maxNodes` tail PLUS every live inject node older than the tail (injections land first and are
+     * few,
+    * so they are pinned). Seq-ordered, oldest first.
    */
   nodes: SurfaceNode[]
   /** Live nodes not served (the overflow beyond `maxNodes`, minus pinned injects — see `nodes`). */
@@ -125,11 +109,8 @@ export interface Snapshot {
 }
 
 /**
- * The `contextTimeline` projection's whole value — the same snapshot the
- * Client has always rendered, now delivered through the session-projection
- * pipeline. `ok` is always `true` here (a delivered projection is by
- * definition available); it is kept for wire compatibility with the
- * snapshot shape.
+  * The `contextTimeline` projection's whole value — the same snapshot the Client has always rendered. `ok` is always `true` here (a
+  * delivered projection is by definition available); kept for wire compatibility with the snapshot shape.
  */
 export type ContextTimeline = Snapshot
 
@@ -195,21 +176,15 @@ export interface TokenUsage {
  * session log, immune to the request/event retention bounds).
  */
 export interface CostBucketTotals {
-  /** Billed prompt tokens that missed the provider cache. */
   uncached: number
-  /** Billed prompt tokens served from the provider cache. */
   cacheRead: number
-  /** Billed prompt tokens written into the provider cache. */
   cacheWrite: number
-  /** Billed output tokens (reasoning included). */
   output: number
 }
 
 /** One model family's totals split by DeepSeek's pricing period (Beijing Time). */
 export interface CostFamilyUsage {
-  /** Peak windows: 09:00-12:00 and 14:00-18:00 Beijing Time, weekdays only. */
   peak?: CostBucketTotals
-  /** All other hours plus all of Saturday/Sunday (half the peak rate). */
   off?: CostBucketTotals
 }
 
@@ -228,7 +203,6 @@ export interface SessionCostUsage {
 /** One model-visible message on the surface, with its heuristic token price. */
 export interface SurfaceNode {
   seq: number
-  /** Event timestamp (ms epoch); the Client shows it when present. */
   time?: number
   cat: Category
   tokens: number
@@ -299,8 +273,6 @@ export interface ContextEventRecord {
   step?: number
 }
 
-// ---- contextHeaders projection (request-header content epochs) -------------
-
 /** One tool schema as assembled into a request header, with its display price. */
 export interface HeaderTool {
   name: string
@@ -312,10 +284,7 @@ export interface HeaderTool {
 }
 
 /**
- * One request-header epoch: the full system prompt and tool schemas in force
- * from this event's seq until the next epoch. Headers change rarely (the loop
- * only logs `request/header` on change), so this unit's pushes are rare and
- * carrying full content is cheap.
+ * One request-header epoch: the full system prompt and tool schemas in force from this event's seq until the next epoch.
  */
 export interface HeaderRecord {
   seq: number

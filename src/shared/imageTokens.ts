@@ -31,7 +31,6 @@ const MIN_PIXELS = 147456
 const floorDiv = (a: number, b: number): number => Math.floor(a / b)
 const ceilDiv = (a: number, b: number): number => Math.floor((a + b - 1) / b)
 
-/** Token count of one patch grid (rows×cols) under the v4 layout rule. */
 function gridTokens(rows: number, cols: number): number {
   let n = rows * (cols + 1) + 2
   if (rows % 2 === 1) n += cols + 1
@@ -119,10 +118,8 @@ function calcResizeInner(width: number, height: number): ResizeSolution {
 }
 
 /**
- * Estimate the tokens one image consumes in a DeepSeek vision request, from
- * its pixel dimensions. Returns null for non-positive/non-finite dimensions
- * or when the official iteration fails to converge — callers fall back to
- * the generic structural price.
+  * Estimate the tokens one image consumes in a DeepSeek vision request from its pixel dimensions. Returns null for non-positive/non-finite
+  * dimensions or when the official iteration fails to converge — callers fall back to the generic structural price.
  */
 export function estimateImageTokens(width: number, height: number): number | null {
   if (!Number.isFinite(width) || !Number.isFinite(height) || width <= 0 || height <= 0) return null

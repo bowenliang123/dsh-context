@@ -62,11 +62,9 @@ export interface TimelineEvent {
  * newest ~`maxKeptTurns` turns deterministically as a live log grows.
  */
 
-/** The projection unit's persisted state (plain JSON, bounded see above). */
 export interface TimelineState {
   /** Model-visible surface, newest last. */
   surface: SurfaceNode[]
-  /** Live per-category token sums over the surface. */
   sums: Record<Category, number>
   systemTokens: number
   toolsTokens: number
@@ -103,7 +101,6 @@ export interface TimelineState {
    * Absent until a v4-flash / v4-pro request reports usage.
    */
   cost?: SessionCostUsage
-  /** Newest `gone` among archive entries dropped by the retention bounds. */
   archiveFloor?: number
   /**
    * Tool callId → name, armed by `tool/call` and DELETED when its
@@ -133,7 +130,6 @@ export interface TimelineState {
   pendingShadowEventSeq?: number
 }
 
-/** Keep only the trailing `maxTurns` turn-runs of a request timeline. */
 export function trimToLastTurns(requests: RequestRecord[], maxTurns: number): RequestRecord[] {
   let runs = 0
   let start = requests.length
@@ -150,7 +146,6 @@ export function trimToLastTurns(requests: RequestRecord[], maxTurns: number): Re
   return requests.slice(start)
 }
 
-/** Distinct turn runs in a request timeline (consecutive equal-turn runs). */
 function countTurnRuns(requests: RequestRecord[]): number {
   let runs = 0
   let prevTurn: number | undefined
@@ -163,7 +158,6 @@ function countTurnRuns(requests: RequestRecord[]): number {
   return runs
 }
 
-/** Retain the newest tail of the two unbounded lists (bounded persisted state). */
 function trimState(st: TimelineState, bounds: FoldBounds): void {
   // Trim by WHOLE turn-runs as soon as the run count crosses the cap —
   // not only when the raw step count does — so the state stays
@@ -190,7 +184,6 @@ function trimState(st: TimelineState, bounds: FoldBounds): void {
       while (drop < st.archived.length
         && (st.archived[drop].gone ?? Infinity) <= oldestReq) drop++
     }
-    // Hard count cap.
     if (st.archived.length - drop > bounds.maxArchiveNodes) {
       drop = st.archived.length - bounds.maxArchiveNodes
     }
@@ -341,13 +334,8 @@ function applySurface(
     if (utext !== '') node.text = utext
   }
 
-  // The metering event armed the shadowed seqs for the replacement that must
-  // follow it synchronously; consume them here (any later surface event
-  // would expire them, mirroring the official shadow-price protocol).
-  // DELETE the armed field — assigning `undefined` would leave an
-  // `undefined`-valued property behind, which violates the plain-JSON
-  // persisted-state precondition (see TimelineState) and would fail the
-  // whole session's projection-cache write.
+  // Consume the armed shadow claim here (a later surface event would expire it, per the shadow-price protocol); DELETE the fields —
+  // assigning `undefined` would break the plain-JSON persisted-state precondition (see TimelineState).
   const shadowedSeqs = st.pendingShadowedSeqs
   const shadowEventSeq = st.pendingShadowEventSeq
   delete st.pendingShadowedSeqs
@@ -496,13 +484,12 @@ export function applyTimeline(state: TimelineState, event: TimelineEvent, bounds
         name: typeof (t as { name?: unknown }).name === 'string' ? (t as { name: string }).name : '?',
         tokens: estimateToolSchema(t),
       }))
-      // The tools TOTAL uses dsh's whole-array price (one JSON string of
-      // every schema); per-tool prices above are display-only rankings.
+      // Tools TOTAL = dsh's whole-array price (one JSON string of every schema); per-tool prices above are display-only.
       s.toolsTokens = estimateToolsTotal(tools)
       s.systemTokens = estimateSystem(header.system)
       // Current route/model: the durable request envelope is the source of
       // truth (request/context is only route/capacity metadata, appended
-      // AFTER request/header per request — see agent-loop buildRequestHeader).
+      // AFTER request/header per request — see agent-loop `buildRequest`).
       // Optional fields are set via conditional spread so a still-unknown
       // value never materializes an `undefined` property (plain-JSON state
       // precondition — see TimelineState).
@@ -522,12 +509,8 @@ export function applyTimeline(state: TimelineState, event: TimelineEvent, bounds
     }
     case 'request/context': {
       const s = ensure()
-      // Route/capacity metadata: request/context is logged only when the
-      // route or capacity changes (appended after request/header), so it
-      // updates the CURRENT route display — it never fires a model-switch
-      // event on its own (see the request/header case). All three fields
-      // are only written on a real value (plain-JSON state — see
-      // TimelineState), so no `undefined` property can materialize here.
+      // Route/capacity metadata: request/context is logged only when the route or capacity changes (after request/header), so it updates
+      // the current route display — never firing a model-switch event on its own.
       if (data && typeof data.contextWindow === 'number') s.contextWindow = data.contextWindow
       if (data && typeof data.model === 'string') s.model = data.model
       if (data && typeof data.provider === 'string') s.provider = data.provider
@@ -555,12 +538,9 @@ export function applyTimeline(state: TimelineState, event: TimelineEvent, bounds
           rec.sub = 'skill'
           rec.name = typeof source.name === 'string' ? source.name : '?'
         } else {
-          // Producer label mirroring the dsh transcript row: instruction file
-          // paths, the plugin id, or the bare source kind (skill-catalog, …).
           const label = injectionSourceName(source)
           if (label !== '') rec.name = label
-          // A notice carries the producer's bounded one-line account; show it
-          // after the source name, as the dsh transcript row does.
+          // A notice carries the producer's bounded one-line account; show it after the source name, as the dsh transcript row does.
           if (source.form === 'notice' && typeof source.summary === 'string' && source.summary !== '') {
             rec.detail = source.summary
           }
@@ -612,10 +592,8 @@ export function applyTimeline(state: TimelineState, event: TimelineEvent, bounds
         tool: s.sums.tool,
         total,
       }
-      // `turn`/`step` are optional in the durable vocabulary (and on replay);
-      // write them only on a real number so an absent value never materializes
-      // an `undefined` property (plain-JSON persisted-state precondition — see
-      // TimelineState) — the same trap that broke the projection cache here.
+      // `turn`/`step` are optional in the durable vocabulary (and on replay); write only real numbers — an absent value must not
+      // materialize an `undefined` property (plain-JSON precondition, the trap that broke the projection cache here).
       if (data && typeof data.turn === 'number') record.turn = data.turn
       if (data && typeof data.step === 'number') record.step = data.step
       if (usage && typeof usage.inputTokens === 'number') {
@@ -626,8 +604,6 @@ export function applyTimeline(state: TimelineState, event: TimelineEvent, bounds
         // exists in the durable vocabulary.
         record.prompt = usage.inputTokens + (usage.cacheReadTokens || 0) + (usage.cacheWriteTokens || 0)
         if (typeof usage.outputTokens === 'number') record.output = usage.outputTokens
-        // Session-cost raw material: the SAME billed buckets, attributed to
-        // the current model family and the request's pricing period.
         accumulateCost(s, event.time, usage)
       }
       s.requests.push(record)
@@ -666,8 +642,6 @@ export function applyTimeline(state: TimelineState, event: TimelineEvent, bounds
       break
     }
     default:
-      // Unrecognized / log-only events (turn boundaries, chunks, todo/write,
-      // compaction brackets, …) don't move the timeline — no state change.
       return state
   }
 
@@ -679,10 +653,9 @@ export function applyTimeline(state: TimelineState, event: TimelineEvent, bounds
 }
 
 /**
- * Build the wire snapshot served to the browser — the projection's `view()`.
- * Bounds the surface nodes (newest carry the signal), and attributes each
- * event to the request around it by stamping COPIES (the persisted state
- * objects are never mutated).
+   * Serve the projection's wire view: bound the surface nodes to the newest tail and attach each event to the request around it; stamp
+   * COPIES
+  * — the persisted state objects are never mutated.
  */
 export function buildTimelineView(state: TimelineState, bounds: FoldBounds): Snapshot {
   const surfaceTotal = state.sums.user + state.sums.inject + state.sums.assistant + state.sums.tool
@@ -706,8 +679,6 @@ export function buildTimelineView(state: TimelineState, bounds: FoldBounds): Sna
       total: surfaceTotal + state.systemTokens + state.toolsTokens,
     },
     toolList: state.toolList,
-    // Image blocks live in the current context: per-node `imgs` summed over
-    // the live surface (compacted/pruned messages stop contributing).
     images: state.surface.reduce((n, node) => n + (node.imgs ?? 0), 0),
     // Tool calls WITH A RESULT live in the current context: one `tool/result`
     // folds to exactly one `tool` surface node, so live tool nodes are the
@@ -763,16 +734,9 @@ export function buildTimelineView(state: TimelineState, bounds: FoldBounds): Sna
   }
   if (state.archiveFloor !== undefined) result.archiveFloor = state.archiveFloor
 
-  // Attribute each event to the requests around it — the context that event
-  // contributed to (same attachment the chart uses for ✂ markers). `turn`/
-  // `step` name the FIRST request logged after the event (an injection lands
-  // on the step that consumed it, a between-turn compaction on the next
-  // turn's first step); `fromTurn`/`fromStep` name the request logged right
-  // BEFORE it, so boundary events can show the gap they sit in
-  // ("Step 2→3", or "Turn 50 · Step 8 → Turn 51 · Step 1"). Both lists stay
-  // sorted by seq, so one pointer walk suffices. Events with no following
-  // request (still in flight, or older than the retained window) keep only
-  // the `from*` side; events before the first retained request keep none.
+  // Attach each event to the requests around it (same attachment the chart uses for ✂): `turn`/`step` name the first request logged after
+  // the event, `fromTurn`/`fromStep` the request before it; both lists stay seq-sorted, so one pointer walk suffices. Events with no
+  // following (or preceding) retained request keep only one side.
   const requests = result.requests
   const events = result.events
   let ri = 0

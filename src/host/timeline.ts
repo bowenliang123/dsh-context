@@ -172,21 +172,14 @@ export function createContextTimelineDefinition(config: Config): ProjectionDefin
   const view = (state: TimelineState): ContextTimeline => buildTimelineView(state, bounds)
   const definition: CompatProjectionDefinition<'contextTimeline', TimelineState> = {
     key: 'contextTimeline',
-    // dsh <= 0.1.0-rc.8 contract: one schema validates the wire payload, `view` is top-level.
     schema: contextTimelineSchema,
     view,
-    // dsh >= 0.1.1-rc.1 contract: `stateSchema` validates persisted state, the client view lives in `wire`.
     stateSchema: timelineStateSchema,
     wire: { viewSchema: contextTimelineSchema, view },
     init: () => createTimelineState(),
     apply: (state: TimelineState, event: SessionEvent) => applyTimeline(state, event as Parameters<typeof applyTimeline>[1], bounds),
-    // 2 since 0.11: the occupancy mirror (pressureTokens/sampledSurfaceTokens/
-    // occupancyWindow) left the persisted state — the client now reads the
-    // official token-meter `contextPressure` projection instead. Old cached
-    // rows are discarded and refolded.
-    // 3 since 0.12: the removed-node archive (`archived` + `archiveFloor`)
-    // joined the persisted state for the Context browser's per-step
-    // reconstruction — cached rows predate the shape and are refolded.
+    // 2: the occupancy mirror left the persisted state (client reads official `contextPressure`); cached rows refolded.
+    // 3: the removed-node archive (`archived` + `archiveFloor`) joined the state; cached rows refolded.
     // 4 since 0.18: the persisted state no longer carries `undefined`-valued
     // properties (model/provider/lastModel/contextWindow are absent until
     // known; pendingShadowedSeqs is deleted when consumed). The previous
@@ -195,18 +188,10 @@ export function createContextTimelineDefinition(config: Config): ProjectionDefin
     // is not losslessly JSON-serializable) — which also starved the `title`
     // projection row and broke the session list after a restart. The bump
     // discards old cached rows and refolds them clean.
-    // 5: the session-cost totals (`cost` — per-family/per-period billed
-    // tokens) joined the persisted state; cached rows predate the shape and
-    // are refolded.
-    // 6: image blocks price through the official DeepSeek docs calculator
-    // (real vision billing by pixel dimensions) instead of the token-meter's
-    // generic JSON branch — cached rows carry the old underpriced image
-    // nodes and are refolded.
-    // 7: the whole-session image-block count (`images`) joined the persisted
-    // state; cached rows predate the shape and are refolded.
-    // 8: the image count moved OFF the persisted counter onto per-node `imgs`
-    // (the stats cell now sums the LIVE surface — current context only, like
-    // the tool-call cell); cached rows predate the shape and are refolded.
+    // 5: the session-cost totals (`cost`) joined the state; cached rows refolded.
+    // 6: image blocks reprice via the official vision calculator instead of the meter's generic JSON branch; cached rows refolded.
+    // 7: the whole-session image count (`images`) joined the state; cached rows refolded.
+    // 8: the image count moved to per-node `imgs` (live-surface cell); cached rows refolded.
     stateVersion: 8,
   }
   return definition

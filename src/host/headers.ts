@@ -26,7 +26,6 @@ import { estimateToolSchema } from './pricing'
 /** Retention cap on header epochs (changes are rare; 50 is generous). */
 const HEADERS_MAX = 50
 
-/** The unit's persisted state (plain JSON, bounded). */
 export interface HeadersState {
   headers: HeaderRecord[]
 }
@@ -48,13 +47,11 @@ const contextHeadersSchema = z.object({
 }).strict() as unknown as z.ZodType<ContextHeaders>
 
 /**
- * The persisted state and the wire view are the same shape here (the view
- * only shallow-copies each record), so one schema validates both under the
- * dsh 0.1.1-rc.1+ `stateSchema`/`wire` contract.
+  * State and wire are the same shape (the view only shallow-copies each record), so one schema validates both under the dsh 0.1.1-rc.1+
+  * `stateSchema`/`wire` contract.
  */
 const contextHeadersStateSchema = contextHeadersSchema
 
-/** Fold one `request/header` payload into an epoch record (display-priced). */
 function recordOf(event: SessionEvent): HeaderRecord | null {
   if (event.type !== 'request/header') return null
   const rawHeader = (event.data as { header?: unknown }).header
@@ -84,14 +81,9 @@ function recordOf(event: SessionEvent): HeaderRecord | null {
 }
 
 /**
- * The context-headers projection unit. Registered alongside the timeline
- * unit (host/index.ts); clients read it through `useProjection('contextHeaders')`
- * and degrade to tokens-only header sections when the key is absent.
- *
- * Dual-contract definition (see compat.ts): `schema`/`view` for
- * dsh <= 0.1.0-rc.8, `stateSchema`/`wire` for dsh >= 0.1.1-rc.1. Without
- * `wire`, the 0.1.1-rc.1+ registry treats the unit as host-only and the
- * Context browser's system/tools sections would degrade.
+  * The context-headers projection unit; registered alongside the timeline unit (host/index.ts); clients read it through
+  * `useProjection('contextHeaders')` and degrade to tokens-only header sections when the key is absent. Dual-contract definition (see
+  * compat.ts).
  */
 export function createContextHeadersDefinition(): ProjectionDefinition<'contextHeaders', HeadersState> {
   const view = (state: HeadersState): ContextHeaders => ({
@@ -99,10 +91,8 @@ export function createContextHeadersDefinition(): ProjectionDefinition<'contextH
   })
   const definition: CompatProjectionDefinition<'contextHeaders', HeadersState> = {
     key: 'contextHeaders',
-    // dsh <= 0.1.0-rc.8 contract: one schema validates the wire payload, `view` is top-level.
     schema: contextHeadersSchema,
     view,
-    // dsh >= 0.1.1-rc.1 contract: `stateSchema` validates persisted state, the client view lives in `wire`.
     stateSchema: contextHeadersStateSchema,
     wire: { viewSchema: contextHeadersSchema, view },
     init: (): HeadersState => ({ headers: [] }),

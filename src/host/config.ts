@@ -15,28 +15,22 @@
 
 import { z } from 'zod'
 
-/** dsh-context host config. All fields optional; defaults below. */
 export interface Config {
   /** Cap on kept per-step request records (the hard step backstop). */
   maxRequestSteps?: number
   /** Newest whole-turn window kept; trimming crosses whole turns, never mid-turn. */
   maxKeptTurns?: number
-  /** Newest context-event records kept. */
   maxEvents?: number
   /**
-   * Surface nodes served to the browser (newest carry the signal; live
-   * inject nodes are always served — they are few and land first). The
-   * default is deliberately generous: auto-compaction keeps the live
-   * surface far below it in healthy sessions, so the browser effectively
-   * lists EVERY live node; the bound stays as a backstop for pathological
-   * sessions (every projection push ships the whole value, ~150B per node).
+    * Served surface nodes (newest carry the signal; live inject nodes are pinned — they land first and are few). Deliberately generous:
+    * auto-compaction keeps healthy surfaces far below it, so the browser effectively lists every live node; the bound is a
+    * pathological-session backstop (each push ships the whole value, ~150B/node).
    */
   maxNodes?: number
   /** Removed (shadowed) surface nodes kept for per-step reconstruction. */
   maxArchiveNodes?: number
 }
 
-/** Defaults — the exact bounds the fold used before they became configurable. */
 export const DEFAULT_BOUNDS: Required<Config> = {
   maxRequestSteps: 1500,
   maxKeptTurns: 300,
@@ -46,8 +40,8 @@ export const DEFAULT_BOUNDS: Required<Config> = {
 }
 
 /**
- * The cordis `Config` validator: strict on keys, defaults on the schema fields.
- * Tolerates `undefined` (a patch row without a `config:` block — defaults win).
+  * The cordis `Config` validator: strict on keys, defaults on the schema fields; tolerates `undefined` (a patch row without a `config:`
+  * block — defaults win).
  */
 export const Config = z.preprocess(
   v => v ?? {},
@@ -60,10 +54,8 @@ export const Config = z.preprocess(
   }).strict(),
 )
 
-/** The resolved retention/slice bounds the fold operates under. */
 export type FoldBounds = Required<Config>
 
-/** Validate (and default) the entry config into concrete fold bounds. */
 export function resolveBounds(config: Config | undefined): FoldBounds {
   return Config.parse(config ?? {})
 }

@@ -27,31 +27,24 @@ import type { SessionEvent } from '@deepseek-ai/dsh-session'
 
 /** The session-projection unit contract as of dsh 0.1.1-rc.1 (local mirror). */
 export interface ProjectionDefinitionV2<K extends keyof SessionProjectionMap, S> {
-  /** The projection key this unit owns (its `SessionProjectionMap` entry). */
   key: K
-  /** Validates persisted state before it seeds a fold. */
   stateSchema: z.ZodType<S>
-  /** State for the empty log. */
   init(): S
   /**
    * Pure transition: previous state + one committed event → next state.
    * Events the unit ignores MUST return the same state reference.
    */
   apply(state: S, event: SessionEvent): S
-  /** Client view: `viewSchema` validates the wire payload before it leaves the host. */
   wire: {
     viewSchema: z.ZodType<SessionProjectionMap[K]>
-    /** State → wire payload (the read-side projection). */
     view(state: S): SessionProjectionMap[K]
   }
-  /** Persisted-cache invalidation version (same semantics in both contracts). */
   stateVersion: number
 }
 
 /**
- * One unit definition under BOTH contracts: the pre-0.1.1 fields (`schema`,
- * top-level `view`) plus the 0.1.1-rc.1+ fields (`stateSchema`, `wire`).
- * Registries of every dsh version read their own fields off the same object.
+  * One unit definition under BOTH contracts: the pre-0.1.1 fields (`schema`, top-level `view`) plus the 0.1.1-rc.1+ fields (`stateSchema`,
+  * `wire`); registries of every dsh version read their own fields off the same object.
  */
 export type CompatProjectionDefinition<K extends keyof SessionProjectionMap, S> =
   ProjectionDefinitionV2<K, S> & Pick<ProjectionDefinition<K, S>, 'schema' | 'view'>
