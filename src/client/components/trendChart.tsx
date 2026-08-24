@@ -90,7 +90,7 @@ export function makeTrendChart(kit: ViewKit): (props: TrendChartProps) => ReactN
    * provider prompt/output are dropped (they are not deltas).
    */
   const deltaOf = (req: RequestRecord, prev: RequestRecord | null): RequestRecord => {
-    const out = { ...req }
+    const { prompt: _prompt, output: _output, ...out } = req
     let churn = 0
     let net = 0
     for (const c of CATS) {
@@ -101,8 +101,6 @@ export function makeTrendChart(kit: ViewKit): (props: TrendChartProps) => ReactN
     }
     out.total = churn
     out.net = net
-    delete out.prompt
-    delete out.output
     return out
   }
 

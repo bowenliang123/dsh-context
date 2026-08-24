@@ -123,7 +123,6 @@ test('client bundle: handoff, dicts, styles, slot registration, /context command
           if (vars) for (const k in vars) s = s.replace('{' + k + '}', String(vars[k]))
           return s
         },
-        subscribe: () => () => {},
       },
       inject: () => {},
       slots: { inject: () => {}, register: () => ({}) },

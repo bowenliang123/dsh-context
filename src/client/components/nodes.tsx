@@ -1,6 +1,6 @@
 import type * as ReactNS from 'react'
 import type { SurfaceNode } from '../../shared/types'
-import { CATS } from '../categories'
+import { CAT_COLORS } from '../categories'
 import type { ViewKit } from '../viewkit'
 
 import { React } from '../react'
@@ -30,8 +30,6 @@ export function makeNodeList(kit: ViewKit): (props: NodeListProps) => ReactNS.Re
     if (props.nodes.length === 0) {
       return <div className="lc-empty">{t('nodes.empty')}</div>
     }
-    const catColor: Record<string, string> = {}
-    for (const c of CATS) catColor[c.key] = c.color
     const rows = props.nodes.slice().reverse()
     return (
       <div className="lc-nodes">
@@ -42,7 +40,7 @@ export function makeNodeList(kit: ViewKit): (props: NodeListProps) => ReactNS.Re
           const text = nodeText(n)
           return (
             <div key={n.seq} className="lc-node">
-              <i style={{ background: catColor[n.cat] || '#999' }} />
+              <i style={{ background: CAT_COLORS[n.cat] || '#999' }} />
               <span className="lc-node-preview" title={text}>{text}</span>
               {typeof n.time === 'number' ? <span className="lc-node-time">{fmtTime(n.time)}</span> : null}
               <span className="lc-node-tokens">{fmt(n.tokens)}</span>

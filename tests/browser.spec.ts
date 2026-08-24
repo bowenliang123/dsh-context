@@ -49,7 +49,7 @@ test('context browser: picker, accordion, reconstruction, header content, deltas
   const brKey = [...hookStates.keys()].find(k => k.includes('ContextBrowser'))
   assert.ok(brKey, 'ContextBrowser fiber registered')
   const brSlots = hookStates.get(brKey) // sel(0) openCat(1) openElem(2)
-  const ctxSlots = bed.ctxSlots() // selected(0) hovered(1) hoverTurn(2) tick(3) gran(4) trendMode(5) focusTurn(6) hoverCat(7) pickedKinds(8) toolFocus(9)
+  const ctxSlots = bed.ctxSlots() // selected(0) hovered(1) hoverTurn(2) gran(3) trendMode(4) focusTurn(5) hoverCat(6) pickedKinds(7) toolFocus(8)
 
   assert.equal(byClass(tr, 'lc-br-cat-row').length, 6, 'six category sections (system/tools + four message cats)')
   assert.equal(byClass(tr, 'lc-br-pick').length, 1, 'step picker present')
@@ -251,7 +251,7 @@ test('context browser: picker, accordion, reconstruction, header content, deltas
   tr = renderView()
   const readDeltas = () => ({ count: textOf(byClass(tr, 'lc-br-delta')[0]), token: textOf(byClass(tr, 'lc-br-tdelta')[0]) })
   assert.deepEqual(readDeltas(), { count: '+2', token: '+20' }, 'step granularity: seq 4 vs turn 1 last (seq 2)')
-  ctxSlots[4][1]('turn')
+  ctxSlots[3][1]('turn')
   tr = renderView()
   assert.deepEqual(readDeltas(), { count: '+2', token: '+20' }, 'turn granularity keeps the SAME previous-turn baseline, not seq 3')
   // Live view: baseline = last request (seq 5, turn 3) — user 5 vs 4 (+1).

@@ -49,9 +49,9 @@ test('host half: registers the dsh-context settings namespace when a provider is
 test('client half: default granularity and trend mode come from the settings scope at mount', async () => {
   const { binder } = fakeBinder({ defaultGranularity: 'turn', defaultTrendMode: 'delta' })
   const bed = await bootViewBed({ settingsScope: binder })
-  // The ContextView fiber's hook slots: gran is index 4, trend mode 5 (see chart.spec).
-  assert.equal(bed.ctxSlots()[4][0], 'turn', 'a freshly mounted view opens with the stored granularity')
-  assert.equal(bed.ctxSlots()[5][0], 'delta', 'a freshly mounted view opens with the stored trend mode')
+  // The ContextView fiber's hook slots: gran is index 3, trend mode 4 (see chart.spec).
+  assert.equal(bed.ctxSlots()[3][0], 'turn', 'a freshly mounted view opens with the stored granularity')
+  assert.equal(bed.ctxSlots()[4][0], 'delta', 'a freshly mounted view opens with the stored trend mode')
   bed.dataValue = bed.snapshot
   const tree = bed.renderView()
   const granRow = byClass(tree, 'lc-gran')[0].args.slice(2)
@@ -63,15 +63,15 @@ test('client half: default granularity and trend mode come from the settings sco
 test('client half: no settings surface -> no card, schema defaults (degraded)', async () => {
   const bed = await bootViewBed()
   assert.equal(bed.settingsCardComponent, null, 'no card registered without settingsScope')
-  assert.equal(bed.ctxSlots()[4][0], 'step', 'granularity falls back to the schema default')
-  assert.equal(bed.ctxSlots()[5][0], 'total', 'trend mode falls back to the schema default')
+  assert.equal(bed.ctxSlots()[3][0], 'step', 'granularity falls back to the schema default')
+  assert.equal(bed.ctxSlots()[4][0], 'total', 'trend mode falls back to the schema default')
 })
 
 test('client half: a stale stored trend mode falls back to the default', async () => {
   const { binder } = fakeBinder({ defaultGranularity: 'turn', defaultTrendMode: 'stale' })
   const bed = await bootViewBed({ settingsScope: binder })
-  assert.equal(bed.ctxSlots()[4][0], 'turn', 'the valid granularity still applies')
-  assert.equal(bed.ctxSlots()[5][0], 'total', 'the unrecognized trend mode is ignored')
+  assert.equal(bed.ctxSlots()[3][0], 'turn', 'the valid granularity still applies')
+  assert.equal(bed.ctxSlots()[4][0], 'total', 'the unrecognized trend mode is ignored')
 })
 
 test('client half: the Plugin configuration card reads and writes both preferences', async () => {

@@ -81,7 +81,6 @@ export function makeContextView(
     const [selectedSeq, setSelectedSeq] = React.useState<number | null>(null)
     const [hoveredSeq, setHoveredSeq] = React.useState<number | null>(null)
     const [hoverTurn, setHoverTurn] = React.useState<number | null>(null)
-    const [tick, setTick] = React.useState(0)
     // Mount-time default from the plugin settings card; in-chart toggling stays mount-local and never writes back.
     const [granularity, setGranularity] = React.useState<'step' | 'turn'>(() => settings.defaultGranularity())
     // 'total' plots each request's cumulative composition, 'delta' its incremental change vs the previous one;
@@ -140,13 +139,9 @@ export function makeContextView(
       }
     }, [sessionId])
 
-    React.useEffect(() => {
-      const localeSvc = ctx.get('locale')
-      if (!localeSvc) return undefined
-      return localeSvc.subscribe(() => { setTick(x => x + 1) })
-    }, [])
-
-    void tick
+    // No locale subscription here: the harness slot outlet subscribes the
+    // LocaleFace revision and re-renders every entry on a locale switch, and
+    // the kit's bound `t` reads the active locale at call time.
 
     // Hooks stay unconditional (Rules of Hooks): the projection value can arrive AFTER a loading first render, and an early return above
     // these useMemos would grow the hook count between renders (React #310); fall back to empty collections and keep the loading return

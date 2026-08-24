@@ -26,6 +26,21 @@ function cacheHitPercent(usage: TokenUsage): string | null {
   return cacheHitPercentOf(reads, uncached + reads + writes)
 }
 
+// A cell may carry an explanation bubble: the label shows a '?' marker and the styled tip (`.lc-stat-tip`, revealed on cell hover) —
+// the native `title` attribute is invisible in the harness GUI.
+function cell(label: string, value: string, tip?: ReactNS.ReactNode): ReactNS.ReactElement {
+  return (
+    <div className={'lc-stat' + (tip === undefined ? '' : ' lc-stat-tipped')}>
+      <span className="lc-stat-label">
+        {label}
+        {tip !== undefined && <i className="lc-stat-q" aria-hidden="true">?</i>}
+      </span>
+      <b className="lc-stat-value">{value}</b>
+      {tip !== undefined && <span className="lc-stat-tip" role="tooltip">{tip}</span>}
+    </div>
+  )
+}
+
 export function makeStatsBoard(kit: ViewKit): (props: {
   requests: RequestRecord[]
   events: ContextEventRecord[]
@@ -76,18 +91,6 @@ export function makeStatsBoard(kit: ViewKit): (props: {
         ))}
       </span>,
     ]
-    // A cell may carry an explanation bubble: the label shows a '?' marker and the styled tip (`.lc-stat-tip`, revealed on cell hover) —
-    // the native `title` attribute is invisible in the harness GUI.
-    const cell = (label: string, value: string, tip?: ReactNS.ReactNode) => (
-      <div className={'lc-stat' + (tip === undefined ? '' : ' lc-stat-tipped')}>
-        <span className="lc-stat-label">
-          {label}
-          {tip !== undefined && <i className="lc-stat-q" aria-hidden="true">?</i>}
-        </span>
-        <b className="lc-stat-value">{value}</b>
-        {tip !== undefined && <span className="lc-stat-tip" role="tooltip">{tip}</span>}
-      </div>
-    )
     return (
       <div className="lc-card lc-col lc-col-stats">
         <div className="lc-card-title">

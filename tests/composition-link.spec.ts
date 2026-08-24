@@ -28,7 +28,7 @@ test('current-composition hover link: browser rows + composition bar <-> overvie
   assert.equal(typeof liveUserRow.args[1].onMouseEnter, 'function', 'live browser rows carry the hover link')
   liveUserRow.args[1].onMouseEnter()
   tr = renderView()
-  assert.equal(ctxSlots[7][0], 'user', 'browser row hover updates the shared hover category')
+  assert.equal(ctxSlots[6][0], 'user', 'browser row hover updates the shared hover category')
   assert.equal(byClass(tr, 'lc-br-cat-on').length, 1, 'browser row hover links its own row')
   assert.equal(barSegsOn(brStack()).length, 1, 'browser row hover lights the browser bar segment')
   assert.equal(barSegsOn(brStack())[0].args[1].key, 'user', 'the lit browser segment is user')
@@ -37,7 +37,7 @@ test('current-composition hover link: browser rows + composition bar <-> overvie
   assert.match(textOf(byClass(tr, 'lc-chip-on')[0]), /User/, 'the lit chip is the user category')
   liveUserRow.args[1].onMouseLeave()
   tr = renderView()
-  assert.equal(ctxSlots[7][0], null, 'leaving the browser row clears the shared hover')
+  assert.equal(ctxSlots[6][0], null, 'leaving the browser row clears the shared hover')
   assert.equal(byClass(tr, 'lc-br-cat-on').length, 0, 'the row echo clears with the leave')
   assert.equal(byClass(tr, 'lc-stacked-seg-on').length, 0, 'both bars clear with the row leave')
   assert.equal(byClass(tr, 'lc-chip-on').length, 0, 'the legend chip clears with the row leave')
@@ -56,13 +56,13 @@ test('current-composition hover link: browser rows + composition bar <-> overvie
 
   segOf(brStack(), 'user').args[1].onMouseEnter()
   tr = renderView()
-  assert.equal(ctxSlots[7][0], 'user', 'browser bar hover updates the shared hover category')
+  assert.equal(ctxSlots[6][0], 'user', 'browser bar hover updates the shared hover category')
   assert.equal(barSegsOn(ovrStack()).length, 1, 'browser bar hover lights the overview segment')
   assert.equal(byClass(tr, 'lc-chip-on').length, 1, 'browser bar hover lights the overview legend chip')
   assert.equal(byClass(tr, 'lc-br-cat-on').length, 1, 'browser bar hover links the browser category row too')
   brStack().args[1].onMouseLeave()
   tr = renderView()
-  assert.equal(ctxSlots[7][0], null, 'leaving the browser bar clears the shared hover')
+  assert.equal(ctxSlots[6][0], null, 'leaving the browser bar clears the shared hover')
 
   // pinned/previewed step: the compositions differ, so no linkage either way
   ctxSlots[1][1](2)
@@ -71,7 +71,7 @@ test('current-composition hover link: browser rows + composition bar <-> overvie
   assert.equal(catRowOf(tr, 'User').args[1].onMouseEnter, undefined, 'pinned browser rows carry no hover link')
   segOf(brStack(), 'user').args[1].onMouseEnter() // handler exists; the live gate must make it a no-op
   tr = renderView()
-  assert.equal(ctxSlots[7][0], null, 'pinned browser bar hover does not leak into the overview')
+  assert.equal(ctxSlots[6][0], null, 'pinned browser bar hover does not leak into the overview')
   segOf(ovrStack(), 'assistant').args[1].onMouseEnter({ clientX: 80 })
   tr = renderView()
   assert.equal(byClass(tr, 'lc-br-cat-on').length, 0, 'overview hover does not echo into a pinned step')

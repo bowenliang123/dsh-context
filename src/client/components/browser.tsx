@@ -508,10 +508,10 @@ function byCatOf(asm: Assembled): Partial<Record<Category, SurfaceNode[]>> {
   return m
 }
 
-function countOf(asm: Assembled, c: string): number {
+function countOf(asm: Assembled, byCat: Partial<Record<Category, SurfaceNode[]>>, c: string): number {
   if (c === 'system') return asm.header !== null && asm.header.system !== undefined ? 1 : 0
   if (c === 'tools') return asm.header !== null ? asm.header.tools.length : 0
-  return byCatOf(asm)[c as Category]?.length ?? 0
+  return byCat[c as Category]?.length ?? 0
 }
 
 function lastOfTurn(requests: RequestRecord[], turn: number): RequestRecord | null {
@@ -527,8 +527,6 @@ export function makeContextBrowser(
   const nodeText = makeNodeText(kit)
   const rich = makeRichText(kit)
   const ImageCard = makeImageCard(kit)
-  const catColor: Record<string, string> = {}
-  for (const c of CATS) catColor[c.key] = c.color
 
   // Auto-load ceiling: a guard against seqs that never land in the conversation snapshot (pages pull until the seq joins, history runs out,
   // or the cap is hit).
@@ -637,10 +635,11 @@ export function makeContextBrowser(
       ? requests.length > 0 ? requests[requests.length - 1] : null
       : lastOfTurn(requests, (req.turn ?? 0) - 1)
     const prevView = refReq !== null ? assemble(data, headers, refReq.seq) : null
+    const prevByCat = prevView !== null ? byCatOf(prevView) : null
 
     const byCat = byCatOf(view)
 
-    const toolCount = (c: string): number => countOf(view, c)
+    const toolCount = (c: string): number => countOf(view, byCat, c)
 
     const toggleCat = (c: string) => {
       // Empty cats stay shut — except system/tools with no header epoch, which open to explain the degradation note.
@@ -828,7 +827,7 @@ export function makeContextBrowser(
           {CATS.map((c) => {
             const count = toolCount(c.key)
             const v = breakdown[c.key] || 0
-            const prevCount = prevView !== null ? countOf(prevView, c.key) : null
+            const prevCount = prevView !== null && prevByCat !== null ? countOf(prevView, prevByCat, c.key) : null
             const countDelta = prevCount !== null ? count - prevCount : null
             const prevTokens = refReq !== null ? (refReq[c.key] || 0) : null
             const tokenDelta = prevTokens !== null ? v - prevTokens : null

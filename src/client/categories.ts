@@ -33,6 +33,9 @@ export const CATS: { key: Category | 'system' | 'tools'; color: string }[] = [
 
 const MESSAGE_CATS: readonly (Category | 'system' | 'tools')[] = ['user', 'inject', 'assistant', 'tool']
 
+/** Category key → chart color, built once from CATS. */
+export const CAT_COLORS: Record<string, string> = Object.fromEntries(CATS.map(c => [c.key, c.color]))
+
 export function partsOf(breakdown: Snapshot['current'] | RequestRecord): PartsPart[] {
   return CATS.map((c) => {
     return { key: c.key, color: c.color, value: breakdown[c.key] || 0 }
