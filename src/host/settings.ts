@@ -22,7 +22,7 @@ export const SETTINGS_NAMESPACE = 'dsh-context'
 
 export type DefaultGranularity = 'step' | 'turn'
 
-export type DefaultTrendMode = 'total' | 'diff'
+export type DefaultTrendMode = 'total' | 'delta'
 
 export interface PluginSettings {
   defaultGranularity: DefaultGranularity
@@ -32,7 +32,8 @@ export interface PluginSettings {
 /** Section schema: also the wire envelope the browser scope validates against. */
 export const SettingsSchema: z<PluginSettings> = z.object({
   defaultGranularity: z.union(['step', 'turn']).default('step'),
-  defaultTrendMode: z.union(['total', 'diff']).default('total'),
+  // Loose: a stale persisted value degrades to the default instead of breaking the section.
+  defaultTrendMode: z.union(['total', 'delta']).default('total').loose(),
 })
 
 /** Serve the namespace while a settings provider is composed; inert otherwise. */

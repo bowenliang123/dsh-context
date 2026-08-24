@@ -126,7 +126,7 @@ test('real-React jsdom mount: rapid step<->turn toggles never hit React #185', a
     const scroller = container.querySelector('.lc-chart-scroll')
     scroller.__clientW = 800
     const buttons = [...container.querySelectorAll('.lc-gran .lc-gran-btn')]
-    // Two toggle groups: granularity (Step/Turn) + display mode (Total/Diff);
+    // Two toggle groups: granularity (Step/Turn) + display mode (Total/Delta);
     // the first two buttons are the granularity pair exercised below.
     assert.equal(buttons.length, 4, 'toggle buttons rendered')
     // Rapid toggles: the overflow state flips each time (wide step chart vs

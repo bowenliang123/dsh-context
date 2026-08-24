@@ -17,7 +17,7 @@ export interface TrendChartProps {
   hoveredSeq: number | null
   activeTurn: number | null
   granularity: 'step' | 'turn'
-  mode: 'total' | 'diff'
+  mode: 'total' | 'delta'
   focusTurn: number | null
   onSelect: (seq: number | null) => void
   onHover: (seq: number | null) => void
@@ -84,10 +84,10 @@ export function makeTrendChart(kit: ViewKit): (props: TrendChartProps) => ReactN
     typeof req.prompt === 'number' && req.prompt > 0 ? req.prompt : req.total
 
   /**
-   * Diff mode: each category becomes |current − previous|, `total` the summed magnitude, `net` the signed change for the tooltip; the first
-   * request diffs from zero so the scale is change-driven, and per-request provider prompt/output are dropped (they are not diffs).
+   * Delta mode: each category becomes |current − previous|, `total` the summed magnitude, `net` the signed change for the tooltip; the first
+   * request starts from zero so the scale is change-driven, and per-request provider prompt/output are dropped (they are not deltas).
    */
-  const diffOf = (req: RequestRecord, prev: RequestRecord | null): RequestRecord => {
+  const deltaOf = (req: RequestRecord, prev: RequestRecord | null): RequestRecord => {
     const out = { ...req }
     let churn = 0
     let net = 0
@@ -151,10 +151,10 @@ export function makeTrendChart(kit: ViewKit): (props: TrendChartProps) => ReactN
   })
 
   return function TrendChart(props: TrendChartProps): ReactNS.ReactElement {
-    const diff = props.mode === 'diff'
+    const delta = props.mode === 'delta'
     const requests = React.useMemo(
-      () => (diff ? props.requests.map((req, i) => diffOf(req, i > 0 ? props.requests[i - 1] : null)) : props.requests),
-      [props.requests, diff],
+      () => (delta ? props.requests.map((req, i) => deltaOf(req, i > 0 ? props.requests[i - 1] : null)) : props.requests),
+      [props.requests, delta],
     )
     const markers = props.markers
     let maxTotal = 1
@@ -271,9 +271,9 @@ export function makeTrendChart(kit: ViewKit): (props: TrendChartProps) => ReactN
       const head = req.stepCount !== undefined && req.stepCount > 1
         ? t('tip.turn', { t: req.turn ?? 0, n: req.stepCount })
         : t('tip.step', { t: req.turn ?? 0, s: req.step ?? 0 })
-      if (diff) {
+      if (delta) {
         const n = req.net ?? 0
-        return head + ' · ' + fmtTime(req.time) + ' · ' + t('tip.diff', { n: (n > 0 ? '+' : '') + fmt(n) })
+        return head + ' · ' + fmtTime(req.time) + ' · ' + t('tip.delta', { n: (n > 0 ? '+' : '') + fmt(n) })
       }
       return head + ' · ' + fmtTime(req.time) + ' · ' + t('tip.total', { n: fmt(req.total) })
         + (req.prompt !== undefined ? ' · ' + t('tip.actual', { n: fmt(req.prompt) }) : '')

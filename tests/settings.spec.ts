@@ -43,15 +43,15 @@ test('host half: registers the dsh-context settings namespace when a provider is
   assert.equal(registrations[0].ns, 'dsh-context', 'namespace key the browser card is keyed on')
   assert.deepEqual(registrations[0].schema({}), { defaultGranularity: 'step', defaultTrendMode: 'total' }, 'schema fills both defaults')
   assert.throws(() => registrations[0].schema({ defaultGranularity: 'week' }), 'schema rejects unknown granularity')
-  assert.throws(() => registrations[0].schema({ defaultTrendMode: 'net' }), 'schema rejects unknown trend mode')
+  assert.deepEqual(registrations[0].schema({ defaultTrendMode: 'net' }), { defaultGranularity: 'step', defaultTrendMode: 'total' }, 'a stale trend mode degrades to the default instead of throwing')
 })
 
 test('client half: default granularity and trend mode come from the settings scope at mount', async () => {
-  const { binder } = fakeBinder({ defaultGranularity: 'turn', defaultTrendMode: 'diff' })
+  const { binder } = fakeBinder({ defaultGranularity: 'turn', defaultTrendMode: 'delta' })
   const bed = await bootViewBed({ settingsScope: binder })
   // The ContextView fiber's hook slots: gran is index 4, trend mode 5 (see chart.spec).
   assert.equal(bed.ctxSlots()[4][0], 'turn', 'a freshly mounted view opens with the stored granularity')
-  assert.equal(bed.ctxSlots()[5][0], 'diff', 'a freshly mounted view opens with the stored trend mode')
+  assert.equal(bed.ctxSlots()[5][0], 'delta', 'a freshly mounted view opens with the stored trend mode')
   bed.dataValue = bed.snapshot
   const tree = bed.renderView()
   const granRow = byClass(tree, 'lc-gran')[0].args.slice(2)
@@ -65,6 +65,13 @@ test('client half: no settings surface -> no card, schema defaults (degraded)', 
   assert.equal(bed.settingsCardComponent, null, 'no card registered without settingsScope')
   assert.equal(bed.ctxSlots()[4][0], 'step', 'granularity falls back to the schema default')
   assert.equal(bed.ctxSlots()[5][0], 'total', 'trend mode falls back to the schema default')
+})
+
+test('client half: a stale stored trend mode falls back to the default', async () => {
+  const { binder } = fakeBinder({ defaultGranularity: 'turn', defaultTrendMode: 'stale' })
+  const bed = await bootViewBed({ settingsScope: binder })
+  assert.equal(bed.ctxSlots()[4][0], 'turn', 'the valid granularity still applies')
+  assert.equal(bed.ctxSlots()[5][0], 'total', 'the unrecognized trend mode is ignored')
 })
 
 test('client half: the Plugin configuration card reads and writes both preferences', async () => {
@@ -95,9 +102,9 @@ test('client half: the Plugin configuration card reads and writes both preferenc
   tree = render()
   assert.equal(byClass(tree, 'lc-menu')[0].args[1]['data-selected'], 'turn', 'turn renders selected after the choice')
 
-  byClass(tree, 'lc-menu')[1].args[1].onSelect('diff')
-  assert.deepEqual(writes[1], ['defaultTrendMode', 'diff'], 'the trend-mode choice lands as a fenced scope write')
-  assert.equal(store.getSnapshot().mode, 'diff', 'local echo before the write settles')
+  byClass(tree, 'lc-menu')[1].args[1].onSelect('delta')
+  assert.deepEqual(writes[1], ['defaultTrendMode', 'delta'], 'the trend-mode choice lands as a fenced scope write')
+  assert.equal(store.getSnapshot().mode, 'delta', 'local echo before the write settles')
 })
 
 test('client half: card states — read-only note and unavailable absence', async () => {

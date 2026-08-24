@@ -500,7 +500,7 @@ export function applyTimeline(state: TimelineState, event: TimelineEvent, bounds
       // 'change' ('initial' opens a session, 'resume' reopens it). A resume
       // carrying a different model is a real switch the user made between
       // sessions — lastModel survived in the projection state, so record it
-      // too. Firing only on a real diff keeps the list equal to the record.
+      // too. Firing only on a real change keeps the list equal to the record.
       if ((data?.reason === 'change' || data?.reason === 'resume') && s.model && s.lastModel && s.model !== s.lastModel) {
         s.events.push({ seq: event.seq, time: event.time, kind: 'model', from: s.lastModel, to: s.model })
       }

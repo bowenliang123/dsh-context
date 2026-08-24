@@ -13,7 +13,7 @@
  */
 
 export type DefaultGranularity = 'step' | 'turn'
-export type DefaultTrendMode = 'total' | 'diff'
+export type DefaultTrendMode = 'total' | 'delta'
 
 /** The section fields the card edits, as the Host schema names them. */
 export type SettingsField = 'defaultGranularity' | 'defaultTrendMode'
@@ -54,7 +54,7 @@ function prefsOf(value: unknown): { granularity?: DefaultGranularity; mode?: Def
   const v = value as Record<string, unknown>
   return {
     ...(v.defaultGranularity === 'step' || v.defaultGranularity === 'turn' ? { granularity: v.defaultGranularity } : {}),
-    ...(v.defaultTrendMode === 'total' || v.defaultTrendMode === 'diff' ? { mode: v.defaultTrendMode } : {}),
+    ...(v.defaultTrendMode === 'total' || v.defaultTrendMode === 'delta' ? { mode: v.defaultTrendMode } : {}),
   }
 }
 

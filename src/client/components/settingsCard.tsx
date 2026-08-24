@@ -101,7 +101,7 @@ export function makeSettingsCard(kit: ViewKit): (props: SettingsCardProps) => Re
                 disabled={disabled}
                 options={[
                   { id: 'total', label: t('gran.total') },
-                  { id: 'diff', label: t('gran.diff') },
+                  { id: 'delta', label: t('gran.delta') },
                 ]}
                 onPick={(id) => { props.set?.('defaultTrendMode', id) }}
               />
