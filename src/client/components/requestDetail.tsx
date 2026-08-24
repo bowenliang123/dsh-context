@@ -1,10 +1,3 @@
-/**
- * RequestDetail — the breakdown panel under the history chart for the
- * active (hovered/pinned/newest) request. The header names the request and,
- * when the bar carries a boundary event, a ✂ chip shows where the event
- * happened (the gap between the request before and after). JSX component.
- */
-
 import type * as ReactNS from 'react'
 import type { ContextEventRecord, RequestRecord } from '../../shared/types'
 import { partsOf, CATS } from '../categories'
@@ -15,7 +8,6 @@ import { React } from '../react'
 
 export interface RequestDetailProps {
   request: RequestRecord | null
-  /** The boundary event attached to this request (✂ chip in the header). */
   marker?: ContextEventRecord | null
 }
 
@@ -27,9 +19,6 @@ export function makeRequestDetail(
   return function RequestDetail(props: RequestDetailProps): ReactNS.ReactElement | null {
     const req = props.request
     if (!req) return null
-    // Turn aggregates are labeled with their step count, and the breakdown
-    // below is explicitly tagged as the turn's LAST step (that is the record
-    // the bar carries).
     const isTurn = req.stepCount !== undefined && req.stepCount > 1
     const head = isTurn
       ? t('detail.turn', { t: req.turn ?? 0, n: req.stepCount ?? 0 })

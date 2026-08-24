@@ -1,17 +1,6 @@
 /**
- * PluginInfo — the card beside Context stats introducing the plugin itself.
- * Every row is one whole-row link: the anchor wraps the label + value so the
- * entire key/value cell is one hit target. Row 1 (Plugin name + version) →
- * the repo's releases page, row 2 (the short owner/repo label) → the repo
- * root; hovering a row underlines its value. Metadata is baked into the
- * bundle from package.json via tsdown `define` (see src/client/meta.ts +
- * tsdown.config.ts). One live check rides on top: the card asks the npm
- * registry for the latest published version (cached with a 1-hour TTL, see
- * ../latestVersion.ts) and shows an `↑ vX.Y.Z` chip when it is newer.
- *
- * Layout: exactly two full-width rows, each a single horizontal line with
- * the label on the left and the value on the right — a compact definition
- * list instead of a multi-cell grid.
+  * PluginInfo — the card beside Context stats introducing the plugin. Metadata is baked in from package.json via tsdown `define` (see
+  * meta.ts); one live npm-registry check (latestVersion.ts, 1-hour TTL) appends an `↑ vX.Y.Z` chip when newer.
  */
 
 import type * as ReactNS from 'react'
@@ -32,7 +21,6 @@ export function makePluginInfo(kit: ViewKit): () => ReactNS.ReactElement {
   return function PluginInfo(): ReactNS.ReactElement {
     const [latest, setLatest] = React.useState<string | null>(null)
     React.useEffect(() => {
-      // Dev bundles carry a `0.0.0-dev` placeholder version: skip the check.
       if (PLUGIN_VERSION.includes('-dev')) return
       let on = true
       // Fire-and-forget: fetchLatestVersion never rejects (every failure

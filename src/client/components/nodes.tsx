@@ -1,9 +1,3 @@
-/**
- * NodeList — the current model-visible message list (newest first).
- * JSX function component; no framework primitives needed (rows are bespoke
- * data-viz chrome, styled through the shared `--dsw-alias-*` tokens).
- */
-
 import type * as ReactNS from 'react'
 import type { SurfaceNode } from '../../shared/types'
 import { CATS } from '../categories'
@@ -13,7 +7,6 @@ import { React } from '../react'
 
 export interface NodeListProps { nodes: SurfaceNode[]; dropped: number }
 
-/** One-line preview of a surface node (shared by the node list and the Context browser's element rows). */
 export function makeNodeText(kit: ViewKit): (n: SurfaceNode) => string {
   const { t } = kit
   return function nodeText(n: SurfaceNode): string {
@@ -51,7 +44,6 @@ export function makeNodeList(kit: ViewKit): (props: NodeListProps) => ReactNS.Re
             <div key={n.seq} className="lc-node">
               <i style={{ background: catColor[n.cat] || '#999' }} />
               <span className="lc-node-preview" title={text}>{text}</span>
-              {/* Timestamp when the host event carried one. */}
               {typeof n.time === 'number' ? <span className="lc-node-time">{fmtTime(n.time)}</span> : null}
               <span className="lc-node-tokens">{fmt(n.tokens)}</span>
             </div>

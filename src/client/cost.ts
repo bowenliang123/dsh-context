@@ -55,7 +55,6 @@ export function estimateSessionCost(usage: SessionCostUsage | null | undefined, 
   return any ? total : null
 }
 
-/** Short money format: two decimals at and above one unit, two significant digits below. */
 export function formatCost(amount: number, currency: CostCurrency): string {
   const symbol = currency === 'cny' ? '¥' : '$'
   return symbol + (amount >= 1 ? amount.toFixed(2) : amount.toPrecision(2))

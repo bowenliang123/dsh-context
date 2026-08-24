@@ -1,16 +1,6 @@
 /**
- * Context events — event text helpers (label + timeline range) and the
- * EventList component that renders the events column.
- *
- * JSX function components: glyphs for injection/model-switch reuse the
- * harness's shared icon set (`@deepseek-ai/dsh-client-ui-primitives`, a
- * platform seed word resolved from the loader module table); compaction and
- * prune keep the ✂ marker (product vocabulary, no shared glyph exists).
- * Each row carries a kind chip (注入/压缩/剪枝/切换) so the classification is
- * readable at a glance; chip color matches the impact direction (+ adds,
- * − frees, ⇄ neutral), mirroring the token sign colors. Long labels truncate
- * with an ellipsis; the native title tooltip is attached only while the
- * label actually overflows (re-measured on every render and on resize).
+  * Glyphs: inject/model-switch reuse the harness's shared icon set (`@deepseek-ai/dsh-client-ui-primitives`, a platform seed word);
+  * compaction/prune keep the ✂ marker — no shared glyph exists for it.
  */
 
 import type * as ReactNS from 'react'
@@ -25,7 +15,6 @@ export const EVENT_ICONS: Record<string, string> = { compaction: '✂', prune: '
 
 export interface EventListProps { events: ContextEventRecord[] }
 
-/** Build the event text helpers bound to the translate function. */
 export function makeEventText(t: Translate): {
   eventLabel: (ev: ContextEventRecord) => string
   eventAt: (ev: ContextEventRecord) => string | null
@@ -39,18 +28,14 @@ export function makeEventText(t: Translate): {
     // compile (ev.sub ev.form ev.name are inject-only), forcing a label.
     if (ev.sub === 'skill') return t('ev.skill', { name: ev.name || '?' })
     const base = t('form.' + (ev.form || 'context'))
-    // The dsh transcript row's shape: title · producer · one-line account.
     let label = ev.name ? base + ' · ' + ev.name : base
     if (ev.detail) label += ' · ' + ev.detail
     return label
   }
 
   /**
-   * Where this event sits in the request timeline, as a label or null.
-   * Boundary events (compaction/prune) show the GAP they sit in: same-turn
-   * "Step 2→3", cross-turn "Turn 50 · Step 8 → Turn 51 · Step 1". Injections
-   * and model switches belong to one request and keep the single point.
-   * Events with no following request (in flight) stay unlabeled.
+    * Where this event sits in the timeline: boundary events (compaction/prune) label the GAP they sit in — same-turn 'Turn 2 · Step 3→4',
+    * cross-turn 'Turn 50 · Step 8 → Turn 51 · Step 1'; other kinds keep their single point; no turn/step (in flight) → null.
    */
   function eventAt(ev: ContextEventRecord): string | null {
     if (ev.kind === 'compaction' || ev.kind === 'prune') {
@@ -79,9 +64,6 @@ export function makeEventList(kit: ViewKit): (props: EventListProps) => ReactNS.
     // non-empty in one mounted instance must not grow the hook count — an
     // early return above these hooks is a React #310 class bug (issue #12).
     const rootRef = React.useRef<HTMLDivElement | null>(null)
-    // Attach the native tooltip only where the ellipsis actually truncates:
-    // re-sync after every render (events/width change) and on window resize,
-    // reading scrollWidth vs clientWidth on the live row.
     React.useLayoutEffect(() => {
       const root = rootRef.current
       if (!root) return

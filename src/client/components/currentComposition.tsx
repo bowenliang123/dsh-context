@@ -1,14 +1,3 @@
-/**
- * CurrentComposition — the "当前构成" card shared by the Context tab and the
- * /context popup: the composition headline (occupancy vs window), the
- * composition bar (with the auto-compaction reserve band), the legend, and —
- * when a tool bridge is wired — the ranked "工具定义 Top" chips that jump the
- * Context browser to a tool section.
- *
- * JSX function component, pure (no state): everything flows through props so
- * either host drives the shared hover link and the tool focus identically.
- */
-
 import type * as ReactNS from 'react'
 import type { PartsPart } from '../categories'
 import type { Headline } from '../headline'
@@ -26,14 +15,15 @@ type LegendFn = (props: {
 
 export interface CurrentCompositionProps {
   head: Headline
-  /** Card subtitle (model / provider); empty hides it. */
   subtitle?: string
-  /** Shared hover link (bar + legend + browser while it shows the live step). */
   hoverKey?: string | null
   onHoverKey?: (key: string | null) => void
-  /** Optional ranked tool schemas for the "工具定义 Top" row (absent = no chips). */
   tools?: { name: string; tokens: number }[]
-  /** One-shot tool-focus request into the Context browser (omitted = no chips). */
+  /**
+   * One-shot tool-focus request into the Context browser (applied once and
+   * cleared there via onToolFocusHandled; chips still render — clicks are
+   * no-ops when omitted).
+   */
   onToolFocus?: (focus: { tool?: string } | null) => void
 }
 

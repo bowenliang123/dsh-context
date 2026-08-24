@@ -17,7 +17,6 @@ export interface LocaleService {
   register(ns: string, dicts: Record<string, Record<string, string>>): () => void
   bind(ns: string): (key: string, params?: Record<string, string | number>) => string
   subscribe(fn: () => void): () => void
-  /** The current immutable locale snapshot (harness locale runtime). */
   getLocale?(): { active: string }
 }
 
@@ -88,7 +87,6 @@ export interface ConversationFace {
   resolveImage(sessionId: string, attachment: ImageRefLike): Promise<string>
 }
 
-/** The conversation-snapshot selector hook, minimally typed for this plugin. */
 export type UseSessionLike = <T>(
   selector: (snapshot: {
     nodes?: readonly ConversationNodeLike[]
@@ -118,7 +116,6 @@ export interface SessionStandardProps {
   loadOlderHistory?: () => Promise<void>
 }
 
-/** The client context: cordis plus the services this plugin injects. */
 export type ClientCtx = Context & {
   locale: LocaleService
   slots: SlotsService
@@ -143,7 +140,6 @@ export function numOf(value: unknown): number {
   return typeof value === 'number' && Number.isFinite(value) ? value : 0
 }
 
-/** The usable (non-null object) entries of a delivered list; [] when the field is not a list. */
 function objectsOf<T>(value: unknown): T[] {
   if (!Array.isArray(value)) return []
   return value.filter((v): v is T => v !== null && typeof v === 'object')
@@ -179,11 +175,9 @@ export function timelineOf(value: unknown): ContextTimeline | null {
     && Array.isArray(data.nodes)
     && Array.isArray(data.archive)
     && Array.isArray(data.toolList)) {
-    // Well-formed: pass the delivered value through untouched (cheap, and
-    // reference-stable so plain re-renders stay zero-copy).
+    // Well-formed: pass the delivered value through untouched (cheap, and reference-stable so plain re-renders stay zero-copy).
     return data as unknown as ContextTimeline
   }
-  // Malformed: rebuild with safe defaults, keeping every usable piece.
   const safeCurrent: Record<string, unknown> = current !== null && typeof current === 'object' ? current as Record<string, unknown> : {}
   const cost = typeof data.cost === 'object' && data.cost !== null && !Array.isArray(data.cost)
     ? data.cost as ContextTimeline['cost']
@@ -279,9 +273,6 @@ export function headersOf(value: unknown): ContextHeaders | null {
   return headers as unknown as ContextHeaders
 }
 
-// ---- /context command faces (framework `inputTriggers` service) ----
-
-/** One menu candidate offered by a trigger source. */
 export interface TriggerCandidate {
   name: string
   description?: string
@@ -294,7 +285,6 @@ export interface TokenSpan {
   draftRev: number
 }
 
-/** Everything a source receives on a menu pick. */
 export interface TriggerPick {
   candidate: TriggerCandidate
   session: { sessionId: string }
@@ -303,7 +293,6 @@ export interface TriggerPick {
   span: TokenSpan
 }
 
-/** The pick outcomes this plugin produces (see the framework's PickOutcome). */
 export type SourcePickOutcome = 'handled' | undefined
 
 /**
@@ -349,7 +338,6 @@ export interface SessionProvideDescriptorLike {
   }
 }
 
-/** The session runtime (`ctx.sessions`), as consumed here. */
 export interface SessionsFace {
   scope(id: string): SessionScopeFace | undefined
   /**

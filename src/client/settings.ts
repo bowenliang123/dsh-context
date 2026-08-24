@@ -42,17 +42,13 @@ export interface SettingsState {
 export interface ContextSettings {
   /** Observable snapshot store, bound onto card props as `useContextSettings`. */
   store: { subscribe(listener: () => void): () => void; getSnapshot(): SettingsState }
-  /** The granularity a freshly mounted view opens with. */
   defaultGranularity(): DefaultGranularity
-  /** The trend display mode a freshly mounted view opens with. */
   defaultTrendMode(): DefaultTrendMode
-  /** Attach the bound namespace scope; returns the subscription disposer. */
   attach(scope: SettingsScopeLike): () => void
   /** Persist one preference choice (local echo, then the fenced scope write). */
   set(field: SettingsField, value: string): void
 }
 
-/** Read the known preferences out of a raw section; unknown/absent fields drop out. */
 function prefsOf(value: unknown): { granularity?: DefaultGranularity; mode?: DefaultTrendMode } {
   if (value === null || typeof value !== 'object') return {}
   const v = value as Record<string, unknown>

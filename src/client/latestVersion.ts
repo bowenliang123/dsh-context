@@ -1,17 +1,12 @@
 /**
- * Latest published version of this plugin on the npm registry — the one
- * live check the Plugin info card performs. Fetched lazily on the first
- * card mount and cached with a 1-hour TTL, so the registry is hit at most
- * once per hour per page. Every failure mode (offline, CSP-blocked,
- * non-200, malformed body) narrows to null = no upgrade hint, so the card
- * silently keeps its static version.
+ * One live check for the Plugin-info card: lazy with 1h TTL; every failure
+ * mode narrows to null so the card silently keeps its static version.
  */
 
 import { PLUGIN_NAME } from './meta'
 
 const REGISTRY_URL = 'https://registry.npmjs.org/' + PLUGIN_NAME + '/latest'
 
-/** How long a registry result stays fresh before the next check refetches. */
 const TTL_MS = 60 * 60 * 1000
 
 let cached: { at: number; promise: Promise<string | null> } | null = null

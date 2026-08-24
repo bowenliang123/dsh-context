@@ -55,7 +55,6 @@ export function setPendingConsume(sessionId: string, guard: ConsumeGuard): void 
   pendingConsume.set(sessionId, guard)
 }
 
-/** Take (and clear) the guard recorded by the open path, if any. */
 export function takePendingConsume(sessionId: string): ConsumeGuard | undefined {
   const guard = pendingConsume.get(sessionId)
   if (guard !== undefined) pendingConsume.delete(sessionId)

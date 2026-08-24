@@ -41,10 +41,10 @@ import { h } from './react'
 const NS = 'dsh-context'
 
 function apply(ctx: ClientCtx): void {
-  // Bilingual dictionaries; the tab label thunk and all UI text follow the
-  // active locale through the bound translate (missing keys fall back to
-  // zh, then the key itself). The registration rides ctx.effect, so a stop
-  // or HMR reload disposes it.
+  // Bilingual dictionaries, registered via ctx.effect so a stop or HMR reload
+  // disposes them; the tab label thunk and all UI text follow the active
+  // locale through the bound translate — missing keys resolve through the
+  // harness chain (en fallback, then the key).
   ctx.effect(() => {
     return ctx.locale.register(NS, { zh: DICT_ZH, en: DICT_EN })
   }, 'dsh-context: dictionaries')

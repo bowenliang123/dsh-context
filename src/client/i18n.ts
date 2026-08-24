@@ -1,6 +1,6 @@
 /**
- * Bilingual dictionaries (zh/en) for every UI string. Missing keys fall back
- * to zh, then the key itself (handled by the harness locale service).
+ * Bilingual dictionaries (zh/en) for every UI string; missing keys resolve
+ * through the harness locale service (active → en → common → the key itself).
  */
 
 export type Translate = (key: string, params?: Record<string, string | number>) => string
@@ -97,37 +97,23 @@ export const DICT_ZH: Record<string, string> = {
   'browser.noContent': '完整内容不在当前加载的消息窗口内（在聊天页加载更早历史后可查看）',
   'browser.loading': '正在从更早的会话历史加载完整内容…',
   'browser.preview': '预览',
-  // Tool schema browser card: parsed parameter table sits above the (collapsed
-  // by default) raw JSON so the common case — skimming arguments — stays
-  // scannable; the JSON is still one click away for the full payload.
   'tool.desc': '描述',
   'tool.params': '参数',
   'tool.paramsEmpty': '（无参数）',
   'tool.jsonToggle': '查看原始 JSON',
   'tool.jsonHide': '收起',
-  // Detail-card view switch (system prompt / tool description / message and
-  // injection bodies): a segmented pill — segment labels + tooltips.
   'rich.raw': '原文',
   'rich.md': 'Markdown',
   'rich.toMd': '按 Markdown 渲染查看',
   'rich.toRaw': '查看原始文本',
-  // Assistant-message block titles inside the detail card: the reasoning
-  // trace and the response each carry a small label (Reasoning / Response,
-  // mirroring the harness's own block + locale vocabulary).
   'block.thinking': '思考',
   'block.answer': '回答',
   'block.content': '内容', 'block.result': '结果', 'block.summary': '摘要',
   // Line-count chip on a tool-result's payload card (the singular/plural
   // split is a no-op in zh, where the measure word never inflects).
   'block.line': '{n} 行', 'block.lines': '{n} 行',
-  // Run-state pill on a tool-result's call card: OK / Failed, with the
-  // payload's terminal `exit N` marker on failure.
   'call.ok': '正常', 'call.fail': '失败', 'call.exit': 'exit {n}',
   'node.failed': '工具执行失败',
-  // Attachment cards in a message detail: image refs render as thumbnail
-  // cards (name + one labeled row per known fact — raw dims, sent dims +
-  // size, estimated token cost), anything unrecognized falls into the
-  // generic raw-JSON card.
   'attach.images': '图片附件',
   'attach.other': '其他内容',
   'attach.image': '图片',
@@ -234,36 +220,21 @@ export const DICT_EN: Record<string, string> = {
   'browser.noContent': 'Full content is outside the loaded message window (load older history in Chat to view)',
   'browser.loading': 'Loading full content from older session history…',
   'browser.preview': 'Preview',
-  // Tool schema browser card: parsed parameter table sits above the (collapsed
-  // by default) raw JSON so the common case — skimming arguments — stays
-  // scannable; the JSON is still one click away for the full payload.
   'tool.desc': 'Description',
   'tool.params': 'Parameters',
   'tool.paramsEmpty': '(no parameters)',
   'tool.jsonToggle': 'View Raw JSON',
   'tool.jsonHide': 'Collapse',
-  // Detail-card view switch (system prompt / tool description / message and
-  // injection bodies): a segmented pill — segment labels + tooltips.
   'rich.raw': 'Raw',
   'rich.md': 'Markdown',
   'rich.toMd': 'View as Markdown',
   'rich.toRaw': 'View Raw Text',
-  // Assistant-message block titles inside the detail card: the reasoning
-  // trace and the response each carry a small label (Reasoning / Response,
-  // mirroring the harness's own block + locale vocabulary).
   'block.thinking': 'Reasoning',
   'block.answer': 'Response',
   'block.content': 'Content', 'block.result': 'Result', 'block.summary': 'Summary',
-  // Line-count chip on a tool-result's payload card.
   'block.line': '1 line', 'block.lines': '{n} lines',
-  // Run-state pill on a tool-result's call card: OK / Failed, with the
-  // payload's terminal `exit N` marker on failure.
   'call.ok': 'OK', 'call.fail': 'Failed', 'call.exit': 'exit {n}',
   'node.failed': 'Tool execution failed',
-  // Attachment cards in a message detail: image refs render as thumbnail
-  // cards (name + one labeled row per known fact — raw dims, sent dims +
-  // size, estimated token cost), anything unrecognized falls into the
-  // generic raw-JSON card.
   'attach.images': 'Images',
   'attach.other': 'Other content',
   'attach.image': 'Image',

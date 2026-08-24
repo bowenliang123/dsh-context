@@ -1,18 +1,8 @@
 /**
- * ErrorBoundary — the tab's no-white-screen guarantee.
- *
- * A render error anywhere in the subtree (a foreign or corrupt projection
- * value that slips past the shape guards in services.ts, a framework
- * surprise, a future bug) would otherwise propagate into the harness's slot
- * renderer and unmount the whole conversation view. This boundary catches
- * render errors of its subtree and degrades to a styled error card with the
- * offending message — the surrounding harness UI (chat, tabs, composer)
- * keeps working as if nothing happened.
- *
- * A class component: the only React primitive that can catch render errors
- * of a subtree (there is no hook-based boundary in React 18). The Retry
- * button resets the boundary; if the underlying condition persists the
- * boundary catches again, once a healthy value arrives the tab resumes.
+   * ErrorBoundary — the tab's no-white-screen guarantee: a render error in the subtree degrades to a styled error card instead of
+   * propagating
+  * into the harness's slot renderer and unmounting the conversation view. Class component: the only React primitive that can catch a
+  * subtree's render errors (no hook-based boundary in React 18); Retry resets the boundary and a healthy value resumes.
  */
 
 import type * as ReactNS from 'react'

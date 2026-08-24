@@ -40,10 +40,6 @@ export function headerAt(headers: ContextHeaders | null, seq: number | null): He
   return null
 }
 
-/**
- * Reconstruct the assembled surface for one step (`seq` = the request
- * record's seq) or the live surface (`seq` = null).
- */
 export function assemble(data: ContextTimeline, headers: ContextHeaders | null, seq: number | null): Assembled {
   const live = seq === null
   let nodes: SurfaceNode[]

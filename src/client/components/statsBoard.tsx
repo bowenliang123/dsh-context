@@ -1,19 +1,7 @@
 /**
- * StatsBoard — the session context statistics card above the composition:
- * conversation size (turns/steps), context churn (compaction count,
- * prune count, injection count), the tool calls with a result and the image
- * blocks live in the current context, the cache-hit share, and the
- * estimated cumulative session cost. The counts cover the retained history window,
- * matching the History chart; the cache-hit figure reuses the official
- * token-meter `tokenUsage` projection verbatim — the exact same data and
- * formula as the chat stats line below the input box — and the cost cell
- * prices the host-folded cumulative billed-token totals (complete session
- * log) with the hardcoded DeepSeek V4 list prices (cost.ts), in the
- * locale's currency. The cost cell's hover bubble (a "?" marker plus a
- * styled DOM tip — the harness GUI never shows native `title` tooltips)
- * explains the whole-session estimate and lists the per-1M-token price
- * table straight from cost.ts, so the printed rates can never drift from
- * the math. JSX component.
+ * The cost cell prices the host-folded cumulative billed-token totals (complete session log, never trimmed) at the hardcoded DeepSeek V4
+ * list prices (cost.ts) in the locale's currency; its hover bubble (a '?' marker + styled DOM tip) explains the whole-session estimate and
+ * lists the per-1M-token table straight from cost.ts, so printed rates can never drift from the math.
  */
 
 import type * as ReactNS from 'react'
@@ -26,15 +14,10 @@ import type { ViewKit } from '../viewkit'
 import { React } from '../react'
 
 /**
- * Cache-hit share of billed prompt-side input — same buckets as the harness's
- * chat stats line below the input box (`cacheReadTokens` over the three
- * disjoint billed buckets: uncached + reads + writes). Unlike that line's
- * whole-percent rounding, this one TRUNCATES to two decimal places (cut, not
- * round). Null when no input was billed. A tiny epsilon keeps a double stored
- * a hair below a cent boundary (e.g. 80.00 as 79.9999999999…) from losing its
- * last digit — with integer token counts no genuine value ever sits that close
- * to a boundary, so the epsilon can only absorb float noise. Bucket reads go
- * through numOf so a malformed payload degrades to a dash instead of NaN text.
+ * Cache-hit share of billed prompt-side input — same three disjoint buckets as the harness chat line (`cacheReadTokens` over uncached +
+ * reads + writes), but deliberately TRUNCATES to two decimals (cut, not round), unlike that line's integer rounding; null when nothing was
+ * billed. The 1e-9 epsilon absorbs only float noise (integer token counts never sit that close to a boundary); `numOf` keeps malformed
+ * payloads at a dash.
  */
 function cacheHitPercent(usage: TokenUsage): string | null {
   const uncached = numOf(usage.uncachedInputTokens)
@@ -54,9 +37,7 @@ export function makeStatsBoard(kit: ViewKit): (props: {
   toolCalls?: number
   /** Image blocks live in the current context (absent on older hosts). */
   images?: number
-  /** Session-cost raw material from the timeline (undefined: nothing priced). */
   cost?: SessionCostUsage
-  /** Active locale id — zh prices in CNY, everything else in USD. */
   locale: string
 }) => ReactNS.ReactElement {
   const { t, fmt } = kit
@@ -84,9 +65,6 @@ export function makeStatsBoard(kit: ViewKit): (props: {
     const currency: CostCurrency = props.locale === 'zh' ? 'cny' : 'usd'
     const cost = estimateSessionCost(props.cost, currency)
     const fmtRate = (n: number) => formatPriceRate(n, currency)
-    // Cost-cell tooltip content: the intro sentence (whole-session estimate,
-    // peak/off-peak windows) followed by the actual per-1M-token price list
-    // for the locale's currency, straight from cost.ts's PRICES table.
     const costTip: ReactNS.ReactNode = [
       t('stats.costTip'),
       <span key="prices" className="lc-stat-tip-prices">
@@ -101,8 +79,7 @@ export function makeStatsBoard(kit: ViewKit): (props: {
         ))}
       </span>,
     ]
-    // A cell may carry an explanation bubble: the label then shows a "?"
-    // marker and the styled tip (`.lc-stat-tip`, revealed on cell hover) —
+    // A cell may carry an explanation bubble: the label shows a '?' marker and the styled tip (`.lc-stat-tip`, revealed on cell hover) —
     // the native `title` attribute is invisible in the harness GUI.
     const cell = (label: string, value: string, tip?: ReactNS.ReactNode) => (
       <div className={'lc-stat' + (tip === undefined ? '' : ' lc-stat-tipped')}>

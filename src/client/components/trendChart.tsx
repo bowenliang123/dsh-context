@@ -1,10 +1,6 @@
 /**
- * TrendChart — the per-request history chart: fixed-width stacked bars with
- * a horizontal scroll (newest anchored right), a turn color strip below,
- * ✂ markers for boundary events, and edge fades. Includes the data
- * preparation helpers (aggregateByTurn, attachMarkers) used by ContextView.
- * JSX component; the chart chrome is bespoke data-viz (no shared primitive),
- * styled through the shared `--dsw-alias-*` tokens.
+ * Bespoke per-request history chart — no shared data-viz primitive — styled through the shared `--dsw-alias-*` tokens; helpers
+ * aggregateByTurn/attachMarkers are shared with ContextView.
  */
 
 import type * as ReactNS from 'react'
@@ -16,33 +12,23 @@ import { React } from '../react'
 
 export interface TrendChartProps {
   requests: RequestRecord[]
-  /** One boundary event (compaction/prune) per request index, if attached. */
   markers: (ContextEventRecord | undefined)[]
   selectedSeq: number | null
   hoveredSeq: number | null
-  /** The turn currently highlighted (from the turn strip or a hovered bar). */
   activeTurn: number | null
-  /** Display granularity; a switch re-anchors the chart at the newest bars. */
   granularity: 'step' | 'turn'
-  /** Display mode: cumulative totals ('total') or per-request incremental diff ('diff'). */
   mode: 'total' | 'diff'
-  /** A strip-clicked turn pending scroll-centering; null once handled. */
   focusTurn: number | null
   onSelect: (seq: number | null) => void
   onHover: (seq: number | null) => void
   onHoverTurn: (turn: number | null) => void
-  /** Strip click: jump to turn granularity focused on that turn. */
   onPickTurn: (turn: number) => void
   onFocusTurnHandled: () => void
 }
 
 /**
- * Collapse a per-step request timeline into one bar per turn: each turn is
- * represented by its LAST step's record (the context state when the turn
- * finished), tagged with the number of steps the turn spans so the bar can
- * keep the turn's column width and the detail can label it. Requests of one
- * turn are consecutive in the log, so a run of equal turns is replaced by
- * its final record.
+ * Collapse per-step requests into one bar per turn — each turn is represented by its LAST step's record, tagged `stepCount` for the bar's
+ * column width; the log keeps one turn's requests consecutive, so a run of equal turns collapses to its final record.
  */
 export function aggregateByTurn(requests: RequestRecord[]): RequestRecord[] {
   const out: RequestRecord[] = []
@@ -61,10 +47,8 @@ export function aggregateByTurn(requests: RequestRecord[]): RequestRecord[] {
 }
 
 /**
- * Attach each boundary event (compaction/prune) to the first request
- * logged after it — one entry per request index, for the ✂ marker above
- * the bar and the range chip in the detail header. Shared by TrendChart
- * and the detail panel so both show the SAME event for a request.
+ * Attach each boundary event (compaction/prune) to the first request logged after it — one entry per index, for the ✂ marker and the detail
+ * chip; shared with the detail panel so both show the SAME event.
  */
 export function attachMarkers(requests: RequestRecord[], events: ContextEventRecord[]): (ContextEventRecord | undefined)[] {
   const markers: (ContextEventRecord | undefined)[] = new Array<ContextEventRecord | undefined>(requests.length)
@@ -83,37 +67,25 @@ export function attachMarkers(requests: RequestRecord[], events: ContextEventRec
 export function makeTrendChart(kit: ViewKit): (props: TrendChartProps) => ReactNS.ReactElement {
   const { t, fmt, fmtTime, eventLabel, eventAt } = kit
 
-  // Plot height in px (the marker lane above it is 18px).
   const CHART_H = 112
-  // Fixed column geometry: constant bar width keeps sparse histories from
-  // stretching bars, and dense histories scroll horizontally instead of
-  // compressing. The turn strip below mirrors the same column grid.
+  // Constant bar width: sparse histories don't stretch bars, dense ones scroll instead of compressing; the turn strip below mirrors the
+  // same column grid.
   const BAR_W = 14
   const BAR_GAP = 2
-  // Turn strip fills: a neutral zebra, deliberately DISJOINT from the
-  // category palette — the strip sits directly under the bars, and the old
-  // per-turn palette (identical to the six category colors) made it read as
-  // a detached, misaligned bottom segment of the composition bars.
+  // Neutral zebra, deliberately DISJOINT from the category palette — the strip must read as a partition layer, not a bottom segment of the
+  // composition bars.
   const TURN_FILLS = ['rgba(128,128,128,0.12)', 'rgba(128,128,128,0.26)']
 
-  // Anchor each bar to the provider-reported prompt size when the request
-  // carried usage: the heuristic categories keep their ratios but the bar
-  // HEIGHT tracks the real billed tokens (matching the overview card and
-  // the official chat ring) instead of the underpriced raw estimate.
+  // Anchor bar HEIGHT to the provider-reported prompt when the request carried usage: categories keep their heuristic ratios but the height
+  // tracks the real billed tokens (matching the overview card and official chat ring), not the underpriced estimate.
   const anchorOf = (req: RequestRecord): number =>
     typeof req.prompt === 'number' && req.prompt > 0 && req.total > 0 ? req.prompt / req.total : 1
   const barTotalOf = (req: RequestRecord): number =>
     typeof req.prompt === 'number' && req.prompt > 0 ? req.prompt : req.total
 
   /**
-   * Transform one request into its per-request incremental diff for the
-   * diff mode. Each category becomes |current − previous| (the magnitude of
-   * change, stacked like the cumulative bars), `total` becomes the summed
-   * magnitude, and `net` keeps the signed change for the tooltip. The first
-   * request (no previous) diff from empty is zero, so the diff mode's scale
-   * is driven purely by inter-request changes rather than the initial
-   * cumulative baseline. Provider prompt/output are dropped: they are
-   * per-request values, not diffs.
+   * Diff mode: each category becomes |current − previous|, `total` the summed magnitude, `net` the signed change for the tooltip; the first
+   * request diffs from zero so the scale is change-driven, and per-request provider prompt/output are dropped (they are not diffs).
    */
   const diffOf = (req: RequestRecord, prev: RequestRecord | null): RequestRecord => {
     const out = { ...req }
@@ -134,7 +106,6 @@ export function makeTrendChart(kit: ViewKit): (props: TrendChartProps) => ReactN
 
   interface ChartBarProps {
     req: RequestRecord
-    /** The boundary event attached to this bar, if any. */
     marker: ContextEventRecord | undefined
     selected: boolean
     hovered: boolean
@@ -144,19 +115,14 @@ export function makeTrendChart(kit: ViewKit): (props: TrendChartProps) => ReactN
     onHover: (seq: number | null) => void
   }
 
-  // Memoized so a hover/selection change re-renders only the bars whose
-  // flags flipped: the retained log renders in full (no windowing), so a
-  // long session's chart is thousands of nodes and the pointer path is hot.
-  // `req`/`marker` keep stable identities between projection pushes (the
-  // parent memoizes its turn-aggregation), so the default shallow compare
-  // suffices.
+  // Memoized so a hover/selection change re-renders only the bars whose flags flipped — the retained log renders in full (thousands of
+  // nodes on long sessions); `req`/`marker` keep stable identities because the parent memoizes its aggregation, so the default shallow
+  // compare suffices.
   const ChartBar = React.memo(function ChartBar(props: ChartBarProps): ReactNS.ReactElement {
     const { req, marker } = props
     const markerAt = marker !== undefined ? eventAt(marker) : null
     return (
       <div
-        // Uniform column width in BOTH granularities: turn aggregates
-        // keep the same fixed width as step bars.
         className={'lc-bar'
           + (props.selected ? ' lc-bar-selected' : '')
           + (props.hovered ? ' lc-bar-hovered' : '')
@@ -166,8 +132,6 @@ export function makeTrendChart(kit: ViewKit): (props: TrendChartProps) => ReactN
         onClick={() => { props.onSelect(props.selected ? null : req.seq) }}
         onMouseEnter={() => { props.onHover(req.seq) }}
       >
-        {/* The ✂ tooltip names the event AND where it happened: the
-            gap between the request before and the request after. */}
         {marker !== undefined ? (
           <span
             className="lc-bar-marker"
@@ -178,8 +142,7 @@ export function makeTrendChart(kit: ViewKit): (props: TrendChartProps) => ReactN
           {CATS.map((c) => {
             const v = (req[c.key] || 0) * anchorOf(req)
             if (!v) return null
-            // px heights: the stack's height is content-driven, so
-            // percentage heights would collapse against an indefinite base.
+            // px (not %) heights: the stack is content-driven, so percentage heights would collapse against an indefinite base.
             return <div key={c.key} style={{ height: `${Math.max(1, Math.round(v / props.maxTotal * CHART_H))}px`, background: c.color }} />
           })}
         </div>
@@ -189,9 +152,6 @@ export function makeTrendChart(kit: ViewKit): (props: TrendChartProps) => ReactN
 
   return function TrendChart(props: TrendChartProps): ReactNS.ReactElement {
     const diff = props.mode === 'diff'
-    // Diff mode swaps the cumulative records for per-request diffs. Memoized
-    // so hover-driven re-renders keep the bar props identity-stable (same
-    // reason the parent memoizes its turn aggregation).
     const requests = React.useMemo(
       () => (diff ? props.requests.map((req, i) => diffOf(req, i > 0 ? props.requests[i - 1] : null)) : props.requests),
       [props.requests, diff],
@@ -203,11 +163,8 @@ export function makeTrendChart(kit: ViewKit): (props: TrendChartProps) => ReactN
       if (bt > maxTotal) maxTotal = bt
     }
 
-    // Consecutive requests of the same turn collapse into one labeled range.
-    // `span` is the number of STEP columns the group covers (step records
-    // count one each). In turn granularity the bars are uniform width, so
-    // the strip blocks are uniform too; in step granularity they span their
-    // steps' columns. Either way bars and blocks stay aligned.
+    // Consecutive same-turn requests collapse into one labeled range; `span` counts the STEP columns the group covers (step records count
+    // one each), so strip blocks align with the bars in both granularities.
     const groups: { turn: number; count: number; span: number; agg: boolean }[] = []
     for (const req of requests) {
       let grp = groups.length > 0 ? groups[groups.length - 1] : null
@@ -219,9 +176,8 @@ export function makeTrendChart(kit: ViewKit): (props: TrendChartProps) => ReactN
       grp.span += req.stepCount ?? 1
     }
 
-    // Prefix geometry of the strip blocks in content px: the scroll handler
-    // re-centers each label inside its block's VISIBLE slice analytically,
-    // so it only measures the handful of labels currently on screen.
+    // Strip offsets/widths are computed in content px so the scroll handler can re-center labels analytically and measures only the handful
+    // of labels on screen.
     const turnOffsets: number[] = []
     const turnWidths: number[] = []
     {
@@ -234,24 +190,16 @@ export function makeTrendChart(kit: ViewKit): (props: TrendChartProps) => ReactN
       }
     }
 
-    // Default anchor: the newest bars at the RIGHT edge. The first layout
-    // after mount scrolls unconditionally; a GRANULARITY SWITCH re-anchors
-    // the same way (returning to step mode must show the newest bars, not
-    // the stale left edge from the narrow turn chart); otherwise the chart
-    // only sticks to the end while the user is already near it (scrolling
-    // away is respected). useLayoutEffect avoids a first-paint flash at the
-    // left. Edge fades stay in sync with the scroll position.
+    // Default anchor: newest bars at the RIGHT edge; the first layout after mount scrolls unconditionally, a GRANULARITY SWITCH re-anchors
+    // the same way (step mode must not inherit the turn chart's stale left edge), otherwise stick to the end only while already near it;
+    // useLayoutEffect avoids a first-paint flash and edge fades stay in sync.
     const scrollRef = React.useRef<HTMLDivElement | null>(null)
     const scrolledOnce = React.useRef(false)
     const lastGranRef = React.useRef(props.granularity)
     const [edges, setEdges] = React.useState<{ left: boolean; right: boolean }>({ left: false, right: false })
-    // Mirror of the last computed fades. The layout effect below runs after
-    // EVERY render (no deps), so it must not dispatch a setState unless the
-    // values truly changed: on a granularity switch the first dispatch
-    // schedules a sync re-render whose fiber still has pending lanes, which
-    // disables React's same-value eager bailout — every subsequent commit
-    // then enqueues yet another update and the queue grows without bound
-    // (React error #185, maximum update depth — the tab whites out).
+    // Mirror of the last computed fades: the layout effect runs after EVERY render (no deps), so it must dispatch setState only on true
+    // change — a same-value dispatch during a granularity switch's pending lanes disables React's eager bailout and the queue grows
+    // unbounded (React error #185).
     const edgesRef = React.useRef(edges)
     const updateEdges = (el: HTMLDivElement): void => {
       const left = el.scrollLeft > 4
@@ -262,12 +210,9 @@ export function makeTrendChart(kit: ViewKit): (props: TrendChartProps) => ReactN
       setEdges({ left, right })
     }
     /**
-     * Keep each turn label centered within its block's VISIBLE slice, so a
-     * label never scrolls out of view while any part of its block remains
-     * on screen. Blocks narrower than their label stay put (the label is
-     * already ellipsized). Reads (offsetWidth) are gathered before writes
-     * (transform) to avoid layout thrash on the scroll path; out-of-view
-     * blocks need no measurement at all.
+     * Keep each turn label centered within its block's VISIBLE slice so it never scrolls out while any part of the block is on screen
+     * (narrower-than-label blocks stay put); reads (offsetWidth) batch before writes (transform) to avoid layout thrash — out-of-view
+     * blocks need no measurement.
      */
     const updateTurnLabels = (el: HTMLDivElement): void => {
       const labels = el.querySelectorAll<HTMLElement>('.lc-turn-label')
@@ -298,11 +243,10 @@ export function makeTrendChart(kit: ViewKit): (props: TrendChartProps) => ReactN
       if (el === null) return
       if (props.granularity !== lastGranRef.current) {
         lastGranRef.current = props.granularity
-        scrolledOnce.current = false // re-anchor on every granularity switch
+        scrolledOnce.current = false
       }
-      // A strip click carries a focus turn: center its bar instead of the
-      // default newest-anchor. Consumed once — also when the granularity
-      // was already 'turn' (no re-anchor happens on that render).
+      // A strip-clicked focus turn centers its bar instead of the newest anchor, consumed once via onFocusTurnHandled — also when
+      // granularity was already 'turn' (no re-anchor happens that render).
       if (props.focusTurn !== null) {
         const gi = groups.findIndex(g => g.turn === props.focusTurn)
         if (gi >= 0) {
@@ -321,17 +265,13 @@ export function makeTrendChart(kit: ViewKit): (props: TrendChartProps) => ReactN
       updateTurnLabels(el)
     })
 
-    // Compact single-line hover tooltip (shown instantly by the custom
-    // `.lc-chart-tip`, replacing the delayed native title): position, time,
-    // estimated total, and the provider-reported prompt when available. The
-    // per-category breakdown lives in the detail panel below.
+    // Compact single-line hover tooltip, shown instantly by the custom `.lc-chart-tip` (the native title is delayed): position, time,
+    // estimated total, provider prompt when available; the per-category breakdown lives in the detail panel below.
     const tipOf = (req: RequestRecord): string => {
       const head = req.stepCount !== undefined && req.stepCount > 1
         ? t('tip.turn', { t: req.turn ?? 0, n: req.stepCount })
         : t('tip.step', { t: req.turn ?? 0, s: req.step ?? 0 })
       if (diff) {
-        // Diff mode: the bar height is the summed magnitude, but the hover
-        // tip reports the SIGNED net change so growth vs shrink is explicit.
         const n = req.net ?? 0
         return head + ' · ' + fmtTime(req.time) + ' · ' + t('tip.diff', { n: (n > 0 ? '+' : '') + fmt(n) })
       }
@@ -349,8 +289,6 @@ export function makeTrendChart(kit: ViewKit): (props: TrendChartProps) => ReactN
           <span className="lc-axis-bot">{'0'}</span>
         </div>
         <div
-          // Turn-aware dim scope: while a turn is focused (bar or strip hover),
-          // bars and strip blocks OUTSIDE the active turn fade to 35%.
           className={'lc-chart-scroll' + (props.activeTurn !== null ? ' lc-chart-dim' : '')}
           ref={scrollRef}
           onScroll={(e: ReactNS.UIEvent<HTMLDivElement>) => {
@@ -358,11 +296,7 @@ export function makeTrendChart(kit: ViewKit): (props: TrendChartProps) => ReactN
             updateTurnLabels(e.currentTarget)
           }}
         >
-          {/* Edge fades: visible whenever more history sits beyond the viewport,
-              so the horizontal scroll affordance is obvious. */}
           {edges.left ? <div className="lc-chart-fade lc-chart-fade-l" /> : null}
-          {/* Hovering a bar previews it in the detail below; leaving the plot
-              clears the preview (a pinned selection, if any, takes over again). */}
           <div
             className="lc-chart"
             onMouseLeave={() => { props.onHover(null) }}
@@ -383,24 +317,18 @@ export function makeTrendChart(kit: ViewKit): (props: TrendChartProps) => ReactN
               />
             ))}
           </div>
-          {/* Instant hover tooltip, glued to its bar's column (it lives in the
-              scrolling content, so it follows the bar while the chart scrolls). */}
+          {/* The tip lives inside the scrolling content so it stays glued to its bar's column while the chart scrolls. */}
           {hoveredReq !== null ? (
             <div
               className="lc-chart-tip"
               style={{ left: `${hoveredIdx * (BAR_W + BAR_GAP) + BAR_W / 2}px` }}
             >{tipOf(hoveredReq)}</div>
           ) : null}
-          {/* Turn strip: one COLOR BLOCK per turn, spanning exactly its bars'
-              columns, so the partition reads at a glance and lines up with the
-              steps above. Hovering a block highlights that turn's bars in the
-              chart (and hovering a bar highlights its block — the active turn
-              is shared hover-only state). */}
+          {/* Turn strip: one COLOR BLOCK per turn spanning exactly its bars' columns, so the partition reads at a glance and lines up with
+              the steps; hovering a block highlights that turn's bars and vice versa — one shared hover-only state.
+              */}
           <div className="lc-turns" onMouseLeave={() => { props.onHoverTurn(null) }}>
             {groups.map((grp, gi) => {
-              // Turn mode: uniform blocks under uniform bars (1:1). Step mode:
-              // blocks span their steps' columns. The flex gap between blocks
-              // mirrors the bar gap, so blocks always line up with the bars.
               const on = props.activeTurn === grp.turn
               return (
                 <span

@@ -1,12 +1,7 @@
 /**
- * ImageCards — durable image attachment rendering for the Context browser.
- *
- * dsh 0.1.1's multimodal pipeline stores only a normalized reference per
- * image (never inline bytes), so a message block carries everything a card
- * needs except the display URL: that comes from the harness conversation
- * service's `resolveImage` (the same loader the chat history rides on),
- * handed down as `load`. Absent loader or a failed load degrades to the
- * metadata row alone — the card never throws.
+ * dsh's multimodal pipeline stores only a normalized reference per image (never inline bytes); the block carries everything the card needs
+ * except the display URL, which comes from the harness conversation service's `resolveImage` (the same loader the chat history rides on),
+ * handed down as `load`; absent loader or failed load degrades to the metadata row alone — the card never throws.
  */
 
 import type * as ReactNS from 'react'
@@ -17,19 +12,15 @@ import type { ImageLoader, ImageRefLike } from '../services'
 import { estimateImageTokens } from '../../shared/imageTokens'
 import type { ViewKit } from '../viewkit'
 
-/** The image-rendering handoff threaded through the browser's bodies. */
 export interface ImageKit {
   Card: (props: { attachment: ImageRefLike; load?: ImageLoader }) => ReactNS.ReactElement
-  /** Session-authorized URL loader (absent = metadata-only cards). */
   load?: ImageLoader
 }
 
 /**
- * Narrow an unknown content block to a durable image reference. Accepts both
- * raw message blocks (`{ type: 'image', attachment }`) and the conversation
- * snapshot's assistant blocks (`{ kind: 'image', attachment }`); everything
- * else returns null. Lenient on the ref's optional facts (name/bytes/dims) —
- * `resolveImage` reads only `attachmentId`.
+ * Narrow an unknown content block to a durable image ref: accepts both raw message blocks (`{ type: 'image', attachment }`) and the
+ * snapshot's assistant blocks (`{ kind: 'image', attachment }`); everything else null. Lenient on the optional facts — resolveImage reads
+ * only attachmentId.
  */
 export function imageRefOf(block: unknown): ImageRefLike | null {
   if (block === null || typeof block !== 'object') return null
@@ -58,12 +49,9 @@ export function imageRefOf(block: unknown): ImageRefLike | null {
 }
 
 /**
- * Document-level original-image preview — the chat history's ImageLightbox
- * recipe (dsh ui-attachment, which the browser module table does not seed)
- * ported onto the plugin's lc-* classes: body portal so a transformed or
- * filtered ancestor cannot trap the fixed backdrop, blurred mask layer,
- * contain-fit image, circular close control, Escape/mask close, and focus
- * restored to the opener on unmount.
+ * Document-level original-image preview — the chat history's ImageLightbox recipe (dsh ui-attachment, which the browser module table does
+ * not seed) ported onto the plugin's lc-* classes: body portal (a transformed/filtered ancestor cannot trap the fixed backdrop), blurred
+ * mask, contain-fit image, circular close, Escape/mask close, focus restored to the opener.
  */
 function AttachmentLightbox(props: {
   src: string
@@ -101,13 +89,9 @@ function AttachmentLightbox(props: {
 }
 
 /**
- * One attachment card: the WHOLE card is the click target — a 64px cover
- * tile beside a metadata column (display name, then one labeled row per
- * known fact: Raw, the pre-normalization raster dsh 0.1.1 records when
- * normalization reduced the image; Sent, the normalized raster the model
- * receives, with its stored byte size; and the estimated provider-billed
- * tokens). Clicking opens the chat-style lightbox preview (load failures
- * retry on click instead). Unknown facts leave no row behind.
+ * One attachment card, the WHOLE card the click target: 64px cover tile + metadata column — Raw (the pre-normalization raster dsh records
+ * when normalization reduced the image), Sent (the normalized raster the model receives, with byte size), estimated provider-billed tokens.
+ * Click opens the chat-style lightbox; load failures retry on click; unknown facts leave no row.
  */
 export function makeImageCard(kit: ViewKit): ImageKit['Card'] {
   const { t, fmt } = kit
@@ -115,8 +99,6 @@ export function makeImageCard(kit: ViewKit): ImageKit['Card'] {
     const { attachment, load } = props
     const [src, setSrc] = React.useState<string | null>(null)
     const [error, setError] = React.useState(false)
-    // Retry re-arms the one load effect, so every attempt runs under the
-    // same liveness guard and the same reset.
     const [attempt, setAttempt] = React.useState(0)
     const [preview, setPreview] = React.useState(false)
     const closePreview = React.useCallback(() => { setPreview(false) }, [])
@@ -146,9 +128,8 @@ export function makeImageCard(kit: ViewKit): ImageKit['Card'] {
         value: attachment.bytes !== undefined ? `${sent} · ${fmtBytes(attachment.bytes)}` : sent,
       })
     }
-    // Estimated provider-billed tokens for this image (the official DeepSeek
-    // docs calculator on the stored dimensions; 117-384 per the vision
-    // guide's cap). Shown whenever the normalized dimensions are known.
+    // Estimated provider-billed tokens (shared/imageTokens — the official docs calculator on the stored dimensions; 117–384 per the vision
+    // guide's cap), shown whenever normalized dimensions are known.
     const tokens = attachment.width !== undefined && attachment.height !== undefined
       ? estimateImageTokens(attachment.width, attachment.height)
       : null

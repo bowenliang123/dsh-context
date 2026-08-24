@@ -19,7 +19,6 @@ import { anchoredParts, officialParts, type PartsPart } from './categories'
 export interface Headline {
   /** Best-known occupancy of the next request (projected ?? derived ?? heuristic total). */
   tokens: number
-  /** Route capacity the headline scales against (may be unknown). */
   window?: number
   /** tokens / window, clamped to 100; null without a window. */
   pct: number | null

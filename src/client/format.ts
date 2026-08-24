@@ -1,7 +1,4 @@
-/**
- * Number/time formatting for the UI. `fmt` uses the same k/M suffix style
- * everywhere (bars, details, stats); `fmtTime` renders a local HH:MM:SS.
- */
+/** `fmt`: the k/M suffix style shared by bars/details/stats; `fmtTime`: local HH:MM:SS. */
 
 export function fmt(n: number | null | undefined): string {
   if (n === undefined || n === null || isNaN(n)) return '—'
@@ -21,10 +18,7 @@ export function fmtBytes(n: number | null | undefined): string {
 }
 
 export function fmtTime(t: number): string {
-  // en-GB with a 24-hour clock renders the same local HH:MM:SS the manual
-  // zero-pad produced, without the hand-rolled p() helper.
-  // An invalid timestamp (garbage from a corrupt payload) must show a dash,
-  // never throw — `toLocaleTimeString` raises RangeError on Invalid Date.
+  // en-GB 24-hour clock zero-pads HH:MM:SS without a helper; invalid dates must show '—' (toLocaleTimeString throws RangeError).
   const d = new Date(t)
   if (isNaN(d.getTime())) return '—'
   return d.toLocaleTimeString('en-GB', { hour12: false })

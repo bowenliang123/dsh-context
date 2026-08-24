@@ -1,18 +1,9 @@
 /**
- * The dsh-context card in Settings → Plugins → Plugin configuration.
- *
- * The tab dispatches one `settings.plugin.item` slot key per Host-served
- * settings namespace; this card claims the `dsh-context` key and owns its
- * internals (the section supplies nothing). It renders nothing while the
- * namespace is unavailable — a deployment that does not compose the Host
- * half (or a remote browser, where settings stay process-local) shows no
- * trace of it.
- *
- * The chrome mirrors the official plugin cards: collapsed by default, the
- * header button discloses the controls in place. Each preference row is the
- * framework's settings-row pattern — a selector pill opening the shared
- * `Menu` dropdown — and picking an option writes immediately through the
- * settings scope (display preferences, like the official Language row).
+   * The dsh-context card in Settings → Plugins → Plugin configuration, registered on the framework's `settings.plugin.item` slot keyed on
+   * the
+   * Host-served `dsh-context` settings namespace — the section itself supplies nothing; it renders nothing while the namespace is
+   * unavailable
+  * (a deployment without the Host half, or a remote browser, shows no trace).
  */
 
 import type * as ReactNS from 'react'
@@ -21,7 +12,6 @@ import { React } from '../react'
 import type { SettingsField, SettingsState } from '../settings'
 import type { ViewKit } from '../viewkit'
 
-/** Props the renderer binds: the hooks-compartment selector + the write action. */
 export interface SettingsCardProps {
   useContextSettings?: <T>(selector: (state: SettingsState) => T) => T
   set?: (field: SettingsField, value: string) => void
@@ -35,7 +25,6 @@ interface PrefRowProps {
   onPick: (id: string) => void
 }
 
-/** One preference row: label + selector pill opening the framework Menu. */
 function PrefRow(props: PrefRowProps): ReactNS.ReactElement {
   const [open, setOpen] = React.useState(false)
   const active = props.options.find(o => o.id === props.value)?.label ?? props.value

@@ -44,8 +44,6 @@ export function registerContextCommand(ctx: ClientCtx, kit: ViewKit): void {
       },
       matchEnter: (session, line) => {
         if (line !== LINE) return Promise.resolve(undefined)
-        // Same deferred consume, bare-token guard (the trimmed draft must
-        // still equal the command line when the modal closes).
         setPendingConsume(session.sessionId, { kind: 'bare-token', token: LINE })
         modalStoreOf(session.sessionId).set(true)
         return Promise.resolve<'handled'>('handled')

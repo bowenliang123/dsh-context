@@ -1,10 +1,6 @@
 /**
- * StackedBar + Legend — the composition bar (overview card) and its legend.
- * Hovering a segment or its legend chip lights the same segment and shows
- * the same tooltip; the free window space (blank track) is hoverable too.
- * JSX components; the shared hover-link tooltip is bespoke (no shared
- * primitive reproduces the cross-segment/legend linkage), so it stays custom
- * but styled through the shared `--dsw-alias-*` tokens.
+ * Composition bar + legend; the shared hover-link tooltip is bespoke — no shared primitive reproduces the cross-segment/legend linkage —
+ * styled through the shared `--dsw-alias-*` tokens.
  */
 
 import type * as ReactNS from 'react'
@@ -14,12 +10,9 @@ import type { ViewKit } from '../viewkit'
 import { React } from '../react'
 
 /**
- * DSH's automatic compaction trigger as a fraction of the routed context
- * window — the default `thresholdRatio` of `@deepseek-ai/dsh-compaction-basic`
- * (it compacts at step boundaries once `floor(contextWindow × ratio)` is
- * reached). DSH does not publish the configured ratio to plugins or clients,
- * so the UI mirrors the default here; deployments that tune `thresholdRatio`
- * / `modelPolicies` can adjust it if they want the reserve band to match.
+ * Mirror of dsh-compaction-basic's default `thresholdRatio` (0.8): it compacts at step boundaries once `floor(contextWindow × ratio)` is
+ * reached; DSH does not publish the configured ratio to plugins/clients, so the reserve band mirrors the default — deployments tuning
+ * `thresholdRatio`/`modelPolicies` should adjust it to match.
  */
 export const AUTO_COMPACT_RATIO = 0.8
 
@@ -27,19 +20,16 @@ export interface StackedBarProps {
   parts: PartsPart[]
   max?: number
   height?: number
-  /** Optional hover link: the active segment key, reported via onHoverKey. */
   hoverKey?: string | null
   onHoverKey?: (key: string | null) => void
-  /** Render the hover tooltip (default true). A mirrored bar that only echoes
-   * another card's hover turns it off, so the tooltip floats only over the
-   * surface the pointer actually rests on. */
+  /**
+   * Render the hover tooltip (default true); a bar that only MIRRORS another card's hover turns it off, so the tooltip floats only over the
+   * surface the pointer actually rests on.
+   */
   tip?: boolean
   /**
-   * Optional auto-compaction reserve band: the rightmost `(1 − ratio)` of the
-   * window, drawn as striped "headroom" — the region the session normally
-   * avoids filling because automatic compaction triggers past the threshold.
-   * Only rendered when `max` (the window) is a positive number. `label` is the
-   * translated hover explanation shown over the band.
+   * Optional auto-compaction reserve band: the rightmost (1−ratio) of the window, striped 'headroom' — the region the session normally
+   * avoids filling because automatic compaction triggers past the threshold; rendered only when `max` (the window) is positive.
    */
   reserve?: { ratio: number; label: string }
 }
@@ -47,45 +37,29 @@ export interface StackedBarProps {
 export function makeStackedBar(kit: ViewKit): (props: StackedBarProps) => ReactNS.ReactElement {
   const { t, fmt, catLabel } = kit
   return function StackedBar(props: StackedBarProps): ReactNS.ReactElement {
-    // Hovering the reserve band shows its explanation (not a segment's); the
-    // flag lives here so the single tooltip slot serves both.
+    // The reserve-hover flag lives here so the single tooltip slot serves both the segments and the band.
     const [reserveOn, setReserveOn] = React.useState(false)
-    // props.parts: [{key,color,value}]; optional props.max: when max exceeds
-    // the parts' total, the remainder shows as an empty, hoverable track
-    // ("free window" — the space left in the context window).
     let total = 0
     for (const p of props.parts) total += p.value
     const scale = props.max !== undefined && props.max > total ? props.max : total
     const free = props.max !== undefined && props.max > total ? props.max - total : 0
-    // Segment widths are laid out against the FULL window (scale), but their
-    // legend/tooltip percentages are shares of the OCCUPIED total — so on
-    // hover we frame the occupied region (width = used/scale) with a solid
-    // box that makes that reference frame visible. Only when a free track
-    // exists (otherwise width already equals the percentage).
+    // Segment WIDTHS lay out against the full window (scale), but legend/tooltip percentages are shares of the OCCUPIED total — on hover a
+    // solid box frames the occupied region (width = used/scale) to make that reference frame visible; only when a free track exists.
     const usedPct = scale > 0 ? total / scale * 100 : 0
     const hovering = props.hoverKey !== null && props.hoverKey !== undefined
     const showBox = free > 0 && hovering
 
-    // The reserve band is laid out in WINDOW units (`ratio × max` → `max`)
-    // scaled onto whatever total the bar spans, so it stays the same physical
-    // slice whether or not a free track exists (once used exceeds the window,
-    // the stripes sit over the outermost segments).
+    // The band lays out in WINDOW units (`ratio × max` → `max`) scaled onto whatever total the bar spans, so it stays the same physical
+    // slice with or without a free track (once used exceeds the window, the stripes sit over the outermost segments).
     const reserve = props.reserve !== undefined && props.max !== undefined && props.max > 0
-      // Carry the checked max into the object: the non-null reserve below
-      // then proves max is present, no assertion needed.
       ? { ...props.reserve, max: props.max }
       : null
-    // Round to one decimal: the ratios are float-y (0.8 × max / scale) and a
-    // style % with a long decimal tail is noise (would render the same).
     const reserveLeft = reserve !== null ? Math.round(reserve.max * reserve.ratio / scale * 1000) / 10 : 0
     const reserveWidth = reserve !== null ? Math.round((1 - reserve.ratio) * reserve.max / scale * 1000) / 10 : 0
 
-    // The tooltip is DERIVED from the shared hover key, so hovering either a
-    // segment or its legend chip lights the same segment and shows the same
-    // tooltip (centered on the segment; percentage positioning needs no
-    // measuring). The wrapper keeps the tooltip outside the clipped stack.
-    // Hovering the RESERVE band overrides the slot with its own explanation,
-    // centered over the band's middle.
+    // The tooltip is DERIVED from the shared hover key, so a segment and its legend chip light the same segment with the same tooltip
+    // (centered by %, no measuring); the wrapper keeps it outside the clipped stack; the reserve band overrides the slot with its own
+    // label.
     let tip: { text: string; leftPct: number } | null = null
     if (reserveOn && reserve !== null) {
       tip = {
@@ -110,8 +84,6 @@ export function makeStackedBar(kit: ViewKit): (props: StackedBarProps) => ReactN
           if (p.key === props.hoverKey && p.value > 0) {
             const count = p.raw ?? p.value
             tip = {
-              // "(pct%)" is a share of the OCCUPIED total — the solid box
-              // that appears on hover frames exactly this reference region.
               text: `${catLabel(p.key)} ≈${fmt(count)} (${rawTotal > 0 ? Math.round(count / rawTotal * 100) : 0}%) `
                 + t('overview.ofUsed'),
               leftPct: Math.max(12, Math.min(acc + pct / 2, 88)),
@@ -126,8 +98,6 @@ export function makeStackedBar(kit: ViewKit): (props: StackedBarProps) => ReactN
     return (
       <div className="lc-stacked-wrap">
         <div
-          // Hover focus: dim everything except the hovered part and show the
-          // occupied-region frame (`.lc-stacked-dim` + `.lc-occupied-box`).
           className={'lc-stacked' + (hovering ? ' lc-stacked-dim' : '')}
           style={{ height: `${props.height || 14}px` }}
           onMouseLeave={() => {
@@ -157,11 +127,9 @@ export function makeStackedBar(kit: ViewKit): (props: StackedBarProps) => ReactN
               onMouseEnter={() => { if (props.onHoverKey !== undefined) props.onHoverKey('free') }}
             />
           ) : null}
-          {/* Auto-compaction reserve band: the rightmost (1−ratio) of the
-              window, striped like a warning plate to read as "headroom, not
-              real usage". Painted above the track/segments so the stripes
-              overlay them, owns the pointer so its own explanation shows
-              (and the segment hover link is cleared while exploring it). */}
+          {/* Painted above the track/segments so the stripes overlay them; owns the pointer so its own explanation shows — and clears the
+              segment hover link while exploring it.
+              */}
           {reserve !== null ? (
             <div
               className="lc-reserve"
@@ -173,19 +141,17 @@ export function makeStackedBar(kit: ViewKit): (props: StackedBarProps) => ReactN
               onMouseLeave={() => { setReserveOn(false) }}
             />
           ) : null}
-          {/* Hover reference frame: the occupied region (outside the free
-              track) — the region the legend/tooltip percentages refer to.
-              Painted last so its border stays above the segments. Always
-              mounted (`.lc-occupied-box-on` toggles opacity) so the frame
-              fades out on leave instead of unmounting instantly. */}
+          {/* The occupied-region frame: painted last so its border stays above the segments; always mounted (`.lc-occupied-box-on` toggles
+              opacity) so it fades out on leave instead of unmounting instantly.
+              */}
           <div
             className={'lc-occupied-box' + (showBox ? ' lc-occupied-box-on' : '')}
             style={{ width: `${usedPct}%` }}
           />
         </div>
-        {/* The hover tooltip is always mounted too (opacity toggles via
-            `.lc-bar-tip-on`) so it fades in AND out; hidden it holds no
-            pointer events and no width of its own. */}
+        {/* The hover tooltip is always mounted too (opacity via `.lc-bar-tip-on`) so it fades in and out; hidden it holds no pointer events
+            and no width of its own.
+            */}
         {props.tip !== false
           ? (
             <div
@@ -210,9 +176,6 @@ export function makeLegend(kit: ViewKit): (props: {
     hoverKey?: string | null
     onHoverKey?: (key: string | null) => void
   }): ReactNS.ReactElement {
-    // The legend reports the heuristic counts (`raw` — the chat ring panel's
-    // rows), never the anchored bar widths, so its figures read identically
-    // to the official context meter.
     let total = 0
     for (const p of props.parts) total += p.raw ?? p.value
     return (
