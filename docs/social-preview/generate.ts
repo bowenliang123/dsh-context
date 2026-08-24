@@ -1,6 +1,6 @@
-// Renders social-preview.html to docs/social-preview.png (exactly 1280x640).
-// Renders at 2x (2560x1280) first, then downsamples via Chromium's high-quality
-// image smoothing, so text and the embedded screenshot stay sharp.
+// Renders social-preview.html to docs/social-preview.png (exactly 1280x640):
+// 2x first (2560x1280), then downsampled via Chromium's high-quality image
+// smoothing so text and the embedded screenshot stay sharp.
 // Usage: node docs/social-preview/generate.ts (or: npm run social-preview)
 import { chromium } from 'playwright-core';
 import { homedir } from 'node:os';
@@ -22,14 +22,12 @@ const executablePath = path.join(
 fs.mkdirSync(tmpDir, { recursive: true });
 const browser = await chromium.launch({ executablePath });
 
-// Pass 1: render the design at 2x.
 const page1 = await browser.newPage({ viewport: { width: 1280, height: 640 }, deviceScaleFactor: 2 });
 await page1.goto(pathToFileURL(htmlPath).href);
 await page1.waitForLoadState('load');
 await page1.screenshot({ path: hiResPath, clip: { x: 0, y: 0, width: 1280, height: 640 } });
 await page1.close();
 
-// Pass 2: downsample the 2x render to the final 1280x640.
 const dataUrl = `data:image/png;base64,${fs.readFileSync(hiResPath).toString('base64')}`;
 const page2 = await browser.newPage({ viewport: { width: 1280, height: 640 } });
 await page2.setContent(

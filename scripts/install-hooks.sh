@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# Installs the repo's git hooks natively (no husky), so `pnpm run typecheck`
-# runs on every commit. Requires the repo to be a git working tree.
+# Installs a native pre-commit hook that runs `pnpm run typecheck`. Git only
+# executes .git/hooks when `core.hooksPath` is unset (husky sets it to .husky/_).
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"

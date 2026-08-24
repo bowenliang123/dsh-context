@@ -49,20 +49,15 @@ const isProductionDependency = (specifier: string): boolean =>
 
 const NODE_ENV = process.env.NODE_ENV ?? 'production'
 
-// ---- CSS channels, mirrored from the official preset ---------------------
-// (packages/client/tsdown.client.ts). The virtual-id wrapper keeps stylesheets
-// away from tsdown's own css pipeline: its guard matches ids ending in `.css`,
-// so the virtual id must not. `.module.css` yields a hashed class map and
-// injects a tagged style at factory execution; `.css?inline` exports compiled
-// text; a plain `.css` import injects the sheet unhashed (the plugin's own
-// lc-* namespace stays the anti-collision discipline).
+// CSS channels, mirrored from packages/client/tsdown.client.ts. The virtual
+// ids must NOT end in `.css` — tsdown's own css-pipeline guard matches on that
+// suffix; the plugin's flat lc-* class namespace is the anti-collision rule.
 const CSS_VIRTUAL_PREFIX = '\0dsh-css:'
 const GLOBAL_CSS_VIRTUAL_PREFIX = '\0dsh-global-css:'
 const INLINE_CSS_VIRTUAL_PREFIX = '\0dsh-inline-css:'
 const CSS_VIRTUAL_SUFFIX = '.mjs'
 const INLINE_CSS_QUERY = '?inline'
 
-/** Emit one plugin-owned style injector and an optional CSS Modules export. */
 function styleInjectionModule(
   id: string,
   fileId: string,
@@ -84,7 +79,6 @@ function styleInjectionModule(
   return source.join('\n')
 }
 
-/** Resolve a stylesheet import against the importing source file. */
 function sourceAssetPath(source: string, importer: string): string {
   return resolvePath(dirname(importer), source)
 }

@@ -1,11 +1,8 @@
 name: Publish to npm
 
-# Fires when a release tag (v*) is pushed — the same tag our release flow
-# creates (`git tag vX.Y.Z && gh release create`). Publishing uses npm
-# Trusted Publishing (OIDC): no long-lived token is needed, and provenance
-# attestations are generated automatically (npm CLI >= 11.5.1 auto-detects
-# the OIDC environment). The npm-side trusted publisher must be configured
-# with this exact workflow filename: `release.yml`.
+# Fires on a release tag (v*) push. Publishing uses npm Trusted Publishing
+# (OIDC), so no long-lived token is needed — the npm-side trusted publisher
+# must be configured with this exact workflow filename.
 on:
   push:
     tags:

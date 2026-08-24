@@ -1,10 +1,6 @@
-# dsh-context — bundle patch layer.
-#
-# Installing this package into a profile (`dsh plugin --profile <name> add dsh-context`)
-# appends it to `dsh.profile.bundles`; this patch is then applied as that
-# bundle's layer. The row below loads the package's main entry as the host
-# half (a plain Cordis plugin) and, because the package declares `dsh.client`,
-# the web app also loads its `./client` bundle as the browser half.
+# Bundle patch layer: the row loads the package's main entry as the host half
+# (a plain Cordis plugin); the `dsh.client` declaration makes the web app load
+# its ./client bundle as the browser half.
 - insert:
     - id: dsh-context
       name: dsh-context
