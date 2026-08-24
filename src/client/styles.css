@@ -404,6 +404,19 @@
  line (mono: it is an identifier, not prose). */
 .lc-ts-call-name { font-size: 13px; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
 .lc-ts-card-count { margin-left: auto; }
+/* The head's right side (Raw/MD switch + trailing chip) forms one group:
+ the group absorbs the free space, so the switch and the chip never fight
+ over two auto margins. */
+.lc-ts-card-right { margin-left: auto; display: inline-flex; align-items: center; gap: 8px; }
+/* Trailing head chip: the result card's line count (`10 lines`). */
+.lc-ts-card-meta { color: var(--dsw-alias-label-secondary); font-size: 11px; font-weight: 400; white-space: nowrap; font-variant-numeric: tabular-nums; }
+/* Run-state pill on a tool-result's call card: a colored dot plus
+ OK / Failed — with the payload's `exit N` on failure — tinted like the
+ delta pills and the events chips. */
+.lc-ts-call-state { flex: none; display: inline-flex; align-items: center; gap: 4px; font-size: 11px; font-weight: 600; line-height: 1; padding: 2px 7px; border-radius: 999px; white-space: nowrap; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+.lc-ts-call-state i { flex: none; width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
+.lc-ts-call-ok { color: var(--dsw-alias-state-success-primary); background: color-mix(in srgb, var(--dsw-alias-state-success-primary) 12%, transparent); }
+.lc-ts-call-err { color: var(--dsw-alias-state-error-primary); background: color-mix(in srgb, var(--dsw-alias-state-error-primary) 12%, transparent); }
 /* The ONE text body chrome (raw <pre> and rendered markdown alike): plain
  padded text on the section card, internally scrolled past the cap. `dim`
  tones down non-prose payloads (reasoning traces, raw JSON). */

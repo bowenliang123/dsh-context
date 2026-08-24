@@ -117,6 +117,12 @@ export const DICT_ZH: Record<string, string> = {
   'block.thinking': '思考',
   'block.answer': '回答',
   'block.content': '内容', 'block.result': '结果', 'block.summary': '摘要',
+  // Line-count chip on a tool-result's payload card (the singular/plural
+  // split is a no-op in zh, where the measure word never inflects).
+  'block.line': '{n} 行', 'block.lines': '{n} 行',
+  // Run-state pill on a tool-result's call card: OK / Failed, with the
+  // payload's terminal `exit N` marker on failure.
+  'call.ok': '正常', 'call.fail': '失败', 'call.exit': 'exit {n}',
   // Attachment cards in a message detail: image refs render as thumbnail
   // cards (name + one labeled row per known fact — raw dims, sent dims +
   // size, estimated token cost), anything unrecognized falls into the
@@ -247,6 +253,11 @@ export const DICT_EN: Record<string, string> = {
   'block.thinking': 'Reasoning',
   'block.answer': 'Response',
   'block.content': 'Content', 'block.result': 'Result', 'block.summary': 'Summary',
+  // Line-count chip on a tool-result's payload card.
+  'block.line': '1 line', 'block.lines': '{n} lines',
+  // Run-state pill on a tool-result's call card: OK / Failed, with the
+  // payload's terminal `exit N` marker on failure.
+  'call.ok': 'OK', 'call.fail': 'Failed', 'call.exit': 'exit {n}',
   // Attachment cards in a message detail: image refs render as thumbnail
   // cards (name + one labeled row per known fact — raw dims, sent dims +
   // size, estimated token cost), anything unrecognized falls into the

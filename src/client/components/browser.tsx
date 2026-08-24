@@ -191,11 +191,11 @@ function ParamRow(props: {
 /**
  * Section — the ONE detail chrome of the Context browser: a labeled card
  * (`lc-ts-card`) whose head carries the section title on the left and the
- * extras on the right (a count badge and/or the Raw/MD switch), with the
- * body below. Every expanded element renders as a stack of these — prose,
- * tool calls, parameter rows, image grids, and raw JSON all share the same
- * frame, so the reader scans one repeating anatomy instead of a different
- * layout per content kind.
+ * extras on the right (head actions such as the Raw/MD switch, a trailing
+ * `meta` chip and/or a count badge), with the body below. Every expanded
+ * element renders as a stack of these — prose, tool calls, parameter rows,
+ * image grids, and raw JSON all share the same frame, so the reader scans
+ * one repeating anatomy instead of a different layout per content kind.
  */
 function Section(props: {
   label: string
@@ -203,15 +203,18 @@ function Section(props: {
   labelClass?: string
   /** Count badge at the head's right edge (omitted when undefined). */
   count?: number
-  /** Head actions (the Raw/MD switch), between the title and the count. */
+  /** Head actions (the Raw/MD switch), at the far right of the head. */
   actions?: ReactNS.ReactNode
+  /** Head chip (line count, run-state pill), between the title and the actions. */
+  meta?: ReactNS.ReactNode
   children: ReactNS.ReactNode
 }): ReactNS.ReactElement {
+  const right = props.actions !== undefined || props.meta !== undefined
   return (
     <div className="lc-ts-card">
       <div className="lc-ts-card-head">
         <b className={props.labelClass}>{props.label}</b>
-        {props.actions ?? null}
+        {right ? <span className="lc-ts-card-right">{props.meta ?? null}{props.actions ?? null}</span> : null}
         {props.count !== undefined ? <span className="lc-ts-card-count">{props.count}</span> : null}
       </div>
       {props.children}
@@ -221,20 +224,26 @@ function Section(props: {
 
 /**
  * TextSection — a prose Section (system prompt, message/injection/summary
- * body, thinking, answer, tool description): the head's right edge carries
- * the Raw/MD switch and the body follows the per-card mode.
+ * body, thinking, answer, tool description, tool-result payload): the head's
+ * right edge carries the Raw/MD switch (rightmost) and the body follows the
+ * per-card mode. `meta` (e.g. a line count) sits right before the switch.
  */
-function TextSection(props: { label: string; text: string; rich: RichKit }): ReactNS.ReactElement {
+function TextSection(props: {
+  label: string
+  text: string
+  rich: RichKit
+  meta?: ReactNS.ReactNode
+}): ReactNS.ReactElement {
   const { rich } = props
   const [mode, setMode] = rich.useRichMode()
   return (
-    <Section label={props.label} actions={<rich.RichSwitch mode={mode} onPick={setMode} />}>
+    <Section label={props.label} actions={<rich.RichSwitch mode={mode} onPick={setMode} />} meta={props.meta}>
       <rich.RichText text={props.text} mode={mode} />
     </Section>
   )
 }
 
-/** RawSection — a dimmed text Section without a view switch (structured payloads: tool results, raw JSON). */
+/** RawSection — a dimmed text Section without a view switch (unrecognized payloads: raw JSON, other block kinds). */
 function RawSection(props: { label: string; text: string }): ReactNS.ReactElement {
   return (
     <Section label={props.label}>
@@ -323,6 +332,14 @@ interface DetailLabels {
   summary: string
   images: string
   other: string
+  /** Line-count chip text for one section body (`1 line` / `10 lines`). */
+  lines: (n: number) => string
+  /**
+   * Run-state pill for a tool-result's call card: green when the call
+   * settled normally, red when it errored (with its `exit N` code when the
+   * payload carries one).
+   */
+  callState: (err: boolean, exit: number | null) => ReactNS.ReactNode
 }
 
 /**
@@ -332,8 +349,9 @@ interface DetailLabels {
  * conversation snapshot's assistant blocks (`kind`: text / reasoning /
  * tool-call / image, argsRaw). Consecutive images group into one grid
  * section; `richable` bodies (messages, injections) carry the Raw/MD
- * switch while tool-result payloads stay raw (structured data, not prose)
- * and dim; nested tool-result blocks flatten into the same flow.
+ * switch, as do tool-result payloads — whose cards additionally head a
+ * line count — while unrecognized blocks stay raw (structured data, not
+ * prose) and dim; nested tool-result blocks flatten into the same flow.
  */
 function BlocksBody(props: {
   blocks: readonly unknown[]
@@ -371,9 +389,17 @@ function BlocksBody(props: {
       : ''
     if ((blockKind === 'text' || blockKind === 'reasoning') && typeof blk?.text === 'string') {
       const label = blockKind === 'reasoning' ? labels.thinking : props.textLabel
-      out.push(props.richable
-        ? <TextSection key={out.length} label={label} text={blk.text} rich={rich} />
-        : <RawSection key={out.length} label={label} text={blk.text} />)
+      out.push(<TextSection
+        key={out.length}
+        label={label}
+        text={blk.text}
+        rich={rich}
+        // Result payloads head their line count: one glance tells how much
+        // output a call produced without opening the card.
+        meta={props.textLabel === labels.result
+          ? <span className="lc-ts-card-meta">{labels.lines(blk.text.split('\n').length)}</span>
+          : undefined}
+      />)
       continue
     }
     if (blockKind === 'tool-call') {
@@ -444,6 +470,24 @@ function callSummaryOf(conv: ConversationNodeLike | undefined): string | null {
 }
 
 /**
+ * The terminal exit code a tool-result payload reports via the dsh
+ * `[exit code: N]` marker (searched across its direct text blocks); null
+ * when the payload carries none. Shows up on the run-state pill of a
+ * FAILED result — the one place the number actually matters.
+ */
+function exitCodeOf(conv: ConversationNodeLike | undefined): number | null {
+  if (conv === undefined || !Array.isArray(conv.content)) return null
+  for (const b of conv.content) {
+    if (b === null || typeof b !== 'object') continue
+    const blk = b as { text?: unknown }
+    if (typeof blk.text !== 'string') continue
+    const m = blk.text.match(/\[exit code:\s*(\d+)\]/)
+    if (m !== null) return Number(m[1])
+  }
+  return null
+}
+
+/**
  * The first call summary inside an assistant message's tool-call blocks —
  * the collapsed-row preview for a text-less assistant turn. Null when no
  * block summarizes.
@@ -461,19 +505,26 @@ function blockSummaryOf(conv: ConversationNodeLike | undefined): string | null {
 
 /**
  * One tool call as a Section, mirroring the tool-definition parameter
- * card: the head names the call target (mono, with the parsed argument
- * count), the body lists the arguments as name/value rows. Arguments that
- * are not a parseable JSON object fall back to the raw payload inside the
- * same card. Shared by assistant tool-call blocks (`→`) and the call half
- * of a tool result (`←`).
+ * card: the head names the call target (mono, with an optional run-state
+ * pill in place of the old argument-count badge — the row list already
+ * shows the arguments), the body lists the arguments as name/value rows.
+ * Arguments that are not a parseable JSON object fall back to the raw
+ * payload inside the same card. Shared by assistant tool-call blocks (`→`)
+ * and the call half of a tool result (`←`).
  */
-function ToolCallCard(props: { name: string; argsRaw: unknown; arrow?: string }): ReactNS.ReactElement {
+function ToolCallCard(props: {
+  name: string
+  argsRaw: unknown
+  arrow?: string
+  /** Run-state pill for the call's own result (tool-result path only). */
+  status?: ReactNS.ReactNode
+}): ReactNS.ReactElement {
   const args = React.useMemo(() => parseArgs(props.argsRaw), [props.argsRaw])
   return (
     <Section
       label={(props.arrow ?? '→') + ' ' + props.name}
       labelClass="lc-ts-call-name"
-      count={args !== null ? Object.keys(args).length : undefined}
+      meta={props.status}
     >
       {args !== null
         ? Object.keys(args).map(k => <CallArgRow key={k} name={k} value={args[k]} />)
@@ -529,10 +580,20 @@ function NodeContent(props: {
     return <BlocksBody blocks={conv.blocks} richable textLabel={labels.answer} rich={rich} img={img} labels={labels} />
   }
   if (conv.kind === 'tool-result') {
+    // The result's settled state: the surface node's fold-stamped `err`
+    // (host-side, authoritative) or the snapshot block's `isError`. The
+    // pill on the call card says OK by default — dsh tools always stamp
+    // failures, so a silent flag means a normal run.
+    const err = node.err === true || conv.isError === true
     return (
       <>
         {conv.call != null
-          ? <ToolCallCard arrow="←" name={conv.call.name} argsRaw={conv.call.argsRaw} />
+          ? <ToolCallCard
+            arrow="←"
+            name={conv.call.name}
+            argsRaw={conv.call.argsRaw}
+            status={labels.callState(err, err ? exitCodeOf(conv) : null)}
+          />
           : null}
         {Array.isArray(conv.content)
           ? <BlocksBody blocks={conv.content} richable={false} textLabel={labels.result} rich={rich} img={img} labels={labels} />
@@ -836,6 +897,15 @@ export function makeContextBrowser(
               summary: t('block.summary'),
               images: t('attach.images'),
               other: t('attach.other'),
+              lines: (n: number) => t(n === 1 ? 'block.line' : 'block.lines', { n }),
+              callState: (err: boolean, exit: number | null) => (
+                <span className={'lc-ts-call-state ' + (err ? 'lc-ts-call-err' : 'lc-ts-call-ok')}>
+                  <i />
+                  {err
+                    ? t('call.fail') + (exit !== null ? ' · ' + t('call.exit', { n: exit }) : '')
+                    : t('call.ok')}
+                </span>
+              ),
             }}
             // This row's body renders only while it is the open element, so
             // `awaiting` (open seq missing, pagination armed) means THIS join
