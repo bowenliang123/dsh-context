@@ -1,15 +1,5 @@
-/**
- * Functional smoke test for the packaged host half (v0.9): mounts the plugin
- * on a fake ctx, captures the `contextTimeline` session-projection unit it
- * registers, drives the unit's pure `init`/`apply`/`view` over synthetic
- * event logs, and asserts the snapshot shape the browser receives.
- *
- * The harness framework normally drives `apply` per committed `session/event`
- * and persists the state via the projection cache; those parts are not this
- * plugin's concern. What we own and verify here: the fold semantics, the wire
- * view shape, reference-stability of the apply contract, and the retention /
- * attribution rules.
- */
+// Host-half smoke test: the framework's apply/persistence plumbing is not this plugin's concern — this pins fold semantics, wire view
+// shape, apply-contract reference stability, and retention/attribution.
 import assert from 'node:assert/strict'
 import { test } from 'vitest'
 import { apply } from '../lib/index.js'
@@ -46,7 +36,6 @@ test('host half: projection unit, fold semantics, attribution, retention, determ
     return def.view(st)
   }
 
-  // ---- synthetic log: header, context, user+inject, tool call/result, step ----
   const live = { events: [
     { seq: 1, type: 'request/header', time: 1000, data: {
       header: { system: 'You are a harness agent.', tools: [{ name: 'bash', description: 'run a command' }], config: { model: 'deepseek-v4', provider: 'deepseek' } },
@@ -104,7 +93,6 @@ test('host half: projection unit, fold semantics, attribution, retention, determ
   assert.equal(v.occupancy, undefined, 'the host no longer mirrors contextPressure inside contextTimeline')
   assert.equal(v.requests[0].prompt, 900, 'provider usage still rides the request records (usage sample input + cache)')
 
-  // -- events are attributed to the requests around them (turn/step + range) --
   const injectEv = v.events.find(e => e.kind === 'inject')
   assert.ok(injectEv, 'injection event present')
   assert.equal(injectEv.turn, 1, 'inject before step 1\'s call lands on Turn 1')
@@ -112,7 +100,6 @@ test('host half: projection unit, fold semantics, attribution, retention, determ
   assert.equal(injectEv.fromTurn, undefined, 'no request before the first inject')
   assert.equal(injectEv.name, 'dsh-agent-presets', 'plugin-sourced inject names its plugin')
 
-  // -- inject event producer labels mirror the dsh transcript provenance --
   const labels = drive([
     { seq: 1, type: 'user/message', time: 1000, data: { source: { kind: 'agent-instructions', form: 'instructions', changes: [
       { action: 'set', scope: 'workspace', path: 'AGENTS.md' },
@@ -142,9 +129,6 @@ test('host half: projection unit, fold semantics, attribution, retention, determ
   assert.equal(cls.events[0].name, 'goal', 'a formless producer names itself by its kind')
   assert.ok(cls.current.inject > 0 && cls.current.user > 0, 'token sums follow the classification')
 
-  // -- plan/mode is a context-composition event (the guidance section joins
-  // every request while active); a resume with a different model records the
-  // switch the user made between sessions --
   const hdr = (seq, model, reason) => ({ seq, type: 'request/header', time: seq * 1000, data: { header: { system: 's', tools: [], config: { model } }, reason } })
   const modes = drive([
     hdr(1, 'deepseek-v4', 'initial'),
@@ -168,9 +152,7 @@ test('host half: projection unit, fold semantics, attribution, retention, determ
   assert.equal(compactEv.fromStep, 1, 'trailing event keeps its from-step')
   assert.equal(compactEv.tokens, 5000, 'a metering event with no synchronous replacement keeps the gross shadow price')
 
-  // -- determinism + reference-stability of the projection contract --
-  // Unrelated events must return the SAME state reference (Object.is gates the
-  // framework change feed); view() must not mutate persisted state.
+  // Unrelated events return the SAME state reference (Object.is gates the change feed); view() never mutates persisted state.
   let base = def.init()
   for (const ev of live.events) base = def.apply(base, ev)
   assert.ok(base.events.length > 0, 'folded state carries events')
@@ -187,7 +169,6 @@ test('host half: projection unit, fold semantics, attribution, retention, determ
   assert.equal(emptyView.current.total, 0)
   assert.ok(!('turn' in base.events[0] || 'step' in base.events[0]), 'view() attributions stay on copies, never on persisted state')
 
-  // -- append a same-turn step: the compaction now spans Step 1 -> Step 2 --
   live.events.push({ seq: 9, type: 'assistant/message', time: 7000, data: { turn: 1, step: 2, message: { content: [{ type: 'text', text: 'more' }] } } })
   const after = drive(live.events)
   assert.equal(after.requests.length, 2, 'new request folded')
@@ -198,7 +179,6 @@ test('host half: projection unit, fold semantics, attribution, retention, determ
   assert.equal(compactAfter.fromTurn, 1, 'same-turn range keeps the previous request\'s turn')
   assert.equal(compactAfter.fromStep, 1, 'same-turn range keeps the previous step')
 
-  // -- a cross-turn compaction: prev turn 1 step 2 -> next turn 2 step 1 --
   live.events.push({ seq: 10, type: 'compaction/summary', time: 7500, data: { shadowedTokenCount: 3000, shadowedSeqs: [3, 4] } })
   live.events.push({ seq: 11, type: 'assistant/message', time: 8000, data: { turn: 2, step: 1, message: { content: [{ type: 'text', text: 'more2' }] } } })
   const cross = drive(live.events)
@@ -208,7 +188,6 @@ test('host half: projection unit, fold semantics, attribution, retention, determ
   assert.equal(compactCross.fromTurn, 1, 'cross-turn range remembers the previous turn')
   assert.equal(compactCross.fromStep, 2, 'cross-turn range remembers the previous step')
 
-  // -- an empty-content assistant message (usage-only step) prices 0 tokens --
   live.events.push({ seq: 12, type: 'assistant/message', time: 9000, data: { turn: 2, step: 2, message: { content: [] } } })
   const emptyMsg = drive(live.events)
   const emptyNode = emptyMsg.nodes.find(n => n.seq === 12)
@@ -258,7 +237,6 @@ test('host half: projection unit, fold semantics, attribution, retention, determ
   const preShadow = [...shadow.nodes, ...shadow.archive].filter(n => n.seq < 4 && (n.gone === undefined || n.gone > 4))
   assert.deepEqual(preShadow.map(n => n.seq).sort(), [1, 2, 3], 'pre-shadow steps still see the shadowed nodes')
 
-  // -- archive retention: count cap + request-window prune --
   let archiveCfg = null
   apply({ ...fakeCtx, sessionProjections: { register(d) { if (d.key === 'contextTimeline') archiveCfg = d; return () => {} } } }, { maxArchiveNodes: 1 })
   const capped = (() => {
@@ -276,7 +254,6 @@ test('host half: projection unit, fold semantics, attribution, retention, determ
   assert.deepEqual(capped.archive.map(n => n.seq), [4], 'maxArchiveNodes keeps the newest removals only')
   assert.equal(capped.archiveFloor, 3, 'archiveFloor names the newest dropped removal')
 
-  // -- surfaceFloor: the coverage floor of the served live-node slice --
   let floorCfg = null
   apply({ ...fakeCtx, sessionProjections: { register(d) { if (d.key === 'contextTimeline') floorCfg = d; return () => {} } } }, { maxNodes: 2 })
   const floored = (() => {
@@ -308,10 +285,8 @@ test('host half: projection unit, fold semantics, attribution, retention, determ
   assert.equal(pinnedView.surfaceFloor, 3, 'surfaceFloor is the newest UNSERVED seq (pinned injects excluded)')
   assert.equal(pinCfg.schema.safeParse(pinnedView).success, true, 'pinning view passes the wire schema')
 
-  // -- the wire view passes the unit's own schema (drift guard incl. archive) --
   assert.equal(def.schema.safeParse(shadow).success, true, 'archive-carrying view passes the wire schema')
 
-  // -- contextHeaders unit: full header content epochs, dedupe + cap --
   const hdrive = (events) => {
     let st = hdef.init()
     for (const ev of events) st = hdef.apply(st, ev)
@@ -350,9 +325,7 @@ test('host half: projection unit, fold semantics, attribution, retention, determ
   assert.equal(legacyTool.nodes.find(n => n.seq === 2).tool, undefined,
     'no source and no registered call name -> no tool label (never crashes)')
 
-  // -- turn-based retention: long sessions trim by whole turns, never mid-turn --
-  // 400 turns x 4 steps = 1600 requests exceeds the step bound; the fold must
-  // keep the newest 300 WHOLE turns (turns 101..400, 1200 requests).
+  // Fixture: 400 turns×4 steps; retention keeps the newest 300 WHOLE turns (101..400, 1200 requests).
   const many = []
   let seq = 1000
   for (let turn = 1; turn <= 400; turn++) {
@@ -386,7 +359,6 @@ test('host half: projection unit, fold semantics, attribution, retention, determ
   assert.equal(snap3.occupancy, undefined, 'chunk usage never re-enters the timeline')
   assert.equal(snap3.contextWindow, 100000, 'route capacity still folds from request/context')
 
-  // -- entry config: bounded slices are honored (config -> bounds threading) --
   let cfgDef = null
   apply({ ...fakeCtx, sessionProjections: { register(d) { if (d.key === 'contextTimeline') cfgDef = d; return () => {} } } }, { maxNodes: 2, maxKeptTurns: 1 })
   const bounded = (() => {
@@ -433,10 +405,8 @@ test('host half: projection unit, fold semantics, attribution, retention, determ
   assert.equal(usageLog.cost, undefined, 'no model name -> nothing priced into the cost totals')
   assert.equal(v.cost, undefined, 'a non-flash/pro model (deepseek-v4) is not priced')
 
-  // -- session-cost totals (cumulative, per family x pricing period) --
-  // Peak windows are 09:00-12:00 and 14:00-18:00 Beijing Time (UTC+8) on
-  // weekdays; weekends bill at off-peak all day. The model NAME decides the
-  // family, provider-agnostically (an OpenRouter-style spelling counts).
+  // Cost totals accumulate per family×period: peak = 09-12 & 14-18 BJT weekdays (weekends off-peak); family decided by model NAME,
+  // provider-agnostically.
   const PEAK = Date.UTC(2026, 0, 5, 2, 0, 0) // Monday 02:00 UTC = 10:00 BJT -> peak
   const OFF = Date.UTC(2026, 0, 5, 12, 0, 0) // Monday 12:00 UTC = 20:00 BJT -> off-peak
   const costLog = drive([
@@ -462,7 +432,6 @@ test('host half: projection unit, fold semantics, attribution, retention, determ
   assert.deepEqual(weekendLog.cost.flash.off, { uncached: 300, cacheRead: 0, cacheWrite: 0, output: 0 },
     'weekend requests price at the off-peak rate all day')
   assert.equal(weekendLog.cost.flash.peak, undefined, 'no peak bucket accrues over the weekend')
-  // A model switch re-attributes later requests to the new family.
   const costSwitch = drive([
     { seq: 1, type: 'request/header', time: OFF - 1000, data: { header: { config: { model: 'deepseek-v4-flash', provider: 'deepseek' } } } },
     { seq: 2, type: 'assistant/message', time: OFF, data: { turn: 1, step: 1, usage: { inputTokens: 100 }, message: { content: [] } } },
@@ -527,9 +496,6 @@ test('host half: projection unit, fold semantics, attribution, retention, determ
   assert.equal(typeof hdef.stateSchema, 'object', 'headers: 0.1.1+ contract field stateSchema present')
   assert.ok(hdef.wire !== undefined && hdef.wire.viewSchema && typeof hdef.wire.view === 'function', 'headers: wire block present and complete')
 
-  // Every intermediate fold state passes the state validator (the persisted
-  // cache seeds folds from these rows), and the wire view through `wire`
-  // reproduces the old `view` output exactly.
   for (const [i, st] of jsonStates.entries()) {
     assert.deepEqual(def.stateSchema.parse(st), st, `timeline: stateSchema round-trips persisted state after event ${i + 1}`)
     assert.deepEqual(def.wire.viewSchema.parse(def.wire.view(st)), def.view(st),
@@ -572,7 +538,7 @@ test('host HMR safety: fiber dispose removes both projection registrations', () 
   }
   apply(ctx)
   assert.deepEqual([...defs.keys()].sort(), ['contextHeaders', 'contextTimeline'], 'both units registered')
-  for (const remove of removers) remove() // simulate fiber dispose
+  for (const remove of removers) remove()
   assert.equal(defs.size, 0, 'fiber dispose removes every registration')
 })
 

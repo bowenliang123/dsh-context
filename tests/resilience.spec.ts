@@ -1,9 +1,3 @@
-/**
- * Backend-parse-failure resilience: a corrupt/foreign contextTimeline value
- * must never white-screen the tab — the projection is sanitized into a
- * render-safe shape and residual render errors land in the error boundary's
- * styled card.
- */
 import assert from 'node:assert/strict'
 import { test } from 'vitest'
 import { bootViewBed, byClass, textOf } from './helpers/viewBed'
@@ -14,19 +8,11 @@ bed.dataValue = snapshot
 let tr = renderView()
 
 test('backend-parse-failure resilience: sanitized render of corrupt payloads, degraded modal, error boundary card', async () => {
-  // ---- backend-parse-failure resilience: a corrupt/foreign `contextTimeline`
-  // value must never white-screen the tab. The projection is sanitized into a
-  // render-safe shape — the tab shows the WHOLE UI with every usable piece —
-  // and any residual render error is caught by the error boundary (a styled
-  // error card, not an unmounted conversation view). ----
 
-  // A non-record value (capability absent, nothing delivered yet): loading.
   bed.dataValue = 'not-even-an-object'
   tr = renderView()
   assert.equal(textOf(byClass(tr, 'lc-empty')[0]), '…', 'a non-record value keeps the loading screen')
 
-  // A garbage payload: wrong-typed scalars drop, non-list collections degrade
-  // to [], non-object entries are dropped, and the breakdown zeroes out.
   bed.dataValue = {
     ok: false,
     model: 42,
@@ -40,7 +26,7 @@ test('backend-parse-failure resilience: sanitized render of corrupt payloads, de
     cost: ['not-a-record'],
     surfaceFloor: 'x',
   }
-  tr = renderView() // must not throw
+  tr = renderView()
   assert.equal(byClass(tr, 'lc-bar').length, 1, 'the usable request entry still renders a trend bar')
   assert.equal(byClass(tr, 'lc-stat-value').length, 9, 'stats board still renders')
   const statValsM = byClass(tr, 'lc-stat-value').map(n => n.args[2])
@@ -56,8 +42,6 @@ test('backend-parse-failure resilience: sanitized render of corrupt payloads, de
   assert.equal(byClass(tr, 'lc-tool-chip').length, 1, 'the usable tool entry still shows')
   assert.equal(byClass(tr, 'lc-br-cat-row').length, 6, 'the context browser still renders all six sections')
 
-  // The /context modal degrades identically: sanitized empty data renders the
-  // dialog shell with full sections instead of throwing.
   const brokenModalTree = evaluate(modalComponent({
     sessionId: 's1',
     useProjection: (key) => (key === 'contextTimeline'
@@ -68,9 +52,6 @@ test('backend-parse-failure resilience: sanitized render of corrupt payloads, de
   assert.equal(byClass(brokenModalTree, 'lc-modal-card').length, 1, 'the modal shell stays intact')
   assert.equal(byClass(brokenModalTree, 'lc-br-cat-row').length, 6, 'the modal degrades to full sections with sanitized data')
 
-  // A projection reader that THROWS (a broker/framework failure) lands in the
-  // error boundary's styled card — not a white screen — with the boundary
-  // protocol recording the offending error.
   const boomTree = evaluate(viewComponent({
     sessionId: 's1',
     useProjection: () => { throw new Error('boom-parse') },
@@ -82,7 +63,6 @@ test('backend-parse-failure resilience: sanitized render of corrupt payloads, de
   assert.ok(boundaryKey, 'boundary instance registered')
   assert.match(classInstances.get(boundaryKey).state.error.message, /boom-parse/, 'the boundary protocol recorded the error')
 
-  // restore state for any later tests
   bed.dataValue = snapshot
   tr = renderView()
   assert.equal(byClass(tr, 'lc-bar').length, 4, 'snapshot restored after the resilience tests')

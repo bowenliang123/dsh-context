@@ -11,7 +11,6 @@ import { estimateImageTokens } from '../src/shared/imageTokens.ts'
 
 test('image token estimates match the official DeepSeek docs calculator', () => {
   const cases = [
-    // [width, height, official tokens]
     [2048, 1365, 313],
     [800, 600, 341],
     [800, 800, 349],

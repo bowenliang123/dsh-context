@@ -9,9 +9,8 @@
 import assert from 'node:assert/strict'
 import { readFile } from 'node:fs/promises'
 
-// ---- fake browser document (style-injection target) ----
 export function makeFakeDoc() {
-  const registered = new Map() // style tags keyed by data-plugin
+  const registered = new Map()
   const fakeDoc = {
     createElement: (tag) => {
       const el = { tagName: tag, attrs: {}, textContent: '', parentNode: null }
@@ -77,7 +76,6 @@ export const snapshot = {
   ], droppedNodes: 0,
 }
 
-/** Walk the h() element tree, returning every node whose className matches. */
 export function byClass(root, className) {
   const found = []
   const walk = (node) => {
@@ -113,7 +111,6 @@ export function plainText(node) {
   return ''
 }
 
-/** Find a browser category row by its label text. */
 export function catRowOf(tr, label) {
   return byClass(tr, 'lc-br-cat-row').find(r => textOf(r).includes(label))
 }
@@ -135,7 +132,6 @@ export async function bootViewBed(options = {}) {
   assert.ok(handoff !== null, 'bundle must register through __ModuleLoader__.load')
 
   const bed = {
-    // projection/service holders the tests arm between renders
     dataValue: null,
     pressureValue: undefined,
     breakdownValue: undefined,
@@ -144,7 +140,6 @@ export async function bootViewBed(options = {}) {
     useSessionHolder: undefined,
     loadOlderHolder: undefined,
     conversationHolder: undefined,
-    // captured at apply time
     bailCalls: [],
     provideDescriptors: [],
     modalSource: null,
@@ -347,7 +342,6 @@ export async function bootViewBed(options = {}) {
     loadOlderHistory: bed.loadOlderHolder,
   }))
 
-  /** Hook slots of one mounted fiber, by component-name substring. */
   const fiberSlots = (name, { nonEmpty = false } = {}) => {
     const key = [...bed.hookStates.keys()].find(k => k.includes(name) && (!nonEmpty || bed.hookStates.get(k).length > 0))
     assert.ok(key, `${name} fiber registered`)

@@ -1,12 +1,3 @@
-/**
- * Assistant block cards: a mixed reply splits thinking / answer / tool-call
- * into SEPARATE cards. The prose cards each carry their OWN raw/markdown
- * switch — toggling one leaves the other untouched; the tool-call card
- * parses its arguments into name/value rows (mirroring the tool
- * definition's parameter card), falling back to the raw payload when the
- * arguments are not a parseable JSON object. A tool RESULT renders its
- * call half through the same card (`←` arrow) with the payload below.
- */
 import assert from 'node:assert/strict'
 import { test } from 'vitest'
 import { bootViewBed, byClass, textOf } from './helpers/viewBed'
@@ -28,8 +19,8 @@ test('assistant blocks: thinking/answer/tool-call split into cards, prose switch
       ],
     }],
   })
-  brSlots[1][1]('assistant') // openCat('assistant')
-  brSlots[2][1]('n2')        // expand the assistant element
+  brSlots[1][1]('assistant')
+  brSlots[2][1]('n2')
   let tr = renderView()
 
   let cards = byClass(tr, 'lc-ts-card')
@@ -39,7 +30,6 @@ test('assistant blocks: thinking/answer/tool-call split into cards, prose switch
   assert.match(textOf(cards[0]), /THINKING-TRACE/, 'thinking card carries the reasoning text')
   assert.match(textOf(cards[1]), /ANSWER-TEXT/, 'answer card carries the reply text')
 
-  // Each PROSE card owns a switch; markdown is the default on BOTH.
   const segsOf = () => byClass(tr, 'lc-ts-card').slice(0, 2).map(c => byClass(c, 'lc-rich-seg')[0])
   assert.ok(segsOf().every(s => s !== undefined), 'each prose card carries its own raw/markdown switch')
   for (const s of segsOf()) {
@@ -47,9 +37,7 @@ test('assistant blocks: thinking/answer/tool-call split into cards, prose switch
   }
   assert.equal(byClass(tr, 'lc-md-stub').length, 2, 'both prose cards render markdown by default')
 
-  // The tool call is its own card: head names the tool, the body lists
-  // parsed arguments as name/value rows — and no raw/markdown switch.
-  // The argument count badge is gone (the rows already show the arguments).
+  // Tool-call card: parsed argument rows replace the old count badge (rows already show the args); no raw/markdown switch.
   const callCard = cards[2]
   assert.match(textOf(byClass(callCard, 'lc-ts-card-head')[0]), /→ bash/, 'tool-call card names the tool')
   assert.equal(byClass(callCard, 'lc-ts-card-count').length, 0, 'no argument-count badge on the call card')
@@ -60,13 +48,11 @@ test('assistant blocks: thinking/answer/tool-call split into cards, prose switch
   assert.equal(byClass(callCard, 'lc-ts-param-type').length, 0, 'argument rows carry no type column')
   assert.equal(byClass(callCard, 'lc-rich-seg').length, 0, 'tool-call card has no raw/markdown switch')
 
-  // Unparseable arguments fall back to the raw payload inside the same card.
   const badCard = cards[3]
   assert.match(textOf(byClass(badCard, 'lc-ts-card-head')[0]), /→ write/, 'fallback card names the tool')
   assert.equal(byClass(badCard, 'lc-ts-arg-row').length, 0, 'fallback card has no argument rows')
   assert.match(textOf(byClass(badCard, 'lc-ts-desc-body')[0]), /\{bad json/, 'fallback card shows the raw payload')
 
-  // Flip the THINKING card to raw: only its own view changes.
   byClass(segsOf()[0], 'lc-rich-seg-btn')[0].args[1].onClick()
   tr = renderView()
   cards = byClass(tr, 'lc-ts-card')
@@ -75,13 +61,11 @@ test('assistant blocks: thinking/answer/tool-call split into cards, prose switch
   assert.equal(byClass(cards[1], 'lc-md-stub').length, 1, 'answer card keeps its markdown view')
   assert.match(byClass(segsOf()[1], 'lc-rich-seg-btn')[1].args[1].className, /lc-rich-seg-on/, 'answer switch still on markdown')
 
-  // Flipping the ANSWER card leaves the thinking card raw.
   byClass(segsOf()[1], 'lc-rich-seg-btn')[0].args[1].onClick()
   tr = renderView()
   cards = byClass(tr, 'lc-ts-card')
   assert.equal(byClass(tr, 'lc-md-stub').length, 0, 'both prose cards raw after both flips')
   assert.match(textOf(byClass(cards[1], 'lc-ts-desc-body')[0]), /ANSWER-TEXT/, 'answer card shows the raw text')
-  // ...and back to markdown independently.
   byClass(segsOf()[0], 'lc-rich-seg-btn')[1].args[1].onClick()
   tr = renderView()
   assert.equal(byClass(tr, 'lc-md-stub').length, 1, 'thinking card flips back to markdown alone')
@@ -95,8 +79,6 @@ test('tool result: the call half renders as a card with a run-state pill and the
     nodes: [
       ...snapshot.nodes,
       { seq: 3, cat: 'tool', tool: 'bash', tokens: 8, time: 66000 },
-      // A text-less assistant turn (a pure tool call): its collapsed row
-      // previews with the call's own description line.
       { seq: 4, cat: 'assistant', tokens: 5, calls: ['bash'], time: 67000 },
       // Path-taking tools (read / edit) preview with the target path.
       // seq 5 FAILS via the SNAPSHOT only (`isError` on the joined node) —
@@ -137,14 +119,10 @@ test('tool result: the call half renders as a card with a run-state pill and the
       },
     ],
   })
-  brSlots[1][1]('tool') // openCat('tool')
+  brSlots[1][1]('tool')
   let tr = renderView()
 
-  // The collapsed row leads with the tool-name chip, then previews with the
-  // call's own summary line instead of the generic result label: bash's
-  // `description`, a read call's target path. FAILED rows carry the red
-  // run-state dot right after the chevron — via the fold `err` stamp OR the
-  // snapshot's `isError` alone — and no ⚠ suffix (the dot marks failures).
+  // Collapsed tool rows: chip + call summary line; failures get the red dot (fold err OR snapshot isError), no ⚠ suffix.
   const toolRows = byClass(tr, 'lc-br-elem-row')
   assert.equal(toolRows.length, 3, 'all three tool results listed (newest first)')
   assert.equal(byClass(toolRows[0], 'lc-br-err-dot').length, 1, 'failed result carries the red error dot')
@@ -167,12 +145,9 @@ test('tool result: the call half renders as a card with a run-state pill and the
   assert.equal(textOf(toolTag), 'bash', 'tool row leads with the tool-name chip')
   assert.ok(!/lc-br-tag-inv/.test(toolTag.args[1].className), 'tool-name chip uses the shared subtle tag style')
 
-  brSlots[2][1]('n3')   // expand the tool-result element
+  brSlots[2][1]('n3')
   tr = renderView()
 
-  // Card 1: the call — named with the result arrow, NO argument-count
-  // badge (the rows already show the arguments), a green OK pill in the
-  // head's right edge.
   const callCard = byClass(tr, 'lc-ts-card')[0]
   assert.ok(callCard, 'the tool result opens with a call card')
   assert.match(textOf(byClass(callCard, 'lc-ts-card-head')[0]), /← bash/, 'call card names the tool with the result arrow')
@@ -186,9 +161,6 @@ test('tool result: the call half renders as a card with a run-state pill and the
   assert.equal(textOf(byClass(argRow, 'lc-ts-arg-val')[0]), 'ls -la', 'argument value on the right')
   assert.equal(byClass(callCard, 'lc-ts-param-type').length, 0, 'no type column')
 
-  // Card 2: the payload — heads its line count BEFORE the raw/markdown
-  // switch (the switch stays at the far right), markdown active by default
-  // like every prose card.
   const resultCard = byClass(tr, 'lc-ts-card')[1]
   assert.equal(textOf(byClass(resultCard, 'lc-ts-card-meta')[0]), '1 line', 'payload card heads its line count')
   const rightSlots = byClass(resultCard, 'lc-ts-card-right')[0].args.slice(2)
@@ -196,22 +168,19 @@ test('tool result: the call half renders as a card with a run-state pill and the
   assert.match(rightSlots[1].args[1].className, /lc-rich-seg/, 'raw/markdown switch sits at the far right')
   assert.match(byClass(resultCard, 'lc-rich-seg-btn')[1].args[1].className, /lc-rich-seg-on/, 'markdown segment active by default')
   assert.equal(byClass(resultCard, 'lc-md-stub').length, 1, 'payload renders markdown by default')
-  byClass(resultCard, 'lc-rich-seg-btn')[0].args[1].onClick() // flip to raw
+  byClass(resultCard, 'lc-rich-seg-btn')[0].args[1].onClick()
   tr = renderView()
   assert.match(textOf(byClass(tr, 'lc-ts-desc-body')[0]), /RESULT-TEXT/, 'raw view carries the payload text')
   assert.match(byClass(tr, 'lc-rich-seg-btn')[0].args[1].className, /lc-rich-seg-on/, 'raw segment lights up')
 
-  // A SNAPSHOT-only failure (no surface `err` stamp): the expanded call
-  // card still swaps the pill for the red Failed pill.
-  brSlots[2][1]('n5')   // expand the snapshot-failed element
+  brSlots[2][1]('n5')
   tr = renderView()
   const snapPill = byClass(tr, 'lc-ts-call-err')[0]
   assert.ok(snapPill, 'snapshot-only failure carries the red Failed pill')
   assert.match(textOf(snapPill), /Failed/, 'pill labels the failure')
   assert.doesNotMatch(textOf(snapPill), /exit/, 'no exit code in the pill without a marker')
 
-  // A FAILED result on both paths: red Failed pill with the exit code.
-  brSlots[2][1]('n7')   // expand the failed element
+  brSlots[2][1]('n7')
   tr = renderView()
   const errPill = byClass(tr, 'lc-ts-call-err')[0]
   assert.ok(errPill, 'failed result carries the red Failed pill')
@@ -220,10 +189,6 @@ test('tool result: the call half renders as a card with a run-state pill and the
   assert.equal(byClass(tr, 'lc-ts-call-ok').length, 0, 'no green pill on the failed result')
   assert.match(textOf(byClass(tr, 'lc-ts-card-meta')[0]), /^2 lines$/, 'two-line payload heads its line count')
 
-  // The text-less ASSISTANT turns preview the same way: a tool-name
-  // breadcrumb chip leads, then the call's summary (bash's
-  // description, an edit call's target path) — while a turn WITH text
-  // keeps the text preview (no chip: it made no calls).
   brSlots[1][1]('assistant')
   tr = renderView()
   const asstRows = byClass(tr, 'lc-br-elem-row')

@@ -1,9 +1,3 @@
-/**
- * Context-view trend-chart spec: fixed-width bars, horizontal scroll, turn
- * ranges, stats board, plugin info card, hover tooltips, legend chips,
- * granularity toggle, edge fades, full history, right-edge anchoring,
- * message times, event range labels, and the overview headline.
- */
 import assert from 'node:assert/strict'
 import { readFile } from 'node:fs/promises'
 import { test } from 'vitest'
@@ -13,8 +7,6 @@ const bed = await bootViewBed()
 const { hookStates, renderView, snapshot } = bed
 
 test('context view: trend chart, stats board, plugin info, hover linking, granularity, fades, anchoring, events, overview headline', async () => {
-  // The ContextView fiber: the boundary wrapper owns an EMPTY hook slot array,
-  // so the data-driven body's fiber is the one carrying the view hooks.
   const ctxKey = [...hookStates.keys()].find(k => k.includes('ContextView') && hookStates.get(k).length > 0)
   assert.ok(ctxKey, 'ContextView fiber registered')
   bed.dataValue = snapshot
@@ -31,8 +23,7 @@ test('context view: trend chart, stats board, plugin info, hover linking, granul
   assert.ok(byClass(tree, 'lc-chart-scroll').length === 1, 'scroll container present')
   assert.ok(byClass(tree, 'lc-turns').length === 1, 'turn tick row present')
 
-  // ---- context stats board: totals over the retained window ----
-  // fixture: 4 requests (turns 1,1,2,3), no events yet -> all event counters 0.
+  // fixture: 4 requests (turns 1,1,2,3), no events -> counters 0; usage/cost cells dash.
   const pkg = JSON.parse(await readFile(new URL('../package.json', import.meta.url), 'utf8'))
   const statVals = byClass(tree, 'lc-stat-value').map(n => n.args[2])
   assert.equal(statVals.length, 9, 'nine stats cells (turns / steps / injections / compactions / prunes / tool calls / images / cache hit / cost)')
@@ -46,7 +37,6 @@ test('context view: trend chart, stats board, plugin info, hover linking, granul
   assert.equal(statVals[7], '—', 'no tokenUsage projection yet -> cache-hit cell shows a dash')
   assert.equal(statVals[8], '—', 'no cost totals yet -> cost cell shows a dash')
 
-  // ---- plugin info card: two full-width rows; every row is itself a link ----
   const piLabels = byClass(tree, 'lc-pi-label').map(n => n.args[2])
   const piValues = byClass(tree, 'lc-pi-value').map(n => n.args[2])
   const piGrid = byClass(tree, 'lc-pi-grid')
@@ -55,8 +45,6 @@ test('context view: trend chart, stats board, plugin info, hover linking, granul
   assert.equal(plainText(piValues[0]), 'dsh-context (v' + pkg.version + ')', 'Plugin row combines package id + version (update chip only after the npm check resolves)')
   assert.equal(plainText(piValues[1]), 'bowenliang123/dsh-context', 'GitHub row shows the short owner/repo')
 
-  // Each row IS the link — Plugin goes to the repo's releases page, GitHub to
-  // the repo root.
   const linkRows = byClass(tree, 'lc-pi-row')
   assert.equal(linkRows.length, 2, 'every row is a whole-row link')
   assert.equal(linkRows[0].args[1].href, 'https://github.com/bowenliang123/dsh-context/releases', 'Plugin → GitHub releases page')
@@ -64,8 +52,7 @@ test('context view: trend chart, stats board, plugin info, hover linking, granul
   // Hover affordance is CSS-driven (row-level `:hover` underlines the value);
   // no JS state needed, so no onMouseEnter/onMouseLeave handlers.
 
-  // ---- hover linking: hovering a trend bar updates the detail below ----
-  const ctxSlots = hookStates.get(ctxKey) // selected(0) hovered(1) hoverTurn(2) tick(3) gran(4) focusTurn(5) hoverCat(6)
+  const ctxSlots = hookStates.get(ctxKey) // selected(0) hovered(1) hoverTurn(2) tick(3) gran(4) trendMode(5) focusTurn(6) hoverCat(7) pickedKinds(8) toolFocus(9)
   const detailStep = (tr) => {
     const head = byClass(tr, 'lc-detail-head')[0]
     return head === undefined ? '' : textOf(head).trim()
@@ -75,7 +62,7 @@ test('context view: trend chart, stats board, plugin info, hover linking, granul
   assert.match(detailStep(tr), /Turn 3/, 'detail defaults to the newest request (Turn 3)')
   assert.equal(byClass(tr, 'lc-bar-hovered').length, 0, 'no hovered bar initially')
 
-  ctxSlots[1][1](3) // setHoveredSeq(seq 3, turn 2)
+  ctxSlots[1][1](3)
   tr = renderView()
   assert.match(detailStep(tr), /Turn 2/, 'hovering a bar links the detail below to it')
   const hovered = byClass(tr, 'lc-bar-hovered')
@@ -90,16 +77,14 @@ test('context view: trend chart, stats board, plugin info, hover linking, granul
   assert.match(textOf(chartTip[0]), /Turn 2 · Step 0/, 'tooltip names the hovered request')
   assert.match(textOf(chartTip[0]), /total ≈ 107/, 'tooltip carries the estimated total')
   assert.equal(typeof chartTip[0].args[1].style.left, 'string', 'tooltip is positioned at the bar column')
-  // turn-aware dimming: the chart is in dim mode while a turn is focused
   assert.equal(byClass(tr, 'lc-chart-dim').length, 1, 'bar hover activates the turn-aware dim')
 
-  ctxSlots[1][1](null) // leave the plot
+  ctxSlots[1][1](null)
   tr = renderView()
   assert.match(detailStep(tr), /Turn 3/, 'leaving the plot reverts the detail to the newest request')
   assert.equal(byClass(tr, 'lc-chart-tip').length, 0, 'tooltip clears with the hover')
   assert.equal(byClass(tr, 'lc-chart-dim').length, 0, 'dim clears with the hover')
 
-  // ---- overview stacked bar: themed hover tooltip per segment ----
   const overviewStack = byClass(tr, 'lc-stacked').find(s => s.args[1].style.height === '16px')
   assert.ok(overviewStack, 'overview stacked bar present')
   const segment = overviewStack.args.slice(2).flat().find(s => s !== null)
@@ -118,7 +103,6 @@ test('context view: trend chart, stats board, plugin info, hover linking, granul
   assert.equal(typeof occBox.args[1].style.width, 'string', 'frame width follows the used share')
   assert.equal(typeof tip[0].args[1].style.left, 'string', 'tooltip is positioned along the pointer')
 
-  // ---- composition bar hover highlights the matching legend chip (and back) ----
   // the tooltip test above left the first segment hovered -> its chip is on
   let chipsOn = byClass(tr, 'lc-chip-on')
   assert.equal(chipsOn.length, 1, 'hovered segment highlights its legend chip')
@@ -134,7 +118,6 @@ test('context view: trend chart, stats board, plugin info, hover linking, granul
   assert.equal(byClass(tr, 'lc-stacked-seg-on').length, 0, 'leaving the chip clears the segment highlight')
   assert.equal(byClass(tr, 'lc-chip-on').length, 0, 'leaving the chip clears the chip highlight')
   assert.equal(byClass(tr, 'lc-bar-tip-on').length, 0, 'leaving the chip fades the tooltip out')
-  // segment -> chip, on a different category
   const seg1 = byClass(tr, 'lc-stacked').find(s => s.args[1].style.height === '16px')
     .args.slice(2).flat().filter(s => s !== null)[1]
   seg1.args[1].onMouseEnter({ clientX: 80 })
@@ -146,7 +129,6 @@ test('context view: trend chart, stats board, plugin info, hover linking, granul
   assert.equal(textOf(chipsOn2[0].args[3]), textOf(byClass(tr, 'lc-chip')[1].args[3]), 'the matching chip is highlighted')
   assert.equal(byClass(tr, 'lc-stacked-seg-on').length, 2, 'the hovered segment is marked (overview + mirrored browser bar)')
 
-  // ---- the free window space (blank track) is hoverable too ----
   // fixture: window 128000 vs anchored occupancy 83017 -> 44983 free (35%)
   const freeSeg = byClass(tr, 'lc-stacked-free')[0]
   assert.ok(freeSeg, 'free window segment present when contextWindow > usage')
@@ -165,9 +147,7 @@ test('context view: trend chart, stats board, plugin info, hover linking, granul
   assert.equal(byClass(tr, 'lc-bar-tip-on').length, 0, 'leaving the stack fades the free tooltip out')
   assert.equal(byClass(tr, 'lc-occupied-box-on').length, 0, 'leaving the stack fades the occupied frame out')
 
-  // ---- auto-compaction reserve band: the rightmost (1−0.8) of the window is
-  // striped headroom; hovering it explains the area instead of the free track.
-  // fixture: max 128000 (window) > 83017 used -> scale = window -> 80%/20%.
+  // Reserve fixture: window 128000 > 83017 used -> scale = window -> 80%/20% band.
   const reserveEl = byClass(tr, 'lc-reserve')[0]
   assert.ok(reserveEl, 'auto-compaction reserve band rendered when the window is known')
   assert.equal(reserveEl.args[1].style.left, '80%', 'reserve starts at the 80% threshold')
@@ -183,7 +163,6 @@ test('context view: trend chart, stats board, plugin info, hover linking, granul
   tr = renderView()
   assert.equal(byClass(tr, 'lc-bar-tip-on').length, 0, 'leaving the reserve hides its tooltip')
 
-  // ---- turn strip: one color block per turn, aligned with the bars above ----
   let turnBlocks = byClass(tr, 'lc-turn')
   assert.equal(turnBlocks.length, 3, 'one turn block per turn')
   assert.equal(typeof turnBlocks[0].args[1].onMouseEnter, 'function', 'turn blocks carry onMouseEnter')
@@ -191,7 +170,7 @@ test('context view: trend chart, stats board, plugin info, hover linking, granul
   assert.ok(blockColors.every(c => typeof c === 'string' && c.length > 0), 'turn blocks carry a color')
   assert.notEqual(blockColors[0], blockColors[1], 'consecutive turns get distinct colors')
   assert.equal(turnBlocks[0].args[1].title, 'T1', 'turn blocks carry a full-label tooltip')
-  turnBlocks[0].args[1].onMouseEnter() // T1 (covers seq 1 and 2)
+  turnBlocks[0].args[1].onMouseEnter()
   tr = renderView()
   const inTurn = byClass(tr, 'lc-bar-in-turn')
   assert.equal(inTurn.length, 2, 'hovering T1 highlights its two bars')
@@ -201,7 +180,6 @@ test('context view: trend chart, stats board, plugin info, hover linking, granul
   assert.equal(textOf(onBlocks[0].args[2]), 'T1', 'highlighted block is T1')
   assert.equal(byClass(tr, 'lc-chart-dim').length, 1, 'strip hover also dims bars outside the turn')
 
-  // leaving the strip clears the turn highlight
   const strip = byClass(tr, 'lc-turns')[0]
   assert.equal(typeof strip.args[1].onMouseLeave, 'function', 'strip carries onMouseLeave')
   strip.args[1].onMouseLeave()
@@ -209,17 +187,14 @@ test('context view: trend chart, stats board, plugin info, hover linking, granul
   assert.equal(byClass(tr, 'lc-bar-in-turn').length, 0, 'leaving the strip clears bar highlights')
   assert.equal(byClass(tr, 'lc-chart-dim').length, 0, 'leaving the strip clears the dim')
 
-  // hovering a bar highlights its turn block (bidirectional)
-  ctxSlots[1][1](3) // hover seq 3 (turn 2)
+  ctxSlots[1][1](3)
   tr = renderView()
   const onBlocks2 = byClass(tr, 'lc-turn-on')
   assert.equal(onBlocks2.length, 1, 'bar hover highlights exactly one turn block')
   assert.equal(textOf(onBlocks2[0].args[2]), 'T2', 'hovering a bar highlights its turn block')
   ctxSlots[1][1](null)
 
-  // ---- granularity toggle: one bar per step vs one bar per turn ----
-  // the trend card scopes its own toggle row: the events card kind toggles
-  // reuse the pill-button classes, so address the row, not the buttons.
+  // Address the toggle row, not the buttons: the events kind toggles reuse the pill-button classes.
   const granRow = () => byClass(tr, 'lc-gran')[0].args.slice(2)
   const onBtns = (row) => row.filter(b => String(b.args[1].className || '').includes('lc-gran-on'))
   let granBtns = granRow()
@@ -229,7 +204,6 @@ test('context view: trend chart, stats board, plugin info, hover linking, granul
   assert.equal(onBtns(granRow()).length, 1, 'step is active by default')
   assert.equal(byClass(tr, 'lc-bar').length, 4, 'step mode: one bar per step')
 
-  // switch to turn granularity: the 4 steps collapse into 3 turn bars
   granBtns[1].args[1].onClick()
   tr = renderView()
   assert.equal(byClass(tr, 'lc-bar').length, 3, 'turn mode: one bar per turn')
@@ -237,7 +211,6 @@ test('context view: trend chart, stats board, plugin info, hover linking, granul
   const turnOn = onBtns(granRow())
   assert.equal(turnOn[0].args[2], 'Turn', 'turn button is active after switching')
 
-  // turn bars keep the uniform column width and align with their strip blocks
   const turnBars = byClass(tr, 'lc-bar')
   const t1Bar = turnBars.find(b => b.args[1]['data-seq'] === 2)
   assert.ok(t1Bar, 'T1 is aggregated into its last step (seq 2)')
@@ -246,7 +219,6 @@ test('context view: trend chart, stats board, plugin info, hover linking, granul
   for (const blk of turnBlocks2) assert.equal(blk.args[1].style.width, '14px', 'every turn block matches the bar width (aligned)')
   assert.equal(turnBlocks2[0].args[1].style.width, t1Bar.args[1].style.width, 'T1 bar and block align 1:1')
 
-  // the turn detail is labeled with the step count and tagged as the last step
   t1Bar.args[1].onMouseEnter()
   tr = renderView()
   assert.match(detailStep(tr), /Turn 1 · 2 steps/, 'turn detail shows the step count, not a bare step number')
@@ -254,14 +226,12 @@ test('context view: trend chart, stats board, plugin info, hover linking, granul
   assert.equal(byClass(tr, 'lc-detail-tag')[0].args[2], 'last step', 'tag text localized')
   ctxSlots[1][1](null)
 
-  // back to step granularity
   granBtns = granRow()
   granBtns[0].args[1].onClick()
   tr = renderView()
   assert.equal(byClass(tr, 'lc-bar').length, 4, 'back to one bar per step')
   assert.equal(onBtns(granRow())[0].args[2], 'Step', 'step button active again')
 
-  // ---- edge fades signal reachable history beyond the viewport ----
   let scroller = byClass(tr, 'lc-chart-scroll')[0]
   const fakeScroller = { scrollLeft: 200, clientWidth: 120, scrollWidth: 800, querySelectorAll: () => [] }
   scroller.args[1].onScroll({ currentTarget: fakeScroller })
@@ -278,7 +248,6 @@ test('context view: trend chart, stats board, plugin info, hover linking, granul
   tr = renderView()
   assert.equal(byClass(tr, 'lc-chart-fade-l').length, 0, 'left fade gone at the start')
 
-  // ---- no 80-bar cap: every request the host sends is rendered ----
   const bigRequests = []
   for (let i = 0; i < 120; i++) {
     bigRequests.push({
@@ -294,10 +263,9 @@ test('context view: trend chart, stats board, plugin info, hover linking, granul
   tr = renderView()
   assert.equal(byClass(tr, 'lc-bar').length, 4, 'snapshot restored')
 
-  // ---- default anchor: the newest bars sit at the right edge ----
   const scrollNode = byClass(tr, 'lc-chart-scroll')[0]
   const scrollEl = { scrollLeft: 0, clientWidth: 120, scrollWidth: 800, querySelectorAll: () => [] }
-  scrollNode.args[1].ref.current = scrollEl // attach a fake layout element
+  scrollNode.args[1].ref.current = scrollEl
   const trendKey = [...hookStates.keys()].find(k => k.includes('TrendChart'))
   assert.ok(trendKey, 'TrendChart fiber registered')
   const layoutEffectSlot = hookStates.get(trendKey).find(s => s && typeof s.effect === 'function')
@@ -314,18 +282,16 @@ test('context view: trend chart, stats board, plugin info, hover linking, granul
   assert.equal(byClass(tr, 'lc-chart-fade-l').length, 1, 'left fade shown once anchored at the newest bars')
   assert.equal(byClass(tr, 'lc-chart-fade-r').length, 0, 'no right fade at the end')
 
-  // ---- granularity switches re-anchor at the newest bars ----
-  // (the turn->step report: returning to step must show the right edge)
   const latestEffect = () => hookStates.get(trendKey).find(s => s && typeof s.effect === 'function')
   scrollEl.scrollLeft = 0 // stale left edge from the narrow turn chart
   const granTurnBtn = granRow()[1]
-  granTurnBtn.args[1].onClick() // step -> turn
+  granTurnBtn.args[1].onClick()
   tr = renderView()
   latestEffect().effect()
   assert.equal(scrollEl.scrollLeft, 800, 'switching to turn re-anchors at the newest bars')
   scrollEl.scrollLeft = 0
   const granStepBtn = granRow()[0]
-  granStepBtn.args[1].onClick() // turn -> step
+  granStepBtn.args[1].onClick()
   tr = renderView()
   latestEffect().effect()
   assert.equal(scrollEl.scrollLeft, 800, 'switching back to step re-anchors at the newest bars')
@@ -334,7 +300,6 @@ test('context view: trend chart, stats board, plugin info, hover linking, granul
   latestEffect().effect()
   assert.equal(scrollEl.scrollLeft, 200, 'plain re-renders still respect the scroll position')
 
-  // ---- message list: newest first, with timestamps when available ----
   const nodeRows = byClass(tr, 'lc-node')
   assert.equal(nodeRows.length, 2, 'message rows rendered')
   assert.equal(nodeRows[0].args[1].key, 2, 'newest message on top')
@@ -394,26 +359,25 @@ test('context view: trend chart, stats board, plugin info, hover linking, granul
   assert.equal(onBtns(kindBtns()).length, 5, 'all five kinds are picked by default')
   assert.equal(byClass(tr, 'lc-event').length, 6, 'default shows every event')
   const click = (i) => { kindBtns()[i].args[1].onClick(); tr = renderView() }
-  click(0) // pick-only 注入
+  click(0)
   assert.equal(byClass(tr, 'lc-event').length, 1, 'clicking 注入 among all shows only injections')
   assert.ok(String(kindBtns()[0].args[1].className || '').includes('lc-gran-on'), 'picked button is highlighted')
   assert.ok(String(kindBtns()[0].args[1].className || '').includes('lc-kind-inject'), 'highlight carries the kind color')
   assert.equal(onBtns(kindBtns()).length, 1, 'the other four turned off')
-  click(1) // add 压缩
+  click(1)
   assert.equal(byClass(tr, 'lc-event').length, 3, 'adding 压缩 shows 注入 + 压缩')
-  click(2) // add 剪枝
+  click(2)
   assert.equal(byClass(tr, 'lc-event').length, 5, 'adding 剪枝 shows 注入 + 压缩 + 剪枝')
-  click(0) // remove 注入
+  click(0)
   assert.equal(byClass(tr, 'lc-event').length, 4, 'removing 注入 leaves 压缩 + 剪枝')
-  click(3) // add 切换
+  click(3)
   assert.equal(byClass(tr, 'lc-event').length, 5, 'adding 切换 shows 压缩 + 剪枝 + 切换')
-  click(1); click(2) // remove 压缩 and 剪枝
+  click(1); click(2)
   assert.equal(byClass(tr, 'lc-event').length, 1, 'only 切换 stays picked')
-  click(3) // remove the last one -> reset to all
+  click(3)
   assert.equal(byClass(tr, 'lc-event').length, 6, 'removing the last picked kind restores all')
   assert.equal(onBtns(kindBtns()).length, 5, 'all five kinds picked again')
 
-  // -- a plan/mode toggle is a neutral mode event, filtered by its chip --
   const fullEvents = bed.dataValue.events
   bed.dataValue = {
     ...snapshot,
@@ -426,14 +390,13 @@ test('context view: trend chart, stats board, plugin info, hover linking, granul
   const modeLabels = byClass(tr, 'lc-event-label')
   assert.equal(modeLabels.length, 2, 'mode + inject rows render')
   assert.equal(modeLabels[1].args[2], 'Plan mode on', 'mode row reads its plan-mode label')
-  click(0) // pick-only 注入 among all
+  click(0)
   assert.equal(byClass(tr, 'lc-event').length, 1, 'the mode row filters out with its own kind')
-  click(4) // add 模式
+  click(4)
   assert.equal(byClass(tr, 'lc-event').length, 2, 'adding 模式 shows 注入 + 模式')
   bed.dataValue = { ...snapshot, events: fullEvents }
   tr = renderView()
 
-  // the stats board picks up the event counters
   const statVals2 = byClass(tr, 'lc-stat-value').map(n => n.args[2])
   assert.equal(statVals2[2], '1', 'one injection counted')
   assert.equal(statVals2[3], '2', 'two compactions counted')
@@ -483,30 +446,24 @@ test('context view: trend chart, stats board, plugin info, hover linking, granul
   bed.dataValue = prevData
   tr = renderView()
 
-  // the ✂ marker sits on the bar it attaches to and tooltips the event gap
   const barMark = byClass(tr, 'lc-bar-marker')
   assert.equal(barMark.length, 1, 'one ✂ marker on the attached bar')
   assert.match(barMark[0].args[1].title, /Turn 1 · Step 0 → Turn 2 · Step 0/, '✂ tooltip carries the event gap')
 
-  // the detail header shows the same gap as a chip when that bar is active
-  ctxSlots[1][1](3) // hover the attached bar (seq 3, Turn 2 · Step 0)
+  ctxSlots[1][1](3)
   tr = renderView()
   const markerChip = byClass(tr, 'lc-detail-marker')
   assert.equal(markerChip.length, 1, 'detail header shows the attached boundary event')
   assert.equal(markerChip[0].args[2], '✂ Turn 1 · Step 0 → Turn 2 · Step 0', 'chip shows the event gap')
   assert.equal(typeof markerChip[0].args[1].title, 'string', 'chip tooltips the event text')
-  ctxSlots[1][1](null) // leave the plot
+  ctxSlots[1][1](null)
   tr = renderView()
   assert.equal(byClass(tr, 'lc-detail-marker').length, 0, 'chip clears with the hover')
   bed.dataValue = snapshot
   tr = renderView()
   assert.equal(byClass(tr, 'lc-event').length, 0, 'event list restored to the empty state')
 
-  // ---- overview headline is the provider-based occupancy (like the chat
-  // ring); the composition is anchored to it, proportions stay heuristic ----
-  // fixture (no `contextPressure` projection -> derived fallback): last request
-  // prompt 83000, last total 83, current total 100, window 128000
-  // -> occupancy = 83000 + (100 - 83) = 83017 (65%), raw heuristic = 100.
+  // Occupancy fixture (no contextPressure): 83000 + (100 − 83) = 83017 (65%).
   const overviewNum = byClass(tr, 'lc-overview-num')[0]
   assert.ok(overviewNum, 'overview number row present')
   assert.match(textOf(overviewNum), /83\.0k/, 'headline shows the provider-based occupancy')
@@ -514,8 +471,7 @@ test('context view: trend chart, stats board, plugin info, hover linking, granul
   assert.match(textOf(overviewNum), /65%/, 'occupancy percent is the emphasized figure of the line')
   assert.ok(!/~65%/.test(textOf(overviewNum)), 'no conflicting heuristic percentage next to the headline')
 
-  // ---- the OFFICIAL token-meter `contextPressure` projection wins over the
-  // derived fallback (the chat ring's own value, read as a second projection) ----
+  // Official contextPressure (a second projection) wins over the derived fallback.
   bed.pressureValue = { pressureTokens: 90000, projectedTokens: 90010, contextWindow: 200000 }
   tr = renderView()
   const overviewNum2 = byClass(tr, 'lc-overview-num')[0]
@@ -525,11 +481,7 @@ test('context view: trend chart, stats board, plugin info, hover linking, granul
   bed.dataValue = snapshot
   tr = renderView()
 
-  // ---- the OFFICIAL token-meter `contextBreakdown` projection drives the
-  // legend counts (the chat ring panel's rows): system/tools read it
-  // verbatim, the message bucket subdivides by the fold ratios, and the four
-  // surface categories always sum exactly to the delivered messageTokens ----
-  // Fixture fold sums: user 30 / inject 5 / assistant 15 / tool 20 (70).
+  // contextBreakdown drives legend counts: system/tools verbatim; message bucket split by fold ratios (30/5/15/20 of 70).
   bed.breakdownValue = { systemTokens: 111, toolsTokens: 222, messageTokens: 600 }
   tr = renderView()
   const chipsBd = byClass(tr, 'lc-chip')
@@ -549,6 +501,4 @@ test('context view: trend chart, stats board, plugin info, hover linking, granul
   tr = renderView()
 
   console.log('✔ chart render test passed (context stats board, free window hover, fixed-width bars, scroll container, turn ranges, hover linking, overview tooltip, turn strip, granularity toggle, edge fades, full history, right-anchored default, message times, event range labels, detail marker chip, overview actual)')
-
-  // ---- Context browser card: step picker + category accordion + element
 })

@@ -113,7 +113,7 @@ const injectEvent = { seq: 3, time: 1700000002000, kind: 'inject', form: 'instru
 test('issue #12: projection arriving after a loading first render never hits React #310', async () => {
   const { container, root, boundaryErrors, reactErrors, render, restore } = boot()
   try {
-    render(undefined) // loading frame: the projection has not pushed yet
+    render(undefined)
     await new Promise(r => setTimeout(r, 30))
     assert.ok(container.textContent.includes('正在读取会话日志'), 'loading frame rendered')
     render(baseSnapshot) // data lands on the SAME mounted instance
@@ -124,14 +124,14 @@ test('issue #12: projection arriving after a loading first render never hits Rea
     assert.ok(container.textContent.includes('历史趋势'), 'loaded view rendered')
   } finally {
     restore()
-    try { root.unmount() } catch { /* ignore */ }
+    try { root.unmount() } catch {}
   }
 })
 
 test('issue #12: events appearing after an empty first render never hits React #310', async () => {
   const { container, root, boundaryErrors, reactErrors, render, restore } = boot()
   try {
-    render(baseSnapshot) // events: [] — the empty EventList branch
+    render(baseSnapshot)
     await new Promise(r => setTimeout(r, 30))
     assert.ok(container.textContent.includes('暂无上下文事件'), 'empty events frame rendered')
     render({ ...baseSnapshot, events: [injectEvent] }) // an event lands in the SAME instance
@@ -142,6 +142,6 @@ test('issue #12: events appearing after an empty first render never hits React #
     assert.ok(container.textContent.includes('Skill 注入'), 'the arrived event rendered')
   } finally {
     restore()
-    try { root.unmount() } catch { /* ignore */ }
+    try { root.unmount() } catch {}
   }
 })

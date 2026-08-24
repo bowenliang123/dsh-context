@@ -1,18 +1,3 @@
-/**
- * Multimodal token estimates and pie-chart consistency:
- *
- * - Host fold: `image` blocks price through the official DeepSeek docs
- *   calculator (117-384 tokens by pixel dimensions), not the token-meter's
- *   generic JSON branch (~40); unknown dimensions degrade to that JSON
- *   price; compaction shadows stay internally consistent with the
- *   corrected prices.
- * - Client headline: with the official `contextBreakdown` projection
- *   delivered, the composition counts (part.raw) are the panel's exact
- *   system/tools/messages figures — the four surface categories subdivide
- *   the message bucket and always sum to it — while the bar widths
- *   (part.value) stay anchored to the provider total. Without the
- *   projection the fold's own sums serve.
- */
 import assert from 'node:assert/strict'
 import { test } from 'vitest'
 import { apply } from '../lib/index.js'
@@ -42,7 +27,6 @@ test('host fold: image blocks price by the official DeepSeek image token formula
     { seq: 2, type: 'user/message', time: 2000, data: { content: [
       { type: 'image', attachment: { attachmentId: 'a2', mediaType: 'image/jpeg', bytes: 512000, width: 800, height: 600 } },
     ] } },
-    // Unknown dimensions: the meter's generic JSON branch prices the ref.
     { seq: 3, type: 'user/message', time: 3000, data: { content: [
       { type: 'image', attachment: { attachmentId: 'a3' } },
     ] } },
@@ -69,17 +53,12 @@ test('host fold: image blocks price by the official DeepSeek image token formula
   // tool-result: outer +4, nested image 201+4 (512×512 → 201), role +4.
   assert.equal(n5.tokens, 201 + 4 + 4 + 4, 'nested tool-result image priced by dims')
   assert.equal(n5.imgs, 1, 'the image count rides the surface node (nested blocks included)')
-  // Category sums carry the corrected figures.
   assert.equal(v.current.user, n1.tokens + n2.tokens + n3.tokens)
-  // Image count: the three user uploads + the nested tool-result image, all
-  // live on the surface.
   assert.equal(v.images, 4, 'image blocks counted across live user messages and tool results')
   // Tool calls: only results LIVE in the current context count — the one
   // tool/result folded above is on the surface.
   assert.equal(v.toolCalls, 1, 'a tool call with a live result counts')
 
-  // Compaction shadows the two image messages: the fold subtracts its own
-  // corrected prices, keeping the surface sum internally consistent.
   const v2 = drive([
     { seq: 1, type: 'user/message', time: 1000, data: { content: [
       { type: 'image', attachment: { attachmentId: 'a1', mediaType: 'image/png', bytes: 153600, width: 2048, height: 1365 } },
@@ -94,8 +73,6 @@ test('host fold: image blocks price by the official DeepSeek image token formula
   assert.equal(v2.images, 0, 'images of a compacted message stop counting (current context only)')
   assert.equal(v2.toolCalls, 0, 'no tool results on the surface -> zero tool calls')
 
-  // A tool result compacted OUT of the surface stops counting; a call still
-  // in flight (no result folded) never counted.
   const v3 = drive([
     { seq: 1, type: 'tool/call', time: 1000, data: { callId: 'c1', name: 'read', arguments: '{}' } },
     { seq: 2, type: 'tool/result', time: 1100, data: { callId: 'c1', message: { source: { kind: 'tool', callId: 'c1' }, content: [
@@ -137,7 +114,6 @@ test('client headline: composition counts match the ring panel, widths stay anch
   // Subdivision follows the fold's ratios (300/100/400/200 of 1000).
   assert.equal(raw.user, 300)
   assert.equal(raw.assistant, 400)
-  // Bar widths anchor to the provider total: they sum to the anchor.
   const anchored = head.parts.reduce((s, p) => s + p.value, 0)
   assert.equal(anchored, Math.round(5200), 'anchored bar fills the provider total')
   // …and keep the official ratios (uniform scale of the raw figures).
@@ -146,15 +122,12 @@ test('client headline: composition counts match the ring panel, widths stay anch
   assert.equal(head.tokens, 5200)
   assert.equal(head.pct, Math.round(5200 / 128000 * 100))
 
-  // No breakdown delivered (older harness): the fold's own sums serve.
   const fallback = headlineOf(data, pressure, null)
   const rawFb = Object.fromEntries(fallback.parts.map(p => [p.key, p.raw]))
   assert.equal(rawFb.system, 100)
   assert.equal(rawFb.user + rawFb.inject + rawFb.assistant + rawFb.tool, 1000)
   assert.equal(rawFb.assistant, 400)
 
-  // No anchor either (no pressure, no provider usage on any request):
-  // value === raw on every part.
   const anchorless = { ...data, requests: [] }
   const plain = headlineOf(anchorless, null, breakdown)
   for (const p of plain.parts) assert.equal(p.value, p.raw)

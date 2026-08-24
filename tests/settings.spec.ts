@@ -1,16 +1,8 @@
-/**
- * User-settings seam tests: the Host half serves the `dsh-context` namespace
- * (Settings → Plugins → Plugin configuration pairs it with the browser card
- * by key), and the browser half binds it for the default trend granularity
- * and display mode — read at view mount, written by the card through the
- * settings scope.
- */
 import assert from 'node:assert/strict'
 import { test } from 'vitest'
 import { apply } from '../lib/index.js'
 import { bootViewBed, byClass, textOf } from './helpers/viewBed.ts'
 
-/** A fake ctx.settingsScope binder over one fixed namespace section. */
 function fakeBinder(value, { status = 'ready', writable = true } = {}) {
   const writes = []
   const scope = {
@@ -27,7 +19,7 @@ function fakeBinder(value, { status = 'ready', writable = true } = {}) {
   return { writes, scope, binder }
 }
 
-/** Render the captured card against one bed's store, expanded via the header. */
+/** Render the captured settings card against one bed's store. */
 function cardRig(bed) {
   const face = bed.settingsCardRegistration.inject()
   const store = face.hooks.contextSettings
@@ -86,7 +78,7 @@ test('client half: the Plugin configuration card reads and writes both preferenc
   assert.equal(byClass(tree, 'lc-settings-head').length, 1, 'the header renders while collapsed')
   assert.equal(byClass(tree, 'lc-settings-row').length, 0, 'collapsed by default like the official plugin cards')
 
-  byClass(tree, 'lc-settings-head')[0].args[1].onClick() // disclose the controls
+  byClass(tree, 'lc-settings-head')[0].args[1].onClick()
   tree = render()
   assert.equal(byClass(tree, 'lc-settings-row').length, 2, 'granularity + trend-mode preference rows')
   const menus = byClass(tree, 'lc-menu')
@@ -97,13 +89,13 @@ test('client half: the Plugin configuration card reads and writes both preferenc
   assert.equal(textOf(pill), 'Step', 'the selector pill names the active option')
   assert.equal(byClass(tree, 'lc-settings-note').length, 0, 'no read-only note when writable')
 
-  menus[0].args[1].onSelect('turn') // choose Turn
+  menus[0].args[1].onSelect('turn')
   assert.deepEqual(writes, [['defaultGranularity', 'turn']], 'the choice lands as a fenced scope write')
   assert.equal(store.getSnapshot().granularity, 'turn', 'local echo before the write settles')
   tree = render()
   assert.equal(byClass(tree, 'lc-menu')[0].args[1]['data-selected'], 'turn', 'turn renders selected after the choice')
 
-  byClass(tree, 'lc-menu')[1].args[1].onSelect('diff') // choose Diff
+  byClass(tree, 'lc-menu')[1].args[1].onSelect('diff')
   assert.deepEqual(writes[1], ['defaultTrendMode', 'diff'], 'the trend-mode choice lands as a fenced scope write')
   assert.equal(store.getSnapshot().mode, 'diff', 'local echo before the write settles')
 })
@@ -111,7 +103,7 @@ test('client half: the Plugin configuration card reads and writes both preferenc
 test('client half: card states — read-only note and unavailable absence', async () => {
   const ro = await bootViewBed({ settingsScope: fakeBinder({ defaultGranularity: 'step' }, { writable: false }).binder })
   const roRig = cardRig(ro)
-  byClass(roRig.render(), 'lc-settings-head')[0].args[1].onClick() // disclose
+  byClass(roRig.render(), 'lc-settings-head')[0].args[1].onClick()
   const roTree = roRig.render()
   assert.equal(byClass(roTree, 'lc-settings-note').length, 1, 'read-only scope shows the note')
   assert.equal(byClass(roTree, 'lc-settings-select')[0].args[1].disabled, true, 'read-only scope disables the control')

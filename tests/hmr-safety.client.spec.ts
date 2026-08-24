@@ -31,7 +31,6 @@ test('client HMR safety: fiber dispose removes every registration', async () => 
   assert.ok(handoff !== null, 'bundle must register through __ModuleLoader__.load')
   const plugin = handoff.factory(require)
 
-  // ---- disposer-tracking ctx: every channel records its remover ----
   const effectDisposers = []
   const slotRemovers = []
   const localeActive = []
@@ -86,10 +85,9 @@ test('client HMR safety: fiber dispose removes every registration', async () => 
   assert.equal(sources.length, 1, '/context trigger source registered')
   assert.equal(provides.length, 1, 'loadOlderHistory prop contribution registered')
 
-  // ---- fiber dispose: run every disposer the fiber would run ----
   for (const d of effectDisposers) d()
   // slot inject removers are returned to cordis directly, not via ctx.effect
-  for (const row of [...slotRemovers]) slotRemovers.length = 0 // cordis removes slot rows on dispose
+  for (const row of [...slotRemovers]) slotRemovers.length = 0
 
   assert.equal(localeActive.length, 0, 'dictionaries unregistered on dispose')
   assert.equal(sources.length, 0, 'trigger source removed on dispose')

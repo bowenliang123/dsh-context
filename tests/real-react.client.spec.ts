@@ -1,9 +1,3 @@
-/**
- * Real-React reproduction harness: mounts the built client bundle with the
- * ACTUAL react/react-dom (module table) inside jsdom, drives the RPC with a
- * large synthetic snapshot, and toggles the granularity buttons — the exact
- * step -> turn -> step flow reported to black-screen the tab.
- */
 import assert from 'node:assert/strict'
 import { test } from 'vitest'
 import { readFile } from 'node:fs/promises'
@@ -15,7 +9,6 @@ import { createRoot } from 'react-dom/client'
 test('real-React jsdom mount: rapid step<->turn toggles never hit React #185', async () => {
   const bundle = await readFile(new URL('../lib/client.js', import.meta.url), 'utf8')
 
-  // ---- jsdom browser environment ----
   const dom = new JSDOM('<!doctype html><html><body></body></html>', { pretendToBeVisual: true })
   globalThis.window = dom.window
   globalThis.document = dom.window.document
@@ -50,7 +43,6 @@ test('real-React jsdom mount: rapid step<->turn toggles never hit React #185', a
     },
   })
 
-  // ---- module table: real React ----
   let handoff = null
   globalThis.window.__ModuleLoader__ = {
     load(h) { handoff = h },
@@ -68,14 +60,11 @@ test('real-React jsdom mount: rapid step<->turn toggles never hit React #185', a
     }
     throw new Error(`unexpected module: ${spec}`)
   }
-  // Run the bundle verbatim through the boot handoff (no string surgery on
-  // the artifact — decoupled from bundler layout), then materialize it with
-  // the module-table require like the browser loader does.
+  // Run the bundle verbatim through the boot handoff (no string surgery — decoupled from bundler layout).
   new Function(bundle)()
   assert.ok(handoff !== null, 'bundle must register through __ModuleLoader__.load')
   const plugin = handoff.factory(require)
 
-  // ---- snapshot: many steps across turns (mirrors a long tool-heavy session) ----
   const requests = []
   for (let i = 0; i < 460; i++) {
     requests.push({
@@ -118,8 +107,7 @@ test('real-React jsdom mount: rapid step<->turn toggles never hit React #185', a
   // hand it straight to the stub so the chart renders on the first commit.
   const viewProps = { sessionId: 's1', useProjection: (key) => (key === 'contextTimeline' ? snapshot : undefined) }
 
-  // ---- mount with real React (behind a boundary so #185-style crashes are
-  // catchable; without one an update-depth error unmounts the whole root) ----
+  // Mount behind a boundary: catches #185-style crashes (without one an update-depth error unmounts the root).
   const container = dom.window.document.createElement('div')
   dom.window.document.body.appendChild(container)
   const root = createRoot(container)
@@ -131,7 +119,6 @@ test('real-React jsdom mount: rapid step<->turn toggles never hit React #185', a
   }
   try {
     root.render(React.createElement(Boundary, null, React.createElement(viewComponent, viewProps)))
-    // the projection value is present on the first commit — no poll to wait on
     await new Promise(r => setTimeout(r, 60))
     assert.ok(container.textContent.includes('tokens'), 'chart rendered')
     // Wide viewport: the step chart overflows (460 bars) but the turn chart
@@ -152,7 +139,6 @@ test('real-React jsdom mount: rapid step<->turn toggles never hit React #185', a
       await new Promise(r => setTimeout(r, 20))
     }
     assert.equal(boundaryErrors.length, 0, 'no render crash: ' + (boundaryErrors[0] && boundaryErrors[0].message))
-    // back to step mode: all step bars render again
     const finalBtns = [...container.querySelectorAll('.lc-gran .lc-gran-btn')]
     finalBtns[0].click()
     await new Promise(r => setTimeout(r, 20))
@@ -160,7 +146,6 @@ test('real-React jsdom mount: rapid step<->turn toggles never hit React #185', a
     assert.ok(container.querySelectorAll('.lc-bar').length > 100, 'step mode re-rendered many bars')
     console.log('✔ real-React repro passed: 8 rapid step<->turn toggles render without throwing')
   } finally {
-    // A vitest failure needs the throw to propagate — no exitCode plumbing.
-    try { root.unmount() } catch { /* ignore */ }
+    try { root.unmount() } catch {}
   }
 })

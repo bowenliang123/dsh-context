@@ -1,8 +1,3 @@
-/**
- * /context modal spec: centered dialog with the current-composition
- * overview + the shared context browser, driven by the modal store hook;
- * closing consumes the deferred composer token through the session scope.
- */
 import assert from 'node:assert/strict'
 import { test } from 'vitest'
 import { bootViewBed, byClass, textOf } from './helpers/viewBed'
@@ -11,15 +6,10 @@ const bed = await bootViewBed()
 const { bailCalls, evaluate, modalComponent, modalSource, snapshot } = bed
 
 test('/context modal: open/close, current overview, embedded browser, deferred token consume on close', async () => {
-  // ---- /context modal render: centered dialog with the current-composition
-  // overview + the shared Context browser (which replaced the old last-10-turn
-  // trend), driven by the modal store hook ----
   assert.ok(modalComponent !== null, 'overlay component captured')
   const modalData = {
     ...snapshot,
     current: { system: 10, tools: 20, user: 140, inject: 0, assistant: 15, tool: 20, total: 205 },
-    // No provider usage on the last request -> the headline falls back to the
-    // heuristic total (205), like the old trend-phase fixture.
     requests: snapshot.requests.map(({ prompt, ...r }) => r),
     events: [],
   }
@@ -56,7 +46,6 @@ test('/context modal: open/close, current overview, embedded browser, deferred t
   assert.equal(bailCalls.length, 1, 'closing the modal dispatches consume-token')
   assert.equal(bailCalls[0][1], 'slash/input-consume-token')
   assert.deepEqual(bailCalls[0][2], { guard: { kind: 'bare-token', token: '/context' } }, 'enter-path guard consumed on close')
-  // A second close without a prior open records nothing.
   backdrop.args[1].onClick()
   assert.equal(bailCalls.length, 1, 'no pending guard -> no dispatch')
 

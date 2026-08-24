@@ -1,10 +1,3 @@
-/**
- * Registration-surface spec for the packaged client bundle: simulates the
- * web boot handoff (window.__ModuleLoader__.load), the module-table require,
- * and the client ctx (locale/slots/effect + a fake DOM), then asserts the
- * plugin registers its dictionaries, styles, the conversation.view tab
- * entry, and the /context command trigger source.
- */
 import assert from 'node:assert/strict'
 import { readFile } from 'node:fs/promises'
 import { test } from 'vitest'
@@ -12,7 +5,6 @@ import { bootViewBed, FAKE_PRIMITIVES, makeFakeDoc } from './helpers/viewBed'
 
 const bundle = await readFile(new URL('../lib/client.js', import.meta.url), 'utf8')
 
-// ---- fake browser environment ----
 const { fakeDoc, registered } = makeFakeDoc()
 const fakeReact = {
   createElement: (...args) => ({ kind: 'element', args }),
@@ -47,12 +39,7 @@ const require = (spec) => {
   return FAKE_PRIMITIVES
 }
 
-// ---- materialize the bundle the way the loader does ----
-// Run the bundle verbatim: it registers itself through the boot handoff
-// (window.__ModuleLoader__.load), and the loader materializes the plugin by
-// invoking the captured factory with the module-table require. The factory
-// body declares its own module/exports (the bundle intro), so no string
-// surgery on the artifact — the test stays decoupled from bundler layout.
+// Run the bundle verbatim (no string surgery — decoupled from bundler layout).
 new Function(bundle)()
 assert.ok(handoff !== null, 'bundle must register through __ModuleLoader__.load')
 const pluginExports = handoff.factory(require)
@@ -61,7 +48,6 @@ test('client bundle: handoff, dicts, styles, slot registration, /context command
   assert.equal(pluginExports.name, 'dsh-context')
   assert.deepEqual(pluginExports.inject, ['slots', 'locale'])
 
-  // ---- apply the client plugin ----
   const localeRegistrations = []
   const slotInjections = []
   const effects = []
@@ -121,10 +107,7 @@ test('client bundle: handoff, dicts, styles, slot registration, /context command
   assert.equal(typeof injected.hooks.contextModal.getSnapshot, 'function', 'hooks compartment carries the modal store')
   assert.equal(injected.hooks.contextModal.getSnapshot(), false, 'modal closed initially')
 
-  // ---- /context command: the plugin's own '/' trigger source ----
-  // The first fake ctx has no inputTriggers service: the command effect must
-  // stay inert (soft dependency), which the apply above already proved by not
-  // throwing. Now apply again with the trigger service present.
+  // inputTriggers is a soft dependency: the first apply (no service) stayed inert; re-apply with it armed.
   {
     const sources = []
     let localeDict = null
@@ -151,21 +134,16 @@ test('client bundle: handoff, dicts, styles, slot registration, /context command
     assert.equal(src.trigger, '/')
     assert.equal(src.name, 'context')
 
-    // Candidates: leading-only, prefix-filtered, description localized.
     const req = (query, position = 'leading') => ({ query, position, signal: new AbortController().signal })
     assert.deepEqual(await src.candidates({ sessionId: 's1' }, req('')), [{ name: 'context', description: '查看当前上下文构成，浏览各步骤组成' }])
     assert.deepEqual((await src.candidates({ sessionId: 's1' }, req('cont'))).length, 1, 'prefix match')
     assert.deepEqual(await src.candidates({ sessionId: 's1' }, req('xyz')), [], 'non-prefix miss')
     assert.deepEqual(await src.candidates({ sessionId: 's1' }, req('', 'inline')), [], 'inline positions never offer the command')
 
-    // Menu pick: opens the session's modal and answers 'handled'; the token
-    // stays in the composer while the modal is open (consumed on close).
     const outcome = src.onPick({ candidate: { name: 'context' }, session: { sessionId: 's1' }, position: 'leading', via: 'menu', span: { start: 0, end: 8, draftRev: 1 } })
     assert.equal(outcome, 'handled', 'menu pick is handled internally')
     assert.equal(injected.hooks.contextModal.getSnapshot(), true, 'menu pick opens the modal')
 
-    // Bare enter: also 'handled' (nothing is submitted, the draft keeps the
-    // token until the modal closes).
     assert.equal(await src.matchEnter({ sessionId: 's1' }, '/context', new AbortController().signal), 'handled', 'bare enter opens the modal without submitting')
     assert.equal(await src.matchEnter({ sessionId: 's1' }, '/context now', new AbortController().signal), undefined, 'argued lines miss')
     assert.equal(await src.matchEnter({ sessionId: 's1' }, '/compact', new AbortController().signal), undefined, 'other commands miss')
