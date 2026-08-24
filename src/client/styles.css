@@ -128,12 +128,14 @@
    slice; max-width keeps the block's ellipsis behavior for narrow blocks. */
 .lc-turn-label { display: inline-block; max-width: 100%; overflow: hidden; text-overflow: ellipsis; }
 .lc-detail { margin-top: 12px; border-top: 1px solid var(--dsw-alias-border-l1); padding-top: 12px; }
-.lc-detail-head { display: flex; flex-wrap: wrap; gap: 6px 16px; margin-bottom: 8px; color: var(--dsw-alias-label-secondary); }
-.lc-detail-head b { color: var(--dsw-alias-label-primary); }
-.lc-detail-marker { color: var(--dsw-alias-state-warn-primary); font-size: 11px; background: var(--dsw-alias-bg-layer-2); border-radius: 6px; padding: 1px 7px; }
-.lc-detail-head .lc-actual { color: var(--dsw-alias-state-success-primary); }
-.lc-detail-head .lc-cache { color: var(--dsw-alias-state-success-primary); }
+/* One wrapping row: title + event/tag chips + right-pinned tabular time, then uniform neutral metric pills —
+   same pill size/tabular figures, so a wrapped line still reads as a grid instead of scattered inline spans. */
+.lc-detail-head { display: flex; align-items: center; flex-wrap: wrap; gap: 6px 8px; margin-bottom: 10px; color: var(--dsw-alias-label-secondary); }
+.lc-detail-head b { font-size: 13px; color: var(--dsw-alias-label-primary); }
+.lc-detail-time { margin-left: auto; font-size: 12px; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.lc-detail-marker { color: var(--dsw-alias-state-warn-primary); font-size: 11px; background: color-mix(in srgb, var(--dsw-alias-state-warn-primary) 12%, transparent); border-radius: 6px; padding: 1px 7px; }
 .lc-detail-tag { background: var(--dsw-alias-bg-layer-2); border: 1px solid var(--dsw-alias-border-l1); border-radius: 4px; padding: 0 6px; font-size: 11px; color: var(--dsw-alias-label-secondary); }
+.lc-detail-metric { font-size: 12px; font-weight: 600; font-variant-numeric: tabular-nums; white-space: nowrap; padding: 2px 8px; border-radius: 6px; color: var(--dsw-alias-label-primary); background: color-mix(in srgb, var(--dsw-alias-label-secondary) 14%, transparent); }
 .lc-detail-rows { margin-top: 10px; display: grid; grid-template-columns: 1fr 1fr; gap: 4px 24px; }
 .lc-detail-row { display: flex; align-items: center; gap: 8px; }
 .lc-detail-label { min-width: 70px; white-space: nowrap; color: var(--dsw-alias-label-secondary); }

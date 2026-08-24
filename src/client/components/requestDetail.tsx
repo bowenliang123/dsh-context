@@ -37,17 +37,17 @@ export function makeRequestDetail(
             ? <span className="lc-detail-marker" title={eventLabel(marker)}>{'✂ ' + markerAt}</span>
             : null}
           {isTurn ? <span className="lc-detail-tag">{t('detail.lastStep')}</span> : null}
-          <span>{fmtTime(req.time)}</span>
+          <span className="lc-detail-time">{fmtTime(req.time)}</span>
+          {/* Metric chips: one neutral pill per provider figure; the cache figure drops out on hosts
+              that do not fold `cacheRead` (and on usage-less requests). */}
           {req.prompt !== undefined
-            ? <span className="lc-actual">{t('detail.actual', { n: fmt(req.prompt) })}</span>
+            ? <span className="lc-detail-metric">{t('detail.actual', { n: fmt(req.prompt) })}</span>
             : null}
           {req.output !== undefined
-            ? <span>{t('detail.output', { n: fmt(req.output) })}</span>
+            ? <span className="lc-detail-metric">{t('detail.output', { n: fmt(req.output) })}</span>
             : null}
-          {/* Step-level cache hit: the cache-served half of the billed prompt; absent on hosts
-              that do not fold `cacheRead` (and on usage-less requests) — the figure drops out. */}
           {req.prompt !== undefined && req.cacheRead !== undefined
-            ? <span className="lc-cache">{t('detail.cache', { n: cacheHitPercent(req.cacheRead, req.prompt) ?? '—' })}</span>
+            ? <span className="lc-detail-metric">{t('detail.cache', { n: cacheHitPercent(req.cacheRead, req.prompt) ?? '—' })}</span>
             : null}
         </div>
         <StackedBar parts={partsOf(req)} height={10} />
