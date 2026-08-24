@@ -142,13 +142,23 @@ test('tool result: the call half renders as a card with a run-state pill and the
 
   // The collapsed row leads with the tool-name chip, then previews with the
   // call's own summary line instead of the generic result label: bash's
-  // `description`, a read call's target path.
+  // `description`, a read call's target path. FAILED rows carry the red
+  // run-state dot right after the chevron — via the fold `err` stamp OR the
+  // snapshot's `isError` alone — and no ⚠ suffix (the dot marks failures).
   const toolRows = byClass(tr, 'lc-br-elem-row')
   assert.equal(toolRows.length, 3, 'all three tool results listed (newest first)')
+  assert.equal(byClass(toolRows[0], 'lc-br-err-dot').length, 1, 'failed result carries the red error dot')
+  assert.equal(byClass(toolRows[1], 'lc-br-err-dot').length, 1, 'snapshot-only failure carries the red error dot too')
+  assert.equal(byClass(toolRows[2], 'lc-br-err-dot').length, 0, 'healthy rows carry no error dot')
+  const failedCells = toolRows[0].args.slice(2)
+  const chevIdx = failedCells.findIndex(n => n !== null && typeof n === 'object' && (n.args[1]?.className ?? '').includes('lc-br-chev'))
+  const dotIdx = failedCells.findIndex(n => n !== null && typeof n === 'object' && (n.args[1]?.className ?? '').includes('lc-br-err-dot'))
+  assert.ok(chevIdx >= 0 && dotIdx === chevIdx + 1, 'the red dot sits right after the chevron')
   const readRowText = textOf(toolRows[1])
   assert.ok(readRowText.includes('/tmp/a.ts'), 'read result previews the target path')
   assert.doesNotMatch(readRowText, /node\.toolResult/, 'generic result label replaced by the path')
-  assert.equal(textOf(byClass(toolRows[1], 'lc-br-tag')[0]), 'read', 'read row leads with its tool-name chip')
+  assert.equal(textOf(byClass(toolRows[1], 'lc-br-tag')[0]), 'read', 'failed read row leads with its bare tool-name chip')
+  assert.doesNotMatch(textOf(toolRows[1]), /⚠/, 'no ⚠ suffix on failed rows (the dot marks failures)')
   const toolRow = toolRows[2]
   const rowText = textOf(toolRow)
   assert.match(rowText, /LIST-FILES/, 'collapsed row previews the call description')

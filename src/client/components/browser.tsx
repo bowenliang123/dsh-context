@@ -787,16 +787,20 @@ export function makeContextBrowser(
     const toggleElem = (key: string) => { setOpenElem(openElem === key ? null : key) }
 
     /** One expandable element row (preview line; the open body is the
-     * uniform indented section stack — `lc-br-content`). */
+     * uniform indented section stack — `lc-br-content`). `err` rows carry a
+     * red run-state dot (the chat's failed-tool marker) right after the
+     * chevron, so a failed tool result scans even while collapsed. */
     const elemRow = (
       key: string, tag: string | null, preview: string,
       tokens: number, time: number | undefined, body: ReactNS.ReactNode,
+      err = false,
     ) => {
       const open = openElem === key
       return (
         <div key={key} className={'lc-br-elem' + (open ? ' lc-br-elem-on' : '')}>
           <button type="button" className="lc-br-elem-row" onClick={() => { toggleElem(key) }}>
             <span className={'lc-br-chev' + (open ? ' lc-br-chev-on' : '')}>{'▸'}</span>
+            {err ? <span className="lc-br-err-dot" title={t('node.failed')} /> : null}
             {tag !== null ? <span className="lc-br-tag">{tag}</span> : null}
             <span className="lc-br-preview">{preview}</span>
             {time !== undefined ? <span className="lc-br-time">{fmtTime(time)}</span> : null}
@@ -838,6 +842,13 @@ export function makeContextBrowser(
       // newest first, mirroring the NodeList card.
       const nodes = (byCat[c as Category] ?? []).slice().reverse()
       return nodes.map((n) => {
+        // The conversation join for this row (missing = out of window).
+        const conv = bySeq.get(n.seq)
+        // Failed tool result: the fold's `err` stamp OR the snapshot block's
+        // `isError` (the latter is what dsh always writes; the former is
+        // optional) — drives the red dot and (when expanded) the call
+        // card's Failed pill.
+        const rowErr = n.cat === 'tool' && (n.err === true || (conv !== undefined && conv.isError === true))
         // Tag/preview split: the compact chip carries the compact fact (tool
         // name, injection form) — one shared subtle chip style — and the
         // preview line carries the text, each fact shown once.
@@ -846,28 +857,28 @@ export function makeContextBrowser(
         if (n.cat === 'tool') {
           // A `skill`-tool result is a loaded skill: label it by NAME (not the
           // generic tool name) so it scans apart from ordinary tool results.
-          tag = n.skill ? t('node.skillTag', { name: n.skill }) : (n.tool ?? '?') + (n.err ? ' ⚠' : '')
+          // The red dot already marks failures — no ⚠ suffix needed.
+          tag = n.skill ? t('node.skillTag', { name: n.skill }) : (n.tool ?? '?')
           // A call that summarizes itself (bash's `description`, the path
           // of an edit/read call) previews with that line in the collapsed
           // row; the generic result label only when the call says nothing.
-          preview = callSummaryOf(bySeq.get(n.seq)) ?? (t('node.toolResult') + (n.err ? ' ⚠' : ''))
+          preview = callSummaryOf(conv) ?? t('node.toolResult')
         } else if (n.cat === 'assistant' && Array.isArray(n.calls) && n.calls.length > 0) {
           // Call targets join as a breadcrumb (`bash › write`); the preview
           // then carries the reply text, or the first call's own summary
           // (description / target path) for a text-less turn.
           tag = n.calls.join(' › ')
           preview = (n.text !== undefined && n.text !== '' ? n.text : null)
-            ?? blockSummaryOf(bySeq.get(n.seq))
+            ?? blockSummaryOf(conv)
             ?? t('node.empty')
         } else if (n.cat === 'assistant' && (n.text === undefined || n.text === '')) {
           // No call list on the surface node: a text-less turn can still
           // preview a self-summarizing call found in the conversation join.
-          preview = blockSummaryOf(bySeq.get(n.seq)) ?? preview
+          preview = blockSummaryOf(conv) ?? preview
         } else if (n.cat === 'user') {
           // A user message with image uploads gains an Image chip on its
           // collapsed row (detected via the conversation join, like the
           // expanded body does); expanded, the body shows the grid anyway.
-          const conv = bySeq.get(n.seq)
           const imgCount = conv !== undefined && Array.isArray(conv.content)
             ? conv.content.filter(b => imageRefOf(b) !== null).length
             : 0
@@ -883,7 +894,7 @@ export function makeContextBrowser(
         return elemRow(`n${n.seq}`, tag, preview, n.tokens, n.time,
           <NodeContent
             node={n}
-            conv={bySeq.get(n.seq)}
+            conv={conv}
             rich={rich}
             img={{ Card: ImageCard, load: props.loadImage }}
             // Localized section titles (thinking / answer / content /
@@ -910,10 +921,12 @@ export function makeContextBrowser(
             // This row's body renders only while it is the open element, so
             // `awaiting` (open seq missing, pagination armed) means THIS join
             // is the one pages are being pulled for.
-            hint={bySeq.get(n.seq) === undefined && awaiting
+            hint={conv === undefined && awaiting
               ? t('browser.loading')
               : t('browser.noContent')}
-          />)
+          />,
+          // The red dot leads the collapsed row of a failed tool result.
+          rowErr)
       })
     }
 

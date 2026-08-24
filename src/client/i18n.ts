@@ -123,6 +123,7 @@ export const DICT_ZH: Record<string, string> = {
   // Run-state pill on a tool-result's call card: OK / Failed, with the
   // payload's terminal `exit N` marker on failure.
   'call.ok': '正常', 'call.fail': '失败', 'call.exit': 'exit {n}',
+  'node.failed': '工具执行失败',
   // Attachment cards in a message detail: image refs render as thumbnail
   // cards (name + one labeled row per known fact — raw dims, sent dims +
   // size, estimated token cost), anything unrecognized falls into the
@@ -258,6 +259,7 @@ export const DICT_EN: Record<string, string> = {
   // Run-state pill on a tool-result's call card: OK / Failed, with the
   // payload's terminal `exit N` marker on failure.
   'call.ok': 'OK', 'call.fail': 'Failed', 'call.exit': 'exit {n}',
+  'node.failed': 'Tool execution failed',
   // Attachment cards in a message detail: image refs render as thumbnail
   // cards (name + one labeled row per known fact — raw dims, sent dims +
   // size, estimated token cost), anything unrecognized falls into the
