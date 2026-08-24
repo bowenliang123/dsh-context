@@ -356,42 +356,46 @@ function callSummaryOf(conv: ConversationNodeLike | undefined): string | null {
 }
 
 /**
- * The dsh `[exit code: N]` marker render.ts appends LAST in a failing run's text (non-zero exits only), surfaced
- * on the FAILED run-state pill. End-anchored like dsh's own parseExitStatus, so marker text quoted inside the
- * output (e.g. a cat'ed log) is not a failure.
+ * The trailing status markers dsh shell tools append at the END of a result's text while `isError` stays false
+ * (the status is result data, per tool-bash's render: "non-zero exits are reported, not errored"):
+ * - one-shot bash/pwsh: `[exit code: N]` (non-zero only), `[killed by signal: X]`
+ * - persistent shells: `[shell killed by signal: X]`, `[shell exited: code N]` — riding LAST, after the
+ *   `[exit code: N]` of the command whose failure killed the shell, so the command marker is re-checked
+ *   on the preceding text
+ * End-anchored like dsh's own parseExitStatus, so marker text quoted inside the output (e.g. a cat'ed log)
+ * is not a failure. A clean shell exit (code 0 or code-less) is a session-loss notice, not a failure.
+ * The parsed exit code feeds the FAILED run-state pill.
  */
-function exitCodeOf(conv: ConversationNodeLike | undefined): number | null {
-  if (conv === undefined || !Array.isArray(conv.content)) return null
-  for (const b of conv.content) {
-    if (b === null || typeof b !== 'object') continue
-    const blk = b as { text?: unknown }
-    if (typeof blk.text !== 'string') continue
-    const m = blk.text.match(/\[exit code:\s*(\d+)\]\s*$/)
-    if (m !== null) return Number(m[1])
-  }
-  return null
-}
-
-/** True when a result's text ends with dsh's `[killed by signal: X]` marker — the other trailing failure marker (see exitCodeOf). */
-function signalKilledOf(conv: ConversationNodeLike | undefined): boolean {
-  if (conv === undefined || !Array.isArray(conv.content)) return false
+function tailStatusOf(conv: ConversationNodeLike | undefined): { fail: boolean; exit: number | null } {
+  if (conv === undefined || !Array.isArray(conv.content)) return { fail: false, exit: null }
   for (const b of conv.content) {
     const text = (b as { text?: unknown } | null)?.text
-    if (typeof text === 'string' && /\[killed by signal: [^\]\n]+\]\s*$/.test(text)) return true
+    if (typeof text !== 'string') continue
+    const tail = text.trimEnd()
+    const shell = /\[(shell killed by signal: [^\]\n]+|shell exited(?:: code \d+)?)\]$/.exec(tail)
+    if (shell !== null) {
+      const cmdExit = /\[exit code:\s*(\d+)\]\s*$/.exec(tail.slice(0, shell.index))
+      if (cmdExit !== null) return { fail: true, exit: Number(cmdExit[1]) }
+      const code = /: code (\d+)$/.exec(shell[1])
+      if (code !== null) return { fail: code[1] !== '0', exit: code[1] === '0' ? null : Number(code[1]) }
+      return { fail: shell[1].startsWith('shell killed'), exit: null }
+    }
+    const exit = /\[exit code:\s*(\d+)\]$/.exec(tail)
+    if (exit !== null) return { fail: true, exit: Number(exit[1]) }
+    if (/\[killed by signal: [^\]\n]+\]$/.test(tail)) return { fail: true, exit: null }
   }
-  return false
+  return { fail: false, exit: null }
 }
 
 /**
  * A tool result's failure: the fold-stamped `err` or the snapshot's `isError` (infrastructure failures — dsh stamps
- * those) OR a trailing exit/signal marker. dsh settles a failing COMMAND as a completed call (isError stays false:
- * the exit status is result data), so the marker is the only failure signal — mirroring the chat row's
- * terminalFailed. A timeout stays a notice, as in the chat.
+ * those) OR a trailing status marker (see tailStatusOf). dsh settles a failing COMMAND as a completed call, so the
+ * marker is the only failure signal — mirroring the chat row's terminalFailed. A timeout stays a notice, as in the chat.
  */
 function toolErrOf(node: SurfaceNode, conv: ConversationNodeLike | undefined): { err: boolean; exit: number | null } {
-  const exit = exitCodeOf(conv)
-  const err = node.err === true || conv?.isError === true || exit !== null || signalKilledOf(conv)
-  return { err, exit }
+  const tail = tailStatusOf(conv)
+  const err = node.err === true || conv?.isError === true || tail.fail
+  return { err, exit: tail.exit }
 }
 
 function blockSummaryOf(conv: ConversationNodeLike | undefined): string | null {

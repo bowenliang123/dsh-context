@@ -266,3 +266,63 @@ test('tool result: a trailing exit-code or signal marker marks the run FAILED wi
 
   console.log('✔ marker-only failure test passed (exit-code dot+pill, signal dot+pill, quoted marker stays OK)')
 })
+
+test('tool result: persistent-shell death markers mark the run FAILED, a clean shell exit stays a notice', async () => {
+  bed.dataValue = {
+    ...snapshot,
+    nodes: [
+      ...snapshot.nodes,
+      // The persistent shell died with the failing command: `[shell exited: code N]` rides LAST, after the
+      // command's own `[exit code: N]` — the command marker must still win the pill's exit number.
+      { seq: 3, cat: 'tool', tool: 'bash', tokens: 8, time: 66000 },
+      { seq: 4, cat: 'tool', tool: 'bash', tokens: 8, time: 67000 },
+      // A clean shell exit (code 0 / code-less) loses the session but is not a command failure.
+      { seq: 5, cat: 'tool', tool: 'bash', tokens: 8, time: 68000 },
+      { seq: 6, cat: 'tool', tool: 'bash', tokens: 8, time: 69000 },
+    ],
+  }
+  bed.useSessionHolder = (sel) => sel({
+    nodes: [
+      {
+        kind: 'tool-result', seq: 3,
+        call: { name: 'bash', argsRaw: '{"command":"kill $$","description":"KILL-SHELL"}' },
+        content: [{ type: 'text', text: 'boom\n[exit code: 1]\n[shell exited: code 1]' }],
+      },
+      {
+        kind: 'tool-result', seq: 4,
+        call: { name: 'bash', argsRaw: '{"command":"sleep 9","description":"SLEEP"}' },
+        content: [{ type: 'text', text: 'partial\n[shell killed by signal: SIGKILL]' }],
+      },
+      {
+        kind: 'tool-result', seq: 5,
+        call: { name: 'bash', argsRaw: '{"command":"exit","description":"EXIT"}' },
+        content: [{ type: 'text', text: 'done\n[shell exited: code 0]' }],
+      },
+      {
+        kind: 'tool-result', seq: 6,
+        call: { name: 'bash', argsRaw: '{"command":"exit","description":"EXIT"}' },
+        content: [{ type: 'text', text: 'done\n[shell exited]' }],
+      },
+    ],
+  })
+  brSlots[1][1]('tool')
+  let tr = renderView()
+  const toolRows = byClass(tr, 'lc-br-elem-row')
+  assert.equal(toolRows.length, 4, 'all four tool results listed (newest first)')
+  assert.equal(byClass(toolRows[0], 'lc-br-err-dot').length, 0, 'code-less shell exit is a notice, not a failure')
+  assert.equal(byClass(toolRows[1], 'lc-br-err-dot').length, 0, 'clean shell exit (code 0) is a notice, not a failure')
+  assert.equal(byClass(toolRows[2], 'lc-br-err-dot').length, 1, 'signal-killed shell carries the red error dot')
+  assert.equal(byClass(toolRows[3], 'lc-br-err-dot').length, 1, 'shell exit with the failed command carries the red error dot')
+
+  brSlots[2][1]('n3')
+  tr = renderView()
+  const errPill = byClass(tr, 'lc-ts-call-err')[0]
+  assert.ok(errPill, 'shell-death result carries the red Failed pill')
+  assert.match(textOf(errPill), /exit 1/, 'pill surfaces the command exit code behind the shell marker')
+
+  brSlots[2][1]('n5')
+  tr = renderView()
+  assert.ok(byClass(tr, 'lc-ts-call-ok')[0], 'clean shell exit keeps the green OK pill')
+
+  console.log('✔ persistent-shell marker test passed (shell death fails, clean exit stays a notice)')
+})
