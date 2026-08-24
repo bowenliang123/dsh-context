@@ -115,7 +115,7 @@ test('tool result: the call half renders as a card with a run-state pill and the
       {
         kind: 'tool-result', seq: 7, isError: true,
         call: { name: 'bash', argsRaw: '{"command":"rm -rf /"}' },
-        content: [{ type: 'text', text: '[exit code: 2]\npermission denied' }],
+        content: [{ type: 'text', text: 'permission denied\n[exit code: 2]' }],
       },
     ],
   })
@@ -204,4 +204,65 @@ test('tool result: the call half renders as a card with a run-state pill and the
   assert.match(textOf(asstRows[2]), /second message/, 'text-bearing turn keeps its text preview')
 
   console.log('✔ tool-result call card test passed (← card, run-state pill, line count, raw/markdown switch)')
+})
+
+test('tool result: a trailing exit-code or signal marker marks the run FAILED without err/isError', async () => {
+  bed.dataValue = {
+    ...snapshot,
+    nodes: [
+      ...snapshot.nodes,
+      // dsh settles a failing COMMAND as a completed call: the fold stamps no `err`, the snapshot carries no
+      // `isError` — the trailing marker is the only failure signal (the chat row's terminalFailed does the same).
+      { seq: 3, cat: 'tool', tool: 'bash', tokens: 8, time: 66000 },
+      { seq: 4, cat: 'tool', tool: 'bash', tokens: 8, time: 67000 },
+      // Marker text quoted mid-output (e.g. a cat'ed log) is NOT a failure — the match is end-anchored.
+      { seq: 5, cat: 'tool', tool: 'bash', tokens: 8, time: 68000 },
+    ],
+  }
+  bed.useSessionHolder = (sel) => sel({
+    nodes: [
+      {
+        kind: 'tool-result', seq: 3,
+        call: { name: 'bash', argsRaw: '{"command":"grep -n x f","description":"GREP"}' },
+        content: [{ type: 'text', text: '(no output)\n[exit code: 1]' }],
+      },
+      {
+        kind: 'tool-result', seq: 4,
+        call: { name: 'bash', argsRaw: '{"command":"sleep 9","description":"SLEEP"}' },
+        content: [{ type: 'text', text: 'partial\n[killed by signal: SIGTERM]' }],
+      },
+      {
+        kind: 'tool-result', seq: 5,
+        call: { name: 'bash', argsRaw: '{"command":"cat log","description":"CAT"}' },
+        content: [{ type: 'text', text: '[exit code: 1]\nquoted marker text' }],
+      },
+    ],
+  })
+  brSlots[1][1]('tool')
+  let tr = renderView()
+  const toolRows = byClass(tr, 'lc-br-elem-row')
+  assert.equal(toolRows.length, 3, 'all three tool results listed (newest first)')
+  assert.equal(byClass(toolRows[0], 'lc-br-err-dot').length, 0, 'quoted marker text is not a failure')
+  assert.equal(byClass(toolRows[1], 'lc-br-err-dot').length, 1, 'signal-killed row carries the red error dot')
+  assert.equal(byClass(toolRows[2], 'lc-br-err-dot').length, 1, 'exit-code row carries the red error dot')
+
+  brSlots[2][1]('n3')
+  tr = renderView()
+  const errPill = byClass(tr, 'lc-ts-call-err')[0]
+  assert.ok(errPill, 'marker-only failure carries the red Failed pill')
+  assert.match(textOf(errPill), /exit 1/, 'pill surfaces the marker exit code')
+  assert.equal(byClass(tr, 'lc-ts-call-ok').length, 0, 'no green OK pill on the marker failure')
+
+  brSlots[2][1]('n4')
+  tr = renderView()
+  const sigPill = byClass(tr, 'lc-ts-call-err')[0]
+  assert.ok(sigPill, 'signal-killed result carries the red Failed pill')
+  assert.doesNotMatch(textOf(sigPill), /exit/, 'no exit code in the pill without the marker')
+
+  brSlots[2][1]('n5')
+  tr = renderView()
+  assert.ok(byClass(tr, 'lc-ts-call-ok')[0], 'quoted marker text keeps the green OK pill')
+  assert.equal(byClass(tr, 'lc-ts-call-err').length, 0, 'no red pill on the quoted-marker result')
+
+  console.log('✔ marker-only failure test passed (exit-code dot+pill, signal dot+pill, quoted marker stays OK)')
 })

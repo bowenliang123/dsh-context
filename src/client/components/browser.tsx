@@ -356,8 +356,9 @@ function callSummaryOf(conv: ConversationNodeLike | undefined): string | null {
 }
 
 /**
- * The dsh `[exit code: N]` marker across the payload's direct text blocks — surfaced only on the FAILED run-state pill, the one place the
- * number matters.
+ * The dsh `[exit code: N]` marker render.ts appends LAST in a failing run's text (non-zero exits only), surfaced
+ * on the FAILED run-state pill. End-anchored like dsh's own parseExitStatus, so marker text quoted inside the
+ * output (e.g. a cat'ed log) is not a failure.
  */
 function exitCodeOf(conv: ConversationNodeLike | undefined): number | null {
   if (conv === undefined || !Array.isArray(conv.content)) return null
@@ -365,10 +366,32 @@ function exitCodeOf(conv: ConversationNodeLike | undefined): number | null {
     if (b === null || typeof b !== 'object') continue
     const blk = b as { text?: unknown }
     if (typeof blk.text !== 'string') continue
-    const m = blk.text.match(/\[exit code:\s*(\d+)\]/)
+    const m = blk.text.match(/\[exit code:\s*(\d+)\]\s*$/)
     if (m !== null) return Number(m[1])
   }
   return null
+}
+
+/** True when a result's text ends with dsh's `[killed by signal: X]` marker — the other trailing failure marker (see exitCodeOf). */
+function signalKilledOf(conv: ConversationNodeLike | undefined): boolean {
+  if (conv === undefined || !Array.isArray(conv.content)) return false
+  for (const b of conv.content) {
+    const text = (b as { text?: unknown } | null)?.text
+    if (typeof text === 'string' && /\[killed by signal: [^\]\n]+\]\s*$/.test(text)) return true
+  }
+  return false
+}
+
+/**
+ * A tool result's failure: the fold-stamped `err` or the snapshot's `isError` (infrastructure failures — dsh stamps
+ * those) OR a trailing exit/signal marker. dsh settles a failing COMMAND as a completed call (isError stays false:
+ * the exit status is result data), so the marker is the only failure signal — mirroring the chat row's
+ * terminalFailed. A timeout stays a notice, as in the chat.
+ */
+function toolErrOf(node: SurfaceNode, conv: ConversationNodeLike | undefined): { err: boolean; exit: number | null } {
+  const exit = exitCodeOf(conv)
+  const err = node.err === true || conv?.isError === true || exit !== null || signalKilledOf(conv)
+  return { err, exit }
 }
 
 function blockSummaryOf(conv: ConversationNodeLike | undefined): string | null {
@@ -443,9 +466,7 @@ function NodeContent(props: {
     return <BlocksBody blocks={conv.blocks} richable textLabel={labels.answer} rich={rich} img={img} labels={labels} />
   }
   if (conv.kind === 'tool-result') {
-    // `err` = the surface node's fold-stamped `err` (host-side, authoritative) OR the snapshot's `isError`; the pill defaults to OK because
-    // dsh always stamps failures — a silent flag means a normal run.
-    const err = node.err === true || conv.isError === true
+    const { err, exit } = toolErrOf(node, conv)
     return (
       <>
         {conv.call != null
@@ -453,7 +474,7 @@ function NodeContent(props: {
             arrow="←"
             name={conv.call.name}
             argsRaw={conv.call.argsRaw}
-            status={labels.callState(err, err ? exitCodeOf(conv) : null)}
+            status={labels.callState(err, exit)}
           />
           : null}
         {Array.isArray(conv.content)
@@ -675,7 +696,7 @@ export function makeContextBrowser(
       const nodes = (byCat[c as Category] ?? []).slice().reverse()
       return nodes.map((n) => {
         const conv = bySeq.get(n.seq)
-        const rowErr = n.cat === 'tool' && (n.err === true || (conv !== undefined && conv.isError === true))
+        const rowErr = n.cat === 'tool' && toolErrOf(n, conv).err
         // Tag carries the compact fact (tool name, injection form) — one shared subtle chip style; the preview line carries the text — each
         // fact shown once.
         let tag: string | null = null
