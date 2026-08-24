@@ -84,8 +84,8 @@ export function makeContextView(
     const [tick, setTick] = React.useState(0)
     // Mount-time default from the plugin settings card; in-chart toggling stays mount-local and never writes back.
     const [granularity, setGranularity] = React.useState<'step' | 'turn'>(() => settings.defaultGranularity())
-    // 'total' plots each request's cumulative composition, 'delta' its incremental change vs the previous one; like granularity, the default
-    // is read at mount and in-chart toggling never writes back.
+    // 'total' plots each request's cumulative composition, 'delta' its incremental change vs the previous one;
+    // like granularity, the default is read at mount and in-chart toggling never writes back.
     const [trendMode, setTrendMode] = React.useState<'total' | 'delta'>(() => settings.defaultTrendMode())
     // Strip-clicked turn: chart switches to turn granularity and scroll-centers that turn's bar, then clears via onFocusTurnHandled.
     const [focusTurn, setFocusTurn] = React.useState<number | null>(null)

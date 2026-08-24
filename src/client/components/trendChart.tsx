@@ -84,8 +84,9 @@ export function makeTrendChart(kit: ViewKit): (props: TrendChartProps) => ReactN
     typeof req.prompt === 'number' && req.prompt > 0 ? req.prompt : req.total
 
   /**
-   * Delta mode: each category becomes |current − previous|, `total` the summed magnitude, `net` the signed change for the tooltip; the first
-   * request starts from zero so the scale is change-driven, and per-request provider prompt/output are dropped (they are not deltas).
+   * Delta mode: each category becomes |current − previous|, `total` the summed magnitude, `net` the signed change
+   * for the tooltip; the first request starts from zero so the scale is change-driven, and per-request provider
+   * prompt/output are dropped (they are not deltas).
    */
   const deltaOf = (req: RequestRecord, prev: RequestRecord | null): RequestRecord => {
     const out = { ...req }
