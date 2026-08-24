@@ -400,7 +400,14 @@
  The raw-schema JSON sits below the cards as a collapsed toggle (no card
  chrome — it's a debug view, not a primary section). ----
  */
-.lc-ts-card { background: var(--dsw-alias-bg-layer-2); border: 1px solid var(--dsw-alias-border-l1); border-radius: 6px; overflow: hidden; }
+/*
+ Markdown cards wrap automatically: the section card is a flex child that
+ otherwise refuses to shrink below its content (`min-width: auto`) — long
+ unbroken tokens would stretch the card past the browser column. With
+ `min-width: 0` on the card and `overflow-wrap: anywhere` on the body, long
+ words, URLs and code wrap in place instead.
+ */
+.lc-ts-card { background: var(--dsw-alias-bg-layer-2); border: 1px solid var(--dsw-alias-border-l1); border-radius: 6px; overflow: hidden; min-width: 0; }
 .lc-ts-card-head { display: flex; align-items: center; gap: 8px; padding: 6px 10px; font-size: 11px; font-weight: 600; color: var(--dsw-alias-label-secondary); border-bottom: 1px solid var(--dsw-alias-border-l1); }
 .lc-ts-card-head b { color: var(--dsw-alias-label-primary); }
 /* Tool-call card heads name the call target a step up from the slim label
@@ -468,7 +475,7 @@
 .lc-rich-seg-btn { border: 0; background: transparent; color: var(--dsw-alias-label-secondary); font-size: 11px; line-height: 1; padding: 3px 8px; border-radius: 5px; cursor: pointer; font-family: inherit; }
 .lc-rich-seg-btn:hover { color: var(--dsw-alias-label-primary); }
 .lc-rich-seg-on, .lc-rich-seg-on:hover { background: var(--dsw-alias-button-primary-fill); color: var(--dsw-alias-label-primary-foreground); }
-.lc-ts-desc-md { padding: 4px 10px; color: var(--dsw-alias-label-primary); font-size: 12px; line-height: 1.55; word-break: break-word; max-height: 320px; overflow-y: auto; scrollbar-width: thin; }
+.lc-ts-desc-md { padding: 4px 10px; color: var(--dsw-alias-label-primary); font-size: 12px; line-height: 1.55; word-break: break-word; overflow-wrap: anywhere; min-width: 0; white-space: pre-line; max-height: 320px; overflow-y: auto; overflow-x: hidden; scrollbar-width: thin; }
 /*
  The shared markdown renderer sizes its root/headings for chat bubbles;
  inside a detail card the base size sits one step ABOVE the raw text
@@ -485,7 +492,7 @@
 .lc-ts-desc-md > div { font-size: 13px; line-height: 1.55; }
 .lc-ts-desc-md div :is(h1, h2, h3, h4, h5, h6) { font-size: 13px; font-weight: 600; margin: 10px 0 4px; }
 .lc-ts-desc-md div p { margin: 6px 0; }
-.lc-ts-desc-md div pre { margin: 6px 0; }
+.lc-ts-desc-md div pre { margin: 6px 0; white-space: pre-wrap; overflow-wrap: anywhere; word-break: break-word; }
 .lc-ts-desc-md div :not(pre) > code { font-size: 1em !important; line-height: 1.3; padding: 1px 5px; box-decoration-break: clone; }
 .lc-ts-desc-md div table code { font-size: inherit; }
 /*
