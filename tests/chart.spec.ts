@@ -236,6 +236,58 @@ test('context view: trend chart, stats board, plugin info, hover linking, granul
   assert.equal(byClass(tr, 'lc-bar').length, 4, 'back to one bar per step')
   assert.equal(onBtns(granRow())[0].args[2], 'Step', 'step button active again')
 
+  // ── Delta mode: diverging bars around a zero line + signed detail panel ──
+  // Fixture deltas: seq2 −5 user/−5 assistant, seq3 +15/+2, seq4 −20/−4 → maxUp 17, maxDown 24,
+  // scale 112/41 → upPx 46, downPx 66.
+  const modeRow = () => byClass(tr, 'lc-gran')[1].args.slice(2)
+  let modeBtns = modeRow()
+  assert.equal(modeBtns[0].args[2], 'Total', 'first mode button is total')
+  assert.equal(modeBtns[1].args[2], 'Delta', 'second mode button is delta')
+  modeBtns[1].args[1].onClick()
+  tr = renderView()
+
+  assert.equal(textOf(byClass(tr, 'lc-axis-top')[0]), '+17', 'delta axis tops at the largest growth')
+  assert.equal(textOf(byClass(tr, 'lc-axis-mid')[0]), '0', 'delta axis mid is the zero reading')
+  assert.equal(byClass(tr, 'lc-axis-mid')[0].args[1].style.top, '59px', 'zero label rides the proportional zero line (13 + upPx)')
+  assert.equal(textOf(byClass(tr, 'lc-axis-bot')[0]), '-24', 'delta axis bottoms at the largest shrinkage')
+  const zeroLine = byClass(tr, 'lc-grid-zero')
+  assert.equal(zeroLine.length, 1, 'a solid zero baseline appears in delta mode')
+  assert.equal(zeroLine[0].args[1].style.top, '64px', 'zero line sits at chart padding + upPx')
+  assert.equal(byClass(tr, 'lc-grid-mid').length, 0, 'the dashed mid grid is replaced')
+
+  const segHeights = (stack) => stack.args.slice(2).flat().filter(c => c !== null && c !== undefined).map(c => c.args[1].style.height)
+  const upStacks = byClass(tr, 'lc-bar-up')
+  const downStacks = byClass(tr, 'lc-bar-down')
+  assert.equal(upStacks.length, 4, 'every bar carries an up stack')
+  assert.equal(downStacks.length, 4, 'every bar carries a down stack')
+  assert.equal(segHeights(upStacks[0]).length + segHeights(downStacks[0]).length, 0, 'the first bar starts from zero')
+  assert.deepEqual(segHeights(upStacks[2]), ['41px', '5px'], 'growth piles up from the zero line (user +15, assistant +2)')
+  assert.deepEqual(segHeights(downStacks[3]), ['55px', '11px'], 'shrinkage hangs down from the zero line (user −20, assistant −4)')
+
+  ctxSlots[1][1](3)
+  tr = renderView()
+  assert.match(textOf(byClass(tr, 'lc-chart-tip')[0]), /Δ \+17/, 'delta tooltip shows the signed net')
+  assert.match(detailStep(tr), /Δ \+17/, 'detail header carries the net chip')
+  assert.ok(!detailStep(tr).includes('Actual Prompt'), 'usage chips drop out in delta mode')
+  assert.ok(byClass(tr, 'lc-detail-tag').map(n => textOf(n)).includes('Delta'), 'a delta tag marks the panel mode')
+  assert.deepEqual(byClass(tr, 'lc-detail-num-up').map(n => textOf(n)), ['+15', '+2'], 'growing categories read as signed figures')
+  assert.equal(byClass(tr, 'lc-detail-num-down').length, 0, 'no shrinkage on this request')
+  assert.equal(byClass(tr, 'lc-bar-zero').length, 6, 'every delta row carries a zero hairline')
+  assert.equal(byClass(tr, 'lc-bar-fill-up').length, 2, 'growing rows fill right of zero')
+
+  ctxSlots[1][1](null)
+  tr = renderView()
+  assert.match(detailStep(tr), /Δ -24/, 'the newest request detail nets to −24')
+  assert.deepEqual(byClass(tr, 'lc-detail-num-down').map(n => textOf(n)), ['-20', '-4'], 'shrinking categories read as signed figures')
+  assert.equal(byClass(tr, 'lc-bar-fill-down').length, 2, 'shrinking rows fill left of zero')
+
+  modeBtns = modeRow()
+  modeBtns[0].args[1].onClick()
+  tr = renderView()
+  assert.equal(byClass(tr, 'lc-grid-zero').length, 0, 'total mode drops the zero baseline')
+  assert.equal(byClass(tr, 'lc-grid-mid').length, 1, 'total mode restores the dashed mid grid')
+  assert.match(detailStep(tr), /Actual Prompt 83\.0k/, 'total mode restores the usage chips')
+
   let scroller = byClass(tr, 'lc-chart-scroll')[0]
   const fakeScroller = { scrollLeft: 200, clientWidth: 120, scrollWidth: 800, querySelectorAll: () => [] }
   scroller.args[1].onScroll({ currentTarget: fakeScroller })

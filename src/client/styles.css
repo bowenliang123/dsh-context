@@ -98,6 +98,8 @@
 .lc-grid { position: absolute; left: 0; right: 0; border-top: 1px dashed var(--dsw-alias-border-l1); pointer-events: none; }
 .lc-grid-top { top: 18px; }
 .lc-grid-mid { top: 74px; }
+/* Delta mode: a SOLID zero baseline (inline-positioned) replaces the dashed mid grid as the reading reference. */
+.lc-grid-zero { border-top-style: solid; border-top-color: rgba(128,128,128,0.5); }
 .lc-bar { position: relative; width: 14px; flex: none; height: 100%; display: flex; align-items: flex-end; cursor: pointer; border-radius: 2px; transition: opacity 120ms ease, background-color 120ms ease; }
 .lc-chart-dim .lc-bar { opacity: 0.35; }
 .lc-chart-dim .lc-bar-in-turn { opacity: 1; }
@@ -117,6 +119,11 @@
 .lc-bar-in-turn { background: rgba(128,128,128,0.14); }
 .lc-bar-stack { display: flex; flex-direction: column-reverse; width: 100%; }
 .lc-bar-stack > div { width: 100%; }
+/* Delta mode: diverging stacks anchored at the zero line — growth piles up from it, shrinkage hangs down. */
+.lc-bar-up, .lc-bar-down { position: absolute; left: 0; width: 100%; display: flex; }
+.lc-bar-up { flex-direction: column-reverse; }
+.lc-bar-down { flex-direction: column; }
+.lc-bar-up > div, .lc-bar-down > div { width: 100%; }
 .lc-bar-marker { position: absolute; top: -16px; left: 50%; transform: translateX(-50%); font-size: 11px; color: var(--dsw-alias-state-warn-primary); }
 /*
  Turn strip: NEUTRAL zebra fills (inline, see TURN_FILLS) — never the category palette, or the strip reads as a detached bottom segment of the bars.
@@ -136,12 +143,23 @@
 .lc-detail-marker { color: var(--dsw-alias-state-warn-primary); font-size: 11px; background: color-mix(in srgb, var(--dsw-alias-state-warn-primary) 12%, transparent); border-radius: 6px; padding: 1px 7px; }
 .lc-detail-tag { background: var(--dsw-alias-bg-layer-2); border: 1px solid var(--dsw-alias-border-l1); border-radius: 4px; padding: 0 6px; font-size: 11px; color: var(--dsw-alias-label-secondary); }
 .lc-detail-metric { font-size: 12px; font-weight: 600; font-variant-numeric: tabular-nums; white-space: nowrap; padding: 2px 8px; border-radius: 6px; color: var(--dsw-alias-label-primary); background: color-mix(in srgb, var(--dsw-alias-label-secondary) 14%, transparent); }
+/* Delta sign semantics mirror the harness diff blocks: growth on the success token, shrinkage on the error token. */
+.lc-detail-metric-up { color: var(--dsw-alias-state-success-primary); background: color-mix(in srgb, var(--dsw-alias-state-success-primary) 15%, transparent); }
+.lc-detail-metric-down { color: var(--dsw-alias-state-error-primary); background: color-mix(in srgb, var(--dsw-alias-state-error-primary) 15%, transparent); }
 .lc-detail-rows { margin-top: 10px; display: grid; grid-template-columns: 1fr 1fr; gap: 4px 24px; }
 .lc-detail-row { display: flex; align-items: center; gap: 8px; }
 .lc-detail-label { min-width: 70px; white-space: nowrap; color: var(--dsw-alias-label-secondary); }
-.lc-bar-track { flex: 1; height: 5px; border-radius: 3px; background: rgba(128,128,128,0.18); overflow: hidden; display: block; }
+.lc-bar-track { flex: 1; height: 5px; border-radius: 3px; background: rgba(128,128,128,0.18); overflow: hidden; display: block; position: relative; }
 .lc-bar-fill { display: block; height: 100%; border-radius: 3px; }
+/* Delta rows: a hairline zero at the middle, growth fills right of it, shrinkage left. */
+.lc-bar-zero { position: absolute; left: 50%; top: 0; bottom: 0; border-left: 1px solid rgba(128,128,128,0.45); }
+.lc-bar-fill-up, .lc-bar-fill-down { position: absolute; top: 0; height: 100%; display: block; }
+.lc-bar-fill-up { left: 50%; border-radius: 0 3px 3px 0; }
+.lc-bar-fill-down { right: 50%; border-radius: 3px 0 0 3px; }
 .lc-detail-num { width: 44px; text-align: right; }
+.lc-detail-num-up, .lc-detail-num-down { width: 52px; font-variant-numeric: tabular-nums; }
+.lc-detail-num-up { color: var(--dsw-alias-state-success-primary); }
+.lc-detail-num-down { color: var(--dsw-alias-state-error-primary); }
 .lc-detail-pct { width: 34px; text-align: right; color: var(--dsw-alias-label-secondary); }
 /*
  The row owns the 14px vertical rhythm (lc-cols gap); cards drop their own bottom margin (incl. the last in a column) so every section boundary measures exactly one 14px whichever way the flex wraps.

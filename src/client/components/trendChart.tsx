@@ -84,9 +84,10 @@ export function makeTrendChart(kit: ViewKit): (props: TrendChartProps) => ReactN
     typeof req.prompt === 'number' && req.prompt > 0 ? req.prompt : req.total
 
   /**
-   * Delta mode: each category becomes |current − previous|, `total` the summed magnitude, `net` the signed change
-   * for the tooltip; the first request starts from zero so the scale is change-driven, and per-request provider
-   * prompt/output are dropped (they are not deltas).
+   * Delta mode: each category keeps the SIGNED change vs the previous record so bars can diverge
+   * above/below the zero line; `total` is the churn (summed magnitude), `net` the signed change
+   * for the tooltip; the first request starts from zero so the scale is change-driven, and per-request
+   * provider prompt/output are dropped (they are not deltas).
    */
   const deltaOf = (req: RequestRecord, prev: RequestRecord | null): RequestRecord => {
     const out = { ...req }
@@ -94,7 +95,7 @@ export function makeTrendChart(kit: ViewKit): (props: TrendChartProps) => ReactN
     let net = 0
     for (const c of CATS) {
       const d = prev !== null ? (req[c.key] || 0) - (prev[c.key] || 0) : 0
-      out[c.key] = Math.abs(d)
+      out[c.key] = d
       churn += Math.abs(d)
       net += d
     }
@@ -112,6 +113,15 @@ export function makeTrendChart(kit: ViewKit): (props: TrendChartProps) => ReactN
     hovered: boolean
     inTurn: boolean
     maxTotal: number
+    /**
+     * Delta mode geometry: zero-line offsets in px (up from the top / down from the bottom of the bar area)
+     * and the uniform px-per-token scale — identical above and below the zero line, so a +n segment and a
+     * −n segment always draw the same height. All three absent in total mode; passed as PRIMITIVES so the
+     * memoized bar keeps its shallow-compare bailout.
+     */
+    upPx?: number
+    downPx?: number
+    deltaScale?: number
     onSelect: (seq: number | null) => void
     onHover: (seq: number | null) => void
   }
@@ -122,6 +132,9 @@ export function makeTrendChart(kit: ViewKit): (props: TrendChartProps) => ReactN
   const ChartBar = React.memo(function ChartBar(props: ChartBarProps): ReactNS.ReactElement {
     const { req, marker } = props
     const markerAt = marker !== undefined ? eventAt(marker) : null
+    // Delta mode: diverging stacks — positive category deltas pile UP from the zero line, negative ones
+    // hang DOWN from it, both in category colors (direction carries the sign, color the category).
+    const diverge = props.upPx !== undefined && props.downPx !== undefined && props.deltaScale !== undefined
     return (
       <div
         className={'lc-bar'
@@ -139,14 +152,33 @@ export function makeTrendChart(kit: ViewKit): (props: TrendChartProps) => ReactN
             title={'✂ ' + (markerAt !== null ? markerAt + ' — ' : '') + eventLabel(marker)}
           >{'✂'}</span>
         ) : null}
-        <div className="lc-bar-stack">
-          {CATS.map((c) => {
-            const v = (req[c.key] || 0) * anchorOf(req)
-            if (!v) return null
-            // px (not %) heights: the stack is content-driven, so percentage heights would collapse against an indefinite base.
-            return <div key={c.key} style={{ height: `${Math.max(1, Math.round(v / props.maxTotal * CHART_H))}px`, background: c.color }} />
-          })}
-        </div>
+        {diverge ? (
+          <>
+            <div className="lc-bar-up" style={{ bottom: `${props.downPx}px` }}>
+              {CATS.map((c) => {
+                const d = req[c.key] || 0
+                if (d <= 0) return null
+                return <div key={c.key} style={{ height: `${Math.max(1, Math.round(d * (props.deltaScale as number)))}px`, background: c.color }} />
+              })}
+            </div>
+            <div className="lc-bar-down" style={{ top: `${props.upPx}px` }}>
+              {CATS.map((c) => {
+                const d = req[c.key] || 0
+                if (d >= 0) return null
+                return <div key={c.key} style={{ height: `${Math.max(1, Math.round(-d * (props.deltaScale as number)))}px`, background: c.color }} />
+              })}
+            </div>
+          </>
+        ) : (
+          <div className="lc-bar-stack">
+            {CATS.map((c) => {
+              const v = (req[c.key] || 0) * anchorOf(req)
+              if (!v) return null
+              // px (not %) heights: the stack is content-driven, so percentage heights would collapse against an indefinite base.
+              return <div key={c.key} style={{ height: `${Math.max(1, Math.round(v / props.maxTotal * CHART_H))}px`, background: c.color }} />
+            })}
+          </div>
+        )}
       </div>
     )
   })
@@ -159,10 +191,32 @@ export function makeTrendChart(kit: ViewKit): (props: TrendChartProps) => ReactN
     )
     const markers = props.markers
     let maxTotal = 1
-    for (const req of requests) {
-      const bt = barTotalOf(req)
-      if (bt > maxTotal) maxTotal = bt
+    let maxUp = 0
+    let maxDown = 0
+    if (delta) {
+      for (const req of requests) {
+        let up = 0
+        let down = 0
+        for (const c of CATS) {
+          const d = req[c.key] || 0
+          if (d > 0) up += d
+          else down -= d
+        }
+        if (up > maxUp) maxUp = up
+        if (down > maxDown) maxDown = down
+      }
+    } else {
+      for (const req of requests) {
+        const bt = barTotalOf(req)
+        if (bt > maxTotal) maxTotal = bt
+      }
     }
+    // The zero line splits the bar area PROPORTIONALLY to the larger side, so the px-per-token scale
+    // is identical above and below it — a compaction's downward bar reads honestly against a growth bar.
+    const span = Math.max(1, maxUp + maxDown)
+    const deltaScale = CHART_H / span
+    const upPx = Math.round(maxUp * deltaScale)
+    const downPx = CHART_H - upPx
 
     // Consecutive same-turn requests collapse into one labeled range; `span` counts the STEP columns the group covers (step records count
     // one each), so strip blocks align with the bars in both granularities.
@@ -285,9 +339,20 @@ export function makeTrendChart(kit: ViewKit): (props: TrendChartProps) => ReactN
     return (
       <div className="lc-chartrow">
         <div className="lc-axis">
-          <span className="lc-axis-top">{fmt(maxTotal)}</span>
-          <span className="lc-axis-mid">{fmt(Math.round(maxTotal / 2))}</span>
-          <span className="lc-axis-bot">{'0'}</span>
+          {delta ? (
+            <>
+              <span className="lc-axis-top">{(maxUp > 0 ? '+' : '') + fmt(maxUp)}</span>
+              {/* The 0 label rides the zero line (chart top padding 18px, half the 11px line-height up). */}
+              <span className="lc-axis-mid" style={{ top: `${13 + upPx}px` }}>{'0'}</span>
+              <span className="lc-axis-bot">{(maxDown > 0 ? '-' : '') + fmt(maxDown)}</span>
+            </>
+          ) : (
+            <>
+              <span className="lc-axis-top">{fmt(maxTotal)}</span>
+              <span className="lc-axis-mid">{fmt(Math.round(maxTotal / 2))}</span>
+              <span className="lc-axis-bot">{'0'}</span>
+            </>
+          )}
         </div>
         <div
           className={'lc-chart-scroll' + (props.activeTurn !== null ? ' lc-chart-dim' : '')}
@@ -303,7 +368,10 @@ export function makeTrendChart(kit: ViewKit): (props: TrendChartProps) => ReactN
             onMouseLeave={() => { props.onHover(null) }}
           >
             <div className="lc-grid lc-grid-top" />
-            <div className="lc-grid lc-grid-mid" />
+            {delta
+              // A SOLID zero baseline replaces the dashed mid grid in delta mode — it is the reading reference.
+              ? <div className="lc-grid lc-grid-zero" style={{ top: `${18 + upPx}px` }} />
+              : <div className="lc-grid lc-grid-mid" />}
             {requests.map((req, i) => (
               <ChartBar
                 key={req.seq}
@@ -313,6 +381,9 @@ export function makeTrendChart(kit: ViewKit): (props: TrendChartProps) => ReactN
                 hovered={props.hoveredSeq === req.seq}
                 inTurn={props.activeTurn !== null && (req.turn ?? 0) === props.activeTurn}
                 maxTotal={maxTotal}
+                upPx={delta ? upPx : undefined}
+                downPx={delta ? downPx : undefined}
+                deltaScale={delta ? deltaScale : undefined}
                 onSelect={props.onSelect}
                 onHover={props.onHover}
               />

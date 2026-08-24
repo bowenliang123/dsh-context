@@ -172,14 +172,16 @@ export function makeContextView(
       return i >= 0 ? markers[i] : undefined
     }
 
-    let pinnedReq: RequestRecord | null = null
-    for (const req of displayRequests) if (req.seq === selectedSeq) pinnedReq = req
-    let activeReq: RequestRecord | null = null
+    let pinnedIdx = -1
+    for (let i = 0; i < displayRequests.length; i++) if (displayRequests[i].seq === selectedSeq) pinnedIdx = i
+    const pinnedReq = pinnedIdx >= 0 ? displayRequests[pinnedIdx] : null
+    let activeIdx = -1
     if (hoveredSeq !== null) {
-      for (const req of displayRequests) if (req.seq === hoveredSeq) activeReq = req
+      for (let i = 0; i < displayRequests.length; i++) if (displayRequests[i].seq === hoveredSeq) { activeIdx = i; break }
     }
-    if (activeReq === null) activeReq = pinnedReq
-    if (activeReq === null && displayRequests.length > 0) activeReq = displayRequests[displayRequests.length - 1]
+    if (activeIdx < 0) activeIdx = pinnedIdx
+    if (activeIdx < 0 && displayRequests.length > 0) activeIdx = displayRequests.length - 1
+    const activeReq = activeIdx >= 0 ? displayRequests[activeIdx] : null
 
     // Turn highlight is hover-only: the turn strip hover wins, then the hovered bar's turn — no fallback, so a pinned or default selection
     // never keeps a turn glowing.
@@ -271,7 +273,12 @@ export function makeContextView(
                       onPickTurn={(turn) => { setGranularity('turn'); setFocusTurn(turn) }}
                       onFocusTurnHandled={() => { setFocusTurn(null) }}
                     />
-                    <RequestDetail request={activeReq} marker={activeReq !== null ? markerOf(activeReq) : undefined} />
+                    <RequestDetail
+                      request={activeReq}
+                      // Delta mode pairs the detail with the SAME previous record the chart diffs against (first bar: null).
+                      prev={trendMode === 'delta' && activeIdx >= 0 ? (activeIdx > 0 ? displayRequests[activeIdx - 1] : null) : undefined}
+                      marker={activeReq !== null ? markerOf(activeReq) : undefined}
+                    />
                   </div>
                 )}
             </div>
