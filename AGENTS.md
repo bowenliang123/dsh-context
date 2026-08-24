@@ -26,6 +26,10 @@ A DeepSeek Harness plugin for context insight, actions, and management.
 - Use English in code comments, documentation, Pull Request description, and commit messages.
 - Smaller, less-coupling and modulized code and tests are preferred for better maintainability and testability.
 - Avoid adding unnecessary code comments (unless for the pinned major decision or for those provide significant value) and code duplication.
+- Before any commit, ALWAYS do the following checks:  
+  - Review all the code changes to ensure they are not necessary, correct and over-engineering.
+  - Cleanup temporary files. Cleanup temporary or unhelpful comments.
+  - `pnpm run test` to run all unit tests and integration tests.
 
 ## Building
 - Run `pnpm run build` after code changes applied.
