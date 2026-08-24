@@ -24,7 +24,7 @@ test('context view: trend chart, stats board, plugin info, hover linking, granul
   assert.equal(bars.length, 4, 'one bar per request')
   const turns = byClass(tree, 'lc-turn')
   assert.equal(turns.length, 3, 'three turn ranges (T1 has two bars, T2/T3 one each)')
-  assert.deepEqual(turns.map(t => t.args[2]), ['T1', 'T2', 'T3'], 'turn labels in order')
+  assert.deepEqual(turns.map(t => textOf(t.args[2])), ['T1', 'T2', 'T3'], 'turn labels in order')
   const turnWidths = turns.map(t => t.args[1].style.width)
   assert.equal(turnWidths[0], '30px', 'T1 tick spans two columns (2*16-2)')
   assert.equal(turnWidths[1], '14px', 'T2 tick spans one column')
@@ -198,7 +198,7 @@ test('context view: trend chart, stats board, plugin info, hover linking, granul
   assert.deepEqual(inTurn.map(b => b.args[1]['data-seq']), [1, 2], 'highlighted bars are seq 1 and 2')
   const onBlocks = byClass(tr, 'lc-turn-on')
   assert.equal(onBlocks.length, 1, 'exactly one turn block highlighted')
-  assert.equal(onBlocks[0].args[2], 'T1', 'highlighted block is T1')
+  assert.equal(textOf(onBlocks[0].args[2]), 'T1', 'highlighted block is T1')
   assert.equal(byClass(tr, 'lc-chart-dim').length, 1, 'strip hover also dims bars outside the turn')
 
   // leaving the strip clears the turn highlight
@@ -214,7 +214,7 @@ test('context view: trend chart, stats board, plugin info, hover linking, granul
   tr = renderView()
   const onBlocks2 = byClass(tr, 'lc-turn-on')
   assert.equal(onBlocks2.length, 1, 'bar hover highlights exactly one turn block')
-  assert.equal(onBlocks2[0].args[2], 'T2', 'hovering a bar highlights its turn block')
+  assert.equal(textOf(onBlocks2[0].args[2]), 'T2', 'hovering a bar highlights its turn block')
   ctxSlots[1][1](null)
 
   // ---- granularity toggle: one bar per step vs one bar per turn ----
@@ -263,7 +263,7 @@ test('context view: trend chart, stats board, plugin info, hover linking, granul
 
   // ---- edge fades signal reachable history beyond the viewport ----
   let scroller = byClass(tr, 'lc-chart-scroll')[0]
-  const fakeScroller = { scrollLeft: 200, clientWidth: 120, scrollWidth: 800 }
+  const fakeScroller = { scrollLeft: 200, clientWidth: 120, scrollWidth: 800, querySelectorAll: () => [] }
   scroller.args[1].onScroll({ currentTarget: fakeScroller })
   tr = renderView()
   assert.equal(byClass(tr, 'lc-chart-fade-l').length, 1, 'left fade shown while scrolled into history')
@@ -296,7 +296,7 @@ test('context view: trend chart, stats board, plugin info, hover linking, granul
 
   // ---- default anchor: the newest bars sit at the right edge ----
   const scrollNode = byClass(tr, 'lc-chart-scroll')[0]
-  const scrollEl = { scrollLeft: 0, clientWidth: 120, scrollWidth: 800 }
+  const scrollEl = { scrollLeft: 0, clientWidth: 120, scrollWidth: 800, querySelectorAll: () => [] }
   scrollNode.args[1].ref.current = scrollEl // attach a fake layout element
   const trendKey = [...hookStates.keys()].find(k => k.includes('TrendChart'))
   assert.ok(trendKey, 'TrendChart fiber registered')
