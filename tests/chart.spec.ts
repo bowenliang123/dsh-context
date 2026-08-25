@@ -52,7 +52,7 @@ test('context view: trend chart, stats board, plugin info, hover linking, granul
   // Hover affordance is CSS-driven (row-level `:hover` underlines the value);
   // no JS state needed, so no onMouseEnter/onMouseLeave handlers.
 
-  const ctxSlots = hookStates.get(ctxKey) // selected(0) hovered(1) hoverTurn(2) gran(3) trendMode(4) focusTurn(5) hoverCat(6) pickedKinds(7) toolFocus(8)
+  const ctxSlots = hookStates.get(ctxKey) // selected(0) hovered(1) hoverTurn(2) gran(3) trendMode(4) focusTurn(5) hoverCat(6) pickedKinds(7) toolFocus(8) nodeFocus(9)
   const detailStep = (tr) => {
     const head = byClass(tr, 'lc-detail-head')[0]
     return head === undefined ? '' : textOf(head).trim()

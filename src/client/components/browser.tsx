@@ -6,6 +6,7 @@ import { CATS, partsOf } from '../categories'
 import { React } from '../react'
 import type { ConversationNodeLike, UseSessionLike } from '../services'
 import type { ViewKit } from '../viewkit'
+import { blockSummaryOf, callSummaryOf, parseCallArgs } from '../callSummary'
 import { makeNodeText } from './nodes'
 import { imageRefOf, makeImageCard } from './images'
 import type { ImageKit } from './images'
@@ -24,6 +25,12 @@ export interface ContextBrowserProps {
   previewSeq?: number | null
   /** Pin-seq: a pin selects that step; pinSeq null returns the browser to the live surface. */
   pinSeq?: number | null
+  /**
+   * One-shot reveal request from the step brief: select the step, open the category and the node element, scroll it into view;
+   * handed back via `onNodeFocusHandled` so the same row can fire again.
+   */
+  nodeFocus?: { step: number | 'live'; seq: number; cat: Category } | null
+  onNodeFocusHandled?: () => void
   hoverKey?: string | null
   onHoverKey?: (key: string | null) => void
   /**
@@ -326,35 +333,6 @@ function BlocksBody(props: {
   return <>{out}</>
 }
 
-function parseArgs(raw: unknown): Record<string, unknown> | null {
-  if (typeof raw !== 'string' || raw === '') return null
-  try {
-    const parsed: unknown = JSON.parse(raw)
-    return parsed !== null && typeof parsed === 'object' && !Array.isArray(parsed)
-      ? parsed as Record<string, unknown>
-      : null
-  } catch {
-    return null
-  }
-}
-
-/**
- * A call's preview: bash-style `description`, or the target path (`file_path`/`path`/`filePath`) for edit/read/write tools; null when the
- * arguments hold neither.
- */
-function summaryIn(args: Record<string, unknown> | null): string | null {
-  if (args === null) return null
-  for (const k of ['description', 'file_path', 'path', 'filePath']) {
-    const v = args[k]
-    if (typeof v === 'string' && v !== '') return v
-  }
-  return null
-}
-
-function callSummaryOf(conv: ConversationNodeLike | undefined): string | null {
-  return summaryIn(parseArgs(conv?.call?.argsRaw))
-}
-
 /**
  * The trailing status markers dsh shell tools append at the END of a result's text while `isError` stays false
  * (the status is result data, per tool-bash's render: "non-zero exits are reported, not errored"):
@@ -402,24 +380,13 @@ function toolErrOf(node: SurfaceNode, conv: ConversationNodeLike | undefined): {
   return { err, exit: tail.exit }
 }
 
-function blockSummaryOf(conv: ConversationNodeLike | undefined): string | null {
-  if (conv === undefined || !Array.isArray(conv.blocks)) return null
-  for (const b of conv.blocks) {
-    const blk = b !== null && typeof b === 'object' ? b as { kind?: string; argsRaw?: unknown } : null
-    if (blk === null || blk.kind !== 'tool-call') continue
-    const s = summaryIn(parseArgs(blk.argsRaw))
-    if (s !== null) return s
-  }
-  return null
-}
-
 function ToolCallCard(props: {
   name: string
   argsRaw: unknown
   arrow?: string
   status?: ReactNS.ReactNode
 }): ReactNS.ReactElement {
-  const args = React.useMemo(() => parseArgs(props.argsRaw), [props.argsRaw])
+  const args = React.useMemo(() => parseCallArgs(props.argsRaw), [props.argsRaw])
   return (
     <Section
       label={(props.arrow ?? '→') + ' ' + props.name}
@@ -603,6 +570,24 @@ export function makeContextBrowser(
       setOpenElem(toolFocus.tool !== undefined ? 'tool:' + toolFocus.tool : null)
       if (props.onToolFocusHandled !== undefined) props.onToolFocusHandled()
     }, [toolFocus, props.onToolFocusHandled])
+    // Step-brief reveal: select the owning step, open the node's category + element (the pagination effect above already pulls older
+    // history for a missing join), then arm a one-shot scroll consumed by the layout effect once the row renders.
+    const rootRef = React.useRef<HTMLDivElement | null>(null)
+    const focusScrollRef = React.useRef(false)
+    const nodeFocus = props.nodeFocus
+    React.useEffect(() => {
+      if (nodeFocus === null || nodeFocus === undefined) return
+      setSel(nodeFocus.step)
+      setOpenCat(nodeFocus.cat)
+      setOpenElem('n' + String(nodeFocus.seq))
+      focusScrollRef.current = true
+      if (props.onNodeFocusHandled !== undefined) props.onNodeFocusHandled()
+    }, [nodeFocus, props.onNodeFocusHandled])
+    React.useLayoutEffect(() => {
+      if (!focusScrollRef.current) return
+      focusScrollRef.current = false
+      rootRef.current?.querySelector('.lc-br-elem-on')?.scrollIntoView({ block: 'nearest' })
+    })
     const awaiting = missingSeq !== null && !exhausted && loadOlderHistory !== undefined && hasMore
 
     const requests = data.requests
@@ -773,7 +758,7 @@ export function makeContextBrowser(
     }
 
     return (
-      <div className="lc-card">
+      <div className="lc-card" ref={rootRef}>
         <div className="lc-card-title">
           <span className="lc-card-title-text">{t('browser.title')}</span>
           <span className="lc-br-hint">{t('browser.deltaHint')}</span>

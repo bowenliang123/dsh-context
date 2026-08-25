@@ -4,11 +4,12 @@
  */
 
 import type * as ReactNS from 'react'
-import type { ContextEventRecord, RequestRecord } from '../../shared/types'
+import type { ContextEventRecord, RequestRecord, SurfaceNode } from '../../shared/types'
+import { briefNodes, briefOf, replyTipsOf } from '../brief'
 import { headlineOf } from '../headline'
 import type { SessionStandardProps } from '../services'
 import { contextBreakdownOf, contextPressureOf, headersOf, timelineOf, tokenUsageOf } from '../services'
-import type { ClientCtx, ConversationFace, ImageRefLike } from '../services'
+import type { ClientCtx, ConversationFace, ConversationNodeLike, ImageRefLike } from '../services'
 import type { ContextSettings } from '../settings'
 import type { ViewKit } from '../viewkit'
 import { makeContextBrowser } from './browser'
@@ -99,6 +100,9 @@ export function makeContextView(
     }
     const [toolFocus, setToolFocus] = React.useState<{ tool?: string } | null>(null)
     const clearToolFocus = React.useCallback(() => { setToolFocus(null) }, [])
+    // Step-brief → browser reveal bridge: one-shot focus request consumed by the Context browser (same hand-back pattern as toolFocus).
+    const [nodeFocus, setNodeFocus] = React.useState<{ step: number | 'live'; seq: number; cat: SurfaceNode['cat'] } | null>(null)
+    const clearNodeFocus = React.useCallback(() => { setNodeFocus(null) }, [])
 
     // Session-authorized durable-image loader for the browser's attachment cards, resolved through the harness conversation service — the
     // same `resolveImage` the chat history's images ride on; absent service/session degrades the cards to metadata-only, never an error.
@@ -158,6 +162,19 @@ export function makeContextView(
     )
     const markers = React.useMemo(() => attachMarkers(displayRequests, events), [displayRequests, events])
 
+    // Step-brief raw material: every served node seq-sorted (live tail + archive), the tooltip's reply previews, and the
+    // conversation-snapshot join the brief uses for call-argument enrichment (same join the Context browser builds).
+    const briefList = React.useMemo(() => (data ? briefNodes(data) : []), [data])
+    const replyTips = React.useMemo(() => replyTipsOf(briefList), [briefList])
+    const convNodes = typeof props.useSession === 'function'
+      ? props.useSession(s => s.nodes)
+      : undefined
+    const bySeq = React.useMemo(() => {
+      const m = new Map<number, ConversationNodeLike>()
+      for (const n of convNodes ?? []) m.set(n.seq, n)
+      return m
+    }, [convNodes])
+
     if (!data) {
       return <div className="lc-root" ref={rootRef}><div className="lc-empty">{t('loading')}</div></div>
     }
@@ -177,6 +194,18 @@ export function makeContextView(
     if (activeIdx < 0) activeIdx = pinnedIdx
     if (activeIdx < 0 && displayRequests.length > 0) activeIdx = displayRequests.length - 1
     const activeReq = activeIdx >= 0 ? displayRequests[activeIdx] : null
+
+    // The active bar's semantic identity ("what this step was about"); pure derivation over the served nodes, null when nothing is known.
+    const brief = activeReq !== null ? briefOf(briefList, displayRequests, activeIdx) : null
+    const convOf = (seq: number): ConversationNodeLike | undefined => bySeq.get(seq)
+    // A brief row's reveal target: inputs/opener live in the picked step's OWN assembled surface; the response node (seq === the
+    // request's) first appears in the NEXT step's surface — or the live surface when the last bar is picked.
+    const locateNode = (node: SurfaceNode, isResponse: boolean): void => {
+      if (activeReq === null) return
+      const next = isResponse && activeIdx + 1 < displayRequests.length ? displayRequests[activeIdx + 1] : null
+      const step: number | 'live' = isResponse ? (next !== null ? next.seq : 'live') : activeReq.seq
+      setNodeFocus({ step, seq: node.seq, cat: node.cat })
+    }
 
     // Turn highlight is hover-only: the turn strip hover wins, then the hovered bar's turn — no fallback, so a pinned or default selection
     // never keeps a turn glowing.
@@ -267,12 +296,16 @@ export function makeContextView(
                       onHoverTurn={setHoverTurn}
                       onPickTurn={(turn) => { setGranularity('turn'); setFocusTurn(turn) }}
                       onFocusTurnHandled={() => { setFocusTurn(null) }}
+                      replyTips={replyTips}
                     />
                     <RequestDetail
                       request={activeReq}
                       // Delta mode pairs the detail with the SAME previous record the chart diffs against (first bar: null).
                       prev={trendMode === 'delta' && activeIdx >= 0 ? (activeIdx > 0 ? displayRequests[activeIdx - 1] : null) : undefined}
                       marker={activeReq !== null ? markerOf(activeReq) : undefined}
+                      brief={brief}
+                      convOf={convOf}
+                      onLocate={locateNode}
                     />
                   </div>
                 )}
@@ -294,6 +327,8 @@ export function makeContextView(
               onHoverKey={setHoverCat}
               toolFocus={toolFocus}
               onToolFocusHandled={clearToolFocus}
+              nodeFocus={nodeFocus}
+              onNodeFocusHandled={clearNodeFocus}
               loadImage={loadImage}
             />
           </div>

@@ -24,6 +24,8 @@ export interface TrendChartProps {
   onHoverTurn: (turn: number | null) => void
   onPickTurn: (turn: number) => void
   onFocusTurnHandled: () => void
+  /** seq → one-line reply preview (see brief.ts replyTipsOf); appended to the hover tooltip when present. */
+  replyTips?: Map<number, string>
 }
 
 /**
@@ -324,12 +326,17 @@ export function makeTrendChart(kit: ViewKit): (props: TrendChartProps) => ReactN
       const head = req.stepCount !== undefined && req.stepCount > 1
         ? t('tip.turn', { t: req.turn ?? 0, n: req.stepCount })
         : t('tip.step', { t: req.turn ?? 0, s: req.step ?? 0 })
+      const reply = props.replyTips?.get(req.seq)
+      // The reply preview anchors the bar's identity at a glance; kept short so the tip stays one line.
+      const tail = reply !== undefined
+        ? ' · “' + (reply.length > 48 ? reply.slice(0, 48) + '…' : reply) + '”'
+        : ''
       if (delta) {
         const n = req.net ?? 0
-        return head + ' · ' + fmtTime(req.time) + ' · ' + t('tip.delta', { n: (n > 0 ? '+' : '') + fmt(n) })
+        return head + ' · ' + fmtTime(req.time) + ' · ' + t('tip.delta', { n: (n > 0 ? '+' : '') + fmt(n) }) + tail
       }
       return head + ' · ' + fmtTime(req.time) + ' · ' + t('tip.total', { n: fmt(req.total) })
-        + (req.prompt !== undefined ? ' · ' + t('tip.actual', { n: fmt(req.prompt) }) : '')
+        + (req.prompt !== undefined ? ' · ' + t('tip.actual', { n: fmt(req.prompt) }) : '') + tail
     }
     const hoveredIdx = props.hoveredSeq !== null ? requests.findIndex(r => r.seq === props.hoveredSeq) : -1
     const hoveredReq = hoveredIdx >= 0 ? requests[hoveredIdx] : null

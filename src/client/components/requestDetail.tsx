@@ -1,7 +1,10 @@
 import type * as ReactNS from 'react'
-import type { ContextEventRecord, RequestRecord } from '../../shared/types'
+import type { ContextEventRecord, RequestRecord, SurfaceNode } from '../../shared/types'
 import { partsOf, CATS } from '../categories'
 import { cacheHitPercent } from '../format'
+import type { StepBrief } from '../brief'
+import { blockSummaryOf, callNamesOf, callSummaryOf } from '../callSummary'
+import type { ConversationNodeLike } from '../services'
 import type { StackedBarProps } from './stackedBar'
 import type { ViewKit } from '../viewkit'
 
@@ -17,6 +20,12 @@ export interface RequestDetailProps {
    */
   prev?: RequestRecord | null
   marker?: ContextEventRecord | null
+  /** The step's semantic identity (turn opener / inputs / reply) — see brief.ts; null hides the section. */
+  brief?: StepBrief | null
+  /** Conversation-snapshot join for call-argument enrichment; absent join = names only, never an error. */
+  convOf?: (seq: number) => ConversationNodeLike | undefined
+  /** Reveal a brief row's node in the Context browser; absent = rows render inert. */
+  onLocate?: (node: SurfaceNode, isResponse: boolean) => void
 }
 
 export function makeRequestDetail(
@@ -24,6 +33,117 @@ export function makeRequestDetail(
   StackedBar: (props: StackedBarProps) => ReactNS.ReactElement,
 ): (props: RequestDetailProps) => ReactNS.ReactElement | null {
   const { t, fmt, fmtTime, catLabel, eventLabel, eventAt } = kit
+
+  /**
+   * One brief row: a fixed-width kind tag plus one glanceable line. The tag carries a styled, instant explanation bubble (the
+   * `.lc-stat-tip` pattern); the content span keeps the native title (preview + locate hint), so the two never stack.
+   * Clickable when the browser linkage is wired.
+   */
+  function BriefRow(props: {
+    tag: string
+    tagTip: string
+    node: SurfaceNode
+    isResponse: boolean
+    onLocate?: (node: SurfaceNode, isResponse: boolean) => void
+    children: ReactNS.ReactNode
+  }): ReactNS.ReactElement {
+    const cls = 'lc-brief-row' + (props.onLocate !== undefined ? ' lc-brief-row-link' : '')
+    const inner = (
+      <>
+        <span className="lc-brief-tag">
+          {props.tag}
+          <span className="lc-brief-tip" role="tooltip">{props.tagTip}</span>
+        </span>
+        {props.children}
+      </>
+    )
+    if (props.onLocate === undefined) return <div className={cls}>{inner}</div>
+    const locate = () => { props.onLocate?.(props.node, props.isResponse) }
+    return (
+      <button type="button" className={cls} onClick={locate}>
+        {inner}
+      </button>
+    )
+  }
+
+  /** One-line identity of a surface node: text preview, call breadcrumb, tool name, or a localized placeholder. */
+  function nodeLine(n: SurfaceNode, conv: ConversationNodeLike | undefined): string {
+    if (n.cat === 'tool') return callSummaryOf(conv) ?? (n.tool ?? t('node.toolResult'))
+    if (n.text !== undefined && n.text !== '') return n.text
+    if (n.skill !== undefined) return t('node.skillTag', { name: n.skill })
+    if (n.calls !== undefined && n.calls.length > 0) {
+      const summary = blockSummaryOf(conv)
+      return n.calls.join(' › ') + (summary !== null ? ' · ' + summary : '')
+    }
+    if (n.cat === 'assistant') return t('node.empty')
+    if (n.cat === 'inject') return t('form.' + (n.form ?? 'context'))
+    return t('node.nonText')
+  }
+
+  function BriefSection(props: {
+    brief: StepBrief
+    convOf?: (seq: number) => ConversationNodeLike | undefined
+    onLocate?: (node: SurfaceNode, isResponse: boolean) => void
+  }): ReactNS.ReactElement | null {
+    const { opener, inputs, response } = props.brief
+    if (opener === undefined && inputs.length === 0 && response === undefined) return null
+    const convOf = props.convOf ?? (() => undefined)
+    // The content span's native title: full preview, plus the locate hint when the row is clickable.
+    const hint = props.onLocate !== undefined ? ' — ' + t('brief.locate') : ''
+    // Chip click: locate THIS chip's node; stopPropagation keeps it from also firing the row's own locate.
+    const locateChip = props.onLocate === undefined ? undefined : (n: SurfaceNode) =>
+      (e?: ReactNS.MouseEvent) => { e?.stopPropagation(); props.onLocate?.(n, false) }
+    const MAX_CHIPS = 3
+    // The reply line: textless replies lead with their call breadcrumb ('→ bash › write'); a reply carrying BOTH text and calls
+    // folds to text-only on the surface node, so its calls are recovered through the conversation join as a suffix.
+    let replyText = ''
+    let replyArrow = false
+    if (response !== undefined) {
+      const conv = convOf(response.seq)
+      replyText = nodeLine(response, conv)
+      if (response.calls !== undefined && response.calls.length > 0) {
+        replyArrow = true
+      } else {
+        const joined = callNamesOf(conv)
+        if (joined.length > 0) replyText += ' → ' + joined.join(' › ')
+      }
+    }
+    return (
+      <div className="lc-brief">
+        {opener !== undefined ? (
+          <BriefRow tag={t('brief.turn')} tagTip={t('brief.turnTip')} node={opener} isResponse={false} onLocate={props.onLocate}>
+            <span className="lc-brief-text" title={nodeLine(opener, convOf(opener.seq)) + hint}>{nodeLine(opener, convOf(opener.seq))}</span>
+          </BriefRow>
+        ) : null}
+        {inputs.length > 0 ? (
+          // Whole-row clickable like the other rows (locates the FIRST input); each chip still locates its own node —
+          // stopPropagation keeps a chip click from also firing the row's.
+          <BriefRow tag={t('brief.input')} tagTip={t('brief.inputTip')} node={inputs[0]} isResponse={false} onLocate={props.onLocate}>
+            {inputs.slice(0, MAX_CHIPS).map(n => (
+              <span
+                key={n.seq}
+                className={'lc-brief-chip' + (props.onLocate !== undefined ? ' lc-brief-chip-link' : '')}
+                title={nodeLine(n, convOf(n.seq)) + hint}
+                onClick={locateChip !== undefined ? locateChip(n) : undefined}
+              >
+                {n.err === true ? <span className="lc-br-err-dot" /> : null}
+                {nodeLine(n, convOf(n.seq))}
+              </span>
+            ))}
+            {inputs.length > MAX_CHIPS ? <span className="lc-brief-more">{t('brief.more', { n: inputs.length - MAX_CHIPS })}</span> : null}
+          </BriefRow>
+        ) : null}
+        {response !== undefined ? (
+          <BriefRow tag={t('brief.reply')} tagTip={t('brief.replyTip')} node={response} isResponse onLocate={props.onLocate}>
+            <span className="lc-brief-text" title={replyText + hint}>
+              {replyArrow ? '→ ' : ''}{replyText}
+            </span>
+          </BriefRow>
+        ) : null}
+      </div>
+    )
+  }
+
   return function RequestDetail(props: RequestDetailProps): ReactNS.ReactElement | null {
     const req = props.request
     if (!req) return null
@@ -80,6 +200,9 @@ export function makeRequestDetail(
             ? <span className="lc-detail-metric">{t('detail.cache', { n: cacheHitPercent(req.cacheRead, req.prompt) ?? '—' })}</span>
             : null}
         </div>
+        {props.brief !== null && props.brief !== undefined
+          ? <BriefSection brief={props.brief} convOf={props.convOf} onLocate={props.onLocate} />
+          : null}
         <StackedBar parts={parts} height={10} />
         <div className="lc-detail-rows">
           {CATS.map((c, i) => {
