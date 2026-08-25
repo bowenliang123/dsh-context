@@ -27,7 +27,6 @@ describe('request/header', () => {
   test('an absent data payload still re-prices the envelope to zero', () => {
     const def = timelineDef({})
     const next = def.apply(def.init(), { type: 'request/header', seq: 1, time: at() } as TimelineEvent)
-    assert.deepEqual(next.toolList, [])
     assert.equal(next.toolsTokens, 0)
     assert.equal(next.systemTokens, 0)
     assert.equal(next.model, undefined)
@@ -36,29 +35,18 @@ describe('request/header', () => {
   test('an absent header field behaves like an empty header', () => {
     const def = timelineDef({})
     const next = def.apply(def.init(), { type: 'request/header', seq: 1, time: at(), data: { reason: 'initial' } } as TimelineEvent)
-    assert.deepEqual(next.toolList, [])
     assert.equal(next.lastModel, undefined)
   })
 
   test('a non-array tools field prices as no tools', () => {
     const { state } = driveTimeline([header(1, { tools: 'nope' as never, model: 'm' })])
-    assert.deepEqual(state.toolList, [])
     assert.equal(state.toolsTokens, 0)
   })
 
-  test('named tools list with their schema prices', () => {
+  test('named tools list prices as a single whole-array total', () => {
     const tools = [{ name: 'bash', description: 'run a command' }, { name: 'read' }]
     const { state } = driveTimeline([header(1, { tools, model: 'm' })])
-    assert.deepEqual(state.toolList.map(t => t.name), ['bash', 'read'])
-    assert.ok(state.toolList.every(t => t.tokens > 0))
     assert.ok(state.toolsTokens > 0)
-  })
-
-  test('a tool with a non-string name lists as ?', () => {
-    const { state } = driveTimeline([header(1, { tools: [{ name: 42 }], model: 'm' })])
-    assert.equal(state.toolList.length, 1)
-    assert.equal(state.toolList[0].name, '?')
-    assert.ok(state.toolList[0].tokens > 0)
   })
 
   test('a header without config sets neither model nor provider, and a change stays silent', () => {

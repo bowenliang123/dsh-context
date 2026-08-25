@@ -58,7 +58,7 @@ describe('createContextTimelineDefinition', () => {
   test('carries both projection contracts on one unit', () => {
     const def = createContextTimelineDefinition({})
     assert.equal(def.key, 'contextTimeline')
-    assert.equal(def.stateVersion, 9)
+    assert.equal(def.stateVersion, 10)
     assert.equal(typeof def.init, 'function')
     assert.equal(typeof def.apply, 'function')
     // 0.1.0 contract: schema + top-level view.

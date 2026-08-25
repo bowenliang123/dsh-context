@@ -37,12 +37,6 @@ export interface ContextBrowserProps {
   onNodeFocusHandled?: () => void
   hoverKey?: string | null
   onHoverKey?: (key: string | null) => void
-  /**
-   * Overview '工具定义 Top' label (`tool` omitted) or chip (`tool: name`) asks to reveal that section; applied once, then handed back via
-   * `onToolFocusHandled` so the same chip can fire again.
-   */
-  toolFocus?: { tool?: string } | null
-  onToolFocusHandled?: () => void
   loadImage?: ImageLoader
 }
 
@@ -573,16 +567,6 @@ export function makeContextBrowser(
       setOpenCat(null)
       setOpenElem(null)
     }, [pinSeq])
-    // Tool-link bridge: apply the one-shot request on the LIVE surface — the overview's Top chips rank the current header's tools — then
-    // hand it back via `onToolFocusHandled` so the same chip can trigger again.
-    const toolFocus = props.toolFocus
-    React.useEffect(() => {
-      if (toolFocus === null || toolFocus === undefined) return
-      setSel('live')
-      setOpenCat('tools')
-      setOpenElem(toolFocus.tool !== undefined ? 'tool:' + toolFocus.tool : null)
-      if (props.onToolFocusHandled !== undefined) props.onToolFocusHandled()
-    }, [toolFocus, props.onToolFocusHandled])
     // Step-brief reveal: select the owning step, open the node's category + element (the pagination effect above already pulls older
     // history for a missing join), then arm a one-shot scroll consumed by the layout effect once the row renders.
     const rootRef = React.useRef<HTMLDivElement | null>(null)

@@ -11,7 +11,6 @@ function timeline(over: Partial<ContextTimeline> = {}): ContextTimeline {
   return {
     ok: true,
     current: { system: 10, tools: 20, user: 30, inject: 0, assistant: 40, tool: 0, total: 100 },
-    toolList: [],
     requests: [],
     events: [],
     nodes: [],

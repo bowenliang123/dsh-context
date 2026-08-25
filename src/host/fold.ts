@@ -25,7 +25,6 @@ import {
   estimateMessage,
   estimateSystem,
   estimateToolsTotal,
-  estimateToolSchema,
   firstText,
   imageCountOf,
   injectionSourceName,
@@ -68,7 +67,6 @@ export interface TimelineState {
   sums: Record<Category, number>
   systemTokens: number
   toolsTokens: number
-  toolList: { name: string; tokens: number }[]
   /**
    * The projection-cache precondition is plain JSON: a property whose value
    * is `undefined` makes the whole checkpoint unserializable
@@ -201,7 +199,6 @@ export function createTimelineState(): TimelineState {
     sums: { user: 0, inject: 0, assistant: 0, tool: 0 },
     systemTokens: 0,
     toolsTokens: 0,
-    toolList: [],
     requests: [],
     events: [],
     archived: [],
@@ -466,7 +463,6 @@ export function applyTimeline(state: TimelineState, event: TimelineEvent, bounds
     ...state,
     surface: [...state.surface],
     sums: { ...state.sums },
-    toolList: [...state.toolList],
     requests: [...state.requests],
     events: [...state.events],
     archived: [...state.archived],
@@ -483,11 +479,7 @@ export function applyTimeline(state: TimelineState, event: TimelineEvent, bounds
       }
       const tools = Array.isArray(header.tools) ? header.tools : []
       const s = ensure()
-      s.toolList = tools.map(t => ({
-        name: typeof (t as { name?: unknown }).name === 'string' ? (t as { name: string }).name : '?',
-        tokens: estimateToolSchema(t),
-      }))
-      // Tools TOTAL = dsh's whole-array price (one JSON string of every schema); per-tool prices above are display-only.
+      // Tools TOTAL = dsh's whole-array price (one JSON string of every schema).
       s.toolsTokens = estimateToolsTotal(tools)
       s.systemTokens = estimateSystem(header.system)
       // Current route/model: the durable request envelope is the source of
@@ -684,7 +676,6 @@ export function buildTimelineView(state: TimelineState, bounds: FoldBounds): Sna
       tool: state.sums.tool,
       total: surfaceTotal + state.systemTokens + state.toolsTokens,
     },
-    toolList: state.toolList,
     images: state.surface.reduce((n, node) => n + (node.imgs ?? 0), 0),
     // Tool calls WITH A RESULT live in the current context: one `tool/result`
     // folds to exactly one `tool` surface node, so live tool nodes are the

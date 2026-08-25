@@ -48,7 +48,6 @@ export function makeContextModal(ctx: ClientCtx, kit: ViewKit): (props: ContextM
       ? headersOf(props.useProjection('contextHeaders'))
       : null
     const [hoverCat, setHoverCat] = React.useState<string | null>(null)
-    const [toolFocus, setToolFocus] = React.useState<{ tool?: string } | null>(null)
     // Same targeted content fetch the Context tab wires (one seq-anchored history read per expanded row).
     const fetchContent = React.useMemo(
       () => (sessionId !== '' ? makeContentFetcher(ctx, sessionId) : undefined),
@@ -104,8 +103,6 @@ export function makeContextModal(ctx: ClientCtx, kit: ViewKit): (props: ContextM
                 subtitle={subtitle}
                 hoverKey={hoverCat}
                 onHoverKey={setHoverCat}
-                tools={data.toolList}
-                onToolFocus={setToolFocus}
               />
               <ContextBrowser
                 data={data}
@@ -114,8 +111,6 @@ export function makeContextModal(ctx: ClientCtx, kit: ViewKit): (props: ContextM
                 fetchContent={fetchContent}
                 hoverKey={hoverCat}
                 onHoverKey={setHoverCat}
-                toolFocus={toolFocus}
-                onToolFocusHandled={() => { setToolFocus(null) }}
               />
             </div>
           )}

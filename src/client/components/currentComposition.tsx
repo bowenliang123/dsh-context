@@ -18,13 +18,6 @@ export interface CurrentCompositionProps {
   subtitle?: string
   hoverKey?: string | null
   onHoverKey?: (key: string | null) => void
-  tools?: { name: string; tokens: number }[]
-  /**
-   * One-shot tool-focus request into the Context browser (applied once and
-   * cleared there via onToolFocusHandled; chips still render — clicks are
-   * no-ops when omitted).
-   */
-  onToolFocus?: (focus: { tool?: string } | null) => void
 }
 
 export function makeCurrentComposition(
@@ -69,25 +62,6 @@ export function makeCurrentComposition(
           reserve={reserve}
         />
         <Legend parts={head.parts} hoverKey={props.hoverKey} onHoverKey={props.onHoverKey} />
-        {props.tools !== undefined && props.tools.length > 0 ? (
-          <div className="lc-tools">
-            <button type="button" className="lc-tools-label" onClick={() => { if (props.onToolFocus !== undefined) props.onToolFocus({}) }}>
-              {t('tools.top')}
-            </button>
-            {props.tools.slice().sort((a, b) => b.tokens - a.tokens).slice(0, 5).map(tool => (
-              <button key={tool.name} type="button" className="lc-tool-chip" onClick={() => { if (props.onToolFocus !== undefined) props.onToolFocus({ tool: tool.name }) }}>
-                {tool.name + ' ' + fmt(tool.tokens)}
-              </button>
-            ))}
-            {props.tools.length > 5
-              ? (
-                <button type="button" className="lc-tools-more" onClick={() => { if (props.onToolFocus !== undefined) props.onToolFocus({}) }}>
-                  {t('tools.more', { n: props.tools.length })}
-                </button>
-              )
-              : null}
-          </div>
-        ) : null}
       </div>
     )
   }

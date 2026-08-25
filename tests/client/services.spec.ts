@@ -51,7 +51,6 @@ describe('timelineOf', () => {
       provider: 'deepseek',
       contextWindow: 128000,
       current,
-      toolList: [{ name: 'bash', tokens: 10 }],
       requests: [],
       events: [],
       nodes: [],
@@ -66,7 +65,6 @@ describe('timelineOf', () => {
       assert.deepEqual(timelineOf(bad), {
         ok: true,
         current: { system: 0, tools: 0, user: 0, inject: 0, assistant: 0, tool: 0, total: 0 },
-        toolList: [],
         requests: [],
         events: [],
         nodes: [],
@@ -89,14 +87,12 @@ describe('timelineOf', () => {
       events: 7,
       nodes: null,
       archive: undefined,
-      toolList: {},
     })
     assert.ok(out !== null)
     assert.deepEqual(out.requests, [])
     assert.deepEqual(out.events, [])
     assert.deepEqual(out.nodes, [])
     assert.deepEqual(out.archive, [])
-    assert.deepEqual(out.toolList, [])
   })
 
   test('null/non-object collection entries are dropped', () => {

@@ -57,7 +57,6 @@ export interface Snapshot {
     projectedTokens?: number
     contextWindow?: number
   }
-  toolList: { name: string; tokens: number }[]
   /**
    * Image blocks live in the CURRENT context (user uploads plus tool-result
    * images, nested blocks included) — the sum over the live surface nodes'

@@ -161,8 +161,7 @@ export function timelineOf(value: unknown): ContextTimeline | null {
     && Array.isArray(data.requests)
     && Array.isArray(data.events)
     && Array.isArray(data.nodes)
-    && Array.isArray(data.archive)
-    && Array.isArray(data.toolList)) {
+    && Array.isArray(data.archive)) {
     // Well-formed: pass the delivered value through untouched (cheap, and reference-stable so plain re-renders stay zero-copy).
     return data as unknown as ContextTimeline
   }
@@ -184,7 +183,6 @@ export function timelineOf(value: unknown): ContextTimeline | null {
       tool: numOf(safeCurrent.tool),
       total: numOf(safeCurrent.total),
     },
-    toolList: objectsOf(data.toolList),
     requests: objectsOf(data.requests),
     events: objectsOf(data.events),
     nodes: objectsOf(data.nodes),

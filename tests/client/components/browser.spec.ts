@@ -23,7 +23,7 @@ function tl(over: Partial<ContextTimeline>): ContextTimeline {
   return {
     ok: true,
     current: { system: 0, tools: 0, user: 0, inject: 0, assistant: 0, tool: 0, total: 0 },
-    toolList: [], requests: [], events: [], nodes: [], droppedNodes: 0, archive: [],
+    requests: [], events: [], nodes: [], droppedNodes: 0, archive: [],
     ...over,
   }
 }
@@ -1028,36 +1028,6 @@ describe('ContextBrowser focus bridges', () => {
     nodes: [node({ seq: 1, tokens: 5, text: 'focusable' }), node({ seq: 11, cat: 'assistant', tokens: 5, text: 'answer' })],
   })
   const convNodes: ConversationNodeLike[] = [{ kind: 'user', seq: 1, content: [{ type: 'text', text: 'focusable' }] }]
-
-  test('toolFocus applies once, opens the tool row, and clears via the callback', async () => {
-    let handled = 0
-    const m = await mount(h(Browser, props({ data, headers })))
-    await m.update(h(Browser, props({ data, headers, toolFocus: { tool: 'beta' }, onToolFocusHandled: () => { handled += 1 } })))
-    assert.equal(handled, 1)
-    const body = query(m.container, '.lc-br-body')
-    assert.ok(text(body).includes('beta'))
-    const onRows = queryAll(m.container, '.lc-br-elem-on')
-    assert.equal(onRows.length, 1)
-    assert.ok(text(onRows[0]).includes('beta'), 'the named tool row expanded')
-    assert.ok(text(m.container).includes('the beta tool'))
-    // Handed back (null): the section stays as applied.
-    await m.update(h(Browser, props({ data, headers, toolFocus: null, onToolFocusHandled: () => { handled += 1 } })))
-    assert.equal(handled, 1)
-    assert.equal(queryAll(m.container, '.lc-br-body').length, 1)
-    // Category-only focus: section opens, no row expands.
-    await m.update(h(Browser, props({ data, headers, toolFocus: {}, onToolFocusHandled: () => { handled += 1 } })))
-    assert.equal(handled, 2)
-    assert.equal(queryAll(m.container, '.lc-br-elem-on').length, 0)
-    assert.equal(queryAll(m.container, '.lc-br-body').length, 1)
-    await m.unmount()
-  })
-
-  test('toolFocus without the handled callback still applies', async () => {
-    const m = await mount(h(Browser, props({ data, headers })))
-    await m.update(h(Browser, props({ data, headers, toolFocus: { tool: 'alpha' } })))
-    assert.equal(queryAll(m.container, '.lc-br-elem-on').length, 1)
-    await m.unmount()
-  })
 
   test('nodeFocus selects the step, opens the node, scrolls it into view, and clears', async () => {
     const scrolls: unknown[] = []

@@ -99,9 +99,7 @@ export function makeContextView(
         return p.length === 1 ? [...EVENT_KINDS] : p.filter(x => x !== k)
       })
     }
-    const [toolFocus, setToolFocus] = React.useState<{ tool?: string } | null>(null)
-    const clearToolFocus = React.useCallback(() => { setToolFocus(null) }, [])
-    // Step-brief → browser reveal bridge: one-shot focus request consumed by the Context browser (same hand-back pattern as toolFocus).
+    // Step-brief → browser reveal bridge: one-shot focus request consumed by the Context browser.
     const [nodeFocus, setNodeFocus] = React.useState<{ step: number | 'live'; seq: number; cat: SurfaceNode['cat'] } | null>(null)
     const clearNodeFocus = React.useCallback(() => { setNodeFocus(null) }, [])
 
@@ -256,8 +254,6 @@ export function makeContextView(
               subtitle={(data.model ? data.model : '') + (data.provider ? ' · ' + data.provider : '')}
               hoverKey={hoverCat}
               onHoverKey={setHoverCat}
-              tools={data.toolList}
-              onToolFocus={setToolFocus}
             />
 
             <div className="lc-card">
@@ -342,8 +338,6 @@ export function makeContextView(
               pinSeq={pinnedReq !== null ? pinnedReq.seq : null}
               hoverKey={hoverCat}
               onHoverKey={setHoverCat}
-              toolFocus={toolFocus}
-              onToolFocusHandled={clearToolFocus}
               nodeFocus={nodeFocus}
               onNodeFocusHandled={clearNodeFocus}
               loadImage={loadImage}

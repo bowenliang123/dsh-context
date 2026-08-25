@@ -34,7 +34,6 @@ function timeline(over: Record<string, unknown> = {}): ContextTimeline {
   return {
     ok: true,
     current: { system: 100, tools: 200, user: 300, inject: 50, assistant: 400, tool: 150, total: 1200 },
-    toolList: [],
     requests: [],
     events: [],
     nodes: [],
@@ -52,7 +51,6 @@ function richTimeline(over: Record<string, unknown> = {}): ContextTimeline {
     model: 'deepseek-v4-flash',
     provider: 'deepseek',
     contextWindow: 128000,
-    toolList: [{ name: 'bash', tokens: 120 }, { name: 'read', tokens: 80 }],
     toolCalls: 3,
     images: 1,
     requests: [
@@ -276,7 +274,7 @@ describe('ContextView — interactions', () => {
     await m.unmount()
   })
 
-  test('composition legend hover lights the linked browser category; tool chips focus the browser', async () => {
+  test('composition legend hover lights the linked browser category', async () => {
     const m = await mountRich('sv-link')
     const comp = queryAll(m.container, '.lc-card').find(c => text(c).includes(DICT_EN['overview.title']))
     assert.ok(comp !== undefined)
@@ -286,14 +284,6 @@ describe('ContextView — interactions', () => {
     assert.ok(query(m.container, '.lc-br-cat-row').className.includes('lc-br-cat-on'))
     await unhover(chip)
     assert.ok(!query(m.container, '.lc-br-cat-row').className.includes('lc-br-cat-on'))
-
-    // A tool chip opens the tools category with that tool's row expanded; the
-    // label chip opens the category without an element.
-    await click(query(comp, '.lc-tool-chip'))
-    assert.ok(text(query(m.container, '.lc-br-elem-on')).includes('bash'))
-    await click(query(comp, '.lc-tools-label'))
-    assert.equal(queryAll(m.container, '.lc-br-elem-on').length, 0)
-    assert.ok(m.container.querySelector('.lc-br-body') !== null)
     await m.unmount()
   })
 

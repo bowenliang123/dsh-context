@@ -21,7 +21,6 @@ function timeline(over: Record<string, unknown> = {}): ContextTimeline {
   return {
     ok: true,
     current: { system: 1, tools: 2, user: 3, inject: 4, assistant: 5, tool: 6, total: 21 },
-    toolList: [],
     requests: [],
     events: [],
     nodes: [],
@@ -87,7 +86,7 @@ describe('ContextModal', () => {
       sessionId: 'sm-garbage',
       useContextModal: OPEN,
       useProjection: (key: string) =>
-        key === 'contextTimeline' ? { current: 'junk', requests: 'nope', nodes: 7, archive: null, toolList: 1 } : undefined,
+        key === 'contextTimeline' ? { current: 'junk', requests: 'nope', nodes: 7, archive: null } : undefined,
     }))
     assert.ok(!text(m.container).includes(DICT_EN.loading))
     assert.ok(text(m.container).includes(DICT_EN['overview.title']))
@@ -95,7 +94,7 @@ describe('ContextModal', () => {
     await m.unmount()
   })
 
-  test('full render: subtitle variants, hover link, and tool focus through the composed browser', async () => {
+  test('full render: subtitle variants and hover link through the composed browser', async () => {
     const sessions = new TestSessions()
     const ctx = new TestClientCtx({ services: { sessions } })
     const ContextModal = makeContextModal(asClientCtx(ctx), kit)
@@ -103,7 +102,6 @@ describe('ContextModal', () => {
       contextTimeline: timeline({
         model: 'deepseek-v4-flash',
         provider: 'deepseek',
-        toolList: [{ name: 'bash', tokens: 50 }],
       }),
       contextPressure: { projectedTokens: 100, contextWindow: 128000 },
       contextBreakdown: { systemTokens: 1, toolsTokens: 2, messageTokens: 18 },
@@ -126,12 +124,6 @@ describe('ContextModal', () => {
     assert.ok(queryAll(compCard, '.lc-chip').some(c => c.className.includes('lc-chip-on')))
     await unhover(query(compCard, '.lc-stacked'))
     assert.ok(!query(compCard, '.lc-stacked').className.includes('lc-stacked-dim'))
-
-    // A tool chip asks the browser to reveal the tool; the browser consumes the
-    // one-shot focus (onToolFocusHandled) after applying it.
-    await click(query(compCard, '.lc-tool-chip'))
-    const openElem = query(m.container, '.lc-br-elem-on')
-    assert.ok(text(openElem).includes('bash'))
     await m.unmount()
   })
 

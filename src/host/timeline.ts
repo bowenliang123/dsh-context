@@ -107,7 +107,6 @@ const contextTimelineSchema = z.object({
   provider: z.string().optional(),
   contextWindow: z.number().optional(),
   current: currentSchema,
-  toolList: z.array(z.object({ name: z.string(), tokens: z.number().int().nonnegative() }).strict()),
   images: z.number().int().nonnegative().optional(),
   toolCalls: z.number().int().nonnegative().optional(),
   requests: z.array(requestRecordSchema),
@@ -136,7 +135,6 @@ const timelineStateSchema = z.object({
   }).strict(),
   systemTokens: z.number().int().nonnegative(),
   toolsTokens: z.number().int().nonnegative(),
-  toolList: z.array(z.object({ name: z.string(), tokens: z.number().int().nonnegative() }).strict()),
   model: z.string().optional(),
   provider: z.string().optional(),
   lastModel: z.string().optional(),
@@ -194,7 +192,8 @@ export function createContextTimelineDefinition(config: Config): ProjectionDefin
     // 7: the whole-session image count (`images`) joined the state; cached rows refolded.
     // 8: the image count moved to per-node `imgs` (live-surface cell); cached rows refolded.
     // 9: per-request billed cache-read tokens (`cacheRead`) joined request records; cached rows refolded.
-    stateVersion: 9,
+    // 10: the `toolList` summary left the state and the wire view; cached rows refolded.
+    stateVersion: 10,
   }
   return definition
 }
