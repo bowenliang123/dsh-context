@@ -9,7 +9,7 @@
 **The best [DeepSeek Harness plugin](https://www.deepseek.com/harness/) for Agent's context insights and management.**
 
 `dsh-context` provides full context lifecycle management features.
-- **Context tab** — an UI context dashboard for DeepSeek Harness’s context stats, composition, history, events, and messages.
+- **Context tab** — an UI context dashboard for DeepSeek Harness’s context stats, composition, trend, events, and messages.
 - **`/context` command** — the slash command shows the context model for current context composition and recent context evolution.
 
 ## Install / Update
@@ -60,17 +60,23 @@ A six-color stacked bar scaled against the model's full context window (the gray
 
 The headline occupancy and the composition counts read the **same official token-meter projections the chat composer's context ring reads** (`contextPressure` / `contextBreakdown`), so the legend's `≈` figures and proportions match the ring's click-open panel exactly; the message bucket is subdivided into the four surface categories by the fold's per-category ratios.
 
-### 📈 History — watch the window grow (and get compacted)
+### 📈 Context Trend — every request's size *and* its story
 
-One stacked bar per model request, finer than per-message. Toggle between **Turn** and **Step** granularity and between **Total** (each request's cumulative size) and **Delta** (each request's incremental change) views, scroll sideways through the session, hover any bar for a quick tooltip, and click to pin the full breakdown — including provider-reported actual prompt/output tokens next to the estimate. **Hovering a bar also drives the Context browser beside it** — the browser previews that step's assembled context in real time as you scrub across the history. **✂ marks where compaction or pruning happened** — watch the bars drop:
+One stacked bar per model request — finer than per-message — so you watch the window grow turn by turn, and drop in one ✂ when compaction hits:
+
+![Context Trend card with the step brief](https://raw.githubusercontent.com/bowenliang123/dsh-context/main/docs/context-trend.png)
+
+- **✨ Step brief — what a step *was*, not just how big.** Three plain-language rows under the chart: **User** recalls the message that opened the turn (on any of its steps), **In** lists what newly entered the context — usually the previous tool calls' results, failures flagged — and **Response** shows what the model returned: its reply text and/or the tools it called. Hover a row's tag to learn what the row means; click any row to open that exact message in the Context browser.
+- **Read it your way** — **Step** or **Turn** granularity, **Total** (cumulative makeup) or **Delta** (each request's signed change), and sideways scroll through the whole session.
+- **Hover & pin** — scrub for an instant tooltip (turn/step, time, tokens, a one-line reply preview); click to pin the full category breakdown, with provider-reported actual prompt/output/cache figures next to the estimates.
+- **✂ marks the events** — compactions and prunes land exactly where they happened, so the bars' drops explain themselves.
+- **Live linkage** — hovering a bar previews that step's assembled context in the Context browser beside the chart; leave the chart and it returns to your own pick.
+
+Above: Turn 1 · Step 15 of a real session — the brief recalls the turn's opening message, the files just read in, and the reply that called `read` next.
+
+A longer session tells the dramatic version — ~563k tokens across 48 turns, then compaction (✂) recycled −535.5k in one step, and the conversation continued from a fresh, small window:
 
 ![History chart with a pinned request](https://raw.githubusercontent.com/bowenliang123/dsh-context/main/docs/history-detail.png)
-
-Above: a real session that grew to ~563k tokens across 48 turns, then compaction (✂) recycled −535.5k in one step, and the conversation continued from a fresh, small window.
-
-In **Step** granularity, hovering any bar shows that single step's context info instantly — its turn/step, timestamp, and estimated vs. provider-reported token counts:
-
-![History chart with a step hover tooltip](https://raw.githubusercontent.com/bowenliang123/dsh-context/main/docs/history-step-hover.png)
 
 Switch the chart from **Total** to **Delta** and each bar becomes the *change* that request made to the window instead of its cumulative size: diverging stacks pile up from the solid zero baseline when the window grew and hang below it when it shrank, tooltips read `Δ ±Nk`, and the pinned detail card re-prices every category as a signed delta — so you can tell exactly which part of a request added (or reclaimed) tokens. Below, Turn 5's first step grew the window by **+1.6k**: injected context **+803**, the user message **+649**, the assistant reply **+178** — and nothing else moved:
 
@@ -94,7 +100,7 @@ Pick **Live (next request)** or any retained step from the picker, and browse wh
 
 Six collapsible category sections (system prompt, tool schemas, user messages, injected context, assistant replies, tool results) expand into one row per element — each with its token price — and every element expands again into its **actual content**: the full system prompt, each tool's description and JSON schema, message text, reasoning, tool-call arguments, and tool outputs.
 
-- **Linked with the history chart** — hover any bar in the History card and the browser previews that step instantly; leave the chart and it returns to your own pick. Keep a category open while scrubbing to compare one category across steps.
+- **Linked with the trend chart** — hover any bar in the Context trend card and the browser previews that step instantly; leave the chart and it returns to your own pick. Keep a category open while scrubbing to compare one category across steps. Clicking a step-brief row (**User** / **In** / **Response**) opens that exact message here, expanded and scrolled into view.
 - **Honest about coverage** — steps before a compaction are reconstructed from the removed-message archive, and the card says so when a step's makeup is only approximate. Elements older than the loaded chat window page older history in automatically when you expand them, and live injections (AGENTS.md, session-start context, …) are always listed — never a token sum without its items.
 - **Diff against the previous turn** — switch the picker to **vs previous turn** and every category gets signed delta badges (`+N` items, `+Nk` tokens), so one glance tells you what the conversation added since the end of the last turn.
 
