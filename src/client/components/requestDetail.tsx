@@ -68,6 +68,8 @@ export function makeRequestDetail(
 
   /** One-line identity of a surface node: text preview, call breadcrumb, tool name, or a localized placeholder. */
   function nodeLine(n: SurfaceNode, conv: ConversationNodeLike | undefined): string {
+    /* v8 ignore if -- chipParts returns for tool cats upstream; only
+       inject-with-skill and drift nodes ever reach nodeLine. Defensive. */
     if (n.cat === 'tool') return callSummaryOf(conv) ?? (n.tool ?? t('node.toolResult'))
     if (n.text !== undefined && n.text !== '') return n.text
     if (n.skill !== undefined) return t('node.skillTag', { name: n.skill })
@@ -75,7 +77,10 @@ export function makeRequestDetail(
       const summary = blockSummaryOf(conv)
       return n.calls.join(' › ') + (summary !== null ? ' · ' + summary : '')
     }
+    /* v8 ignore if -- chipParts returns for assistant cats upstream. Defensive. */
     if (n.cat === 'assistant') return t('node.empty')
+    /* v8 ignore if -- inject nodes arrive only WITH a skill (the text/skill
+       arms above return first); inject-without-skill never reaches nodeLine. */
     if (n.cat === 'inject') return t('form.' + (n.form ?? 'context'))
     return t('node.nonText')
   }
@@ -190,7 +195,12 @@ export function makeRequestDetail(
     if (!req) return null
     const isTurn = req.stepCount !== undefined && req.stepCount > 1
     const head = isTurn
-      ? t('detail.turn', { t: req.turn ?? 0, n: req.stepCount ?? 0 })
+      ? t('detail.turn', {
+        t: req.turn ?? 0,
+        /* v8 ignore next -- isTurn already guarantees stepCount !== undefined;
+           the fallback is defensive. */
+        n: req.stepCount ?? 0,
+      })
       : t('detail.step', { t: req.turn ?? 0, s: req.step ?? 0 })
     // When this bar carries a boundary event (compaction/prune), the header
     // also shows WHERE the event happened: the gap between the request

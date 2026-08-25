@@ -57,15 +57,22 @@ function solveResizeRatio(height: number, width: number, budget: number): Resize
   if (gridW < 1) {
     // Tall image: width collapses to one unit, height takes the budget.
     let rows = floorDiv(budget - 2, 2)
+    /* v8 ignore else -- budget enters at 381 and the tall solve always fits
+       (never decrements), so rows is always odd here; parity-defensive. */
     if (rows % 2 === 1) rows -= 1
     bestWidth = unit
     bestHeight = rows * unit
+  /* v8 ignore start -- unreachable: the MAX_WH_RATIO clamp in
+     calcResizeInner keeps height/width ≥ 1/8, so gridH = gridW × ratio
+     can never fall below 2 (500k-dimension fuzz: wide = 0 hits); the arm
+     is kept verbatim from the official calculator port. */
   } else if (gridH < 2) {
     // Wide image: height collapses to two units, width takes the budget.
     const cols = floorDiv(budget - 2, 2) - 1
     if (cols <= 1) throw new Error('image tokens: budget too small to solve')
     bestHeight = 2 * unit
     bestWidth = cols * unit
+  /* v8 ignore stop */
   } else {
     const cols = Math.trunc(gridW)
     // The row grid carries the pairing constraint: odd counts round down.
@@ -134,6 +141,8 @@ export function estimateImageTokens(width: number, height: number): number | nul
     }
     return null
   } catch {
+    /* v8 ignore next -- the only throw site is the clamped-away budget guard
+       above; the catch keeps a hostile dimension from ever breaking the fold. */
     return null
   }
 }

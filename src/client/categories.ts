@@ -75,7 +75,14 @@ export function officialParts(
   } else {
     for (const cat of MESSAGE_CATS) shares[cat] = 0
   }
-  return CATS.map(c => ({ key: c.key, color: c.color, value: shares[c.key] ?? 0 }))
+  return CATS.map(c => ({
+    key: c.key,
+    color: c.color,
+    /* v8 ignore next 1 -- `shares` is initialized with system/tools and both
+       foldSurface arms assign every MESSAGE_CATS key, so each key is always
+       defined; the fallback is defensive. */
+    value: shares[c.key] ?? 0,
+  }))
 }
 
 /**

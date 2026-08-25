@@ -295,6 +295,8 @@ export function makeTrendChart(kit: ViewKit): (props: TrendChartProps) => ReactN
     }
     React.useLayoutEffect(() => {
       const el = scrollRef.current
+      /* v8 ignore next 1 -- the scroll div renders unconditionally and React
+         attaches refs before layout effects run; el is never null here. */
       if (el === null) return
       if (props.granularity !== lastGranRef.current) {
         lastGranRef.current = props.granularity
@@ -332,6 +334,8 @@ export function makeTrendChart(kit: ViewKit): (props: TrendChartProps) => ReactN
         ? ' · “' + (reply.length > 48 ? reply.slice(0, 48) + '…' : reply) + '”'
         : ''
       if (delta) {
+        /* v8 ignore next 1 -- delta mode only receives records from
+           deltaOf, which always assigns net; the fallback is defensive. */
         const n = req.net ?? 0
         return head + ' · ' + fmtTime(req.time) + ' · ' + t('tip.delta', { n: (n > 0 ? '+' : '') + fmt(n) }) + tail
       }

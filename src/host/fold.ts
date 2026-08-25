@@ -439,6 +439,9 @@ function accumulateCost(st: TimelineState, time: number, usage: UsageLike): void
   const b = fam[period] ?? { uncached: 0, cacheRead: 0, cacheWrite: 0, output: 0 }
   const nextFam: CostFamilyUsage = { ...fam }
   nextFam[period] = {
+    /* v8 ignore next 1 -- accumulateCost only runs under the
+       `typeof usage.inputTokens === 'number'` guard; the fallback is
+       defensive against a hand-built UsageLike. */
     uncached: b.uncached + (usage.inputTokens ?? 0),
     cacheRead: b.cacheRead + (usage.cacheReadTokens ?? 0),
     cacheWrite: b.cacheWrite + (usage.cacheWriteTokens ?? 0),

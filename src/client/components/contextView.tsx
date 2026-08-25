@@ -124,6 +124,8 @@ export function makeContextView(
       if (typeof sessionId !== 'string' || sessionId === '' || data === null) return
       if (restoredRef.current === sessionId) return
       restoredRef.current = sessionId
+      /* v8 ignore next 3 -- a layout effect body only runs while mounted and
+         both render paths attach rootRef, so the null arm cannot fire. */
       const scroller = rootRef.current !== null
         ? rootRef.current.closest('[data-conversation-scroll]')
         : null
@@ -181,6 +183,8 @@ export function makeContextView(
 
     const markerOf = (req: RequestRecord): ContextEventRecord | undefined => {
       const i = displayRequests.indexOf(req)
+      /* v8 ignore next 1 -- the only caller passes displayRequests[activeIdx],
+         an element of the very array indexOf scans. */
       return i >= 0 ? markers[i] : undefined
     }
 
@@ -201,6 +205,8 @@ export function makeContextView(
     // A brief row's reveal target: inputs/opener live in the picked step's OWN assembled surface; the response node (seq === the
     // request's) first appears in the NEXT step's surface — or the live surface when the last bar is picked.
     const locateNode = (node: SurfaceNode, isResponse: boolean): void => {
+      /* v8 ignore next 1 -- locateNode is only wired to brief rows, and
+         brief !== null guarantees activeReq !== null in the same closure. */
       if (activeReq === null) return
       const next = isResponse && activeIdx + 1 < displayRequests.length ? displayRequests[activeIdx + 1] : null
       const step: number | 'live' = isResponse ? (next !== null ? next.seq : 'live') : activeReq.seq
@@ -302,6 +308,9 @@ export function makeContextView(
                       request={activeReq}
                       // Delta mode pairs the detail with the SAME previous record the chart diffs against (first bar: null).
                       prev={trendMode === 'delta' && activeIdx >= 0 ? (activeIdx > 0 ? displayRequests[activeIdx - 1] : null) : undefined}
+                      /* v8 ignore next 1 -- RequestDetail renders only when
+                         displayRequests.length > 0, which forces activeReq
+                         non-null via the activeIdx fallback above. */
                       marker={activeReq !== null ? markerOf(activeReq) : undefined}
                       brief={brief}
                       convOf={convOf}

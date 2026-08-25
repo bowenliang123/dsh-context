@@ -147,7 +147,7 @@ function Section(props: {
     <div className="lc-ts-card">
       <div className="lc-ts-card-head">
         <b className={props.labelClass}>{props.label}</b>
-        {right ? <span className="lc-ts-card-right">{props.meta ?? null}{props.actions ?? null}</span> : null}
+        {right ? <span className="lc-ts-card-right">{props.meta}{props.actions}</span> : null}
         {props.count !== undefined ? <span className="lc-ts-card-count">{props.count}</span> : null}
       </div>
       {props.children}
@@ -412,6 +412,8 @@ function ToolCallCard(props: {
 
 function CallArgRow(props: { name: string; value: unknown }): ReactNS.ReactElement {
   const v = props.value
+  /* v8 ignore next 2 -- the only caller maps Object.keys of a JSON.parse'd
+     object, which never holds undefined values; defensive. */
   const text = typeof v === 'string' ? v
     : v === undefined ? ''
       : JSON.stringify(v)
@@ -682,6 +684,8 @@ export function makeContextBrowser(
       if (c === 'system') {
         if (view.header === null) return <div className="lc-br-note">{t(headers === null ? 'browser.noHeader' : 'browser.noEpoch')}</div>
         const system = view.header.system
+        /* v8 ignore next 1 -- the category opens only when its count > 0
+           (countOf ⟺ system defined); the undefined arm is defensive. */
         if (system === undefined) return null
         return elemRow('sys', null, system.replace(/\s+/g, ' ').trim().slice(0, 80), breakdown.system, undefined,
           <TextSection label={catLabel('system')} text={system} rich={rich} lines={lineLabel} />)
@@ -702,6 +706,8 @@ export function makeContextBrowser(
         })
       }
       // List surface nodes newest first, mirroring the NodeList card.
+      /* v8 ignore next 1 -- the body renders only when the category is open,
+         which requires count > 0 ⟺ byCat[c] exists; defensive. */
       const nodes = (byCat[c as Category] ?? []).slice().reverse()
       return nodes.map((n) => {
         const conv = bySeq.get(n.seq)
@@ -841,8 +847,11 @@ export function makeContextBrowser(
                 <button
                   type="button"
                   className={'lc-br-cat-row' + (linked && props.hoverKey === c.key ? ' lc-br-cat-on' : '')}
+                  /* v8 ignore start -- the handlers exist only when linked,
+                     and linked already requires onHoverKey defined (above). */
                   onMouseEnter={linked ? () => { if (props.onHoverKey !== undefined) props.onHoverKey(c.key) } : undefined}
                   onMouseLeave={linked ? () => { if (props.onHoverKey !== undefined) props.onHoverKey(null) } : undefined}
+                  /* v8 ignore stop */
                   onClick={() => { toggleCat(c.key) }}
                 >
                   <span className={'lc-br-chev' + (open ? ' lc-br-chev-on' : '')}>{'▸'}</span>
