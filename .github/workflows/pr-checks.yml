@@ -28,10 +28,10 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
-      # Client tests mount the built bundle (tests/helpers/viewBed.ts reads
-      # lib/client.js), so the build must precede the test run.
-      - name: Build
-        run: pnpm run build
-
-      - name: Test (typecheck + vitest)
+      - name: Test (typecheck + vitest against src; no build needed)
         run: pnpm test
+
+      # The packaging glue (module handoff, CSS channel) only exists after
+      # tsdown runs — the smoke script verifies the built bundle.
+      - name: Build + bundle smoke
+        run: pnpm run build && pnpm run test:bundle

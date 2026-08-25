@@ -42,6 +42,9 @@ jobs:
       - name: Test
         run: pnpm test
 
+      - name: Bundle smoke
+        run: pnpm run test:bundle
+
       - name: Verify version matches the tag
         run: |
           TAG="${{ github.ref_name }}"
