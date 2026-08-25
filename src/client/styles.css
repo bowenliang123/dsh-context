@@ -19,7 +19,7 @@
 .lc-stat-tip-head { display: block; font-weight: 600; }
 .lc-stat-tip-row { display: block; margin-top: 2px; }
 .lc-stat-tip-model { color: var(--dsw-alias-label-primary); }
-.lc-card-sub { font-weight: 400; color: var(--dsw-alias-label-secondary); font-size: 12px; }
+.lc-card-sub { font-weight: 400; color: var(--dsw-alias-label-secondary); font-size: 12px; margin-left: auto; }
 .lc-gran, .lc-kinds { margin-left: auto; display: flex; gap: 2px; background: var(--dsw-alias-bg-layer-2); border: 1px solid var(--dsw-alias-border-l1); border-radius: 6px; padding: 1px; }
 /* A title carrying TWO toggle groups wraps them so the auto-margin push happens once — two bare .lc-gran siblings would split the free space and drift apart. */
 .lc-trend-ctl { margin-left: auto; display: flex; gap: 6px; align-items: center; }
