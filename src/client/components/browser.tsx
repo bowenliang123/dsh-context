@@ -642,8 +642,14 @@ export function makeContextBrowser(
       const openable = toolCount(c) > 0
         || ((c === 'system' || c === 'tools') && view.header === null)
       if (!openable) return
-      setOpenCat(openCat === c ? null : c)
-      setOpenElem(null)
+      if (openCat === c) {
+        setOpenCat(null)
+        setOpenElem(null)
+        return
+      }
+      setOpenCat(c)
+      // The system prompt's single row opens by default, so one category click lands on the text directly.
+      setOpenElem(c === 'system' && view.header?.system !== undefined ? 'sys' : null)
     }
     const toggleElem = (key: string) => { setOpenElem(openElem === key ? null : key) }
 

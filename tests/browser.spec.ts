@@ -103,6 +103,16 @@ test('context browser: picker, accordion, reconstruction, header content, deltas
   tr = renderView()
   assert.equal(byClass(tr, 'lc-br-elem-row').length, 1, 'live view excludes removed nodes')
 
+  // Category click: the system prompt row opens by default — one click lands
+  // on the prompt content instead of a second click on the row.
+  catRowOf(tr, 'cat.system').args[1].onClick()
+  tr = renderView()
+  assert.equal(byClass(tr, 'lc-br-content').length, 1, 'clicking the system category opens its row by default')
+  assert.match(textOf(byClass(tr, 'lc-br-content')[0]), /SYSTEM-PROMPT-TEXT/, 'the prompt is readable without a row click')
+  catRowOf(tr, 'cat.system').args[1].onClick()
+  tr = renderView()
+  assert.equal(byClass(tr, 'lc-br-content').length, 0, 're-clicking the system category collapses it again')
+
   // Header content sections: the system prompt and tool schemas ride the
   // contextHeaders projection (full content, not just prices).
   brSlots[1][1]('system')
