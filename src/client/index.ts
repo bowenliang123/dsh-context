@@ -90,7 +90,7 @@ function apply(ctx: ClientCtx): void {
   ctx.slots.inject('conversation.input.overlay', () => {
     return ctx.slots.register(
       { name: 'conversation.input.overlay', id: 'context-modal', order: 10, locale: NS,
-        inject: (sessionId: string) => ({ hooks: { contextModal: modalStoreOf(sessionId) } }) },
+        inject: (sessionId = '') => ({ hooks: { contextModal: modalStoreOf(sessionId) } }) },
       props => h(ContextModal, props),
     )
   })

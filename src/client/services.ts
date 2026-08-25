@@ -30,14 +30,14 @@ export interface SlotRegistration {
   locale?: string
   label?: () => string
   /** optional business face factory; a `hooks` compartment binds selector hooks onto props. */
-  inject?: (sessionId: string) => unknown
+  inject?: (sessionId?: string) => unknown
 }
 
 export interface SlotsService {
   inject(name: string, callback: () => unknown): unknown
   register(
     registration: SlotRegistration,
-    component: (props: { sessionId?: string }) => unknown,
+    component: (props: { sessionId?: string } & Record<string, unknown>) => unknown,
   ): unknown
 }
 
