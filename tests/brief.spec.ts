@@ -139,21 +139,29 @@ test('context view: the brief section renders under the trend detail and drives 
   const focus = ctxSlots[9][0]
   assert.deepEqual(focus, { step: 7, seq: 5, cat: 'assistant' }, 'a reply node first appears on the NEXT step’s surface')
 
-  // Conversation join armed: a text+calls reply recovers its call breadcrumb as a suffix, and a textless reply's
-  // breadcrumb gains the call's argument summary.
+  // Conversation join armed: tool-result inputs chip [tool name] + argument summary; a textless reply chips its call
+  // breadcrumb with the summary as text; a text+calls reply keeps the text and recovers the call as a fact chip.
   bed.useSessionHolder = (sel) => sel({
     nodes: [
+      { kind: 'tool-result', seq: 4, call: { name: 'bash', argsRaw: '{"command":"pnpm test","description":"跑测试"}' }, content: [] },
       { kind: 'assistant', seq: 5, blocks: [{ kind: 'tool-call', name: 'bash', argsRaw: '{"command":"pnpm test","description":"跑测试"}' }] },
       { kind: 'assistant', seq: 7, blocks: [{ kind: 'text', text: '已添加测试' }, { kind: 'tool-call', name: 'write', argsRaw: '{"file_path":"/tmp/a.ts"}' }] },
     ],
   })
   tree = renderView()
   rows = byClass(tree, 'lc-brief-row')
-  assert.ok(textOf(rows[2]).includes('bash · 跑测试'), 'textless reply: call summary enriches the breadcrumb')
+  const toolChip = byClass(rows[1], 'lc-brief-chip')[0]
+  assert.equal(textOf(byClass(toolChip, 'lc-brief-chip-tag')[0]), 'bash', 'a tool input chip leads with the tool NAME')
+  assert.equal(textOf(byClass(toolChip, 'lc-brief-chip-text')[0]), '跑测试', 'the chip carries the call-argument summary')
+  const replyChip = byClass(rows[2], 'lc-brief-chip')[0]
+  assert.ok(replyChip.args[1].className.includes('lc-brief-chip-grow'), 'the reply chip shares the input chip anatomy, grown to the row')
+  assert.equal(textOf(byClass(replyChip, 'lc-brief-chip-tag')[0]), 'bash', 'a text-less reply chips its call breadcrumb')
+  assert.ok(textOf(replyChip).includes('跑测试'), 'the reply chip carries the call-argument summary')
   ctxSlots[1][1](null)
   tree = renderView()
   rows = byClass(tree, 'lc-brief-row')
-  assert.ok(textOf(rows[1]).includes('已添加测试 → write'), 'text+calls reply shows the text AND recovers the call')
+  assert.ok(textOf(rows[1]).includes('已添加测试'), 'a text+calls reply keeps the reply text')
+  assert.equal(textOf(byClass(rows[1], 'lc-brief-chip-tag')[0]), 'write', '…and recovers its call as the chip tag')
 
   // The browser consumes the one-shot focus: selects the owning step, opens the node's category + element.
   ctxSlots[1][1](5)

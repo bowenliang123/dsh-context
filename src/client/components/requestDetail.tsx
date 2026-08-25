@@ -80,6 +80,49 @@ export function makeRequestDetail(
     return t('node.nonText')
   }
 
+  /**
+   * One line's anatomy — a compact FACT tag plus the preview text, mirroring the Context browser's element rows so a
+   * brief line reads exactly like the browser row its click reveals: tool results tag the tool name (skill results the
+   * skill name), assistant replies tag the call breadcrumb, injections tag the form, user messages tag image attachments.
+   */
+  function chipParts(n: SurfaceNode, conv: ConversationNodeLike | undefined): { tag: string | null; text: string } {
+    if (n.cat === 'tool') {
+      const summary = callSummaryOf(conv)
+      if (n.skill !== undefined) return { tag: t('node.skillTag', { name: n.skill }), text: summary ?? '' }
+      if (n.tool !== undefined) return { tag: n.tool, text: summary ?? '' }
+      return { tag: null, text: summary ?? t('node.toolResult') }
+    }
+    if (n.cat === 'assistant') {
+      // The fold's surface node keeps `calls` only for TEXT-LESS replies; a reply carrying both text and calls recovers
+      // its call breadcrumb through the conversation join.
+      const names = n.calls !== undefined && n.calls.length > 0 ? n.calls : callNamesOf(conv)
+      const own = n.text !== undefined && n.text !== '' ? n.text : blockSummaryOf(conv) ?? ''
+      return {
+        tag: names.length > 0 ? names.join(' › ') : null,
+        text: own !== '' ? own : (names.length > 0 ? '' : t('node.empty')),
+      }
+    }
+    if (n.cat === 'inject' && n.skill === undefined) {
+      const text = n.text !== undefined && n.text !== ''
+        ? (n.form === 'snapshot' ? t('node.snapshot') + n.text : n.text)
+        : ''
+      return { tag: t('form.' + (n.form ?? 'context')), text }
+    }
+    if (n.cat === 'user') {
+      const imgs = n.imgs ?? 0
+      return {
+        tag: imgs > 0 ? t('attach.image') + (imgs > 1 ? ' ×' + String(imgs) : '') : null,
+        text: n.text ?? '',
+      }
+    }
+    return { tag: null, text: nodeLine(n, conv) }
+  }
+
+  /** The native-title line for a fact+text pair: 'tag · text', degrading to whichever half exists. */
+  function factTitle(tag: string | null, text: string): string {
+    return tag !== null ? (text !== '' ? tag + ' · ' + text : tag) : text
+  }
+
   function BriefSection(props: {
     brief: StepBrief
     convOf?: (seq: number) => ConversationNodeLike | undefined
@@ -94,50 +137,48 @@ export function makeRequestDetail(
     const locateChip = props.onLocate === undefined ? undefined : (n: SurfaceNode) =>
       (e?: ReactNS.MouseEvent) => { e?.stopPropagation(); props.onLocate?.(n, false) }
     const MAX_CHIPS = 3
-    // The reply line: textless replies lead with their call breadcrumb ('→ bash › write'); a reply carrying BOTH text and calls
-    // folds to text-only on the surface node, so its calls are recovered through the conversation join as a suffix.
-    let replyText = ''
-    let replyArrow = false
-    if (response !== undefined) {
-      const conv = convOf(response.seq)
-      replyText = nodeLine(response, conv)
-      if (response.calls !== undefined && response.calls.length > 0) {
-        replyArrow = true
-      } else {
-        const joined = callNamesOf(conv)
-        if (joined.length > 0) replyText += ' → ' + joined.join(' › ')
-      }
+    /**
+     * The ONE content unit of the brief — inputs and the reply share the same chip anatomy (error dot, fact tag,
+     * preview text). Input chips are compact and individually clickable (each locates its own node); the reply is a
+     * single chip grown to the row's width, left inert because the row button already locates it.
+     */
+    const nodeChip = (n: SurfaceNode, onClick?: (e?: ReactNS.MouseEvent) => void, grow = false): ReactNS.ReactElement => {
+      const { tag, text } = chipParts(n, convOf(n.seq))
+      return (
+        <span
+          key={n.seq}
+          className={'lc-brief-chip' + (grow ? ' lc-brief-chip-grow' : '') + (onClick !== undefined ? ' lc-brief-chip-link' : '')}
+          title={factTitle(tag, text) + hint}
+          onClick={onClick}
+        >
+          {n.err === true ? <span className="lc-br-err-dot" /> : null}
+          {tag !== null ? <span className="lc-brief-chip-tag">{tag}</span> : null}
+          {text !== '' ? <span className="lc-brief-chip-text">{text}</span> : null}
+        </span>
+      )
     }
+    const openerParts = opener !== undefined ? chipParts(opener, convOf(opener.seq)) : null
     return (
       <div className="lc-brief">
-        {opener !== undefined ? (
+        {opener !== undefined && openerParts !== null ? (
           <BriefRow tag={t('brief.turn')} tagTip={t('brief.turnTip')} node={opener} isResponse={false} onLocate={props.onLocate}>
-            <span className="lc-brief-text" title={nodeLine(opener, convOf(opener.seq)) + hint}>{nodeLine(opener, convOf(opener.seq))}</span>
+            {openerParts.tag !== null ? <span className="lc-brief-fact">{openerParts.tag}</span> : null}
+            {openerParts.text !== '' ? (
+              <span className="lc-brief-text" title={factTitle(openerParts.tag, openerParts.text) + hint}>{openerParts.text}</span>
+            ) : null}
           </BriefRow>
         ) : null}
         {inputs.length > 0 ? (
           // Whole-row clickable like the other rows (locates the FIRST input); each chip still locates its own node —
           // stopPropagation keeps a chip click from also firing the row's.
           <BriefRow tag={t('brief.input')} tagTip={t('brief.inputTip')} node={inputs[0]} isResponse={false} onLocate={props.onLocate}>
-            {inputs.slice(0, MAX_CHIPS).map(n => (
-              <span
-                key={n.seq}
-                className={'lc-brief-chip' + (props.onLocate !== undefined ? ' lc-brief-chip-link' : '')}
-                title={nodeLine(n, convOf(n.seq)) + hint}
-                onClick={locateChip !== undefined ? locateChip(n) : undefined}
-              >
-                {n.err === true ? <span className="lc-br-err-dot" /> : null}
-                {nodeLine(n, convOf(n.seq))}
-              </span>
-            ))}
+            {inputs.slice(0, MAX_CHIPS).map(n => nodeChip(n, locateChip?.(n)))}
             {inputs.length > MAX_CHIPS ? <span className="lc-brief-more">{t('brief.more', { n: inputs.length - MAX_CHIPS })}</span> : null}
           </BriefRow>
         ) : null}
         {response !== undefined ? (
           <BriefRow tag={t('brief.reply')} tagTip={t('brief.replyTip')} node={response} isResponse onLocate={props.onLocate}>
-            <span className="lc-brief-text" title={replyText + hint}>
-              {replyArrow ? '→ ' : ''}{replyText}
-            </span>
+            {nodeChip(response, undefined, true)}
           </BriefRow>
         ) : null}
       </div>

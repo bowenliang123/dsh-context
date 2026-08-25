@@ -147,8 +147,10 @@
 .lc-detail-metric-up { color: var(--dsw-alias-state-success-primary); background: color-mix(in srgb, var(--dsw-alias-state-success-primary) 15%, transparent); }
 .lc-detail-metric-down { color: var(--dsw-alias-state-error-primary); background: color-mix(in srgb, var(--dsw-alias-state-error-primary) 15%, transparent); }
 .lc-detail-rows { margin-top: 10px; display: grid; grid-template-columns: 1fr 1fr; gap: 4px 24px; }
-/* Step brief: the bar's semantic identity under the detail head — one FIXED-WIDTH tag + one ellipsis line per row, so content starts at
-   one shared left edge; every clickable target (whole row or input chip) uses the standard interactive hover token + 120ms transition. */
+/* Step brief: the bar's semantic identity under the detail head — one FIXED-WIDTH tag + one line per row, so content starts at
+   one shared left edge. Every line speaks the Context browser's row anatomy (fact tag + preview text), so a brief line reads
+   exactly like the browser element its click reveals; every clickable target (whole row or input chip) uses the standard
+   interactive hover token + 120ms transition. */
 .lc-brief { display: flex; flex-direction: column; gap: 2px; margin: -4px 0 10px; }
 .lc-brief-row { display: flex; align-items: center; gap: 8px; min-width: 0; padding: 3px 6px; margin-left: -6px; margin-right: -6px; border-radius: 6px; border: 0; background: transparent; font-family: inherit; font-size: 12px; line-height: 1.5; color: var(--dsw-alias-label-primary); text-align: left; transition: background-color 120ms ease; }
 /* The link class marks a hoverable ROW (buttons and the chip-carrying inputs row alike); the pointer cursor belongs only to the
@@ -160,7 +162,14 @@ button.lc-brief-row-link { cursor: pointer; }
 .lc-brief-tip { position: absolute; bottom: calc(100% + 6px); left: 0; z-index: 6; width: max-content; max-width: 240px; white-space: normal; text-align: left; background: var(--dsw-alias-bg-layer-2); border: 1px solid var(--dsw-alias-border-l1); border-radius: 6px; padding: 6px 10px; font-size: 12px; line-height: 1.5; font-weight: 400; color: var(--dsw-alias-label-primary); box-shadow: 0 2px 8px rgba(0,0,0,0.18); pointer-events: none; opacity: 0; transition: opacity 120ms ease; }
 .lc-brief-tag:hover .lc-brief-tip { opacity: 1; }
 .lc-brief-text { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.lc-brief-chip { display: inline-flex; align-items: center; gap: 5px; max-width: 220px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12px; padding: 0 7px; border-radius: 5px; background: var(--dsw-alias-bg-layer-2); border: 1px solid var(--dsw-alias-border-l1); color: var(--dsw-alias-label-primary); transition: background-color 120ms ease; }
+/* Standalone fact chip on the opener/reply rows (call breadcrumb, image count) — the row kind tag's look, content-sized. */
+.lc-brief-fact { flex: none; box-sizing: border-box; max-width: 160px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 11px; padding: 0 6px; border-radius: 4px; background: var(--dsw-alias-bg-layer-2); border: 1px solid var(--dsw-alias-border-l1); color: var(--dsw-alias-label-secondary); }
+/* Input chips: the name tag is flex-none so it always survives truncation — only the preview text ellipsizes. */
+.lc-brief-chip { display: inline-flex; align-items: center; gap: 5px; max-width: 260px; min-width: 0; overflow: hidden; font-size: 12px; padding: 0 7px; border-radius: 5px; background: var(--dsw-alias-bg-layer-2); border: 1px solid var(--dsw-alias-border-l1); color: var(--dsw-alias-label-primary); transition: background-color 120ms ease; }
+/* The reply row's single chip grows to the row's width, so a long reply text reads as far as the card allows. */
+.lc-brief-chip-grow { flex: 1; max-width: none; }
+.lc-brief-chip-tag { flex: none; max-width: 120px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 11px; padding: 0 6px; border-radius: 4px; background: var(--dsw-alias-bg-layer-1); border: 1px solid var(--dsw-alias-border-l1); color: var(--dsw-alias-label-secondary); }
+.lc-brief-chip-text { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .lc-brief-chip-link { cursor: pointer; }
 .lc-brief-chip-link:hover { background: var(--dsw-alias-interactive-bg-hover); }
 .lc-brief-more { flex: none; font-size: 11px; color: var(--dsw-alias-label-secondary); }
