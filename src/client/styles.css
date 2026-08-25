@@ -90,7 +90,7 @@
 .lc-axis-top { top: 13px; }
 .lc-axis-mid { top: 69px; }
 .lc-axis-bot { top: 125px; }
-.lc-chart-scroll { position: relative; flex: 1; overflow-x: auto; overflow-y: hidden; min-width: 0; scrollbar-width: thin; padding-bottom: 8px; /* reserve room for the horizontal scrollbar so it can't overlay the turn strip */ }
+.lc-chart-scroll { position: relative; flex: 1; overflow-x: auto; overflow-y: hidden; min-width: 0; scrollbar-width: thin; scrollbar-gutter: stable; padding-bottom: 8px; /* scrollbar-gutter keeps the card height invariant across the overflow toggle; padding-bottom is a safety net for browsers that under-reserve */ }
 .lc-chart-fade { position: absolute; top: 0; bottom: 0; width: 26px; pointer-events: none; z-index: 2; }
 .lc-chart-fade-l { left: 0; background: linear-gradient(to right, var(--dsw-alias-bg-layer-1), transparent); }
 .lc-chart-fade-r { right: 0; background: linear-gradient(to left, var(--dsw-alias-bg-layer-1), transparent); }
