@@ -1,7 +1,7 @@
 // Client entry (src/client/index.ts): the plugin's apply() wiring asserted
 // through the faithful harness-context seams — dictionaries, slots, the
-// sessions provide channel, the /context trigger source, and the deferred
-// settingsScope inject — plus real renders of the registered components.
+// /context trigger source, and the deferred settingsScope inject — plus real
+// renders of the registered components.
 
 import assert from 'node:assert/strict'
 import type { ReactElement } from 'react'
@@ -9,7 +9,6 @@ import { describe, test } from 'vitest'
 import { DICT_EN, DICT_ZH } from '../../src/client/i18n'
 import { modalStoreOf, type ModalStore } from '../../src/client/modalStore'
 import { h } from '../../src/client/react'
-import type { SessionProvideDescriptorLike } from '../../src/client/services'
 import type { SettingsField, SettingsScopeLike, SettingsState } from '../../src/client/settings'
 import { TestClientCtx, TestSessions, asClientCtx } from './helpers/harness'
 import { click, mount, query, queryAll } from './helpers/kit'
@@ -104,48 +103,15 @@ describe('client entry: conversation.view slot', () => {
   })
 })
 
-describe('client entry: sessions.provide effect', () => {
-  test('absent sessions service: apply is a noop for the provide channel', () => {
+describe('client entry: sessions scope seam', () => {
+  test('absent sessions service: apply is a noop for the sessions seams', () => {
     const ctx = new TestClientCtx()
     applyTo(ctx)
     ctx.dispose()
   })
 
-  test('sessions without the provide channel: noop, nothing thrown', () => {
-    const ctx = new TestClientCtx({ services: { sessions: { scope: () => undefined } } })
-    applyTo(ctx)
-    ctx.dispose()
-  })
-
-  test('sessions present: the loadOlderHistory descriptor resolves to session.loadOlder', async () => {
+  test('sessions present: apply wires through and disposes cleanly', () => {
     const sessions = new TestSessions()
-    const ctx = new TestClientCtx({ services: { sessions } })
-    applyTo(ctx)
-    assert.equal(sessions.provided.length, 1)
-    const descriptor = sessions.provided[0]
-    assert.deepEqual(descriptor.props, ['loadOlderHistory'])
-    let calls = 0
-    const resolved = descriptor.resolve({
-      session: {
-        loadOlder: async () => {
-          calls += 1
-        },
-      },
-    })
-    const loadOlderHistory = resolved.props?.loadOlderHistory as () => Promise<void>
-    await loadOlderHistory()
-    assert.equal(calls, 1)
-    ctx.dispose()
-    assert.equal(sessions.provided.length, 0)
-  })
-
-  test('a throwing provide (duplicate refusal) fails soft', () => {
-    const sessions = {
-      scope: () => undefined,
-      provide: (_descriptor: SessionProvideDescriptorLike): never => {
-        throw new Error('duplicate')
-      },
-    }
     const ctx = new TestClientCtx({ services: { sessions } })
     applyTo(ctx)
     ctx.dispose()
@@ -302,8 +268,7 @@ describe('client entry: settings card slot', () => {
 })
 
 describe('client entry: dispose', () => {
-  test('a full apply unwinds dictionaries, the provide descriptor, and the command source', () => {
-    const sessions = new TestSessions()
+  test('a full apply unwinds dictionaries and the command source', () => {
     const sources: unknown[] = []
     const inputTriggers = {
       registerSource(src: unknown): () => void {
@@ -314,14 +279,12 @@ describe('client entry: dispose', () => {
         }
       },
     }
-    const ctx = new TestClientCtx({ services: { sessions, inputTriggers } })
+    const ctx = new TestClientCtx({ services: { inputTriggers } })
     applyTo(ctx)
     assert.ok(ctx.locale.namespaces.has('dsh-context'))
-    assert.equal(sessions.provided.length, 1)
     assert.equal(sources.length, 1)
     ctx.dispose()
     assert.equal(ctx.locale.namespaces.has('dsh-context'), false)
-    assert.equal(sessions.provided.length, 0)
     assert.equal(sources.length, 0)
   })
 })

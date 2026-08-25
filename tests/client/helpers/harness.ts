@@ -1,11 +1,11 @@
 // A faithful in-memory implementation of the harness client context the
 // plugin's `apply` consumes. Every member implements the DOCUMENTED contract
 // (cordis effect/inject semantics, locale fallback chain, slot registry,
-// sessions provide channel) rather than a test-specific stub — registrations
+// sessions scope) rather than a test-specific stub — registrations
 // and disposals behave the way the real harness's do, so specs assert through
 // the same seams the production runtime uses.
 
-import type { ClientCtx, LocaleService, SessionProvideDescriptorLike, SlotRegistration, SlotsService } from '../../../src/client/services'
+import type { ClientCtx, LocaleService, SlotRegistration, SlotsService } from '../../../src/client/services'
 import { makeTranslate } from './kit'
 
 export interface SlotEntry {
@@ -123,18 +123,9 @@ export function asClientCtx(ctx: TestClientCtx): ClientCtx {
   return ctx as unknown as ClientCtx
 }
 
-/** A real sessions face with the documented provide/scope contract. */
+/** A real sessions face with the documented scope contract. */
 export class TestSessions {
-  readonly provided: SessionProvideDescriptorLike[] = []
   readonly bails: { scope: unknown; event: string; payload: unknown }[] = []
-
-  provide(descriptor: SessionProvideDescriptorLike): () => void {
-    this.provided.push(descriptor)
-    return () => {
-      const i = this.provided.indexOf(descriptor)
-      if (i >= 0) this.provided.splice(i, 1)
-    }
-  }
 
   scope(_id: string): { bail(subject: unknown, event: string, payload: unknown): boolean } | undefined {
     return {

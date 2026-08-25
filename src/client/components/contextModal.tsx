@@ -9,6 +9,7 @@ import { headlineOf } from '../headline'
 import { modalStoreOf, takePendingConsume } from '../modalStore'
 import type { ClientCtx, SessionStandardProps, SessionsFace } from '../services'
 import { contextBreakdownOf, contextPressureOf, headersOf, timelineOf } from '../services'
+import { makeContentFetcher } from '../historyPage'
 import type { ViewKit } from '../viewkit'
 import { makeContextBrowser } from './browser'
 import { makeCurrentComposition } from './currentComposition'
@@ -48,6 +49,11 @@ export function makeContextModal(ctx: ClientCtx, kit: ViewKit): (props: ContextM
       : null
     const [hoverCat, setHoverCat] = React.useState<string | null>(null)
     const [toolFocus, setToolFocus] = React.useState<{ tool?: string } | null>(null)
+    // Same targeted content fetch the Context tab wires (one seq-anchored history read per expanded row).
+    const fetchContent = React.useMemo(
+      () => (sessionId !== '' ? makeContentFetcher(ctx, sessionId) : undefined),
+      [ctx, sessionId],
+    )
 
     const close = React.useCallback(() => {
       if (sessionId === '') return
@@ -105,7 +111,7 @@ export function makeContextModal(ctx: ClientCtx, kit: ViewKit): (props: ContextM
                 data={data}
                 headers={headers}
                 useSession={props.useSession}
-                loadOlderHistory={props.loadOlderHistory}
+                fetchContent={fetchContent}
                 hoverKey={hoverCat}
                 onHoverKey={setHoverCat}
                 toolFocus={toolFocus}

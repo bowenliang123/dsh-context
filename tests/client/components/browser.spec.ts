@@ -1,7 +1,7 @@
 // ContextBrowser (src/client/components/browser.tsx) rendered with real
 // React in jsdom: picker, category accordion, header content (schema
 // narrowing matrix), conversation join (block cascade, tail-status matrix),
-// history auto-pagination, hover linkage, and the focus bridges.
+// targeted content fetch, hover linkage, and the focus bridges.
 
 import assert from 'node:assert/strict'
 import { act } from 'react'
@@ -41,13 +41,13 @@ function node(over: Partial<SurfaceNode> & { seq: number }): SurfaceNode {
 }
 
 /** A REAL tiny selector over an in-memory snapshot — the documented UseSessionLike contract. */
-function sess(snap: { nodes?: readonly ConversationNodeLike[]; hasMore?: boolean; loadingOlder?: boolean }): UseSessionLike {
+function sess(snap: { nodes?: readonly ConversationNodeLike[] }): UseSessionLike {
   return (sel) => sel(snap)
 }
 
-interface Snap { nodes?: readonly ConversationNodeLike[]; hasMore?: boolean; loadingOlder?: boolean }
+interface Snap { nodes?: readonly ConversationNodeLike[] }
 
-/** Same contract, but re-reads the snapshot on every render (pagination tests mutate it). */
+/** Same contract, but re-reads the snapshot on every render (join tests mutate it). */
 function liveSess(get: () => Snap): UseSessionLike {
   return (sel) => sel(get())
 }
@@ -891,7 +891,7 @@ describe('ContextBrowser tool results', () => {
   })
 })
 
-describe('ContextBrowser history auto-load', () => {
+describe('ContextBrowser targeted content fetch', () => {
   const data = tl({
     current: { system: 0, tools: 0, user: 10, inject: 0, assistant: 0, tool: 0, total: 10 },
     nodes: [node({ seq: 5, tokens: 5, text: 'pageable' }), node({ seq: 6, tokens: 5, text: 'also pageable' })],
@@ -902,91 +902,112 @@ describe('ContextBrowser history auto-load', () => {
     await click(elemRows(m)[1]) // seq 5 (newest first: 6, 5)
   }
 
-  test('missing join pulls one older page, then the joined content renders', async () => {
-    let snap: Snap = { nodes: [], hasMore: true, loadingOlder: false }
+  test('a missed join fetches the seq once, and the fetched body renders', async () => {
     let calls = 0
-    const loadOlderHistory = async (): Promise<void> => { calls += 1 }
-    const el = () => h(Browser, props({
-      data, useSession: liveSess(() => snap), loadOlderHistory,
-    }))
-    const m = await mount(el())
-    await openFirstRow(m)
-    assert.equal(calls, 1, 'one page requested')
-    assert.ok(text(query(m.container, '.lc-br-content')).includes('Loading full content from older session history'))
-    // The page lands: the seq joins the window.
-    snap = { nodes: [{ kind: 'user', seq: 5, content: [{ type: 'text', text: 'FULL BODY' }] }], hasMore: false, loadingOlder: false }
-    await m.update(el())
-    assert.ok(text(query(m.container, '.lc-br-content')).includes('FULL BODY'))
-    assert.equal(calls, 1, 'no further pages once the join lands')
-    await m.unmount()
-  })
-
-  test('a page already in flight does not double-fire', async () => {
-    const snap: Snap = { nodes: [], hasMore: true, loadingOlder: true }
-    let calls = 0
-    const m = await mount(h(Browser, props({
-      data,
-      useSession: liveSess(() => snap),
-      loadOlderHistory: async () => { calls += 1 },
-    })))
-    await openFirstRow(m)
-    assert.equal(calls, 0)
-    assert.ok(text(query(m.container, '.lc-br-content')).includes('Loading full content'))
-    await m.unmount()
-  })
-
-  test('history end latches the static note; absent loader degrades the same way', async () => {
-    const snap: Snap = { nodes: [], hasMore: false, loadingOlder: false }
-    let calls = 0
-    const m = await mount(h(Browser, props({
-      data,
-      useSession: liveSess(() => snap),
-      loadOlderHistory: async () => { calls += 1 },
-    })))
-    await openFirstRow(m)
-    assert.equal(calls, 0, 'no pages left to pull')
-    assert.ok(text(query(m.container, '.lc-br-content')).includes('outside the loaded message window'))
-    await m.unmount()
-
-    // Older host without the pagination verb.
-    const snap2: Snap = { nodes: [], hasMore: true, loadingOlder: false }
-    const m2 = await mount(h(Browser, props({
-      data,
-      useSession: liveSess(() => snap2),
-    })))
-    await openFirstRow(m2)
-    assert.ok(text(query(m2.container, '.lc-br-content')).includes('outside the loaded message window'))
-    await m2.unmount()
-  })
-
-  test('the auto-load ceiling stops paging and opening another element re-arms', async () => {
-    const snap: Snap = { nodes: [], hasMore: true, loadingOlder: false }
-    let calls = 0
-    const loadOlderHistory = async (): Promise<void> => { calls += 1 }
-    const el = () => h(Browser, props({
-      data, useSession: liveSess(() => snap), loadOlderHistory,
-    }))
-    const m = await mount(el())
-    await openFirstRow(m)
-    assert.equal(calls, 1)
-    // Each landed page (loadingOlder true→false) without the seq re-arms the pull.
-    for (let i = 0; i < 19; i++) {
-      snap.loadingOlder = true
-      await m.update(el())
-      snap.loadingOlder = false
-      await m.update(el())
+    let release: (() => void) | null = null
+    const fetchContent = async (seq: number) => {
+      calls += 1
+      return new Promise<void>((resolve) => { release = resolve })
+        .then(() => ({ kind: 'user', seq, content: [{ type: 'text', text: 'FULL BODY' }] }) as ConversationNodeLike)
     }
-    assert.equal(calls, 20, 'twenty pages pulled')
-    // The next pull hits the cap: exhausted latches, the note falls back.
-    snap.loadingOlder = true
-    await m.update(el())
-    snap.loadingOlder = false
-    await m.update(el())
-    assert.equal(calls, 20, 'the ceiling stops auto-paging')
+    const m = await mount(h(Browser, props({ data, useSession: sess({ nodes: [] }), fetchContent })))
+    await openFirstRow(m)
+    assert.equal(calls, 1, 'one targeted read')
+    assert.ok(text(query(m.container, '.lc-br-content')).includes('Loading full content from older session history'), 'in-flight note')
+    await act(async () => { release?.() })
+    await flush()
+    assert.ok(text(query(m.container, '.lc-br-content')).includes('FULL BODY'))
+    // Close and reopen the same row: the fetched node is merged state — no re-read.
+    await click(elemRows(m)[1])
+    await click(elemRows(m)[1])
+    assert.ok(text(query(m.container, '.lc-br-content')).includes('FULL BODY'))
+    assert.equal(calls, 1, 'no second fetch for a merged seq')
+    await m.unmount()
+  })
+
+  test('a page without the seq reports it as absent from the session log', async () => {
+    let calls = 0
+    const fetchContent = async () => {
+      calls += 1
+      return null
+    }
+    const m = await mount(h(Browser, props({ data, useSession: sess({ nodes: [] }), fetchContent })))
+    await openFirstRow(m)
+    await flush()
+    assert.equal(calls, 1)
+    assert.ok(text(query(m.container, '.lc-br-content')).includes('not in the session log anymore'))
+    await m.unmount()
+  })
+
+  test('a failed read arms the retry button; retrying succeeds', async () => {
+    let calls = 0
+    const fetchContent = async (seq: number) => {
+      calls += 1
+      if (calls === 1) throw new Error('transport down')
+      return { kind: 'user', seq, content: [{ type: 'text', text: 'RETRY BODY' }] } as ConversationNodeLike
+    }
+    const m = await mount(h(Browser, props({ data, useSession: sess({ nodes: [] }), fetchContent })))
+    await openFirstRow(m)
+    await flush()
+    const failed = query(m.container, '.lc-br-content')
+    assert.ok(text(failed).includes('Load failed'))
+    await click(query(failed, '.lc-br-retry'))
+    await flush()
+    assert.ok(text(query(m.container, '.lc-br-content')).includes('RETRY BODY'))
+    assert.equal(calls, 2)
+    await m.unmount()
+  })
+
+  test('without a fetcher (older host) an un-joined row keeps the static note', async () => {
+    const m = await mount(h(Browser, props({ data, useSession: sess({ nodes: [] }) })))
+    await openFirstRow(m)
+    await flush()
     assert.ok(text(query(m.container, '.lc-br-content')).includes('outside the loaded message window'))
-    // Opening another element resets the budget.
-    await click(elemRows(m)[0]) // seq 6
-    assert.equal(calls, 21, 'a new element re-arms the auto-load')
+    await m.unmount()
+  })
+
+  test('a late fetch for an abandoned row never lands; the next row fetches its own seq', async () => {
+    const deferreds: { resolve: (node: ConversationNodeLike | null) => void; reject: (reason: Error) => void }[] = []
+    const fetchedFor: number[] = []
+    const fetchContent = (seq: number): Promise<ConversationNodeLike | null> => {
+      fetchedFor.push(seq)
+      if (seq === 5) return new Promise((resolve, reject) => { deferreds.push({ resolve, reject }) })
+      return Promise.resolve({ kind: 'user', seq, content: [{ type: 'text', text: 'BODY ' + String(seq) }] } as ConversationNodeLike)
+    }
+    let snap: Snap = { nodes: [] }
+    const el = () => h(Browser, props({ data, useSession: liveSess(() => snap), fetchContent }))
+    const m = await mount(el())
+    await openFirstRow(m) // seq 5 hangs in flight
+    assert.equal(deferreds.length, 1)
+    await click(elemRows(m)[0]) // switch to seq 6 while seq 5 is pending
+    await flush()
+    assert.ok(text(query(m.container, '.lc-br-content')).includes('BODY 6'))
+    // The abandoned promise settles after the row was left — both outcomes are ignored.
+    await act(async () => {
+      deferreds[0]?.resolve({ kind: 'user', seq: 5, content: [{ type: 'text', text: 'STALE BODY' }] })
+    })
+    assert.ok(!text(m.container).includes('STALE BODY'), 'stale result ignored')
+    await click(elemRows(m)[1]) // seq 5 again: another deferred hangs
+    await click(elemRows(m)[0])
+    await flush()
+    await act(async () => {
+      deferreds[1]?.reject(new Error('gone'))
+    })
+    await flush()
+    assert.ok(text(query(m.container, '.lc-br-content')).includes('BODY 6'), 'stale rejection ignored')
+    // Reopening seq 5 renders once its own fetch settles.
+    await click(elemRows(m)[1])
+    await act(async () => {
+      deferreds[2]?.resolve({ kind: 'user', seq: 5, content: [{ type: 'text', text: 'BODY 5' }] })
+    })
+    await flush()
+    assert.ok(text(query(m.container, '.lc-br-content')).includes('BODY 5'))
+    assert.deepEqual(fetchedFor, [5, 6, 5, 5], 'one call per miss (seq 6 stays cached)')
+    // The conversation window catching up later wins over fetched state.
+    snap = { nodes: [{ kind: 'user', seq: 5, content: [{ type: 'text', text: 'WINDOW BODY' }] }] }
+    await m.update(el())
+    assert.ok(text(query(m.container, '.lc-br-content')).includes('WINDOW BODY'))
+    assert.ok(!text(m.container).includes('BODY 5'), 'the join takes precedence over the fetch cache')
     await m.unmount()
   })
 })

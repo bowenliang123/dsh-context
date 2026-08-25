@@ -26,7 +26,7 @@ import { registerContextCommand } from './command'
 import { makeContextModal } from './components/contextModal'
 import { makeSettingsCard } from './components/settingsCard'
 import { modalStoreOf } from './modalStore'
-import type { ClientCtx, SessionsFace } from './services'
+import type { ClientCtx } from './services'
 import { createContextSettings, type SettingsField, type SettingsScopeBinderFace } from './settings'
 import { makeContextView } from './components/contextView'
 import { makeViewKit } from './viewkit'
@@ -53,25 +53,6 @@ function apply(ctx: ClientCtx): void {
   const kit = makeViewKit(t)
   const settings = createContextSettings()
   const ContextView = makeContextView(ctx, kit, settings)
-
-  // Contribute the history-pagination verb as a standard prop, so the
-  // Context browser can pull older conversation pages on demand when the
-  // reader expands an element outside the loaded window. Fail-soft: hosts
-  // without the provide channel (or a duplicate-name refusal) keep the
-  // preview-plus-hint degradation.
-  ctx.effect(() => {
-    const noop = (): void => {}
-    const sessions = ctx.get('sessions') as SessionsFace | undefined
-    if (sessions === undefined || typeof sessions.provide !== 'function') return noop
-    try {
-      return sessions.provide({
-        props: ['loadOlderHistory'],
-        resolve: binding => ({ props: { loadOlderHistory: () => binding.session.loadOlder() } }),
-      })
-    } catch {
-      return noop
-    }
-  }, 'dsh-context: loadOlderHistory prop')
 
   ctx.slots.inject('conversation.view', () => {
     return ctx.slots.register(

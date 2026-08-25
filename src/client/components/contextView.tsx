@@ -10,6 +10,7 @@ import { headlineOf } from '../headline'
 import type { SessionStandardProps } from '../services'
 import { contextBreakdownOf, contextPressureOf, headersOf, timelineOf, tokenUsageOf } from '../services'
 import type { ClientCtx, ConversationFace, ConversationNodeLike, ImageRefLike } from '../services'
+import { makeContentFetcher } from '../historyPage'
 import type { ContextSettings } from '../settings'
 import type { ViewKit } from '../viewkit'
 import { makeContextBrowser } from './browser'
@@ -112,6 +113,13 @@ export function makeContextView(
       if (conversation === undefined || typeof conversation.resolveImage !== 'function') return undefined
       return (attachment: ImageRefLike) => conversation.resolveImage(sessionId, attachment)
     }, [sessionId])
+
+    // Targeted full-content fetch for browser nodes outside the conversation window (one seq-anchored history read per expanded row);
+    // absent face/session degrades to the static hint — never an error.
+    const fetchContent = React.useMemo(
+      () => (typeof sessionId === 'string' && sessionId !== '' ? makeContentFetcher(ctx, sessionId) : undefined),
+      [ctx, sessionId],
+    )
 
     const rootRef = React.useRef<HTMLDivElement | null>(null)
     const scrollerRef = React.useRef<HTMLElement | null>(null)
@@ -329,7 +337,7 @@ export function makeContextView(
               data={data}
               headers={headers}
               useSession={props.useSession}
-              loadOlderHistory={props.loadOlderHistory}
+              fetchContent={fetchContent}
               previewSeq={hoveredSeq}
               pinSeq={pinnedReq !== null ? pinnedReq.seq : null}
               hoverKey={hoverCat}

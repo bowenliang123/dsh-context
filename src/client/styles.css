@@ -254,6 +254,8 @@ button.lc-brief-row-link { cursor: pointer; }
 .lc-br-meta b { color: var(--dsw-alias-label-primary); }
 .lc-br-meta .lc-actual { color: var(--dsw-alias-state-success-primary); }
 .lc-br-note { margin-top: 8px; color: var(--dsw-alias-label-secondary); font-size: 12px; }
+.lc-br-retry { border: 0; background: transparent; padding: 0; color: var(--dsw-alias-brand-primary); font: inherit; font-size: 12px; cursor: pointer; text-decoration: underline; text-underline-offset: 2px; }
+.lc-br-retry:hover { filter: brightness(1.15); }
 .lc-br-cats { margin-top: 10px; display: flex; flex-direction: column; gap: 4px; }
 .lc-br-cat { border: 1px solid var(--dsw-alias-border-l1); border-radius: 8px; background: var(--dsw-alias-bg-layer-2); overflow: hidden; }
 .lc-br-cat-empty { opacity: 0.55; }

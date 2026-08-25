@@ -157,7 +157,7 @@ describe('ContextView — interactions', () => {
       useProjection: projectionsFor(richTimeline(), {
         contextHeaders: { headers: [{ seq: 1, time: T0, system: 'SYS', tools: [{ name: 'bash', tokens: 12, description: 'run' }] }] },
       }),
-      useSession: (sel => sel({ nodes: [], hasMore: false, loadingOlder: false })) as UseSessionLike,
+      useSession: (sel => sel({ nodes: [] })) as UseSessionLike,
     }))
     return m
   }
@@ -330,34 +330,54 @@ describe('ContextView — interactions', () => {
   })
 })
 
-describe('ContextView — history paging and image loading', () => {
-  test('opening an uncached node pulls older history through loadOlderHistory', async () => {
-    const View = makeView(new TestClientCtx())
-    const loads: number[] = []
+describe('ContextView — targeted content fetch and image loading', () => {
+  test('opening an un-joined node reads one seq-anchored history page through the connection api', async () => {
+    const calls: { sessionId: string; beforeSeq: number }[] = []
+    const ctx = new TestClientCtx({
+      services: {
+        connection: {
+          api: {
+            sessions: {
+              history: (request: { sessionId: string; beforeSeq: number }) => {
+                calls.push(request)
+                return Promise.resolve({
+                  result: {
+                    ok: true,
+                    value: {
+                      events: [
+                        { event: { type: 'user/message', seq: request.beforeSeq - 1, data: { content: [{ type: 'text', text: 'OLD FULL BODY' }] } } },
+                      ],
+                    },
+                  },
+                })
+              },
+            },
+          },
+        },
+      },
+    })
+    const View = makeView(ctx)
     const m = await mount(h(View, {
       sessionId: 'sv-page',
       useProjection: projectionsFor(timeline({ nodes: [{ seq: 1, cat: 'user', tokens: 5, text: 'old msg' }] })),
-      useSession: (sel => sel({ nodes: [], hasMore: true, loadingOlder: false })) as UseSessionLike,
-      loadOlderHistory: async () => {
-        loads.push(1)
-      },
+      useSession: (sel => sel({ nodes: [] })) as UseSessionLike,
     }))
     const catRow = queryAll(m.container, '.lc-br-cat-row').find(r => text(r).includes(DICT_EN['cat.user']))
     assert.ok(catRow !== undefined)
     await click(catRow)
     await click(query(m.container, '.lc-br-elem-row'))
     await flush()
-    assert.ok(loads.length >= 1)
-    assert.ok(text(m.container).includes(DICT_EN['browser.loading']))
+    assert.deepEqual(calls, [{ sessionId: 'sv-page', beforeSeq: 2 }], 'one read anchored just past the seq')
+    assert.ok(text(m.container).includes('OLD FULL BODY'), 'mapped page content renders')
     await m.unmount()
   })
 
-  test('without loadOlderHistory an uncached node shows the static note', async () => {
+  test('without a connection face an uncached node shows the static note', async () => {
     const View = makeView(new TestClientCtx())
     const m = await mount(h(View, {
       sessionId: 'sv-nopage',
       useProjection: projectionsFor(timeline({ nodes: [{ seq: 1, cat: 'user', tokens: 5, text: 'old msg' }] })),
-      useSession: (sel => sel({ nodes: [], hasMore: false })) as UseSessionLike,
+      useSession: (sel => sel({ nodes: [] })) as UseSessionLike,
     }))
     const catRow = queryAll(m.container, '.lc-br-cat-row').find(r => text(r).includes(DICT_EN['cat.user']))
     assert.ok(catRow !== undefined)
@@ -393,8 +413,6 @@ describe('ContextView — history paging and image loading', () => {
             seq: 1,
             content: [{ type: 'image', attachment: { attachmentId: 'att-1', name: 'pic.png', bytes: 2048, width: 640, height: 480 } }],
           }],
-          hasMore: false,
-          loadingOlder: false,
         })) as UseSessionLike,
     }))
     const catRow = queryAll(m.container, '.lc-br-cat-row').find(r => text(r).includes(DICT_EN['cat.user']))

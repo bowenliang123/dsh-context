@@ -4,7 +4,7 @@ import { assemble } from '../assemble'
 import type { Assembled } from '../assemble'
 import { CATS, partsOf } from '../categories'
 import { React } from '../react'
-import type { ConversationNodeLike, UseSessionLike } from '../services'
+import type { ContentFetcher, ConversationNodeLike, UseSessionLike } from '../services'
 import type { ViewKit } from '../viewkit'
 import { blockSummaryOf, callSummaryOf, parseCallArgs } from '../callSummary'
 import { makeNodeText } from './nodes'
@@ -19,8 +19,12 @@ export interface ContextBrowserProps {
   data: ContextTimeline
   headers: ContextHeaders | null
   useSession?: UseSessionLike
-  /** History-pagination verb contributed via `sessions.provide` (absent on older hosts). */
-  loadOlderHistory?: () => Promise<void>
+  /**
+   * Targeted full-content fetch for nodes outside the conversation window:
+   * one seq-anchored history read per expanded row (absent on older hosts —
+   * those keep the preview-plus-hint degradation).
+   */
+  fetchContent?: ContentFetcher
   /** Preview-seq: hover transiently previews that step; the picker's own selection resumes when the pointer leaves the chart. */
   previewSeq?: number | null
   /** Pin-seq: a pin selects that step; pinSeq null returns the browser to the live surface. */
@@ -428,7 +432,7 @@ function CallArgRow(props: { name: string; value: unknown }): ReactNS.ReactEleme
 function NodeContent(props: {
   node: SurfaceNode
   conv: ConversationNodeLike | undefined
-  hint: string
+  hint: ReactNS.ReactNode
   rich: RichKit
   img: ImageKit
   labels: DetailLabels
@@ -436,7 +440,7 @@ function NodeContent(props: {
   const { node, conv, rich, img, labels } = props
   if (conv === undefined) {
     // The join missed (node outside the loaded window): the 80-char preview
-    // still shows as a plain content section, with the window note below.
+    // still shows as a plain content section, with the fetch-state note below.
     if (node.text === undefined || node.text === '') {
       return <div className="lc-br-note">{props.hint}</div>
     }
@@ -508,10 +512,6 @@ export function makeContextBrowser(
   // descriptions, system text, and message bodies stay in sync.
   const lineLabel = (n: number): string => t(n === 1 ? 'block.line' : 'block.lines', { n })
 
-  // Auto-load ceiling: a guard against seqs that never land in the conversation snapshot (pages pull until the seq joins, history runs out,
-  // or the cap is hit).
-  const MAX_AUTO_PAGES = 20
-
   return function ContextBrowser(props: ContextBrowserProps): ReactNS.ReactElement {
     const { data, headers } = props
     // 'live' = the current surface (the NEXT request's context); number = a retained step's seq.
@@ -519,52 +519,52 @@ export function makeContextBrowser(
     const [openCat, setOpenCat] = React.useState<string | null>(null)
     const [openElem, setOpenElem] = React.useState<string | null>(null)
 
-    // Full message content joined from the conversation snapshot by surface seq (`s.nodes` is a stable reference per snapshot; the bySeq
-    // map memoizes over it).
+    // Full message content: the conversation-window join first (zero cost),
+    // plus nodes fetched on demand for seqs outside the window (`s.nodes` is
+    // a stable reference per snapshot; the map memoizes over it).
     const convNodes = typeof props.useSession === 'function'
       ? props.useSession(s => s.nodes)
       : undefined
+    const [fetched, setFetched] = React.useState<Map<number, ConversationNodeLike>>(() => new Map())
     const bySeq = React.useMemo(() => {
       const m = new Map<number, ConversationNodeLike>()
       for (const n of convNodes ?? []) m.set(n.seq, n)
+      for (const [seq, n] of fetched) if (!m.has(seq)) m.set(seq, n)
       return m
-    }, [convNodes])
-
-    // On-demand pagination flags as primitive selectors, so the component re-renders only when a page actually lands or runs out.
-    const hasMore = typeof props.useSession === 'function'
-      ? props.useSession(s => s.hasMore === true)
-      : false
-    const loadingOlder = typeof props.useSession === 'function'
-      ? props.useSession(s => s.loadingOlder === true)
-      : false
+    }, [convNodes, fetched])
 
     // The open element's surface-node seq ('sys'/'tool:*' keys never join).
     const openSeq = openElem !== null && openElem.startsWith('n')
       ? Number(openElem.slice(1))
       : null
+    // Fetch-on-miss state machine: one targeted history read per expanded row
+    // whose seq the join missed. `failed` arms the retry button; `absent`
+    // means the page came back without the seq — it is not in the durable log.
     const missingSeq = openSeq !== null && !bySeq.has(openSeq) ? openSeq : null
-    // Auto-load pages older history until the open seq joins (one page in flight, sequenced by loadingOlder); `exhausted` latches
-    // cap/history-end so the hint falls back to the static note instead of 'loading' forever.
-    const [exhausted, setExhausted] = React.useState(false)
-    const pagesRef = React.useRef(0)
+    const fetchContent = props.fetchContent
+    const [missState, setMissState] = React.useState<'idle' | 'loading' | 'absent' | 'failed'>('idle')
+    const [retry, setRetry] = React.useState(0)
     React.useEffect(() => {
-      pagesRef.current = 0
-      setExhausted(false)
-    }, [openElem])
-    const loadOlderHistory = props.loadOlderHistory
-    React.useEffect(() => {
-      if (missingSeq === null || !hasMore || loadingOlder || exhausted) return
-      if (loadOlderHistory === undefined) return
-      if (pagesRef.current >= MAX_AUTO_PAGES) {
-        setExhausted(true)
-        return
-      }
-      pagesRef.current += 1
-      void loadOlderHistory()
-    }, [missingSeq, hasMore, loadingOlder, exhausted, bySeq, loadOlderHistory])
-    React.useEffect(() => {
-      if (!hasMore && missingSeq !== null && !exhausted) setExhausted(true)
-    }, [hasMore, missingSeq, exhausted])
+      if (missingSeq === null || fetchContent === undefined) return
+      let live = true
+      setMissState('loading')
+      fetchContent(missingSeq).then((node) => {
+        if (!live) return
+        if (node === null) {
+          setMissState('absent')
+          return
+        }
+        setFetched((prev) => {
+          const next = new Map(prev)
+          next.set(missingSeq, node)
+          return next
+        })
+        setMissState('idle')
+      }, () => {
+        if (live) setMissState('failed')
+      })
+      return () => { live = false }
+    }, [missingSeq, fetchContent, retry])
     // Pin linkage: a pinned bar selects its step (same accordion reset as a manual pick); unpin returns to live — a manual pick here is
     // overridden only when a NEW pin lands.
     const pinSeq = props.pinSeq
@@ -601,7 +601,21 @@ export function makeContextBrowser(
       focusScrollRef.current = false
       rootRef.current?.querySelector('.lc-br-elem-on')?.scrollIntoView({ block: 'nearest' })
     })
-    const awaiting = missingSeq !== null && !exhausted && loadOlderHistory !== undefined && hasMore
+    // The note an un-joined open row shows, per fetch state: legacy static hint
+    // (no fetcher), in-flight loading, log-absent, or a failed read with retry.
+    const missNote: ReactNS.ReactNode = fetchContent === undefined
+      ? t('browser.noContent')
+      : missState === 'loading'
+        ? t('browser.loading')
+        : missState === 'absent'
+          ? t('browser.notInLog')
+          : missState === 'failed'
+            ? (
+              <button type="button" className="lc-br-retry" onClick={() => { setRetry(r => r + 1) }}>
+                {t('browser.loadFailed')}
+              </button>
+            )
+            : t('browser.noContent')
 
     const requests = data.requests
     const hoverReq = props.previewSeq !== null && props.previewSeq !== undefined
@@ -771,10 +785,9 @@ export function makeContextBrowser(
                 </span>
               ),
             }}
-            // Only the open row's body renders, so `awaiting` (open seq missing, pagination armed) is exactly THIS join being pulled for.
-            hint={conv === undefined && awaiting
-              ? t('browser.loading')
-              : t('browser.noContent')}
+            // Only the open row's body renders, so the miss note is exactly THIS join's fetch state; a joined-but-empty row keeps the
+            // static hint.
+            hint={conv === undefined ? missNote : t('browser.noContent')}
           />,
           rowErr)
       })

@@ -89,10 +89,6 @@ export interface ConversationFace {
 export type UseSessionLike = <T>(
   selector: (snapshot: {
     nodes?: readonly ConversationNodeLike[]
-    /** whether older history remains outside the loaded window */
-    hasMore?: boolean
-    /** whether an older-history page is currently being pulled */
-    loadingOlder?: boolean
   }) => T,
 ) => T
 
@@ -106,13 +102,6 @@ export interface SessionStandardProps {
   sessionId?: string
   useProjection?: (key: string) => unknown
   useSession?: UseSessionLike
-  /**
-   * History-pagination verb this plugin contributes through the harness's
-   * `sessions.provide` channel (one call prepends one older page to the
-   * conversation window). Absent on older hosts without the channel — the
-   * Context browser then keeps its preview-plus-hint degradation.
-   */
-  loadOlderHistory?: () => Promise<void>
 }
 
 export type ClientCtx = Context & {
@@ -322,26 +311,47 @@ export interface SessionScopeFace {
   bail(subject: unknown, event: string, payload: unknown): unknown
 }
 
-/**
- * One standard-props contribution to the harness's `sessions.provide`
- * channel: declared members are resolved per session and delivered to every
- * session-scope slot component (hooks become `use<Name>` selector hooks,
- * props spread verbatim). Minimally typed against the runtime contract.
- */
-export interface SessionProvideDescriptorLike {
-  hooks?: readonly string[]
-  props?: readonly string[]
-  resolve(binding: { session: { loadOlder(): Promise<void> } }): {
-    hooks?: Record<string, unknown>
-    props?: Record<string, unknown>
-  }
-}
-
 export interface SessionsFace {
   scope(id: string): SessionScopeFace | undefined
-  /**
-   * The standard-props provide channel (absent on older hosts). Throws on a
-   * misdeclared or duplicate contribution — callers fail soft.
-   */
-  provide?(descriptor: SessionProvideDescriptorLike): () => void
 }
+
+/**
+ * One raw durable-log event as the history RPC serves it (the wire envelope
+ * the Host fold consumes, minimally re-typed): every field re-proved by the
+ * mapper before use (the no-white-screen guarantee).
+ */
+export interface HistoryEventLike {
+  type?: unknown
+  seq?: unknown
+  data?: unknown
+}
+
+/** One history page row: the raw event plus the optional host-computed view. */
+export interface HistoryEntryLike {
+  event?: unknown
+}
+
+/**
+ * The sessions domain of the shared api client (`connection.api.sessions`),
+ * narrowed to the one verb the targeted content fetch rides on: a
+ * seq-anchored history page whose boundaries align to whole append-origin
+ * messages, so `beforeSeq: seq + 1` always covers that seq when the log
+ * still holds it. Every response field is re-proven at runtime.
+ */
+export interface SessionsHistoryFace {
+  history(request: { sessionId: string; beforeSeq: number }): Promise<{
+    result?: { ok?: unknown; value?: { events?: unknown } | null } | null
+  }>
+}
+
+/** The connection service face, as far as this plugin consumes it. */
+export interface ConnectionFace {
+  api?: { sessions?: SessionsHistoryFace }
+}
+
+/**
+ * On-demand full content for one surface-node seq: resolves the joined
+ * conversation node, `null` when the durable log does not hold the seq,
+ * rejects on transport/RPC failure (the caller distinguishes the three).
+ */
+export type ContentFetcher = (seq: number) => Promise<ConversationNodeLike | null>
