@@ -121,7 +121,7 @@ test('issue #12: projection arriving after a loading first render never hits Rea
     assert.equal(boundaryErrors.length, 0, 'no render crash: ' + (boundaryErrors[0] && boundaryErrors[0].message))
     assert.deepEqual(reactErrors, [], 'no hook-order console errors')
     assert.ok(!container.textContent.includes('上下文数据读取失败'), 'plugin ErrorBoundary stayed quiet')
-    assert.ok(container.textContent.includes('历史趋势'), 'loaded view rendered')
+    assert.ok(container.textContent.includes('上下文趋势'), 'loaded view rendered')
   } finally {
     restore()
     try { root.unmount() } catch {}
