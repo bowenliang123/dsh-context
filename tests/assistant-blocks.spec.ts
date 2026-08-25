@@ -36,6 +36,14 @@ test('assistant blocks: thinking/answer/tool-call split into cards, prose switch
     assert.match(byClass(s, 'lc-rich-seg-btn')[1].args[1].className, /lc-rich-seg-on/, 'markdown segment active by default')
   }
   assert.equal(byClass(tr, 'lc-md-stub').length, 2, 'both prose cards render markdown by default')
+  for (const card of cards.slice(0, 2)) {
+    const cardMeta = byClass(card, 'lc-ts-card-meta')[0]
+    assert.ok(cardMeta, 'every prose card heads its line count')
+    assert.equal(textOf(cardMeta), '1 line', 'one-line prose cards show their line count')
+    const cardRightSlots = byClass(card, 'lc-ts-card-right')[0].args.slice(2)
+    assert.match(cardRightSlots[0].args[1].className, /lc-ts-card-meta/, 'line count sits before the switch')
+    assert.match(cardRightSlots[1].args[1].className, /lc-rich-seg/, 'raw/markdown switch sits at the far right')
+  }
 
   // Tool-call card: parsed argument rows replace the old count badge (rows already show the args); no raw/markdown switch.
   const callCard = cards[2]

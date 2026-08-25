@@ -155,16 +155,26 @@ function Section(props: {
   )
 }
 
+function lineCountOf(text: string): number {
+  // Count logical lines for LF, CRLF, and lone CR output alike.
+  return text.split(/\r\n|\r|\n/).length
+}
+
 function TextSection(props: {
   label: string
   text: string
   rich: RichKit
-  meta?: ReactNS.ReactNode
+  lines: (n: number) => string
 }): ReactNS.ReactElement {
   const { rich } = props
   const [mode, setMode] = rich.useRichMode()
+  const lineCount = React.useMemo(() => lineCountOf(props.text), [props.text])
   return (
-    <Section label={props.label} actions={<rich.RichSwitch mode={mode} onPick={setMode} />} meta={props.meta}>
+    <Section
+      label={props.label}
+      actions={<rich.RichSwitch mode={mode} onPick={setMode} />}
+      meta={<span className="lc-ts-card-meta">{props.lines(lineCount)}</span>}
+    >
       <rich.RichText text={props.text} mode={mode} />
     </Section>
   )
@@ -186,6 +196,7 @@ function ToolSchema(props: {
   description: string | undefined
   schema: unknown
   rich: RichKit
+  lines: (n: number) => string
   labels: {
     desc: string
     title: string
@@ -220,7 +231,7 @@ function ToolSchema(props: {
   return (
     <>
       {props.description !== undefined ? (
-        <TextSection label={props.labels.desc} text={props.description} rich={rich} />
+        <TextSection label={props.labels.desc} text={props.description} rich={rich} lines={props.lines} />
       ) : null}
       {params !== null && rows.length > 0 ? (
         <Section label={props.labels.title} count={rows.length}>
@@ -257,8 +268,8 @@ interface DetailLabels {
 
 /**
  * Both block vocabularies normalize here — raw durable blocks (`type`: text/reasoning/tool-call/tool-result/image) and snapshot assistant
- * blocks (`kind`: text/reasoning/tool-call/image, argsRaw). Consecutive images group into one grid; tool-result payloads carry the Raw/MD
- * switch + line count; nested tool-result blocks flatten into the same flow.
+ * blocks (`kind`: text/reasoning/tool-call/image, argsRaw). Consecutive images group into one grid; every
+ * rich text block carries the Raw/MD switch + line count; nested tool-result blocks flatten into the same flow.
  */
 function BlocksBody(props: {
   blocks: readonly unknown[]
@@ -300,10 +311,7 @@ function BlocksBody(props: {
         label={label}
         text={blk.text}
         rich={rich}
-        // Result payloads head a line count — one glance at the output size without opening the card.
-        meta={props.textLabel === labels.result
-          ? <span className="lc-ts-card-meta">{labels.lines(blk.text.split('\n').length)}</span>
-          : undefined}
+        lines={labels.lines}
       />)
       continue
     }
@@ -432,7 +440,7 @@ function NodeContent(props: {
     }
     return (
       <>
-        <TextSection label={labels.content} text={node.text} rich={rich} />
+        <TextSection label={labels.content} text={node.text} rich={rich} lines={labels.lines} />
         <div className="lc-br-note">{props.hint}</div>
       </>
     )
@@ -460,7 +468,7 @@ function NodeContent(props: {
   }
   if (conv.kind === 'compaction') {
     return typeof conv.summary === 'string' && conv.summary !== ''
-      ? <TextSection label={labels.summary} text={conv.summary} rich={rich} />
+      ? <TextSection label={labels.summary} text={conv.summary} rich={rich} lines={labels.lines} />
       : <></>
   }
   if (Array.isArray(conv.content)) {
@@ -494,6 +502,9 @@ export function makeContextBrowser(
   const nodeText = makeNodeText(kit)
   const rich = makeRichText(kit)
   const ImageCard = makeImageCard(kit)
+  // All rich text sections share the same line-count label; hoist it once so tool
+  // descriptions, system text, and message bodies stay in sync.
+  const lineLabel = (n: number): string => t(n === 1 ? 'block.line' : 'block.lines', { n })
 
   // Auto-load ceiling: a guard against seqs that never land in the conversation snapshot (pages pull until the seq joins, history runs out,
   // or the cap is hit).
@@ -667,7 +678,7 @@ export function makeContextBrowser(
         const system = view.header.system
         if (system === undefined) return null
         return elemRow('sys', null, system.replace(/\s+/g, ' ').trim().slice(0, 80), breakdown.system, undefined,
-          <TextSection label={catLabel('system')} text={system} rich={rich} />)
+          <TextSection label={catLabel('system')} text={system} rich={rich} lines={lineLabel} />)
       }
       if (c === 'tools') {
         if (view.header === null) return <div className="lc-br-note">{t(headers === null ? 'browser.noHeader' : 'browser.noEpoch')}</div>
@@ -681,7 +692,7 @@ export function makeContextBrowser(
         }
         return view.header.tools.slice().sort((a, b) => b.tokens - a.tokens).map((tool: HeaderTool) => {
           return elemRow('tool:' + tool.name, null, tool.name, tool.tokens, undefined,
-            <ToolSchema description={tool.description} schema={tool.schema} rich={rich} labels={labels} />)
+            <ToolSchema description={tool.description} schema={tool.schema} rich={rich} lines={lineLabel} labels={labels} />)
         })
       }
       // List surface nodes newest first, mirroring the NodeList card.
@@ -738,7 +749,7 @@ export function makeContextBrowser(
               summary: t('block.summary'),
               images: t('attach.images'),
               other: t('attach.other'),
-              lines: (n: number) => t(n === 1 ? 'block.line' : 'block.lines', { n }),
+              lines: lineLabel,
               callState: (err: boolean, exit: number | null) => (
                 <span className={'lc-ts-call-state ' + (err ? 'lc-ts-call-err' : 'lc-ts-call-ok')}>
                   <i />

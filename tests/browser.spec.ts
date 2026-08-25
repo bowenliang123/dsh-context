@@ -117,6 +117,7 @@ test('context browser: picker, accordion, reconstruction, header content, deltas
   const sysMd = byClass(tr, 'lc-md-stub')
   assert.equal(sysMd.length, 1, 'markdown mode renders the prompt through MarkdownText')
   assert.equal(textOf(sysMd[0]), 'SYSTEM-PROMPT-TEXT', 'markdown view carries the same source text')
+  assert.equal(textOf(byClass(tr, 'lc-ts-card-meta')[0]), '1 line', 'system card heads its line count')
   assert.equal(byClass(tr, 'lc-br-body')[0] && byClass(byClass(tr, 'lc-br-body')[0], 'lc-ts-desc-body').length, 0,
     'markdown mode drops the raw <pre>')
   sysSegBtns()[0].args[1].onClick()
@@ -147,6 +148,7 @@ test('context browser: picker, accordion, reconstruction, header content, deltas
   const descMd = byClass(descCards[0], 'lc-ts-desc-md')
   assert.equal(descMd.length, 1, 'description defaults to the markdown view')
   assert.equal(textOf(byClass(descMd[0], 'lc-md-stub')[0]), 'run a command', 'markdown view carries the description text')
+  assert.equal(textOf(byClass(descCards[0], 'lc-ts-card-meta')[0]), '1 line', 'tool description card heads its line count')
   byClass(descSeg, 'lc-rich-seg-btn')[0].args[1].onClick()
   tr = renderView()
   assert.equal(byClass(tr, 'lc-ts-desc-md').length, 0, 'raw mode drops the markdown body')
