@@ -37,7 +37,7 @@
     "watch": "tsdown --watch",
     "register": "bash scripts/register.sh",
     "typecheck": "tsc --noEmit",
-    "test": "npm run typecheck && vitest run",
+    "test": "pnpm run typecheck && vitest run",
     "release": "bash scripts/publish.sh",
     "hooks": "bash scripts/install-hooks.sh",
     "social-preview": "node docs/social-preview/generate.ts"

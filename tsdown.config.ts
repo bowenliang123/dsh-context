@@ -6,7 +6,7 @@ import { transform } from 'lightningcss'
 import { defineConfig } from 'tsdown'
 
 // Read the manifest from cwd: the config file's own URL is not guaranteed to
-// sit at the package root under every loader, and `npm run build` runs here.
+// sit at the package root under every loader, and `pnpm run build` runs here.
 const pkg = JSON.parse(readFileSync(join(process.cwd(), 'package.json'), 'utf8'))
 
 // Mirrors packages/client/web/src/platform.ts in deepseek-harness: the shell

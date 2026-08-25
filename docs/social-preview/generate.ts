@@ -1,7 +1,7 @@
 // Renders social-preview.html to docs/social-preview.png (exactly 1280x640):
 // 2x first (2560x1280), then downsampled via Chromium's high-quality image
 // smoothing so text and the embedded screenshot stay sharp.
-// Usage: node docs/social-preview/generate.ts (or: npm run social-preview)
+// Usage: node docs/social-preview/generate.ts (or: pnpm run social-preview)
 import { chromium } from 'playwright-core';
 import { homedir } from 'node:os';
 import { fileURLToPath, pathToFileURL } from 'node:url';
