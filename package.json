@@ -38,6 +38,7 @@
     "register": "bash scripts/register.sh",
     "typecheck": "tsc --noEmit",
     "test": "pnpm run typecheck && vitest run",
+    "coverage": "vitest run --coverage",
     "release": "bash scripts/publish.sh",
     "hooks": "bash scripts/install-hooks.sh",
     "social-preview": "node docs/social-preview/generate.ts"
@@ -93,6 +94,7 @@
     "@deepseek-ai/schemastery": "^3.18.1",
     "@stylistic/eslint-plugin": "^5.10.0",
     "@types/react": "^18.3.31",
+    "@vitest/coverage-v8": "^4.1.11",
     "eslint-plugin-sonarjs": "^4.2.0",
     "jsdom": "^30.0.1",
     "lightningcss": "^1.33.0",
