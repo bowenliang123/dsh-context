@@ -1,6 +1,4 @@
-# vX.Y.Z
-
-## Install / update
+## Install / Update
 
 Install the `dsh-context` plugin on [DeepSeek Harness](https://www.deepseek.com/harness/) with released [NPM package](https://www.npmjs.com/package/dsh-context):
 
