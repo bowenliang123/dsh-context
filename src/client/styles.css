@@ -156,8 +156,7 @@
 .lc-bar-fill-up, .lc-bar-fill-down { position: absolute; top: 0; height: 100%; display: block; }
 .lc-bar-fill-up { left: 50%; border-radius: 0 3px 3px 0; }
 .lc-bar-fill-down { right: 50%; border-radius: 3px 0 0 3px; }
-.lc-detail-num { width: 44px; text-align: right; }
-.lc-detail-num-up, .lc-detail-num-down { width: 52px; font-variant-numeric: tabular-nums; }
+.lc-detail-num { width: 52px; text-align: right; font-variant-numeric: tabular-nums; }
 .lc-detail-num-up { color: var(--dsw-alias-state-success-primary); }
 .lc-detail-num-down { color: var(--dsw-alias-state-error-primary); }
 .lc-detail-pct { width: 34px; text-align: right; color: var(--dsw-alias-label-secondary); }
