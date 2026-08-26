@@ -182,11 +182,11 @@ describe('FileCard — header, rows, and filters', () => {
     await m.unmount()
   })
 
-  test('the sort toggle defaults to most-active and switches to latest', async () => {
+  test('the sort toggle defaults to most-active and switches to latest and path', async () => {
     const m = await mount(h(FileCard, { activity: richActivity(), scope: 'live' }))
     const titles = () => queryAll(m.container, '.lc-fa-row').map(r => r.title)
     const sortBtns = queryAll(m.container, '.lc-fa-sort .lc-gran-btn')
-    assert.equal(sortBtns.length, 2)
+    assert.equal(sortBtns.length, 3)
     // Count order by default: 9 ops → 4 ops → one-op files by recency.
     assert.ok(sortBtns[0].className.includes('lc-gran-on'))
     assert.deepEqual(titles(), ['/var/many.log', '/src/a.ts', '/shots/ui.png', 'solo.md', '/src/'])
@@ -194,7 +194,12 @@ describe('FileCard — header, rows, and filters', () => {
     await click(sortBtns[1])
     assert.ok(sortBtns[1].className.includes('lc-gran-on'))
     assert.deepEqual(titles(), ['/var/many.log', '/shots/ui.png', 'solo.md', '/src/a.ts', '/src/'])
+    // Path order: ascending over full paths (the dir row precedes its children).
+    await click(sortBtns[2])
+    assert.ok(sortBtns[2].className.includes('lc-gran-on'))
+    assert.deepEqual(titles(), ['/shots/ui.png', '/src/', '/src/a.ts', '/var/many.log', 'solo.md'])
     await click(sortBtns[0])
+    assert.ok(sortBtns[0].className.includes('lc-gran-on'))
     assert.deepEqual(titles(), ['/var/many.log', '/src/a.ts', '/shots/ui.png', 'solo.md', '/src/'])
     await m.unmount()
   })

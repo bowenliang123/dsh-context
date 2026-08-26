@@ -18,8 +18,8 @@ import type { ViewKit } from '../viewkit'
 import { React } from '../react'
 
 export type FileFilter = 'all' | FileOpKind | 'image'
-/** Row order: most operations first (default) or most-recently-touched first. */
-export type FileSort = 'count' | 'latest'
+/** Row order: most operations first (default), most-recently-touched first, or path ascending. */
+export type FileSort = 'count' | 'latest' | 'path'
 
 export interface FileCardProps {
   activity: FileActivity
@@ -70,7 +70,10 @@ export function makeFileCard(kit: ViewKit): (props: FileCardProps) => ReactNS.Re
       .filter(e => matches(e, filter) && (q === '' || e.path.toLowerCase().includes(q)))
       .sort((a, b) => sort === 'count'
         ? (b.ops.length - a.ops.length) || (b.ops[0].seq - a.ops[0].seq)
-        : b.ops[0].seq - a.ops[0].seq)
+        : sort === 'latest'
+          ? b.ops[0].seq - a.ops[0].seq
+          // Paths are unique map keys: a two-way comparison orders them fully.
+          : (a.path < b.path ? -1 : 1))
 
     const chips: { key: FileFilter; files: number; ops: number }[] = [
       {
@@ -136,7 +139,7 @@ export function makeFileCard(kit: ViewKit): (props: FileCardProps) => ReactNS.Re
                 </span>
               ) : null}
               <span className="lc-gran lc-fa-sort" role="group" title={t('files.sortTip')}>
-                {(['count', 'latest'] as const).map(k => (
+                {(['count', 'latest', 'path'] as const).map(k => (
                   <button
                     key={k}
                     type="button"
