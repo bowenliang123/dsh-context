@@ -211,7 +211,8 @@ describe('TrendChart step granularity, total mode', () => {
     // r4 anchors to prompt (500) but every category is zero → the stack renders no segments.
     assert.equal(queryAll(bs[3], '.lc-bar-stack > div').length, 0)
 
-    // The tooltip reports the heuristic total plus the provider-anchored actual.
+    // The tip is placed over its bar's visible slice imperatively (transform, not `left`), so it never
+    // contributes to the scroller's overflow — see the overlay test below.
     const { spies, handlers } = makeSpies()
     await m.update(h(TrendChart, { ...propsOf([r1, r2, r3, r4]), ...handlers, hoveredSeq: 2 }))
     const tip = query(m.container, '.lc-chart-tip')
@@ -220,7 +221,7 @@ describe('TrendChart step granularity, total mode', () => {
       kit.t('tip.step', { t: 1, s: 1 }) + ' · ' + kit.fmtTime(r2.time) + ' · '
         + kit.t('tip.total', { n: '600' }) + ' · ' + kit.t('tip.actual', { n: '1.2k' }),
     )
-    assert.equal(tip.style.left, '23px') // idx 1 * 16 + BAR_W/2
+    assert.equal(tip.style.transform, 'translate(23px, 0)') // idx 1 * 16 + BAR_W/2, scrollLeft 0
     assert.ok(spies.hover.length === 0, 'hover callback only fires from real mouseover')
     await m.unmount()
   })
@@ -434,7 +435,7 @@ describe('TrendChart tooltips', () => {
       query(m.container, '.lc-chart-tip').textContent,
       kit.t('tip.step', { t: 1, s: 0 }) + ' · ' + kit.fmtTime(r1.time) + ' · ' + kit.t('tip.total', { n: '300' }),
     )
-    assert.equal(query(m.container, '.lc-chart-tip').style.left, '7px')
+    assert.equal(query(m.container, '.lc-chart-tip').style.transform, 'translate(7px, 0)')
 
     // With replyTips (built by the real replyTipsOf): short reply lands verbatim.
     const withTips = (hoveredSeq: number | null): TrendChartProps =>
@@ -631,6 +632,91 @@ describe('TrendChart edge fades and scroll anchoring', () => {
     assert.equal(labels[1].style.transform, '', 'fully out of view → shift cleared')
     await scrollEvent(scroll)
     assert.equal(labels[1].style.transform, '', 'repeat scroll with unchanged geometry writes nothing')
+    await m.unmount()
+  })
+})
+
+describe('TrendChart hover tip overlay', () => {
+  function manySteps(): RequestRecord[] {
+    const out: RequestRecord[] = []
+    for (let i = 0; i < 40; i++) {
+      out.push(req(i + 1, { turn: 1 + Math.floor(i / 10), step: i % 10 }))
+    }
+    return out
+  }
+
+  /**
+   * The regression behind the overlay split: the tooltip used to live INSIDE .lc-chart-scroll, and an absolutely
+   * positioned child of a scroller contributes to its scrollable overflow — a several-hundred-px reply preview on a
+   * right-edge bar inflated scrollWidth on every hover, flapping the horizontal scrollbar open/closed and jumping the
+   * whole card. The tip now lives beside the scroller (positioned by the wrapper), and syncTip glues it to the bar's
+   * visible slice on every scroll/commit.
+   */
+  test('renders outside the scroller, glues to the visible slice while scrolling, and clamps at both edges', async () => {
+    const reqs = manySteps()
+    const { handlers } = makeSpies()
+    // Mounted WITH the hover set: the wrapper owns the tip from the very first commit (scrollWidth 640 > 400, so the
+    // chart mounts pre-scrolled to sl=240).
+    const m = await mount(h(TrendChart, propsOf(reqs, { ...handlers, hoveredSeq: 40 })))
+    await flush()
+    const scroll = query<LayoutEl>(m.container, '.lc-chart-scroll')
+    const tip = query(m.container, '.lc-chart-tip')
+    assert.equal(tip.parentElement!.className, 'lc-chart-wrap', 'the tip is a sibling of the scroller, not its child')
+    assert.equal(query(m.container, '.lc-chart-wrap').contains(tip), true)
+    assert.equal(query(m.container, '.lc-chart-wrap').contains(scroll), true)
+
+    // Newest bar (idx 39 → col 631) fully scrolled into view at the right edge: dx = 631 - 240.
+    assert.equal(tip.style.transform, 'translate(391px, 0)')
+
+    // Glue without clamping: hover bar idx 19 (col 311) — the scroller is still parked at sl=240 from mount.
+    await m.update(h(TrendChart, propsOf(reqs, { ...handlers, hoveredSeq: 20 })))
+    assert.equal(query(m.container, '.lc-chart-tip').style.transform, 'translate(71px, 0)')
+    // Scrolling without any React commit keeps the tip glued: 311 - 100 = 211.
+    await scrollTo(scroll, 100)
+    assert.equal(query(m.container, '.lc-chart-tip').style.transform, 'translate(211px, 0)')
+    // And again deeper: 311 - 211 = 100.
+    await scrollTo(scroll, 211)
+    assert.equal(query(m.container, '.lc-chart-tip').style.transform, 'translate(100px, 0)')
+
+    // Left-edge clamp: hovering bar idx 1 (col 23) while parked deep right pushes the raw dx far negative.
+    await m.update(h(TrendChart, propsOf(reqs, { ...handlers, hoveredSeq: 2 })))
+    await scrollTo(scroll, 240)
+    assert.equal(query(m.container, '.lc-chart-tip').style.transform, 'translate(0px, 0)')
+
+    // Overflow geometry stays honest: the scrollable area is exactly the bars', never the tip's (jsdom cannot prove
+    // the browser-level scrollbar parity here — verified against real Chromium separately).
+    assert.equal(scroll.scrollWidth, 640)
+    await m.unmount()
+  })
+
+  test('real tip widths clamp into the viewport on both sides and center when wider than the viewport', async () => {
+    const reqs = manySteps()
+    const { handlers } = makeSpies()
+    const m = await mount(h(TrendChart, propsOf(reqs, { ...handlers, hoveredSeq: 30 })))
+    await flush()
+    const scroll = query<LayoutEl>(m.container, '.lc-chart-scroll')
+    const tip = query<LayoutEl & { offsetWidth: number }>(m.container, '.lc-chart-tip')
+    scroll.__clientW = 160
+    Object.defineProperty(tip, 'offsetWidth', { configurable: true, get: () => 120 })
+    // idx 29 → col 471. cw 160 / lw 120 → valid center window [60, 100]:
+    try {
+      // dx 471 far past the right edge → pinned at cw - lw/2.
+      await scrollTo(scroll, 0)
+      assert.equal(tip.style.transform, 'translate(40px, 0)')
+      // dx 91, inside the window → rides raw.
+      await scrollTo(scroll, 380)
+      assert.equal(tip.style.transform, 'translate(31px, 0)')
+      // Parked at the last sl (480): dx -9 → pinned at lw/2.
+      await scrollTo(scroll, 480)
+      assert.equal(tip.style.transform, 'translate(0px, 0)')
+
+      // A tip wider than the viewport centers over it, bleeding symmetrically instead of picking a bogus side.
+      Object.defineProperty(tip, 'offsetWidth', { configurable: true, get: () => 500 })
+      await scrollTo(scroll, 0)
+      assert.equal(tip.style.transform, 'translate(-170px, 0)')
+    } finally {
+      delete scroll.__clientW
+    }
     await m.unmount()
   })
 })

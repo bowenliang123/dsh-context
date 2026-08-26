@@ -334,10 +334,10 @@ export function makeTrendChart(kit: ViewKit): (props: TrendChartProps) => ReactN
       prevScrollWidthRef.current = el.scrollWidth
       updateEdges(el)
       updateTurnLabels(el)
+      syncTip(el)
     }, [props.granularity, props.focusTurn, requests])
 
-    // Compact single-line hover tooltip, shown instantly by the custom `.lc-chart-tip` (the native title is delayed): position, time,
-    // estimated total, provider prompt when available; the per-category breakdown lives in the detail panel below.
+    // Compact single-line hover tooltip, shown instantly by the custom `.lc-chart-tip` (the native title is delayed).
     const tipOf = (req: RequestRecord): string => {
       const head = req.stepCount !== undefined && req.stepCount > 1
         ? t('tip.turn', { t: req.turn ?? 0, n: req.stepCount })
@@ -359,6 +359,41 @@ export function makeTrendChart(kit: ViewKit): (props: TrendChartProps) => ReactN
     const hoveredIdx = props.hoveredSeq !== null ? requests.findIndex(r => r.seq === props.hoveredSeq) : -1
     const hoveredReq = hoveredIdx >= 0 ? requests[hoveredIdx] : null
 
+    // Column center (content px) of the currently hovered bar, for syncTip reads outside the render pass.
+    const tipColRef = React.useRef(0)
+
+    /**
+     * Glue the hover tip to its bar's VISIBLE slice. The tip deliberately does NOT live inside the scrolling
+     * content: an absolutely-positioned child of a scroller contributes to its scrollable overflow, so a wide
+     * reply preview on a right-edge bar used to inflate scrollWidth on every hover and flap the horizontal
+     * scrollbar open/closed — jumping the whole card. Reads (offsetWidth/clientWidth) batch before the single
+     * style write; unchanged transforms write nothing.
+     */
+    const syncTip = (el: HTMLDivElement): void => {
+      /* v8 ignore next 1 -- the scroll div renders unconditionally while mounted, so its parent exists. */
+      const tip = (el.parentElement ?? document.body).querySelector<HTMLElement>('.lc-chart-tip')
+      // No hover, nothing to place.
+      if (tip === null) return
+      const lw = tip.offsetWidth
+      const cw = el.clientWidth
+      // Center over the bar's visible slice, clamped so the tip never hangs past either edge nor gets cut off; a tip
+      // wider than the viewport centers over it instead of picking a bogus side on an inverted clamp window.
+      const half = Math.min(lw / 2, cw / 2)
+      const cx = Math.min(Math.max(tipColRef.current - el.scrollLeft, half), cw - half)
+      const next = `translate(${Math.round(cx - lw / 2)}px, 0)`
+      if (tip.style.transform !== next) tip.style.transform = next
+    }
+
+    // Position (and re-position after EVERY commit — the tip mounts on hover changes, which touch no other
+    // effect dependency here) from the committed hovered column before paint.
+    React.useLayoutEffect(() => {
+      /* v8 ignore next 1 -- the scroll div renders unconditionally and React attaches refs before
+         layout effects run; el is never null here. */
+      if (scrollRef.current === null) return
+      tipColRef.current = hoveredIdx >= 0 ? hoveredIdx * (BAR_W + BAR_GAP) + BAR_W / 2 : 0
+      syncTip(scrollRef.current)
+    })
+
     return (
       <div className="lc-chartrow">
         <div className="lc-axis">
@@ -377,71 +412,78 @@ export function makeTrendChart(kit: ViewKit): (props: TrendChartProps) => ReactN
             </>
           )}
         </div>
-        <div
-          className={'lc-chart-scroll' + (props.activeTurn !== null ? ' lc-chart-dim' : '')}
-          ref={scrollRef}
-          onScroll={(e: ReactNS.UIEvent<HTMLDivElement>) => {
-            updateEdges(e.currentTarget)
-            updateTurnLabels(e.currentTarget)
-          }}
-        >
-          {edges.left ? <div className="lc-chart-fade lc-chart-fade-l" /> : null}
+        {/* Only the scrolling CONTENT lives under .lc-chart-scroll; the edge fades and the hover tip sit beside it
+            inside the positioned wrapper instead of inside the scroller — absolutely-positioned children of a
+            scroller contribute to its scrollable overflow AND translate away with the content on scroll (which once
+            made the left fade drift off-screen exactly when shown). */}
+        <div className="lc-chart-wrap">
           <div
-            className="lc-chart"
-            onMouseLeave={() => { props.onHover(null) }}
+            className={'lc-chart-scroll' + (props.activeTurn !== null ? ' lc-chart-dim' : '')}
+            ref={scrollRef}
+            onScroll={(e: ReactNS.UIEvent<HTMLDivElement>) => {
+              updateEdges(e.currentTarget)
+              updateTurnLabels(e.currentTarget)
+              syncTip(e.currentTarget)
+            }}
           >
-            <div className="lc-grid lc-grid-top" />
-            {delta
-              // A SOLID zero baseline replaces the dashed mid grid in delta mode — it is the reading reference.
-              ? <div className="lc-grid lc-grid-zero" style={{ top: `${18 + upPx}px` }} />
-              : <div className="lc-grid lc-grid-mid" />}
-            {requests.map((req, i) => (
-              <ChartBar
-                key={req.seq}
-                req={req}
-                marker={markers[i]}
-                selected={props.selectedSeq === req.seq}
-                hovered={props.hoveredSeq === req.seq}
-                inTurn={props.activeTurn !== null && (req.turn ?? 0) === props.activeTurn}
-                maxTotal={maxTotal}
-                upPx={delta ? upPx : undefined}
-                downPx={delta ? downPx : undefined}
-                deltaScale={delta ? deltaScale : undefined}
-                onSelect={props.onSelect}
-                onHover={props.onHover}
-              />
-            ))}
-          </div>
-          {/* The tip lives inside the scrolling content so it stays glued to its bar's column while the chart scrolls. */}
-          {hoveredReq !== null ? (
             <div
-              className="lc-chart-tip"
-              style={{ left: `${hoveredIdx * (BAR_W + BAR_GAP) + BAR_W / 2}px` }}
-            >{tipOf(hoveredReq)}</div>
-          ) : null}
-          {/* Turn strip: one COLOR BLOCK per turn spanning exactly its bars' columns, so the partition reads at a glance and lines up with
-              the steps; hovering a block highlights that turn's bars and vice versa — one shared hover-only state.
-              */}
-          <div className="lc-turns" onMouseLeave={() => { props.onHoverTurn(null) }}>
-            {groups.map((grp, gi) => {
-              const on = props.activeTurn === grp.turn
-              return (
-                <span
-                  key={`turn-${gi}`}
-                  className={'lc-turn' + (on ? ' lc-turn-on' : '')}
-                  style={{
-                    width: `${turnWidths[gi]}px`,
-                    background: TURN_FILLS[gi % TURN_FILLS.length],
-                  }}
-                  title={`T${grp.turn}`}
-                  onMouseEnter={() => { props.onHoverTurn(grp.turn) }}
-                  onClick={() => { props.onPickTurn(grp.turn) }}
-                ><span className="lc-turn-label">{`T${grp.turn}`}</span></span>
-              )
-            })}
+              className="lc-chart"
+              onMouseLeave={() => { props.onHover(null) }}
+            >
+              <div className="lc-grid lc-grid-top" />
+              {delta
+                // A SOLID zero baseline replaces the dashed mid grid in delta mode — it is the reading reference.
+                ? <div className="lc-grid lc-grid-zero" style={{ top: `${18 + upPx}px` }} />
+                : <div className="lc-grid lc-grid-mid" />}
+              {requests.map((req, i) => (
+                <ChartBar
+                  key={req.seq}
+                  req={req}
+                  marker={markers[i]}
+                  selected={props.selectedSeq === req.seq}
+                  hovered={props.hoveredSeq === req.seq}
+                  inTurn={props.activeTurn !== null && (req.turn ?? 0) === props.activeTurn}
+                  maxTotal={maxTotal}
+                  upPx={delta ? upPx : undefined}
+                  downPx={delta ? downPx : undefined}
+                  deltaScale={delta ? deltaScale : undefined}
+                  onSelect={props.onSelect}
+                  onHover={props.onHover}
+                />
+              ))}
+            </div>
+            {/* Turn strip: one COLOR BLOCK per turn spanning exactly its bars' columns, so the partition reads at a glance and lines
+                up with the steps; hovering a block highlights that turn's bars and vice versa — one shared hover-only state.
+                */}
+            <div className="lc-turns" onMouseLeave={() => { props.onHoverTurn(null) }}>
+              {groups.map((grp, gi) => {
+                const on = props.activeTurn === grp.turn
+                return (
+                  <span
+                    key={`turn-${gi}`}
+                    className={'lc-turn' + (on ? ' lc-turn-on' : '')}
+                    style={{
+                      width: `${turnWidths[gi]}px`,
+                      background: TURN_FILLS[gi % TURN_FILLS.length],
+                    }}
+                    title={`T${grp.turn}`}
+                    onMouseEnter={() => { props.onHoverTurn(grp.turn) }}
+                    onClick={() => { props.onPickTurn(grp.turn) }}
+                  ><span className="lc-turn-label">{`T${grp.turn}`}</span></span>
+                )
+              })}
+            </div>
           </div>
+          {edges.left ? <div className="lc-chart-fade lc-chart-fade-l" /> : null}
+          {edges.right ? <div className="lc-chart-fade lc-chart-fade-r" /> : null}
+          {/* Compact single-line hover tooltip, shown instantly by the custom `.lc-chart-tip` (the native title is delayed):
+              position, time, estimated total, provider prompt when available; the per-category breakdown lives in the detail
+              panel below. Positioned imperatively over its bar's visible slice (syncTip) so scrolling keeps it glued without
+              ever widening the scrollable area. */}
+          {hoveredReq !== null ? (
+            <div className="lc-chart-tip">{tipOf(hoveredReq)}</div>
+          ) : null}
         </div>
-        {edges.right ? <div className="lc-chart-fade lc-chart-fade-r" /> : null}
       </div>
     )
   }
