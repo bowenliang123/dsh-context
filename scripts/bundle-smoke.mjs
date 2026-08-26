@@ -82,16 +82,12 @@ const removeFrom = list => item => () => {
 const dicts = new Map()
 const slots = []
 const sources = []
-const provides = []
 const effectDisposers = []
 const ctx = {
   get(name) {
     if (name === 'inputTriggers') return { registerSource(s) { sources.push(s); return removeFrom(sources)(s) } }
     if (name === 'sessions') {
-      return {
-        scope: () => undefined,
-        provide(d) { provides.push(d); return removeFrom(provides)(d) },
-      }
+      return { scope: () => undefined }
     }
     return undefined
   },
@@ -121,15 +117,12 @@ assert.equal(slots[1][0], 'conversation.input.overlay')
 assert.equal(typeof slots[1][1].inject('s1').hooks.contextModal.getSnapshot, 'function', 'overlay hooks carry the modal store')
 assert.equal(sources.length, 1, '/context trigger source registered')
 assert.equal(sources[0].trigger, '/', 'trigger is the slash')
-assert.equal(provides.length, 1, 'loadOlderHistory contribution registered')
-assert.deepEqual(provides[0].props, ['loadOlderHistory'])
 
 // HMR safety: fiber dispose removes every registration; the style tag rides
 // the HMR receiver (data-plugin claim), not the fiber.
 for (const d of effectDisposers) d()
 assert.equal(dicts.size, 0, 'dictionaries unregistered on dispose')
 assert.equal(sources.length, 0, 'trigger source removed on dispose')
-assert.equal(provides.length, 0, 'prop contribution removed on dispose')
 assert.ok(styleTag() !== null, 'style tag survives fiber dispose (the HMR receiver claims it)')
 
 console.log('✔ bundle smoke: handoff, CSS channel, registrations, HMR safety')
