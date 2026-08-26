@@ -46,7 +46,7 @@ Type `/context` (or pick it from the `/` menu) and press Enter: a centered dialo
 
 ### ⚙️ Settings — per-user preferences
 
-In **Settings → Plugins → Plugin configuration**, the **Context / 上下文** card holds this plugin's per-user preferences — the **default trend granularity** (Step/Turn) and the **default trend mode** (Total/Delta) the Context tab opens with. In-chart toggling stays per-view and never overwrites the stored preference. The card appears only when the Host half is installed and the settings document is writable (a remote browser keeps settings process-local and shows no card).
+In **Settings → Plugins → Plugin configuration**, the **Context / 上下文** card holds this plugin's per-user preferences — the **default trend granularity** (Step/Turn), the **default trend mode** (Total/Delta), and the **File Activity default sort** (Most active / Latest / By path) the Context tab opens with. In-chart and in-card toggling stays per-view and never overwrites the stored preference. The card appears only when the Host half is installed and the settings document is writable (a remote browser keeps settings process-local and shows no card).
 
 ## What you'll see
 

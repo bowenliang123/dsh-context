@@ -24,9 +24,13 @@ export type DefaultGranularity = 'step' | 'turn'
 
 export type DefaultTrendMode = 'total' | 'delta'
 
+/** File Activity row order: most operations first, most-recently-touched first, or path ascending. */
+export type DefaultFileSort = 'count' | 'latest' | 'path'
+
 export interface PluginSettings {
   defaultGranularity: DefaultGranularity
   defaultTrendMode: DefaultTrendMode
+  defaultFileSort: DefaultFileSort
 }
 
 /** Section schema: also the wire envelope the browser scope validates against. */
@@ -34,6 +38,7 @@ export const SettingsSchema: z<PluginSettings> = z.object({
   defaultGranularity: z.union(['step', 'turn']).default('step'),
   // Loose: a stale persisted value degrades to the default instead of breaking the section.
   defaultTrendMode: z.union(['total', 'delta']).default('total').loose(),
+  defaultFileSort: z.union(['count', 'latest', 'path']).default('count').loose(),
 })
 
 /** Serve the namespace while a settings provider is composed; inert otherwise. */

@@ -623,23 +623,42 @@ describe('ContextView — locale and settings', () => {
     await m3.unmount()
   })
 
-  test('mount-time granularity/trend defaults come from the bound settings scope', async () => {
+  test('mount-time granularity/trend/file-sort defaults come from the bound settings scope', async () => {
     const settings = createContextSettings()
     const scope: SettingsScopeLike = {
-      getSnapshot: () => ({ status: 'ready', writable: true, value: { defaultGranularity: 'turn', defaultTrendMode: 'delta' } }),
+      getSnapshot: () => ({
+        status: 'ready',
+        writable: true,
+        value: { defaultGranularity: 'turn', defaultTrendMode: 'delta', defaultFileSort: 'path' },
+      }),
       subscribe: () => () => {},
       set: async () => {},
     }
     const detach = settings.attach(scope)
     const View = makeView(new TestClientCtx(), settings)
+    // Two file reads (the 2-op path sorts AFTER the 1-op one under 'count' but BEFORE it under 'path').
     const m = await mount(h(View, {
       sessionId: 'sv-settings',
-      useProjection: projectionsFor(richTimeline()),
+      useProjection: projectionsFor(richTimeline({
+        nodes: [
+          ...richTimeline().nodes,
+          { seq: 7, cat: 'tool', tokens: 30, tool: 'read', text: 'z', time: T0 + 6000 },
+          { seq: 8, cat: 'tool', tokens: 30, tool: 'read', text: 'a', time: T0 + 7000 },
+          { seq: 9, cat: 'tool', tokens: 30, tool: 'read', text: 'z', time: T0 + 8000 },
+        ],
+      })),
+      useSession: (sel => sel({ nodes: [
+        { kind: 'tool', seq: 7, call: { name: 'read', argsRaw: JSON.stringify({ file_path: '/z.ts' }) } },
+        { kind: 'tool', seq: 8, call: { name: 'read', argsRaw: JSON.stringify({ file_path: '/a.ts' }) } },
+        { kind: 'tool', seq: 9, call: { name: 'read', argsRaw: JSON.stringify({ file_path: '/z.ts' }) } },
+      ] })) as UseSessionLike,
     }))
     assert.ok(buttonByText(m.container, DICT_EN['gran.turn']).className.includes('lc-gran-on'))
     assert.ok(buttonByText(m.container, DICT_EN['gran.delta']).className.includes('lc-gran-on'))
     // Turn aggregation applies at mount: two bars (turn 1 aggregate + turn-less).
     assert.equal(queryAll(m.container, '.lc-bar').length, 2)
+    // The File Activity card opens sorted by the 'path' preference, not by op count.
+    assert.deepEqual(queryAll(m.container, '.lc-fa-row').map(r => r.title), ['/a.ts', '/z.ts'])
     await m.unmount()
     detach()
   })

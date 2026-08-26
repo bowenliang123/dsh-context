@@ -8,10 +8,12 @@ import { describe, test } from 'vitest'
 import { h } from '../../../src/client/react'
 import { makeFileCard } from '../../../src/client/components/fileCard'
 import type { FileActivity, FileEntry, FileOp } from '../../../src/client/fileActivity'
+import { createContextSettings } from '../../../src/client/settings'
 import { makeKit, mount, query, queryAll, text, click } from '../helpers/kit'
 
 const kit = makeKit()
-const FileCard = makeFileCard(kit)
+const settings = createContextSettings()
+const FileCard = makeFileCard(kit, settings)
 
 const T0 = 1700000000000
 
@@ -201,6 +203,32 @@ describe('FileCard — header, rows, and filters', () => {
     await click(sortBtns[0])
     assert.ok(sortBtns[0].className.includes('lc-gran-on'))
     assert.deepEqual(titles(), ['/var/many.log', '/src/a.ts', '/shots/ui.png', 'solo.md', '/src/'])
+    await m.unmount()
+  })
+
+  test('the mount-time default sort comes from the plugin settings', async () => {
+    const titles = (container: ParentNode) => queryAll(container, '.lc-fa-row').map(r => r.title)
+    const sortBtns = (container: ParentNode) => queryAll(container, '.lc-fa-sort .lc-gran-btn')
+
+    settings.set('defaultFileSort', 'latest')
+    let m = await mount(h(FileCard, { activity: richActivity(), scope: 'live' }))
+    assert.ok(sortBtns(m.container)[1].className.includes('lc-gran-on'))
+    assert.deepEqual(titles(m.container), ['/var/many.log', '/shots/ui.png', 'solo.md', '/src/a.ts', '/src/'])
+    await m.unmount()
+
+    settings.set('defaultFileSort', 'path')
+    m = await mount(h(FileCard, { activity: richActivity(), scope: 'live' }))
+    assert.ok(sortBtns(m.container)[2].className.includes('lc-gran-on'))
+    assert.deepEqual(titles(m.container), ['/shots/ui.png', '/src/', '/src/a.ts', '/var/many.log', 'solo.md'])
+    await m.unmount()
+
+    // The stored preference resets the default; in-card toggling never writes back.
+    settings.set('defaultFileSort', 'count')
+    m = await mount(h(FileCard, { activity: richActivity(), scope: 'live' }))
+    assert.ok(sortBtns(m.container)[0].className.includes('lc-gran-on'))
+    assert.deepEqual(titles(m.container), ['/var/many.log', '/src/a.ts', '/shots/ui.png', 'solo.md', '/src/'])
+    await click(sortBtns(m.container)[1])
+    assert.deepEqual(settings.store.getSnapshot().fileSort, 'count')
     await m.unmount()
   })
 })

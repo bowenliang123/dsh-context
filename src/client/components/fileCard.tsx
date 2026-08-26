@@ -13,13 +13,14 @@
 
 import type * as ReactNS from 'react'
 import type { FileActivity, FileEntry, FileForm, FileOp, FileOpKind } from '../fileActivity'
+import type { ContextSettings, DefaultFileSort } from '../settings'
 import type { ViewKit } from '../viewkit'
 
 import { React } from '../react'
 
 export type FileFilter = 'all' | FileOpKind | 'image'
 /** Row order: most operations first (default), most-recently-touched first, or path ascending. */
-export type FileSort = 'count' | 'latest' | 'path'
+export type FileSort = DefaultFileSort
 
 export interface FileCardProps {
   activity: FileActivity
@@ -32,7 +33,7 @@ export interface FileCardProps {
 /** An expanded file lists at most this many ops before a "+n earlier" line. */
 const MAX_OPS = 8
 
-export function makeFileCard(kit: ViewKit): (props: FileCardProps) => ReactNS.ReactElement {
+export function makeFileCard(kit: ViewKit, settings: ContextSettings): (props: FileCardProps) => ReactNS.ReactElement {
   const { t, fmt, fmtTime } = kit
 
   function formGlyph(form: FileForm): string {
@@ -60,7 +61,8 @@ export function makeFileCard(kit: ViewKit): (props: FileCardProps) => ReactNS.Re
   return function FileCard(props: FileCardProps): ReactNS.ReactElement {
     const { activity } = props
     const [filter, setFilter] = React.useState<FileFilter>('all')
-    const [sort, setSort] = React.useState<FileSort>('count')
+    // Mount-time default from the plugin settings card; in-card toggling stays mount-local and never writes back.
+    const [sort, setSort] = React.useState<FileSort>(() => settings.defaultFileSort())
     const [query, setQuery] = React.useState('')
     const [openPath, setOpenPath] = React.useState<string | null>(null)
 

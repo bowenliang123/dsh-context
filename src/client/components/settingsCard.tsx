@@ -105,6 +105,17 @@ export function makeSettingsCard(kit: ViewKit): (props: SettingsCardProps) => Re
                 ]}
                 onPick={(id) => { props.set?.('defaultTrendMode', id) }}
               />
+              <PrefRow
+                label={t('settings.fileSort')}
+                value={state.fileSort}
+                disabled={disabled}
+                options={[
+                  { id: 'count', label: t('files.sort.count') },
+                  { id: 'latest', label: t('files.sort.latest') },
+                  { id: 'path', label: t('files.sort.path') },
+                ]}
+                onPick={(id) => { props.set?.('defaultFileSort', id) }}
+              />
             </div>
           )
           : null}

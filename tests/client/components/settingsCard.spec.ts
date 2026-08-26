@@ -18,7 +18,7 @@ function hookFor(state: SettingsState) {
 }
 
 function stateOf(partial: Partial<SettingsState> = {}): SettingsState {
-  return { status: 'ready', granularity: 'step', mode: 'total', writable: true, ...partial }
+  return { status: 'ready', granularity: 'step', mode: 'total', fileSort: 'count', writable: true, ...partial }
 }
 
 /** Menu items portaled into document.body while a select is open. */
@@ -52,7 +52,7 @@ describe('SettingsCard', () => {
     assert.equal(head.getAttribute('aria-label'), `${DICT_EN['settings.collapse']}: ${DICT_EN['settings.title']}`)
     assert.ok(card.className.includes('lc-settings-open'))
     const selects = queryAll(m.container, '.lc-settings-select')
-    assert.equal(selects.length, 2)
+    assert.equal(selects.length, 3)
     assert.ok(selects.every(s => (s as HTMLButtonElement).disabled))
     // Loading is not ready: no read-only note.
     assert.equal(m.container.querySelector('.lc-settings-note'), null)
@@ -77,6 +77,8 @@ describe('SettingsCard', () => {
     // Active option labels resolve through the options list.
     assert.ok(text(selects[0]).includes(DICT_EN['gran.step']))
     assert.ok(text(selects[1]).includes(DICT_EN['gran.total']))
+    assert.ok(text(m.container).includes(DICT_EN['settings.fileSort']))
+    assert.ok(text(selects[2]).includes(DICT_EN['files.sort.count']))
 
     await click(selects[0])
     assert.equal(selects[0].getAttribute('aria-expanded'), 'true')
@@ -95,6 +97,22 @@ describe('SettingsCard', () => {
     assert.deepEqual(modeItems.map(i => text(i)), [DICT_EN['gran.total'], DICT_EN['gran.delta']])
     await click(modeItems[1]) // 'Delta'
     assert.deepEqual(calls, [['defaultGranularity', 'turn'], ['defaultTrendMode', 'delta']])
+    assert.equal(document.body.querySelector('[role="menu"]'), null)
+
+    // The file-sort row writes the third field.
+    await click(selects[2])
+    const sortItems = menuItems()
+    assert.deepEqual(sortItems.map(i => text(i)), [
+      DICT_EN['files.sort.count'],
+      DICT_EN['files.sort.latest'],
+      DICT_EN['files.sort.path'],
+    ])
+    await click(sortItems[2]) // 'By path'
+    assert.deepEqual(calls, [
+      ['defaultGranularity', 'turn'],
+      ['defaultTrendMode', 'delta'],
+      ['defaultFileSort', 'path'],
+    ])
     assert.equal(document.body.querySelector('[role="menu"]'), null)
 
     // Anchor toggles shut too (setOpen(v => !v) back edge).

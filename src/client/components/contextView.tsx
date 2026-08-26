@@ -49,7 +49,7 @@ export function makeContextView(
   const TrendChart = makeTrendChart(kit)
   const RequestDetail = makeRequestDetail(kit, StackedBar)
   const EventList = makeEventList(kit)
-  const FileCard = makeFileCard(kit)
+  const FileCard = makeFileCard(kit, settings)
   const StatsBoard = makeStatsBoard(kit)
   const PluginInfo = makePluginInfo(kit)
   const ContextBrowser = makeContextBrowser(kit, StackedBar)
