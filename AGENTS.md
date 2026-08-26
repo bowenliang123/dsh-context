@@ -48,6 +48,7 @@ A DeepSeek Harness plugin for context insight, actions, and management.
 - Chinese (Simplified) and English are supported for UI elements.
 
 ## Docs
+- `docs` directory contains only end-user faced documents.
 - `docs/social-preview.png` (GitHub social preview) must be exactly **1280 × 640 pixels**.
 
 ## Temp files
