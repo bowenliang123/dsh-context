@@ -99,6 +99,22 @@ Not what the context is made of, but what it was good for: one row per touched f
 - **Sorted your way** — **Most active**, **Latest**, or **By path**; each row carries per-purpose badges, its cumulative line delta, the last operation's time, and a red dot when an operation failed.
 - **Click to inspect** — a row expands into the file's own operation log — every operation, no cap (tool, time, per-op delta, failures flagged); each operation jumps straight to the exact tool result in the Context browser.
 
+### 🕸 Agent Network — the whole agent family at the foot of the tab
+
+The current agent, its parents, and every subagent it spawned — one node per agent, colored edges for the parent→child lineage:
+
+![Agent network card](https://raw.githubusercontent.com/bowenliang123/dsh-context/main/docs/agent-network.png)
+
+Context insight no longer stops at one session. When an agent delegates — one-shot explorers, continuable workers, nested subagents spawning subagents of their own — the card turns the whole delegation tree into a single live map:
+
+- **A fused context ring per agent** — every node is one ring with the exact semantics of the chat composer's own context meter: the six composition categories (same estimator as the overview card) fill the occupied share of the window, a neutral remainder marks the free room, and the center shows the fill percentage. Spot at a glance which subagent is about to compact, and what its context is made of — across the whole family, not just the session in front of you.
+- **Multi-level lineage, colored by family** — edges are direct segments colored per level-1 subtree (a golden-angle hue rotation keeps neighboring families maximally distinct), so the root's fan is the color key and every descendant's allegiance is obvious at any depth. The card walks the `parentId` chain up to the topmost known ancestor and lays out the whole family around the current agent — ancestors, siblings, cousins, grandchildren.
+- **Live status without dot-soup** — a breathing green halo means *running right now*, a faint green halo marks *finished while you were away*, and a running edge brightens its channel with a traveling pulse of the family hue. Header chips keep the totals: agents, running, combined context tokens.
+- **Hover for the story** — the inspector strip tells each agent's tale in one line: full name (it wraps, never truncates), `current` / `running` / lifecycle-mode badges (one-shot vs. continuable), occupancy, request count, billed tokens, and active time.
+- **Click to jump** — any node opens that agent's session (the breadcrumb switches to it), so you can read a subagent's own Context tab — its trend, events, file activity, and its own sub-network — and hop straight back.
+- **Fully responsive layout** — the tidy tree measures the card's visible width and adapts exactly: sibling spacing stretches or compresses to fit, captions re-wrap, and a level too wide for the stage folds into kinship-ordered bands (each parent's band is followed by its own children's) instead of scrolling sideways. From a solo agent to an 18-agent clan, the map always fits.
+- **Zero extra traffic** — the card rides the harness's session-list lineage rows and per-session projection baselines (`contextTimeline`, token-meter, subagent identity/timing) plus one direct-child catalog refresh per session, updating live as agents spawn, run, and finish. A harness without the outward sessions service simply hides the card.
+
 ### 🧭 Context browser — open the box of any request
 
 Pick **Live (next request)** or any retained step from the picker, and browse what that request was actually assembled from:
