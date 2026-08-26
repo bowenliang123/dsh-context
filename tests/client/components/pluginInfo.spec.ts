@@ -76,14 +76,32 @@ describe('PluginInfo', () => {
     await m.unmount()
   })
 
-  test('a failed or malformed registry answer narrows to null and renders no chip', async () => {
+  test('every registry failing narrows to null and renders no chip', async () => {
     const fetchMock = vi.fn(() => Promise.resolve({ ok: false, json: () => Promise.resolve(null) }))
     vi.stubGlobal('fetch', fetchMock)
     const PluginInfo = await loadPluginInfo('1.0.0')
     const m = await mount(h(PluginInfo, {}))
     await flush()
-    assert.equal(fetchMock.mock.calls.length, 1)
+    // Both registries (official npm then npmmirror) are tried before giving up.
+    assert.equal(fetchMock.mock.calls.length, 2)
     assert.equal(queryAll(m.container, '.lc-pi-update').length, 0)
+    await m.unmount()
+  })
+
+  test('falls back to npmmirror when the official registry fails', async () => {
+    const fetchMock = vi.fn((input: unknown) => {
+      const url = String(input)
+      if (url.startsWith('https://registry.npmjs.org/')) {
+        return Promise.resolve({ ok: false, json: () => Promise.resolve(null) })
+      }
+      return Promise.resolve({ ok: true, json: () => Promise.resolve({ version: '1.1.0' }) })
+    })
+    vi.stubGlobal('fetch', fetchMock)
+    const PluginInfo = await loadPluginInfo('1.0.0')
+    const m = await mount(h(PluginInfo, {}))
+    await flush()
+    assert.equal(fetchMock.mock.calls.length, 2)
+    assert.equal(query(m.container, '.lc-pi-update').textContent, '↑ v1.1.0')
     await m.unmount()
   })
 

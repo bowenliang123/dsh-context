@@ -1,7 +1,8 @@
 // Latest-version check (src/client/latestVersion.ts): registry fetch with a
-// 1h TTL and the semver comparator. fetch is stubbed — the suite never hits
-// the network — and each fetch test re-imports the module (vi.resetModules)
-// to reset the module-level cache.
+// 1h TTL and the semver comparator. The fetch is stubbed per test — the
+// suite never hits the network — and each fetch test re-imports the module
+// (vi.resetModules) to reset the module-level cache. Two registries are
+// tried in order (official npm, then npmmirror as a fallback).
 
 import assert from 'node:assert/strict'
 import { afterEach, describe, test, vi } from 'vitest'
@@ -79,6 +80,51 @@ describe('fetchLatestVersion', () => {
     vi.setSystemTime(1_000_000 + HOUR_MS)
     assert.equal(await fetchLatestVersion(), '1.0.2')
     assert.equal(fetches, 2)
+  })
+
+  test('falls back to npmmirror when the official registry fails', async () => {
+    const urls: string[] = []
+    vi.stubGlobal('fetch', async (input: unknown) => {
+      const url = String(input)
+      urls.push(url)
+      if (url.startsWith('https://registry.npmjs.org/')) {
+        return { ok: false, json: async () => ({}) }
+      }
+      return { ok: true, json: async () => ({ version: '2.0.0' }) }
+    })
+    const { fetchLatestVersion } = await freshModule()
+    assert.equal(await fetchLatestVersion(), '2.0.0')
+    assert.deepEqual(urls, [
+      'https://registry.npmjs.org/dsh-context/latest',
+      'https://registry.npmmirror.com/dsh-context/latest',
+    ])
+  })
+
+  test('falls back to npmmirror when the official fetch rejects', async () => {
+    const urls: string[] = []
+    vi.stubGlobal('fetch', async (input: unknown) => {
+      const url = String(input)
+      urls.push(url)
+      if (url.startsWith('https://registry.npmjs.org/')) {
+        throw new Error('offline')
+      }
+      return { ok: true, json: async () => ({ version: '3.0.0' }) }
+    })
+    const { fetchLatestVersion } = await freshModule()
+    assert.equal(await fetchLatestVersion(), '3.0.0')
+    assert.equal(urls.length, 2)
+  })
+
+  test('resolves to null when every source fails', async () => {
+    const urls: string[] = []
+    vi.stubGlobal('fetch', async (input: unknown) => {
+      const url = String(input)
+      urls.push(url)
+      return { ok: false, json: async () => ({}) }
+    })
+    const { fetchLatestVersion } = await freshModule()
+    assert.equal(await fetchLatestVersion(), null)
+    assert.equal(urls.length, 2)
   })
 })
 

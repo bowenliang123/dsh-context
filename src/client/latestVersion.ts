@@ -1,24 +1,40 @@
 /**
- * One live check for the Plugin-info card: lazy with 1h TTL; every failure
- * mode narrows to null so the card silently keeps its static version.
+ * One live check for the Plugin-info card: lazy with 1h TTL; the registry
+ * list is tried in order (official npm first, npmmirror as a fallback) and
+ * any failure — network error, non-ok response, missing/non-string version —
+ * narrows to null for that source and moves on. Every source failing
+ * resolves to null so the card silently keeps its static version.
  */
 
 import { PLUGIN_NAME } from './meta'
 
-const REGISTRY_URL = 'https://registry.npmjs.org/' + PLUGIN_NAME + '/latest'
+const REGISTRY_URLS = [
+  'https://registry.npmjs.org/' + PLUGIN_NAME + '/latest',
+  'https://registry.npmmirror.com/' + PLUGIN_NAME + '/latest',
+]
 
 const TTL_MS = 60 * 60 * 1000
 
 let cached: { at: number; promise: Promise<string | null> } | null = null
 
+function readVersion(url: string): Promise<string | null> {
+  return fetch(url)
+    .then(res => (res.ok ? res.json() as Promise<{ version?: unknown }> : null))
+    .then(body => (body !== null && typeof body.version === 'string' ? body.version : null))
+    .catch(() => null)
+}
+
 export function fetchLatestVersion(): Promise<string | null> {
   if (!cached || Date.now() - cached.at >= TTL_MS) {
     cached = {
       at: Date.now(),
-      promise: fetch(REGISTRY_URL)
-        .then(res => (res.ok ? res.json() as Promise<{ version?: unknown }> : null))
-        .then(body => (body !== null && typeof body.version === 'string' ? body.version : null))
-        .catch(() => null),
+      promise: (async () => {
+        for (const url of REGISTRY_URLS) {
+          const v = await readVersion(url)
+          if (v !== null) return v
+        }
+        return null
+      })(),
     }
   }
   return cached.promise
