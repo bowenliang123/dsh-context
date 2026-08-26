@@ -88,9 +88,13 @@ Every compaction, tool-output prune, skill or plugin context injection, model sw
 
 ![Context events and messages](https://raw.githubusercontent.com/bowenliang123/dsh-context/main/docs/context-events.png)
 
-### 💬 Messages — the currently model-visible surface
+### 📁 File Activity — what the agent *did* to your files
 
-The exact message list the model sees right now, newest first, with a per-message token cost.
+Not what the context is made of, but what it was good for: one row per touched file — read, written, or searched — aggregated up to the step you pick on the trend chart (the card scrubs live as you hover the bars; the default is the whole session to date):
+
+- **Per-purpose counts** — how many times each file was read, written, and searched, with the header chips doubling as purpose filters (**Read / Written / Searched**), an **Images** chip for the multimodal view (`read_image` calls and image extensions), and a path search box.
+- **Line deltas** — every `edit`/`write` contributes its estimated footprint (`+added / −removed`, read off the call arguments), per file and summed in the header.
+- **Click to inspect** — a row expands into the file's own operation log (tool, time, per-op delta, failures flagged); each operation jumps straight to the exact tool result in the Context browser. Operations whose paths aged out of the retained window are honestly counted in a footnote.
 
 ### 🧭 Context browser — open the box of any request
 

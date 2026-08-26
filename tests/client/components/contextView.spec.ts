@@ -1,6 +1,6 @@
 // ContextView (src/client/components/contextView.tsx) — the Context tab root
-// rendered for real: stats, composition, trend chart, events, nodes and the
-// composed Context browser, driven by real projection values and real
+// rendered for real: stats, composition, trend chart, events, file activity
+// and the composed Context browser, driven by real projection values and real
 // plugin settings. Covers the view's own branches (projections absent /
 // garbage / well-formed, granularity/trend-mode state, brief→browser
 // locate bridge, kind filter, scroll ledger, locale arms, error boundary).
@@ -118,7 +118,7 @@ describe('ContextView — projection guards', () => {
     assert.ok(text(m.container).includes(DICT_EN['stats.title']))
     assert.ok(text(m.container).includes(DICT_EN['trend.empty']))
     assert.ok(text(m.container).includes(DICT_EN['events.empty']))
-    assert.ok(text(m.container).includes(DICT_EN['nodes.empty']))
+    assert.ok(text(m.container).includes(DICT_EN['files.empty']))
     assert.ok(text(m.container).includes(DICT_EN['footer']))
     assert.ok(m.container.querySelector('.lc-br-cats') !== null)
     // No model/provider: the composition card carries no subtitle.
@@ -167,7 +167,8 @@ describe('ContextView — interactions', () => {
     // The compaction event lands as the ✂ marker on the first request after it.
     assert.equal(queryAll(m.container, '.lc-bar-marker').length, 1)
     assert.equal(queryAll(m.container, '.lc-event').length, 2)
-    assert.ok(text(m.container).includes(DICT_EN['nodes.more'].replace('{n}', '2')))
+    assert.ok(text(m.container).includes(DICT_EN['files.title']))
+    assert.ok(text(m.container).includes(DICT_EN['files.scopeLatest']))
     assert.ok(text(m.container).includes(DICT_EN['browser.liveNow']))
     // Turn strip partitions the two turn groups (turn 1 + the turn-less 0).
     assert.deepEqual(queryAll(m.container, '.lc-turn-label').map(el => text(el)), ['T1', 'T0'])
@@ -316,6 +317,106 @@ describe('ContextView — interactions', () => {
     assert.equal(countEvents(), 1)
     await click(buttonByText(m.container, DICT_EN['kind.inject']))
     assert.equal(countEvents(), 2)
+    await m.unmount()
+  })
+})
+
+describe('ContextView — file activity card', () => {
+  /** Six steps with two file ops: a live read (seq 3) and an edit (seq 5) compacted away before seq 6 dispatched. */
+  function fileTimeline(): ContextTimeline {
+    const req = (seq: number, time: number, extra: Record<string, unknown> = {}) =>
+      ({ seq, time, system: 10, tools: 20, user: 10, inject: 0, assistant: 20, tool: 10, total: 70, ...extra })
+    return timeline({
+      requests: [
+        req(2, T0 + 1000, { turn: 1, step: 1 }),
+        req(4, T0 + 3000, { turn: 1, step: 2 }),
+        req(6, T0 + 5000), // two turn-less mid-session steps form their own aggregate
+        req(7, T0 + 6000),
+        req(8, T0 + 7000, { turn: 2, step: 1 }), // a single-step turn, not the last bar
+        req(9, T0 + 8000, { turn: 3, step: 1 }),
+      ],
+      nodes: [
+        { seq: 1, cat: 'user', tokens: 10, text: 'hi', time: T0 + 500 },
+        { seq: 2, cat: 'assistant', tokens: 20, text: 'r1', time: T0 + 1000 },
+        { seq: 3, cat: 'tool', tokens: 30, tool: 'read', time: T0 + 2000 },
+        { seq: 4, cat: 'assistant', tokens: 60, text: 'r2', time: T0 + 3000 },
+        { seq: 6, cat: 'assistant', tokens: 80, text: 'r3', time: T0 + 5000 },
+        { seq: 7, cat: 'assistant', tokens: 80, text: 'r3b', time: T0 + 6000 },
+        { seq: 8, cat: 'assistant', tokens: 80, text: 'r4', time: T0 + 7000 },
+        { seq: 9, cat: 'assistant', tokens: 80, text: 'r5', time: T0 + 8000 },
+      ],
+      archive: [
+        { seq: 5, cat: 'tool', tokens: 30, tool: 'edit', gone: 6, time: T0 + 4000 },
+      ],
+    })
+  }
+
+  const fileConv = [
+    { kind: 'tool', seq: 3, call: { name: 'read', argsRaw: JSON.stringify({ file_path: '/src/a.ts' }) } },
+    { kind: 'tool', seq: 5, call: { name: 'edit', argsRaw: JSON.stringify({ file_path: '/src/a.ts', old_string: 'a\nb', new_string: 'a' }) } },
+  ]
+
+  async function mountFiles(sessionId: string) {
+    const View = makeView(new TestClientCtx())
+    const m = await mount(h(View, {
+      sessionId,
+      useProjection: projectionsFor(fileTimeline()),
+      useSession: (sel => sel({ nodes: fileConv })) as UseSessionLike,
+    }))
+    const card = queryAll(m.container, '.lc-card').find(c => text(c).includes(DICT_EN['files.title']))
+    assert.ok(card !== undefined)
+    return { m, card }
+  }
+
+  test('follows the chart pick: the scope label and the exclusive next-step bound', async () => {
+    const { m, card } = await mountFiles('sv-files-scope')
+    // Default (latest bar): everything served, edit delta included.
+    assert.ok(text(card).includes(DICT_EN['files.scopeLatest']))
+    assert.ok(text(card).includes('+1') && text(card).includes('−2'))
+
+    // Hovering the FIRST bar bounds the fold at the second request: the edit drops out.
+    await hover(query(m.container, '.lc-bar[data-seq="2"]'))
+    assert.ok(text(card).includes('Turn 1 · Step 1'))
+    assert.equal(queryAll(card, '.lc-fa-meta-delta').length, 0)
+    assert.equal(queryAll(card, '.lc-fa-row').length, 1)
+    assert.ok(!text(card).includes('+1'))
+
+    // The turn-less mid step falls back to zero labels and still bounds at the next request.
+    await hover(query(m.container, '.lc-bar[data-seq="6"]'))
+    assert.ok(text(card).includes('Turn 0 · Step 0'))
+    assert.ok(text(card).includes('+1'))
+
+    await unhover(query(m.container, '.lc-chart'))
+    assert.ok(text(card).includes(DICT_EN['files.scopeLatest']))
+    await m.unmount()
+  })
+
+  test('turn aggregates label the scope; op clicks reveal the result in the browser', async () => {
+    const { m, card } = await mountFiles('sv-files-locate')
+    const pick = query<HTMLSelectElement>(m.container, 'select.lc-br-pick')
+
+    await click(buttonByText(m.container, DICT_EN['gran.turn']))
+    // Turn 1's aggregate (two steps) labels the scope as a turn.
+    await hover(query(m.container, '.lc-bar[data-seq="4"]'))
+    assert.ok(text(card).includes(DICT_EN['detail.turn'].replace('{t}', '1').replace('{n}', '2')))
+    // The turn-less pair aggregates too: a turn label with zeroed turn.
+    await hover(query(m.container, '.lc-bar[data-seq="7"]'))
+    assert.ok(text(card).includes(DICT_EN['detail.turn'].replace('{t}', '0').replace('{n}', '2')))
+    // A single-step turn aggregate labels as a plain step.
+    await hover(query(m.container, '.lc-bar[data-seq="8"]'))
+    assert.ok(text(card).includes('Turn 2 · Step 1'))
+    await unhover(query(m.container, '.lc-chart'))
+
+    // Expand the file row: the compacted edit (seq 5) has no viewing step and
+    // its click is a no-op; the read (seq 3) reveals in step 4's surface.
+    await click(query(card, '.lc-fa-row'))
+    const ops = queryAll(card, '.lc-fa-op')
+    assert.equal(ops.length, 2)
+    await click(ops[0]) // edit, gone = 6: unlocatable
+    assert.equal(pick.value, 'live')
+    await click(ops[1]) // read at seq 3
+    assert.equal(pick.value, '4')
+    assert.ok(text(query(m.container, '.lc-br-elem-on')).includes('/src/a.ts'))
     await m.unmount()
   })
 })

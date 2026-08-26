@@ -11,12 +11,14 @@ import type { SessionStandardProps } from '../services'
 import { contextBreakdownOf, contextPressureOf, headersOf, timelineOf, tokenUsageOf } from '../services'
 import type { ClientCtx, ConversationFace, ConversationNodeLike, ImageRefLike } from '../services'
 import { makeContentFetcher } from '../historyPage'
+import { activityOf, locateStepOf } from '../fileActivity'
+import type { FileOp } from '../fileActivity'
 import type { ContextSettings } from '../settings'
 import type { ViewKit } from '../viewkit'
 import { makeContextBrowser } from './browser'
 import { makeCurrentComposition } from './currentComposition'
 import { makeEventList } from './events'
-import { makeNodeList } from './nodes'
+import { makeFileCard } from './fileCard'
 import { makePluginInfo } from './pluginInfo'
 import { makeRequestDetail } from './requestDetail'
 import { makeStatsBoard } from './statsBoard'
@@ -47,7 +49,7 @@ export function makeContextView(
   const TrendChart = makeTrendChart(kit)
   const RequestDetail = makeRequestDetail(kit, StackedBar)
   const EventList = makeEventList(kit)
-  const NodeList = makeNodeList(kit)
+  const FileCard = makeFileCard(kit)
   const StatsBoard = makeStatsBoard(kit)
   const PluginInfo = makePluginInfo(kit)
   const ContextBrowser = makeContextBrowser(kit, StackedBar)
@@ -161,7 +163,6 @@ export function makeContextView(
     const requests = data ? data.requests : []
     const events = data ? data.events : []
     const shownEvents = pickedKinds.length === EVENT_KINDS.length ? events : events.filter(e => pickedKinds.includes(e.kind))
-    const nodes = data ? data.nodes : []
     // Per-step bars, or one per turn (each turn's LAST step's record); memoized so hover-driven re-renders keep bar props identity-stable —
     // the chart's memoized bars then skip reconciliation (turn-mode aggregation allocates).
     const displayRequests = React.useMemo(
@@ -208,6 +209,26 @@ export function makeContextView(
     // The active bar's semantic identity ("what this step was about"); pure derivation over the served nodes, null when nothing is known.
     const brief = activeReq !== null ? briefOf(briefList, displayRequests, activeIdx) : null
     const convOf = (seq: number): ConversationNodeLike | undefined => bySeq.get(seq)
+    // File activity follows the same active bar: the EXCLUSIVE upper bound is the next RAW request's seq, so the picked step's own
+    // tool calls (results land before the next request) count too; the latest bar's null bound serves everything.
+    let filesBefore: number | null = null
+    if (activeReq !== null) {
+      // The active bar's seq always exists in the raw list (turn aggregates keep their last step's record).
+      const ri = requests.findIndex(r => r.seq === activeReq.seq)
+      filesBefore = ri + 1 < requests.length ? requests[ri + 1].seq : null
+    }
+    let fileScope = t('files.scopeLatest')
+    if (activeReq !== null && filesBefore !== null) {
+      fileScope = activeReq.stepCount !== undefined && activeReq.stepCount > 1
+        ? t('detail.turn', { t: activeReq.turn ?? 0, n: activeReq.stepCount })
+        : t('detail.step', { t: activeReq.turn ?? 0, s: activeReq.step ?? 0 })
+    }
+    const fileActivity = activityOf(briefList, convOf, filesBefore)
+    const locateFileOp = (op: FileOp): void => {
+      const step = locateStepOf(requests, op.seq, op.gone)
+      if (step === null) return
+      setNodeFocus({ step, seq: op.seq, cat: 'tool' })
+    }
     // A brief row's reveal target: inputs/opener live in the picked step's OWN assembled surface; the response node (seq === the
     // request's) first appears in the NEXT step's surface — or the live surface when the last bar is picked.
     const locateNode = (node: SurfaceNode, isResponse: boolean): void => {
@@ -361,13 +382,7 @@ export function makeContextView(
             </div>
             <EventList events={shownEvents} />
           </div>
-          <div className="lc-card lc-col">
-            <div className="lc-card-title">
-              <span className="lc-card-title-text">{t('nodes.title')}</span>
-              <span className="lc-card-sub">{t('nodes.hint')}</span>
-            </div>
-            <NodeList nodes={nodes} dropped={data.droppedNodes || 0} />
-          </div>
+          <FileCard activity={fileActivity} scope={fileScope} onLocate={locateFileOp} />
         </div>
 
         <div className="lc-foot">{t('footer')}</div>

@@ -74,7 +74,7 @@
 .lc-chip { display: flex; align-items: center; gap: 5px; min-width: 0; color: var(--dsw-alias-label-primary); padding: 1px 6px; border-radius: 6px; cursor: pointer; transition: background-color 120ms ease; }
 .lc-chip-label { font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
 .lc-chip-nums { margin-left: auto; flex: none; display: inline-flex; align-items: baseline; gap: 6px; white-space: nowrap; }
-.lc-chip i, .lc-detail-row i, .lc-node i { display: inline-block; width: 8px; height: 8px; border-radius: 2px; }
+.lc-chip i, .lc-detail-row i { display: inline-block; width: 8px; height: 8px; border-radius: 2px; }
 .lc-chip i { transition: box-shadow 120ms ease; }
 .lc-chip em { font-style: normal; color: var(--dsw-alias-label-secondary); }
 .lc-chip-on { font-weight: 600; background: var(--dsw-alias-interactive-bg-hover); }
@@ -205,7 +205,7 @@ button.lc-brief-row-link { cursor: pointer; }
  an ellipsis; without it a narrow card pushes the value over the label.
  */
 .lc-pi-value { min-width: 0; color: var(--dsw-alias-label-primary); font-size: 13px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; text-align: right; }
-.lc-events, .lc-nodes { display: flex; flex-direction: column; gap: 2px; max-height: 320px; overflow-y: auto; }
+.lc-events, .lc-fa-list { display: flex; flex-direction: column; gap: 2px; max-height: 320px; overflow-y: auto; }
 .lc-event { display: flex; align-items: center; gap: 8px; padding: 3px 0; }
 .lc-event-icon { width: 18px; text-align: center; color: var(--dsw-alias-state-warn-primary); }
 .lc-event-icon.lc-event-inject { color: #a855f7; }
@@ -225,11 +225,46 @@ button.lc-brief-row-link { cursor: pointer; }
 .lc-event-tokens { color: var(--dsw-alias-state-success-primary); font-weight: 600; white-space: nowrap; }
 .lc-event-tokens.lc-up { color: var(--dsw-alias-state-warn-primary); }
 .lc-event-time { color: var(--dsw-alias-label-secondary); font-size: 12px; }
-.lc-node { display: flex; align-items: center; gap: 8px; padding: 3px 0; }
-.lc-node-preview { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--dsw-alias-label-primary); }
-.lc-node-time { color: var(--dsw-alias-label-secondary); font-size: 12px; min-width: 54px; text-align: right; }
-.lc-node-tokens { color: var(--dsw-alias-label-secondary); }
-.lc-nodes-more { color: var(--dsw-alias-label-secondary); padding: 3px 0; }
+/*
+ ---- File Activity card: the header chips double as purpose/form filters (the shared lc-gran toggle look with an ops count);
+ rows speak the browser's element-row anatomy (chevron, fact chips, right-aligned time) and expand into a per-operation log. ----
+ */
+.lc-fa-ctl { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
+.lc-fa-ctl .lc-gran { margin-left: 0; }
+.lc-fa-n { margin-left: 4px; font-weight: 700; opacity: 0.75; }
+.lc-fa-search { flex: 1; min-width: 80px; font: inherit; font-size: 12px; color: var(--dsw-alias-label-primary); background: var(--dsw-alias-bg-layer-2); border: 1px solid var(--dsw-alias-border-l1); border-radius: 6px; padding: 3px 8px; outline: none; }
+.lc-fa-search:focus { border-color: var(--dsw-alias-label-dimmed); }
+.lc-fa-meta { display: flex; align-items: center; gap: 10px; margin-bottom: 6px; color: var(--dsw-alias-label-secondary); font-size: 12px; }
+/* The aggregate delta pill carries the card's one styled tip (`.lc-stat-tip` pattern) — it sits outside the scrolling list, so the bubble never clips. */
+.lc-fa-meta-delta { position: relative; }
+.lc-fa-meta-tip { position: absolute; top: calc(100% + 6px); left: 0; z-index: 6; width: max-content; max-width: 260px; white-space: normal; background: var(--dsw-alias-bg-layer-2); border: 1px solid var(--dsw-alias-border-l1); border-radius: 6px; padding: 6px 10px; font-size: 12px; line-height: 1.5; color: var(--dsw-alias-label-primary); box-shadow: 0 2px 8px rgba(0,0,0,0.18); pointer-events: none; opacity: 0; transition: opacity 120ms ease; }
+.lc-fa-meta-delta:hover .lc-fa-meta-tip { opacity: 1; }
+.lc-fa-item { border-radius: 6px; }
+.lc-fa-item-on { background: var(--dsw-alias-interactive-bg-active); }
+.lc-fa-row { display: flex; align-items: center; gap: 7px; width: 100%; border: 0; background: transparent; color: var(--dsw-alias-label-primary); font: inherit; font-size: 12px; padding: 5px 6px; cursor: pointer; text-align: left; border-radius: 6px; transition: background-color 120ms ease; }
+.lc-fa-row:hover { background: var(--dsw-alias-interactive-bg-hover); }
+.lc-fa-form { flex: none; width: 16px; text-align: center; font-size: 11px; }
+.lc-fa-path { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.lc-fa-path em { font-style: normal; color: var(--dsw-alias-label-secondary); }
+/* Per-purpose count badges: one fixed tint per purpose (read = brand, write = success, search = warn). */
+.lc-fa-badge { flex: none; display: inline-flex; align-items: center; gap: 4px; font-size: 11px; font-weight: 600; font-variant-numeric: tabular-nums; padding: 0 6px; border-radius: 4px; white-space: nowrap; }
+.lc-fa-badge i { display: inline-block; width: 6px; height: 6px; border-radius: 2px; background: currentColor; }
+.lc-fa-b-read { color: var(--dsw-alias-brand-primary); background: color-mix(in srgb, var(--dsw-alias-brand-primary) 15%, transparent); }
+.lc-fa-b-write { color: var(--dsw-alias-state-success-primary); background: color-mix(in srgb, var(--dsw-alias-state-success-primary) 15%, transparent); }
+.lc-fa-b-search { color: var(--dsw-alias-state-warn-primary); background: color-mix(in srgb, var(--dsw-alias-state-warn-primary) 15%, transparent); }
+.lc-fa-delta { flex: none; display: inline-flex; gap: 5px; font-size: 11px; font-weight: 600; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.lc-fa-up { color: var(--dsw-alias-state-success-primary); }
+.lc-fa-down { color: var(--dsw-alias-state-error-primary); }
+.lc-fa-time { flex: none; color: var(--dsw-alias-label-secondary); font-size: 11px; }
+.lc-fa-ops { padding: 2px 6px 6px 26px; display: flex; flex-direction: column; gap: 1px; }
+.lc-fa-op { display: flex; align-items: center; gap: 8px; min-width: 0; border: 0; background: transparent; color: var(--dsw-alias-label-primary); font: inherit; font-size: 11px; padding: 3px 6px; text-align: left; border-radius: 5px; transition: background-color 120ms ease; }
+.lc-fa-op-link { cursor: pointer; }
+.lc-fa-op-link:hover { background: var(--dsw-alias-interactive-bg-hover); }
+.lc-fa-op-time { flex: none; width: 58px; color: var(--dsw-alias-label-secondary); font-variant-numeric: tabular-nums; }
+.lc-fa-op-tool { flex: none; font-size: 11px; padding: 0 6px; border-radius: 4px; background: var(--dsw-alias-bg-layer-2); border: 1px solid var(--dsw-alias-border-l1); color: var(--dsw-alias-label-secondary); }
+.lc-fa-op-detail { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--dsw-alias-label-secondary); }
+.lc-fa-more { padding: 2px 6px; color: var(--dsw-alias-label-secondary); font-size: 11px; }
+.lc-fa-note { margin-top: 8px; color: var(--dsw-alias-label-secondary); font-size: 12px; }
 .lc-empty { color: var(--dsw-alias-label-secondary); padding: 18px 0; text-align: center; }
 .lc-error { display: flex; flex-direction: column; align-items: center; gap: 8px; padding: 40px 16px; }
 .lc-error-msg { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12px; color: var(--dsw-alias-state-error-primary); background: var(--dsw-alias-bg-layer-2); border: 1px solid var(--dsw-alias-border-l1); border-radius: 6px; padding: 4px 8px; max-width: 100%; overflow-wrap: anywhere; }

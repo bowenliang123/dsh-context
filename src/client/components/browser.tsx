@@ -703,7 +703,7 @@ export function makeContextBrowser(
             <ToolSchema description={tool.description} schema={tool.schema} rich={rich} lines={lineLabel} labels={labels} />)
         })
       }
-      // List surface nodes newest first, mirroring the NodeList card.
+      // List surface nodes newest first (the live surface's reading order).
       /* v8 ignore next 1 -- the body renders only when the category is open,
          which requires count > 0 ⟺ byCat[c] exists; defensive. */
       const nodes = (byCat[c as Category] ?? []).slice().reverse()
