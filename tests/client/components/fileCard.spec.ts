@@ -45,7 +45,7 @@ function richActivity(over: Partial<FileActivity> = {}): FileActivity {
       entry('solo.md', { writes: 1, added: 5, ops: [fileOp(8, 'write', 'write', { added: 5, time: undefined })] }),
       entry('/var/many.log', {
         reads: 9,
-        ops: Array.from({ length: 9 }, (_, i) => fileOp(20 + i, 'read', 'read')),
+        ops: Array.from({ length: 9 }, (_, i) => fileOp(28 - i, 'read', 'read')),
       }),
     ],
     totals: {
@@ -64,6 +64,12 @@ function richActivity(over: Partial<FileActivity> = {}): FileActivity {
 function chipByLabel(container: ParentNode, label: string): HTMLElement {
   const hit = queryAll(container, '.lc-fa-ctl .lc-gran-btn').find(b => text(b).startsWith(label))
   if (hit === undefined) throw new Error(`chip not found: ${label}`)
+  return hit
+}
+
+function rowByTitle(container: ParentNode, title: string): HTMLElement {
+  const hit = queryAll(container, '.lc-fa-row').find(r => r.title === title)
+  if (hit === undefined) throw new Error(`row not found: ${title}`)
   return hit
 }
 
@@ -115,16 +121,22 @@ describe('FileCard — header, rows, and filters', () => {
 
     const rows = queryAll(m.container, '.lc-fa-row')
     assert.equal(rows.length, 5)
-    const first = text(rows[0])
+    // Default order is most-active first: many.log (9 ops) → a.ts (4) → the one-op files by recency.
+    assert.deepEqual(rows.map(r => r.title), ['/var/many.log', '/src/a.ts', '/shots/ui.png', 'solo.md', '/src/'])
     // Path split: muted dir + bold base; every badge and the row delta.
-    assert.ok(rows[0].querySelector('.lc-fa-path em')?.textContent === '/src/')
-    assert.ok(rows[0].querySelector('.lc-fa-path b')?.textContent === 'a.ts')
-    assert.ok(first.includes('2')) // read ×2 badge
-    assert.equal(queryAll(rows[0], '.lc-fa-badge').length, 2) // read + write
-    assert.ok(first.includes('+2') && first.includes('−3'))
-    assert.ok(rows[0].querySelector('.lc-br-err-dot') !== null)
-    assert.ok(rows[0].querySelector('.lc-fa-time') !== null)
-    assert.equal(rows[0].title, '/src/a.ts')
+    const first = rows[0]
+    assert.ok(first.querySelector('.lc-fa-path em')?.textContent === '/var/')
+    assert.ok(first.querySelector('.lc-fa-path b')?.textContent === 'many.log')
+    assert.ok(text(first).includes('9')) // read ×9 badge
+    assert.equal(queryAll(first, '.lc-fa-badge').length, 1) // read only
+    assert.ok(first.querySelector('.lc-fa-time') !== null)
+    const aRow = rowByTitle(m.container, '/src/a.ts')
+    assert.ok(aRow.querySelector('.lc-fa-path em')?.textContent === '/src/')
+    assert.ok(aRow.querySelector('.lc-fa-path b')?.textContent === 'a.ts')
+    assert.equal(queryAll(aRow, '.lc-fa-badge').length, 2) // read + write
+    assert.ok(text(aRow).includes('+2') && text(aRow).includes('−3'))
+    assert.ok(aRow.querySelector('.lc-br-err-dot') !== null)
+    assert.ok(aRow.title === '/src/a.ts')
     // The directory row trims its trailing slash for display.
     const dirRow = rows.find(r => r.title === '/src/')
     assert.ok(dirRow !== undefined)
@@ -152,7 +164,7 @@ describe('FileCard — header, rows, and filters', () => {
     await click(chipByLabel(m.container, 'Images'))
     assert.deepEqual(paths(), ['/shots/ui.png'])
     await click(chipByLabel(m.container, 'Read'))
-    assert.deepEqual(paths(), ['/src/a.ts', '/shots/ui.png', '/var/many.log'])
+    assert.deepEqual(paths(), ['/var/many.log', '/src/a.ts', '/shots/ui.png'])
     await click(chipByLabel(m.container, 'Read'))
     assert.equal(paths().length, 5)
     await m.unmount()
@@ -169,6 +181,23 @@ describe('FileCard — header, rows, and filters', () => {
     assert.equal(queryAll(m.container, '.lc-fa-row').length, 5)
     await m.unmount()
   })
+
+  test('the sort toggle defaults to most-active and switches to latest', async () => {
+    const m = await mount(h(FileCard, { activity: richActivity(), scope: 'live' }))
+    const titles = () => queryAll(m.container, '.lc-fa-row').map(r => r.title)
+    const sortBtns = queryAll(m.container, '.lc-fa-sort .lc-gran-btn')
+    assert.equal(sortBtns.length, 2)
+    // Count order by default: 9 ops → 4 ops → one-op files by recency.
+    assert.ok(sortBtns[0].className.includes('lc-gran-on'))
+    assert.deepEqual(titles(), ['/var/many.log', '/src/a.ts', '/shots/ui.png', 'solo.md', '/src/'])
+    // Latest order: many.log (seq 28) → ui.png (9) → solo.md (8) → a.ts (7) → /src/ (6).
+    await click(sortBtns[1])
+    assert.ok(sortBtns[1].className.includes('lc-gran-on'))
+    assert.deepEqual(titles(), ['/var/many.log', '/shots/ui.png', 'solo.md', '/src/a.ts', '/src/'])
+    await click(sortBtns[0])
+    assert.deepEqual(titles(), ['/var/many.log', '/src/a.ts', '/shots/ui.png', 'solo.md', '/src/'])
+    await m.unmount()
+  })
 })
 
 describe('FileCard — expansion and locate', () => {
@@ -179,7 +208,7 @@ describe('FileCard — expansion and locate', () => {
       scope: 'live',
       onLocate: op => { located.push(op.seq) },
     }))
-    const row = queryAll(m.container, '.lc-fa-row')[0]
+    const row = rowByTitle(m.container, '/src/a.ts')
     await click(row)
     const ops = queryAll(m.container, '.lc-fa-op')
     assert.equal(ops.length, 4)
@@ -194,7 +223,7 @@ describe('FileCard — expansion and locate', () => {
     await click(ops[1])
     assert.deepEqual(located, [5])
     assert.ok(query(m.container, '.lc-fa-ops') !== null)
-    await click(queryAll(m.container, '.lc-fa-row')[0])
+    await click(rowByTitle(m.container, '/src/a.ts'))
     assert.equal(queryAll(m.container, '.lc-fa-ops').length, 0)
     await m.unmount()
   })
@@ -202,11 +231,11 @@ describe('FileCard — expansion and locate', () => {
   test('a search op shows its pattern detail; the log caps at eight with an overflow line', async () => {
     const m = await mount(h(FileCard, { activity: richActivity(), scope: 'live' }))
     // The directory row: one grep op with its searched pattern.
-    await click(queryAll(m.container, '.lc-fa-row')[2])
+    await click(rowByTitle(m.container, '/src/'))
     assert.ok(text(query(m.container, '.lc-fa-ops')).includes('needle'))
     // The nine-read log renders eight rows plus the "+1 earlier ops" line
     // (one expanded file at a time: this click collapsed the directory row).
-    await click(queryAll(m.container, '.lc-fa-row')[4])
+    await click(rowByTitle(m.container, '/var/many.log'))
     const many = query(m.container, '.lc-fa-ops')
     assert.equal(queryAll(many, '.lc-fa-op').length, 8)
     assert.ok(text(many).includes('+1 earlier ops'))

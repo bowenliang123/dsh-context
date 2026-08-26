@@ -18,6 +18,8 @@ import type { ViewKit } from '../viewkit'
 import { React } from '../react'
 
 export type FileFilter = 'all' | FileOpKind | 'image'
+/** Row order: most operations first (default) or most-recently-touched first. */
+export type FileSort = 'count' | 'latest'
 
 export interface FileCardProps {
   activity: FileActivity
@@ -58,11 +60,17 @@ export function makeFileCard(kit: ViewKit): (props: FileCardProps) => ReactNS.Re
   return function FileCard(props: FileCardProps): ReactNS.ReactElement {
     const { activity } = props
     const [filter, setFilter] = React.useState<FileFilter>('all')
+    const [sort, setSort] = React.useState<FileSort>('count')
     const [query, setQuery] = React.useState('')
     const [openPath, setOpenPath] = React.useState<string | null>(null)
 
     const q = query.trim().toLowerCase()
-    const shown = activity.entries.filter(e => matches(e, filter) && (q === '' || e.path.toLowerCase().includes(q)))
+    /* The fold serves entries latest-first; the sort toggle re-orders the filtered copy (never the source array). */
+    const shown = activity.entries
+      .filter(e => matches(e, filter) && (q === '' || e.path.toLowerCase().includes(q)))
+      .sort((a, b) => sort === 'count'
+        ? (b.ops.length - a.ops.length) || (b.ops[0].seq - a.ops[0].seq)
+        : b.ops[0].seq - a.ops[0].seq)
 
     const chips: { key: FileFilter; files: number; ops: number }[] = [
       {
@@ -127,6 +135,18 @@ export function makeFileCard(kit: ViewKit): (props: FileCardProps) => ReactNS.Re
                   <span className="lc-fa-meta-tip" role="tooltip">{t('files.deltaTip')}</span>
                 </span>
               ) : null}
+              <span className="lc-gran lc-fa-sort" role="group" title={t('files.sortTip')}>
+                {(['count', 'latest'] as const).map(k => (
+                  <button
+                    key={k}
+                    type="button"
+                    className={'lc-gran-btn' + (sort === k ? ' lc-gran-on' : '')}
+                    onClick={() => { setSort(k) }}
+                  >
+                    {t('files.sort.' + k)}
+                  </button>
+                ))}
+              </span>
             </div>
             {shown.length === 0 ? (
               <div className="lc-empty">{t('files.noMatch')}</div>
