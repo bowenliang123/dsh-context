@@ -1,10 +1,10 @@
 /**
  * TrendChart (src/client/components/trendChart.tsx) rendered with the REAL React 18 tree in jsdom: stacked step bars,
- * turn aggregation, total/delta geometry, compaction/prune markers, hover tooltips, scroll edge fades, and turn-label
+ * turn aggregation, total/delta geometry, compaction/prune markers, hover tooltips, scroll anchoring, and turn-label
  * centering. The pure helpers (aggregateByTurn/attachMarkers) are also driven directly.
  *
  * jsdom reports zero layout metrics, so beforeAll overrides them (scrollWidth follows the bar count, clientWidth is
- * test-controlled, the scrollLeft setter dispatches a real scroll event in a microtask) — the overflow/edge-fade
+ * test-controlled, the scrollLeft setter dispatches a real scroll event in a microtask) — the overflow/scroll-anchor
  * logic runs FOR REAL — and afterAll restores the originals.
  *
  * Note: the 'trend.empty' panel and the defaultGranularity/defaultTrendMode settings reads live in the PARENT
@@ -138,13 +138,12 @@ async function scrollEvent(el: Element): Promise<void> {
 }
 
 describe('TrendChart empty history', () => {
-  test('renders the chart frame with no bars, no turn blocks, and no edge fades', async () => {
+  test('renders the chart frame with no bars and no turn blocks', async () => {
     // The 'trend.empty' placeholder is the parent's (contextView) render arm; with zero requests the chart itself
     // renders an empty frame: unit axis (maxTotal floors at 1), empty scroll content, empty turn strip.
     const m = await mount(h(TrendChart, propsOf([])))
     assert.equal(bars(m.container).length, 0)
     assert.equal(queryAll(m.container, '.lc-turn').length, 0)
-    assert.equal(queryAll(m.container, '.lc-chart-fade').length, 0)
     assert.equal(query(m.container, '.lc-axis-top').textContent, '1')
     assert.equal(query(m.container, '.lc-axis-mid').textContent, '1')
     assert.equal(query(m.container, '.lc-axis-bot').textContent, '0')
@@ -470,7 +469,7 @@ describe('TrendChart tooltips', () => {
   })
 })
 
-describe('TrendChart edge fades and scroll anchoring', () => {
+describe('TrendChart scroll anchoring', () => {
   function manySteps(): RequestRecord[] {
     const out: RequestRecord[] = []
     for (let i = 0; i < 40; i++) {
@@ -479,28 +478,16 @@ describe('TrendChart edge fades and scroll anchoring', () => {
     return out
   }
 
-  test('overflow drives both/neither fades for real; the end-anchor sticks only near the end', async () => {
+  test('the end-anchor sticks only near the end', async () => {
     const reqs = manySteps()
     const { handlers } = makeSpies()
     const m = await mount(h(TrendChart, propsOf(reqs, handlers)))
     await flush()
     const scroll = query<LayoutEl>(m.container, '.lc-chart-scroll')
 
-    // scrollWidth 640 vs clientWidth 400: mount anchors to the newest (right) edge → left fade only.
+    // scrollWidth 640 vs clientWidth 400: mount anchors to the newest (right) edge.
     assert.equal(scroll.scrollLeft, 240)
-    assert.equal(queryAll(m.container, '.lc-chart-fade-l').length, 1)
-    assert.equal(queryAll(m.container, '.lc-chart-fade-r').length, 0)
-
-    // Left edge: right fade only. Middle: both. A repeat scroll event with unchanged geometry keeps state.
-    await scrollTo(scroll, 0)
-    assert.equal(queryAll(m.container, '.lc-chart-fade-l').length, 0)
-    assert.equal(queryAll(m.container, '.lc-chart-fade-r').length, 1)
     await scrollTo(scroll, 100)
-    assert.equal(queryAll(m.container, '.lc-chart-fade-l').length, 1)
-    assert.equal(queryAll(m.container, '.lc-chart-fade-r').length, 1)
-    await scrollEvent(scroll)
-    assert.equal(queryAll(m.container, '.lc-chart-fade-l').length, 1)
-    assert.equal(queryAll(m.container, '.lc-chart-fade-r').length, 1)
 
     // An unrelated (selection-only) update mid-scroll does NOT re-anchor (100 + 400 < 640 - 24), and the chart
     // also stays put when the same selection-only update fires NEAR the right edge — only a real data push
@@ -541,8 +528,6 @@ describe('TrendChart edge fades and scroll anchoring', () => {
     await m.update(h(TrendChart, propsOf(grown, handlers)))
     await flush()
     assert.equal(scroll.scrollLeft, 256, 'near-edge reader follows the appended bar')
-    assert.equal(queryAll(m.container, '.lc-chart-fade-l').length, 1)
-    assert.equal(queryAll(m.container, '.lc-chart-fade-r').length, 0)
 
     // A push while the reader is mid-chart leaves them where they were — no auto-follow yank.
     await scrollTo(scroll, 100)
@@ -558,20 +543,18 @@ describe('TrendChart edge fades and scroll anchoring', () => {
     const { handlers } = makeSpies()
     const m = await mount(h(TrendChart, propsOf(reqs, { ...handlers, granularity: 'step' })))
     await flush()
-    assert.equal(queryAll(m.container, '.lc-chart-fade-l').length, 1)
+    assert.equal(query(m.container, '.lc-chart-scroll').scrollLeft, 240)
 
-    // Step → turn: 4 aggregated bars fit the viewport — the stale left edge must not survive the switch.
+    // Step → turn: 4 aggregated bars fit the viewport.
     await m.update(h(TrendChart, propsOf(aggregateByTurn(reqs), { ...handlers, granularity: 'turn' })))
     await flush()
     assert.equal(bars(m.container).length, 4)
-    assert.equal(queryAll(m.container, '.lc-chart-fade').length, 0)
 
     // Turn → step re-anchors to the newest bars again.
     await m.update(h(TrendChart, propsOf(reqs, { ...handlers, granularity: 'step' })))
     await flush()
     assert.equal(bars(m.container).length, 40)
     assert.equal(query(m.container, '.lc-chart-scroll').scrollLeft, 240)
-    assert.equal(queryAll(m.container, '.lc-chart-fade-l').length, 1)
     await m.unmount()
   })
 
@@ -588,8 +571,6 @@ describe('TrendChart edge fades and scroll anchoring', () => {
       const scroll = query<LayoutEl>(m.container, '.lc-chart-scroll')
       assert.ok(spies.focusHandled >= 1)
       assert.equal(scroll.scrollLeft, 8) // 1 * 16 + 7 - 30/2
-      assert.equal(queryAll(m.container, '.lc-chart-fade-l').length, 1)
-      assert.equal(queryAll(m.container, '.lc-chart-fade-r').length, 1)
 
       const before = spies.focusHandled
       await m.update(h(TrendChart, propsOf(agg, { ...handlers, granularity: 'turn', focusTurn: 99 })))

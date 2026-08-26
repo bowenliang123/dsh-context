@@ -87,14 +87,12 @@
 .lc-axis-top { top: 13px; }
 .lc-axis-mid { top: 69px; }
 .lc-axis-bot { top: 125px; }
-/* Positioned wrapper owning the chart viewport: the scroller holds ONLY the scrolling content, while the edge fades and the hover
-   tip sit beside it anchored here — absolutely-positioned children of a scroller would contribute to its scrollable overflow (a wide
-   tooltip once flapped the horizontal scrollbar per hover) AND translate away with the content on scroll. */
+/* Positioned wrapper owning the chart viewport: the scroller holds ONLY the scrolling content, while the hover
+   tip sits beside it anchored here — absolutely-positioned children of a scroller would contribute to its
+   scrollable overflow (a wide tooltip once flapped the horizontal scrollbar per hover) AND translate away with
+   the content on scroll. */
 .lc-chart-wrap { position: relative; flex: 1; min-width: 0; }
 .lc-chart-scroll { overflow-x: auto; overflow-y: hidden; scrollbar-width: thin; scrollbar-gutter: stable; padding-bottom: 8px; }
-.lc-chart-fade { position: absolute; top: 0; bottom: 0; width: 26px; pointer-events: none; z-index: 2; }
-.lc-chart-fade-l { left: 0; background: linear-gradient(to right, var(--dsw-alias-bg-layer-1), transparent); }
-.lc-chart-fade-r { right: 0; background: linear-gradient(to left, var(--dsw-alias-bg-layer-1), transparent); }
 .lc-chart { position: relative; display: flex; align-items: flex-end; gap: 2px; height: 130px; padding-top: 18px; box-sizing: border-box; width: max-content; min-width: 100%; }
 .lc-grid { position: absolute; left: 0; right: 0; border-top: 1px dashed var(--dsw-alias-border-l1); pointer-events: none; }
 .lc-grid-top { top: 18px; }

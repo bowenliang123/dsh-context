@@ -247,7 +247,7 @@ export function makeTrendChart(kit: ViewKit): (props: TrendChartProps) => ReactN
 
     // Default anchor: newest bars at the RIGHT edge; the first layout after mount scrolls unconditionally, a GRANULARITY SWITCH re-anchors
     // the same way (step mode must not inherit the turn chart's stale left edge), otherwise stick to the end only while already near it;
-    // useLayoutEffect avoids a first-paint flash and edge fades stay in sync.
+    // useLayoutEffect avoids a first-paint flash.
     const scrollRef = React.useRef<HTMLDivElement | null>(null)
     const scrolledOnce = React.useRef(false)
     const lastGranRef = React.useRef(props.granularity)
@@ -259,18 +259,6 @@ export function makeTrendChart(kit: ViewKit): (props: TrendChartProps) => ReactN
     // has to compare against the width as it was BEFORE the new bar landed — by the time the layout effect runs,
     // `el.scrollWidth` is already the new (wider) value, so a near-edge check against it would miss the auto-follow.
     const prevScrollWidthRef = React.useRef(0)
-    const [edges, setEdges] = React.useState<{ left: boolean; right: boolean }>({ left: false, right: false })
-    // Mirror of the last computed fades: the layout effect dispatches setState only on true change, so a same-value
-    // dispatch during a granularity switch's pending lanes does not disable React's eager bailout (React error #185).
-    const edgesRef = React.useRef(edges)
-    const updateEdges = (el: HTMLDivElement): void => {
-      const left = el.scrollLeft > 4
-      const right = el.scrollLeft + el.clientWidth < el.scrollWidth - 4
-      const prev = edgesRef.current
-      if (prev.left === left && prev.right === right) return
-      edgesRef.current = { left, right }
-      setEdges({ left, right })
-    }
     /**
      * Keep each turn label centered within its block's VISIBLE slice so it never scrolls out while any part of the block is on screen
      * (narrower-than-label blocks stay put); reads (offsetWidth) batch before writes (transform) to avoid layout thrash — out-of-view
@@ -332,7 +320,6 @@ export function makeTrendChart(kit: ViewKit): (props: TrendChartProps) => ReactN
       }
       lastSeqRef.current = newestSeq
       prevScrollWidthRef.current = el.scrollWidth
-      updateEdges(el)
       updateTurnLabels(el)
       syncTip(el)
     }, [props.granularity, props.focusTurn, requests])
@@ -412,16 +399,14 @@ export function makeTrendChart(kit: ViewKit): (props: TrendChartProps) => ReactN
             </>
           )}
         </div>
-        {/* Only the scrolling CONTENT lives under .lc-chart-scroll; the edge fades and the hover tip sit beside it
-            inside the positioned wrapper instead of inside the scroller — absolutely-positioned children of a
-            scroller contribute to its scrollable overflow AND translate away with the content on scroll (which once
-            made the left fade drift off-screen exactly when shown). */}
+        {/* Only the scrolling CONTENT lives under .lc-chart-scroll; the hover tip sits beside it inside the
+            positioned wrapper instead of inside the scroller — absolutely-positioned children of a scroller
+            contribute to its scrollable overflow AND translate away with the content on scroll. */}
         <div className="lc-chart-wrap">
           <div
             className={'lc-chart-scroll' + (props.activeTurn !== null ? ' lc-chart-dim' : '')}
             ref={scrollRef}
             onScroll={(e: ReactNS.UIEvent<HTMLDivElement>) => {
-              updateEdges(e.currentTarget)
               updateTurnLabels(e.currentTarget)
               syncTip(e.currentTarget)
             }}
@@ -474,8 +459,6 @@ export function makeTrendChart(kit: ViewKit): (props: TrendChartProps) => ReactN
               })}
             </div>
           </div>
-          {edges.left ? <div className="lc-chart-fade lc-chart-fade-l" /> : null}
-          {edges.right ? <div className="lc-chart-fade lc-chart-fade-r" /> : null}
           {/* Compact single-line hover tooltip, shown instantly by the custom `.lc-chart-tip` (the native title is delayed):
               position, time, estimated total, provider prompt when available; the per-category breakdown lives in the detail
               panel below. Positioned imperatively over its bar's visible slice (syncTip) so scrolling keeps it glued without
