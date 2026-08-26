@@ -205,7 +205,7 @@ button.lc-brief-row-link { cursor: pointer; }
  an ellipsis; without it a narrow card pushes the value over the label.
  */
 .lc-pi-value { min-width: 0; color: var(--dsw-alias-label-primary); font-size: 13px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; text-align: right; }
-.lc-events, .lc-fa-list { display: flex; flex-direction: column; gap: 2px; max-height: 320px; overflow-y: auto; }
+.lc-events, .lc-fa-list { display: flex; flex-direction: column; gap: 2px; height: 320px; overflow-y: auto; }
 .lc-event { display: flex; align-items: center; gap: 8px; padding: 3px 0; }
 .lc-event-icon { width: 18px; text-align: center; color: var(--dsw-alias-state-warn-primary); }
 .lc-event-icon.lc-event-inject { color: #a855f7; }
