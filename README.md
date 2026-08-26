@@ -99,6 +99,18 @@ Not what the context is made of, but what it was good for: one row per touched f
 - **Sorted your way** — **Most active**, **Latest**, or **By path**; each row carries per-purpose badges, its cumulative line delta, the last operation's time, and a red dot when an operation failed.
 - **Click to inspect** — a row expands into the file's own operation log — every operation, no cap (tool, time, per-op delta, failures flagged); each operation jumps straight to the exact tool result in the Context browser.
 
+### 🕸 Agent Network — the whole agent family at the foot of the tab
+
+The current agent, its parents, and every subagent it spawned — one node per agent, edges for the parent→child lineage:
+
+![Agent network card](https://raw.githubusercontent.com/bowenliang123/dsh-context/main/docs/agent-network.png)
+
+- **A donut per agent** — each node's ring is that session's own context composition (same six categories and estimator as the overview card), wrapped by an **occupancy ring** (green → amber → red as the context window fills); the center shows the fill percentage.
+- **Live status at a glance** — a pulsing green dot for running agents, a blue dot for finished ones, and header chips for the family totals (agents, running, combined context tokens).
+- **Hover for the story** — the inspector strip shows the hovered agent's full name, lifecycle mode (one-shot / continuable), occupancy, request count, billed tokens, and active time.
+- **Click to jump** — any node opens that agent's session (the breadcrumb switches to it), so you can inspect a subagent's own Context tab and hop back.
+- **Zero extra traffic** — the card rides the harness's session-list lineage and per-session projection baselines (`contextTimeline`, token-meter, subagent identity/timing), updating live as agents spawn, run, and finish.
+
 ### 🧭 Context browser — open the box of any request
 
 Pick **Live (next request)** or any retained step from the picker, and browse what that request was actually assembled from:

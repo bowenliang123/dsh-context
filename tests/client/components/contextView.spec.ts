@@ -107,6 +107,14 @@ describe('ContextView — projection guards', () => {
     await m3.unmount()
   })
 
+  test('renders the full tab without a session id (the agent card anchors nothing)', async () => {
+    const View = makeView(new TestClientCtx())
+    const m = await mount(h(View, { useProjection: projectionsFor(timeline()) }))
+    assert.ok(text(m.container).includes(DICT_EN['overview.title']))
+    assert.ok(text(m.container).includes(DICT_EN.footer))
+    await m.unmount()
+  })
+
   test('a corrupt timeline is sanitized and the whole tab still renders empty-section states', async () => {
     const View = makeView(new TestClientCtx())
     const m = await mount(h(View, {

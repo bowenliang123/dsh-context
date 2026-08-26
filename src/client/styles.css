@@ -411,3 +411,40 @@ button.lc-brief-row-link { cursor: pointer; }
 .lc-att-lightbox-img { position: relative; max-width: min(100%, 1600px); max-height: calc(100vh - 80px); object-fit: contain; border-radius: 12px; background: var(--dsw-specific-input-major, var(--dsw-alias-bg-layer-1)); box-shadow: var(--dsw-shadow-lv3, 0 12px 32px rgba(0, 0, 0, 0.4)); }
 .lc-att-lightbox-close { position: fixed; top: 20px; right: 20px; z-index: 1; display: grid; place-items: center; width: 36px; height: 36px; padding: 0; border: 1px solid var(--dsw-alias-border-l2-darkmode-thin, var(--dsw-alias-border-l1)); border-radius: 999px; background: var(--dsw-specific-input-major, var(--dsw-alias-bg-layer-1)); color: var(--dsw-alias-label-primary); cursor: pointer; }
 [data-conversation-scroll]:has(.lc-root) > [data-composer-seat]:not(:has([data-approval-key], [data-question-key], [data-plan-review-key])) { display: none; }
+/* ---- Agent network card: session-family graph at the foot of the Context tab ---- */
+.lc-agents-chips { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 10px; }
+.lc-agents-chip { font-size: 11px; padding: 2px 8px; border-radius: 999px; background: var(--dsw-alias-bg-layer-2); border: 1px solid var(--dsw-alias-border-l1); color: var(--dsw-alias-label-secondary); font-variant-numeric: tabular-nums; }
+.lc-agents-chip-on { color: var(--dsw-alias-state-success-primary); border-color: color-mix(in srgb, var(--dsw-alias-state-success-primary) 40%, transparent); }
+.lc-agents-stage { overflow-x: auto; margin: 0 -4px; padding: 0 4px; }
+.lc-agents-svg { display: block; margin: 0 auto; max-width: none; }
+.lc-agents-link { stroke: color-mix(in srgb, var(--dsw-alias-label-secondary) 45%, transparent); stroke-width: 1.5; }
+.lc-agents-link-on { stroke: var(--dsw-alias-state-success-primary); stroke-dasharray: 5 4; animation: lc-agent-flow 1.2s linear infinite; }
+@keyframes lc-agent-flow { to { stroke-dashoffset: -9; } }
+.lc-agent-node { outline: none; }
+.lc-agent-clickable { cursor: pointer; }
+.lc-agent-halo { fill: transparent; transition: fill 120ms ease; }
+.lc-agent-hover .lc-agent-halo, .lc-agent-node:focus-visible .lc-agent-halo { fill: var(--dsw-alias-interactive-bg-hover, var(--dsw-alias-bg-layer-2)); }
+.lc-agent-self .lc-agent-halo { fill: var(--dsw-alias-bg-layer-2); }
+.lc-agent-track { fill: var(--dsw-alias-bg-layer-1); stroke: var(--dsw-alias-border-l1); stroke-width: 3; }
+.lc-agent-self .lc-agent-track { stroke: var(--dsw-alias-brand-primary, var(--dsw-alias-label-primary)); }
+.lc-agent-ring { fill: none; stroke-width: 3; stroke-linecap: round; transition: stroke-dasharray 300ms ease; }
+.lc-agent-seg { fill: none; stroke-width: 7; transition: stroke-dasharray 300ms ease, stroke-dashoffset 300ms ease; }
+.lc-agent-pct { font-size: 11px; font-weight: 600; fill: var(--dsw-alias-label-primary); font-variant-numeric: tabular-nums; pointer-events: none; }
+/* The caption is HTML inside a foreignObject, so long agent names wrap freely instead of truncating. */
+.lc-agent-caption { width: 100%; text-align: center; pointer-events: none; line-height: 1.25; }
+.lc-agent-label { font-size: 11px; color: var(--dsw-alias-label-primary); overflow-wrap: anywhere; }
+.lc-agent-tokens { font-size: 10px; color: var(--dsw-alias-label-secondary); font-variant-numeric: tabular-nums; }
+.lc-agent-dot { display: inline-block; width: 8px; height: 8px; flex: none; border-radius: 999px; background: var(--dsw-alias-border-l1); fill: var(--dsw-alias-border-l1); }
+.lc-agent-dot-on { background: var(--dsw-alias-state-success-primary); fill: var(--dsw-alias-state-success-primary); animation: lc-agent-pulse 1.6s ease-in-out infinite; }
+.lc-agent-dot-done { background: var(--dsw-alias-brand-primary, #3b82f6); fill: var(--dsw-alias-brand-primary, #3b82f6); }
+@keyframes lc-agent-pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.35; } }
+.lc-agents-solo { padding: 4px 0 10px; }
+.lc-agents-inspector { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 8px; min-width: 0; margin-top: 10px; padding: 7px 10px; border: 1px solid var(--dsw-alias-border-l1); border-radius: 8px; background: var(--dsw-alias-bg-layer-2); font-size: 12px; }
+.lc-agents-inspector .lc-agent-dot { align-self: center; }
+.lc-agents-inspector-name { color: var(--dsw-alias-label-primary); overflow-wrap: anywhere; }
+.lc-agents-badge { flex: none; font-size: 10px; padding: 1px 6px; border-radius: 999px; background: var(--dsw-alias-bg-layer-1); border: 1px solid var(--dsw-alias-border-l1); color: var(--dsw-alias-label-secondary); }
+.lc-agents-inspector-stats { color: var(--dsw-alias-label-secondary); font-variant-numeric: tabular-nums; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.lc-agents-inspector-open { margin-left: auto; flex: none; color: var(--dsw-alias-brand-primary, #3b82f6); }
+.lc-agents-legend { display: flex; flex-wrap: wrap; gap: 4px 14px; margin-top: 8px; font-size: 11px; color: var(--dsw-alias-label-secondary); }
+.lc-agents-legend-item { display: inline-flex; align-items: center; gap: 5px; }
+.lc-agents-legend-item i { width: 8px; height: 8px; border-radius: 2px; }

@@ -8,7 +8,7 @@ import type { ContextEventRecord, RequestRecord, SurfaceNode } from '../../share
 import { briefNodes, briefOf, replyTipsOf } from '../brief'
 import { headlineOf } from '../headline'
 import type { SessionStandardProps } from '../services'
-import { contextBreakdownOf, contextPressureOf, headersOf, timelineOf, tokenUsageOf } from '../services'
+import { contextBreakdownOf, contextPressureOf, headersOf, numOf, timelineOf, tokenUsageOf } from '../services'
 import type { ClientCtx, ConversationFace, ConversationNodeLike, ImageRefLike } from '../services'
 import { makeContentFetcher } from '../historyPage'
 import { activityOf, locateStepOf } from '../fileActivity'
@@ -16,6 +16,7 @@ import type { FileOp } from '../fileActivity'
 import type { ContextSettings } from '../settings'
 import type { ViewKit } from '../viewkit'
 import { makeContextBrowser } from './browser'
+import { makeAgentGraph } from './agentGraph'
 import { makeCurrentComposition } from './currentComposition'
 import { makeEventList } from './events'
 import { makeFileCard } from './fileCard'
@@ -53,6 +54,7 @@ export function makeContextView(
   const StatsBoard = makeStatsBoard(kit)
   const PluginInfo = makePluginInfo(kit)
   const ContextBrowser = makeContextBrowser(kit, StackedBar)
+  const AgentGraph = makeAgentGraph(ctx, kit)
   const ErrorBoundary = makeErrorBoundary(t)
 
   // The body renders under the error boundary: a corrupt projection value (past the timelineOf shape guard) degrades to a styled error
@@ -395,6 +397,16 @@ export function makeContextView(
           </div>
           <FileCard activity={fileActivity} scope={fileScope} onLocate={locateFileOp} />
         </div>
+
+        <AgentGraph
+          sessionId={typeof sessionId === 'string' ? sessionId : undefined}
+          self={{
+            head,
+            billed: usage !== null ? numOf(usage.uncachedInputTokens) + numOf(usage.outputTokens)
+              + numOf(usage.cacheReadTokens) + numOf(usage.cacheWriteTokens) : null,
+            requests: requests.length,
+          }}
+        />
 
         <div className="lc-foot">{t('footer')}</div>
       </div>
