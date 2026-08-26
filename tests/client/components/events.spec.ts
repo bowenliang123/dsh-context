@@ -149,6 +149,43 @@ describe('EventList', () => {
     await m.unmount()
   })
 
+  test('a resize while the list is empty (no rows, no root) does not throw', async () => {
+    const m = await mount(h(EventList, { events: [] }))
+    await act(async () => {
+      window.dispatchEvent(new Event('resize'))
+    })
+    assert.ok(text(m.container).includes('No context events yet'))
+    // The same listener keeps working once rows arrive (root was null at mount).
+    await m.update(h(EventList, { events: [ev({ seq: 1, kind: 'prune' })] }))
+    const label = query(m.container, '.lc-event-label')
+    Object.defineProperty(label, 'scrollWidth', { value: 100, configurable: true })
+    await act(async () => {
+      window.dispatchEvent(new Event('resize'))
+    })
+    assert.equal(label.getAttribute('title'), 'Tool output pruned')
+    await m.unmount()
+  })
+
+  test('an appended event keeps every existing row mounted (seq-keyed, newest prepends)', async () => {
+    const base = [
+      ev({ seq: 1, kind: 'inject', form: 'notice', name: 'first' }),
+      ev({ seq: 2, kind: 'prune' }),
+    ]
+    const m = await mount(h(EventList, { events: base }))
+    const before = queryAll(m.container, '.lc-event')
+    assert.equal(before.length, 2)
+
+    // A new event lands at the log tail → the row list prepends it; every old row must be the SAME DOM node
+    // (an index-bearing key would shift all keys and remount the whole list on every push).
+    await m.update(h(EventList, { events: [...base, ev({ seq: 3, kind: 'model', from: 'a', to: 'b' })] }))
+    const after = queryAll(m.container, '.lc-event')
+    assert.equal(after.length, 3)
+    assert.ok(after[0] !== before[0], 'the new event prepends a new row')
+    assert.equal(after[1], before[0], 'the previously-newest row keeps its DOM node')
+    assert.equal(after[2], before[1], 'the oldest row keeps its DOM node')
+    await m.unmount()
+  })
+
   test('empty → non-empty transition keeps the hook count stable (issue #12)', async () => {
     const m = await mount(h(EventList, { events: [] }))
     assert.ok(text(m.container).includes('No context events yet'))
