@@ -501,19 +501,21 @@ describe('TrendChart edge fades and scroll anchoring', () => {
     assert.equal(queryAll(m.container, '.lc-chart-fade-l').length, 1)
     assert.equal(queryAll(m.container, '.lc-chart-fade-r').length, 1)
 
-    // An unrelated update mid-scroll does NOT re-anchor (100 + 400 < 640 - 24).
+    // An unrelated (selection-only) update mid-scroll does NOT re-anchor (100 + 400 < 640 - 24), and the chart
+    // also stays put when the same selection-only update fires NEAR the right edge — only a real data push
+    // (a new request appended, or a granularity/focus switch) may follow the newest bar, so a hover/select
+    // change never flashes the column.
     await m.update(h(TrendChart, propsOf(reqs, { ...handlers, selectedSeq: 1 })))
     assert.equal(scroll.scrollLeft, 100)
-    // …but near the end (230 + 400 >= 640 - 24) the next render sticks to the newest edge.
     await scrollTo(scroll, 230)
     await m.update(h(TrendChart, propsOf(reqs, { ...handlers, selectedSeq: 2 })))
     await flush()
-    assert.equal(scroll.scrollLeft, 240)
-    assert.equal(queryAll(m.container, '.lc-chart-fade-l').length, 1)
-    assert.equal(queryAll(m.container, '.lc-chart-fade-r').length, 0)
+    assert.equal(scroll.scrollLeft, 230, 'selection-only update near the end does not stick')
 
-    // Turn labels re-center within their visible slice: T2 is half-clipped at the left → shifted right;
-    // T3 is fully visible and centered → no transform; T1 is fully out of view → untouched.
+    // Turn labels re-center within their visible slice: with the reader at scrollLeft 240, T2 is half-clipped
+    // at the left → shifted right; T3 is fully visible and centered → no transform; T1 is fully out of view
+    // → untouched.
+    await scrollTo(scroll, 240)
     const labels = queryAll(m.container, '.lc-turn-label')
     assert.equal(labels.length, 4)
     assert.equal(labels[1].style.transform, 'translateX(40px)')
@@ -521,6 +523,32 @@ describe('TrendChart edge fades and scroll anchoring', () => {
     assert.equal(labels[0].style.transform, '')
     await scrollTo(scroll, 0)
     assert.equal(labels[1].style.transform, '', 'back at the left edge every block centers natively')
+    await m.unmount()
+  })
+
+  test('a data push follows the newest bar only when the reader was near the right edge', async () => {
+    const reqs = manySteps()
+    const { handlers } = makeSpies()
+    const m = await mount(h(TrendChart, propsOf(reqs, handlers)))
+    await flush()
+    const scroll = query<LayoutEl>(m.container, '.lc-chart-scroll')
+    // Mount anchors at the right edge (scrollLeft = 240 over scrollWidth 640 / clientWidth 400).
+    assert.equal(scroll.scrollLeft, 240)
+
+    // A new request appended while the reader sits at the right edge → follows the newest bar.
+    const grown = [...reqs, req(reqs.length + 1, { turn: 1 + Math.floor(reqs.length / 10), step: reqs.length % 10 })]
+    await m.update(h(TrendChart, propsOf(grown, handlers)))
+    await flush()
+    assert.equal(scroll.scrollLeft, 256, 'near-edge reader follows the appended bar')
+    assert.equal(queryAll(m.container, '.lc-chart-fade-l').length, 1)
+    assert.equal(queryAll(m.container, '.lc-chart-fade-r').length, 0)
+
+    // A push while the reader is mid-chart leaves them where they were — no auto-follow yank.
+    await scrollTo(scroll, 100)
+    const grown2 = [...grown, req(grown.length + 1, { turn: 1 + Math.floor(grown.length / 10), step: grown.length % 10 })]
+    await m.update(h(TrendChart, propsOf(grown2, handlers)))
+    await flush()
+    assert.equal(scroll.scrollLeft, 100, 'mid-scroll reader is not yanked back to the newest')
     await m.unmount()
   })
 

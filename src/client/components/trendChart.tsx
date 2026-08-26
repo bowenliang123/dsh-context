@@ -251,10 +251,17 @@ export function makeTrendChart(kit: ViewKit): (props: TrendChartProps) => ReactN
     const scrollRef = React.useRef<HTMLDivElement | null>(null)
     const scrolledOnce = React.useRef(false)
     const lastGranRef = React.useRef(props.granularity)
+    // The newest bar's seq (or 0 when the log is empty): the layout effect only re-runs when the right edge genuinely
+    // moves (new bar appended, granularity switched, focus turn set) — hover/select changes keep their scroll position
+    // so the chart does not flash with every keystroke.
+    const lastSeqRef = React.useRef(0)
+    // The scrollWidth measured during the PREVIOUS effect pass. The "was the reader near the right edge?" check
+    // has to compare against the width as it was BEFORE the new bar landed — by the time the layout effect runs,
+    // `el.scrollWidth` is already the new (wider) value, so a near-edge check against it would miss the auto-follow.
+    const prevScrollWidthRef = React.useRef(0)
     const [edges, setEdges] = React.useState<{ left: boolean; right: boolean }>({ left: false, right: false })
-    // Mirror of the last computed fades: the layout effect runs after EVERY render (no deps), so it must dispatch setState only on true
-    // change — a same-value dispatch during a granularity switch's pending lanes disables React's eager bailout and the queue grows
-    // unbounded (React error #185).
+    // Mirror of the last computed fades: the layout effect dispatches setState only on true change, so a same-value
+    // dispatch during a granularity switch's pending lanes does not disable React's eager bailout (React error #185).
     const edgesRef = React.useRef(edges)
     const updateEdges = (el: HTMLDivElement): void => {
       const left = el.scrollLeft > 4
@@ -298,6 +305,9 @@ export function makeTrendChart(kit: ViewKit): (props: TrendChartProps) => ReactN
       /* v8 ignore next 1 -- the scroll div renders unconditionally and React
          attaches refs before layout effects run; el is never null here. */
       if (el === null) return
+      const newestSeq = requests.length === 0 ? 0 : requests[requests.length - 1].seq
+      const grew = newestSeq !== lastSeqRef.current
+      const widthBeforeAppend = prevScrollWidthRef.current
       if (props.granularity !== lastGranRef.current) {
         lastGranRef.current = props.granularity
         scrolledOnce.current = false
@@ -311,16 +321,20 @@ export function makeTrendChart(kit: ViewKit): (props: TrendChartProps) => ReactN
           el.scrollLeft = Math.max(0, gi * (BAR_W + BAR_GAP) + BAR_W / 2 - el.clientWidth / 2)
         }
         props.onFocusTurnHandled()
-      }
-      if (!scrolledOnce.current) {
+      } else if (!scrolledOnce.current) {
         scrolledOnce.current = true
         el.scrollLeft = el.scrollWidth
-      } else if (el.scrollLeft + el.clientWidth >= el.scrollWidth - 24) {
+      } else if (grew && el.scrollLeft + el.clientWidth >= widthBeforeAppend - 24) {
+        // Only follow the latest bar when the right edge actually moved AND the reader was already near it
+        // BEFORE the new bar landed — comparing against the new scrollWidth would silently drop the stick for a
+        // mid-chart reader whose viewport just slid past the near-end threshold.
         el.scrollLeft = el.scrollWidth
       }
+      lastSeqRef.current = newestSeq
+      prevScrollWidthRef.current = el.scrollWidth
       updateEdges(el)
       updateTurnLabels(el)
-    })
+    }, [props.granularity, props.focusTurn, requests])
 
     // Compact single-line hover tooltip, shown instantly by the custom `.lc-chart-tip` (the native title is delayed): position, time,
     // estimated total, provider prompt when available; the per-category breakdown lives in the detail panel below.
