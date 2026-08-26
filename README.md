@@ -92,8 +92,11 @@ Every compaction, tool-output prune, skill or plugin context injection, model sw
 
 Not what the context is made of, but what it was good for: one row per touched file — read, written, or searched — aggregated up to the step you pick on the trend chart (the card scrubs live as you hover the bars; the default is the whole session to date):
 
+![File Activity card sorted by most active](https://raw.githubusercontent.com/bowenliang123/dsh-context/main/docs/file-activity.png)
+
 - **Per-purpose counts** — how many times each file was read, written, and searched, with the header chips doubling as purpose filters (**Read / Written / Searched**), an **Images** chip for the multimodal view (`read_image` calls and image extensions), and a path search box.
 - **Line deltas** — every `edit`/`write` contributes its estimated footprint (`+added / −removed`, read off the call arguments), per file and summed in the header.
+- **Sorted your way** — **Most active**, **Latest**, or **By path**; each row carries per-purpose badges, its cumulative line delta, the last operation's time, and a red dot when an operation failed.
 - **Click to inspect** — a row expands into the file's own operation log (tool, time, per-op delta, failures flagged); each operation jumps straight to the exact tool result in the Context browser. Operations whose paths aged out of the retained window are honestly counted in a footnote.
 
 ### 🧭 Context browser — open the box of any request
