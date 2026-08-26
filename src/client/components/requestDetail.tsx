@@ -20,7 +20,7 @@ export interface RequestDetailProps {
    */
   prev?: RequestRecord | null
   marker?: ContextEventRecord | null
-  /** The step's semantic identity (turn opener / inputs / reply) — see brief.ts; null hides the section. */
+  /** The step's semantic identity (turn opener / inputs / reply) — see brief.ts; null renders an empty reserved lane. */
   brief?: StepBrief | null
   /** Conversation-snapshot join for call-argument enrichment; absent join = names only, never an error. */
   convOf?: (seq: number) => ConversationNodeLike | undefined
@@ -37,17 +37,17 @@ export function makeRequestDetail(
   /**
    * One brief row: a fixed-width kind tag plus one glanceable line. The tag carries a styled, instant explanation bubble (the
    * `.lc-stat-tip` pattern); the content span keeps the native title (preview + locate hint), so the two never stack.
-   * Clickable when the browser linkage is wired.
+   * Clickable when the browser linkage is wired AND the row carries a node (the always-present In row's empty state stays inert).
    */
   function BriefRow(props: {
     tag: string
     tagTip: string
-    node: SurfaceNode
+    /** Absent only on the empty-state In row — a row without a node cannot be located. */
+    node?: SurfaceNode
     isResponse: boolean
     onLocate?: (node: SurfaceNode, isResponse: boolean) => void
     children: ReactNS.ReactNode
   }): ReactNS.ReactElement {
-    const cls = 'lc-brief-row' + (props.onLocate !== undefined ? ' lc-brief-row-link' : '')
     const inner = (
       <>
         <span className="lc-brief-tag">
@@ -57,10 +57,12 @@ export function makeRequestDetail(
         {props.children}
       </>
     )
-    if (props.onLocate === undefined) return <div className={cls}>{inner}</div>
-    const locate = () => { props.onLocate?.(props.node, props.isResponse) }
+    if (props.node === undefined || props.onLocate === undefined) return <div className="lc-brief-row">{inner}</div>
+    const node = props.node
+    const onLocate = props.onLocate
+    const locate = (): void => { onLocate(node, props.isResponse) }
     return (
-      <button type="button" className={cls} onClick={locate}>
+      <button type="button" className="lc-brief-row lc-brief-row-link" onClick={locate}>
         {inner}
       </button>
     )
@@ -128,13 +130,16 @@ export function makeRequestDetail(
     return tag !== null ? (text !== '' ? tag + ' · ' + text : tag) : text
   }
 
+  /**
+   * The brief's container ALWAYS renders — a fixed three-row lane (`.lc-brief`'s min-height) so scrubbing the chart never
+   * changes the panel's height; unknown or empty steps just leave parts of the lane blank instead of collapsing it.
+   */
   function BriefSection(props: {
-    brief: StepBrief
+    brief: StepBrief | null | undefined
     convOf?: (seq: number) => ConversationNodeLike | undefined
     onLocate?: (node: SurfaceNode, isResponse: boolean) => void
-  }): ReactNS.ReactElement | null {
-    const { opener, inputs, response } = props.brief
-    if (opener === undefined && inputs.length === 0 && response === undefined) return null
+  }): ReactNS.ReactElement {
+    const { opener, inputs, response } = props.brief ?? { inputs: [] }
     const convOf = props.convOf ?? (() => undefined)
     // The content span's native title: full preview, plus the locate hint when the row is clickable.
     const hint = props.onLocate !== undefined ? ' — ' + t('brief.locate') : ''
@@ -173,14 +178,20 @@ export function makeRequestDetail(
             ) : null}
           </BriefRow>
         ) : null}
-        {inputs.length > 0 ? (
-          // Whole-row clickable like the other rows (locates the FIRST input); each chip still locates its own node —
-          // stopPropagation keeps a chip click from also firing the row's.
-          <BriefRow tag={t('brief.input')} tagTip={t('brief.inputTip')} node={inputs[0]} isResponse={false} onLocate={props.onLocate}>
-            {inputs.slice(0, MAX_CHIPS).map(n => nodeChip(n, locateChip?.(n)))}
-            {inputs.length > MAX_CHIPS ? <span className="lc-brief-more">{t('brief.more', { n: inputs.length - MAX_CHIPS })}</span> : null}
-          </BriefRow>
-        ) : null}
+        {/* The In row ALWAYS renders (empty state included): a turn's opening step has no inputs, and a constant row
+            count keeps the panel height steady while the chart scrubs. Without a node the row renders inert. */}
+        <BriefRow tag={t('brief.input')} tagTip={t('brief.inputTip')} node={inputs[0]} isResponse={false} onLocate={props.onLocate}>
+          {inputs.length > 0 ? (
+            <>
+              {/* Whole-row clickable like the other rows (locates the FIRST input); each chip still locates its own node —
+                  stopPropagation keeps a chip click from also firing the row's. */}
+              {inputs.slice(0, MAX_CHIPS).map(n => nodeChip(n, locateChip?.(n)))}
+              {inputs.length > MAX_CHIPS ? <span className="lc-brief-more">{t('brief.more', { n: inputs.length - MAX_CHIPS })}</span> : null}
+            </>
+          ) : (
+            <span className="lc-brief-empty">{t('brief.noInputs')}</span>
+          )}
+        </BriefRow>
         {response !== undefined ? (
           <BriefRow tag={t('brief.reply')} tagTip={t('brief.replyTip')} node={response} isResponse onLocate={props.onLocate}>
             {nodeChip(response, undefined, true)}
@@ -253,9 +264,7 @@ export function makeRequestDetail(
             ? <span className="lc-detail-metric">{t('detail.cache', { n: cacheHitPercent(req.cacheRead, req.prompt) ?? '—' })}</span>
             : null}
         </div>
-        {props.brief !== null && props.brief !== undefined
-          ? <BriefSection brief={props.brief} convOf={props.convOf} onLocate={props.onLocate} />
-          : null}
+        <BriefSection brief={props.brief} convOf={props.convOf} onLocate={props.onLocate} />
         <StackedBar parts={parts} height={10} />
         <div className="lc-detail-rows">
           {CATS.map((c, i) => {

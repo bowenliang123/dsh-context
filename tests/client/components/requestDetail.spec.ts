@@ -213,14 +213,16 @@ describe('RequestDetail brief section', () => {
     content: [{ type: 'text', text: 'a.txt' }],
   }
 
-  test('absent/empty briefs render no section', async () => {
+  test('the brief lane is constant: absent/empty briefs reserve its height, not collapse', async () => {
     const m = await mount(h(RequestDetail, { request: req({}), brief: null }))
-    assert.equal(queryAll(m.container, '.lc-brief').length, 0)
+    assert.equal(queryAll(m.container, '.lc-brief').length, 1, 'the lane always renders')
+    assert.equal(queryAll(m.container, '.lc-brief-row').length, 1, 'only the always-present In row placeholder')
     await m.unmount()
 
     const empty: StepBrief = { inputs: [] }
     const m2 = await mount(h(RequestDetail, { request: req({}), brief: empty }))
-    assert.equal(queryAll(m2.container, '.lc-brief').length, 0)
+    assert.equal(queryAll(m2.container, '.lc-brief').length, 1)
+    assert.equal(queryAll(m2.container, '.lc-brief-row').length, 1, 'only the always-present In row')
     await m2.unmount()
   })
 
@@ -401,16 +403,25 @@ describe('RequestDetail brief section', () => {
     await m12.unmount()
   })
 
-  test('opener without tag or text renders a bare row; inputs-only brief has no opener row', async () => {
+  test('the In row always renders: muted empty state when nothing entered, chips otherwise', async () => {
+    const calls: { seq: number; isResponse: boolean }[] = []
+    const onLocate = (n: SurfaceNode, isResponse: boolean): void => {
+      calls.push({ seq: n.seq, isResponse })
+    }
+    // A turn's opening step: opener known, zero inputs — the In row still occupies its line.
     const brief: StepBrief = {
       opener: node({ seq: 1, cat: 'user' }),
       inputs: [],
     }
-    const m = await mount(h(RequestDetail, { request: req({}), brief }))
+    const m = await mount(h(RequestDetail, { request: req({}), brief, onLocate }))
     const rows = queryAll(m.container, '.lc-brief-row')
-    assert.equal(rows.length, 1, 'opener-only brief')
+    assert.equal(rows.length, 2, 'the opener row plus the ALWAYS-present In row')
     assert.equal(queryAll(rows[0], '.lc-brief-fact').length, 0, 'no fact tag on a plain user opener')
     assert.equal(queryAll(rows[0], '.lc-brief-text').length, 0, 'no text span without preview')
+    assert.ok(text(rows[1]).includes('(nothing new)'), 'the empty In row carries the placeholder')
+    assert.equal(queryAll(rows[1], '.lc-brief-chip').length, 0, 'empty state carries no chips')
+    await click(rows[1] as HTMLElement)
+    assert.deepEqual(calls, [], 'a row without a node stays inert even with locate wired')
     await m.unmount()
 
     const m2 = await mount(h(RequestDetail, {

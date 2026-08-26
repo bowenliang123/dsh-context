@@ -153,7 +153,9 @@
    one shared left edge. Every line speaks the Context browser's row anatomy (fact tag + preview text), so a brief line reads
    exactly like the browser element its click reveals; every clickable target (whole row or input chip) uses the standard
    interactive hover token + 120ms transition. */
-.lc-brief { display: flex; flex-direction: column; gap: 2px; margin: -4px 0 10px; }
+/* Fixed three-row lane (min-height = 3 × 24px rows + 2 × 2px gaps): the container exists even when no row resolves, so
+   hovering around the trend chart never changes the detail panel's height. Rows appear INSIDE the lane; blanks degrade. */
+.lc-brief { display: flex; flex-direction: column; gap: 2px; margin: -4px 0 10px; min-height: 76px; }
 /* Input chips wrap onto a second line instead of forcing the row past the card edge (each chip's internal tag is flex-none). */
 .lc-brief-row { display: flex; align-items: center; gap: 8px; min-width: 0; padding: 3px 6px; margin-left: -6px; margin-right: -6px; border-radius: 6px; border: 0; background: transparent; font-family: inherit; font-size: 12px; line-height: 1.5; color: var(--dsw-alias-label-primary); text-align: left; transition: background-color 120ms ease; }
 /* The link class marks a hoverable ROW (buttons and the chip-carrying inputs row alike); the pointer cursor belongs only to the
@@ -165,6 +167,8 @@ button.lc-brief-row-link { cursor: pointer; }
 .lc-brief-tip { position: absolute; bottom: calc(100% + 6px); left: 0; z-index: 6; width: max-content; max-width: 240px; white-space: normal; text-align: left; background: var(--dsw-alias-bg-layer-2); border: 1px solid var(--dsw-alias-border-l1); border-radius: 6px; padding: 6px 10px; font-size: 12px; line-height: 1.5; font-weight: 400; color: var(--dsw-alias-label-primary); box-shadow: 0 2px 8px rgba(0,0,0,0.18); pointer-events: none; opacity: 0; transition: opacity 120ms ease; }
 .lc-brief-tag:hover .lc-brief-tip { opacity: 1; }
 .lc-brief-text { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* The empty-state In row's placeholder: same anatomy as the preview text, muted. */
+.lc-brief-empty { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--dsw-alias-label-tertiary); }
 /* Standalone fact chip on the opener/reply rows (call breadcrumb, image count) — the row kind tag's look, content-sized. */
 .lc-brief-fact { flex: none; box-sizing: border-box; max-width: 160px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 11px; padding: 0 6px; border-radius: 4px; background: var(--dsw-alias-bg-layer-2); border: 1px solid var(--dsw-alias-border-l1); color: var(--dsw-alias-label-secondary); }
 /* Input chips: the name tag is flex-none so it always survives truncation — only the preview text ellipsizes. */

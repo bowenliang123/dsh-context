@@ -66,7 +66,7 @@ One stacked bar per model request — finer than per-message — so you watch th
 
 ![Context Trend card with the step brief](https://raw.githubusercontent.com/bowenliang123/dsh-context/main/docs/context-trend.png)
 
-- **✨ Step brief — what a step *was*, not just how big.** Three plain-language rows under the chart: **User** recalls the message that opened the turn (on any of its steps), **In** lists what newly entered the context — usually the previous tool calls' results, failures flagged — and **Response** shows what the model returned: its reply text and/or the tools it called. Hover a row's tag to learn what the row means; click any row to open that exact message in the Context browser.
+- **✨ Step brief — what a step *was*, not just how big.** Three plain-language rows under the chart: **User** recalls the message that opened the turn (on any of its steps), **In** lists what newly entered the context — usually the previous tool calls' results, failures flagged, empty on a turn's opening step — and **Response** shows what the model returned: its reply text and/or the tools it called. Hover a row's tag to learn what the row means; click any row to open that exact message in the Context browser.
 - **Read it your way** — **Step** or **Turn** granularity, **Total** (cumulative makeup) or **Delta** (each request's signed change), and sideways scroll through the whole session.
 - **Hover & pin** — scrub for an instant tooltip (turn/step, time, tokens, a one-line reply preview); click to pin the full category breakdown, with provider-reported actual prompt/output/cache figures next to the estimates.
 - **✂ marks the events** — compactions and prunes land exactly where they happened, so the bars' drops explain themselves.
