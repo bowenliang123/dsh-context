@@ -31,7 +31,7 @@ A DeepSeek Harness plugin for context insight, actions, and management.
   - Review and simplify all the code changes, to ensure they are necessary, correct and not over-engineered.
   - Cleanup all temporary files. Cleanup temporary or unhelpful comments.
   - Run `pnpm run lint:fix`, to check and auto-fix code style and formatting.  
-  - Run `pnpm run coverage`, to run all tests, and ensure the code coverage is literally 100%.
+  - Run `pnpm run test`, to run all tests, and ensure the code coverage is literally 100%.
 
 ## Building
 - Run `pnpm run build` after code changes applied.
