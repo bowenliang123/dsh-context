@@ -158,7 +158,8 @@ export function activityOf(
     const path = pathOfArgs(tool, args)
     // A file-kind call whose arguments aged out of the retained window (or
     // name no target) has nothing to row — skipped, so counted means shown.
-    if (path === null) continue
+    // The args check narrows `args` for the delta/detail reads below.
+    if (path === null || args === null) continue
     totals[kind].ops++
     const { added, removed } = deltaOf(tool, args)
     const detail = kind === 'search'
