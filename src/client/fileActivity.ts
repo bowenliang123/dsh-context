@@ -3,10 +3,10 @@
  * timeline's served tool-result nodes (live tail + archive) joined with the
  * conversation snapshot for call arguments; no host or wire additions.
  *
- * One tool-result surface node equals one executed call, and the fold keeps
- * the tool NAME on it even when the conversation join has aged out — so the
- * op counts degrade to "known kind, unknown path" (`unresolved`) instead of
- * vanishing. Line deltas are estimates read off the call ARGUMENTS (an
+ * One tool-result surface node equals one executed call; a call whose
+ * arguments have aged out of the conversation join names no target and is
+ * skipped — every op the card counts, it can also row. Line deltas are
+ * estimates read off the call ARGUMENTS (an
  * edit's old/new strings, a write's content), never off result payloads.
  *
  * Scope: `before` is the EXCLUSIVE upper seq bound (the next request's seq),
@@ -55,8 +55,6 @@ export interface FileActivity {
   /** Path-resolved files, most-recently-touched first. */
   entries: FileEntry[]
   totals: Record<FileOpKind | 'image', FileKindTotal> & { added: number; removed: number }
-  /** File-kind ops whose path is outside the retained conversation window. */
-  unresolved: number
 }
 
 const KIND_BY_TOOL: Record<string, FileOpKind> = {
@@ -148,7 +146,6 @@ export function activityOf(
     removed: 0,
   }
   const byPath = new Map<string, FileEntry>()
-  let unresolved = 0
   for (const n of nodes) {
     if (n.cat !== 'tool') continue
     if (before !== null && n.seq >= before) continue
@@ -156,16 +153,13 @@ export function activityOf(
     /* kind non-null ⟹ n.tool defined (kindOfTool's only other exit). */
     if (kind === null) continue
     const tool = n.tool as string
-    totals[kind].ops++
     const conv = convOf(n.seq)
     const args = parseCallArgs(conv?.call?.argsRaw)
     const path = pathOfArgs(tool, args)
-    if (args === null || path === null) {
-      // Known file-kind op, but the call arguments are outside the retained
-      // conversation window (or name no target) — counted, never rowed.
-      unresolved++
-      continue
-    }
+    // A file-kind call whose arguments aged out of the retained window (or
+    // name no target) has nothing to row — skipped, so counted means shown.
+    if (path === null) continue
+    totals[kind].ops++
     const { added, removed } = deltaOf(tool, args)
     const detail = kind === 'search'
       && typeof args.path === 'string' && args.path !== ''
@@ -211,7 +205,7 @@ export function activityOf(
     totals.removed += e.removed
   }
   entries.sort((a, b) => b.ops[0].seq - a.ops[0].seq)
-  return { entries, totals, unresolved }
+  return { entries, totals }
 }
 
 /**

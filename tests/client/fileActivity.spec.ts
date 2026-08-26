@@ -135,7 +135,6 @@ describe('activityOf', () => {
       added: 4,
       removed: 3,
     })
-    assert.equal(a.unresolved, 0)
   })
 
   test('flags multimodal reads and directory targets, and totals image ops', () => {
@@ -189,20 +188,19 @@ describe('activityOf', () => {
     assert.equal(a.entries.length, 0)
     assert.deepEqual(withNoise.entries, [])
     assert.equal(withNoise.totals.read.ops, 0)
-    assert.equal(withNoise.unresolved, 0)
   })
 
-  test('file-kind ops without a resolvable path count as unresolved, never as rows', () => {
+  test('file-kind ops without a resolvable path are skipped — never counted, never rowed', () => {
     const a = run([
       op(3, 'read', null), // the conversation join aged out
       op(5, 'edit', {}), // args survived but name no target
       op(7, 'read', { file_path: '/a.ts' }),
     ])
-    assert.equal(a.unresolved, 2)
     assert.equal(a.entries.length, 1)
-    // Op counts still reflect the file-kind calls (known kind, unknown path).
-    assert.equal(a.totals.read.ops, 2)
-    assert.equal(a.totals.write.ops, 1)
+    assert.deepEqual(a.entries[0].ops.map(o => o.seq), [7])
+    // Only the path-resolved call reaches the totals.
+    assert.equal(a.totals.read.ops, 1)
+    assert.equal(a.totals.write.ops, 0)
     assert.equal(a.totals.read.files, 1)
   })
 

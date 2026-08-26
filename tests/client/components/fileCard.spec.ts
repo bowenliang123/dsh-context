@@ -58,7 +58,6 @@ function richActivity(over: Partial<FileActivity> = {}): FileActivity {
       added: 7,
       removed: 3,
     },
-    unresolved: 0,
     ...over,
   }
 }
@@ -84,32 +83,22 @@ async function typeSearch(container: ParentNode, value: string): Promise<void> {
   })
 }
 
-describe('FileCard — empty and unresolved states', () => {
+describe('FileCard — empty state', () => {
   test('no file ops renders the empty state without controls', async () => {
     const m = await mount(h(FileCard, {
-      activity: richActivity({ entries: [], unresolved: 0 }),
+      activity: richActivity({ entries: [] }),
       scope: 'Turn 1 · Step 1',
     }))
     assert.ok(text(m.container).includes('No file reads, writes, or searches'))
     assert.ok(text(m.container).includes('Turn 1 · Step 1'))
     assert.equal(queryAll(m.container, '.lc-fa-ctl').length, 0)
-    assert.equal(queryAll(m.container, '.lc-fa-note').length, 0)
-    await m.unmount()
-  })
-
-  test('ops whose paths aged out show only the unresolved note', async () => {
-    const m = await mount(h(FileCard, {
-      activity: richActivity({ entries: [], unresolved: 2 }),
-      scope: 'live',
-    }))
-    assert.ok(text(m.container).includes('2 more file ops have paths outside the retained window'))
     await m.unmount()
   })
 })
 
 describe('FileCard — header, rows, and filters', () => {
   test('renders chips with op counts, the meta strip, and fully-dressed rows', async () => {
-    const m = await mount(h(FileCard, { activity: richActivity({ unresolved: 1 }), scope: 'Up to latest' }))
+    const m = await mount(h(FileCard, { activity: richActivity(), scope: 'Up to latest' }))
     // Chip op counts: all = 12 + 3 + 1.
     assert.ok(text(chipByLabel(m.container, 'All')).includes('16'))
     assert.ok(text(chipByLabel(m.container, 'Read')).includes('12'))
@@ -150,8 +139,6 @@ describe('FileCard — header, rows, and filters', () => {
     assert.ok(text(solo).includes('+5') && !text(solo).includes('−'))
     // solo.md's only op is timeless: the row drops its time cell.
     assert.ok(solo.querySelector('.lc-fa-time') === null)
-    // The unresolved footnote rides below the list.
-    assert.ok(text(m.container).includes('1 more file op'))
     await m.unmount()
   })
 
@@ -212,7 +199,6 @@ describe('FileCard — header, rows, and filters', () => {
         added: 0,
         removed: 0,
       },
-      unresolved: 0,
     }
     const m = await mount(h(FileCard, { activity, scope: 'live' }))
     const titles = () => queryAll(m.container, '.lc-fa-row').map(r => r.title)
@@ -319,17 +305,16 @@ describe('FileCard — expansion and locate', () => {
     await m.unmount()
   })
 
-  test('a search op shows its pattern detail; the log caps at eight with an overflow line', async () => {
+  test('a search op shows its pattern detail; the expanded log lists every op', async () => {
     const m = await mount(h(FileCard, { activity: richActivity(), scope: 'live' }))
     // The directory row: one grep op with its searched pattern.
     await click(rowByTitle(m.container, '/src/'))
     assert.ok(text(query(m.container, '.lc-fa-ops')).includes('needle'))
-    // The nine-read log renders eight rows plus the "+1 earlier ops" line
+    // The nine-read log renders all nine rows — no cap, no overflow line
     // (one expanded file at a time: this click collapsed the directory row).
     await click(rowByTitle(m.container, '/var/many.log'))
     const many = query(m.container, '.lc-fa-ops')
-    assert.equal(queryAll(many, '.lc-fa-op').length, 8)
-    assert.ok(text(many).includes('+1 earlier ops'))
+    assert.equal(queryAll(many, '.lc-fa-op').length, 9)
     await m.unmount()
   })
 

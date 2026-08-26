@@ -275,8 +275,6 @@ button.lc-brief-row-link { cursor: pointer; }
 .lc-fa-op-time { flex: none; width: 58px; color: var(--dsw-alias-label-secondary); font-variant-numeric: tabular-nums; }
 .lc-fa-op-tool { flex: none; font-size: 11px; padding: 0 6px; border-radius: 999px; background: var(--dsw-alias-bg-layer-1); border: 1px solid var(--dsw-alias-border-l1); color: var(--dsw-alias-label-secondary); }
 .lc-fa-op-detail { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--dsw-alias-label-secondary); }
-.lc-fa-more { padding: 2px 6px; color: var(--dsw-alias-label-secondary); font-size: 11px; }
-.lc-fa-note { margin-top: 8px; color: var(--dsw-alias-label-secondary); font-size: 12px; }
 .lc-empty { color: var(--dsw-alias-label-secondary); padding: 18px 0; text-align: center; }
 .lc-error { display: flex; flex-direction: column; align-items: center; gap: 8px; padding: 40px 16px; }
 .lc-error-msg { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12px; color: var(--dsw-alias-state-error-primary); background: var(--dsw-alias-bg-layer-2); border: 1px solid var(--dsw-alias-border-l1); border-radius: 6px; padding: 4px 8px; max-width: 100%; overflow-wrap: anywhere; }

@@ -30,9 +30,6 @@ export interface FileCardProps {
   onLocate?: (op: FileOp) => void
 }
 
-/** An expanded file lists at most this many ops before a "+n earlier" line. */
-const MAX_OPS = 8
-
 export function makeFileCard(kit: ViewKit, settings: ContextSettings): (props: FileCardProps) => ReactNS.ReactElement {
   const { t, fmt, fmtTime } = kit
 
@@ -198,7 +195,7 @@ export function makeFileCard(kit: ViewKit, settings: ContextSettings): (props: F
                       </button>
                       {open ? (
                         <div className="lc-fa-ops">
-                          {e.ops.slice(0, MAX_OPS).map((op) => {
+                          {e.ops.map((op) => {
                             const onLocate = props.onLocate
                             return onLocate !== undefined
                               ? (
@@ -214,9 +211,6 @@ export function makeFileCard(kit: ViewKit, settings: ContextSettings): (props: F
                               )
                               : <div key={op.seq} className="lc-fa-op">{opLine(op)}</div>
                           })}
-                          {e.ops.length > MAX_OPS
-                            ? <div className="lc-fa-more">{t('files.moreOps', { n: e.ops.length - MAX_OPS })}</div>
-                            : null}
                         </div>
                       ) : null}
                     </div>
@@ -226,9 +220,6 @@ export function makeFileCard(kit: ViewKit, settings: ContextSettings): (props: F
             )}
           </div>
         )}
-        {activity.unresolved > 0
-          ? <div className="lc-fa-note">{t('files.unresolved', { n: activity.unresolved })}</div>
-          : null}
       </div>
     )
   }
