@@ -31,7 +31,7 @@ export interface RequestDetailProps {
 export function makeRequestDetail(
   kit: ViewKit,
   StackedBar: (props: StackedBarProps) => ReactNS.ReactElement,
-): (props: RequestDetailProps) => ReactNS.ReactElement | null {
+): ReactNS.ComponentType<RequestDetailProps> {
   const { t, fmt, fmtTime, catLabel, eventLabel, eventAt } = kit
 
   /**
@@ -190,7 +190,9 @@ export function makeRequestDetail(
     )
   }
 
-  return function RequestDetail(props: RequestDetailProps): ReactNS.ReactElement | null {
+  // Memoized at the factory level: the parent hands reference-stable request/prev/marker/brief/convOf/onLocate
+  // across hover/select renders (see contextView), so the panel skips reconciliation when the active bar did not move.
+  return React.memo(function RequestDetail(props: RequestDetailProps): ReactNS.ReactElement | null {
     const req = props.request
     if (!req) return null
     const isTurn = req.stepCount !== undefined && req.stepCount > 1
@@ -294,5 +296,5 @@ export function makeRequestDetail(
         </div>
       </div>
     )
-  }
+  })
 }

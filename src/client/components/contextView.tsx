@@ -184,6 +184,55 @@ export function makeContextView(
       return m
     }, [convNodes])
 
+    // Active bar / pin lookup — derived BEFORE the loading-return so the hooks below stay unconditional (React #310).
+    let pinnedIdx = -1
+    for (let i = 0; i < displayRequests.length; i++) if (displayRequests[i].seq === selectedSeq) pinnedIdx = i
+    const pinnedReq = pinnedIdx >= 0 ? displayRequests[pinnedIdx] : null
+    let activeIdx = -1
+    if (hoveredSeq !== null) {
+      for (let i = 0; i < displayRequests.length; i++) if (displayRequests[i].seq === hoveredSeq) { activeIdx = i; break }
+    }
+    if (activeIdx < 0) activeIdx = pinnedIdx
+    if (activeIdx < 0 && displayRequests.length > 0) activeIdx = displayRequests.length - 1
+    const activeReq = activeIdx >= 0 ? displayRequests[activeIdx] : null
+    // File activity follows the same active bar: the EXCLUSIVE upper bound is the next RAW request's seq, so the picked step's own
+    // tool calls (results land before the next request) count too; the latest bar's null bound serves everything.
+    let filesBefore: number | null = null
+    if (activeReq !== null) {
+      // The active bar's seq always exists in the raw list (turn aggregates keep their last step's record).
+      const ri = requests.findIndex(r => r.seq === activeReq.seq)
+      filesBefore = ri + 1 < requests.length ? requests[ri + 1].seq : null
+    }
+    // The active bar's semantic identity ("what this step was about"); pure derivation over the served nodes, null when nothing is known.
+    const brief = React.useMemo(
+      () => (activeReq !== null ? briefOf(briefList, displayRequests, activeIdx) : null),
+      [activeReq, briefList, displayRequests, activeIdx],
+    )
+    const convOf = React.useCallback((seq: number): ConversationNodeLike | undefined => bySeq.get(seq), [bySeq])
+
+    // File activity follows the same active bar: recomputed when the brief source, the conversation join, or the
+    // upper bound moves — hover/select elsewhere (composition chips, kind filters) leaves every input reference
+    // untouched, so the whole-fold activityOf walk is skipped on those renders.
+    const fileActivity = React.useMemo(
+      () => activityOf(briefList, convOf, filesBefore),
+      [briefList, convOf, filesBefore],
+    )
+    const locateFileOp = React.useCallback((op: FileOp): void => {
+      const step = locateStepOf(requests, op.seq, op.gone)
+      if (step === null) return
+      setNodeFocus({ step, seq: op.seq, cat: 'tool' })
+    }, [requests])
+    // A brief row's reveal target: inputs/opener live in the picked step's OWN assembled surface; the response node (seq === the
+    // request's) first appears in the NEXT step's surface — or the live surface when the last bar is picked.
+    const locateNode = React.useCallback((node: SurfaceNode, isResponse: boolean): void => {
+      /* v8 ignore next 1 -- locateNode is only wired to brief rows, and
+         brief !== null guarantees activeReq !== null in the same closure. */
+      if (activeReq === null) return
+      const next = isResponse && activeIdx + 1 < displayRequests.length ? displayRequests[activeIdx + 1] : null
+      const step: number | 'live' = isResponse ? (next !== null ? next.seq : 'live') : activeReq.seq
+      setNodeFocus({ step, seq: node.seq, cat: node.cat })
+    }, [activeReq, activeIdx, displayRequests])
+
     if (!data) {
       return <div className="lc-root" ref={rootRef}><div className="lc-empty">{t('loading')}</div></div>
     }
@@ -195,49 +244,15 @@ export function makeContextView(
       return i >= 0 ? markers[i] : undefined
     }
 
-    let pinnedIdx = -1
-    for (let i = 0; i < displayRequests.length; i++) if (displayRequests[i].seq === selectedSeq) pinnedIdx = i
-    const pinnedReq = pinnedIdx >= 0 ? displayRequests[pinnedIdx] : null
-    let activeIdx = -1
-    if (hoveredSeq !== null) {
-      for (let i = 0; i < displayRequests.length; i++) if (displayRequests[i].seq === hoveredSeq) { activeIdx = i; break }
-    }
-    if (activeIdx < 0) activeIdx = pinnedIdx
-    if (activeIdx < 0 && displayRequests.length > 0) activeIdx = displayRequests.length - 1
-    const activeReq = activeIdx >= 0 ? displayRequests[activeIdx] : null
-
-    // The active bar's semantic identity ("what this step was about"); pure derivation over the served nodes, null when nothing is known.
-    const brief = activeReq !== null ? briefOf(briefList, displayRequests, activeIdx) : null
-    const convOf = (seq: number): ConversationNodeLike | undefined => bySeq.get(seq)
-    // File activity follows the same active bar: the EXCLUSIVE upper bound is the next RAW request's seq, so the picked step's own
-    // tool calls (results land before the next request) count too; the latest bar's null bound serves everything.
-    let filesBefore: number | null = null
-    if (activeReq !== null) {
-      // The active bar's seq always exists in the raw list (turn aggregates keep their last step's record).
-      const ri = requests.findIndex(r => r.seq === activeReq.seq)
-      filesBefore = ri + 1 < requests.length ? requests[ri + 1].seq : null
-    }
+    // Provider-anchored CURRENT occupancy (contextPressure.projectedTokens): the headline, because the fixed 4-chars/token heuristic
+    // undercounts CJK by ~10–15% — proportions stay heuristic but are anchored to the real billed total. Shared with the /context popup
+    // (headline.ts); composition rides the official `contextBreakdown` rows.
+    const head = headlineOf(data, pressure, breakdown)
     let fileScope = t('files.scopeLatest')
     if (activeReq !== null && filesBefore !== null) {
       fileScope = activeReq.stepCount !== undefined && activeReq.stepCount > 1
         ? t('detail.turn', { t: activeReq.turn ?? 0, n: activeReq.stepCount })
         : t('detail.step', { t: activeReq.turn ?? 0, s: activeReq.step ?? 0 })
-    }
-    const fileActivity = activityOf(briefList, convOf, filesBefore)
-    const locateFileOp = (op: FileOp): void => {
-      const step = locateStepOf(requests, op.seq, op.gone)
-      if (step === null) return
-      setNodeFocus({ step, seq: op.seq, cat: 'tool' })
-    }
-    // A brief row's reveal target: inputs/opener live in the picked step's OWN assembled surface; the response node (seq === the
-    // request's) first appears in the NEXT step's surface — or the live surface when the last bar is picked.
-    const locateNode = (node: SurfaceNode, isResponse: boolean): void => {
-      /* v8 ignore next 1 -- locateNode is only wired to brief rows, and
-         brief !== null guarantees activeReq !== null in the same closure. */
-      if (activeReq === null) return
-      const next = isResponse && activeIdx + 1 < displayRequests.length ? displayRequests[activeIdx + 1] : null
-      const step: number | 'live' = isResponse ? (next !== null ? next.seq : 'live') : activeReq.seq
-      setNodeFocus({ step, seq: node.seq, cat: node.cat })
     }
 
     // Turn highlight is hover-only: the turn strip hover wins, then the hovered bar's turn — no fallback, so a pinned or default selection
@@ -247,17 +262,13 @@ export function makeContextView(
       for (const req of displayRequests) if (req.seq === hoveredSeq) { activeTurn = req.turn ?? null; break }
     }
 
-    // Provider-anchored CURRENT occupancy (contextPressure.projectedTokens): the headline, because the fixed 4-chars/token heuristic
-    // undercounts CJK by ~10–15% — proportions stay heuristic but are anchored to the real billed total. Shared with the /context popup
-    // (headline.ts); composition rides the official `contextBreakdown` rows.
-    const head = headlineOf(data, pressure, breakdown)
-
     // The cost cell prices in the active locale (zh → CNY, else USD), read at render time — the locale subscription above already
     // re-renders on a switch; older hosts without getLocale fall back to USD.
     const localeSvc = ctx.get('locale')
     const activeLocale = localeSvc !== undefined && typeof localeSvc.getLocale === 'function'
       ? localeSvc.getLocale().active
       : 'en'
+    const subtitle = (data.model ?? '') + (data.provider ? ' · ' + data.provider : '')
 
     return (
       <div className="lc-root" ref={rootRef}>
@@ -272,7 +283,7 @@ export function makeContextView(
           <div className="lc-col">
             <CurrentComposition
               head={head}
-              subtitle={(data.model ? data.model : '') + (data.provider ? ' · ' + data.provider : '')}
+              subtitle={subtitle}
               hoverKey={hoverCat}
               onHoverKey={setHoverCat}
             />

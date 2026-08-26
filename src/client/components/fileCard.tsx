@@ -30,7 +30,7 @@ export interface FileCardProps {
   onLocate?: (op: FileOp) => void
 }
 
-export function makeFileCard(kit: ViewKit, settings: ContextSettings): (props: FileCardProps) => ReactNS.ReactElement {
+export function makeFileCard(kit: ViewKit, settings: ContextSettings): ReactNS.ComponentType<FileCardProps> {
   const { t, fmt, fmtTime } = kit
 
   function formGlyph(form: FileForm): string {
@@ -55,7 +55,9 @@ export function makeFileCard(kit: ViewKit, settings: ContextSettings): (props: F
     )
   }
 
-  return function FileCard(props: FileCardProps): ReactNS.ReactElement {
+  // Memoized at the factory level: the parent's activity/scope/onLocate props are all reference-stable across
+  // hover/select renders (see contextView), so this card skips reconciliation whenever its own inputs did not move.
+  return React.memo(function FileCard(props: FileCardProps): ReactNS.ReactElement {
     const { activity } = props
     const [filter, setFilter] = React.useState<FileFilter>('all')
     // Mount-time default from the plugin settings card; in-card toggling stays mount-local and never writes back.
@@ -222,5 +224,5 @@ export function makeFileCard(kit: ViewKit, settings: ContextSettings): (props: F
         )}
       </div>
     )
-  }
+  })
 }
