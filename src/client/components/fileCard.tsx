@@ -120,7 +120,7 @@ export function makeFileCard(kit: ViewKit, settings: ContextSettings): (props: F
                   <button
                     key={c.key}
                     type="button"
-                    // Kind chips carry their badge color (the row pills below) once active.
+                    // Kind chips carry their badge color (the row pills below) in every state.
                     className={'lc-gran-btn' + (filter === c.key ? ' lc-gran-on' : '')
                       + (c.key === 'read' || c.key === 'write' || c.key === 'search' ? ' lc-fa-chip-' + c.key : '')}
                     title={t('files.chipTip', { files: c.files, ops: c.ops })}

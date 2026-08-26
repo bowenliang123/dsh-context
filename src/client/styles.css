@@ -256,7 +256,10 @@ button.lc-brief-row-link { cursor: pointer; }
 .lc-fa-b-read { color: var(--dsw-alias-brand-primary); background: color-mix(in srgb, var(--dsw-alias-brand-primary) 14%, transparent); }
 .lc-fa-b-write { color: var(--dsw-alias-state-success-primary); background: color-mix(in srgb, var(--dsw-alias-state-success-primary) 14%, transparent); }
 .lc-fa-b-search { color: var(--dsw-alias-state-warn-primary); background: color-mix(in srgb, var(--dsw-alias-state-warn-primary) 14%, transparent); }
-/* An active kind chip tints in its badge color (the pills on the rows below), keeping the same color language as the counts. */
+/* Kind chips wear their badge color in every state (plain colored text while idle, so the group reads at a glance); the active chip adds the filled tint. Hover keeps the kind color over the generic brighten rule. */
+.lc-fa-chip-read, .lc-fa-chip-read:hover { color: var(--dsw-alias-brand-primary); }
+.lc-fa-chip-write, .lc-fa-chip-write:hover { color: var(--dsw-alias-state-success-primary); }
+.lc-fa-chip-search, .lc-fa-chip-search:hover { color: var(--dsw-alias-state-warn-primary); }
 .lc-fa-chip-read.lc-gran-on, .lc-fa-chip-read.lc-gran-on:hover { background: color-mix(in srgb, var(--dsw-alias-brand-primary) 14%, transparent); color: var(--dsw-alias-brand-primary); }
 .lc-fa-chip-write.lc-gran-on, .lc-fa-chip-write.lc-gran-on:hover { background: color-mix(in srgb, var(--dsw-alias-state-success-primary) 14%, transparent); color: var(--dsw-alias-state-success-primary); }
 .lc-fa-chip-search.lc-gran-on, .lc-fa-chip-search.lc-gran-on:hover { background: color-mix(in srgb, var(--dsw-alias-state-warn-primary) 14%, transparent); color: var(--dsw-alias-state-warn-primary); }
