@@ -37,7 +37,7 @@
     "watch": "tsdown --watch",
     "register": "bash scripts/register.sh",
     "typecheck": "tsc --noEmit && tsc --noEmit -p tsconfig.tests.json",
-    "test": "pnpm run typecheck && vitest run",
+    "test": "pnpm run typecheck && vitest run --coverage",
     "test:bundle": "node scripts/bundle-smoke.mjs",
     "coverage": "vitest run --coverage",
     "release": "bash scripts/publish.sh",
