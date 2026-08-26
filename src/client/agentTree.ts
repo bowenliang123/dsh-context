@@ -103,13 +103,17 @@ export interface AgentForest {
 /** The card stays readable up to this many nodes; the rest folds into an overflow note. */
 export const AGENT_TREE_LIMIT = 25
 
-/** Donut geometry: node ring radii and stage spacing (SVG units). */
+/** Donut geometry: node ring radii (SVG units). */
 export const AGENT_NODE_R = 26
 export const AGENT_INNER_R = 18
-const COL_W = 148
-/* Row pitch leaves room under each node for a two-line wrapped caption plus the tokens line. */
-const ROW_H = 116
-/* Side pad ≥ half the caption width (136/2) plus margin, so wrapped labels never clip at the SVG edge. */
+/* Horizontal pitch between leaf slots (the 136px caption plus gutter). */
+const SLOT_W = 144
+/* Vertical pitch between depth levels: node radius + caption zone (up to 3
+   wrapped lines + the tokens line) + the edge band below it. */
+const LEVEL_H = 138
+/* Bottom edge of a node cell — links exit here, below the caption zone, so a
+   connector never crosses a label. */
+const CELL_H = AGENT_NODE_R + 64
 const PAD_X = 78
 const PAD_Y = 56
 
@@ -329,15 +333,55 @@ export interface AgentLayout {
 }
 
 /**
- * Tidy tree layout: depth columns left → right, DFS pre-order rows top →
- * bottom (a parent always sits above its children, and every row is occupied
- * by exactly one node, so links never stack).
+ * Tidy top-down tree layout: one row per depth level, siblings spread
+ * horizontally in DFS order (leaf slots), parents centered over their
+ * children — the wide card's natural shape, where a family's breadth (not
+ * its depth) is what grows. Links exit a parent at its cell bottom (below
+ * the caption zone) and enter the child at its top, so a connector never
+ * crosses a label.
  */
 export function layoutForest(forest: AgentForest): AgentLayout {
-  const points: AgentPoint[] = forest.nodes.map((node, index) => ({
+  // Children lists in DFS order (nodes are DFS pre-order, so plain iteration appends in visit order).
+  const childrenOf = new Map<string, AgentNode[]>()
+  for (const n of forest.nodes) {
+    if (n.parentId === undefined) continue
+    const kids = childrenOf.get(n.parentId) ?? []
+    kids.push(n)
+    childrenOf.set(n.parentId, kids)
+  }
+
+  // Tidy x: leaves claim successive slots; internal nodes center over their children.
+  const slotOf = new Map<string, number>()
+  let leafSlots = 0
+  const place = (node: AgentNode): number => {
+    const kids = childrenOf.get(node.id) ?? []
+    if (kids.length === 0) {
+      const slot = leafSlots
+      leafSlots++
+      slotOf.set(node.id, slot)
+      return slot
+    }
+    let first = 0
+    let last = 0
+    kids.forEach((kid, index) => {
+      const slot = place(kid)
+      if (index === 0) first = slot
+      last = slot
+    })
+    const slot = (first + last) / 2
+    slotOf.set(node.id, slot)
+    return slot
+  }
+  /* v8 ignore next 1 -- a forest always holds at least the (possibly
+     synthesized) current node. */
+  if (forest.nodes.length > 0) place(forest.nodes[0])
+
+  const points: AgentPoint[] = forest.nodes.map(node => ({
     id: node.id,
-    x: PAD_X + node.depth * COL_W,
-    y: PAD_Y + index * ROW_H,
+    /* v8 ignore next 1 -- place() visits every node: the forest is exactly
+       the root's subtree by construction. */
+    x: PAD_X + (slotOf.get(node.id) ?? 0) * SLOT_W,
+    y: PAD_Y + node.depth * LEVEL_H,
     depth: node.depth,
   }))
   const pointOf = new Map(points.map(p => [p.id, p]))
@@ -352,17 +396,17 @@ export function layoutForest(forest: AgentForest): AgentLayout {
     links.push({
       to: edge.to,
       running: runningIds.has(edge.to),
-      x1: from.x + AGENT_NODE_R + 8,
-      y1: from.y,
-      x2: to.x - AGENT_NODE_R - 8,
-      y2: to.y,
+      x1: from.x,
+      y1: from.y + CELL_H,
+      x2: to.x,
+      y2: to.y - AGENT_NODE_R - 10,
     })
   }
   const maxDepth = points.reduce((max, p) => Math.max(max, p.depth), 0)
   return {
-    width: PAD_X * 2 + maxDepth * COL_W,
-    // Bottom pad covers the node radius plus the label/tokens text under it.
-    height: PAD_Y * 2 + Math.max(0, points.length - 1) * ROW_H + 10,
+    width: PAD_X * 2 + Math.max(0, leafSlots - 1) * SLOT_W,
+    // The deepest level still carries its full caption cell below the node.
+    height: PAD_Y + maxDepth * LEVEL_H + CELL_H + 28,
     points,
     links,
   }

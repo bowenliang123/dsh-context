@@ -37,7 +37,7 @@ export interface AgentGraphProps {
 
 /** Caption box under a node: wraps freely so full agent names always show. */
 const CAPTION_W = 136
-const CAPTION_H = 78
+const CAPTION_H = 60
 
 /** Occupancy-ring color by fill ratio (no window → the neutral track color). */
 export function ringColorOf(pct: number | null): string {
@@ -140,7 +140,7 @@ export function makeAgentGraph(
               <path
                 key={link.to}
                 className={'lc-agents-link' + (link.running ? ' lc-agents-link-on' : '')}
-                d={`M ${link.x1} ${link.y1} C ${link.x1 + 36} ${link.y1}, ${link.x2 - 36} ${link.y2}, ${link.x2} ${link.y2}`}
+                d={`M ${link.x1} ${link.y1} C ${link.x1} ${link.y1 + 18}, ${link.x2} ${link.y2 - 18}, ${link.x2} ${link.y2}`}
                 fill="none"
               />
             ))}

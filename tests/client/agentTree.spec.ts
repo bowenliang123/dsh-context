@@ -309,30 +309,39 @@ describe('layoutForest', () => {
     }
   }
 
-  test('single node: no links, square stage', () => {
+  test('single node: no links, minimal stage', () => {
     const layout = layoutForest(forestOf([['root']]))
     assert.equal(layout.points.length, 1)
     assert.equal(layout.points[0].depth, 0)
     assert.equal(layout.links.length, 0)
     assert.equal(layout.width, 156)
-    assert.equal(layout.height, 122)
+    assert.equal(layout.height, 56 + 90 + 28)
   })
 
-  test('columns follow depth, rows follow DFS order, links join parent to child', () => {
+  test('levels follow depth, siblings claim leaf slots, parents center over children', () => {
     const layout = layoutForest(forestOf([['root'], ['a', 'root'], ['b', 'root'], ['g', 'a']]))
     const pointOf = new Map(layout.points.map(p => [p.id, p]))
-    assert.equal(pointOf.get('root')?.depth, 0)
-    assert.equal(pointOf.get('g')?.depth, 2)
-    assert.equal(layout.points[0].y < layout.points[3].y, true)
-    assert.equal(layout.links.length, 3)
+    // Two leaf slots (g under a, then b); root centers between them.
+    assert.equal(pointOf.get('g')?.x, 78)
+    assert.equal(pointOf.get('a')?.x, 78)
+    assert.equal(pointOf.get('b')?.x, 78 + 144)
+    assert.equal(pointOf.get('root')?.x, 78 + 72)
+    // One row per depth level.
+    assert.equal(pointOf.get('root')?.y, 56)
+    assert.equal(pointOf.get('a')?.y, 56 + 138)
+    assert.equal(pointOf.get('g')?.y, 56 + 2 * 138)
+    // Links exit the parent's cell bottom and enter the child's top.
     const linkG = layout.links.find(l => l.to === 'g')
     assert.ok(linkG !== undefined)
-    assert.equal(linkG.x1, pointOf.get('a')?.x as number + AGENT_NODE_R + 8)
-    assert.equal(linkG.x2, (pointOf.get('g')?.x as number) - AGENT_NODE_R - 8)
+    assert.equal(linkG.x1, pointOf.get('a')?.x)
+    assert.equal(linkG.y1, (pointOf.get('a')?.y as number) + 90)
+    assert.equal(linkG.x2, pointOf.get('g')?.x)
+    assert.equal(linkG.y2, (pointOf.get('g')?.y as number) - AGENT_NODE_R - 10)
     assert.equal(linkG.running, false)
     assert.equal(layout.links.find(l => l.to === 'b')?.running, true)
-    assert.equal(layout.width, 156 + 2 * 148)
-    assert.equal(layout.height, 122 + 3 * 116)
+    assert.equal(layout.links.length, 3)
+    assert.equal(layout.width, 156 + 144)
+    assert.equal(layout.height, 56 + 2 * 138 + 90 + 28)
   })
 })
 
