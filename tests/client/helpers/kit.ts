@@ -66,6 +66,19 @@ export async function flush(): Promise<void> {
   await act(async () => {})
 }
 
+/**
+ * Silence a deliberately-thrown render error: React 18 dev replays a failed
+ * render through a fake DOM event, which jsdom reports as an uncaught window
+ * error and vitest forwards to an uncaughtException — a user error listener
+ * that prevents the default keeps the throw inside the test. Returns the
+ * cleanup that restores normal error reporting.
+ */
+export function silenceWindowErrors(): () => void {
+  const onError = (e: Event) => { e.preventDefault() }
+  window.addEventListener('error', onError)
+  return () => { window.removeEventListener('error', onError) }
+}
+
 export function text(container: HTMLElement): string {
   return container.textContent ?? ''
 }

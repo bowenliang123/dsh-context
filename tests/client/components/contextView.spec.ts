@@ -17,7 +17,7 @@ import type { UseSessionLike } from '../../../src/client/services'
 import type { ContextTimeline } from '../../../src/shared/types'
 import { DICT_EN } from '../../../src/client/i18n'
 import { TestClientCtx, TestLocale, asClientCtx } from '../helpers/harness'
-import { click, flush, hover, makeKit, mount, query, queryAll, text, unhover } from '../helpers/kit'
+import { click, flush, hover, makeKit, mount, query, queryAll, silenceWindowErrors, text, unhover } from '../helpers/kit'
 
 // pluginInfo's npm-registry probe stays inert (and '0.0.0-dev' short-circuits
 // it anyway).
@@ -666,30 +666,39 @@ describe('ContextView — locale and settings', () => {
 
 describe('ContextView — error boundary', () => {
   test('a render failure degrades to the error card and Retry recovers', async () => {
-    const real = createContextSettings()
-    // Flag-driven (not call-counted): React 18 dev replays a failed unit of
-    // work and retries an errored concurrent pass synchronously, so the
-    // failure must persist until the boundary catches, then clear for Retry.
-    let fail = true
-    const flaky = {
-      ...real,
-      defaultGranularity: (): 'step' | 'turn' => {
-        if (fail) throw new Error('boom-settings')
-        return real.defaultGranularity()
-      },
-    }
-    const View = makeView(new TestClientCtx(), flaky)
-    const m = await mount(h(View, {
-      sessionId: 'sv-err',
-      useProjection: projectionsFor(richTimeline()),
-    }))
-    assert.ok(text(m.container).includes(DICT_EN.error))
-    assert.ok(text(m.container).includes('boom-settings'))
+    // React 18 dev replays the failed render through a fake DOM event (loud
+    // stderr via jsdom/vitest) and logs the boundary message to console —
+    // both silenced so the deliberate throw stays inside this test.
+    vi.spyOn(console, 'error').mockImplementation(() => {})
+    const silenceErrors = silenceWindowErrors()
+    try {
+      const real = createContextSettings()
+      // Flag-driven (not call-counted): React 18 dev replays a failed unit of
+      // work and retries an errored concurrent pass synchronously, so the
+      // failure must persist until the boundary catches, then clear for Retry.
+      let fail = true
+      const flaky = {
+        ...real,
+        defaultGranularity: (): 'step' | 'turn' => {
+          if (fail) throw new Error('boom-settings')
+          return real.defaultGranularity()
+        },
+      }
+      const View = makeView(new TestClientCtx(), flaky)
+      const m = await mount(h(View, {
+        sessionId: 'sv-err',
+        useProjection: projectionsFor(richTimeline()),
+      }))
+      assert.ok(text(m.container).includes(DICT_EN.error))
+      assert.ok(text(m.container).includes('boom-settings'))
 
-    fail = false
-    await click(query(m.container, '.lc-error-retry'))
-    assert.ok(text(m.container).includes(DICT_EN['overview.title']))
-    assert.ok(!text(m.container).includes(DICT_EN.error))
-    await m.unmount()
+      fail = false
+      await click(query(m.container, '.lc-error-retry'))
+      assert.ok(text(m.container).includes(DICT_EN['overview.title']))
+      assert.ok(!text(m.container).includes(DICT_EN.error))
+      await m.unmount()
+    } finally {
+      silenceErrors()
+    }
   })
 })
