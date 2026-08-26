@@ -47,6 +47,8 @@ A DeepSeek Harness plugin for context insight, actions, and management.
 
 ## I18n
 - Chinese (Simplified) and English are supported for UI elements.
+- Update all the supported languages translations when adding or modifying the UI elements.
+- Do not keep the deprecated or unused language keys.
 
 ## Docs
 - `docs` directory contains only end-user faced documents.
