@@ -256,6 +256,10 @@ button.lc-brief-row-link { cursor: pointer; }
 .lc-fa-b-read { color: var(--dsw-alias-brand-primary); background: color-mix(in srgb, var(--dsw-alias-brand-primary) 14%, transparent); }
 .lc-fa-b-write { color: var(--dsw-alias-state-success-primary); background: color-mix(in srgb, var(--dsw-alias-state-success-primary) 14%, transparent); }
 .lc-fa-b-search { color: var(--dsw-alias-state-warn-primary); background: color-mix(in srgb, var(--dsw-alias-state-warn-primary) 14%, transparent); }
+/* An active kind chip tints in its badge color (the pills on the rows below), keeping the same color language as the counts. */
+.lc-fa-chip-read.lc-gran-on, .lc-fa-chip-read.lc-gran-on:hover { background: color-mix(in srgb, var(--dsw-alias-brand-primary) 14%, transparent); color: var(--dsw-alias-brand-primary); }
+.lc-fa-chip-write.lc-gran-on, .lc-fa-chip-write.lc-gran-on:hover { background: color-mix(in srgb, var(--dsw-alias-state-success-primary) 14%, transparent); color: var(--dsw-alias-state-success-primary); }
+.lc-fa-chip-search.lc-gran-on, .lc-fa-chip-search.lc-gran-on:hover { background: color-mix(in srgb, var(--dsw-alias-state-warn-primary) 14%, transparent); color: var(--dsw-alias-state-warn-primary); }
 .lc-fa-delta { flex: none; display: inline-flex; gap: 5px; font-size: 11px; font-weight: 600; font-variant-numeric: tabular-nums; white-space: nowrap; }
 .lc-fa-up { color: var(--dsw-alias-state-success-primary); }
 .lc-fa-down { color: var(--dsw-alias-state-error-primary); }

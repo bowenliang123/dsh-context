@@ -159,7 +159,15 @@ describe('FileCard — header, rows, and filters', () => {
     const m = await mount(h(FileCard, { activity: richActivity(), scope: 'live' }))
     const paths = () => queryAll(m.container, '.lc-fa-row').map(r => r.title)
 
+    // Kind chips always carry their badge-color class; the neutral chips don't.
+    assert.ok(chipByLabel(m.container, 'Read').className.includes('lc-fa-chip-read'))
+    assert.ok(chipByLabel(m.container, 'Written').className.includes('lc-fa-chip-write'))
+    assert.ok(chipByLabel(m.container, 'Searched').className.includes('lc-fa-chip-search'))
+    assert.ok(!chipByLabel(m.container, 'All').className.includes('lc-fa-chip-'))
+    assert.ok(!chipByLabel(m.container, 'Images').className.includes('lc-fa-chip-'))
+
     await click(chipByLabel(m.container, 'Written'))
+    assert.ok(chipByLabel(m.container, 'Written').className.includes('lc-gran-on'))
     assert.deepEqual(paths(), ['/src/a.ts', 'solo.md'])
     await click(chipByLabel(m.container, 'Searched'))
     assert.deepEqual(paths(), ['/src/'])
@@ -169,6 +177,56 @@ describe('FileCard — header, rows, and filters', () => {
     assert.deepEqual(paths(), ['/var/many.log', '/src/a.ts', '/shots/ui.png'])
     await click(chipByLabel(m.container, 'Read'))
     assert.equal(paths().length, 5)
+    await m.unmount()
+  })
+
+  test('the count sort keys on the selected kind once a kind chip is active', async () => {
+    // x.log is op-heavy overall (6 ops) but read-light (1); y.ts is read-heavy (2 of 2 ops);
+    // idx.md and pat.txt split the search counts 3 vs 1.
+    const activity: FileActivity = {
+      entries: [
+        entry('/logs/x.log', {
+          reads: 1,
+          writes: 5,
+          ops: [
+            fileOp(6, 'write', 'edit'),
+            fileOp(5, 'write', 'edit'),
+            fileOp(4, 'write', 'edit'),
+            fileOp(3, 'write', 'edit'),
+            fileOp(2, 'write', 'edit'),
+            fileOp(1, 'read', 'read'),
+          ],
+        }),
+        entry('/code/y.ts', { reads: 2, ops: [fileOp(8, 'read', 'read'), fileOp(7, 'read', 'read')] }),
+        entry('/src/idx.md', {
+          searches: 3,
+          ops: [fileOp(11, 'search', 'glob'), fileOp(10, 'search', 'grep'), fileOp(9, 'search', 'grep')],
+        }),
+        entry('/src/pat.txt', { searches: 1, ops: [fileOp(12, 'search', 'grep')] }),
+      ],
+      totals: {
+        read: { files: 2, ops: 3 },
+        write: { files: 1, ops: 5 },
+        search: { files: 2, ops: 4 },
+        image: { files: 0, ops: 0 },
+        added: 0,
+        removed: 0,
+      },
+      unresolved: 0,
+    }
+    const m = await mount(h(FileCard, { activity, scope: 'live' }))
+    const titles = () => queryAll(m.container, '.lc-fa-row').map(r => r.title)
+    // 'count' over everything: total ops lead.
+    assert.deepEqual(titles(), ['/logs/x.log', '/src/idx.md', '/code/y.ts', '/src/pat.txt'])
+    // The read chip narrows AND the count sort re-keys on reads: 2 reads beat 1.
+    await click(chipByLabel(m.container, 'Read'))
+    assert.deepEqual(titles(), ['/code/y.ts', '/logs/x.log'])
+    // The write chip leaves the one write-heavy file, still write-keyed.
+    await click(chipByLabel(m.container, 'Written'))
+    assert.deepEqual(titles(), ['/logs/x.log'])
+    // The search chip re-keys on searches: 3 beat 1.
+    await click(chipByLabel(m.container, 'Searched'))
+    assert.deepEqual(titles(), ['/src/idx.md', '/src/pat.txt'])
     await m.unmount()
   })
 

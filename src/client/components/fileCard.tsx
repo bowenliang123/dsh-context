@@ -67,11 +67,16 @@ export function makeFileCard(kit: ViewKit, settings: ContextSettings): (props: F
     const [openPath, setOpenPath] = React.useState<string | null>(null)
 
     const q = query.trim().toLowerCase()
+    // The count sort's magnitude: the selected kind's own ops when a kind
+    // chip is active (a file heavy on writes must not outrank one heavy on
+    // reads under the read chip), else the file's overall op count.
+    const countOf = (e: FileEntry): number =>
+      filter === 'read' ? e.reads : filter === 'write' ? e.writes : filter === 'search' ? e.searches : e.ops.length
     /* The fold serves entries latest-first; the sort toggle re-orders the filtered copy (never the source array). */
     const shown = activity.entries
       .filter(e => matches(e, filter) && (q === '' || e.path.toLowerCase().includes(q)))
       .sort((a, b) => sort === 'count'
-        ? (b.ops.length - a.ops.length) || (b.ops[0].seq - a.ops[0].seq)
+        ? (countOf(b) - countOf(a)) || (b.ops[0].seq - a.ops[0].seq)
         : sort === 'latest'
           ? b.ops[0].seq - a.ops[0].seq
           // Paths are unique map keys: a two-way comparison orders them fully.
@@ -115,7 +120,9 @@ export function makeFileCard(kit: ViewKit, settings: ContextSettings): (props: F
                   <button
                     key={c.key}
                     type="button"
-                    className={'lc-gran-btn' + (filter === c.key ? ' lc-gran-on' : '')}
+                    // Kind chips carry their badge color (the row pills below) once active.
+                    className={'lc-gran-btn' + (filter === c.key ? ' lc-gran-on' : '')
+                      + (c.key === 'read' || c.key === 'write' || c.key === 'search' ? ' lc-fa-chip-' + c.key : '')}
                     title={t('files.chipTip', { files: c.files, ops: c.ops })}
                     onClick={() => { setFilter(cur => (cur === c.key ? 'all' : c.key)) }}
                   >
