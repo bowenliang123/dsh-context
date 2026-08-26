@@ -55,7 +55,8 @@ A DeepSeek Harness plugin for context insight, actions, and management.
 - Generate one-time temp files in the `.tmp` directory, and properly clean them up right after use.
 
 ## Git
-- When asked to commit, please commit the possibly mixed changes separately for each purpose.
+- When asked to commit, please commit the possibly mixed changes separately for each task or purpose.
+- Push the commits automatically.
 
 ## Tool Usage
 - Use `read` tool before using the `edit` tool, avoiding errors like "Error: edit requires reading '/path/file' first — read the file, then retry."
