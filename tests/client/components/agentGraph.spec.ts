@@ -158,30 +158,36 @@ describe('AgentGraph — the family tree', () => {
     assert.ok(rendered.includes('2 running'))
     assert.ok(rendered.includes('2.3k tokens in context'))
 
-    // The current node wears the self ring and shows the freshest stats.
+    // The current node wears the brand self-ring and shows the freshest stats.
     const self = query(m.container, 'g.lc-agent-self')
     assert.equal(self.getAttribute('data-agent'), 'root')
     assert.equal(self.getAttribute('role'), 'img')
     assert.ok(text(self).includes('50%'))
+    assert.ok(self.querySelector('.lc-agent-self-badge') !== null)
+    assert.ok(query(m.container, 'g[data-agent="worker"]').querySelector('.lc-agent-self-badge') === null)
 
-    // Links join both children; the running one is animated.
+    // Links join both children: the running one layers a flowing pulse over the solid lineage stroke.
     const links = queryAll(m.container, 'path.lc-agents-link')
     assert.equal(links.length, 2)
-    assert.equal(queryAll(m.container, 'path.lc-agents-link-on').length, 1)
+    assert.equal(queryAll(m.container, 'path.lc-agents-link-live').length, 1)
+    assert.equal(queryAll(m.container, 'path.lc-agents-flow').length, 1)
 
-    // The worker node: descriptor label, donut segments, occupancy ring.
+    // The worker node: descriptor label, running halo class, fused ring (composition + free remainder).
     const worker = query(m.container, 'g[data-agent="worker"]')
     assert.ok(text(worker).includes('worker-bee'))
     assert.ok(text(worker).includes('83%'))
-    assert.ok(worker.querySelectorAll('circle.lc-agent-seg').length > 0)
-    assert.ok(worker.querySelector('circle.lc-agent-ring') !== null)
-    assert.ok(worker.querySelector('.lc-agent-dot-on') !== null)
+    assert.ok(worker.classList.contains('lc-agent-running'))
+    const workerSegs = worker.querySelectorAll('circle.lc-agent-seg')
+    assert.ok(workerSegs.length > 1)
+    assert.ok(worker.querySelector('circle.lc-agent-free') !== null)
 
-    // The one-shot child: no timeline → id label, pressure-only ring at 95%, completed dot.
+    // The one-shot child: no timeline → id label, pressure-only fused ring (arc + free), done halo class.
     const done = query(m.container, 'g[data-agent="done"]')
     assert.ok(text(done).includes('95%'))
-    assert.ok(done.querySelector('.lc-agent-dot-done') !== null)
-    assert.equal(done.querySelectorAll('circle.lc-agent-seg').length, 0)
+    assert.ok(done.classList.contains('lc-agent-done'))
+    const doneSegs = done.querySelectorAll('circle.lc-agent-seg')
+    assert.equal(doneSegs.length, 2)
+    assert.ok(done.querySelector('circle.lc-agent-free') !== null)
 
     // The inspector mirrors the current node by default, with the self badge.
     const inspector = query(m.container, '.lc-agents-inspector')
@@ -192,8 +198,8 @@ describe('AgentGraph — the family tree', () => {
     assert.ok(text(inspector).includes('1.2k billed'))
     assert.ok(!text(inspector).includes('click to open'))
 
-    // The legend lists all six categories.
-    assert.equal(queryAll(m.container, '.lc-agents-legend-item').length, 6)
+    // The legend lists all six categories plus the free-window and running-edge keys.
+    assert.equal(queryAll(m.container, '.lc-agents-legend-item').length, 8)
 
     await m.unmount()
   })
@@ -333,11 +339,14 @@ describe('AgentGraph — the family tree', () => {
 
     const bare = query(m.container, 'g[data-agent="bare"]')
     assert.ok(text(bare).includes('—'))
-    assert.equal(bare.querySelectorAll('circle.lc-agent-ring').length, 0)
+    assert.equal(bare.querySelectorAll('circle.lc-agent-seg').length, 0)
 
     const zero = query(m.container, 'g[data-agent="zero"]')
     assert.ok(text(zero).includes('0%'))
-    assert.equal(zero.querySelectorAll('circle.lc-agent-ring').length, 0)
+    // Zero occupancy on a known window: just the free outline.
+    const zeroSegs = zero.querySelectorAll('circle.lc-agent-seg')
+    assert.equal(zeroSegs.length, 1)
+    assert.ok(zero.querySelector('circle.lc-agent-free') !== null)
 
     // Long labels wrap in full — no ellipsis truncation.
     assert.ok(text(query(m.container, 'g[data-agent="longname"]')).includes('a-very-long-descriptor-label'))

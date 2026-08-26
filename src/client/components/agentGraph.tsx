@@ -17,13 +17,13 @@ import type { ClientCtx } from '../services'
 import type { ViewKit } from '../viewkit'
 import type { AgentNode, AgentSelfStats } from '../agentTree'
 import {
-  AGENT_INNER_R,
   AGENT_NODE_R,
+  AGENT_RING_R,
   agentForestOf,
-  donutSegments,
   fmtDuration,
   layoutForest,
   openAgentSession,
+  ringSegments,
   sessionsFaceOf,
 } from '../agentTree'
 
@@ -35,11 +35,10 @@ export interface AgentGraphProps {
   self?: AgentSelfStats
 }
 
-/** Caption box under a node: wraps freely so full agent names always show. */
-const CAPTION_W = 136
+/** Caption box height under a node (3 wrapped label lines + the tokens line). */
 const CAPTION_H = 60
 
-/** Occupancy-ring color by fill ratio (no window → the neutral track color). */
+/** Fallback arc color for pressure-only nodes (no composition data), by fill ratio. */
 export function ringColorOf(pct: number | null): string {
   if (pct === null) return 'var(--dsw-alias-border-l1)'
   if (pct >= 90) return '#ef4444'
@@ -74,6 +73,21 @@ export function makeAgentGraph(
     const sessionId = props.sessionId
     const [hoverId, setHoverId] = React.useState<string | null>(null)
 
+    // The layout is fully responsive: re-run it whenever the stage's visible
+    // width changes (sidebar toggles, window resizes, split views).
+    const stageRef = React.useRef<HTMLDivElement | null>(null)
+    const [stageWidth, setStageWidth] = React.useState(0)
+    React.useEffect(() => {
+      /* v8 ignore start -- jsdom has neither ResizeObserver nor layout; tests exercise the natural-pitch fallback (stageWidth 0). */
+      const el = stageRef.current
+      if (el === null || typeof ResizeObserver !== 'function') return
+      setStageWidth(el.clientWidth)
+      const observer = new ResizeObserver(() => { setStageWidth(el.clientWidth) })
+      observer.observe(el)
+      return () => { observer.disconnect() }
+      /* v8 ignore stop */
+    }, [])
+
     // Discover the current session's direct-child catalog once per session:
     // catalog-derived children join the list rows (and gain navigation
     // addresses). Fire-and-forget — the card renders from list rows alone.
@@ -83,13 +97,13 @@ export function makeAgentGraph(
       face.refreshSubagents(sessionId).catch(() => {})
     }, [face, sessionId])
 
-    const forest = React.useMemo(
-      () => agentForestOf(snapshot, sessionId, props.self),
-      [snapshot, sessionId, props.self],
-    )
-    if (forest === null) return null
+    const built = React.useMemo(() => {
+      const forest = agentForestOf(snapshot, sessionId, props.self)
+      return forest !== null ? { forest, layout: layoutForest(forest, stageWidth) } : null
+    }, [snapshot, sessionId, props.self, stageWidth])
 
-    const layout = layoutForest(forest)
+    if (built === null) return null
+    const { forest, layout } = built
     const byId = new Map(forest.nodes.map(n => [n.id, n]))
     /* v8 ignore next 1 -- agentForestOf anchors the forest at the current
        session, so a current node always exists. */
@@ -129,21 +143,29 @@ export function makeAgentGraph(
             : null}
         </div>
 
-        <div className="lc-agents-stage">
+        <div className="lc-agents-stage" ref={stageRef}>
           <svg
             className="lc-agents-svg"
             width={layout.width}
             height={layout.height}
             viewBox={`0 0 ${layout.width} ${layout.height}`}
           >
-            {layout.links.map(link => (
-              <path
-                key={link.to}
-                className={'lc-agents-link' + (link.running ? ' lc-agents-link-on' : '')}
-                d={`M ${link.x1} ${link.y1} C ${link.x1} ${link.y1 + 18}, ${link.x2} ${link.y2 - 18}, ${link.x2} ${link.y2}`}
-                fill="none"
-              />
-            ))}
+            {layout.links.map((link) => {
+              // Direct segment per link, colored by the child's family; a
+              // running child layers a flowing pulse of the same hue on top.
+              const d = `M ${link.x1} ${link.y1} L ${link.x2} ${link.y2}`
+              return (
+                <g key={link.to}>
+                  <path
+                    className={'lc-agents-link' + (link.running ? ' lc-agents-link-live' : '')}
+                    d={d}
+                    stroke={link.color}
+                    fill="none"
+                  />
+                  {link.running ? <path className="lc-agents-flow" d={d} stroke={link.color} fill="none" /> : null}
+                </g>
+              )
+            })}
             {forest.nodes.map((node) => {
               const point = layout.points.find(p => p.id === node.id)
               /* v8 ignore next 2 -- layoutForest positions every forest node,
@@ -155,6 +177,7 @@ export function makeAgentGraph(
                   node={node}
                   x={point.x}
                   y={point.y}
+                  captionW={layout.captionW}
                   hovered={hoverId === node.id}
                   onHover={setHoverId}
                   onOpen={open}
@@ -177,6 +200,14 @@ export function makeAgentGraph(
               {catLabel(c.key)}
             </span>
           ))}
+          <span className="lc-agents-legend-item">
+            <i className="lc-agents-legend-free" />
+            {t('agents.legend.free')}
+          </span>
+          <span className="lc-agents-legend-item">
+            <i className="lc-agents-legend-edge" />
+            {t('agents.running')}
+          </span>
         </div>
       </div>
     )
@@ -189,6 +220,8 @@ interface NodeViewProps {
   node: AgentNode
   x: number
   y: number
+  /** Label box width from the responsive layout (narrows as slots compress). */
+  captionW: number
   hovered: boolean
   onHover: (id: string | null) => void
   onOpen: (id: string) => void
@@ -198,14 +231,14 @@ interface NodeViewProps {
 }
 
 function AgentNodeView(props: NodeViewProps): ReactNS.ReactElement {
-  const { node, x, y } = props
+  const { node, x, y, captionW } = props
   const pct = node.head !== null ? node.head.pct : null
-  const segs = node.head !== null ? donutSegments(node.head.parts, AGENT_INNER_R) : []
-  const ring = 2 * Math.PI * AGENT_NODE_R
-  const fill = pct !== null ? ring * Math.min(100, pct) / 100 : 0
+  const ring = 2 * Math.PI * AGENT_RING_R
+  const segs = node.head !== null ? ringSegments(node.head.parts, pct, AGENT_RING_R, ringColorOf(pct)) : []
   const cls = 'lc-agent-node'
     + (node.isCurrent ? ' lc-agent-self' : '')
     + (node.running ? ' lc-agent-running' : '')
+    + (node.completed && !node.running ? ' lc-agent-done' : '')
     + (props.hovered ? ' lc-agent-hover' : '')
     + (node.isCurrent ? '' : ' lc-agent-clickable')
   return (
@@ -220,26 +253,16 @@ function AgentNodeView(props: NodeViewProps): ReactNS.ReactElement {
       onMouseEnter={() => { props.onHover(node.id) }}
       onMouseLeave={() => { props.onHover(null) }}
     >
+      {/* Halo carries the state: wash for self, breathing green while running, faint green for done. */}
       <circle className="lc-agent-halo" r={AGENT_NODE_R + 9} />
       <circle className="lc-agent-track" r={AGENT_NODE_R} />
-      {pct !== null && pct > 0
-        ? (
-          <circle
-            className="lc-agent-ring"
-            r={AGENT_NODE_R}
-            stroke={ringColorOf(pct)}
-            strokeDasharray={`${fill} ${ring - fill}`}
-            transform="rotate(-90)"
-          />
-        )
-        : null}
       {segs.map(seg => (
         <circle
           key={seg.key}
-          className="lc-agent-seg"
-          r={AGENT_INNER_R}
-          stroke={seg.color}
-          strokeDasharray={`${seg.len} ${2 * Math.PI * AGENT_INNER_R - seg.len}`}
+          className={'lc-agent-seg' + (seg.free ? ' lc-agent-free' : '')}
+          r={AGENT_RING_R}
+          stroke={seg.free ? undefined : seg.color}
+          strokeDasharray={`${seg.len} ${ring - seg.len}`}
           strokeDashoffset={-seg.offset}
           transform="rotate(-90)"
         />
@@ -247,16 +270,14 @@ function AgentNodeView(props: NodeViewProps): ReactNS.ReactElement {
       <text className="lc-agent-pct" textAnchor="middle" dy="0.32em">
         {pct !== null ? `${pct}%` : (node.head !== null ? props.fmt(node.head.tokens) : '—')}
       </text>
-      <circle
-        className={'lc-agent-dot' + (node.running ? ' lc-agent-dot-on' : node.completed ? ' lc-agent-dot-done' : '')}
-        cx={AGENT_NODE_R * 0.72}
-        cy={AGENT_NODE_R * 0.72}
-        r={4}
-      />
-      {/* HTML caption (foreignObject): the full label wraps instead of truncating. */}
-      <foreignObject x={-CAPTION_W / 2} y={AGENT_NODE_R + 8} width={CAPTION_W} height={CAPTION_H}>
+      {/* HTML caption (foreignObject): the full label wraps instead of truncating;
+          the current agent is marked in text, keeping every node's ring semantics identical. */}
+      <foreignObject x={-captionW / 2} y={AGENT_NODE_R + 8} width={captionW} height={CAPTION_H}>
         <div className="lc-agent-caption">
-          <div className="lc-agent-label">{node.label}</div>
+          <div className="lc-agent-label">
+            {node.label}
+            {node.isCurrent ? <span className="lc-agents-badge lc-agent-self-badge">{props.t('agents.self')}</span> : null}
+          </div>
           <div className="lc-agent-tokens">{node.head !== null ? props.fmt(node.head.tokens) : '—'}</div>
         </div>
       </foreignObject>
@@ -279,9 +300,9 @@ function Inspector(props: { node: AgentNode; t: ViewKit['t']; fmt: ViewKit['fmt'
   if (node.durationMs !== null) bits.push(fmtDuration(node.durationMs))
   return (
     <div className="lc-agents-inspector">
-      <span className={'lc-agent-dot' + (node.running ? ' lc-agent-dot-on' : node.completed ? ' lc-agent-dot-done' : '')} />
       <b className="lc-agents-inspector-name">{node.label}</b>
       {node.isCurrent ? <span className="lc-agents-badge">{t('agents.self')}</span> : null}
+      {node.running ? <span className="lc-agents-badge lc-agents-badge-on">{t('agents.running')}</span> : null}
       {node.identity !== null
         ? <span className="lc-agents-badge">{t(node.identity.mode === 'one-shot' ? 'agents.oneshot' : 'agents.continuable')}</span>
         : null}

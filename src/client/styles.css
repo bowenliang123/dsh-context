@@ -417,34 +417,42 @@ button.lc-brief-row-link { cursor: pointer; }
 .lc-agents-chip-on { color: var(--dsw-alias-state-success-primary); border-color: color-mix(in srgb, var(--dsw-alias-state-success-primary) 40%, transparent); }
 .lc-agents-stage { overflow-x: auto; margin: 0 -4px; padding: 0 4px; }
 .lc-agents-svg { display: block; margin: 0 auto; max-width: none; }
-.lc-agents-link { stroke: color-mix(in srgb, var(--dsw-alias-label-secondary) 45%, transparent); stroke-width: 1.5; }
-.lc-agents-link-on { stroke: var(--dsw-alias-state-success-primary); stroke-dasharray: 5 4; animation: lc-agent-flow 1.2s linear infinite; }
+/* Direct segment per link, family-colored (the stroke comes from the link);
+   a running child brightens its channel and layers a traveling pulse of the
+   same hue over it. */
+.lc-agents-link { stroke-width: 1.5; stroke-opacity: 0.45; }
+.lc-agents-link-live { stroke-opacity: 0.85; }
+.lc-agents-flow { stroke-width: 2; stroke-linecap: round; stroke-dasharray: 2 7; animation: lc-agent-flow 0.9s linear infinite; }
 @keyframes lc-agent-flow { to { stroke-dashoffset: -9; } }
 .lc-agent-node { outline: none; }
 .lc-agent-clickable { cursor: pointer; }
+/* The halo carries node state: hover wash, brand tint for self, breathing green while running, a faint green rest for done. */
 .lc-agent-halo { fill: transparent; transition: fill 120ms ease; }
 .lc-agent-hover .lc-agent-halo, .lc-agent-node:focus-visible .lc-agent-halo { fill: var(--dsw-alias-interactive-bg-hover, var(--dsw-alias-bg-layer-2)); }
 .lc-agent-self .lc-agent-halo { fill: var(--dsw-alias-bg-layer-2); }
-.lc-agent-track { fill: var(--dsw-alias-bg-layer-1); stroke: var(--dsw-alias-border-l1); stroke-width: 3; }
-.lc-agent-self .lc-agent-track { stroke: var(--dsw-alias-brand-primary, var(--dsw-alias-label-primary)); }
-.lc-agent-ring { fill: none; stroke-width: 3; stroke-linecap: round; transition: stroke-dasharray 300ms ease; }
-.lc-agent-seg { fill: none; stroke-width: 7; transition: stroke-dasharray 300ms ease, stroke-dashoffset 300ms ease; }
+.lc-agent-running .lc-agent-halo { fill: color-mix(in srgb, var(--dsw-alias-state-success-primary) 12%, transparent); animation: lc-agent-glow 1.8s ease-in-out infinite; }
+.lc-agent-done .lc-agent-halo { fill: color-mix(in srgb, var(--dsw-alias-state-success-primary) 7%, transparent); }
+@keyframes lc-agent-glow { 0%, 100% { opacity: 1; } 50% { opacity: 0.4; } }
+.lc-agent-track { fill: var(--dsw-alias-bg-layer-1); stroke: var(--dsw-alias-border-l1); stroke-width: 1.5; }
+/* One fused ring per node: composition arcs fill the occupied share, a neutral remainder marks the free window. */
+.lc-agent-seg { fill: none; stroke-width: 9; transition: stroke-dasharray 300ms ease, stroke-dashoffset 300ms ease; }
+.lc-agent-free { stroke: color-mix(in srgb, var(--dsw-alias-label-secondary) 18%, transparent); }
 .lc-agent-pct { font-size: 11px; font-weight: 600; fill: var(--dsw-alias-label-primary); font-variant-numeric: tabular-nums; pointer-events: none; }
 /* The caption is HTML inside a foreignObject, so long agent names wrap freely instead of truncating. */
 .lc-agent-caption { width: 100%; text-align: center; pointer-events: none; line-height: 1.25; }
-.lc-agent-label { font-size: 11px; color: var(--dsw-alias-label-primary); overflow-wrap: anywhere; }
+/* Labels wrap word-wise; only an extremely compressed (narrow stage) layout ellipsizes past 3 lines. */
+.lc-agent-label { font-size: 11px; color: var(--dsw-alias-label-primary); overflow-wrap: break-word; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 3; overflow: hidden; }
 .lc-agent-tokens { font-size: 10px; color: var(--dsw-alias-label-secondary); font-variant-numeric: tabular-nums; }
-.lc-agent-dot { display: inline-block; width: 8px; height: 8px; flex: none; border-radius: 999px; background: var(--dsw-alias-border-l1); fill: var(--dsw-alias-border-l1); }
-.lc-agent-dot-on { background: var(--dsw-alias-state-success-primary); fill: var(--dsw-alias-state-success-primary); animation: lc-agent-pulse 1.6s ease-in-out infinite; }
-.lc-agent-dot-done { background: var(--dsw-alias-brand-primary, #3b82f6); fill: var(--dsw-alias-brand-primary, #3b82f6); }
-@keyframes lc-agent-pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.35; } }
 .lc-agents-solo { padding: 4px 0 10px; }
 .lc-agents-inspector { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 8px; min-width: 0; margin-top: 10px; padding: 7px 10px; border: 1px solid var(--dsw-alias-border-l1); border-radius: 8px; background: var(--dsw-alias-bg-layer-2); font-size: 12px; }
-.lc-agents-inspector .lc-agent-dot { align-self: center; }
 .lc-agents-inspector-name { color: var(--dsw-alias-label-primary); overflow-wrap: anywhere; }
 .lc-agents-badge { flex: none; font-size: 10px; padding: 1px 6px; border-radius: 999px; background: var(--dsw-alias-bg-layer-1); border: 1px solid var(--dsw-alias-border-l1); color: var(--dsw-alias-label-secondary); }
+.lc-agent-self-badge { margin-left: 5px; vertical-align: 1px; }
+.lc-agents-badge-on { color: var(--dsw-alias-state-success-primary); border-color: color-mix(in srgb, var(--dsw-alias-state-success-primary) 40%, transparent); }
 .lc-agents-inspector-stats { color: var(--dsw-alias-label-secondary); font-variant-numeric: tabular-nums; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .lc-agents-inspector-open { margin-left: auto; flex: none; color: var(--dsw-alias-brand-primary, #3b82f6); }
 .lc-agents-legend { display: flex; flex-wrap: wrap; gap: 4px 14px; margin-top: 8px; font-size: 11px; color: var(--dsw-alias-label-secondary); }
 .lc-agents-legend-item { display: inline-flex; align-items: center; gap: 5px; }
 .lc-agents-legend-item i { width: 8px; height: 8px; border-radius: 2px; }
+.lc-agents-legend-free { background: color-mix(in srgb, var(--dsw-alias-label-secondary) 18%, transparent); }
+.lc-agents-legend-edge { width: 14px !important; height: 0 !important; border-radius: 0 !important; border-top: 2px dashed var(--dsw-alias-label-secondary); }
