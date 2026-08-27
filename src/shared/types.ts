@@ -278,12 +278,31 @@ export interface ContextEventRecord {
   step?: number
 }
 
+/**
+ * Sentinel `HeaderTool.plugin` value marking a tool whose provider could not
+ * be attributed: it was already registered in the harness tool service when
+ * this plugin's runtime attribution hook installed (boot-time third-party
+ * tools — e.g. local-link plugins that apply before dsh-context). The client
+ * renders a localized "unknown plugin" tag with an explanatory tooltip. No
+ * real plugin name can collide (it is not a valid package identifier).
+ */
+export const UNKNOWN_TOOL_SOURCE = '<unknown-plugin>'
+
 /** One tool schema as assembled into a request header, with its display price. */
 export interface HeaderTool {
   name: string
   tokens: number
   /** Producer-declared description (may be long; the browser truncates). */
   description?: string
+  /**
+   * The registering plugin's label, when attribution is known: either a
+   * `plugin` field carried by the raw header entry (harness-provided) or the
+   * host's best-effort attribution (`mcp:<server>` for MCP tools, or the
+   * pinned first-party package map). `UNKNOWN_TOOL_SOURCE` marks a tool whose
+   * provider predates the attribution hook; absent means nothing is known and
+   * the browser shows no tag.
+   */
+  plugin?: string
   /** The raw JSON schema object the model received (plain JSON). */
   schema?: unknown
 }

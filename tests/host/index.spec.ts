@@ -103,6 +103,58 @@ describe('dsh-context host plugin', () => {
     assert.ok(seen.some(e => e.key === 'contextHeaders'), 'contextHeaders changes notified')
   })
 
+  test('tool schema rows carry best-effort plugin attribution through real appends', async () => {
+    const { ctx } = await boot()
+    const session = ctx.sessions.create()
+    session.append('request/header', {
+      header: {
+        config: { model: 'deepseek-v4-flash', provider: 'deepseek' },
+        tools: [
+          { name: 'bash', description: 'run', parameters: { type: 'object' } },
+          { name: 'mcp__github__get_issue', description: 'm', parameters: { type: 'object' } },
+          { name: 'agent_teams_add_member', description: 't', parameters: { type: 'object' } },
+        ],
+      },
+      reason: 'initial',
+    } as never)
+    const headers = ctx.sessionProjections.snapshot(session).values.contextHeaders
+    assert.ok(headers !== undefined, 'contextHeaders served after real appends')
+    const tools = headers.headers[0].tools
+    assert.equal(tools.find(t => t.name === 'bash')?.plugin, '@deepseek-ai/dsh-tool-bash')
+    assert.equal(tools.find(t => t.name === 'mcp__github__get_issue')?.plugin, 'mcp:github')
+    assert.ok(!('plugin' in tools.find(t => t.name === 'agent_teams_add_member')!), 'unmapped third-party tools stay untagged')
+  })
+
+  test('register-hook attribution flows through to the rendered headers', async () => {
+    const { ctx } = await boot()
+    // dsh-context booted before any tools service existed; a late-provided
+    // instance is wrapped on first read inside the registering plugin.
+    ctx.provide('tools', { register() { return () => {} } })
+    await ctx.plugin({
+      name: 'my-agent-tools',
+      apply(agentCtx) {
+        const tools = (agentCtx as any).tools
+        tools.register({ name: 'custom_dynamic_tool', description: 'd', parameters: { type: 'object' } })
+      },
+    })
+    const session = ctx.sessions.create()
+    session.append('request/header', {
+      header: {
+        config: { model: 'deepseek-v4-flash', provider: 'deepseek' },
+        tools: [
+          { name: 'custom_dynamic_tool', description: 'd', parameters: { type: 'object' } },
+          { name: 'bash', description: 'run', parameters: { type: 'object' } },
+        ],
+      },
+      reason: 'initial',
+    } as never)
+    const headers = ctx.sessionProjections.snapshot(session).values.contextHeaders
+    assert.ok(headers !== undefined, 'contextHeaders served after real appends')
+    const tools = headers.headers[0].tools
+    assert.equal(tools.find(t => t.name === 'custom_dynamic_tool')?.plugin, 'my-agent-tools')
+    assert.equal(tools.find(t => t.name === 'bash')?.plugin, '@deepseek-ai/dsh-tool-bash', 'static backbone still applies')
+  })
+
   test('disposing the plugin fiber removes both keys from later snapshots', async () => {
     const { ctx, fiber } = await boot()
     const session = ctx.sessions.create()

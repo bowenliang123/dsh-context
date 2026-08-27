@@ -18,6 +18,7 @@
  */
 
 import type { Context } from '@deepseek-ai/cordis'
+import { createToolAttribution } from './attribution'
 import { Config } from './config'
 import { createContextHeadersDefinition } from './headers'
 import { installSettings } from './settings'
@@ -34,8 +35,13 @@ export const inject = ['sessionProjections']
 export { Config } from './config'
 
 export function apply(ctx: Context, config: Config): void {
+  // Tool-to-plugin attribution (see attribution.ts): the static chain from
+  // toolSources.ts stays the backbone, the runtime register() hook adds
+  // third-party / agent-scoped / dynamic tools on top. Strictly additive — an
+  // unsupported cordis or a missed read degrades to the static chain.
+  const attribution = createToolAttribution(ctx)
   ctx.sessionProjections.register(createContextTimelineDefinition(config))
-  ctx.sessionProjections.register(createContextHeadersDefinition())
+  ctx.sessionProjections.register(createContextHeadersDefinition(name => attribution.ownerOf(name)))
   installSettings(ctx)
 }
 

@@ -155,6 +155,60 @@ describe('createContextHeadersDefinition', () => {
     assert.equal(c.wire.view, def.view, 'the wire block shares the view function')
     assert.equal(c.wire.viewSchema.safeParse(c.wire.view(state)).success, true)
   })
+
+  test('a harness-provided plugin field rides the raw tool entry verbatim', () => {
+    const def = createContextHeadersDefinition()
+    const view = def.view(fold(def, [headerEvent(1, {
+      tools: [
+        { name: 'mcp__github__get_issue', plugin: 'mcp:github' },
+        { name: 'plain', plugin: '' }, // empty plugin behaves as absent
+        { name: 'naked' },
+      ],
+    })]))
+    const tools = view.headers[0].tools
+    assert.equal(tools[0].plugin, 'mcp:github')
+    assert.ok(!('plugin' in tools[1]))
+    assert.ok(!('plugin' in tools[2]))
+  })
+
+  test('the resolver fills an absent plugin at view time and never overrides a logged one', () => {
+    const resolve = (name: string): string | undefined =>
+      name === 'bash' ? '@deepseek-ai/dsh-tool-bash' : name === 'mcp__github__x' ? 'mcp:github' : undefined
+    const def = createContextHeadersDefinition(resolve)
+    const view = def.view(fold(def, [headerEvent(1, {
+      tools: [
+        { name: 'bash' },
+        { name: 'mcp__github__x' },
+        { name: 'bash', plugin: 'logged-owner' }, // logged wins over the resolver
+        { name: 'unknown' },
+      ],
+    })]))
+    const tools = view.headers[0].tools
+    assert.equal(tools[0].plugin, '@deepseek-ai/dsh-tool-bash')
+    assert.equal(tools[1].plugin, 'mcp:github')
+    assert.equal(tools[2].plugin, 'logged-owner')
+    assert.ok(!('plugin' in tools[3]))
+    // The fill is a view-time projection: the folded state stays pure.
+    assert.ok(!('plugin' in fold(def, [headerEvent(9, { tools: [{ name: 'bash' }] })]).headers[0].tools[0]))
+  })
+
+  test('without a resolver no plugin is ever added', () => {
+    const def = createContextHeadersDefinition()
+    const view = def.view(fold(def, [headerEvent(1, { tools: [{ name: 'mcp__github__x' }] })]))
+    assert.ok(!('plugin' in view.headers[0].tools[0]))
+  })
+
+  test('plugin-bearing state and views pass both schemas', () => {
+    const def = createContextHeadersDefinition(name => (name === 'bash' ? '@deepseek-ai/dsh-tool-bash' : undefined))
+    const state = fold(def, [headerEvent(1, {
+      tools: [{ name: 'bash', plugin: 'mcp:github' }, { name: 'read' }],
+    })])
+    const view = def.view(state)
+    assert.equal(def.schema.safeParse(view).success, true)
+    const c = compat(def)
+    assert.deepEqual(c.stateSchema.parse(structuredClone(state)), state)
+    assert.equal(c.wire.viewSchema.safeParse(c.wire.view(state)).success, true)
+  })
 })
 
 describe('hostile tool entries', () => {
