@@ -205,6 +205,38 @@ describe('activityOf', () => {
     assert.equal(a.totals.read.files, 1)
   })
 
+  test('a file-kind node the join lost entirely skips without throwing', () => {
+    // The regression this locks: with the conv node gone (aged window), the
+    // fold must skip the node — not dereference it and take the tab down.
+    const a = activityOf(
+      [
+        { seq: 3, cat: 'tool', tokens: 5, tool: 'read', time: T0 },
+        { seq: 5, cat: 'tool', tokens: 5, tool: 'run_code', time: T0 },
+      ],
+      () => undefined,
+      null,
+    )
+    assert.deepEqual(a.entries, [])
+  })
+
+  test('one hostile join node cannot take the walk down', () => {
+    const hostile: ConversationNodeLike = { kind: 'tool', seq: 3 }
+    Object.defineProperty(hostile, 'call', { get(): never { throw new Error('boom') } })
+    const healthy = op(5, 'read', { file_path: '/a.ts' })
+    const bySeq = new Map<number, ConversationNodeLike>([[3, hostile], [5, healthy.conv]])
+    const a = activityOf(
+      [
+        { seq: 3, cat: 'tool', tokens: 5, tool: 'read', time: T0 },
+        healthy.node,
+      ],
+      seq => bySeq.get(seq),
+      null,
+    )
+    // The throwing node drops; the walk carries on with the next node.
+    assert.deepEqual(a.entries.map(e => e.path), ['/a.ts'])
+    assert.equal(a.totals.read.ops, 1)
+  })
+
   test('an edit with missing strings contributes no line delta', () => {
     const a = run([op(3, 'edit', { file_path: '/a.ts', new_string: 'only\nadded' })])
     assert.equal(a.entries[0].added, 2)

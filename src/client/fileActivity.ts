@@ -333,63 +333,72 @@ export function activityOf(
     if (before !== null && n.seq >= before) continue
     const tool = n.tool
     if (tool === undefined) continue
-    const conv = convOf(n.seq)
-    const staticKind = kindOfTool(tool)
-    // Args are read for the file-kind tools only — any other call (bash, web
-    // search…) contributes nothing at the top level and walks only its
-    // nested tree, if any.
-    const args = staticKind !== null || tool === 'str_replace_editor'
-      ? parseCallArgs(conv?.call?.argsRaw)
-      : null
-    const kind = staticKind ?? kindOfCall(tool, args)
-    if (kind !== null) {
-      const err = n.err === true || (conv as ConversationNodeLike).isError === true
-      // A search whose result meta carries the COMPLETE matched-file list
-      // rows its ops per real file; a capped or malformed meta falls back to
-      // the call's own target (the narrowing path, else the pattern).
-      const files = kind === 'search' ? searchFilesOf(conv?.meta) : null
-      if (files !== null) {
-        const detail = searchDetailOf(args)
-        for (const f of files) {
-          add({
-            seq: n.seq,
-            ...(n.gone !== undefined ? { gone: n.gone } : {}),
-            kind,
-            tool,
-            ...(n.time !== undefined ? { time: n.time } : {}),
-            err,
-            added: 0,
-            removed: 0,
-            ...(detail !== undefined ? { detail } : {}),
-            ...(f.hits > 0 ? { hits: f.hits } : {}),
-          }, f.path)
-        }
-      } else if (args !== null) {
-        const path = pathOfArgs(tool, args)
-        if (path !== null) {
-          const { added, removed } = deltaOf(tool, args)
-          const detail = kind === 'search'
-            && typeof args.path === 'string' && args.path !== ''
-            ? searchDetailOf(args)
-            : undefined
-          add({
-            seq: n.seq,
-            ...(n.gone !== undefined ? { gone: n.gone } : {}),
-            kind,
-            tool,
-            ...(n.time !== undefined ? { time: n.time } : {}),
-            err,
-            added,
-            removed,
-            ...(detail !== undefined ? { detail } : {}),
-          }, path)
+    // One node's join data can never take the card down: anything that throws
+    // while folding it (a hostile conversation node, a drifted host) drops
+    // that node and the walk carries on.
+    try {
+      const conv = convOf(n.seq)
+      const staticKind = kindOfTool(tool)
+      // Args are read for the file-kind tools only — any other call (bash, web
+      // search…) contributes nothing at the top level and walks only its
+      // nested tree, if any.
+      const args = staticKind !== null || tool === 'str_replace_editor'
+        ? parseCallArgs(conv?.call?.argsRaw)
+        : null
+      const kind = staticKind ?? kindOfCall(tool, args)
+      if (kind !== null) {
+        // The join may have aged this node out entirely (conv undefined).
+        const err = n.err === true || conv?.isError === true
+        // A search whose result meta carries the COMPLETE matched-file list
+        // rows its ops per real file; a capped or malformed meta falls back to
+        // the call's own target (the narrowing path, else the pattern).
+        const files = kind === 'search' ? searchFilesOf(conv?.meta) : null
+        if (files !== null) {
+          const detail = searchDetailOf(args)
+          for (const f of files) {
+            add({
+              seq: n.seq,
+              ...(n.gone !== undefined ? { gone: n.gone } : {}),
+              kind,
+              tool,
+              ...(n.time !== undefined ? { time: n.time } : {}),
+              err,
+              added: 0,
+              removed: 0,
+              ...(detail !== undefined ? { detail } : {}),
+              ...(f.hits > 0 ? { hits: f.hits } : {}),
+            }, f.path)
+          }
+        } else if (args !== null) {
+          const path = pathOfArgs(tool, args)
+          if (path !== null) {
+            const { added, removed } = deltaOf(tool, args)
+            const detail = kind === 'search'
+              && typeof args.path === 'string' && args.path !== ''
+              ? searchDetailOf(args)
+              : undefined
+            add({
+              seq: n.seq,
+              ...(n.gone !== undefined ? { gone: n.gone } : {}),
+              kind,
+              tool,
+              ...(n.time !== undefined ? { time: n.time } : {}),
+              err,
+              added,
+              removed,
+              ...(detail !== undefined ? { detail } : {}),
+            }, path)
+          }
         }
       }
-    }
-    // Nested Code-Mode calls (PTC): one settled sub-dispatch is one op.
-    const subCalls = conv?.subCalls
-    if (subCalls !== undefined && subCalls.length > 0) {
-      foldSubCalls(subCalls, n, programOf(conv), add, new Set<object>(), 1)
+      // Nested Code-Mode calls (PTC): one settled sub-dispatch is one op.
+      const subCalls = conv?.subCalls
+      if (subCalls !== undefined && subCalls.length > 0) {
+        foldSubCalls(subCalls, n, programOf(conv), add, new Set<object>(), 1)
+      }
+    } catch {
+      // Unreachable with well-formed join data; the guard exists so it can
+      // never matter.
     }
   }
   const entries = [...byPath.values()]
