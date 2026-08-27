@@ -51,6 +51,12 @@ describe('PluginInfo', () => {
     assert.equal(query(rows[1], '.lc-pi-label').textContent, 'GitHub')
     assert.equal(query(rows[1], '.lc-pi-value').textContent, 'bowenliang123/dsh-context')
     assert.equal(rows[1].getAttribute('href'), 'https://github.com/bowenliang123/dsh-context')
+    // The tagline is the repo link too: hover underlines it, a click opens GitHub.
+    const hint = query(m.container, '.lc-pi-hint')
+    assert.ok(text(hint).includes('The best DSH context plugin'))
+    assert.equal(hint.getAttribute('href'), 'https://github.com/bowenliang123/dsh-context')
+    assert.equal(hint.getAttribute('target'), '_blank')
+    assert.equal(hint.getAttribute('rel'), 'noreferrer')
     assert.equal(queryAll(m.container, '.lc-pi-update').length, 0)
     await m.unmount()
   })

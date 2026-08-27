@@ -35,7 +35,10 @@ export function makePluginInfo(kit: ViewKit): () => ReactNS.ReactElement {
       <div className="lc-card">
         <div className="lc-card-title">
           <span className="lc-card-title-text">{t('plugin.title')}</span>
-          <span className="lc-card-sub">{t('plugin.hint')}</span>
+          {/* The tagline doubles as the repo link: hover underlines it, a click opens GitHub. */}
+          <a className="lc-card-sub lc-pi-hint" href={PLUGIN_REPO} target="_blank" rel="noreferrer">
+            {t('plugin.hint')}
+          </a>
         </div>
         <div className="lc-pi-grid">
           {row(t('plugin.name'), nameValue, PLUGIN_REPO + '/releases')}
