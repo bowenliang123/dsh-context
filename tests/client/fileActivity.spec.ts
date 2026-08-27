@@ -248,6 +248,29 @@ describe('activityOf', () => {
     assert.equal(c.entries[0].added, 0)
   })
 
+  test('reads report the exact window off the result meta, else the limit estimate', () => {
+    const window = Array.from({ length: 30 }, (_, i) => ({ number: 41 + i, text: 'x' }))
+    const a = run([
+      op(3, 'read', { file_path: '/a.ts', offset: 41, limit: 80 }, {}, {
+        meta: { path: '/a.ts', offset: 41, totalLines: 500, lines: window },
+      }),
+      op(5, 'read', { file_path: '/b.ts', limit: 80 }),
+      op(7, 'read', { file_path: '/c.ts' }),
+      op(9, 'read', { file_path: '/d.ts', limit: 0 }),
+      op(11, 'read', { file_path: '/e.ts', limit: 'many' }),
+      op(13, 'read', { file_path: '/f.ts', limit: 80 }, {}, { meta: { shape: 'nope' } }),
+      op(15, 'read', { file_path: '/g.ts', limit: 80 }, {}, { meta: { path: '/g.ts', offset: 1, lines: [] } }),
+      op(17, 'read', { file_path: '/h.ts', limit: 80 }, {}, { meta: { path: '/h.ts', offset: 0, lines: window } }),
+    ])
+    // Entries are newest-first: h(17) g(15) f(13) e(11) d(9) c(7) b(5) a(3).
+    assert.deepEqual(a.entries[7].ops[0].read, { start: 41, count: 30 })
+    for (const i of [0, 1, 2, 6]) assert.deepEqual(a.entries[i].ops[0].read, { count: 80, est: true })
+    for (const i of [3, 4, 5]) assert.equal(a.entries[i].ops[0].read, undefined)
+    // A nested read has no result meta in the join — it estimates from the limit.
+    const nested = run([op(20, 'run_code', null, {}, { subCalls: [sub(15, 'read', { file_path: '/n.ts', limit: 50.9 })] })])
+    assert.deepEqual(nested.entries[0].ops[0].read, { count: 50, est: true })
+  })
+
   test('nodes without a timestamp carry ops without one', () => {
     const a = run([op(3, 'read', { file_path: '/a.ts' }, { time: undefined })])
     assert.equal(a.entries[0].ops[0].time, undefined)

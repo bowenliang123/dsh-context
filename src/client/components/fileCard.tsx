@@ -92,8 +92,20 @@ export function makeFileCard(kit: ViewKit, settings: ContextSettings): ReactNS.C
 
     const opLine = (op: FileOp): ReactNS.ReactElement => (
       <>
-        <span className="lc-fa-op-time">{op.time !== undefined ? fmtTime(op.time) : '—'}</span>
         <span className="lc-fa-op-tool">{op.tool}</span>
+        {/* A read's line footprint: the exact `>>n` window off the result meta, or the ≈ limit estimate. */}
+        {op.read !== undefined
+          ? (
+            <span
+              className="lc-fa-read"
+              title={'est' in op.read
+                ? t('files.readEst')
+                : t('files.readTip', { a: fmt(op.read.start), b: fmt(op.read.start + op.read.count - 1) })}
+            >
+              {('est' in op.read ? '≈' : '>>') + fmt(op.read.count)}
+            </span>
+          )
+          : null}
         {op.detail !== undefined ? <span className="lc-fa-op-detail">{op.detail}</span> : null}
         {op.hits !== undefined ? <span className="lc-fa-op-detail">{t('files.hits', { n: fmt(op.hits) })}</span> : null}
         {/* A nested PTC op with nothing else to say still tells why: its program's description. */}
@@ -102,6 +114,8 @@ export function makeFileCard(kit: ViewKit, settings: ContextSettings): ReactNS.C
           : null}
         {op.added + op.removed > 0 ? <DeltaPair added={op.added} removed={op.removed} /> : null}
         {op.err ? <span className="lc-br-err-dot" title={t('node.failed')} /> : null}
+        {/* The time rides the right edge, mirroring the file row above. */}
+        <span className="lc-fa-op-time">{op.time !== undefined ? fmtTime(op.time) : '—'}</span>
       </>
     )
 

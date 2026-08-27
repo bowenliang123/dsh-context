@@ -52,6 +52,10 @@ export interface FileOp {
   program?: string
   /** Meta-attributed search op only: matched lines the result reported for this file. */
   hits?: number
+  /** Read ops only: what the call read — the 1-based `start` line and `count`
+   * when the result meta reported the window, else just the `count` estimated
+   * off the limit argument (`est: true`). */
+  read?: { start: number; count: number } | { count: number; est: true }
 }
 
 /** One file's aggregated activity; `ops` newest first. */
@@ -154,6 +158,35 @@ function deltaOf(tool: string, args: Record<string, unknown>): { added: number; 
     if (args.command === 'create') return pairOf(args.file_text, undefined)
   }
   return { added: 0, removed: 0 }
+}
+
+/** The exact window a read's result meta reports: `offset` plus the retained
+ * `lines` array (the same bounded payload the read card renders from). Null
+ * for a foreign or malformed meta. */
+function readWindowOf(meta: unknown): { start: number; count: number } | null {
+  if (meta === null || typeof meta !== 'object') return null
+  const m = meta as { path?: unknown; offset?: unknown; lines?: unknown }
+  if (typeof m.path !== 'string' || m.path === '') return null
+  if (typeof m.offset !== 'number' || !Number.isFinite(m.offset) || m.offset < 1) return null
+  if (!Array.isArray(m.lines) || m.lines.length === 0) return null
+  return { start: m.offset, count: m.lines.length }
+}
+
+/** The limit estimate: the tool reads up to `limit` lines from `offset`;
+ * absent when the call reads unbounded. */
+function readEstimateOf(args: Record<string, unknown>): { count: number; est: true } | undefined {
+  const limit = args.limit
+  return typeof limit === 'number' && Number.isFinite(limit) && limit > 0
+    ? { count: Math.floor(limit), est: true }
+    : undefined
+}
+
+/** What a read op shows: the exact window off the result meta, else the
+ * limit estimate, else nothing (an unbounded read names no footprint). */
+function readOf(meta: unknown, args: Record<string, unknown>): { start: number; count: number } | { count: number; est: true } | undefined {
+  const win = readWindowOf(meta)
+  if (win !== null) return { start: win.start, count: win.count }
+  return readEstimateOf(args)
 }
 
 const IMAGE_EXT = /\.(png|jpe?g|gif|webp|svg|bmp|ico|avif)$/i
@@ -403,6 +436,7 @@ function foldSubCalls(
         const detail = kind === 'search' && typeof args.path === 'string' && args.path !== ''
           ? searchDetailOf(args)
           : undefined
+        const read = kind === 'read' ? readOf(undefined, args) : undefined
         add({
           seq: sub.seq,
           ...(parent.gone !== undefined ? { gone: parent.gone } : {}),
@@ -413,6 +447,7 @@ function foldSubCalls(
           added,
           removed,
           ...(detail !== undefined ? { detail } : {}),
+          ...(read !== undefined ? { read } : {}),
           parent: parent.seq,
           ...(program !== undefined ? { program } : {}),
         }, path)
@@ -502,6 +537,7 @@ export function activityOf(
               && typeof args.path === 'string' && args.path !== ''
               ? searchDetailOf(args)
               : undefined
+            const read = kind === 'read' ? readOf(conv?.meta, args) : undefined
             add({
               seq: n.seq,
               ...(n.gone !== undefined ? { gone: n.gone } : {}),
@@ -512,6 +548,7 @@ export function activityOf(
               added,
               removed,
               ...(detail !== undefined ? { detail } : {}),
+              ...(read !== undefined ? { read } : {}),
             }, path)
           }
         }

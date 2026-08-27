@@ -373,6 +373,36 @@ describe('FileCard — expansion and locate', () => {
     await m.unmount()
   })
 
+  test('a read op shows its line footprint — exact window or estimate; the time rides the right edge', async () => {
+    const m = await mount(h(FileCard, {
+      activity: richActivity({
+        entries: [entry('/src/a.ts', {
+          reads: 2,
+          ops: [fileOp(7, 'read', 'read', { read: { start: 41, count: 30 } }), fileOp(6, 'read', 'read', { read: { count: 80, est: true } })],
+        })],
+        totals: { read: { files: 1, ops: 2 }, write: { files: 0, ops: 0 }, search: { files: 0, ops: 0 }, image: { files: 0, ops: 0 }, added: 0, removed: 0 },
+      }),
+      scope: 'live',
+    }))
+    await click(rowByTitle(m.container, '/src/a.ts'))
+    const ops = queryAll(m.container, '.lc-fa-op')
+    // The exact read: `>> count` with the range as the title.
+    const exact = queryAll(ops[0], '.lc-fa-read')
+    assert.equal(exact.length, 1)
+    assert.equal(exact[0].textContent, '>>30')
+    assert.equal(exact[0].getAttribute('title'), 'Read lines 41–70')
+    // The estimate keeps the ≈ form and its own title.
+    const est = queryAll(ops[1], '.lc-fa-read')
+    assert.equal(est.length, 1)
+    assert.equal(est[0].textContent, '≈80')
+    assert.equal(est[0].getAttribute('title'), 'Lines read, estimated from the limit argument')
+    // The time is the row's last cell, pushed to the right edge (formatted, not the timeless dash).
+    const time = query(ops[1], '.lc-fa-op-time')
+    assert.notEqual(time.textContent, '—')
+    assert.ok((time.textContent ?? '').includes(':'))
+    await m.unmount()
+  })
+
   test('without a locate hook the op lines render inert', async () => {
     const m = await mount(h(FileCard, { activity: richActivity(), scope: 'live' }))
     await click(queryAll(m.container, '.lc-fa-row')[0])
