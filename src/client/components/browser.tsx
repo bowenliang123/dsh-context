@@ -1,5 +1,5 @@
 import type * as ReactNS from 'react'
-import type { Category, ContextHeaders, ContextTimeline, HeaderTool, RequestRecord, SurfaceNode } from '../../shared/types'
+import { UNKNOWN_TOOL_SOURCE, type Category, type ContextHeaders, type ContextTimeline, type HeaderTool, type RequestRecord, type SurfaceNode } from '../../shared/types'
 import { assemble } from '../assemble'
 import type { Assembled } from '../assemble'
 import { CATS, partsOf } from '../categories'
@@ -658,9 +658,9 @@ export function makeContextBrowser(
      * result scans while collapsed.
      */
     const elemRow = (
-      key: string, tag: string | null, preview: string,
+      key: string, tag: ReactNS.ReactNode | null, preview: string,
       tokens: number, time: number | undefined, body: ReactNS.ReactNode,
-      err = false,
+      err = false, trailing: ReactNS.ReactNode = null,
     ) => {
       const open = openElem === key
       return (
@@ -670,6 +670,7 @@ export function makeContextBrowser(
             {err ? <span className="lc-br-err-dot" title={t('node.failed')} /> : null}
             {tag !== null ? <span className="lc-br-tag">{tag}</span> : null}
             <span className="lc-br-preview">{preview}</span>
+            {trailing !== null ? trailing : null}
             {time !== undefined ? <span className="lc-br-time">{fmtTime(time)}</span> : null}
             <span className="lc-br-tokens">{'≈' + fmt(tokens)}</span>
           </button>
@@ -699,8 +700,20 @@ export function makeContextBrowser(
           hide: t('tool.jsonHide'),
         }
         return view.header.tools.slice().sort((a, b) => b.tokens - a.tokens).map((tool: HeaderTool) => {
+          // The registering plugin (best-effort host attribution — see
+          // toolSources.ts) trails the tool name as a standalone chip, so it
+          // needs no extra frame around it. A tool whose provider predates
+          // the attribution hook arrives with the UNKNOWN_TOOL_SOURCE
+          // sentinel and renders a localized "unknown plugin" tag whose
+          // tooltip explains why no provider is shown.
+          const trailing = tool.plugin !== undefined
+            ? <span className="lc-br-tag lc-br-tool-plugin" title={tool.plugin === UNKNOWN_TOOL_SOURCE ? t('tool.unknownTitle') : t('tool.plugin')}>
+              {tool.plugin === UNKNOWN_TOOL_SOURCE ? t('tool.unknown') : tool.plugin}
+            </span>
+            : null
           return elemRow('tool:' + tool.name, null, tool.name, tool.tokens, undefined,
-            <ToolSchema description={tool.description} schema={tool.schema} rich={rich} lines={lineLabel} labels={labels} />)
+            <ToolSchema description={tool.description} schema={tool.schema} rich={rich} lines={lineLabel} labels={labels} />,
+            false, trailing)
         })
       }
       // List surface nodes newest first (the live surface's reading order).

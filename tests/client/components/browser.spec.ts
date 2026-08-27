@@ -9,7 +9,7 @@ import { describe, test } from 'vitest'
 import { h } from '../../../src/client/react'
 import { makeContextBrowser, type ContextBrowserProps } from '../../../src/client/components/browser'
 import { makeStackedBar } from '../../../src/client/components/stackedBar'
-import type { ContextHeaders, ContextTimeline, RequestRecord, SurfaceNode } from '../../../src/shared/types'
+import { UNKNOWN_TOOL_SOURCE, type ContextHeaders, type ContextTimeline, type RequestRecord, type SurfaceNode } from '../../../src/shared/types'
 import type { ConversationNodeLike, ImageLoader, UseSessionLike } from '../../../src/client/services'
 import { click, flush, hover, makeKit, mount, query, queryAll, text, unhover, type Mounted } from '../helpers/kit'
 
@@ -508,6 +508,41 @@ describe('ContextBrowser tool schemas', () => {
     body = await open('omega')
     assert.equal(queryAll(body, '.lc-ts-json-toggle').length, 0)
     assert.equal(text(body), '')
+    await m.unmount()
+  })
+
+  test('tool rows tag the registering plugin when attribution exists', async () => {
+    const attributed: ContextHeaders = {
+      headers: [{ seq: 1, time: 1, system: 'SYS', tools: [
+        { name: 'write', tokens: 5, plugin: '@deepseek-ai/dsh-tool-fs' },
+        { name: 'mcp__github__get_issue', tokens: 3, plugin: 'mcp:github' },
+        { name: 'agent_teams_add_member', tokens: 2 }, // no attribution → no chip
+        // Boot-predating tools arrive with the unknown sentinel → localized tag.
+        { name: 'claim_files', tokens: 2, plugin: UNKNOWN_TOOL_SOURCE },
+      ] }],
+    }
+    const data = tl({ current: { system: 0, tools: 10, user: 0, inject: 0, assistant: 0, tool: 0, total: 10 } })
+    const m = await mount(h(Browser, props({ data, headers: attributed })))
+    await click(catRow(m, 'tools'))
+    const rows = elemRows(m)
+    assert.equal(rows.length, 4)
+    const chips = queryAll(m.container, '.lc-br-tool-plugin')
+    assert.equal(chips.length, 3, 'only attributed tools chip')
+    assert.ok(text(chips[0]).includes('@deepseek-ai/dsh-tool-fs'))
+    assert.ok(text(chips[1]).includes('mcp:github'))
+    assert.ok((chips[0] as HTMLElement).title.includes('The registering plugin of this tool'), 'the chip carries the i18n tooltip')
+    assert.ok(!text(rows[2]).includes('@'), 'unattributed tools stay untagged')
+    // The unknown-source sentinel renders the localized tag with the
+    // boot-timing explanation, never the raw sentinel string.
+    assert.equal(chips[2].textContent, 'Unknown plugin')
+    assert.ok((chips[2] as HTMLElement).title.includes('registered before the context plugin loaded'), 'unknown chips explain the boot gap')
+    // Layout: the tool name leads the row, the plugin chip trails it directly
+    // — one frame only, so `lc-br-tag` must not nest another `lc-br-tag`.
+    assert.equal(text(query(rows[0], '.lc-br-preview')), 'write', 'tool name leads')
+    const chip = chips[0] as HTMLElement
+    assert.equal(chip.previousElementSibling, query(rows[0], '.lc-br-preview'), 'plugin chip sits right after the tool name')
+    assert.equal(chip.parentElement!.className, 'lc-br-elem-row', 'plugin chip is a single frame, a direct row child')
+    assert.equal(queryAll(chip, '.lc-br-tag').length, 0, 'no nested tag wrapper')
     await m.unmount()
   })
 })
