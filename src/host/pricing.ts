@@ -36,16 +36,21 @@ export interface ContentBlock {
   attachment?: { width?: unknown; height?: unknown } | null
 }
 
-function estimateBlocks(blocks: ContentBlock[] | undefined): number {
+/** The `ContentBlock` walkers take `unknown`: block arrays ride the untrusted
+ * log, so their element shapes (null and primitives included) are re-proved
+ * here, not trusted from the declared message types. */
+
+function estimateBlocks(blocks: unknown): number {
   let tokens = 0
   if (!Array.isArray(blocks)) return 0
-  for (const block of blocks) {
-    // The log is untrusted input: a null or primitive element prices as bare
-    // overhead instead of throwing the whole fold.
-    if (block === null || typeof block !== 'object') {
+  for (const item of blocks) {
+    // A null or primitive element prices as bare overhead instead of
+    // throwing the whole fold.
+    if (item === null || typeof item !== 'object') {
       tokens += BLOCK_OVERHEAD
       continue
     }
+    const block = item as ContentBlock
     switch (block.type) {
       case 'text':
       case 'reasoning':
@@ -101,21 +106,23 @@ export function estimateToolSchema(tool: unknown): number {
   * Count image blocks in a message payload, recursing into nested content (tool-result blocks carry their inner blocks) — seeds each node's
   * `imgs`, which the stats board's image cell sums over the LIVE surface (compacted/pruned messages stop counting).
  */
-export function imageCountOf(blocks: ContentBlock[] | undefined): number {
+export function imageCountOf(blocks: unknown): number {
   let count = 0
   if (!Array.isArray(blocks)) return 0
-  for (const block of blocks) {
-    if (block === null || typeof block !== 'object') continue
+  for (const item of blocks) {
+    if (item === null || typeof item !== 'object') continue
+    const block = item as ContentBlock
     if (block.type === 'image') count++
     else if (Array.isArray(block.content)) count += imageCountOf(block.content)
   }
   return count
 }
 
-export function firstText(blocks: ContentBlock[] | undefined): string {
+export function firstText(blocks: unknown): string {
   if (!Array.isArray(blocks)) return ''
-  for (const b of blocks) {
-    if (b === null || typeof b !== 'object') continue
+  for (const item of blocks) {
+    if (item === null || typeof item !== 'object') continue
+    const b = item as ContentBlock
     if (b.type === 'text' && typeof b.text === 'string' && b.text.trim() !== '') {
       return b.text.replace(/\s+/g, ' ').trim().slice(0, 80)
     }
@@ -123,11 +130,12 @@ export function firstText(blocks: ContentBlock[] | undefined): string {
   return ''
 }
 
-export function toolCallNames(blocks: ContentBlock[] | undefined): string[] {
+export function toolCallNames(blocks: unknown): string[] {
   const names: string[] = []
   if (!Array.isArray(blocks)) return names
-  for (const b of blocks) {
-    if (b === null || typeof b !== 'object') continue
+  for (const item of blocks) {
+    if (item === null || typeof item !== 'object') continue
+    const b = item as ContentBlock
     if (b.type === 'tool-call' && typeof b.name === 'string') names.push(b.name)
   }
   return names

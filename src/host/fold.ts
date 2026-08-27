@@ -240,10 +240,11 @@ interface MessageLike {
  * must NOT truncate/normalize: the skill name is matched off the raw
  * `<skill_content name="…">` wrapper.
  */
-function nestedText(blocks: ContentBlock[] | undefined): string {
+function nestedText(blocks: unknown): string {
   if (!Array.isArray(blocks)) return ''
-  for (const block of blocks) {
-    if (block === null || typeof block !== 'object') continue
+  for (const item of blocks) {
+    if (item === null || typeof item !== 'object') continue
+    const block = item as ContentBlock
     if (block.type === 'text' && typeof block.text === 'string' && block.text !== '') return block.text
     if (block.content !== undefined) {
       const nested = nestedText(block.content)
@@ -309,9 +310,12 @@ function applySurface(
     // fails EVERY projection-cache write for the session (the plain-JSON
     // precondition, see TimelineState).
     if (srcName !== undefined) node.tool = srcName
-    else if (typeof blockId === 'string') {
-      const blockName = st.callNames[blockId]
-      if (blockName !== undefined) node.tool = blockName
+    else if (typeof blockId === 'string' && Object.hasOwn(st.callNames, blockId)) {
+      // hasOwn, not a Map-style index check: a missing key IS possible at
+      // runtime (an unpaired result), and stamping it would write an
+      // `undefined`-valued property — failing every projection-cache write
+      // for the session (the plain-JSON precondition).
+      node.tool = st.callNames[blockId]
     }
     // Consume-once: the entry is never looked up again after its result
     // folds in (see TimelineState.callNames). Rebuild without the used ids
@@ -487,176 +491,176 @@ export function applyTimeline(state: TimelineState, event: TimelineEvent, bounds
   // clones and stay valid plain JSON.
   try {
     switch (event.type) {
-    case 'request/header': {
-      const header = (data?.header ?? {}) as {
-        system?: unknown
-        tools?: unknown[]
-        config?: { model?: unknown; provider?: unknown }
-      }
-      const tools = Array.isArray(header.tools) ? header.tools : []
-      const s = ensure()
-      // Tools TOTAL = dsh's whole-array price (one JSON string of every schema).
-      s.toolsTokens = estimateToolsTotal(tools)
-      s.systemTokens = estimateSystem(header.system)
-      // Current route/model: the durable request envelope is the source of
-      // truth (request/context is only route/capacity metadata, appended
-      // AFTER request/header per request — see agent-loop `buildRequest`).
-      // Optional fields are set via conditional spread so a still-unknown
-      // value never materializes an `undefined` property (plain-JSON state
-      // precondition — see TimelineState).
-      if (header.config && typeof header.config.model === 'string') s.model = header.config.model
-      if (header.config && typeof header.config.provider === 'string') s.provider = header.config.provider
-      // A model switch has no dedicated durable event: it is a request
-      // header that differs from the previous one, logged with reason
-      // 'change' ('initial' opens a session, 'resume' reopens it). A resume
-      // carrying a different model is a real switch the user made between
-      // sessions — lastModel survived in the projection state, so record it
-      // too. Firing only on a real change keeps the list equal to the record.
-      if ((data?.reason === 'change' || data?.reason === 'resume') && s.model && s.lastModel && s.model !== s.lastModel) {
-        s.events.push({ seq: event.seq, time: event.time, kind: 'model', from: s.lastModel, to: s.model })
-      }
-      if (s.model) s.lastModel = s.model
-      break
-    }
-    case 'request/context': {
-      const s = ensure()
-      // Route/capacity metadata: request/context is logged only when the route or capacity changes (after request/header), so it updates
-      // the current route display — never firing a model-switch event on its own.
-      if (data && typeof data.contextWindow === 'number') s.contextWindow = data.contextWindow
-      if (data && typeof data.model === 'string') s.model = data.model
-      if (data && typeof data.provider === 'string') s.provider = data.provider
-      break
-    }
-    case 'tool/call': {
-      if (data && typeof data.callId === 'string' && typeof data.name === 'string') {
+      case 'request/header': {
+        const header = (data?.header ?? {}) as {
+          system?: unknown
+          tools?: unknown[]
+          config?: { model?: unknown; provider?: unknown }
+        }
+        const tools = Array.isArray(header.tools) ? header.tools : []
         const s = ensure()
-        s.callNames[data.callId] = data.name
+        // Tools TOTAL = dsh's whole-array price (one JSON string of every schema).
+        s.toolsTokens = estimateToolsTotal(tools)
+        s.systemTokens = estimateSystem(header.system)
+        // Current route/model: the durable request envelope is the source of
+        // truth (request/context is only route/capacity metadata, appended
+        // AFTER request/header per request — see agent-loop `buildRequest`).
+        // Optional fields are set via conditional spread so a still-unknown
+        // value never materializes an `undefined` property (plain-JSON state
+        // precondition — see TimelineState).
+        if (header.config && typeof header.config.model === 'string') s.model = header.config.model
+        if (header.config && typeof header.config.provider === 'string') s.provider = header.config.provider
+        // A model switch has no dedicated durable event: it is a request
+        // header that differs from the previous one, logged with reason
+        // 'change' ('initial' opens a session, 'resume' reopens it). A resume
+        // carrying a different model is a real switch the user made between
+        // sessions — lastModel survived in the projection state, so record it
+        // too. Firing only on a real change keeps the list equal to the record.
+        if ((data?.reason === 'change' || data?.reason === 'resume') && s.model && s.lastModel && s.model !== s.lastModel) {
+          s.events.push({ seq: event.seq, time: event.time, kind: 'model', from: s.lastModel, to: s.model })
+        }
+        if (s.model) s.lastModel = s.model
+        break
       }
-      break
-    }
-    case 'user/message': {
+      case 'request/context': {
+        const s = ensure()
+        // Route/capacity metadata: request/context is logged only when the route or capacity changes (after request/header), so it updates
+        // the current route display — never firing a model-switch event on its own.
+        if (data && typeof data.contextWindow === 'number') s.contextWindow = data.contextWindow
+        if (data && typeof data.model === 'string') s.model = data.model
+        if (data && typeof data.provider === 'string') s.provider = data.provider
+        break
+      }
+      case 'tool/call': {
+        if (data && typeof data.callId === 'string' && typeof data.name === 'string') {
+          const s = ensure()
+          s.callNames[data.callId] = data.name
+        }
+        break
+      }
+      case 'user/message': {
       // `deriveEventMessage` is the canonical per-event projection: returns
       // `event.data` for user/message (no `data.message` indirection).
-      const msg = deriveEventMessage(event as never) as MessageLike | null
-      const s = ensure()
-      const node = applySurface(s, event, event.type, data, msg)
-      const source = msg?.source
-      if (isInjection(source)) {
-        const rec: ContextEventRecord = {
-          seq: event.seq, time: event.time, kind: 'inject', form: source.form || 'context', tokens: node.tokens,
-        }
-        if (source.kind === 'skill-invocation') {
-          rec.sub = 'skill'
-          rec.name = typeof source.name === 'string' ? source.name : '?'
-        } else {
-          const label = injectionSourceName(source)
-          if (label !== '') rec.name = label
-          // A notice carries the producer's bounded one-line account; show it after the source name, as the dsh transcript row does.
-          if (source.form === 'notice' && typeof source.summary === 'string' && source.summary !== '') {
-            rec.detail = source.summary
+        const msg = deriveEventMessage(event as never) as MessageLike | null
+        const s = ensure()
+        const node = applySurface(s, event, event.type, data, msg)
+        const source = msg?.source
+        if (isInjection(source)) {
+          const rec: ContextEventRecord = {
+            seq: event.seq, time: event.time, kind: 'inject', form: source.form || 'context', tokens: node.tokens,
           }
+          if (source.kind === 'skill-invocation') {
+            rec.sub = 'skill'
+            rec.name = typeof source.name === 'string' ? source.name : '?'
+          } else {
+            const label = injectionSourceName(source)
+            if (label !== '') rec.name = label
+            // A notice carries the producer's bounded one-line account; show it after the source name, as the dsh transcript row does.
+            if (source.form === 'notice' && typeof source.summary === 'string' && source.summary !== '') {
+              rec.detail = source.summary
+            }
+          }
+          s.events.push(rec)
         }
-        s.events.push(rec)
+        break
       }
-      break
-    }
-    case 'tool/result': {
+      case 'tool/result': {
       // The model-visible message is data.message; `deriveEventMessage`
       // returns that directly (the envelope also carries callId/error; pricing
       // the envelope would miss all content).
-      const toolMsg = deriveEventMessage(event as never) as MessageLike | null
-      const s = ensure()
-      const node = applySurface(s, event, event.type, data, toolMsg)
-      // A skill load via the `skill` tool returns the loaded skill's
-      // instructions as a tool result — content the harness injected into the
-      // model's context. Keep it a tool result (that is what it is), but make
-      // it findable: tag the node with the skill name so the browser can label
-      // the row, and record an inject event so a `Skill 注入（name）` entry
-      // shows in the Context Events card instead of being buried among
-      // ordinary tool results. `node.tool` resolves to the tool name `skill`;
-      // the skill NAME comes from the rendered `<skill_content name="…">`.
-      // When the tool/call event is gone (trimmed window, replay) the name is
-      // unresolvable — fall back to the wrapper alone: it only appears in
-      // genuine skill results, and a missed tag is worse than a content guess.
-      if (node.tool === 'skill' || node.tool === undefined) {
-        const name = skillNameOf(toolMsg)
-        if (name !== '') {
-          node.skill = name
-          s.events.push({ seq: event.seq, time: event.time, kind: 'inject', form: 'instructions', sub: 'skill', name, tokens: node.tokens })
+        const toolMsg = deriveEventMessage(event as never) as MessageLike | null
+        const s = ensure()
+        const node = applySurface(s, event, event.type, data, toolMsg)
+        // A skill load via the `skill` tool returns the loaded skill's
+        // instructions as a tool result — content the harness injected into the
+        // model's context. Keep it a tool result (that is what it is), but make
+        // it findable: tag the node with the skill name so the browser can label
+        // the row, and record an inject event so a `Skill 注入（name）` entry
+        // shows in the Context Events card instead of being buried among
+        // ordinary tool results. `node.tool` resolves to the tool name `skill`;
+        // the skill NAME comes from the rendered `<skill_content name="…">`.
+        // When the tool/call event is gone (trimmed window, replay) the name is
+        // unresolvable — fall back to the wrapper alone: it only appears in
+        // genuine skill results, and a missed tag is worse than a content guess.
+        if (node.tool === 'skill' || node.tool === undefined) {
+          const name = skillNameOf(toolMsg)
+          if (name !== '') {
+            node.skill = name
+            s.events.push({ seq: event.seq, time: event.time, kind: 'inject', form: 'instructions', sub: 'skill', name, tokens: node.tokens })
+          }
         }
+        break
       }
-      break
-    }
-    case 'assistant/message': {
+      case 'assistant/message': {
       // Snapshot the request exactly as dispatched: current surface + header,
       // before this response joins the surface.
-      const usage = data?.usage as UsageLike | undefined
-      const s = ensure()
-      const total = s.systemTokens + s.toolsTokens + s.sums.user + s.sums.inject + s.sums.assistant + s.sums.tool
-      const record: RequestRecord = {
-        time: event.time, seq: event.seq,
-        system: s.systemTokens,
-        tools: s.toolsTokens,
-        user: s.sums.user,
-        inject: s.sums.inject,
-        assistant: s.sums.assistant,
-        tool: s.sums.tool,
-        total,
-      }
-      // `turn`/`step` are optional in the durable vocabulary (and on replay); write only real numbers — an absent value must not
-      // materialize an `undefined` property (plain-JSON precondition, the trap that broke the projection cache here).
-      if (data && typeof data.turn === 'number') record.turn = data.turn
-      if (data && typeof data.step === 'number') record.step = data.step
-      if (usage && typeof usage.inputTokens === 'number') {
+        const usage = data?.usage as UsageLike | undefined
+        const s = ensure()
+        const total = s.systemTokens + s.toolsTokens + s.sums.user + s.sums.inject + s.sums.assistant + s.sums.tool
+        const record: RequestRecord = {
+          time: event.time, seq: event.seq,
+          system: s.systemTokens,
+          tools: s.toolsTokens,
+          user: s.sums.user,
+          inject: s.sums.inject,
+          assistant: s.sums.assistant,
+          tool: s.sums.tool,
+          total,
+        }
+        // `turn`/`step` are optional in the durable vocabulary (and on replay); write only real numbers — an absent value must not
+        // materialize an `undefined` property (plain-JSON precondition, the trap that broke the projection cache here).
+        if (data && typeof data.turn === 'number') record.turn = data.turn
+        if (data && typeof data.step === 'number') record.step = data.step
+        if (usage && typeof usage.inputTokens === 'number') {
         // Official TokenUsage semantics (dsh-llm): the buckets are disjoint —
         // inputTokens is uncached input only, cache read/write are separate,
         // and billed prompt-side = input + cacheRead + cacheWrite. outputTokens
         // already includes reasoningTokens. No separate prompt/output field
         // exists in the durable vocabulary.
-        record.prompt = usage.inputTokens + (usage.cacheReadTokens || 0) + (usage.cacheWriteTokens || 0)
-        // Cache-hit share of the billed prompt (the step line's 缓存 figure):
-        // keep the cache-served half of `prompt`; absent = no cache buckets.
-        if (typeof usage.cacheReadTokens === 'number') record.cacheRead = usage.cacheReadTokens
-        if (typeof usage.outputTokens === 'number') record.output = usage.outputTokens
-        accumulateCost(s, event.time, usage)
+          record.prompt = usage.inputTokens + (usage.cacheReadTokens || 0) + (usage.cacheWriteTokens || 0)
+          // Cache-hit share of the billed prompt (the step line's 缓存 figure):
+          // keep the cache-served half of `prompt`; absent = no cache buckets.
+          if (typeof usage.cacheReadTokens === 'number') record.cacheRead = usage.cacheReadTokens
+          if (typeof usage.outputTokens === 'number') record.output = usage.outputTokens
+          accumulateCost(s, event.time, usage)
+        }
+        s.requests.push(record)
+        // `deriveEventMessage` returns `data.message` for assistant/message, or
+        // null when the content array is empty (usage-only events project to no
+        // message — same rule as dsh's surface fold).
+        const asstMsg = deriveEventMessage(event as never) as MessageLike | null
+        applySurface(s, event, event.type, data, asstMsg)
+        break
       }
-      s.requests.push(record)
-      // `deriveEventMessage` returns `data.message` for assistant/message, or
-      // null when the content array is empty (usage-only events project to no
-      // message — same rule as dsh's surface fold).
-      const asstMsg = deriveEventMessage(event as never) as MessageLike | null
-      applySurface(s, event, event.type, data, asstMsg)
-      break
-    }
-    case 'plan/mode': {
+      case 'plan/mode': {
       // Plan mode adds a guidance section to every model request while
       // active — a real context-composition change, so it earns an event.
-      if (data && typeof data.active === 'boolean') {
+        if (data && typeof data.active === 'boolean') {
+          const s = ensure()
+          s.events.push({ seq: event.seq, time: event.time, kind: 'mode', name: data.active ? 'plan.on' : 'plan.off' })
+        }
+        break
+      }
+      case 'compaction/summary':
+      case 'compaction/prune': {
         const s = ensure()
-        s.events.push({ seq: event.seq, time: event.time, kind: 'mode', name: data.active ? 'plan.on' : 'plan.off' })
+        // Arm the shadow-price claim: the replacement that follows this
+        // event synchronously shadows exactly these node seqs.
+        if (data && Array.isArray(data.shadowedSeqs)) {
+          s.pendingShadowedSeqs = data.shadowedSeqs.filter((x): x is number => typeof x === 'number')
+          s.pendingShadowEventSeq = event.seq
+        }
+        s.events.push({
+          seq: event.seq, time: event.time, kind: event.type === 'compaction/summary' ? 'compaction' : 'prune',
+          tokens: data && typeof data.shadowedTokenCount === 'number' ? data.shadowedTokenCount : 0,
+          ...(event.type === 'compaction/summary' && data && Array.isArray(data.shadowedSeqs)
+            ? { count: data.shadowedSeqs.length }
+            : {}),
+        })
+        break
       }
-      break
-    }
-    case 'compaction/summary':
-    case 'compaction/prune': {
-      const s = ensure()
-      // Arm the shadow-price claim: the replacement that follows this
-      // event synchronously shadows exactly these node seqs.
-      if (data && Array.isArray(data.shadowedSeqs)) {
-        s.pendingShadowedSeqs = data.shadowedSeqs.filter((x): x is number => typeof x === 'number')
-        s.pendingShadowEventSeq = event.seq
-      }
-      s.events.push({
-        seq: event.seq, time: event.time, kind: event.type === 'compaction/summary' ? 'compaction' : 'prune',
-        tokens: data && typeof data.shadowedTokenCount === 'number' ? data.shadowedTokenCount : 0,
-        ...(event.type === 'compaction/summary' && data && Array.isArray(data.shadowedSeqs)
-          ? { count: data.shadowedSeqs.length }
-          : {}),
-      })
-      break
-    }
-    default:
-      return state
+      default:
+        return state
     }
   } catch {
     // Unreachable over well-formed events; the guard exists so it can never
