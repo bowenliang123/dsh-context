@@ -498,3 +498,35 @@ describe('session-cost accumulation', () => {
     assert.deepEqual(state.cost?.pro?.peak, { uncached: 10, cacheRead: 20, cacheWrite: 30, output: 40 })
   })
 })
+
+describe('hostile events', () => {
+  test('a malformed assistant/message is dropped instead of taking the fold down', () => {
+    const def = timelineDef({})
+    // deriveEventMessage dereferences data.message.content — a log without it
+    // must not throw out of apply (the projection registry has no net; a
+    // throwing fold stalls the unit and the browser waits on loading forever).
+    const init = def.init()
+    const next = def.apply(init, { type: 'assistant/message', seq: 1, time: at(), data: {} } as TimelineEvent)
+    assert.equal(next, init, 'a failed event leaves the state untouched')
+    // The fold carries on: the next well-formed event still lands.
+    const then = def.apply(next, assistantMessage(2, { turn: 1, step: 1 }))
+    assert.equal(then.surface.length, 1)
+    assert.equal(then.requests.length, 1)
+    assertPlainJson(then)
+  })
+
+  test('null and primitive content blocks price and render as nothing', () => {
+    const blocks = [null, 7, 'x', { type: 'text', text: 'hello' }] as never
+    // The tool/result has NO preceding tool/call — the unpaired lookup must
+    // not stamp an `undefined`-valued node.tool (it would fail every
+    // projection-cache write for the session).
+    const { state } = driveTimeline([
+      userMessage(1, blocks),
+      toolResult(2, { callId: 'c1', content: blocks }),
+      assistantMessage(3, { content: blocks }),
+    ])
+    // The text block still prices; the junk blocks cost overhead only.
+    assert.ok(state.sums.user > 0)
+    assertPlainJson(state)
+  })
+})

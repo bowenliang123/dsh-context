@@ -246,3 +246,17 @@ describe('isInjection', () => {
     assert.equal(isInjection({ form: 'notice' }), true)
   })
 })
+
+describe('hostile block shapes', () => {
+  test('null and primitive elements degrade to overhead instead of throwing', () => {
+    const junk = [null, 7, 'x'] as never
+    assert.ok(estimateMessage({ content: junk }) > 0)
+    assert.equal(imageCountOf(junk), 0)
+    assert.equal(firstText(junk), '')
+    assert.deepEqual(toolCallNames(junk), [])
+    // A null element nested inside a tool-result block is tolerated too.
+    const nested = [{ type: 'tool-result', content: [null, { type: 'image' }] }] as never
+    assert.equal(imageCountOf(nested), 1)
+    assert.ok(estimateMessage({ content: nested }) > 0)
+  })
+})

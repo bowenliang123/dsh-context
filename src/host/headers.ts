@@ -62,7 +62,9 @@ function recordOf(event: SessionEvent): HeaderRecord | null {
     seq: event.seq,
     time: event.time,
     tools: tools.map((t): HeaderTool => {
-      const tool = t as { name?: unknown; description?: unknown }
+      // The log is untrusted input: a null or primitive entry degrades to an
+      // unnamed, JSON-priced tool instead of throwing the fold.
+      const tool = (t !== null && typeof t === 'object' ? t : {}) as { name?: unknown; description?: unknown }
       const entry: HeaderTool = {
         name: typeof tool.name === 'string' ? tool.name : '?',
         tokens: estimateToolSchema(t),

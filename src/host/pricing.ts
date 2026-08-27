@@ -40,6 +40,12 @@ function estimateBlocks(blocks: ContentBlock[] | undefined): number {
   let tokens = 0
   if (!Array.isArray(blocks)) return 0
   for (const block of blocks) {
+    // The log is untrusted input: a null or primitive element prices as bare
+    // overhead instead of throwing the whole fold.
+    if (block === null || typeof block !== 'object') {
+      tokens += BLOCK_OVERHEAD
+      continue
+    }
     switch (block.type) {
       case 'text':
       case 'reasoning':
@@ -99,6 +105,7 @@ export function imageCountOf(blocks: ContentBlock[] | undefined): number {
   let count = 0
   if (!Array.isArray(blocks)) return 0
   for (const block of blocks) {
+    if (block === null || typeof block !== 'object') continue
     if (block.type === 'image') count++
     else if (Array.isArray(block.content)) count += imageCountOf(block.content)
   }
@@ -108,6 +115,7 @@ export function imageCountOf(blocks: ContentBlock[] | undefined): number {
 export function firstText(blocks: ContentBlock[] | undefined): string {
   if (!Array.isArray(blocks)) return ''
   for (const b of blocks) {
+    if (b === null || typeof b !== 'object') continue
     if (b.type === 'text' && typeof b.text === 'string' && b.text.trim() !== '') {
       return b.text.replace(/\s+/g, ' ').trim().slice(0, 80)
     }
@@ -119,6 +127,7 @@ export function toolCallNames(blocks: ContentBlock[] | undefined): string[] {
   const names: string[] = []
   if (!Array.isArray(blocks)) return names
   for (const b of blocks) {
+    if (b === null || typeof b !== 'object') continue
     if (b.type === 'tool-call' && typeof b.name === 'string') names.push(b.name)
   }
   return names

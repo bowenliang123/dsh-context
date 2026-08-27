@@ -156,3 +156,22 @@ describe('createContextHeadersDefinition', () => {
     assert.equal(c.wire.viewSchema.safeParse(c.wire.view(state)).success, true)
   })
 })
+
+describe('hostile tool entries', () => {
+  test('null and primitive tool entries degrade to unnamed JSON-priced tools', () => {
+    const def = createContextHeadersDefinition()
+    const view = def.view(fold(def, [headerEvent(1, {
+      tools: [null, 42, 'x', { name: 'bash' }],
+    })]))
+    const tools = view.headers[0].tools
+    assert.equal(tools.length, 4)
+    assert.equal(tools[0].name, '?')
+    assert.equal(tools[1].name, '?')
+    assert.equal(tools[2].name, '?')
+    assert.equal(tools[3].name, 'bash')
+    for (const tool of tools) {
+      assert.ok(Number.isInteger(tool.tokens) && tool.tokens >= 0, 'tool tokens priced')
+      assert.ok('schema' in tool, 'the raw schema rides the record')
+    }
+  })
+})

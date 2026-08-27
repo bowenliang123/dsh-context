@@ -243,6 +243,7 @@ interface MessageLike {
 function nestedText(blocks: ContentBlock[] | undefined): string {
   if (!Array.isArray(blocks)) return ''
   for (const block of blocks) {
+    if (block === null || typeof block !== 'object') continue
     if (block.type === 'text' && typeof block.text === 'string' && block.text !== '') return block.text
     if (block.content !== undefined) {
       const nested = nestedText(block.content)
@@ -302,8 +303,16 @@ function applySurface(
     const srcName = typeof srcId === 'string' ? st.callNames[srcId] : undefined
     const block = message?.content?.[0] as { toolCallId?: unknown } | undefined
     const blockId = block?.toolCallId
-    if (srcName) node.tool = srcName
-    else if (typeof blockId === 'string') node.tool = st.callNames[blockId]
+    // The name is stamped only on a real map hit: an unpaired result (a call
+    // event that aged out of the log, a foreign producer, a duplicate callId)
+    // must not materialize an `undefined`-valued property — that one property
+    // fails EVERY projection-cache write for the session (the plain-JSON
+    // precondition, see TimelineState).
+    if (srcName !== undefined) node.tool = srcName
+    else if (typeof blockId === 'string') {
+      const blockName = st.callNames[blockId]
+      if (blockName !== undefined) node.tool = blockName
+    }
     // Consume-once: the entry is never looked up again after its result
     // folds in (see TimelineState.callNames). Rebuild without the used ids
     // (no dynamic delete, per repo lint) — consume-once holds the map at
@@ -470,7 +479,14 @@ export function applyTimeline(state: TimelineState, event: TimelineEvent, bounds
   }
 
   const data = event.data
-  switch (event.type) {
+  // The projection registry drives `apply` straight off the session/event bus
+  // with no error boundary: one throwing fold stops this unit's cells (and the
+  // `contextTimeline` push feed) from advancing — the browser waits on
+  // "loading" forever. The durable log is untrusted input, so a malformed
+  // event is DROPPED, never thrown; any partial mutations are private lazy
+  // clones and stay valid plain JSON.
+  try {
+    switch (event.type) {
     case 'request/header': {
       const header = (data?.header ?? {}) as {
         system?: unknown
@@ -641,6 +657,14 @@ export function applyTimeline(state: TimelineState, event: TimelineEvent, bounds
     }
     default:
       return state
+    }
+  } catch {
+    // Unreachable over well-formed events; the guard exists so it can never
+    // take the projection (or the session event bus) down. A failed event is
+    // dropped WHOLE: any partial mutation lived on private lazy clones, so
+    // falling back to the previous state reference keeps the transition
+    // all-or-nothing.
+    st = undefined
   }
 
   if (st !== undefined) {
