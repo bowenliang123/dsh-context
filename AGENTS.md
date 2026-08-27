@@ -61,6 +61,12 @@ A DeepSeek Harness plugin for context insight, actions, and management.
 - When asked to commit, please commit the possibly mixed changes separately for each task or purpose.
 - Push the commits automatically.
 
+## Workflow
+
+- To-do list
+  - Keep the coding agent's to-do list up to date throughout planning, investigation and implementation.
+  - Before closing any task, review all pending to-do items and ensure each is completed, cleaned up or explicitly closed.
+
 ## Tool Usage
 - Always read the file first using the `read` tool before using the `edit` tool, which prevents errors like "Error: edit requires reading '/path/file' first — read the file, then retry."
 
