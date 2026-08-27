@@ -269,6 +269,8 @@ button.lc-brief-row-link { cursor: pointer; }
 /* The chevron sits close to the icon: only half the row gap stays visible. */
 .lc-fa-row .lc-br-chev { margin-right: -2px; }
 .lc-fa-path { flex: 1; min-width: 0; word-break: break-all; }
+.lc-fa-file { cursor: pointer; }
+.lc-fa-file:hover { text-decoration: underline; }
 .lc-fa-path em { font-style: normal; color: var(--dsw-alias-label-secondary); }
 /* Per-purpose count badges: pill chips, one fixed tint per purpose (read = brand, write = success, search = warn). */
 .lc-fa-badge { flex: none; display: inline-flex; align-items: center; gap: 4px; font-size: 11px; font-weight: 600; font-variant-numeric: tabular-nums; padding: 1px 7px; border-radius: 999px; white-space: nowrap; }

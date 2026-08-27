@@ -69,6 +69,8 @@ export interface FileEntry {
   removed: number
   errs: number
   ops: FileOp[]
+  /** Set when `path` is a pathless search's PATTERN, not a file path — display must not relativize it. */
+  pattern?: true
 }
 
 export interface FileKindTotal { files: number; ops: number }
@@ -323,6 +325,36 @@ export function glyphOf(path: string, form: FileForm): FileGlyph {
   return form === 'dir' ? dirGlyph(base) : fileGlyph(base)
 }
 
+const DRIVE_PATH = /^[a-zA-Z]:[\\/]/
+
+/**
+ * The absolute form of a real file path: verbatim when already absolute,
+ * resolved against the workspace root when relative, and undefined when a
+ * relative path has no root to resolve against (the system open can't reach
+ * it). Callers keep search-pattern "paths" away from here.
+ */
+export function absPathOf(path: string, workspace: string | undefined): string | undefined {
+  if (path.startsWith('/') || DRIVE_PATH.test(path)) return path
+  if (workspace === undefined || workspace === '' || path.startsWith('.')) return undefined
+  return workspace.replace(/\/+$/, '') + '/' + path.replace(/^\/+/, '')
+}
+
+/**
+ * The row's display form of a path: inside the workspace (or already
+ * workspace-relative) it shortens to a './'-prefixed relative — an absolute
+ * path outside the workspace, a Windows drive path, and an already-'.'
+ * relative keep their verbatim form.
+ */
+export function displayPathOf(path: string, workspace: string | undefined): string {
+  const root = workspace !== undefined && workspace.length > 1 ? workspace.replace(/\/+$/, '') : undefined
+  if (root !== undefined) {
+    if (path === root) return './'
+    if (path.startsWith(root + '/')) return './' + path.slice(root.length + 1)
+  }
+  if (path.startsWith('/') || DRIVE_PATH.test(path) || path.startsWith('.')) return path
+  return './' + path
+}
+
 /**
  * A search op's detail: the pattern, with the include filter appended when
  * one narrowed the call. A patternless (malformed) search has no detail.
@@ -418,7 +450,7 @@ function foldSubCalls(
   blocks: readonly unknown[],
   parent: SurfaceNode,
   program: string | undefined,
-  add: (op: FileOp, path: string) => void,
+  add: (op: FileOp, path: string, pattern?: boolean) => void,
   seen: Set<object>,
   depth: number,
 ): void {
@@ -433,9 +465,8 @@ function foldSubCalls(
       const path = kind !== null ? pathOfArgs(sub.name, args) : null
       if (args !== null && kind !== null && path !== null) {
         const { added, removed } = deltaOf(sub.name, args)
-        const detail = kind === 'search' && typeof args.path === 'string' && args.path !== ''
-          ? searchDetailOf(args)
-          : undefined
+        const narrowed = typeof args.path === 'string' && args.path !== ''
+        const detail = kind === 'search' && narrowed ? searchDetailOf(args) : undefined
         const read = kind === 'read' ? readOf(undefined, args) : undefined
         add({
           seq: sub.seq,
@@ -450,7 +481,7 @@ function foldSubCalls(
           ...(read !== undefined ? { read } : {}),
           parent: parent.seq,
           ...(program !== undefined ? { program } : {}),
-        }, path)
+        }, path, kind === 'search' && !narrowed)
       }
       if (sub.subCalls !== undefined) foldSubCalls(sub.subCalls, parent, program, add, seen, depth + 1)
     }
@@ -472,12 +503,20 @@ export function activityOf(
     removed: 0,
   }
   const byPath = new Map<string, FileEntry>()
-  /** Book one executed op under its file; the totals and the entry move together. */
-  const add = (op: FileOp, path: string): void => {
+  /** Book one executed op under its file; the totals and the entry move together.
+   * `pattern` marks a pathless search's pattern-as-target row (a display-only flag). */
+  const add = (op: FileOp, path: string, pattern: boolean = false): void => {
     totals[op.kind].ops++
     let entry = byPath.get(path)
     if (entry === undefined) {
-      entry = { path, form: formOf(op.tool, path), reads: 0, writes: 0, searches: 0, added: 0, removed: 0, errs: 0, ops: [] }
+      entry = {
+        path,
+        form: formOf(op.tool, path),
+        reads: 0, writes: 0, searches: 0,
+        added: 0, removed: 0, errs: 0,
+        ops: [],
+        ...(pattern ? { pattern: true as const } : {}),
+      }
       byPath.set(path, entry)
     }
     if (op.kind === 'read') entry.reads++
@@ -533,10 +572,8 @@ export function activityOf(
           const path = pathOfArgs(tool, args)
           if (path !== null) {
             const { added, removed } = deltaOf(tool, args)
-            const detail = kind === 'search'
-              && typeof args.path === 'string' && args.path !== ''
-              ? searchDetailOf(args)
-              : undefined
+            const narrowed = typeof args.path === 'string' && args.path !== ''
+            const detail = kind === 'search' && narrowed ? searchDetailOf(args) : undefined
             const read = kind === 'read' ? readOf(conv?.meta, args) : undefined
             add({
               seq: n.seq,
@@ -549,7 +586,7 @@ export function activityOf(
               removed,
               ...(detail !== undefined ? { detail } : {}),
               ...(read !== undefined ? { read } : {}),
-            }, path)
+            }, path, kind === 'search' && !narrowed)
           }
         }
       }

@@ -476,6 +476,48 @@ describe('ContextView — file activity card', () => {
     assert.ok(text(query(m.container, '.lc-br-elem-on')).includes('Fix the failing test'))
     await m.unmount()
   })
+
+  test('the session workspace relativizes row paths; the host opener opens the resolved file', async () => {
+    const opened: string[] = []
+    const ctx = new TestClientCtx({
+      services: {
+        sessions: { list: { getSnapshot: () => ({ byId: { 'sv-files-open': { cwd: '/repo' } } }) } },
+        connection: {
+          hostDescription: { getSnapshot: () => ({ canOpenPath: true }) },
+          api: { host: { openPath: (r: { path: string }) => { opened.push(r.path); return Promise.resolve({ opened: true }) } } },
+        },
+      },
+    })
+    const conv = [
+      { kind: 'tool', seq: 3, call: { name: 'read', argsRaw: JSON.stringify({ file_path: '/repo/src/a.ts' }) } },
+    ]
+    const View = makeView(ctx)
+    const m = await mount(h(View, {
+      sessionId: 'sv-files-open',
+      useProjection: projectionsFor(fileTimeline()),
+      useSession: (sel => sel({ nodes: conv })) as UseSessionLike,
+    }))
+    const card = queryAll(m.container, '.lc-card').find(c => text(c).includes(DICT_EN['files.title']))
+    assert.ok(card !== undefined)
+    // The read inside the session cwd displays './'-relative…
+    const row = query(card, '.lc-fa-row')
+    assert.ok(row.querySelector('.lc-fa-path em')?.textContent === './src/')
+    // …and its name opens on the system through the host RPC.
+    const name = query(row, '.lc-fa-file')
+    assert.equal(name.getAttribute('title'), DICT_EN['files.open'])
+    await click(name)
+    assert.deepEqual(opened, ['/repo/src/a.ts'])
+    await m.unmount()
+  })
+
+  test('a ctx without service access degrades the card wiring, not the view', async () => {
+    const View = makeView({} as unknown as TestClientCtx)
+    // No session id: the view stays on its loading screen; the workspace and
+    // opener wiring (both read ctx before the early return) resolve to nothing.
+    const m = await mount(h(View, { sessionId: '' }))
+    assert.ok(text(m.container).includes(DICT_EN.loading))
+    await m.unmount()
+  })
 })
 
 describe('ContextView — targeted content fetch and image loading', () => {

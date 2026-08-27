@@ -1,6 +1,7 @@
 // FileCard (src/client/components/fileCard.tsx) rendered with real React:
 // purpose/form filter chips, path search, per-file rows with count badges
-// and line deltas, expandable operation logs, and the op-level locate hook.
+// and line deltas, expandable operation logs, the op-level locate hook,
+// workspace-relative path display, and the system-open affordance.
 
 import assert from 'node:assert/strict'
 import { act } from 'react'
@@ -132,10 +133,11 @@ describe('FileCard — header, rows, and filters', () => {
     const dirRow = rows.find(r => r.title === '/src/')
     assert.ok(dirRow !== undefined)
     assert.ok(dirRow.querySelector('.lc-fa-path b')?.textContent === 'src')
-    // The extension-less row carries no dir span and no badges beyond its own kind.
+    // The extension-less row relativizes with no workspace known: a './' dir span, and no badges beyond its own kind.
     const solo = rows.find(r => r.title === 'solo.md')
     assert.ok(solo !== undefined)
-    assert.equal(solo.querySelector('.lc-fa-path em'), null)
+    assert.ok(solo.querySelector('.lc-fa-path em')?.textContent === './')
+    assert.ok(solo.querySelector('.lc-fa-path b')?.textContent === 'solo.md')
     assert.ok(text(solo).includes('+5') && !text(solo).includes('−'))
     // solo.md's only op is timeless: the row drops its time cell.
     assert.ok(solo.querySelector('.lc-fa-time') === null)
@@ -421,5 +423,103 @@ describe('FileCard — expansion and locate', () => {
     }))
     assert.equal(queryAll(m.container, '.lc-fa-meta-delta').length, 0)
     await m.unmount()
+  })
+})
+
+describe('FileCard — workspace display and system open', () => {
+  /** Entries exercising every display form against one workspace root. */
+  function workspaceActivity(): FileActivity {
+    return {
+      entries: [
+        entry('/repo/src/a.ts', { reads: 1, ops: [fileOp(5, 'read', 'read')] }),
+        entry('/etc/hosts', { reads: 1, ops: [fileOp(4, 'read', 'read')] }),
+        entry('rel/b.md', { writes: 1, ops: [fileOp(3, 'write', 'write')] }),
+        entry('needle', { searches: 1, pattern: true, ops: [fileOp(2, 'search', 'grep', { detail: 'needle' })] }),
+        entry('./dot/c.ts', { reads: 1, ops: [fileOp(1, 'read', 'read')] }),
+      ],
+      totals: {
+        read: { files: 3, ops: 3 },
+        write: { files: 1, ops: 1 },
+        search: { files: 1, ops: 1 },
+        image: { files: 0, ops: 0 },
+        added: 0,
+        removed: 0,
+      },
+    }
+  }
+
+  function rowOf(container: ParentNode, title: string): HTMLElement {
+    const hit = queryAll(container, '.lc-fa-row').find(r => r.title === title)
+    if (hit === undefined) throw new Error(`row not found: ${title}`)
+    return hit
+  }
+
+  const baseOf = (row: HTMLElement): HTMLElement => query(row, '.lc-fa-path b')
+
+  test('workspace paths display ./-relative; pattern rows and outside paths stay verbatim', async () => {
+    const m = await mount(h(FileCard, { activity: workspaceActivity(), scope: 'live', workspace: '/repo' }))
+    // Inside the workspace: './'-relative dir + base.
+    const a = rowOf(m.container, '/repo/src/a.ts')
+    assert.ok(a.querySelector('.lc-fa-path em')?.textContent === './src/')
+    assert.ok(baseOf(a).textContent === 'a.ts')
+    // An absolute path outside the workspace keeps its verbatim form.
+    const hosts = rowOf(m.container, '/etc/hosts')
+    assert.ok(hosts.querySelector('.lc-fa-path em')?.textContent === '/etc/')
+    // A bare-relative path displays './'-prefixed.
+    const rel = rowOf(m.container, 'rel/b.md')
+    assert.ok(rel.querySelector('.lc-fa-path em')?.textContent === './rel/')
+    // A pattern-as-target search row shows the pattern, never relativized.
+    const pat = rowOf(m.container, 'needle')
+    assert.equal(pat.querySelector('.lc-fa-path em'), null)
+    assert.ok(baseOf(pat).textContent === 'needle')
+    // A './'-prefixed path keeps its form.
+    const dot = rowOf(m.container, './dot/c.ts')
+    assert.ok(dot.querySelector('.lc-fa-path em')?.textContent === './dot/')
+    await m.unmount()
+  })
+
+  test('the file name opens on the system; pattern and unresolvable rows render inert', async () => {
+    const opened: string[] = []
+    const m = await mount(h(FileCard, {
+      activity: workspaceActivity(),
+      scope: 'live',
+      workspace: '/repo',
+      onOpen: p => { opened.push(p) },
+    }))
+    // A workspace file resolves to its absolute path and opens without expanding the row.
+    const a = baseOf(rowOf(m.container, '/repo/src/a.ts'))
+    assert.ok(a.className.includes('lc-fa-file'))
+    assert.equal(a.getAttribute('title'), 'Open on your system')
+    await click(a)
+    assert.deepEqual(opened, ['/repo/src/a.ts'])
+    assert.equal(queryAll(m.container, '.lc-fa-ops').length, 0)
+    // An outside absolute path hands through verbatim.
+    await click(baseOf(rowOf(m.container, '/etc/hosts')))
+    assert.deepEqual(opened, ['/repo/src/a.ts', '/etc/hosts'])
+    // Pattern rows are not files: inert bold text.
+    const pat = baseOf(rowOf(m.container, 'needle'))
+    assert.equal(pat.className.includes('lc-fa-file'), false)
+    // A './'-prefixed path has no root to resolve against: inert.
+    const dot = baseOf(rowOf(m.container, './dot/c.ts'))
+    assert.equal(dot.className.includes('lc-fa-file'), false)
+    await m.unmount()
+  })
+
+  test('without an opener (or without the workspace) the file names render inert', async () => {
+    // No onOpen prop: nothing clickable even with the workspace known.
+    const m1 = await mount(h(FileCard, { activity: workspaceActivity(), scope: 'live', workspace: '/repo' }))
+    assert.equal(queryAll(m1.container, '.lc-fa-file').length, 0)
+    await m1.unmount()
+    // No workspace: only the absolute rows resolve; relative ones stay inert.
+    const opened: string[] = []
+    const m2 = await mount(h(FileCard, {
+      activity: workspaceActivity(),
+      scope: 'live',
+      onOpen: p => { opened.push(p) },
+    }))
+    assert.equal(queryAll(m2.container, '.lc-fa-file').length, 2)
+    await click(baseOf(rowOf(m2.container, 'rel/b.md')))
+    assert.deepEqual(opened, [])
+    await m2.unmount()
   })
 })

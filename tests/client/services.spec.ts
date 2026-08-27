@@ -5,13 +5,17 @@
 import assert from 'node:assert/strict'
 import { describe, test } from 'vitest'
 import {
+  canOpenPathsOf,
   contextBreakdownOf,
   contextPressureOf,
   headersOf,
   numOf,
+  openPathVia,
   timelineOf,
   tokenUsageOf,
+  workspaceOf,
 } from '../../src/client/services'
+import type { ClientCtx } from '../../src/client/services'
 
 describe('numOf', () => {
   test('finite numbers pass through', () => {
@@ -230,5 +234,67 @@ describe('headersOf', () => {
       ],
     }
     assert.equal(headersOf(value), value)
+  })
+})
+
+describe('workspaceOf', () => {
+  const ctxWith = (services: Record<string, unknown>): ClientCtx => ({ get: (name: string) => services[name] }) as unknown as ClientCtx
+
+  test('reads the session row cwd off the sessions list snapshot', () => {
+    const ctx = ctxWith({ sessions: { list: { getSnapshot: () => ({ byId: { sv: { cwd: '/repo' } } }) } } })
+    assert.equal(workspaceOf(ctx, 'sv'), '/repo')
+    assert.equal(workspaceOf(ctx, 'other'), undefined)
+  })
+
+  test('absent or malformed faces degrade to undefined', () => {
+    assert.equal(workspaceOf(ctxWith({}), 'sv'), undefined)
+    assert.equal(workspaceOf(ctxWith({ sessions: {} }), 'sv'), undefined)
+    assert.equal(workspaceOf(ctxWith({ sessions: { list: { getSnapshot: () => ({ byId: { sv: { cwd: 7 } } }) } } }), 'sv'), undefined)
+    assert.equal(workspaceOf(ctxWith({ sessions: { list: { getSnapshot: () => ({ byId: { sv: { cwd: '/repo' } } }) } } }), undefined), undefined)
+  })
+
+  test('hostile snapshots that throw on call or property access degrade safely', () => {
+    const throwProp = (): never => { throw new Error('boom') }
+    // A snapshot source whose getSnapshot throws; snapshots and rows that throw on property read.
+    assert.equal(workspaceOf(ctxWith({ sessions: { list: { getSnapshot: throwProp } } }), 'sv'), undefined)
+    assert.equal(workspaceOf(ctxWith({ sessions: { list: { getSnapshot: () => Object.defineProperty({}, 'byId', { get: throwProp }) } } }), 'sv'), undefined)
+    assert.equal(workspaceOf(ctxWith({ sessions: { list: { getSnapshot: () => ({ byId: Object.defineProperty({}, 'sv', { get: throwProp }) }) } } }), 'sv'), undefined)
+    // A service lookup itself may throw; both readers degrade instead of blanking the view.
+    const ctxThrows = { get: throwProp } as unknown as ClientCtx
+    assert.equal(workspaceOf(ctxThrows, 'sv'), undefined)
+    assert.equal(canOpenPathsOf(ctxThrows), false)
+    // A host description that throws on call or on the capability read.
+    assert.equal(canOpenPathsOf(ctxWith({ connection: { hostDescription: { getSnapshot: throwProp } } })), false)
+    assert.equal(canOpenPathsOf(ctxWith({ connection: { hostDescription: { getSnapshot: () => Object.defineProperty({}, 'canOpenPath', { get: throwProp }) } } })), false)
+  })
+})
+
+describe('canOpenPathsOf / openPathVia', () => {
+  const ctxWith = (services: Record<string, unknown>): ClientCtx => ({ get: (name: string) => services[name] }) as unknown as ClientCtx
+  const connection = {
+    hostDescription: { getSnapshot: () => ({ canOpenPath: true }) },
+    api: { host: { openPath: () => Promise.resolve({ opened: true }) } },
+  }
+
+  test('the capability bit gates the opener', () => {
+    assert.equal(canOpenPathsOf(ctxWith({ connection })), true)
+    assert.equal(canOpenPathsOf(ctxWith({ connection: { hostDescription: { getSnapshot: () => ({}) } } })), false)
+    assert.equal(canOpenPathsOf(ctxWith({})), false)
+  })
+
+  test('openPathVia returns a fire-and-forget caller that swallows failures', async () => {
+    const rejecting = { api: { host: { openPath: () => Promise.reject(new Error('no desktop')) } } }
+    const open = openPathVia(ctxWith({ connection: rejecting }))
+    assert.ok(open !== undefined)
+    open('/repo/a.ts') // must not throw
+    assert.equal(openPathVia(ctxWith({})), undefined)
+  })
+
+  test('the opener forwards the requested path', async () => {
+    const calls: string[] = []
+    const open = openPathVia(ctxWith({ connection: { api: { host: { openPath: (r: { path: string }) => { calls.push(r.path); return Promise.resolve({ opened: true }) } } } } }))
+    open!('/repo/a.ts')
+    await new Promise(resolve => setTimeout(resolve, 0))
+    assert.deepEqual(calls, ['/repo/a.ts'])
   })
 })

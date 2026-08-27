@@ -11,6 +11,7 @@ import type { SessionStandardProps } from '../services'
 import { contextBreakdownOf, contextPressureOf, headersOf, numOf, timelineOf, tokenUsageOf } from '../services'
 import type { ClientCtx, ConversationFace, ConversationNodeLike, ImageRefLike } from '../services'
 import { makeContentFetcher } from '../historyPage'
+import { canOpenPathsOf, openPathVia, workspaceOf } from '../services'
 import { activityOf, locateStepOf } from '../fileActivity'
 import type { FileOp } from '../fileActivity'
 import type { ContextSettings } from '../settings'
@@ -219,6 +220,14 @@ export function makeContextView(
       () => activityOf(briefList, convOf, filesBefore),
       [briefList, convOf, filesBefore],
     )
+    // The session's workspace root — './'-relative row paths when known; read per
+    // render (an observable snapshot), so the next projection push re-renders with it.
+    const workspace = typeof ctx.get === 'function' ? workspaceOf(ctx, typeof sessionId === 'string' ? sessionId : undefined) : undefined
+    // The system-opener affordance rides the same ctx; both resolve before the early return.
+    const fileOpener = React.useMemo(
+      () => (typeof ctx.get === 'function' && canOpenPathsOf(ctx) ? openPathVia(ctx) : undefined),
+      [ctx],
+    )
     const locateFileOp = React.useCallback((op: FileOp): void => {
       // A nested Code-Mode op has no surface row of its own — it reveals on
       // its parent run_code result (whose removal stamp the op carries).
@@ -398,7 +407,7 @@ export function makeContextView(
             </div>
             <EventList events={shownEvents} />
           </div>
-          <FileCard activity={fileActivity} scope={fileScope} onLocate={locateFileOp} />
+          <FileCard activity={fileActivity} scope={fileScope} workspace={workspace} onOpen={fileOpener} onLocate={locateFileOp} />
         </div>
 
         <AgentGraph

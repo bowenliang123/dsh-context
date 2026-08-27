@@ -353,7 +353,64 @@ export interface SessionsHistoryFace {
 
 /** The connection service face, as far as this plugin consumes it. */
 export interface ConnectionFace {
-  api?: { sessions?: SessionsHistoryFace }
+  api?: {
+    sessions?: SessionsHistoryFace
+    host?: { openPath?(request: { path: string }): Promise<unknown> }
+  }
+  /** Observable host description (dsh's HostDescriptionSource); `canOpenPath` gates the open affordance. */
+  hostDescription?: { getSnapshot(): unknown }
+}
+
+/**
+ * The SESSION's workspace root — the `cwd` its session-list row carries (the
+ * host session canon, not the host process's own launch directory) — or
+ * undefined when the face is absent, the snapshot is malformed, or the row
+ * names no cwd. Every field is re-proved — the no-white-screen guarantee.
+ */
+export function workspaceOf(ctx: ClientCtx, sessionId: string | undefined): string | undefined {
+  if (typeof sessionId !== 'string' || sessionId === '') return undefined
+  // The snapshot and its rows are host data — a hostile object may throw on
+  // the call or on property access, and the card must never blank over it.
+  try {
+    const sessions = ctx.get('sessions') as { list?: { getSnapshot(): unknown } } | undefined
+    const snapshot = typeof sessions?.list?.getSnapshot === 'function' ? sessions.list.getSnapshot() : undefined
+    const byId = snapshot !== null && typeof snapshot === 'object' ? (snapshot as { byId?: unknown }).byId : undefined
+    const row: unknown = byId !== null && typeof byId === 'object' ? (byId as Record<string, unknown>)[sessionId] : undefined
+    const cwd = row !== null && typeof row === 'object' ? (row as { cwd?: unknown }).cwd : undefined
+    return typeof cwd === 'string' && cwd !== '' ? cwd : undefined
+  } catch {
+    return undefined
+  }
+}
+
+/** Whether this deployment can hand a path to the user's native desktop (the
+ * host description's `canOpenPath`); false when unknown. */
+export function canOpenPathsOf(ctx: ClientCtx): boolean {
+  try {
+    const source = (ctx.get('connection') as ConnectionFace | undefined)?.hostDescription
+    const snapshot = typeof source?.getSnapshot === 'function' ? source.getSnapshot() : undefined
+    const can = snapshot !== null && typeof snapshot === 'object' ? (snapshot as { canOpenPath?: unknown }).canOpenPath : undefined
+    return can === true
+  } catch {
+    return false
+  }
+}
+
+/**
+ * The system path opener, or undefined when the deployment lacks the RPC.
+ * Fire-and-forget: rejections (unknown path, no desktop) swallow — the
+ * affordance is best-effort by nature.
+ */
+export function openPathVia(ctx: ClientCtx): ((path: string) => void) | undefined {
+  const host = (ctx.get('connection') as ConnectionFace | undefined)?.api?.host
+  if (host === undefined || typeof host.openPath !== 'function') return undefined
+  // Bound up front: an implementation relying on `this` survives the hand-off.
+  const openPath = host.openPath.bind(host)
+  return (path: string): void => {
+    try {
+      void openPath({ path }).catch(() => { /* the open is best-effort; a failure stays silent */ })
+    } catch { /* same contract, for a synchronously throwing transport */ }
+  }
 }
 
 /**

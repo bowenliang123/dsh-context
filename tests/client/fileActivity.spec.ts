@@ -5,7 +5,7 @@
 
 import assert from 'node:assert/strict'
 import { describe, test } from 'vitest'
-import { activityOf, formOf, glyphOf, kindOfCall, kindOfTool, linesOf, locateStepOf, pathOfArgs } from '../../src/client/fileActivity'
+import { absPathOf, activityOf, displayPathOf, formOf, glyphOf, kindOfCall, kindOfTool, linesOf, locateStepOf, pathOfArgs } from '../../src/client/fileActivity'
 import type { FileActivity } from '../../src/client/fileActivity'
 import type { ConversationNodeLike } from '../../src/client/services'
 import type { RequestRecord, SurfaceNode } from '../../src/shared/types'
@@ -687,5 +687,61 @@ describe('glyphOf', () => {
       const g = glyphOf('/x/' + base, 'text')
       assert.notEqual(g.tip, 'files.glyph.tests', base)
     }
+  })
+})
+
+describe('displayPathOf', () => {
+  const ws = '/Users/bw/dev/dsh-context'
+
+  test('workspace paths shorten to a ./-relative form', () => {
+    assert.equal(displayPathOf(ws + '/src/client/a.ts', ws), './src/client/a.ts')
+    assert.equal(displayPathOf(ws, ws), './')
+    assert.equal(displayPathOf(ws + '/', ws), './')
+    assert.equal(displayPathOf('tests/client/a.spec.ts', ws), './tests/client/a.spec.ts')
+    assert.equal(displayPathOf('./tests/a.ts', ws), './tests/a.ts')
+  })
+
+  test('everything else stays verbatim', () => {
+    assert.equal(displayPathOf('/etc/hosts', ws), '/etc/hosts')
+    assert.equal(displayPathOf(ws + '-sibling/a.ts', ws), ws + '-sibling/a.ts')
+    assert.equal(displayPathOf('C:\\repo\\a.ts', ws), 'C:\\repo\\a.ts')
+    assert.equal(displayPathOf('needle', ws), './needle')
+    assert.equal(displayPathOf(ws + '/a.ts', undefined), ws + '/a.ts')
+    // Without a known workspace a relative path is still workspace-relative by definition.
+    assert.equal(displayPathOf('needle', undefined), './needle')
+  })
+})
+
+describe('activityOf — pattern rows', () => {
+  test('a pathless search marks its pattern-as-target entry; a narrowed one does not', () => {
+    const a = run([
+      op(3, 'grep', { pattern: 'needle' }),
+      op(5, 'grep', { pattern: 'needle', path: '/src' }),
+    ])
+    // Newest first: /src (5) leads, the pattern row (3) follows.
+    assert.equal(a.entries[0].pattern, undefined)
+    assert.equal(a.entries[1].pattern, true)
+  })
+
+  test('a nested Code-Mode pathless search is a pattern row too; its narrowed sibling is not', () => {
+    const a = run([op(30, 'run_code', null, {}, { subCalls: [
+      sub(20, 'grep', { pattern: 'needle' }),
+      sub(22, 'grep', { pattern: 'needle', path: '/src' }),
+    ] })])
+    // Newest first: /src (22) leads, the pattern row (20) follows.
+    assert.equal(a.entries[0].pattern, undefined)
+    assert.equal(a.entries[1].pattern, true)
+  })
+})
+
+describe('absPathOf', () => {
+  test('absolute paths stay; relative paths resolve against the workspace root', () => {
+    const ws = '/Users/bw/dev/dsh-context'
+    assert.equal(absPathOf('/etc/hosts', ws), '/etc/hosts')
+    assert.equal(absPathOf('src/a.ts', ws), ws + '/src/a.ts')
+    assert.equal(absPathOf('src/a.ts', ws + '/'), ws + '/src/a.ts')
+    assert.equal(absPathOf('src/a.ts', undefined), undefined)
+    assert.equal(absPathOf('./src/a.ts', ws), undefined)
+    assert.equal(absPathOf('C:\\repo\\a.ts', ws), 'C:\\repo\\a.ts')
   })
 })

@@ -12,7 +12,7 @@
  */
 
 import type * as ReactNS from 'react'
-import { glyphOf } from '../fileActivity'
+import { absPathOf, displayPathOf, glyphOf } from '../fileActivity'
 import type { FileActivity, FileEntry, FileOp, FileOpKind } from '../fileActivity'
 import type { ContextSettings, DefaultFileSort } from '../settings'
 import type { ViewKit } from '../viewkit'
@@ -27,6 +27,10 @@ export interface FileCardProps {
   activity: FileActivity
   /** The range label — the picked step, or the whole-session latest view. */
   scope: string
+  /** The host workspace root: workspace paths display './'-relative when known. */
+  workspace?: string
+  /** Open a file on the user's system; absent = the file name renders inert. */
+  onOpen?: (absPath: string) => void
   /** Reveal one operation's result node in the Context browser; absent = op lines render inert. */
   onLocate?: (op: FileOp) => void
 }
@@ -63,6 +67,9 @@ export function makeFileCard(kit: ViewKit, settings: ContextSettings): ReactNS.C
     const [openPath, setOpenPath] = React.useState<string | null>(null)
 
     const q = query.trim().toLowerCase()
+    // Display form of an entry's path: './'-relative inside the workspace, verbatim outside —
+    // except pattern-as-target search rows, whose "path" is a search pattern, not a file.
+    const displayOf = (e: FileEntry): string => (e.pattern === true ? e.path : displayPathOf(e.path, props.workspace))
     // The count sort's magnitude: the selected kind's own ops when a kind
     // chip is active (a file heavy on writes must not outrank one heavy on
     // reads under the read chip), else the file's overall op count.
@@ -70,7 +77,7 @@ export function makeFileCard(kit: ViewKit, settings: ContextSettings): ReactNS.C
       filter === 'read' ? e.reads : filter === 'write' ? e.writes : filter === 'search' ? e.searches : e.ops.length
     /* The fold serves entries latest-first; the sort toggle re-orders the filtered copy (never the source array). */
     const shown = activity.entries
-      .filter(e => matches(e, filter) && (q === '' || e.path.toLowerCase().includes(q)))
+      .filter(e => matches(e, filter) && (q === '' || displayOf(e).toLowerCase().includes(q)))
       .sort((a, b) => sort === 'count'
         ? (countOf(b) - countOf(a)) || (b.ops[0].seq - a.ops[0].seq)
         : sort === 'latest'
@@ -181,11 +188,15 @@ export function makeFileCard(kit: ViewKit, settings: ContextSettings): ReactNS.C
               <div className="lc-fa-list">
                 {shown.map((e) => {
                   const open = openPath === e.path
-                  const trimmed = e.path.endsWith('/') ? e.path.slice(0, -1) : e.path
+                  // The path column renders the display form; the row title keeps the raw path.
+                  const display = displayOf(e)
+                  const trimmed = display.endsWith('/') ? display.slice(0, -1) : display
                   const slash = trimmed.lastIndexOf('/')
                   const dir = slash >= 0 ? trimmed.slice(0, slash + 1) : ''
                   const base = slash >= 0 ? trimmed.slice(slash + 1) : trimmed
                   const glyph = glyphOf(e.path, e.form)
+                  // The system-open affordance: real paths resolve to absolute; pattern rows are not files.
+                  const abs = e.pattern === true ? undefined : absPathOf(e.path, props.workspace)
                   return (
                     <div key={e.path} className={'lc-fa-item' + (open ? ' lc-fa-item-on' : '')}>
                       <button
@@ -204,7 +215,20 @@ export function makeFileCard(kit: ViewKit, settings: ContextSettings): ReactNS.C
                             )
                             : glyph.glyph}
                         </span>
-                        <span className="lc-fa-path">{dir !== '' ? <em>{dir}</em> : null}<b>{base}</b></span>
+                        <span className="lc-fa-path">
+                          {dir !== '' ? <em>{dir}</em> : null}
+                          {abs !== undefined && props.onOpen !== undefined
+                            ? (
+                              <b
+                                className="lc-fa-file"
+                                title={t('files.open')}
+                                onClick={(ev: ReactNS.MouseEvent) => { ev.stopPropagation(); props.onOpen?.(abs) }}
+                              >
+                                {base}
+                              </b>
+                            )
+                            : <b>{base}</b>}
+                        </span>
                         {e.reads > 0 ? (
                           <span className="lc-fa-badge lc-fa-b-read" title={t('files.kind.read')}><i />{fmt(e.reads)}</span>
                         ) : null}
