@@ -345,6 +345,34 @@ describe('FileCard — expansion and locate', () => {
     await m.unmount()
   })
 
+  test('a code file renders its language badge; an emoji file keeps its glyph', async () => {
+    const m = await mount(h(FileCard, {
+      activity: richActivity({
+        entries: [
+          entry('/src/main.ts', { reads: 1, ops: [fileOp(9, 'read', 'read')] }),
+          entry('/notes.md', { reads: 1, ops: [fileOp(8, 'read', 'read')] }),
+        ],
+        totals: { read: { files: 2, ops: 2 }, write: { files: 0, ops: 0 }, search: { files: 0, ops: 0 }, image: { files: 0, ops: 0 }, added: 0, removed: 0 },
+      }),
+      scope: 'live',
+    }))
+    // The badge: TS label on the language fill, readable text color inline.
+    const tsRow = rowByTitle(m.container, '/src/main.ts')
+    const badge = query(tsRow, '.lc-fa-lang')
+    assert.ok(badge !== undefined)
+    assert.equal(badge.textContent, 'TS')
+    assert.equal(query(tsRow, '.lc-fa-form').getAttribute('title'), 'TypeScript')
+    const style = badge.getAttribute('style') ?? ''
+    assert.ok(style.includes('background: rgb(49, 120, 198)'), style)
+    assert.ok(style.includes('color: rgb(255, 255, 255)'), style)
+    // The markdown row keeps its emoji glyph with the bucket name as the title.
+    const mdRow = rowByTitle(m.container, '/notes.md')
+    assert.equal(queryAll(mdRow, '.lc-fa-lang').length, 0)
+    assert.ok(text(mdRow).includes('📝'))
+    assert.equal(query(mdRow, '.lc-fa-form').getAttribute('title'), 'Markup document')
+    await m.unmount()
+  })
+
   test('without a locate hook the op lines render inert', async () => {
     const m = await mount(h(FileCard, { activity: richActivity(), scope: 'live' }))
     await click(queryAll(m.container, '.lc-fa-row')[0])

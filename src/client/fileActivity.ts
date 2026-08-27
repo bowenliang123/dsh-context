@@ -165,8 +165,16 @@ export function formOf(tool: string, path: string): FileForm {
   return 'text'
 }
 
-/** One row icon: the emoji plus the i18n key naming its bucket (the row's hover title). */
-export interface FileGlyph { glyph: string; tip: string }
+/** One row icon: the emoji — or, when `color` is set, a letter badge with that
+ * fill and `glyph` as its label — plus the i18n key naming its bucket (the row's hover title). */
+export interface FileGlyph {
+  glyph: string
+  tip: string
+  /** Language-badge fill; present only on the code-file buckets. */
+  color?: string
+  /** Badge text color, riding along with `color` (white, or near-black on light fills). */
+  text?: string
+}
 
 /** Directory buckets, by last path segment (lowercased, explicit plurals). Checked in order, then hidden dirs, then the plain folder. */
 const DIR_BUCKETS: (readonly [readonly string[], string, string])[] = [
@@ -182,17 +190,54 @@ const DIR_BUCKETS: (readonly [readonly string[], string, string])[] = [
 /** Lockfile base names that do not end in `.lock`. */
 const LOCK_NAMES = ['package-lock.json', 'pnpm-lock.yaml', 'npm-shrinkwrap.json']
 const MAKE_NAMES = ['makefile', 'justfile', 'cmakelists.txt']
-/** A test file by name: a standalone or delimited `test`, an inline `.test.`/`.spec.`, or their underscore forms. */
-const TEST_NAME = /(^|[^a-z0-9])test([^a-z0-9]|$)|\.(test|spec)\./
+/** A test file by name: a standalone or delimited `test`, or an inline `.test.`. */
+const TEST_NAME = /(^|[^a-z0-9])test([^a-z0-9]|$)|\.test\./
 
-/** Extension buckets, most specific first; the last row catches every programming language. */
+/**
+ * Programming-language files render as letter badges over their language's
+ * color (GitHub Linguist shades). Checked before the emoji buckets, so a
+ * language file never falls through to one.
+ */
+const CODE_LANGS: (readonly [readonly string[], string, string, string])[] = [
+  [['tsx'], 'TSX', '#3178c6', 'files.glyph.lang.ts'],
+  [['ts'], 'TS', '#3178c6', 'files.glyph.lang.ts'],
+  [['js', 'jsx', 'mjs', 'cjs'], 'JS', '#f7df1e', 'files.glyph.lang.js'],
+  [['py', 'pyi', 'pyw'], 'PY', '#3572a5', 'files.glyph.python'],
+  [['ipynb'], 'NB', '#da5b0b', 'files.glyph.notebook'],
+  [['go'], 'GO', '#00add8', 'files.glyph.lang.go'],
+  [['rs'], 'RS', '#dea584', 'files.glyph.lang.rust'],
+  [['java'], 'JV', '#b07219', 'files.glyph.lang.java'],
+  [['kt', 'kts'], 'KT', '#a97bff', 'files.glyph.lang.kotlin'],
+  [['rb'], 'RB', '#701516', 'files.glyph.lang.ruby'],
+  [['php'], 'PHP', '#4f5d95', 'files.glyph.lang.php'],
+  [['c', 'h'], 'C', '#555555', 'files.glyph.lang.c'],
+  [['cpp', 'cc', 'cxx', 'hpp'], 'C++', '#f34b7d', 'files.glyph.lang.cpp'],
+  [['cs'], 'C#', '#178600', 'files.glyph.lang.csharp'],
+  [['scala'], 'SC', '#c22d40', 'files.glyph.lang.scala'],
+  [['lua'], 'LUA', '#000080', 'files.glyph.lang.lua'],
+  [['dart'], 'DA', '#00b4ab', 'files.glyph.lang.dart'],
+  [['swift'], 'SW', '#f05138', 'files.glyph.lang.swift'],
+  [['vue'], 'VUE', '#41b883', 'files.glyph.lang.vue'],
+  [['svelte'], 'SV', '#ff3e00', 'files.glyph.lang.svelte'],
+  [['sh', 'bash', 'zsh', 'fish', 'ps1'], 'SH', '#89e051', 'files.glyph.shell'],
+  [['html', 'htm', 'xhtml'], 'HT', '#e34c26', 'files.glyph.lang.html'],
+  [['css', 'scss', 'sass', 'less', 'styl'], 'CSS', '#563d7c', 'files.glyph.style'],
+  [['sql'], 'SQL', '#e38c00', 'files.glyph.database'],
+]
+
+/**
+ * Badge text by fill luminance: white on dark shades, near-black on light
+ * ones (the JS yellow, the shell green) — a fixed dark tone, never pure
+ * black, so it sits quietly next to the white badges.
+ */
+function badgeTextColor(hex: string): string {
+  const n = parseInt(hex.slice(1), 16)
+  const luminance = (0.299 * ((n >> 16) & 255) + 0.587 * ((n >> 8) & 255) + 0.114 * (n & 255)) / 255
+  return luminance < 0.6 ? '#ffffff' : '#1f2328'
+}
+
+/** Extension buckets for non-code files, most specific first. */
 const EXT_BUCKETS: (readonly [readonly string[], string, string])[] = [
-  [['py', 'pyi', 'pyw'], '🐍', 'files.glyph.python'],
-  [['ipynb'], '📓', 'files.glyph.notebook'],
-  [['sh', 'bash', 'zsh', 'fish', 'ps1'], '🐚', 'files.glyph.shell'],
-  [['html', 'htm', 'xhtml'], '🌐', 'files.glyph.web'],
-  [['css', 'scss', 'sass', 'less', 'styl'], '🎨', 'files.glyph.style'],
-  [['sql'], '🗃️', 'files.glyph.database'],
   [['yaml', 'yml', 'toml', 'ini', 'conf', 'cfg', 'properties', 'env'], '⚙️', 'files.glyph.config'],
   [['json', 'jsonc', 'json5', 'jsonl', 'ndjson', 'xml'], '🧾', 'files.glyph.data'],
   [['md', 'mdx', 'markdown', 'rst', 'adoc', 'org'], '📝', 'files.glyph.markdown'],
@@ -202,11 +247,6 @@ const EXT_BUCKETS: (readonly [readonly string[], string, string])[] = [
   [['zip', 'gz', 'tgz', 'tar', 'bz2', 'xz', '7z', 'rar', 'jar'], '🗜️', 'files.glyph.archive'],
   [['ttf', 'otf', 'woff', 'woff2', 'eot'], '🔤', 'files.glyph.font'],
   [['mp4', 'mov', 'mkv', 'webm', 'mp3', 'wav', 'flac', 'ogg'], '🎬', 'files.glyph.media'],
-  [
-    ['ts', 'tsx', 'js', 'jsx', 'mjs', 'cjs', 'go', 'rs', 'java', 'kt', 'kts', 'swift', 'rb', 'php',
-      'c', 'h', 'cpp', 'cc', 'cxx', 'hpp', 'cs', 'scala', 'lua', 'dart', 'vue', 'svelte'],
-    '🧩', 'files.glyph.code',
-  ],
 ]
 
 function dirGlyph(base: string): FileGlyph {
@@ -232,6 +272,9 @@ function fileGlyph(base: string): FileGlyph {
   if (name === 'license' || name.startsWith('license.') || name === 'copying') return { glyph: '⚖️', tip: 'files.glyph.license' }
   if (name === '.env' || name.startsWith('.env.')) return { glyph: '⚙️', tip: 'files.glyph.config' }
   if (ext !== '') {
+    for (const [exts, label, color, tip] of CODE_LANGS) {
+      if (exts.includes(ext)) return { glyph: label, tip, color, text: badgeTextColor(color) }
+    }
     for (const [exts, glyph, tip] of EXT_BUCKETS) {
       if (exts.includes(ext)) return { glyph, tip }
     }

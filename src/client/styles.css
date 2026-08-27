@@ -264,7 +264,10 @@ button.lc-brief-row-link { cursor: pointer; }
 .lc-fa-item-on { background: var(--dsw-alias-bg-layer-2); border-color: var(--dsw-alias-border-l1); }
 .lc-fa-row { display: flex; align-items: center; gap: 7px; width: 100%; border: 0; background: transparent; color: var(--dsw-alias-label-primary); font: inherit; font-size: 12px; padding: 6px 8px; cursor: pointer; text-align: left; border-radius: 7px; transition: background-color 120ms ease; }
 .lc-fa-row:hover { background: var(--dsw-alias-interactive-bg-hover); }
-.lc-fa-form { flex: none; width: 16px; text-align: center; font-size: 11px; opacity: 0.85; }
+.lc-fa-form { flex: none; width: 20px; height: 14px; display: flex; align-items: center; justify-content: center; font-size: 11px; opacity: 0.85; }
+.lc-fa-lang { display: inline-flex; align-items: center; justify-content: center; min-width: 16px; height: 13px; padding: 0 2px; border-radius: 4px; font-size: 8px; font-weight: 700; line-height: 1; }
+/* The chevron hugs the icon: the row's 7px gap inside the chevron's 12px box reads loose. */
+.lc-fa-row .lc-br-chev { margin-right: -4px; }
 .lc-fa-path { flex: 1; min-width: 0; word-break: break-all; }
 .lc-fa-path em { font-style: normal; color: var(--dsw-alias-label-secondary); }
 /* Per-purpose count badges: pill chips, one fixed tint per purpose (read = brand, write = success, search = warn). */

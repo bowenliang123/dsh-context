@@ -582,7 +582,6 @@ describe('glyphOf', () => {
       ['package-lock.json', '🔒', 'files.glyph.lock'],
       ['Cargo.lock', '🔒', 'files.glyph.lock'],
       ['a.test.ts', '🧪', 'files.glyph.tests'],
-      ['a.spec.js', '🧪', 'files.glyph.tests'],
       ['foo_test.py', '🧪', 'files.glyph.tests'],
       ['test_foo.py', '🧪', 'files.glyph.tests'],
       ['Dockerfile', '🐳', 'files.glyph.docker'],
@@ -593,13 +592,8 @@ describe('glyphOf', () => {
       ['LICENSE.md', '⚖️', 'files.glyph.license'],
       ['COPYING', '⚖️', 'files.glyph.license'],
       ['.env', '⚙️', 'files.glyph.config'],
-      ['app.py', '🐍', 'files.glyph.python'],
-      ['notebook.ipynb', '📓', 'files.glyph.notebook'],
-      ['run.sh', '🐚', 'files.glyph.shell'],
-      ['index.html', '🌐', 'files.glyph.web'],
-      ['main.css', '🎨', 'files.glyph.style'],
-      ['schema.sql', '🗃️', 'files.glyph.database'],
       ['tsconfig.yaml', '⚙️', 'files.glyph.config'],
+      ['config.env', '⚙️', 'files.glyph.config'],
       ['manifest.json', '🧾', 'files.glyph.data'],
       ['README.md', '📝', 'files.glyph.markdown'],
       ['README.MD', '📝', 'files.glyph.markdown'],
@@ -610,14 +604,59 @@ describe('glyphOf', () => {
       ['bundle.tar.gz', '🗜️', 'files.glyph.archive'],
       ['inter.woff2', '🔤', 'files.glyph.font'],
       ['clip.mp4', '🎬', 'files.glyph.media'],
-      ['main.ts', '🧩', 'files.glyph.code'],
-      ['lib.go', '🧩', 'files.glyph.code'],
-      ['App.vue', '🧩', 'files.glyph.code'],
       ['README', '📄', 'files.form.text'],
       ['data.parquet', '📄', 'files.form.text'],
       ['.foo', '📄', 'files.form.text'],
     ]
     for (const [base, glyph, tip] of cases) assert.deepEqual(glyphOf('/x/' + base, 'text'), { glyph, tip }, base)
+  })
+
+  test('code files render letter badges over their language color, with readable text', () => {
+    const cases: [string, string, string, string][] = [
+      ['main.ts', 'TS', '#3178c6', 'files.glyph.lang.ts'],
+      ['App.tsx', 'TSX', '#3178c6', 'files.glyph.lang.ts'],
+      ['index.js', 'JS', '#f7df1e', 'files.glyph.lang.js'],
+      ['a.spec.js', 'JS', '#f7df1e', 'files.glyph.lang.js'],
+      ['app.py', 'PY', '#3572a5', 'files.glyph.python'],
+      ['notebook.ipynb', 'NB', '#da5b0b', 'files.glyph.notebook'],
+      ['main.go', 'GO', '#00add8', 'files.glyph.lang.go'],
+      ['lib.rs', 'RS', '#dea584', 'files.glyph.lang.rust'],
+      ['App.java', 'JV', '#b07219', 'files.glyph.lang.java'],
+      ['Main.kt', 'KT', '#a97bff', 'files.glyph.lang.kotlin'],
+      ['app.rb', 'RB', '#701516', 'files.glyph.lang.ruby'],
+      ['db.php', 'PHP', '#4f5d95', 'files.glyph.lang.php'],
+      ['mem.c', 'C', '#555555', 'files.glyph.lang.c'],
+      ['util.h', 'C', '#555555', 'files.glyph.lang.c'],
+      ['graph.cpp', 'C++', '#f34b7d', 'files.glyph.lang.cpp'],
+      ['Repo.cs', 'C#', '#178600', 'files.glyph.lang.csharp'],
+      ['Router.scala', 'SC', '#c22d40', 'files.glyph.lang.scala'],
+      ['conf.lua', 'LUA', '#000080', 'files.glyph.lang.lua'],
+      ['cli.dart', 'DA', '#00b4ab', 'files.glyph.lang.dart'],
+      ['App.swift', 'SW', '#f05138', 'files.glyph.lang.swift'],
+      ['App.vue', 'VUE', '#41b883', 'files.glyph.lang.vue'],
+      ['view.svelte', 'SV', '#ff3e00', 'files.glyph.lang.svelte'],
+      ['deploy.sh', 'SH', '#89e051', 'files.glyph.shell'],
+      ['index.html', 'HT', '#e34c26', 'files.glyph.lang.html'],
+      ['main.css', 'CSS', '#563d7c', 'files.glyph.style'],
+      ['schema.sql', 'SQL', '#e38c00', 'files.glyph.database'],
+    ]
+    for (const [base, glyph, color, tip] of cases) {
+      const g = glyphOf('/x/' + base, 'text')
+      assert.equal(g.glyph, glyph, base)
+      assert.equal(g.tip, tip, base)
+      assert.equal(g.color, color, base)
+      assert.ok(g.text !== undefined, `badge text color missing for ${base}`)
+    }
+    // The text color contrasts with the fill: near-black on light shades (the
+    // JS yellow, shell green, rust peach), white on dark ones (including the
+    // kotlin lilac, just under the threshold).
+    assert.equal(glyphOf('/x/index.js', 'text').text, '#1f2328')
+    assert.equal(glyphOf('/x/deploy.sh', 'text').text, '#1f2328')
+    assert.equal(glyphOf('/x/lib.rs', 'text').text, '#1f2328')
+    assert.equal(glyphOf('/x/Main.kt', 'text').text, '#ffffff')
+    assert.equal(glyphOf('/x/main.ts', 'text').text, '#ffffff')
+    // An extension outside the badge table is not a known language: plain fallback.
+    assert.deepEqual(glyphOf('/x/build.zig', 'text'), { glyph: '📄', tip: 'files.form.text' })
   })
 
   test('near-miss names do not trip the test-file rule', () => {

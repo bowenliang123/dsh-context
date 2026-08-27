@@ -181,7 +181,15 @@ export function makeFileCard(kit: ViewKit, settings: ContextSettings): ReactNS.C
                         onClick={() => { setOpenPath(open ? null : e.path) }}
                       >
                         <span className={'lc-br-chev' + (open ? ' lc-br-chev-on' : '')}>{'▸'}</span>
-                        <span className="lc-fa-form" title={t(glyph.tip)}>{glyph.glyph}</span>
+                        <span className="lc-fa-form" title={t(glyph.tip)}>
+                          {glyph.color !== undefined
+                            ? (
+                              <span className="lc-fa-lang" style={{ background: glyph.color, color: glyph.text }}>
+                                {glyph.glyph}
+                              </span>
+                            )
+                            : glyph.glyph}
+                        </span>
                         <span className="lc-fa-path">{dir !== '' ? <em>{dir}</em> : null}<b>{base}</b></span>
                         {e.reads > 0 ? (
                           <span className="lc-fa-badge lc-fa-b-read" title={t('files.kind.read')}><i />{fmt(e.reads)}</span>
