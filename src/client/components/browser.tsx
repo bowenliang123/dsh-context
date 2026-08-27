@@ -666,7 +666,7 @@ export function makeContextBrowser(
       return (
         <div key={key} className={'lc-br-elem' + (open ? ' lc-br-elem-on' : '')}>
           <button type="button" className="lc-br-elem-row" onClick={() => { toggleElem(key) }}>
-            <span className={'lc-br-chev' + (open ? ' lc-br-chev-on' : '')}>{'▸'}</span>
+            <span className={'lc-br-chev' + (open ? ' lc-br-chev-on' : '')} />
             {err ? <span className="lc-br-err-dot" title={t('node.failed')} /> : null}
             {tag !== null ? <span className="lc-br-tag">{tag}</span> : null}
             <span className="lc-br-preview">{preview}</span>
@@ -851,7 +851,7 @@ export function makeContextBrowser(
                   /* v8 ignore stop */
                   onClick={() => { toggleCat(c.key) }}
                 >
-                  <span className={'lc-br-chev' + (open ? ' lc-br-chev-on' : '')}>{'▸'}</span>
+                  <span className={'lc-br-chev' + (open ? ' lc-br-chev-on' : '')} />
                   <i style={{ background: c.color }} />
                   <span className="lc-br-cat-label">{catLabel(c.key)}</span>
                   {/* Count + Δ pill sit as one attached group (tight inner gap),

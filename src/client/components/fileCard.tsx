@@ -180,7 +180,7 @@ export function makeFileCard(kit: ViewKit, settings: ContextSettings): ReactNS.C
                         title={e.path}
                         onClick={() => { setOpenPath(open ? null : e.path) }}
                       >
-                        <span className={'lc-br-chev' + (open ? ' lc-br-chev-on' : '')}>{'▸'}</span>
+                        <span className={'lc-br-chev' + (open ? ' lc-br-chev-on' : '')} />
                         <span className="lc-fa-form" title={t(glyph.tip)}>
                           {glyph.color !== undefined
                             ? (

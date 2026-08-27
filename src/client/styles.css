@@ -266,8 +266,8 @@ button.lc-brief-row-link { cursor: pointer; }
 .lc-fa-row:hover { background: var(--dsw-alias-interactive-bg-hover); }
 .lc-fa-form { flex: none; width: 20px; height: 14px; display: flex; align-items: center; justify-content: center; font-size: 11px; opacity: 0.85; }
 .lc-fa-lang { display: inline-flex; align-items: center; justify-content: center; min-width: 16px; height: 13px; padding: 0 2px; border-radius: 4px; font-size: 8px; font-weight: 700; line-height: 1; }
-/* The chevron hugs the icon: the row's 7px gap inside the chevron's 12px box reads loose. */
-.lc-fa-row .lc-br-chev { margin-right: -4px; }
+/* The chevron sits close to the icon: only half the row gap stays visible. */
+.lc-fa-row .lc-br-chev { margin-right: -2px; }
 .lc-fa-path { flex: 1; min-width: 0; word-break: break-all; }
 .lc-fa-path em { font-style: normal; color: var(--dsw-alias-label-secondary); }
 /* Per-purpose count badges: pill chips, one fixed tint per purpose (read = brand, write = success, search = warn). */
@@ -330,8 +330,12 @@ button.lc-brief-row-link { cursor: pointer; }
 .lc-br-cat-label { font-weight: 600; }
 .lc-br-cat-count { color: var(--dsw-alias-label-secondary); font-size: 12px; white-space: nowrap; }
 .lc-br-count-grp { flex: 1; min-width: 0; display: inline-flex; align-items: center; gap: 4px; }
-.lc-br-chev { flex: none; width: 12px; color: var(--dsw-alias-label-secondary); transition: transform 120ms ease; }
-.lc-br-chev-on { transform: rotate(90deg); }
+/* Disclosure chevron, drawn in CSS (a bordered box rotated -45°→45°) instead
+   of a ▸ glyph: the box rotates about its true center — no glyph wobble — and
+   stays crisp at any zoom. */
+.lc-br-chev { flex: none; width: 12px; height: 14px; display: flex; align-items: center; justify-content: center; color: var(--dsw-alias-label-tertiary); }
+.lc-br-chev::before { content: ''; width: 5px; height: 5px; border-right: 1px solid currentColor; border-bottom: 1px solid currentColor; transform: rotate(-45deg); transition: transform 120ms ease; }
+.lc-br-chev-on::before { transform: rotate(45deg); }
 .lc-br-tokens { flex: none; color: var(--dsw-alias-label-secondary); font-size: 12px; }
 /*
  Δ pills on a category row: count/token swings vs the previous turn's last step, tinted by direction (added = success, freed = error) — the events chips' language.
