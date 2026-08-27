@@ -62,7 +62,7 @@ A DeepSeek Harness plugin for context insight, actions, and management.
 - Push the commits automatically.
 
 ## Tool Usage
-- Use `read` tool before using the `edit` tool, avoiding errors like "Error: edit requires reading '/path/file' first — read the file, then retry."
+- Always read the file first using the `read` tool before using the `edit` tool, which prevents errors like "Error: edit requires reading '/path/file' first — read the file, then retry."
 
 ## Releasing
 - Version X.Y.Z, 大版本.次版本.小版本。
