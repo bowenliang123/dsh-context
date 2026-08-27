@@ -5,7 +5,7 @@
 
 import assert from 'node:assert/strict'
 import { describe, test } from 'vitest'
-import { activityOf, formOf, kindOfCall, kindOfTool, linesOf, locateStepOf, pathOfArgs } from '../../src/client/fileActivity'
+import { activityOf, formOf, glyphOf, kindOfCall, kindOfTool, linesOf, locateStepOf, pathOfArgs } from '../../src/client/fileActivity'
 import type { FileActivity } from '../../src/client/fileActivity'
 import type { ConversationNodeLike } from '../../src/client/services'
 import type { RequestRecord, SurfaceNode } from '../../src/shared/types'
@@ -549,5 +549,81 @@ describe('activityOf — search meta attribution', () => {
     })])
     assert.deepEqual(a.entries.map(e => e.path), ['/only.md'])
     assert.equal(a.entries[0].ops[0].detail, undefined)
+  })
+})
+
+describe('glyphOf', () => {
+  test('image form wins over everything the path says', () => {
+    assert.deepEqual(glyphOf('/a/data.csv', 'image'), { glyph: '🖼', tip: 'files.form.image' })
+  })
+
+  test('directories match their last segment, case-insensitively', () => {
+    const cases: [string, string, string][] = [
+      ['/', '🏠', 'files.glyph.root'],
+      ['.', '🏠', 'files.glyph.root'],
+      ['/repo/tests/', '🧪', 'files.glyph.tests'],
+      ['/repo/TESTS/', '🧪', 'files.glyph.tests'],
+      ['/repo/packages/a/tests/', '🧪', 'files.glyph.tests'],
+      ['/docs/', '📚', 'files.glyph.docs'],
+      ['/repo/node_modules/', '📦', 'files.glyph.deps'],
+      ['/repo/dist/', '🏗️', 'files.glyph.build'],
+      ['/repo/scripts/', '🛠️', 'files.glyph.scripts'],
+      ['/repo/config/', '⚙️', 'files.glyph.config'],
+      ['/repo/assets/', '🎨', 'files.glyph.assets'],
+      ['/repo/.github/', '🗄️', 'files.glyph.hidden'],
+      ['/repo/src/', '📁', 'files.form.dir'],
+    ]
+    for (const [path, glyph, tip] of cases) assert.deepEqual(glyphOf(path, 'dir'), { glyph, tip }, path)
+  })
+
+  test('files resolve special names before extensions, and buckets before the fallback', () => {
+    const cases: [string, string, string][] = [
+      ['pnpm-lock.yaml', '🔒', 'files.glyph.lock'],
+      ['package-lock.json', '🔒', 'files.glyph.lock'],
+      ['Cargo.lock', '🔒', 'files.glyph.lock'],
+      ['a.test.ts', '🧪', 'files.glyph.tests'],
+      ['a.spec.js', '🧪', 'files.glyph.tests'],
+      ['foo_test.py', '🧪', 'files.glyph.tests'],
+      ['test_foo.py', '🧪', 'files.glyph.tests'],
+      ['Dockerfile', '🐳', 'files.glyph.docker'],
+      ['Dockerfile.dev', '🐳', 'files.glyph.docker'],
+      ['Makefile', '🛠️', 'files.glyph.scripts'],
+      ['CMakeLists.txt', '🛠️', 'files.glyph.scripts'],
+      ['.gitignore', '🚫', 'files.glyph.ignore'],
+      ['LICENSE.md', '⚖️', 'files.glyph.license'],
+      ['COPYING', '⚖️', 'files.glyph.license'],
+      ['.env', '⚙️', 'files.glyph.config'],
+      ['app.py', '🐍', 'files.glyph.python'],
+      ['notebook.ipynb', '📓', 'files.glyph.notebook'],
+      ['run.sh', '🐚', 'files.glyph.shell'],
+      ['index.html', '🌐', 'files.glyph.web'],
+      ['main.css', '🎨', 'files.glyph.style'],
+      ['schema.sql', '🗃️', 'files.glyph.database'],
+      ['tsconfig.yaml', '⚙️', 'files.glyph.config'],
+      ['manifest.json', '🧾', 'files.glyph.data'],
+      ['README.md', '📝', 'files.glyph.markdown'],
+      ['README.MD', '📝', 'files.glyph.markdown'],
+      ['server.log', '📜', 'files.glyph.log'],
+      ['exports.csv', '📊', 'files.glyph.sheet'],
+      ['report.xlsx', '📊', 'files.glyph.sheet'],
+      ['manual.pdf', '📕', 'files.glyph.document'],
+      ['bundle.tar.gz', '🗜️', 'files.glyph.archive'],
+      ['inter.woff2', '🔤', 'files.glyph.font'],
+      ['clip.mp4', '🎬', 'files.glyph.media'],
+      ['main.ts', '🧩', 'files.glyph.code'],
+      ['lib.go', '🧩', 'files.glyph.code'],
+      ['App.vue', '🧩', 'files.glyph.code'],
+      ['README', '📄', 'files.form.text'],
+      ['data.parquet', '📄', 'files.form.text'],
+      ['.foo', '📄', 'files.form.text'],
+    ]
+    for (const [base, glyph, tip] of cases) assert.deepEqual(glyphOf('/x/' + base, 'text'), { glyph, tip }, base)
+  })
+
+  test('near-miss names do not trip the test-file rule', () => {
+    for (const base of ['latest.ts', 'contest.py', 'attest.json']) {
+      const g = glyphOf('/x/' + base, 'text')
+      assert.notEqual(g.tip, 'files.glyph.tests', base)
+    }
   })
 })

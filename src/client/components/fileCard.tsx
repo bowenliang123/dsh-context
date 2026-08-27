@@ -12,7 +12,8 @@
  */
 
 import type * as ReactNS from 'react'
-import type { FileActivity, FileEntry, FileForm, FileOp, FileOpKind } from '../fileActivity'
+import { glyphOf } from '../fileActivity'
+import type { FileActivity, FileEntry, FileOp, FileOpKind } from '../fileActivity'
 import type { ContextSettings, DefaultFileSort } from '../settings'
 import type { ViewKit } from '../viewkit'
 
@@ -32,10 +33,6 @@ export interface FileCardProps {
 
 export function makeFileCard(kit: ViewKit, settings: ContextSettings): ReactNS.ComponentType<FileCardProps> {
   const { t, fmt, fmtTime } = kit
-
-  function formGlyph(form: FileForm): string {
-    return form === 'image' ? '🖼' : form === 'dir' ? '📁' : '📄'
-  }
 
   function matches(e: FileEntry, f: FileFilter): boolean {
     if (f === 'all') return true
@@ -174,6 +171,7 @@ export function makeFileCard(kit: ViewKit, settings: ContextSettings): ReactNS.C
                   const slash = trimmed.lastIndexOf('/')
                   const dir = slash >= 0 ? trimmed.slice(0, slash + 1) : ''
                   const base = slash >= 0 ? trimmed.slice(slash + 1) : trimmed
+                  const glyph = glyphOf(e.path, e.form)
                   return (
                     <div key={e.path} className={'lc-fa-item' + (open ? ' lc-fa-item-on' : '')}>
                       <button
@@ -183,7 +181,7 @@ export function makeFileCard(kit: ViewKit, settings: ContextSettings): ReactNS.C
                         onClick={() => { setOpenPath(open ? null : e.path) }}
                       >
                         <span className={'lc-br-chev' + (open ? ' lc-br-chev-on' : '')}>{'▸'}</span>
-                        <span className="lc-fa-form" title={t('files.form.' + e.form)}>{formGlyph(e.form)}</span>
+                        <span className="lc-fa-form" title={t(glyph.tip)}>{glyph.glyph}</span>
                         <span className="lc-fa-path">{dir !== '' ? <em>{dir}</em> : null}<b>{base}</b></span>
                         {e.reads > 0 ? (
                           <span className="lc-fa-badge lc-fa-b-read" title={t('files.kind.read')}><i />{fmt(e.reads)}</span>

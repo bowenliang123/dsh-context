@@ -165,6 +165,88 @@ export function formOf(tool: string, path: string): FileForm {
   return 'text'
 }
 
+/** One row icon: the emoji plus the i18n key naming its bucket (the row's hover title). */
+export interface FileGlyph { glyph: string; tip: string }
+
+/** Directory buckets, by last path segment (lowercased, explicit plurals). Checked in order, then hidden dirs, then the plain folder. */
+const DIR_BUCKETS: (readonly [readonly string[], string, string])[] = [
+  [['test', 'tests', '__tests__', 'spec', 'specs', 'e2e'], '🧪', 'files.glyph.tests'],
+  [['doc', 'docs', 'documentation'], '📚', 'files.glyph.docs'],
+  [['node_modules', 'vendor', 'third_party', 'third-party', 'packages'], '📦', 'files.glyph.deps'],
+  [['dist', 'build', 'out', 'target', 'release', 'debug', 'coverage', 'artifacts'], '🏗️', 'files.glyph.build'],
+  [['scripts', 'tools', 'bin'], '🛠️', 'files.glyph.scripts'],
+  [['config', 'configs', 'settings', '.config'], '⚙️', 'files.glyph.config'],
+  [['assets', 'static', 'public', 'images', 'fonts', 'icons', 'media'], '🎨', 'files.glyph.assets'],
+]
+
+/** Lockfile base names that do not end in `.lock`. */
+const LOCK_NAMES = ['package-lock.json', 'pnpm-lock.yaml', 'npm-shrinkwrap.json']
+const MAKE_NAMES = ['makefile', 'justfile', 'cmakelists.txt']
+/** A test file by name: a standalone or delimited `test`, an inline `.test.`/`.spec.`, or their underscore forms. */
+const TEST_NAME = /(^|[^a-z0-9])test([^a-z0-9]|$)|\.(test|spec)\./
+
+/** Extension buckets, most specific first; the last row catches every programming language. */
+const EXT_BUCKETS: (readonly [readonly string[], string, string])[] = [
+  [['py', 'pyi', 'pyw'], '🐍', 'files.glyph.python'],
+  [['ipynb'], '📓', 'files.glyph.notebook'],
+  [['sh', 'bash', 'zsh', 'fish', 'ps1'], '🐚', 'files.glyph.shell'],
+  [['html', 'htm', 'xhtml'], '🌐', 'files.glyph.web'],
+  [['css', 'scss', 'sass', 'less', 'styl'], '🎨', 'files.glyph.style'],
+  [['sql'], '🗃️', 'files.glyph.database'],
+  [['yaml', 'yml', 'toml', 'ini', 'conf', 'cfg', 'properties', 'env'], '⚙️', 'files.glyph.config'],
+  [['json', 'jsonc', 'json5', 'jsonl', 'ndjson', 'xml'], '🧾', 'files.glyph.data'],
+  [['md', 'mdx', 'markdown', 'rst', 'adoc', 'org'], '📝', 'files.glyph.markdown'],
+  [['log'], '📜', 'files.glyph.log'],
+  [['csv', 'tsv', 'xls', 'xlsx', 'ods'], '📊', 'files.glyph.sheet'],
+  [['pdf', 'doc', 'docx', 'odt', 'rtf'], '📕', 'files.glyph.document'],
+  [['zip', 'gz', 'tgz', 'tar', 'bz2', 'xz', '7z', 'rar', 'jar'], '🗜️', 'files.glyph.archive'],
+  [['ttf', 'otf', 'woff', 'woff2', 'eot'], '🔤', 'files.glyph.font'],
+  [['mp4', 'mov', 'mkv', 'webm', 'mp3', 'wav', 'flac', 'ogg'], '🎬', 'files.glyph.media'],
+  [
+    ['ts', 'tsx', 'js', 'jsx', 'mjs', 'cjs', 'go', 'rs', 'java', 'kt', 'kts', 'swift', 'rb', 'php',
+      'c', 'h', 'cpp', 'cc', 'cxx', 'hpp', 'cs', 'scala', 'lua', 'dart', 'vue', 'svelte'],
+    '🧩', 'files.glyph.code',
+  ],
+]
+
+function dirGlyph(base: string): FileGlyph {
+  if (base === '' || base === '.') return { glyph: '🏠', tip: 'files.glyph.root' }
+  const name = base.toLowerCase()
+  for (const [names, glyph, tip] of DIR_BUCKETS) {
+    if (names.includes(name)) return { glyph, tip }
+  }
+  if (name.startsWith('.')) return { glyph: '🗄️', tip: 'files.glyph.hidden' }
+  return { glyph: '📁', tip: 'files.form.dir' }
+}
+
+function fileGlyph(base: string): FileGlyph {
+  const name = base.toLowerCase()
+  const dot = name.lastIndexOf('.')
+  // A dot at position 0 is a dotfile, not an extension — `.env` below reads by name.
+  const ext = dot > 0 ? name.slice(dot + 1) : ''
+  if (name.endsWith('.lock') || LOCK_NAMES.includes(name)) return { glyph: '🔒', tip: 'files.glyph.lock' }
+  if (TEST_NAME.test(name)) return { glyph: '🧪', tip: 'files.glyph.tests' }
+  if (name === 'dockerfile' || name.startsWith('dockerfile.')) return { glyph: '🐳', tip: 'files.glyph.docker' }
+  if (MAKE_NAMES.includes(name)) return { glyph: '🛠️', tip: 'files.glyph.scripts' }
+  if (name === '.gitignore' || name === '.gitattributes') return { glyph: '🚫', tip: 'files.glyph.ignore' }
+  if (name === 'license' || name.startsWith('license.') || name === 'copying') return { glyph: '⚖️', tip: 'files.glyph.license' }
+  if (name === '.env' || name.startsWith('.env.')) return { glyph: '⚙️', tip: 'files.glyph.config' }
+  if (ext !== '') {
+    for (const [exts, glyph, tip] of EXT_BUCKETS) {
+      if (exts.includes(ext)) return { glyph, tip }
+    }
+  }
+  return { glyph: '📄', tip: 'files.form.text' }
+}
+
+/** The row icon for one file entry: form first (image/dir), then the file-name tables. */
+export function glyphOf(path: string, form: FileForm): FileGlyph {
+  if (form === 'image') return { glyph: '🖼', tip: 'files.form.image' }
+  const trimmed = path.endsWith('/') ? path.slice(0, -1) : path
+  const base = trimmed.slice(trimmed.lastIndexOf('/') + 1)
+  return form === 'dir' ? dirGlyph(base) : fileGlyph(base)
+}
+
 /**
  * A search op's detail: the pattern, with the include filter appended when
  * one narrowed the call. A patternless (malformed) search has no detail.
