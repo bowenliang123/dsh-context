@@ -96,8 +96,10 @@ Not what the context is made of, but what it was good for: one row per touched f
 
 - **Per-purpose counts** — how many times each file was read, written, and searched, with the header chips doubling as purpose filters (**Read / Written / Searched**), an **Images** chip for the multimodal view (`read_image` calls and image extensions), and a path search box.
 - **Line deltas** — every `edit`/`write` contributes its estimated footprint (`+added / −removed`, read off the call arguments), per file and summed in the header.
+- **Every mode counts** — native tool calls, the Minimal preset's `str_replace_editor`, and the nested `read`/`write`/`edit`/`grep`/`glob` calls a PTC (`run_code`) program makes are all folded: each nested call rows under its own tool, annotated with the program's description, and jumps to the parent `run_code` result.
+- **Searches land on real files** — when a search result carries its matched-file list, the ops row per matched file with the hit count (pattern as detail); only a capped or unknown result falls back to the searched path/pattern itself.
 - **Sorted your way** — **Most active**, **Latest**, or **By path**; each row carries per-purpose badges, its cumulative line delta, the last operation's time, and a red dot when an operation failed.
-- **Click to inspect** — a row expands into the file's own operation log — every operation, no cap (tool, time, per-op delta, failures flagged); each operation jumps straight to the exact tool result in the Context browser.
+- **Click to inspect** — a row expands into the file's own operation log — every operation, no cap (tool, time, per-op delta, search detail, failures flagged); each operation jumps straight to the exact tool result in the Context browser.
 
 ### 🕸 Agent Network — the whole agent family at the foot of the tab
 
