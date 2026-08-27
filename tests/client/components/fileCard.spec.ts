@@ -318,6 +318,33 @@ describe('FileCard — expansion and locate', () => {
     await m.unmount()
   })
 
+  test('a nested PTC op tells why (its program); a meta search op shows its hit count', async () => {
+    const m = await mount(h(FileCard, {
+      activity: richActivity({
+        entries: [
+          entry('/src/a.ts', {
+            reads: 2,
+            ops: [
+              fileOp(9, 'read', 'read', { parent: 30, program: 'Read failing test and its fixture' }),
+              fileOp(7, 'read', 'read'),
+            ],
+          }),
+          entry('/src/b.ts', { searches: 1, ops: [fileOp(10, 'search', 'grep', { detail: 'needle', hits: 3 })] }),
+        ],
+        totals: { read: { files: 1, ops: 2 }, write: { files: 0, ops: 0 }, search: { files: 1, ops: 1 }, image: { files: 0, ops: 0 }, added: 0, removed: 0 },
+      }),
+      scope: 'live',
+    }))
+    await click(rowByTitle(m.container, '/src/a.ts'))
+    assert.ok(text(query(m.container, '.lc-fa-ops')).includes('Read failing test and its fixture'))
+    await click(rowByTitle(m.container, '/src/a.ts')) // collapse
+    await click(rowByTitle(m.container, '/src/b.ts'))
+    const ops = text(query(m.container, '.lc-fa-ops'))
+    assert.ok(ops.includes('needle'))
+    assert.ok(ops.includes('3 hits'))
+    await m.unmount()
+  })
+
   test('without a locate hook the op lines render inert', async () => {
     const m = await mount(h(FileCard, { activity: richActivity(), scope: 'live' }))
     await click(queryAll(m.container, '.lc-fa-row')[0])

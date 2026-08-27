@@ -220,9 +220,12 @@ export function makeContextView(
       [briefList, convOf, filesBefore],
     )
     const locateFileOp = React.useCallback((op: FileOp): void => {
-      const step = locateStepOf(requests, op.seq, op.gone)
+      // A nested Code-Mode op has no surface row of its own — it reveals on
+      // its parent run_code result (whose removal stamp the op carries).
+      const seq = op.parent ?? op.seq
+      const step = locateStepOf(requests, seq, op.gone)
       if (step === null) return
-      setNodeFocus({ step, seq: op.seq, cat: 'tool' })
+      setNodeFocus({ step, seq, cat: 'tool' })
     }, [requests])
     // A brief row's reveal target: inputs/opener live in the picked step's OWN assembled surface; the response node (seq === the
     // request's) first appears in the NEXT step's surface — or the live surface when the last bar is picked.

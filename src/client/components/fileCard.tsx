@@ -98,6 +98,11 @@ export function makeFileCard(kit: ViewKit, settings: ContextSettings): ReactNS.C
         <span className="lc-fa-op-time">{op.time !== undefined ? fmtTime(op.time) : '—'}</span>
         <span className="lc-fa-op-tool">{op.tool}</span>
         {op.detail !== undefined ? <span className="lc-fa-op-detail">{op.detail}</span> : null}
+        {op.hits !== undefined ? <span className="lc-fa-op-detail">{t('files.hits', { n: fmt(op.hits) })}</span> : null}
+        {/* A nested PTC op with nothing else to say still tells why: its program's description. */}
+        {op.detail === undefined && op.hits === undefined && op.program !== undefined
+          ? <span className="lc-fa-op-detail">{op.program}</span>
+          : null}
         {op.added + op.removed > 0 ? <DeltaPair added={op.added} removed={op.removed} /> : null}
         {op.err ? <span className="lc-br-err-dot" title={t('node.failed')} /> : null}
       </>
@@ -197,12 +202,15 @@ export function makeFileCard(kit: ViewKit, settings: ContextSettings): ReactNS.C
                       </button>
                       {open ? (
                         <div className="lc-fa-ops">
-                          {e.ops.map((op) => {
+                          {e.ops.map((op, i) => {
                             const onLocate = props.onLocate
+                            // A meta-attributed search rows one op per matched file off ONE
+                            // result — the ops share that result's seq, so the key joins the index.
+                            const key = `${op.seq}:${i}`
                             return onLocate !== undefined
                               ? (
                                 <button
-                                  key={op.seq}
+                                  key={key}
                                   type="button"
                                   className="lc-fa-op lc-fa-op-link"
                                   title={t('files.locate')}
@@ -211,7 +219,7 @@ export function makeFileCard(kit: ViewKit, settings: ContextSettings): ReactNS.C
                                   {opLine(op)}
                                 </button>
                               )
-                              : <div key={op.seq} className="lc-fa-op">{opLine(op)}</div>
+                              : <div key={key} className="lc-fa-op">{opLine(op)}</div>
                           })}
                         </div>
                       ) : null}

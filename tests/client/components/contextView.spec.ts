@@ -427,6 +427,55 @@ describe('ContextView — file activity card', () => {
     assert.ok(text(query(m.container, '.lc-br-elem-on')).includes('/src/a.ts'))
     await m.unmount()
   })
+
+  test('a nested PTC op reveals on its parent run_code result, not on its dispatch seq', async () => {
+    const ptcTimeline = timeline({
+      requests: [
+        { seq: 2, turn: 1, step: 1, time: T0 + 1000, system: 10, tools: 20, user: 10, inject: 0, assistant: 20, tool: 10, total: 70 },
+        { seq: 4, turn: 1, step: 2, time: T0 + 3000, system: 10, tools: 20, user: 10, inject: 0, assistant: 20, tool: 10, total: 70 },
+      ],
+      nodes: [
+        { seq: 2, cat: 'assistant', tokens: 20, text: 'r1', time: T0 + 1000 },
+        { seq: 3, cat: 'tool', tokens: 30, tool: 'run_code', time: T0 + 2000 },
+        { seq: 4, cat: 'assistant', tokens: 60, text: 'r2', time: T0 + 3000 },
+      ],
+    })
+    const ptcConv = [
+      {
+        kind: 'tool-result',
+        seq: 3,
+        call: { name: 'run_code', argsRaw: JSON.stringify({ code: 'await tools.edit(…)', description: 'Fix the failing test' }) },
+        subCalls: [
+          {
+            kind: 'tool-result',
+            seq: 2,
+            time: T0 + 1500,
+            call: { name: 'edit', argsRaw: JSON.stringify({ file_path: '/src/a.ts', old_string: 'a\nb', new_string: 'a' }) },
+            isError: false,
+            subCalls: [],
+          },
+        ],
+      },
+    ]
+    const View = makeView(new TestClientCtx())
+    const m = await mount(h(View, {
+      sessionId: 'sv-ptc-locate',
+      useProjection: projectionsFor(ptcTimeline),
+      useSession: (sel => sel({ nodes: ptcConv })) as UseSessionLike,
+    }))
+    const card = queryAll(m.container, '.lc-card').find(c => text(c).includes(DICT_EN['files.title']))
+    assert.ok(card !== undefined)
+    await click(query(card, '.lc-fa-row'))
+    // The op is attributed to the nested tool, and says why (its program).
+    assert.ok(text(card).includes('edit'))
+    assert.ok(text(card).includes('Fix the failing test'))
+    // The click lands on the parent run_code node (seq 3 → step 4's surface).
+    await click(query(card, '.lc-fa-op'))
+    const pick = query<HTMLSelectElement>(m.container, 'select.lc-br-pick')
+    assert.equal(pick.value, '4')
+    assert.ok(text(query(m.container, '.lc-br-elem-on')).includes('Fix the failing test'))
+    await m.unmount()
+  })
 })
 
 describe('ContextView — targeted content fetch and image loading', () => {

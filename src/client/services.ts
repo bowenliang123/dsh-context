@@ -55,6 +55,15 @@ export interface ConversationNodeLike {
   call?: { name: string; argsRaw: string } | null
   isError?: boolean
   summary?: string | null
+  /**
+   * Nested Code-Mode call tree (dsh's recursive ToolCallBlock[]) on a tool
+   * result whose call ran sub-dispatches — a PTC `run_code` program. Consumed
+   * structurally only (fileActivity): every block is re-proved at runtime and
+   * malformed shapes drop out instead of throwing.
+   */
+  subCalls?: readonly unknown[]
+  /** The tool result's bounded presentation meta (a search's matched files), as the join delivers it. */
+  meta?: unknown
 }
 
 /**
