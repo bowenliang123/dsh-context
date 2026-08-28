@@ -34,6 +34,7 @@ const headerToolSchema = z.object({
   name: z.string(),
   tokens: z.number().int().nonnegative(),
   description: z.string().optional(),
+  plugin: z.string().optional(),
   schema: z.unknown().optional(),
 }).strict()
 
@@ -64,7 +65,7 @@ function recordOf(event: SessionEvent): HeaderRecord | null {
     tools: tools.map((t): HeaderTool => {
       // The log is untrusted input: a null or primitive entry degrades to an
       // unnamed, JSON-priced tool instead of throwing the fold.
-      const tool = (t !== null && typeof t === 'object' ? t : {}) as { name?: unknown; description?: unknown }
+      const tool = (t !== null && typeof t === 'object' ? t : {}) as { name?: unknown; description?: unknown; plugin?: unknown }
       const entry: HeaderTool = {
         name: typeof tool.name === 'string' ? tool.name : '?',
         tokens: estimateToolSchema(t),
@@ -72,6 +73,11 @@ function recordOf(event: SessionEvent): HeaderRecord | null {
       }
       if (typeof tool.description === 'string' && tool.description !== '') {
         entry.description = tool.description
+      }
+      // A harness/MCP-provided attribution rides the raw entry; kept verbatim
+      // so the view-time resolver never overrides it.
+      if (typeof tool.plugin === 'string' && tool.plugin !== '') {
+        entry.plugin = tool.plugin
       }
       return entry
     }),
@@ -86,10 +92,21 @@ function recordOf(event: SessionEvent): HeaderRecord | null {
   * The context-headers projection unit; registered alongside the timeline unit (host/index.ts); clients read it through
   * `useProjection('contextHeaders')` and degrade to tokens-only header sections when the key is absent. Dual-contract definition (see
   * compat.ts).
+  * @param resolve - best-effort tool-to-plugin attribution (see toolSources.ts); fills a missing `plugin` at view time so
+  * epochs folded without attribution still render a tag when the source is known.
  */
-export function createContextHeadersDefinition(): ProjectionDefinition<'contextHeaders', HeadersState> {
+export function createContextHeadersDefinition(
+  resolve?: (name: string) => string | undefined,
+): ProjectionDefinition<'contextHeaders', HeadersState> {
   const view = (state: HeadersState): ContextHeaders => ({
-    headers: state.headers.map(h => ({ ...h, tools: h.tools.map(t => ({ ...t })) })),
+    headers: state.headers.map(h => ({
+      ...h,
+      tools: h.tools.map((t) => {
+        if (resolve === undefined || t.plugin !== undefined) return { ...t }
+        const plugin = resolve(t.name)
+        return plugin === undefined ? { ...t } : { ...t, plugin }
+      }),
+    })),
   })
   const definition: CompatProjectionDefinition<'contextHeaders', HeadersState> = {
     key: 'contextHeaders',
