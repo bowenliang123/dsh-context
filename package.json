@@ -34,7 +34,7 @@
     "build": "tsdown",
     "lint": "oxlint",
     "lint:fix": "oxlint --fix",
-    "watch": "tsdown --watch",
+    "watch": "bash scripts/watch.sh",
     "register": "bash scripts/register.sh",
     "typecheck": "tsc --noEmit && tsc --noEmit -p tsconfig.tests.json",
     "test": "pnpm run typecheck && vitest run --coverage",
