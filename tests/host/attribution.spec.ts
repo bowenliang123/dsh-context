@@ -126,6 +126,24 @@ describe('createToolAttribution', () => {
     }
   })
 
+  test('a foreign wrapper carrying a garbage attribution marker is left untouched', async () => {
+    const app = new Context()
+    const attribution = createToolAttribution(app)
+    // A wrapper that copied the peel-marker name with a non-function value:
+    // there is no original to recover, so the instance is not re-wrapped.
+    const foreign = Object.assign(() => 'not-a-disposer', { attributedOriginal: 42 })
+    const fake = { register: foreign }
+    app.provide('tools', fake)
+    await app.plugin({
+      name: 'probe',
+      apply(sub) {
+        void (sub as any).tools
+      },
+    })
+    assert.equal((app.get('tools', false) as typeof fake).register, foreign, 'the instance was not re-wrapped')
+    assert.equal(attribution.ownerOf('whatever'), undefined)
+  })
+
   test('ignores registrations without a string tool name or a disposer', async () => {
     const app = new Context()
     const attribution = createToolAttribution(app)
@@ -143,7 +161,7 @@ describe('createToolAttribution', () => {
     assert.equal(attribution.ownerOf('42'), undefined, 'non-string tool names are not recorded')
   })
 
-  test('keeps the static chain authoritative over live records', async () => {
+  test('the live record outranks the pinned map; name-derived MCP labels outrank the live record', async () => {
     const app = new Context()
     const attribution = createToolAttribution(app)
     const fake = { register() { return () => {} } }
@@ -157,9 +175,35 @@ describe('createToolAttribution', () => {
         tools.register({ name: 'brand_new_tool' })
       },
     })
-    assert.equal(attribution.ownerOf('bash'), '@deepseek-ai/dsh-tool-bash', 'pinned map wins over the live record')
-    assert.equal(attribution.ownerOf('mcp__github__x'), 'mcp:github', 'MCP naming wins over the live record')
+    assert.equal(attribution.ownerOf('bash'), 'third-party', 'a post-boot registration is the truth, even under a first-party name')
+    assert.equal(attribution.ownerOf('mcp__github__x'), 'mcp:github', 'the name-derived MCP label names the actual provider')
     assert.equal(attribution.ownerOf('brand_new_tool'), 'third-party', 'live record fills the gap')
+  })
+
+  test('a pinned first-party name still resolves when it was never registered at runtime', () => {
+    const app = new Context()
+    const attribution = createToolAttribution(app)
+    assert.equal(attribution.ownerOf('bash'), '@deepseek-ai/dsh-tool-bash', 'the pinned map serves boot-time first-party tools')
+  })
+
+  test('re-installing the hook re-wraps the instance without stacking wrappers', async () => {
+    const app = new Context()
+    let calls = 0
+    app.provide('tools', { register() { calls++; return () => {} } })
+    const first = createToolAttribution(app)
+    void first
+    // The second hook incarnation (a reload) peels the first wrapper back to
+    // the original: a registration records into the NEW hook only, and the
+    // original register still runs exactly once.
+    const second = createToolAttribution(app)
+    await app.plugin({
+      name: 'provider-b',
+      apply(sub) {
+        ;((sub as any).tools as { register(def?: unknown): () => void }).register({ name: 'reload_tool' })
+      },
+    })
+    assert.equal(calls, 1, 'the original register ran once, through one wrapper only')
+    assert.equal(second.ownerOf('reload_tool'), 'provider-b', 'the fresh hook records the registration')
   })
 
   test('tags boot-time tools whose providers predate the hook as unknown', () => {
@@ -176,7 +220,7 @@ describe('createToolAttribution', () => {
     const attribution = createToolAttribution(app)
     assert.equal(attribution.ownerOf('claim_files'), UNKNOWN_TOOL_SOURCE, 'boot-only tools carry the unknown sentinel')
     assert.equal(attribution.ownerOf('pending_write'), UNKNOWN_TOOL_SOURCE)
-    assert.equal(attribution.ownerOf('read'), '@deepseek-ai/dsh-tool-fs', 'the static chain wins over the unknown tag')
+    assert.equal(attribution.ownerOf('read'), '@deepseek-ai/dsh-tool-fs', 'the pinned map wins over the unknown tag')
     assert.equal(attribution.ownerOf('nope'), undefined, 'names outside the boot snapshot stay untagged')
   })
 

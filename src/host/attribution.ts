@@ -13,8 +13,10 @@
  * to call `register()`.
  *
  * - The `internal/get` handler records who last read the `tools` service and
- *   wraps that instance's `register` (once, tracked by a WeakSet) to capture
- *   the reader at registration time into a live map.
+ *   wraps that instance's `register` (once — an earlier wrapper of a previous
+ *   hook incarnation is peeled back to the original, so a plugin reload
+ *   re-wraps without stacking) to capture the reader at registration time
+ *   into a live map.
  * - When the reader slot is missing, root-named, or this plugin's own (e.g.
  *   LOCAL-LINK plugins — dev installs via `dsh plugin add <path>` or
  *   npm/pnpm link — whose anonymous entrypoints make cordis fall back to the
@@ -23,19 +25,23 @@
  *   `name`. That covers both npm installs (`node_modules/<pkg>`) and local
  *   links (any directory carrying a package.json), which never pass through
  *   node_modules. Frames that resolve back to this package are skipped.
- * - `ownerOf(name)` keeps the static chain authoritative, then consults the
- *   live map, and finally tags tools that were ALREADY registered when the
- *   hook installed (the boot snapshot — third-party bundles, e.g. local
- *   links like dsh-file-claim, that applied before dsh-context) with the
+ * - `ownerOf(name)` prefers the name-derived `mcp:<server>` label (it names
+ *   the actual provider, where the live record would only ever name the MCP
+ *   proxy client), then the LIVE record — for a post-boot registration it is
+ *   the truth, even when the name collides with a pinned first-party tool —
+ *   then the pinned map (the boot-time guess for tools registered before the
+ *   hook), and finally tags tools that were ALREADY registered when the hook
+ *   installed (the boot snapshot — third-party bundles, e.g. local links like
+ *   dsh-file-claim, that applied before dsh-context) with the
  *   `UNKNOWN_TOOL_SOURCE` sentinel: their registering plugin is unknowable,
  *   and a bare gap would read as "no plugin" instead of "unknown plugin".
  *
  * Best-effort by design: a read separated from `register()` by an `await` can
  * be overwritten by another plugin's read (misattribution) and the stack
- * fallback needs a resolvable package.json — both degrade to the static chain;
- * registrations that predate the hook degrade to the unknown tag. The hook
- * costs roughly +1.4us per service-property read and is negligible on the
- * rare register path (the stack walk only runs when the reader slot is
+ * fallback needs a resolvable package.json — both degrade to the name/pinned
+ * chain; registrations that predate the hook degrade to the unknown tag. The
+ * hook costs roughly +1.4us per service-property read and is negligible on
+ * the rare register path (the stack walk only runs when the reader slot is
  * unusable, and its package lookups are cached per directory).
  */
 
@@ -44,7 +50,7 @@ import { dirname, join, normalize } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import type { Context } from '@deepseek-ai/cordis'
 import { UNKNOWN_TOOL_SOURCE } from '../shared/types'
-import { resolveToolSource } from './toolSources'
+import { mcpSourceOf, pinnedSourceOf } from './toolSources'
 
 export interface ToolAttribution {
   /** Best-effort label of the plugin that registered `name`, if any is known. */
@@ -165,14 +171,19 @@ export function createToolAttribution(ctx: Context): ToolAttribution {
     const register = (tools as { register?: unknown }).register
     if (typeof register !== 'function') return
     wrapped.add(tools)
+    // A reload of this plugin re-installs the hook on a still-wrapped
+    // instance: peel the previous incarnation's wrapper back to the original
+    // (marked below) so wrappers never stack across reloads.
+    const original = (register as { attributedOriginal?: unknown }).attributedOriginal ?? register
+    if (typeof original !== 'function') return
     const instance = tools as { register: (this: unknown, definition?: { name?: unknown }) => unknown }
-    instance.register = function (definition?) {
+    const wrappedRegister = function (this: unknown, definition?: { name?: unknown }) {
       const toolName = definition?.name
       let owner = lastReader?.fiber.name
       if (!owner || owner === 'root' || owner === self) {
         owner = callerPackageFrom(new Error().stack)
       }
-      const dispose = (register as (this: unknown, definition?: unknown) => unknown).call(this, definition)
+      const dispose = (original as (this: unknown, definition?: unknown) => unknown).call(this, definition)
       if (typeof toolName === 'string' && owner && owner !== 'root' && owner !== self && owner !== selfPackage) {
         live.set(toolName, owner)
         if (typeof dispose === 'function') {
@@ -187,6 +198,8 @@ export function createToolAttribution(ctx: Context): ToolAttribution {
       }
       return dispose
     }
+    ;(wrappedRegister as { attributedOriginal?: unknown }).attributedOriginal = original
+    instance.register = wrappedRegister
   }
 
   ctx.on('internal/get', (reader, name, _error, next) => {
@@ -220,7 +233,13 @@ export function createToolAttribution(ctx: Context): ToolAttribution {
   }
 
   return {
+    // Priority: the name-derived MCP label names the actual provider (the
+    // live record would only ever name the proxying client plugin); a live
+    // record outranks the pinned map (for a post-boot registration it IS the
+    // truth, even under a first-party-looking name); the pinned map is the
+    // boot-time guess; the sentinel marks boot-predating tools.
     ownerOf: name =>
-      resolveToolSource(name) ?? live.get(name) ?? (boot.has(name) ? UNKNOWN_TOOL_SOURCE : undefined),
+      mcpSourceOf(name) ?? live.get(name) ?? pinnedSourceOf(name)
+        ?? (boot.has(name) ? UNKNOWN_TOOL_SOURCE : undefined),
   }
 }

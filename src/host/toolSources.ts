@@ -7,7 +7,8 @@
  * module recovers what it can without a harness change:
  *
  * 1. A `plugin` field a (future) harness or MCP client carries on the raw
- *    header entry — passed through verbatim, the caller of recordOf.
+ *    header entry — passed through verbatim by headers.ts's recordOf, ahead
+ *    of everything here.
  * 2. MCP tools: `dsh-mcp-client` names every proxied tool
  *    `mcp__<server>__<rawName>`, so the server is recoverable from the name.
  * 3. Shipped first-party tools: a PINNED name → package map derived from the
@@ -36,6 +37,17 @@ export function mcpServerOf(name: string): string | undefined {
   if (cut < MCP_PREFIX.length) return undefined
   const server = name.slice(MCP_PREFIX.length, cut)
   return server.length > 0 ? server : undefined
+}
+
+/** The `mcp:<server>` display label of a proxied tool name, or undefined. */
+export function mcpSourceOf(name: string): string | undefined {
+  const server = mcpServerOf(name)
+  return server !== undefined ? `mcp:${server}` : undefined
+}
+
+/** The pinned package of a first-party tool name, or undefined. */
+export function pinnedSourceOf(name: string): string | undefined {
+  return FIRST_PARTY_SOURCES[name]
 }
 
 /**
@@ -81,17 +93,3 @@ export const FIRST_PARTY_SOURCES: Readonly<Record<string, string>> = Object.free
   update_goal: '@deepseek-ai/dsh-tool-goal',
   lsp: '@deepseek-ai/dsh-tool-lsp',
 })
-
-/**
- * Resolve one tool's registering-plugin label for display: the harness-logged
- * `plugin` field wins, then the MCP server prefix, then the pinned first-party
- * map. Undefined when nothing is known (third-party tools are left untagged).
- * @param name - the model-facing tool name.
- * @param logged - a `plugin` field carried by the raw header entry, if any.
- */
-export function resolveToolSource(name: string, logged?: string): string | undefined {
-  if (logged !== undefined && logged !== '') return logged
-  const mcp = mcpServerOf(name)
-  if (mcp !== undefined) return `mcp:${mcp}`
-  return FIRST_PARTY_SOURCES[name]
-}
