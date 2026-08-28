@@ -21,6 +21,12 @@ A DeepSeek Harness plugin for context insight, actions, and management.
   - Example plugins:
     - Available on GitHub topic `dsh-plugin`: https://github.com/topics/dsh-plugin
 
+## Exploring code
+- `codegraph` helps to search and explore the code graph of the dsh and plugin, which is very useful for understanding the code structure and dependencies.
+- Run `pnpm dlx @colbymchenry/codegraph query <Query or KeyWords>` to explore the code graph of the dsh and plugin, in the corresponding path of the source code folder.
+- Run `pnpm dlx @colbymchenry/codegraph sync` to sync the code graph with the latest code changes, before running the query command.
+- Run `pnpm dlx @colbymchenry/codegraph init` to initialize the code graph for the first time, if the code graph is not initialized yet as no `./.codegraph` folder present.
+
 ## Coding
 - Always consider the minimal change and the most performance efficient implementation.
 - Try best to use the existing classes, utilities, styles, events, presets and lifecycles provided by DeepSeek Harness.ess.
