@@ -247,11 +247,11 @@ button.lc-brief-row-link { cursor: pointer; }
  the meta strip carries the totals at the left and the count/latest sort toggle at the right; rows speak the browser's
  element-row anatomy (chevron, fact chips, right-aligned time) and expand into a per-operation log on a tree-guide rail. ----
  */
-.lc-fa-ctl { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-bottom: 8px; }
+.lc-fa-ctl, .lc-br-toolctl { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-bottom: 8px; }
 .lc-fa-ctl .lc-gran { margin-left: 0; }
 .lc-fa-n { margin-left: 4px; font-weight: 700; opacity: 0.75; }
-.lc-fa-search { flex: 1; min-width: 80px; font: inherit; font-size: 12px; color: var(--dsw-alias-label-primary); background: var(--dsw-alias-bg-layer-2); border: 1px solid var(--dsw-alias-border-l1); border-radius: 6px; padding: 3px 8px; outline: none; }
-.lc-fa-search:focus { border-color: var(--dsw-alias-label-dimmed); }
+.lc-fa-search, .lc-br-tool-search { flex: 1; min-width: 80px; font: inherit; font-size: 12px; color: var(--dsw-alias-label-primary); background: var(--dsw-alias-bg-layer-2); border: 1px solid var(--dsw-alias-border-l1); border-radius: 6px; padding: 3px 8px; outline: none; }
+.lc-fa-search:focus, .lc-br-tool-search:focus { border-color: var(--dsw-alias-label-dimmed); }
 .lc-fa-meta { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin-bottom: 6px; color: var(--dsw-alias-label-secondary); font-size: 12px; }
 /* The sort toggle rides the meta strip's right edge — the shared .lc-gran's own auto margin does the push. */
 .lc-fa-meta .lc-fa-sort { flex: none; }

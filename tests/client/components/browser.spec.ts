@@ -60,6 +60,16 @@ function elemRows(m: Mounted): HTMLElement[] {
   return queryAll(m.container, '.lc-br-elem-row')
 }
 
+/** Type into the tool-schema search box like a real user (native setter + input event). */
+async function typeToolSearch(m: Mounted, value: string): Promise<void> {
+  await act(async () => {
+    const input = query<HTMLInputElement>(m.container, '.lc-br-tool-search')
+    const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set
+    setter?.call(input, value)
+    input.dispatchEvent(new Event('input', { bubbles: true }))
+  })
+}
+
 async function pickStep(m: Mounted, value: string): Promise<void> {
   const sel = query<HTMLSelectElement>(m.container, 'select.lc-br-pick')
   await act(async () => {
@@ -358,7 +368,7 @@ describe('ContextBrowser tool schemas', () => {
       seq: 1, time: 1, system: 'SYS',
       tools: [
         // Producer order is NOT meaningful: rows re-rank by token price.
-        { name: 'omega', tokens: 5 },
+        { name: 'omega', tokens: 5, plugin: 'mcp:github' },
         { name: 'rho', tokens: 6, schema: 'nope' },
         { name: 'theta', tokens: 8, schema: { type: 'object', properties: null } },
         { name: 'zeta', tokens: 10, schema: { type: 'object' } },
@@ -451,6 +461,63 @@ describe('ContextBrowser tool schemas', () => {
     assert.equal(queryAll(content, 'pre').length, 0)
     await click(elemRows(m)[0])
     assert.equal(queryAll(m.container, '.lc-br-content').length, 0)
+    await m.unmount()
+  })
+
+  test('a text filter and the size/name sort narrow and re-rank the rows', async () => {
+    const m = await mount(h(Browser, props({ data, headers })))
+    await click(catRow(m, 'tools'))
+    const input = query<HTMLInputElement>(m.container, '.lc-br-tool-search')
+    assert.equal(input.placeholder, 'Filter by name, description, or parameters…')
+    const sortBtns = queryAll(m.container, '.lc-br-toolctl .lc-gran-btn')
+    assert.equal(sortBtns.length, 2)
+    assert.ok(sortBtns[0].className.includes('lc-gran-on'), 'size is the default sort')
+    const names = () => elemRows(m).map(r => text(query(r, '.lc-br-preview')))
+
+    await typeToolSearch(m, 'gamma')
+    assert.deepEqual(names(), ['gamma'])
+    // The producer description matches: mega's 'does everything'.
+    await typeToolSearch(m, 'everything')
+    assert.deepEqual(names(), ['mega'])
+    // The parameter JSON matches: 'the a param' lives in mega's schema.
+    await typeToolSearch(m, 'the a param')
+    assert.deepEqual(names(), ['mega'])
+    // The plugin chip matches: omega carries mcp:github.
+    await typeToolSearch(m, 'github')
+    assert.deepEqual(names(), ['omega'])
+    // No match degrades to a note; clearing restores every row.
+    await typeToolSearch(m, 'zzz')
+    assert.equal(elemRows(m).length, 0)
+    assert.ok(text(m.container).includes('No tools match the current filter'))
+    await typeToolSearch(m, '')
+    assert.equal(elemRows(m).length, 9)
+
+    // Name sort re-ranks alphabetically; size restores the token-price ranking.
+    await click(sortBtns[1])
+    assert.ok(sortBtns[1].className.includes('lc-gran-on'))
+    assert.deepEqual(names(), ['beta', 'delta', 'epsilon', 'gamma', 'mega', 'omega', 'rho', 'theta', 'zeta'])
+    await click(sortBtns[0])
+    assert.deepEqual(names(), ['mega', 'beta', 'gamma', 'delta', 'epsilon', 'zeta', 'theta', 'rho', 'omega'])
+    await m.unmount()
+  })
+
+  test('a hostile schema degrades the text filter, not the rows', async () => {
+    const cyclic: Record<string, unknown> = { type: 'object' }
+    cyclic['self'] = cyclic
+    const hostile: ContextHeaders = { headers: [{ seq: 1, time: 1, system: 'SYS', tools: [
+      { name: 'loop', tokens: 3, schema: cyclic },
+      { name: 'plain', tokens: 2 },
+    ] }] }
+    const m = await mount(h(Browser, props({ data, headers: hostile })))
+    await click(catRow(m, 'tools'))
+    assert.equal(elemRows(m).length, 2)
+    // The name still matches; the unstringifiable schema contributes no text.
+    await typeToolSearch(m, 'loop')
+    assert.deepEqual(elemRows(m).map(r => text(query(r, '.lc-br-preview'))), ['loop'])
+    // Searching schema-only text finds nothing here and shows the note.
+    await typeToolSearch(m, 'properties')
+    assert.equal(elemRows(m).length, 0)
+    assert.ok(text(m.container).includes('No tools match the current filter'))
     await m.unmount()
   })
 

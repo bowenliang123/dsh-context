@@ -187,6 +187,20 @@ function RawSection(props: { label: string; text: string }): ReactNS.ReactElemen
 }
 
 /**
+ * The search text of one tool's raw schema. The schema is log data this view
+ * does not own — a hostile value (cyclic, throwing getters) degrades to no
+ * matchable text instead of taking the row, or the browser, down.
+ */
+function schemaTextOf(schema: unknown): string {
+  try {
+    return JSON.stringify(schema ?? '')
+  } catch {
+    return ''
+  }
+}
+
+
+/**
  * Full tool-row body: description, parsed parameter table (when the schema carries one), raw JSON behind a per-row toggle — the JSON open
  * state is per-row so two expanded tools stay independent.
  */
@@ -512,6 +526,10 @@ export function makeContextBrowser(
     const [sel, setSel] = React.useState<'live' | number>('live')
     const [openCat, setOpenCat] = React.useState<string | null>(null)
     const [openElem, setOpenElem] = React.useState<string | null>(null)
+    // The tools category's local view state: a text filter and the row order,
+    // kept across step picks so the same lens compares epochs.
+    const [toolQuery, setToolQuery] = React.useState('')
+    const [toolSort, setToolSort] = React.useState<'size' | 'name'>('size')
 
     // Full message content: the conversation-window join first (zero cost),
     // plus nodes fetched on demand for seqs outside the window (`s.nodes` is
@@ -691,7 +709,6 @@ export function makeContextBrowser(
       }
       if (c === 'tools') {
         if (view.header === null) return <div className="lc-br-note">{t(headers === null ? 'browser.noHeader' : 'browser.noEpoch')}</div>
-        // Schemas rank by token price (largest first) to mirror the overview's Top chips — the producer's header order is not meaningful.
         const labels = {
           desc: t('tool.desc'),
           title: t('tool.params'),
@@ -699,22 +716,72 @@ export function makeContextBrowser(
           show: t('tool.jsonToggle'),
           hide: t('tool.jsonHide'),
         }
-        return view.header.tools.slice().sort((a, b) => b.tokens - a.tokens).map((tool: HeaderTool) => {
-          // The registering plugin (best-effort host attribution — see
-          // toolSources.ts) trails the tool name as a standalone chip, so it
-          // needs no extra frame around it. A tool whose provider predates
-          // the attribution hook arrives with the UNKNOWN_TOOL_SOURCE
-          // sentinel and renders a localized "unknown plugin" tag whose
-          // tooltip explains why no provider is shown.
-          const trailing = tool.plugin !== undefined
-            ? <span className="lc-br-tag lc-br-tool-plugin" title={tool.plugin === UNKNOWN_TOOL_SOURCE ? t('tool.unknownTitle') : t('tool.plugin')}>
-              {tool.plugin === UNKNOWN_TOOL_SOURCE ? t('tool.unknown') : tool.plugin}
+        // The text filter scans everything the rows can say: the name, the
+        // producer description, the plugin chip, and the raw parameter JSON.
+        const q = toolQuery.trim().toLowerCase()
+        const shown = view.header.tools
+          .filter((tool: HeaderTool) => q === ''
+            || tool.name.toLowerCase().includes(q)
+            || (tool.description ?? '').toLowerCase().includes(q)
+            || (tool.plugin ?? '').toLowerCase().includes(q)
+            || schemaTextOf(tool.schema).toLowerCase().includes(q))
+          // Size order mirrors the overview's Top chips — the producer's header
+          // order is not meaningful; name order gives lookup instead of ranking
+          // (names are unique keys, so a two-way comparison orders them fully).
+          .sort((a, b) => toolSort === 'size' ? b.tokens - a.tokens : (a.name < b.name ? -1 : 1))
+        // The toolbar stays mounted on an empty match, or the filter could
+        // never be cleared from the UI.
+        const toolctl = (
+          <div className="lc-br-toolctl">
+            <input
+              className="lc-br-tool-search"
+              value={toolQuery}
+              placeholder={t('tool.search')}
+              onChange={(ev: ReactNS.ChangeEvent<HTMLInputElement>) => { setToolQuery(ev.target.value) }}
+            />
+            <span className="lc-gran" role="group" title={t('tool.sortTip')}>
+              {(['size', 'name'] as const).map(k => (
+                <button
+                  key={k}
+                  type="button"
+                  className={'lc-gran-btn' + (toolSort === k ? ' lc-gran-on' : '')}
+                  onClick={() => { setToolSort(k) }}
+                >
+                  {t('tool.sort.' + k)}
+                </button>
+              ))}
             </span>
-            : null
-          return elemRow('tool:' + tool.name, null, tool.name, tool.tokens, undefined,
-            <ToolSchema description={tool.description} schema={tool.schema} rich={rich} lines={lineLabel} labels={labels} />,
-            false, trailing)
-        })
+          </div>
+        )
+        if (shown.length === 0) {
+          return (
+            <div>
+              {toolctl}
+              <div className="lc-br-note">{t('tool.noMatch')}</div>
+            </div>
+          )
+        }
+        return (
+          <div>
+            {toolctl}
+            {shown.map((tool: HeaderTool) => {
+              // The registering plugin (best-effort host attribution — see
+              // toolSources.ts) trails the tool name as a standalone chip, so it
+              // needs no extra frame around it. A tool whose provider predates
+              // the attribution hook arrives with the UNKNOWN_TOOL_SOURCE
+              // sentinel and renders a localized "unknown plugin" tag whose
+              // tooltip explains why no provider is shown.
+              const trailing = tool.plugin !== undefined
+                ? <span className="lc-br-tag lc-br-tool-plugin" title={tool.plugin === UNKNOWN_TOOL_SOURCE ? t('tool.unknownTitle') : t('tool.plugin')}>
+                  {tool.plugin === UNKNOWN_TOOL_SOURCE ? t('tool.unknown') : tool.plugin}
+                </span>
+                : null
+              return elemRow('tool:' + tool.name, null, tool.name, tool.tokens, undefined,
+                <ToolSchema description={tool.description} schema={tool.schema} rich={rich} lines={lineLabel} labels={labels} />,
+                false, trailing)
+            })}
+          </div>
+        )
       }
       // List surface nodes newest first (the live surface's reading order).
       /* v8 ignore next 1 -- the body renders only when the category is open,
