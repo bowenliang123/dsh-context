@@ -307,7 +307,8 @@ describe('ContextBrowser header epochs', () => {
     const rawBtn = queryAll(m.container, '.lc-rich-seg-btn')[0]
     assert.equal(text(rawBtn), 'Raw')
     await click(rawBtn)
-    assert.ok(text(query(m.container, '.lc-ts-desc-body')).includes('SYS B\nsecond line'))
+    const lines = queryAll(m.container, '.lc-ts-line').map(line => line.textContent)
+    assert.deepEqual(lines, ['SYS B', 'second line'])
     await click(queryAll(m.container, '.lc-rich-seg-btn')[1])
     assert.ok(queryAll(m.container, '.lc-ts-desc-md').length >= 1, 'markdown restored')
     await click(catRow(m, 'system'))

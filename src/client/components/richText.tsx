@@ -1,7 +1,7 @@
 /**
   * RichText — the raw/markdown body for the Context browser's detail sections. Markdown renders via the harness's shared MarkdownText (GFM,
-  * sanitized, resolved from the platform module table — zero plugin-side markdown dependency); raw is a plain `<pre>`. The Raw/MD switch
-  * sits at a section head's right edge (RichSwitch; per-card mode via useRichMode).
+  * sanitized, resolved from the platform module table — zero plugin-side markdown dependency); raw is a line-numbered `<pre>`. The Raw/MD
+  * switch sits at a section head's right edge (RichSwitch; per-card mode via useRichMode).
  */
 
 import type * as ReactNS from 'react'
@@ -45,11 +45,28 @@ export function makeRichText(kit: ViewKit): RichKit {
     )
   }
 
+  // One block per source line: the number is a counter-fed ::before glued to
+  // its own line across soft wraps, and pseudo content never reaches the
+  // clipboard, so selecting the body still copies the exact source text.
+  function RawText(props: { text: string }): ReactNS.ReactElement {
+    const lines = React.useMemo(() => {
+      const parts = props.text.split('\n')
+      return parts.length > 1 && parts[parts.length - 1] === '' ? parts.slice(0, -1) : parts
+    }, [props.text])
+    return (
+      <pre className="lc-ts-desc-body lc-ts-lines">
+        {lines.map((line, index) => (
+          <span key={index} className="lc-ts-line">{line}</span>
+        ))}
+      </pre>
+    )
+  }
+
   function RichText(props: { text: string; mode: RichMode }): ReactNS.ReactElement {
     if (props.mode === 'md') {
       return <div className="lc-ts-desc-md"><MarkdownText text={props.text} /></div>
     }
-    return <pre className="lc-ts-desc-body">{props.text}</pre>
+    return <RawText text={props.text} />
   }
 
   return { RichText, RichSwitch, useRichMode }

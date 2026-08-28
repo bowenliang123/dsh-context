@@ -385,6 +385,10 @@ button.lc-brief-row-link { cursor: pointer; }
 .lc-ts-call-ok { color: var(--dsw-alias-state-success-primary); background: color-mix(in srgb, var(--dsw-alias-state-success-primary) 12%, transparent); }
 .lc-ts-call-err { color: var(--dsw-alias-state-error-primary); background: color-mix(in srgb, var(--dsw-alias-state-error-primary) 12%, transparent); }
 .lc-ts-desc-body { margin: 0; padding: 8px 10px; color: var(--dsw-alias-label-primary); font-size: 12px; line-height: 1.55; white-space: pre-wrap; word-break: break-word; max-height: 320px; overflow-y: auto; scrollbar-width: thin; }
+.lc-ts-lines { counter-reset: lc-line; }
+.lc-ts-line { display: block; position: relative; padding-left: 26px; }
+.lc-ts-line::before { content: counter(lc-line); counter-increment: lc-line; position: absolute; left: 0; width: 20px; padding-right: 6px; text-align: right; color: var(--dsw-alias-label-tertiary); font-size: 11px; user-select: none; }
+.lc-ts-line:empty::after { content: '\200B'; }
 /* Columns squeeze under width pressure (desktop metrics unchanged) — fixed px tracks cannot shrink below 316px and would spill the nested section card. */
 .lc-ts-param-row { display: grid; grid-template-columns: minmax(0, 140px) minmax(0, 90px) 56px minmax(0, 1fr); column-gap: 10px; row-gap: 2px; padding: 6px 10px; border-top: 1px solid var(--dsw-alias-border-l1); font-size: 12px; align-items: baseline; }
 .lc-ts-param-row:first-of-type { border-top: 0; }
