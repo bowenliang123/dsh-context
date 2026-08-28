@@ -359,9 +359,10 @@ button.lc-brief-row-link { cursor: pointer; }
 /* Shrinkable under width pressure (min-width: 0) so a long tool/call tag ellipsizes instead of forcing the row past the card edge. */
 .lc-br-tag { min-width: 0; font-size: 11px; color: var(--dsw-alias-label-secondary); background: var(--dsw-alias-bg-layer-1); border: 1px solid var(--dsw-alias-border-l1); border-radius: 4px; padding: 0 6px; max-width: 220px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 /* Registering-plugin chip on tool-schema rows: package/server names scan on a
-   solid pill, set in the same face and size as the tool name they tag (the row
-   inherits the UI font at 12px) so the attribution reads as part of the name. */
-.lc-br-tool-plugin { font-size: 12px; color: #fff; background: #000; border-color: #000; border-radius: 6px; }
+   brand-tinted pill (the badge tint idiom), in the same face and size as the
+   tool name they tag (the row inherits the UI font at 12px) so the attribution
+   reads as part of the name. */
+.lc-br-tool-plugin { font-size: 12px; border-radius: 6px; color: var(--dsw-alias-brand-primary); background: color-mix(in srgb, var(--dsw-alias-brand-primary) 14%, transparent); border-color: transparent; }
 .lc-br-preview { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .lc-br-time { flex: none; color: var(--dsw-alias-label-secondary); font-size: 11px; }
 .lc-br-content { padding: 2px 6px 8px 26px; display: flex; flex-direction: column; gap: 6px; }
