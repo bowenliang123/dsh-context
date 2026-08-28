@@ -26,7 +26,7 @@ A DeepSeek Harness plugin for context insight, actions, and management.
 **Prerequisite:** The code graph in the current working directory has already been initialized (`.codegraph` directory exists). Use it directly.
 
 ### Mandatory Pre-step
-Before any code analysis, exploration, or planning, you **MUST** first use `codegraph` to understand the codebase structure and dependencies. **This step is non-negotiable and cannot be skipped.**
+Before and during any code analysis, exploration, or planning, or investigating any term or keywords, you **MUST** first use `codegraph` to understand the codebase structure and dependencies. **This step is non-negotiable and cannot be skipped.**
   ### Usage
   1. **Explore code structure**
      ```bash
