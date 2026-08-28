@@ -762,7 +762,7 @@ describe('ContextBrowser message categories', () => {
     const m = await mountBrowser()
     await click(catRow(m, 'user'))
     const input = query<HTMLInputElement>(m.container, '.lc-br-tool-search')
-    assert.equal(input.placeholder, 'Filter by text…')
+    assert.equal(input.placeholder, 'Filter by message text…')
     const previews = () => elemRows(m).map(r => text(query(r, '.lc-br-preview')))
     await typeToolSearch(m, 'summary')
     assert.deepEqual(previews(), ['empty summary', 'summary node'])

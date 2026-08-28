@@ -858,7 +858,7 @@ export function makeContextBrowser(
         (r.tag ?? '').toLowerCase().includes(q) || r.preview.toLowerCase().includes(q))
       // The toolbar stays mounted on an empty match, or the filter could
       // never be cleared from the UI.
-      const rowctl = <RowToolbar value={rowQuery} placeholder={t('browser.rowSearch')} onChange={setRowQuery} />
+      const rowctl = <RowToolbar value={rowQuery} placeholder={t('browser.search.' + c)} onChange={setRowQuery} />
       if (shown.length === 0) {
         return <div>{rowctl}<div className="lc-br-note">{t('browser.rowNoMatch')}</div></div>
       }
