@@ -410,7 +410,7 @@ button.lc-brief-row-link { cursor: pointer; }
 .lc-rich-seg-btn { border: 0; background: transparent; color: var(--dsw-alias-label-secondary); font-size: 11px; line-height: 1; padding: 3px 8px; border-radius: 5px; cursor: pointer; font-family: inherit; }
 .lc-rich-seg-btn:hover { color: var(--dsw-alias-label-primary); }
 .lc-rich-seg-on, .lc-rich-seg-on:hover { background: var(--dsw-alias-button-primary-fill); color: var(--dsw-alias-label-primary-foreground); }
-.lc-ts-desc-md { padding: 4px 10px; color: var(--dsw-alias-label-primary); font-size: 12px; line-height: 1.55; word-break: break-word; overflow-wrap: anywhere; min-width: 0; white-space: pre-line; max-height: 320px; overflow-y: auto; overflow-x: hidden; scrollbar-width: thin; }
+.lc-ts-desc-md { padding: 4px 10px; color: var(--dsw-alias-label-primary); font-size: 12px; line-height: 1.55; word-break: break-word; overflow-wrap: anywhere; min-width: 0; max-height: 320px; overflow-y: auto; overflow-x: hidden; scrollbar-width: thin; }
 /*
  The shared markdown renderer sizes its root/headings for chat bubbles;
  inside a detail card the base size sits one step ABOVE the raw text
