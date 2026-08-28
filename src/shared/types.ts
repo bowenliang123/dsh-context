@@ -5,9 +5,19 @@
   * from here ever reaches the runtime bundles.
  */
 
+import type { HeadersState } from '../host/headers'
+import type { TimelineState } from '../host/fold'
+// The registry package ROOT carries the `@deepseek-ai/cordis` Context
+// augmentation (`sessionProjections` service); the `/types` subpath below
+// only declares the merge-extensible maps.
+import type {} from '@deepseek-ai/dsh-session-projection'
 import type {} from '@deepseek-ai/dsh-session-projection/types'
 
 declare module '@deepseek-ai/dsh-session-projection/types' {
+  // Both maps take the plugin keys: `SessionProjectionMap` names the
+  // client-visible wire values, `SessionProjectionStateMap` constrains the
+  // unit `key`s and their fold-state types (the split arrived with
+  // dsh 0.1.1 — the definition's K constraint moved to the state map).
   interface SessionProjectionMap {
     /**
      * The plugin's whole-value context timeline: current composition,
@@ -25,6 +35,10 @@ declare module '@deepseek-ai/dsh-session-projection/types' {
      * content of a picked step (key absence = older host: tokens only).
      */
     contextHeaders: ContextHeaders
+  }
+  interface SessionProjectionStateMap {
+    contextTimeline: TimelineState
+    contextHeaders: HeadersState
   }
 }
 

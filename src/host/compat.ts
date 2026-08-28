@@ -10,6 +10,12 @@
  *     unit carries a `wire` block with `viewSchema` + `view`; a unit WITHOUT
  *     `wire` is host-only — its value is never delivered to clients).
  *
+ * dsh 0.1.2-alpha.1 widens `init` to `init(header: SessionHeader)` — the
+ * registry now hands the session's immutable header to a fresh fold. A
+ * zero-argument `init` satisfies that contract as-is (extra arguments are
+ * simply not observed), so the dual-shape object below installs unchanged on
+ * every supported registry.
+ *
  * A definition that carries BOTH shapes on one object is accepted by every
  * registry: each version reads the fields it knows and ignores the extras.
  * That is what this plugin emits — the same fold state and the same wire
@@ -21,7 +27,6 @@
  */
 
 import type { z } from 'zod'
-import type { ProjectionDefinition } from '@deepseek-ai/dsh-session-projection'
 import type { SessionProjectionMap } from '@deepseek-ai/dsh-session-projection/types'
 import type { SessionEvent } from '@deepseek-ai/dsh-session'
 
@@ -29,6 +34,11 @@ import type { SessionEvent } from '@deepseek-ai/dsh-session'
 export interface ProjectionDefinitionV2<K extends keyof SessionProjectionMap, S> {
   key: K
   stateSchema: z.ZodType<S>
+  /**
+   * Fresh fold state for the empty log. dsh 0.1.2-alpha.1 widened the
+   * contract to `init(header: SessionHeader)`; a zero-argument init
+   * satisfies every supported registry (extra arguments go unobserved).
+   */
   init(): S
   /**
    * Pure transition: previous state + one committed event → next state.
@@ -42,9 +52,21 @@ export interface ProjectionDefinitionV2<K extends keyof SessionProjectionMap, S>
   stateVersion: number
 }
 
+/** The session-projection unit contract as of dsh <= 0.1.0-rc.8 (local mirror). */
+export interface ProjectionDefinitionV1<K extends keyof SessionProjectionMap, S> {
+  key: K
+  /** Validated the wire payload before it left the host. */
+  schema: z.ZodType<SessionProjectionMap[K]>
+  init(): S
+  apply(state: S, event: SessionEvent): S
+  view(state: S): SessionProjectionMap[K]
+  stateVersion: number
+}
+
 /**
   * One unit definition under BOTH contracts: the pre-0.1.1 fields (`schema`, top-level `view`) plus the 0.1.1-rc.1+ fields (`stateSchema`,
-  * `wire`); registries of every dsh version read their own fields off the same object.
+  * `wire`); registries of every dsh version read their own fields off the same object. (The legacy block is mirrored, not `Pick`ed from
+  * the installed dts — dsh >= 0.1.1 removed those fields from the published contract.)
  */
 export type CompatProjectionDefinition<K extends keyof SessionProjectionMap, S> =
-  ProjectionDefinitionV2<K, S> & Pick<ProjectionDefinition<K, S>, 'schema' | 'view'>
+  ProjectionDefinitionV2<K, S> & ProjectionDefinitionV1<K, S>

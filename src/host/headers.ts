@@ -17,7 +17,6 @@
  */
 
 import { z } from 'zod'
-import type { ProjectionDefinition } from '@deepseek-ai/dsh-session-projection'
 import type { SessionEvent } from '@deepseek-ai/dsh-session'
 import type { CompatProjectionDefinition } from './compat'
 import type { ContextHeaders, HeaderRecord, HeaderTool } from '../shared/types'
@@ -97,7 +96,7 @@ function recordOf(event: SessionEvent): HeaderRecord | null {
  */
 export function createContextHeadersDefinition(
   resolve?: (name: string) => string | undefined,
-): ProjectionDefinition<'contextHeaders', HeadersState> {
+): CompatProjectionDefinition<'contextHeaders', HeadersState> {
   const view = (state: HeadersState): ContextHeaders => ({
     headers: state.headers.map(h => ({
       ...h,
