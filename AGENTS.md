@@ -13,6 +13,7 @@ A DeepSeek Harness plugin for context insight, actions, and management.
     - may be found in the `~/dev/deepseek-harness` directory
     - `git pull` on the `main` branch to update
     - commits and tags are available for reference and comparison
+    - run `pnpm install` to update dependencies after a `git pull` or switching commit/tag
 
 - DeepSeek Harness Plugin:
   - docs:
@@ -53,7 +54,7 @@ The plugin lives off data it does not own: the durable session log (event shapes
 
 ## Compatibility - Important!
 - MUST be able to install and work correctly on `@deepseek-ai/dsh` all of **0.1.0-rc7+** and **0.1.1-rc2+** and **0.1.2-alpha1+** — no regressions in runtime dependencies, message parsing, or any user-visible behavior.
-- Check carefully in depth for the compatibility of the plugin with all supported dsh version, investigate and dive deep into details of dsh source code.
+- Check carefully in depth for the compatibility of the plugin with all supported dsh version, investigate and dive deep into details of dsh source code and its dependencies (run pnpm install in dsh source code folder).
 - Low-level logic (e.g. token counting) should track the implementation of the newest supported dsh version.
 
 ## I18n
