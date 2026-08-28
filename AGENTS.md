@@ -22,6 +22,7 @@ A DeepSeek Harness plugin for context insight, actions, and management.
     - Available on GitHub topic `dsh-plugin`: https://github.com/topics/dsh-plugin
 
 ## Exploring code
+- ALWAYS consider `codegraph` and `pnpm dlx @colbymchenry/codegraph` for exploring the code, planning, investigating.
 - `codegraph` helps to search and explore the code graph of the dsh and plugin, which is very useful for understanding the code structure and dependencies.
 - Run `pnpm dlx @colbymchenry/codegraph explore <Query or KeyWords>` to explore the code graph of the dsh and plugin, in the corresponding path of the source code folder.
   - `pnpm dlx @colbymchenry/codegraph explore --path some-path --max-files 1000 "What's Context Stats?"`
