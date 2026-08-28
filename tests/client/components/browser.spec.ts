@@ -758,6 +758,30 @@ describe('ContextBrowser message categories', () => {
     await m.unmount()
   })
 
+  test('message rows filter by tag and preview text; another category opens unfiltered', async () => {
+    const m = await mountBrowser()
+    await click(catRow(m, 'user'))
+    const input = query<HTMLInputElement>(m.container, '.lc-br-tool-search')
+    assert.equal(input.placeholder, 'Filter by text…')
+    const previews = () => elemRows(m).map(r => text(query(r, '.lc-br-preview')))
+    await typeToolSearch(m, 'summary')
+    assert.deepEqual(previews(), ['empty summary', 'summary node'])
+    // No match keeps the toolbar mounted so the filter can be cleared.
+    await typeToolSearch(m, 'zzz')
+    assert.equal(elemRows(m).length, 0)
+    assert.ok(text(m.container).includes('No rows match the current filter'))
+    assert.equal(queryAll(m.container, '.lc-br-tool-search').length, 1)
+    await typeToolSearch(m, '')
+    assert.equal(elemRows(m).length, 8)
+
+    // The call-breadcrumb tag matches too (an assistant row's 'bash › write').
+    await click(catRow(m, 'assistant'))
+    assert.equal(query<HTMLInputElement>(m.container, '.lc-br-tool-search').value, '', 'another category opens unfiltered')
+    await typeToolSearch(m, 'bash')
+    assert.deepEqual(previews(), ['done all'])
+    await m.unmount()
+  })
+
   test('user images render a placeholder when no loader is wired', async () => {
     const m = await mountBrowser({ loadImage: undefined })
     await click(catRow(m, 'user'))

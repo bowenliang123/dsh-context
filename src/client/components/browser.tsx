@@ -199,6 +199,34 @@ function schemaTextOf(schema: unknown): string {
   }
 }
 
+/**
+ * The shared row-filter toolbar of a category body: a text input plus an
+ * optional trailing control group (the tools' size/name sort). Stays mounted
+ * on an empty match so the filter can always be cleared from the UI.
+ */
+function RowToolbar(props: {
+  value: string
+  placeholder: string
+  tip?: string
+  onChange: (v: string) => void
+  children?: ReactNS.ReactNode
+}): ReactNS.ReactElement {
+  return (
+    <div className="lc-br-toolctl">
+      <input
+        className="lc-br-tool-search"
+        value={props.value}
+        placeholder={props.placeholder}
+        onChange={(ev: ReactNS.ChangeEvent<HTMLInputElement>) => { props.onChange(ev.target.value) }}
+      />
+      {props.children !== undefined
+        ? <span className="lc-gran" role="group" title={props.tip}>{props.children}</span>
+        : null}
+    </div>
+  )
+}
+
+
 
 /**
  * Full tool-row body: description, parsed parameter table (when the schema carries one), raw JSON behind a per-row toggle — the JSON open
@@ -526,9 +554,11 @@ export function makeContextBrowser(
     const [sel, setSel] = React.useState<'live' | number>('live')
     const [openCat, setOpenCat] = React.useState<string | null>(null)
     const [openElem, setOpenElem] = React.useState<string | null>(null)
-    // The tools category's local view state: a text filter and the row order,
-    // kept across step picks so the same lens compares epochs.
-    const [toolQuery, setToolQuery] = React.useState('')
+    // The open category's row-filter text plus the tools' row order. The
+    // filter is a lens on the OPEN category: opening a different one resets
+    // it, while step picks (setOpenCat(null) below) keep it so the same lens
+    // compares epochs.
+    const [rowQuery, setRowQuery] = React.useState('')
     const [toolSort, setToolSort] = React.useState<'size' | 'name'>('size')
 
     // Full message content: the conversation-window join first (zero cost),
@@ -666,6 +696,8 @@ export function makeContextBrowser(
         return
       }
       setOpenCat(c)
+      // A different category opens unfiltered — the lens belongs to the open one.
+      setRowQuery('')
       // The system prompt's single row opens by default, so one category click lands on the text directly.
       setOpenElem(c === 'system' && view.header?.system !== undefined ? 'sys' : null)
     }
@@ -718,7 +750,7 @@ export function makeContextBrowser(
         }
         // The text filter scans everything the rows can say: the name, the
         // producer description, the plugin chip, and the raw parameter JSON.
-        const q = toolQuery.trim().toLowerCase()
+        const q = rowQuery.trim().toLowerCase()
         const shown = view.header.tools
           .filter((tool: HeaderTool) => q === ''
             || tool.name.toLowerCase().includes(q)
@@ -732,26 +764,18 @@ export function makeContextBrowser(
         // The toolbar stays mounted on an empty match, or the filter could
         // never be cleared from the UI.
         const toolctl = (
-          <div className="lc-br-toolctl">
-            <input
-              className="lc-br-tool-search"
-              value={toolQuery}
-              placeholder={t('tool.search')}
-              onChange={(ev: ReactNS.ChangeEvent<HTMLInputElement>) => { setToolQuery(ev.target.value) }}
-            />
-            <span className="lc-gran" role="group" title={t('tool.sortTip')}>
-              {(['size', 'name'] as const).map(k => (
-                <button
-                  key={k}
-                  type="button"
-                  className={'lc-gran-btn' + (toolSort === k ? ' lc-gran-on' : '')}
-                  onClick={() => { setToolSort(k) }}
-                >
-                  {t('tool.sort.' + k)}
-                </button>
-              ))}
-            </span>
-          </div>
+          <RowToolbar value={rowQuery} placeholder={t('tool.search')} tip={t('tool.sortTip')} onChange={setRowQuery}>
+            {(['size', 'name'] as const).map(k => (
+              <button
+                key={k}
+                type="button"
+                className={'lc-gran-btn' + (toolSort === k ? ' lc-gran-on' : '')}
+                onClick={() => { setToolSort(k) }}
+              >
+                {t('tool.sort.' + k)}
+              </button>
+            ))}
+          </RowToolbar>
         )
         if (shown.length === 0) {
           return (
@@ -787,7 +811,10 @@ export function makeContextBrowser(
       /* v8 ignore next 1 -- the body renders only when the category is open,
          which requires count > 0 ⟺ byCat[c] exists; defensive. */
       const nodes = (byCat[c as Category] ?? []).slice().reverse()
-      return nodes.map((n) => {
+      // Derive each row's display facts first so the text filter scans exactly
+      // what the rows show (tag + preview) at zero extra derivation cost; the
+      // survivors render unchanged.
+      const rows = nodes.map((n) => {
         const conv = bySeq.get(n.seq)
         const rowErr = n.cat === 'tool' && toolErrOf(n, conv).err
         // Tag carries the compact fact (tool name, injection form) — one shared subtle chip style; the preview line carries the text — each
@@ -824,37 +851,52 @@ export function makeContextBrowser(
             preview = n.form === 'snapshot' ? t('node.snapshot') + n.text : n.text
           }
         }
-        return elemRow(`n${n.seq}`, tag, preview, n.tokens, n.time,
-          <NodeContent
-            node={n}
-            conv={conv}
-            rich={rich}
-            img={{ Card: ImageCard, load: props.loadImage }}
-            // Localized section titles handed in by the parent so the body stays a pure function of props.
-            labels={{
-              thinking: t('block.thinking'),
-              answer: t('block.answer'),
-              content: t('block.content'),
-              result: t('block.result'),
-              summary: t('block.summary'),
-              images: t('attach.images'),
-              other: t('attach.other'),
-              lines: lineLabel,
-              callState: (err: boolean, exit: number | null) => (
-                <span className={'lc-ts-call-state ' + (err ? 'lc-ts-call-err' : 'lc-ts-call-ok')}>
-                  <i />
-                  {err
-                    ? t('call.fail') + (exit !== null ? ' · ' + t('call.exit', { n: exit }) : '')
-                    : t('call.ok')}
-                </span>
-              ),
-            }}
-            // Only the open row's body renders, so the miss note is exactly THIS join's fetch state; a joined-but-empty row keeps the
-            // static hint.
-            hint={conv === undefined ? missNote : t('browser.noContent')}
-          />,
-          rowErr)
+        return { n, conv, rowErr, tag, preview }
       })
+      const q = rowQuery.trim().toLowerCase()
+      const shown = q === '' ? rows : rows.filter(r =>
+        (r.tag ?? '').toLowerCase().includes(q) || r.preview.toLowerCase().includes(q))
+      // The toolbar stays mounted on an empty match, or the filter could
+      // never be cleared from the UI.
+      const rowctl = <RowToolbar value={rowQuery} placeholder={t('browser.rowSearch')} onChange={setRowQuery} />
+      if (shown.length === 0) {
+        return <div>{rowctl}<div className="lc-br-note">{t('browser.rowNoMatch')}</div></div>
+      }
+      return (
+        <div>
+          {rowctl}
+          {shown.map(({ n, conv, rowErr, tag, preview }) => elemRow(`n${n.seq}`, tag, preview, n.tokens, n.time,
+            <NodeContent
+              node={n}
+              conv={conv}
+              rich={rich}
+              img={{ Card: ImageCard, load: props.loadImage }}
+              // Localized section titles handed in by the parent so the body stays a pure function of props.
+              labels={{
+                thinking: t('block.thinking'),
+                answer: t('block.answer'),
+                content: t('block.content'),
+                result: t('block.result'),
+                summary: t('block.summary'),
+                images: t('attach.images'),
+                other: t('attach.other'),
+                lines: lineLabel,
+                callState: (err: boolean, exit: number | null) => (
+                  <span className={'lc-ts-call-state ' + (err ? 'lc-ts-call-err' : 'lc-ts-call-ok')}>
+                    <i />
+                    {err
+                      ? t('call.fail') + (exit !== null ? ' · ' + t('call.exit', { n: exit }) : '')
+                      : t('call.ok')}
+                  </span>
+                ),
+              }}
+              // Only the open row's body renders, so the miss note is exactly THIS join's fetch state; a joined-but-empty row keeps the
+              // static hint.
+              hint={conv === undefined ? missNote : t('browser.noContent')}
+            />,
+            rowErr))}
+        </div>
+      )
     }
 
     return (
