@@ -50,6 +50,12 @@ export interface SlotsService {
 export interface ConversationNodeLike {
   kind: string
   seq: number
+  /**
+   * The durable message id (assistant nodes on the harness chat nodes; absent
+   * on synthetic/interrupted replies) — the key the chat's assistant-action
+   * seat addresses a finalized reply by.
+   */
+  messageId?: unknown
   content?: readonly unknown[]
   blocks?: readonly unknown[]
   call?: { name: string; argsRaw: string } | null

@@ -16,7 +16,7 @@ import assert from 'node:assert/strict'
 import { afterAll, beforeAll, describe, test } from 'vitest'
 import { act } from 'react'
 import { h } from '../../../src/client/react'
-import { aggregateByTurn, attachMarkers, makeTrendChart, type TrendChartProps } from '../../../src/client/components/trendChart'
+import { aggregateByTurn, attachMarkers, jumpTargetOf, makeTrendChart, type TrendChartProps } from '../../../src/client/components/trendChart'
 import { CATS } from '../../../src/client/categories'
 import { replyTipsOf } from '../../../src/client/brief'
 import type { ContextEventRecord, RequestRecord, SurfaceNode } from '../../../src/shared/types'
@@ -760,6 +760,15 @@ describe('aggregateByTurn', () => {
 
   test('an empty history aggregates to nothing', () => {
     assert.deepEqual(aggregateByTurn([]), [])
+  })
+})
+
+describe('jumpTargetOf', () => {
+  test('matches the exact seq; an aged-out seq clamps to the oldest retained request', () => {
+    const reqs = [req(50), req(60), req(70)]
+    assert.equal(jumpTargetOf(reqs, 60)?.seq, 60)
+    assert.equal(jumpTargetOf(reqs, 10)?.seq, 50, 'below the window → the oldest retained bar')
+    assert.equal(jumpTargetOf([], 1), null)
   })
 })
 

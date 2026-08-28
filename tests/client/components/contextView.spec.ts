@@ -11,6 +11,7 @@ import { createRoot } from 'react-dom/client'
 import { afterEach, describe, test, vi } from 'vitest'
 import { h } from '../../../src/client/react'
 import { makeContextView } from '../../../src/client/components/contextView'
+import { requestContextFocus, takeContextFocus } from '../../../src/client/viewFocus'
 import { createContextSettings } from '../../../src/client/settings'
 import type { SettingsScopeLike } from '../../../src/client/settings'
 import type { UseSessionLike } from '../../../src/client/services'
@@ -90,6 +91,31 @@ function buttonByText(container: ParentNode, label: string): HTMLElement {
   return hit
 }
 
+/** Mount inside a `[data-conversation-scroll]` scroller so the view's shared-scrollport probes find it. */
+async function mountInScroller(el: React.ReactElement, scroller: HTMLElement) {
+  const inner = document.createElement('div')
+  scroller.appendChild(inner)
+  document.body.appendChild(scroller)
+  const root = createRoot(inner)
+  await act(async () => {
+    root.render(el)
+  })
+  return {
+    container: inner,
+    async update(next: React.ReactElement) {
+      await act(async () => {
+        root.render(next)
+      })
+    },
+    async unmount() {
+      await act(async () => {
+        root.unmount()
+      })
+      scroller.remove()
+    },
+  }
+}
+
 describe('ContextView — projection guards', () => {
   test('loading screen while useProjection is absent, empty, or the session id is missing', async () => {
     const View = makeView(new TestClientCtx())
@@ -155,19 +181,20 @@ describe('ContextView — projection guards', () => {
   })
 })
 
-describe('ContextView — interactions', () => {
-  async function mountRich(sessionId: string) {
-    const View = makeView(new TestClientCtx())
-    const m = await mount(h(View, {
-      sessionId,
-      useProjection: projectionsFor(richTimeline(), {
-        contextHeaders: { headers: [{ seq: 1, time: T0, system: 'SYS', tools: [{ name: 'bash', tokens: 12, description: 'run' }] }] },
-      }),
-      useSession: (sel => sel({ nodes: [] })) as UseSessionLike,
-    }))
-    return m
-  }
+/** The rich tab: full projection (stats, chart, markers, browser headers) over two turns plus a turn-less step. */
+async function mountRich(sessionId: string) {
+  const View = makeView(new TestClientCtx())
+  const m = await mount(h(View, {
+    sessionId,
+    useProjection: projectionsFor(richTimeline(), {
+      contextHeaders: { headers: [{ seq: 1, time: T0, system: 'SYS', tools: [{ name: 'bash', tokens: 12, description: 'run' }] }] },
+    }),
+    useSession: (sel => sel({ nodes: [] })) as UseSessionLike,
+  }))
+  return m
+}
 
+describe('ContextView — interactions', () => {
   test('renders the rich tab: stats, chart bars, markers, events, nodes, browser', async () => {
     const m = await mountRich('sv-rich')
     assert.ok(text(m.container).includes('deepseek-v4-flash · deepseek'))
@@ -654,29 +681,6 @@ describe('ContextView — targeted content fetch and image loading', () => {
 })
 
 describe('ContextView — scroll ledger', () => {
-  async function mountInScroller(el: React.ReactElement, scroller: HTMLElement) {
-    const inner = document.createElement('div')
-    scroller.appendChild(inner)
-    document.body.appendChild(scroller)
-    const root = createRoot(inner)
-    await act(async () => {
-      root.render(el)
-    })
-    return {
-      async update(next: React.ReactElement) {
-        await act(async () => {
-          root.render(next)
-        })
-      },
-      async unmount() {
-        await act(async () => {
-          root.unmount()
-        })
-        scroller.remove()
-      },
-    }
-  }
-
   test('restores the saved position per session and re-applies only once per mount', async () => {
     const View = makeView(new TestClientCtx())
     const props = {
@@ -823,5 +827,68 @@ describe('ContextView — error boundary', () => {
     } finally {
       silenceErrors()
     }
+  })
+})
+
+describe('ContextView — chat→Context jump', () => {
+  test('the relay flips the chart to turn bars, pins the reply\'s turn, and consumes itself', async () => {
+    // The clicked reply closed turn 1: its request seq (4) is that turn's LAST step — exactly the aggregate's record.
+    requestContextFocus('sv-jump', 4)
+    const m = await mountRich('sv-jump')
+    assert.ok(buttonByText(m.container, DICT_EN['gran.turn']).className.includes('lc-gran-on'), 'granularity flips to turn')
+    assert.equal(queryAll(m.container, '.lc-bar').length, 2, 'the chart renders turn aggregates')
+    assert.ok(query(m.container, '.lc-bar[data-seq="4"]').className.includes('lc-bar-selected'), 'the reply\'s turn bar is pinned')
+    assert.equal(query<HTMLSelectElement>(m.container, 'select.lc-br-pick').value, '4')
+    assert.equal(takeContextFocus('sv-jump'), null, 'the relay is one-shot')
+    await m.unmount()
+  })
+
+  test('no session id: the relay stays pending — the loading view never takes it', async () => {
+    requestContextFocus('sv-jumpnone', 4)
+    const View = makeView(new TestClientCtx())
+    const m = await mount(h(View, { sessionId: '', useProjection: () => undefined }))
+    assert.ok(text(m.container).includes(DICT_EN.loading))
+    await m.unmount()
+    assert.equal(takeContextFocus('sv-jumpnone'), 4, 'an absent session id skips leg 1')
+    takeContextFocus('sv-jumpnone')
+  })
+
+  test('an empty history consumes the relay and pins nothing', async () => {
+    requestContextFocus('sv-jumpempty', 4)
+    const View = makeView(new TestClientCtx())
+    const m = await mount(h(View, { sessionId: 'sv-jumpempty', useProjection: projectionsFor(timeline()) }))
+    assert.equal(queryAll(m.container, '.lc-bar').length, 0)
+    assert.equal(takeContextFocus('sv-jumpempty'), null)
+    await m.unmount()
+  })
+
+  test('a turn-less reply routes to the turn-0 bar', async () => {
+    // The trailing turn-less step: its group key derives to 0, the ?? 0 arm.
+    requestContextFocus('sv-jump0', 6)
+    const m = await mountRich('sv-jump0')
+    assert.ok(query(m.container, '.lc-bar[data-seq="6"]').className.includes('lc-bar-selected'))
+    assert.equal(takeContextFocus('sv-jump0'), null)
+    await m.unmount()
+  })
+
+  test('the jump resets the shared scroller even when a saved position was about to be restored', async () => {
+    const View = makeView(new TestClientCtx())
+    const props = { sessionId: 'sv-jumpscroll', useProjection: projectionsFor(richTimeline()) }
+
+    // Seed the ledger: a first visit scrolls, the unmount saves 42.
+    const scroller1 = document.createElement('div')
+    scroller1.setAttribute('data-conversation-scroll', '')
+    const m1 = await mountInScroller(h(View, props), scroller1)
+    scroller1.scrollTop = 42
+    await m1.unmount()
+
+    // The jump remount: restore applies 42, then the jump resolves and resets to top.
+    requestContextFocus('sv-jumpscroll', 4)
+    const scroller2 = document.createElement('div')
+    scroller2.setAttribute('data-conversation-scroll', '')
+    const m2 = await mountInScroller(h(View, props), scroller2)
+    assert.equal(scroller2.scrollTop, 0, 'the jump lands at the top of the tab')
+    assert.ok(query(m2.container, '.lc-bar[data-seq="4"]').className.includes('lc-bar-selected'))
+    await m2.unmount()
   })
 })

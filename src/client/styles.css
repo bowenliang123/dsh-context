@@ -29,6 +29,10 @@
 .lc-gran-btn { border: 0; background: transparent; color: var(--dsw-alias-label-secondary); font-size: 11px; line-height: 1; padding: 3px 8px; border-radius: 5px; cursor: pointer; font-family: inherit; }
 .lc-gran-btn:hover { color: var(--dsw-alias-label-primary); }
 .lc-gran-on, .lc-gran-on:hover { background: var(--dsw-alias-button-primary-fill); color: var(--dsw-alias-label-primary-foreground); }
+/* The chat action-row jump button — mirrors the harness MessageIconActions `.action` chrome so it sits flush beside the shipped icons. */
+.lc-jump { display: inline-flex; align-items: center; justify-content: center; width: calc(28px + var(--dsh-content-font-delta, 0px)); height: calc(28px + var(--dsh-content-font-delta, 0px)); padding: 6px; border: 0; border-radius: 28px; background: transparent; color: var(--dsw-alias-label-tertiary); cursor: pointer; }
+.lc-jump svg { width: calc(16px + var(--dsh-content-font-delta, 0px)); height: calc(16px + var(--dsh-content-font-delta, 0px)); }
+.lc-jump:hover { background: var(--dsw-alias-interactive-bg-hover); color: var(--dsw-alias-label-secondary); }
 .lc-settings-card { background: var(--dsw-alias-bg-layer-3); border: 1px solid var(--dsw-alias-border-l2); border-radius: 12px; transition: border-color .16s, background .16s; }
 .lc-settings-card:hover { border-color: var(--dsw-alias-label-dimmed); }
 .lc-settings-open, .lc-settings-open:hover { background: var(--dsw-alias-bg-layer-2); border-color: var(--dsw-alias-label-dimmed); }

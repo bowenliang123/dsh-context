@@ -29,6 +29,7 @@ import { modalStoreOf } from './modalStore'
 import type { ClientCtx } from './services'
 import { createContextSettings, type SettingsField, type SettingsScopeBinderFace } from './settings'
 import { makeContextView } from './components/contextView'
+import { makeContextJumpButton } from './components/contextJump'
 import { makeViewKit } from './viewkit'
 
 // Theme-native styles: the bundle's global-CSS channel injects the sheet as
@@ -60,6 +61,18 @@ function apply(ctx: ClientCtx): void {
       // namespace put the framework `t` seat on the component's props too.
       { name: 'conversation.view', id: 'context', order: 20, locale: NS, label: () => t('tab') },
       props => h(ContextView, props),
+    )
+  })
+
+  // Chat → Context jump: an icon in each finalized reply's action row that
+  // opens this tab pinned to that reply's turn (see contextJump.tsx; the
+  // relay and tab activation live in viewFocus.ts).
+  const ContextJump = makeContextJumpButton(kit)
+  ctx.slots.inject('conversation.chat.assistant-actions', () => {
+    return ctx.slots.register(
+      // After the shipped feedback entry (10), still inside the icon row.
+      { name: 'conversation.chat.assistant-actions', id: 'context-jump', order: 20, locale: NS },
+      props => h(ContextJump, props),
     )
   })
 

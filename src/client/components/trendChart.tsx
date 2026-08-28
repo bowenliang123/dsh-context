@@ -68,6 +68,16 @@ export function attachMarkers(requests: RequestRecord[], events: ContextEventRec
   return markers
 }
 
+/**
+ * The chat→Context jump's target: the turn bar whose closing reply the user clicked — the relayed seq is a turn's LAST step, exactly the
+ * aggregate's record — or, when that turn has aged out of the host's retained window, the oldest retained bar. Resolved against turn
+ * aggregates, since the jump pins in turn granularity. Null only on an empty history.
+ */
+export function jumpTargetOf(requests: RequestRecord[], seq: number): RequestRecord | null {
+  for (const req of requests) if (req.seq === seq) return req
+  return requests.length > 0 ? requests[0] : null
+}
+
 export function makeTrendChart(kit: ViewKit): (props: TrendChartProps) => ReactNS.ReactElement {
   const { t, fmt, fmtTime, eventLabel, eventAt } = kit
 

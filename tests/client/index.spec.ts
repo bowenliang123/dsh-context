@@ -103,6 +103,31 @@ describe('client entry: conversation.view slot', () => {
   })
 })
 
+describe('client entry: assistant-actions seat', () => {
+  test('registers the chat→Context jump entry whose component renders the labelled icon button', async () => {
+    const ctx = new TestClientCtx()
+    applyTo(ctx)
+    const entries = ctx.slots.of('conversation.chat.assistant-actions')
+    assert.equal(entries.length, 1)
+    const { registration, component } = entries[0]
+    assert.equal(registration.name, 'conversation.chat.assistant-actions')
+    assert.equal(registration.id, 'context-jump')
+    assert.equal(registration.order, 20, 'right of the shipped feedback entry')
+    assert.equal(registration.locale, 'dsh-context')
+
+    const el = component({ messageId: 'm1' }) as ReactElement
+    const m = await mount(el)
+    assert.equal(query(m.container, 'button.lc-jump').getAttribute('aria-label'), 'View this turn in the Context tab')
+    await m.unmount()
+
+    // Interruption-frozen partials address no durable message: nothing renders.
+    const nil = await mount(component({ messageId: 7 }) as ReactElement)
+    assert.equal(queryAll(nil.container, 'button').length, 0)
+    await nil.unmount()
+    ctx.dispose()
+  })
+})
+
 describe('client entry: sessions scope seam', () => {
   test('absent sessions service: apply is a noop for the sessions seams', () => {
     const ctx = new TestClientCtx()

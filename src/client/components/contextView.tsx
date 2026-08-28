@@ -25,9 +25,10 @@ import { makePluginInfo } from './pluginInfo'
 import { makeRequestDetail } from './requestDetail'
 import { makeStatsBoard } from './statsBoard'
 import { makeLegend, makeStackedBar } from './stackedBar'
-import { aggregateByTurn, attachMarkers, makeTrendChart } from './trendChart'
+import { aggregateByTurn, attachMarkers, jumpTargetOf, makeTrendChart } from './trendChart'
 
 import { React, h } from '../react'
+import { takeContextFocus } from '../viewFocus'
 import { makeErrorBoundary } from './errorBoundary'
 
 // The context page scrolls inside the conversation's shared `[data-conversation-scroll]` container, which the chat bottom-anchors — mirror
@@ -95,6 +96,9 @@ export function makeContextView(
     const [trendMode, setTrendMode] = React.useState<'total' | 'delta'>(() => settings.defaultTrendMode())
     // Strip-clicked turn: chart switches to turn granularity and scroll-centers that turn's bar, then clears via onFocusTurnHandled.
     const [focusTurn, setFocusTurn] = React.useState<number | null>(null)
+    // Chat → Context jump: the assistant-action relay's one-shot request, held until the projection data is in, then resolved into a
+    // turn-level pin below (mirrors the strip-click's consume-once focus flow).
+    const [jumpSeq, setJumpSeq] = React.useState<number | null>(null)
     const [hoverCat, setHoverCat] = React.useState<string | null>(null)
     const [pickedKinds, setPickedKinds] = React.useState<string[]>([...EVENT_KINDS])
     const toggleKind = (k: string) => {
@@ -172,6 +176,28 @@ export function makeContextView(
       [requests, granularity],
     )
     const markers = React.useMemo(() => attachMarkers(displayRequests, events), [displayRequests, events])
+
+    // Chat → Context jump, leg 1: pick up the assistant-action relay's request for this session (once per mount).
+    React.useEffect(() => {
+      if (typeof sessionId !== 'string' || sessionId === '') return
+      const seq = takeContextFocus(sessionId)
+      if (seq !== null) setJumpSeq(seq)
+    }, [sessionId])
+
+    // Leg 2: the action row belongs to the reply that CLOSED a turn, so the jump is turn-level — flip the chart to turn bars, pin that
+    // turn's aggregate (the relayed seq is the turn's last request, exactly the aggregate's record), and center it: the same flow as a
+    // turn-strip click. An aged-out turn clamps to the oldest retained bar. No page-scroller anchor → the reset degrades quietly.
+    React.useEffect(() => {
+      if (jumpSeq === null || data === null) return
+      setJumpSeq(null)
+      const target = jumpTargetOf(aggregateByTurn(requests), jumpSeq)
+      if (target === null) return
+      setGranularity('turn')
+      setSelectedSeq(target.seq)
+      setFocusTurn(target.turn ?? 0)
+      // The restore layout effect resolved the shared scroller on this same data render (layout effects precede this one).
+      if (scrollerRef.current !== null) scrollerRef.current.scrollTop = 0
+    }, [jumpSeq, data, requests])
 
     // Step-brief raw material: every served node seq-sorted (live tail + archive), the tooltip's reply previews, and the
     // conversation-snapshot join the brief uses for call-argument enrichment (same join the Context browser builds).
