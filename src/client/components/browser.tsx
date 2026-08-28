@@ -4,7 +4,7 @@ import { assemble } from '../assemble'
 import type { Assembled } from '../assemble'
 import { CATS, partsOf } from '../categories'
 import { React } from '../react'
-import type { ContentFetcher, ConversationNodeLike, UseSessionLike } from '../services'
+import type { ContentFetcher, ConversationNodeLike } from '../services'
 import type { ViewKit } from '../viewkit'
 import { blockSummaryOf, callSummaryOf, parseCallArgs } from '../callSummary'
 import { makeNodeText } from './nodes'
@@ -18,7 +18,13 @@ import type { ImageLoader, ImageRefLike } from '../services'
 export interface ContextBrowserProps {
   data: ContextTimeline
   headers: ContextHeaders | null
-  useSession?: UseSessionLike
+  /**
+   * The conversation-window nodes, already resolved by the caller from
+   * whichever seat the harness provides (`useChat` on 0.1.2+, the session
+   * snapshot before it) — the browser itself stays seat-free so the hook
+   * order lives in exactly one place.
+   */
+  convNodes?: readonly ConversationNodeLike[]
   /**
    * Targeted full-content fetch for nodes outside the conversation window:
    * one seq-anchored history read per expanded row (absent on older hosts —
@@ -562,11 +568,9 @@ export function makeContextBrowser(
     const [toolSort, setToolSort] = React.useState<'size' | 'name'>('size')
 
     // Full message content: the conversation-window join first (zero cost),
-    // plus nodes fetched on demand for seqs outside the window (`s.nodes` is
-    // a stable reference per snapshot; the map memoizes over it).
-    const convNodes = typeof props.useSession === 'function'
-      ? props.useSession(s => s.nodes)
-      : undefined
+    // plus nodes fetched on demand for seqs outside the window (node arrays
+    // are stable references per snapshot; the map memoizes over them).
+    const convNodes = props.convNodes
     const [fetched, setFetched] = React.useState<Map<number, ConversationNodeLike>>(() => new Map())
     const bySeq = React.useMemo(() => {
       const m = new Map<number, ConversationNodeLike>()
@@ -602,7 +606,8 @@ export function makeContextBrowser(
           return next
         })
         setMissState('idle')
-      }, () => {
+      }, (error: unknown) => {
+        console.warn('dsh-context: targeted history read failed', error)
         if (live) setMissState('failed')
       })
       return () => { live = false }

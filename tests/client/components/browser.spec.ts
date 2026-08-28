@@ -10,7 +10,7 @@ import { h } from '../../../src/client/react'
 import { makeContextBrowser, type ContextBrowserProps } from '../../../src/client/components/browser'
 import { makeStackedBar } from '../../../src/client/components/stackedBar'
 import { UNKNOWN_TOOL_SOURCE, type ContextHeaders, type ContextTimeline, type RequestRecord, type SurfaceNode } from '../../../src/shared/types'
-import type { ConversationNodeLike, ImageLoader, UseSessionLike } from '../../../src/client/services'
+import type { ConversationNodeLike, ImageLoader } from '../../../src/client/services'
 import { click, flush, hover, makeKit, mount, query, queryAll, text, unhover, type Mounted } from '../helpers/kit'
 
 const kit = makeKit()
@@ -38,18 +38,6 @@ function req(over: Partial<RequestRecord>): RequestRecord {
 
 function node(over: Partial<SurfaceNode> & { seq: number }): SurfaceNode {
   return { cat: 'user', tokens: 5, ...over }
-}
-
-/** A REAL tiny selector over an in-memory snapshot — the documented UseSessionLike contract. */
-function sess(snap: { nodes?: readonly ConversationNodeLike[] }): UseSessionLike {
-  return (sel) => sel(snap)
-}
-
-interface Snap { nodes?: readonly ConversationNodeLike[] }
-
-/** Same contract, but re-reads the snapshot on every render (join tests mutate it). */
-function liveSess(get: () => Snap): UseSessionLike {
-  return (sel) => sel(get())
 }
 
 function catRow(m: Mounted, cat: keyof typeof ROW): HTMLElement {
@@ -699,7 +687,7 @@ describe('ContextBrowser message categories', () => {
   }
 
   const mountBrowser = async (over: Partial<ContextBrowserProps> = {}) =>
-    mount(h(Browser, props({ data, useSession: sess({ nodes: convNodes }), loadImage, ...over })))
+    mount(h(Browser, props({ data, convNodes, loadImage, ...over })))
 
   test('user rows: image chips on collapsed rows, join content, fallbacks', async () => {
     const m = await mountBrowser()
@@ -948,7 +936,7 @@ describe('ContextBrowser tool results', () => {
   })
 
   test('tail-status matrix drives the error dot; tags and previews render on collapsed rows', async () => {
-    const m = await mount(h(Browser, props({ data, useSession: sess({ nodes: convNodes }) })))
+    const m = await mount(h(Browser, props({ data, convNodes })))
     await click(catRow(m, 'tool'))
     const rows = elemRows(m)
     assert.equal(rows.length, nodes.length)
@@ -979,7 +967,7 @@ describe('ContextBrowser tool results', () => {
   })
 
   test('clean results render the OK state; orphan results render no call card', async () => {
-    const m = await mount(h(Browser, props({ data, useSession: sess({ nodes: convNodes }) })))
+    const m = await mount(h(Browser, props({ data, convNodes })))
     await click(catRow(m, 'tool'))
     const rows = elemRows(m)
     // Newest first: index map by seq (97, 96, 95, 94, 93, 92, 91, 90..80).
@@ -1037,7 +1025,7 @@ describe('ContextBrowser targeted content fetch', () => {
       return new Promise<void>((resolve) => { release = resolve })
         .then(() => ({ kind: 'user', seq, content: [{ type: 'text', text: 'FULL BODY' }] }) as ConversationNodeLike)
     }
-    const m = await mount(h(Browser, props({ data, useSession: sess({ nodes: [] }), fetchContent })))
+    const m = await mount(h(Browser, props({ data, convNodes: [], fetchContent })))
     await openFirstRow(m)
     assert.equal(calls, 1, 'one targeted read')
     assert.ok(text(query(m.container, '.lc-br-content')).includes('Loading full content from older session history'), 'in-flight note')
@@ -1058,7 +1046,7 @@ describe('ContextBrowser targeted content fetch', () => {
       calls += 1
       return null
     }
-    const m = await mount(h(Browser, props({ data, useSession: sess({ nodes: [] }), fetchContent })))
+    const m = await mount(h(Browser, props({ data, convNodes: [], fetchContent })))
     await openFirstRow(m)
     await flush()
     assert.equal(calls, 1)
@@ -1073,7 +1061,7 @@ describe('ContextBrowser targeted content fetch', () => {
       if (calls === 1) throw new Error('transport down')
       return { kind: 'user', seq, content: [{ type: 'text', text: 'RETRY BODY' }] } as ConversationNodeLike
     }
-    const m = await mount(h(Browser, props({ data, useSession: sess({ nodes: [] }), fetchContent })))
+    const m = await mount(h(Browser, props({ data, convNodes: [], fetchContent })))
     await openFirstRow(m)
     await flush()
     const failed = query(m.container, '.lc-br-content')
@@ -1086,7 +1074,7 @@ describe('ContextBrowser targeted content fetch', () => {
   })
 
   test('without a fetcher (older host) an un-joined row keeps the static note', async () => {
-    const m = await mount(h(Browser, props({ data, useSession: sess({ nodes: [] }) })))
+    const m = await mount(h(Browser, props({ data, convNodes: [] })))
     await openFirstRow(m)
     await flush()
     assert.ok(text(query(m.container, '.lc-br-content')).includes('outside the loaded message window'))
@@ -1101,8 +1089,8 @@ describe('ContextBrowser targeted content fetch', () => {
       if (seq === 5) return new Promise((resolve, reject) => { deferreds.push({ resolve, reject }) })
       return Promise.resolve({ kind: 'user', seq, content: [{ type: 'text', text: 'BODY ' + String(seq) }] } as ConversationNodeLike)
     }
-    let snap: Snap = { nodes: [] }
-    const el = () => h(Browser, props({ data, useSession: liveSess(() => snap), fetchContent }))
+    let snap: { nodes?: readonly ConversationNodeLike[] } = { nodes: [] }
+    const el = () => h(Browser, props({ data, convNodes: snap.nodes, fetchContent }))
     const m = await mount(el())
     await openFirstRow(m) // seq 5 hangs in flight
     assert.equal(deferreds.length, 1)
@@ -1162,9 +1150,9 @@ describe('ContextBrowser focus bridges', () => {
     Element.prototype.scrollIntoView = function (this: Element, arg?: unknown) { scrolls.push(arg) } as never
     try {
       let handled = 0
-      const m = await mount(h(Browser, props({ data, headers, useSession: sess({ nodes: convNodes }) })))
+      const m = await mount(h(Browser, props({ data, headers, convNodes })))
       await m.update(h(Browser, props({
-        data, headers, useSession: sess({ nodes: convNodes }),
+        data, headers, convNodes,
         nodeFocus: { step: 'live', seq: 1, cat: 'user' },
         onNodeFocusHandled: () => { handled += 1 },
       })))
@@ -1175,7 +1163,7 @@ describe('ContextBrowser focus bridges', () => {
       assert.deepEqual(scrolls, [{ block: 'nearest' }], 'the open row scrolled into view')
       // A step focus switches the assembled view.
       await m.update(h(Browser, props({
-        data, headers, useSession: sess({ nodes: convNodes }),
+        data, headers, convNodes,
         nodeFocus: { step: 20, seq: 1, cat: 'user' },
         onNodeFocusHandled: () => { handled += 1 },
       })))
@@ -1183,7 +1171,7 @@ describe('ContextBrowser focus bridges', () => {
       assert.equal(handled, 2)
       // A node outside the assembled surface leaves nothing to scroll to.
       await m.update(h(Browser, props({
-        data, headers, useSession: sess({ nodes: convNodes }),
+        data, headers, convNodes,
         nodeFocus: { step: 'live', seq: 999, cat: 'user' },
       })))
       assert.equal(queryAll(m.container, '.lc-br-elem-on').length, 0)

@@ -43,6 +43,15 @@ describe('pageNodesOf — the durable-page mapper', () => {
     assert.deepEqual(nodes.get(11)?.call, { name: '?', argsRaw: '' })
   })
 
+  test('bare event envelopes without the {event} wrapper map identically', () => {
+    // Shape-drift tolerance: a face that serves the envelope unwrapped.
+    const nodes = pageNodesOf([{ type: 'user/message', seq: 45, time: 45, data: { content: [{ type: 'text', text: 'bare' }] } }])
+    assert.deepEqual(nodes.get(45), { kind: 'user', seq: 45, content: [{ type: 'text', text: 'bare' }] })
+    assert.equal(pageNodesOf([{ type: 'user/message', seq: 46 }]).get(46)?.kind, 'user')
+    assert.equal(pageNodesOf(['junk', 7]).size, 0, 'scalar rows still drop')
+    assert.equal(pageNodesOf([{ event: 42 }, { event: 'x' }]).size, 0, 'non-envelope event fields drop')
+  })
+
   test('a tool result without any message shape still joins empty', () => {
     const nodes = pageNodesOf([row('tool/result', 12, {})])
     assert.deepEqual(nodes.get(12), { kind: 'tool-result', seq: 12, call: null, content: [], isError: false })
@@ -188,13 +197,82 @@ describe('makeContentFetcher — the per-session targeted read', () => {
     assert.deepEqual(calls.length, 1)
   })
 
-  test('a page without the seq resolves null; garbage events arrays too', async () => {
+  test('a page without the seq resolves null; an empty events page too', async () => {
     const fetch = makeContentFetcher(ctxWith({ connection: { api: apiFace([row('user/message', 9, {})]) } }), 's')!
     assert.equal(await fetch(500), null)
     const empty = makeContentFetcher(ctxWith({
-      connection: { api: { sessions: { history: async () => ({ result: { ok: true, value: {} } }) } } },
+      connection: { api: { sessions: { history: async () => ({ result: { ok: true, value: { events: [] } } }) } } },
     }), 's')!
     assert.equal(await empty(1), null)
+  })
+
+  test('a payload with no rows array at all rejects (never claims absence)', async () => {
+    const garbage = makeContentFetcher(ctxWith({
+      connection: { api: { sessions: { history: async () => ({ result: { ok: true, value: {} } }) } } },
+    }), 's')!
+    await assert.rejects(garbage(1))
+  })
+
+  test('a throwing service read degrades to no fetcher', () => {
+    const hostile = (throwing: string): Parameters<typeof makeContentFetcher>[0] => ({
+      get: (key: string) => {
+        if (key === throwing) throw new Error('service absent')
+        return undefined
+      },
+    }) as Parameters<typeof makeContentFetcher>[0]
+    assert.equal(makeContentFetcher(hostile('remote.session'), 's'), undefined)
+    assert.equal(makeContentFetcher(hostile('connection'), 's'), undefined)
+  })
+
+  test('the 0.1.2 page face wins over the legacy history verb and maps its records', async () => {
+    const calls: unknown[] = []
+    // The real 0.1.2 shape: the remote resolves to the ClientResult itself.
+    const pageFace = (records: unknown[], envelope: (records: unknown[]) => unknown = (r) => ({ ok: true, value: { records: r } })) => ({
+      page: (request: unknown) => {
+        calls.push(request)
+        return Promise.resolve(envelope(records))
+      },
+    })
+    const records = [
+      { type: 'event', event: { type: 'user/message', seq: 7, time: 7, data: { content: [{ type: 'text', text: 'PAGED BODY' }] } } },
+      // A packed chunk-row record projects to nothing — only final events matter.
+      { type: 'chunks', event: { type: 'chunkrow/text-chunks', seq: 8, time: 8, data: { turn: 1, step: 0, index: 0, dt: [1], texts: ['delta'] } } },
+    ]
+    const historyCalls: unknown[] = []
+    const fetch = makeContentFetcher(ctxWith({
+      'remote.session': pageFace(records),
+      connection: { api: { sessions: { history: () => { historyCalls.push(1); return Promise.resolve({}) } } } },
+    }), 'sess-9')!
+    const node = await fetch(7)
+    assert.deepEqual(calls, [{
+      address: { kind: 'session', sessionId: 'sess-9' },
+      throughSeq: 7,
+      beforeSeq: 8,
+    }])
+    assert.equal((node?.content as { text: string }[])[0]?.text, 'PAGED BODY')
+    assert.equal(historyCalls.length, 0, 'the legacy verb stays untouched')
+    // A bare (non-enveloped) SessionPage passes too.
+    const bare = makeContentFetcher(ctxWith({ 'remote.session': pageFace(records, (r) => ({ records: r })) }), 's')!
+    assert.equal((await bare(7))?.kind, 'user')
+  })
+
+  test('page-face failures reject so the caller can offer a retry', async () => {
+    const bad = makeContentFetcher(ctxWith({
+      'remote.session': { page: async () => ({ result: { ok: false, value: undefined } }) },
+    }), 's')!
+    await assert.rejects(bad(1))
+    const badTop = makeContentFetcher(ctxWith({
+      'remote.session': { page: async () => ({ ok: false, error: { message: 'gone' } }) },
+    }), 's')!
+    await assert.rejects(badTop(1))
+    const garbage = makeContentFetcher(ctxWith({
+      'remote.session': { page: async () => ({ records: 'nope' }) },
+    }), 's')!
+    await assert.rejects(garbage(1))
+    const broken = makeContentFetcher(ctxWith({
+      'remote.session': { page: async () => { throw new Error('transport down') } } ,
+    }), 's')!
+    await assert.rejects(broken(1), /transport down/)
   })
 
   test('malformed rpc envelopes reject so the caller can offer a retry', async () => {
@@ -202,6 +280,10 @@ describe('makeContentFetcher — the per-session targeted read', () => {
       connection: { api: { sessions: { history: async () => ({ result: { ok: false, value: undefined } }) } } },
     }), 's')!
     await assert.rejects(fetch(1))
+    const nullResponse = makeContentFetcher(ctxWith({
+      connection: { api: { sessions: { history: async () => null } } },
+    }), 's')!
+    await assert.rejects(nullResponse(1))
     const noResult = makeContentFetcher(ctxWith({
       connection: { api: { sessions: { history: async () => ({}) } } },
     }), 's')!

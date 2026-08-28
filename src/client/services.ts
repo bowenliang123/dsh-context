@@ -87,12 +87,45 @@ export interface ImageRefLike {
 export type ImageLoader = (attachment: ImageRefLike) => Promise<string>
 
 /**
- * The harness conversation client service (`ctx.conversation`), minimally
- * typed for image resolution — the same call the chat view's own message
- * images ride on.
+ * The harness conversation client service, minimally typed for image
+ * resolution — the same call the chat view's own message images ride on.
+ * Renamed across dsh versions: `ctx.conversation.resolveImage` before
+ * 0.1.2, `ctx.uiConversation.imageUrl` since. Whichever face is present
+ * serves the loader; absence degrades the cards to metadata-only.
  */
 export interface ConversationFace {
-  resolveImage(sessionId: string, attachment: ImageRefLike): Promise<string>
+  resolveImage?(sessionId: string, attachment: ImageRefLike): Promise<string>
+}
+
+export interface UiConversationFace {
+  imageUrl?(sessionId: string, attachment: ImageRefLike): Promise<string>
+}
+
+/**
+ * A session-authorized durable-image loader over whichever conversation
+ * face the running harness provides (`resolveImage` pre-0.1.2, `imageUrl`
+ * since), or undefined when neither service is composed — the caller
+ * degrades to metadata-only cards. Hostile snapshots and throwing service
+ * reads are caught: this helper can never take a render down.
+ */
+export function imageLoaderOf(
+  ctx: ClientCtx,
+  sessionId: string | undefined,
+): ImageLoader | undefined {
+  if (typeof sessionId !== 'string' || sessionId === '') return undefined
+  try {
+    const legacy = ctx.get('conversation') as ConversationFace | undefined
+    if (legacy !== undefined && typeof legacy.resolveImage === 'function') {
+      const resolveImage = legacy.resolveImage.bind(legacy)
+      return attachment => resolveImage(sessionId, attachment)
+    }
+    const modern = ctx.get('uiConversation') as UiConversationFace | undefined
+    if (modern !== undefined && typeof modern.imageUrl === 'function') {
+      const imageUrl = modern.imageUrl.bind(modern)
+      return attachment => imageUrl(sessionId, attachment)
+    }
+  } catch { /* absent or hostile service — metadata-only cards */ }
+  return undefined
 }
 
 export type UseSessionLike = <T>(
@@ -100,6 +133,56 @@ export type UseSessionLike = <T>(
     nodes?: readonly ConversationNodeLike[]
   }) => T,
 ) => T
+
+/**
+ * The `useChat` standard seat (dsh 0.1.2+: the finalized chat nodes moved
+ * from the session snapshot to a per-view `ChatSnapshot` whose `legacy`
+ * slice keeps the plain `ConversationNode[]`). Minimally typed: the selector
+ * receives the harness snapshot (untrusted — re-proved outside), and the
+ * slice it returns must be reference-stable so the framework's
+ * selector-hook equality can gate re-renders.
+ */
+export type UseChatLike = <T>(selector: (snapshot: unknown) => T) => T
+
+/**
+ * The conversation-window nodes this plugin joins on, from whichever seat
+ * the running harness provides — `useChat` (`ChatSnapshot.legacy.nodes`) on
+ * dsh 0.1.2+, the session snapshot's own `nodes` before that. Returns
+ * undefined when neither seat delivers a real array (absent seat, older or
+ * foreign harness, hostile snapshot) — callers render without the join,
+ * never an error.
+ *
+ * Hook-order contract: the seats are real React hooks, so BOTH are invoked
+ * on every call whenever present (the chat seat first, the session seat
+ * second) and only the RESULT is picked conditionally — a stable call order
+ * across renders. Selectors return stable slice references so the
+ * framework's snapshot equality can gate re-renders.
+ */
+export function conversationNodesOf(props: {
+  useChat?: UseChatLike
+  useSession?: UseSessionLike
+}): readonly ConversationNodeLike[] | undefined {
+  const useChat: unknown = props.useChat
+  let chatNodes: unknown
+  if (typeof useChat === 'function') {
+    try {
+      // `s.legacy` is a stable object; the array is read outside the selector.
+      const slice = (useChat as UseChatLike)((s: unknown) =>
+        s !== null && typeof s === 'object' ? (s as { legacy?: unknown }).legacy : undefined)
+      chatNodes = slice !== null && typeof slice === 'object' ? (slice as { nodes?: unknown }).nodes : undefined
+    } catch { /* hostile seat — the session snapshot still answers */ }
+  }
+  const useSession: unknown = props.useSession
+  let sessionNodes: unknown
+  if (typeof useSession === 'function') {
+    try {
+      sessionNodes = (useSession as UseSessionLike)(s => s.nodes)
+    } catch { /* hostile seat — the join degrades to nothing */ }
+  }
+  if (Array.isArray(chatNodes)) return chatNodes as readonly ConversationNodeLike[]
+  if (Array.isArray(sessionNodes)) return sessionNodes as readonly ConversationNodeLike[]
+  return undefined
+}
 
 /**
  * The framework standard kit of a session-scope slot component, as far as
@@ -111,6 +194,8 @@ export interface SessionStandardProps {
   sessionId?: string
   useProjection?: (key: string) => unknown
   useSession?: UseSessionLike
+  /** The chat-view snapshot seat (dsh 0.1.2+; see {@link UseChatLike}). */
+  useChat?: UseChatLike
 }
 
 export type ClientCtx = Context & {
@@ -343,12 +428,37 @@ export interface HistoryEntryLike {
  * narrowed to the one verb the targeted content fetch rides on: a
  * seq-anchored history page whose boundaries align to whole append-origin
  * messages, so `beforeSeq: seq + 1` always covers that seq when the log
- * still holds it. Every response field is re-proven at runtime.
+ * still holds it. This is the dsh <= 0.1.1 face — the RPC was rewritten in
+ * 0.1.2 into `remote.session.page` (see {@link SessionPageFace}). Every
+ * response field is re-proven at runtime.
  */
 export interface SessionsHistoryFace {
   history(request: { sessionId: string; beforeSeq: number }): Promise<{
-    result?: { ok?: unknown; value?: { events?: unknown } | null } | null
+    result?: { ok?: unknown; value?: { events?: unknown; records?: unknown } | null } | null
   }>
+}
+
+/**
+ * The seq-anchored history page verb of the dsh 0.1.2+ gateway remotes: the
+ * session namespace mounts as a traced cordis service literally named
+ * `remote.session`, so `ctx.get('remote.session')` reaches it without an
+ * inject declaration (undefined on harnesses that never mount it — the
+ * 0.1.1 remotes carry no session namespace). `throughSeq` is the inclusive
+ * log cut (a seq that must exist in the log), `beforeSeq` the exclusive
+ * upper bound, and the response wraps the rows in a `ClientResult`-style
+ * envelope. Rows are `SessionHistoryRecord`s — `{type:'event', event}`
+ * entries plus packed `{type:'chunks', …}` runs the mapper skips (every
+ * event the fold needs — user/assistant messages, tool calls/results,
+ * compaction summaries — is always served verbatim; only streaming deltas
+ * pack).
+ */
+export interface SessionPageFace {
+  page(request: {
+    address: { kind: 'session'; sessionId: string }
+    throughSeq: number
+    beforeSeq?: number
+    maxMessages?: number
+  }, signal?: AbortSignal): Promise<unknown>
 }
 
 /** The connection service face, as far as this plugin consumes it. */

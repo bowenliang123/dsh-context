@@ -44,6 +44,15 @@ describe('registerContextCommand', () => {
     ctx.dispose()
   })
 
+  test('a service provided with a foreign shape registers nothing', () => {
+    // The inject callback fires on the service NAME; a value that is not a
+    // trigger face (a half-composed module, a producer drift) must degrade
+    // to the no-command state instead of throwing at apply.
+    const ctx = new TestClientCtx({ services: { inputTriggers: { registerSource: 42 } } })
+    registerContextCommand(asClientCtx(ctx), makeKit())
+    ctx.dispose()
+  })
+
   test('with the service it registers one "/" source named context at order 1', () => {
     const { ctx, inputTriggers, source } = setup()
     assert.equal(source.trigger, '/')

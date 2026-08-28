@@ -8,8 +8,8 @@ import type { ContextEventRecord, RequestRecord, SurfaceNode } from '../../share
 import { briefNodes, briefOf, replyTipsOf } from '../brief'
 import { headlineOf } from '../headline'
 import type { SessionStandardProps } from '../services'
-import { contextBreakdownOf, contextPressureOf, headersOf, numOf, timelineOf, tokenUsageOf } from '../services'
-import type { ClientCtx, ConversationFace, ConversationNodeLike, ImageRefLike } from '../services'
+import { contextBreakdownOf, contextPressureOf, conversationNodesOf, headersOf, imageLoaderOf, numOf, timelineOf, tokenUsageOf } from '../services'
+import type { ClientCtx, ConversationNodeLike } from '../services'
 import { makeContentFetcher } from '../historyPage'
 import { canOpenPathsOf, openPathVia, workspaceOf } from '../services'
 import { activityOf, locateStepOf } from '../fileActivity'
@@ -108,14 +108,13 @@ export function makeContextView(
     const [nodeFocus, setNodeFocus] = React.useState<{ step: number | 'live'; seq: number; cat: SurfaceNode['cat'] } | null>(null)
     const clearNodeFocus = React.useCallback(() => { setNodeFocus(null) }, [])
 
-    // Session-authorized durable-image loader for the browser's attachment cards, resolved through the harness conversation service — the
-    // same `resolveImage` the chat history's images ride on; absent service/session degrades the cards to metadata-only, never an error.
-    const loadImage = React.useMemo(() => {
-      if (typeof sessionId !== 'string' || sessionId === '') return undefined
-      const conversation = ctx.get('conversation') as ConversationFace | undefined
-      if (conversation === undefined || typeof conversation.resolveImage !== 'function') return undefined
-      return (attachment: ImageRefLike) => conversation.resolveImage(sessionId, attachment)
-    }, [sessionId])
+    // Session-authorized durable-image loader for the browser's attachment cards, resolved through the harness conversation service —
+    // whichever face the running harness serves (`resolveImage` pre-0.1.2, `imageUrl` since); absent service/session degrades the cards
+    // to metadata-only, never an error.
+    const loadImage = React.useMemo(
+      () => imageLoaderOf(ctx, typeof sessionId === 'string' ? sessionId : undefined),
+      [ctx, sessionId],
+    )
 
     // Targeted full-content fetch for browser nodes outside the conversation window (one seq-anchored history read per expanded row);
     // absent face/session degrades to the static hint — never an error.
@@ -178,9 +177,11 @@ export function makeContextView(
     // conversation-snapshot join the brief uses for call-argument enrichment (same join the Context browser builds).
     const briefList = React.useMemo(() => (data ? briefNodes(data) : []), [data])
     const replyTips = React.useMemo(() => replyTipsOf(briefList), [briefList])
-    const convNodes = typeof props.useSession === 'function'
-      ? props.useSession(s => s.nodes)
-      : undefined
+    // The conversation-window join, from whichever seat the harness provides
+    // (`useChat` on 0.1.2+, the session snapshot before it). Both seats are
+    // real hooks — invoked unconditionally per render (stable order), only
+    // the result picked; undefined join = render without it, never an error.
+    const convNodes = conversationNodesOf(props)
     const bySeq = React.useMemo(() => {
       const m = new Map<number, ConversationNodeLike>()
       for (const n of convNodes ?? []) m.set(n.seq, n)
@@ -378,7 +379,7 @@ export function makeContextView(
             <ContextBrowser
               data={data}
               headers={headers}
-              useSession={props.useSession}
+              convNodes={convNodes}
               fetchContent={fetchContent}
               previewSeq={hoveredSeq}
               pinSeq={pinnedReq !== null ? pinnedReq.seq : null}

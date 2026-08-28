@@ -18,14 +18,15 @@ const COMMAND = 'context'
 const LINE = '/' + COMMAND
 
 export function registerContextCommand(ctx: ClientCtx, kit: ViewKit): void {
-  ctx.effect(() => {
-    // Soft dependency (ctx.get, not the inject list): a harness without the
-    // input-trigger service keeps the tab working and only the command
-    // absent.
-    const inputTriggers = ctx.get('inputTriggers') as InputTriggersFace | undefined
-    if (inputTriggers === undefined) return () => {}
-
-    return inputTriggers.registerSource({
+  // Wait for the SERVICE, not for module arrival order: dsh 0.1.2 composes
+  // the client from finer modules, so `inputTriggers` may not be provided
+  // yet when this plugin applies (the 0.1.1 monolith made a ctx.get at
+  // apply time reliable). A harness without the service never fires the
+  // callback — the tab keeps working and only the command is absent.
+  ctx.inject(['inputTriggers'], (ictx) => {
+    const inputTriggers = (ictx as ClientCtx).get('inputTriggers') as InputTriggersFace | undefined
+    if (inputTriggers === undefined || typeof inputTriggers.registerSource !== 'function') return
+    ictx.effect(() => inputTriggers.registerSource({
       trigger: '/',
       name: COMMAND,
       order: 1,
@@ -48,6 +49,6 @@ export function registerContextCommand(ctx: ClientCtx, kit: ViewKit): void {
         modalStoreOf(session.sessionId).set(true)
         return Promise.resolve<'handled'>('handled')
       },
-    })
-  }, 'dsh-context: /context command')
+    }), 'dsh-context: /context command')
+  })
 }

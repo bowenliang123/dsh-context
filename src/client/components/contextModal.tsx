@@ -8,7 +8,7 @@ import type * as ReactNS from 'react'
 import { headlineOf } from '../headline'
 import { modalStoreOf, takePendingConsume } from '../modalStore'
 import type { ClientCtx, SessionStandardProps, SessionsFace } from '../services'
-import { contextBreakdownOf, contextPressureOf, headersOf, timelineOf } from '../services'
+import { contextBreakdownOf, contextPressureOf, conversationNodesOf, headersOf, timelineOf } from '../services'
 import { makeContentFetcher } from '../historyPage'
 import type { ViewKit } from '../viewkit'
 import { makeContextBrowser } from './browser'
@@ -25,7 +25,6 @@ export interface ContextModalProps extends SessionStandardProps {
 
 export function makeContextModal(ctx: ClientCtx, kit: ViewKit): (props: ContextModalProps) => ReactNS.ReactElement | null {
   const { t } = kit
-  const sessions = ctx.get('sessions') as SessionsFace | undefined
   const StackedBar = makeStackedBar(kit)
   const Legend = makeLegend(kit)
   const CurrentComposition = makeCurrentComposition(kit, StackedBar, Legend)
@@ -47,6 +46,10 @@ export function makeContextModal(ctx: ClientCtx, kit: ViewKit): (props: ContextM
     const headers = typeof props.useProjection === 'function'
       ? headersOf(props.useProjection('contextHeaders'))
       : null
+    // Conversation-window join for the browser (both seats are hooks — read
+    // unconditionally here, before the closed early return, so the hook order
+    // stays stable across open/close).
+    const convNodes = conversationNodesOf(props)
     const [hoverCat, setHoverCat] = React.useState<string | null>(null)
     // Same targeted content fetch the Context tab wires (one seq-anchored history read per expanded row).
     const fetchContent = React.useMemo(
@@ -58,12 +61,15 @@ export function makeContextModal(ctx: ClientCtx, kit: ViewKit): (props: ContextM
       if (sessionId === '') return
       modalStoreOf(sessionId).set(false)
       // Consume the `/context` token now (it stayed in the composer while the modal was open) via the scoped input event — a stale guard
-      // (the user typed meanwhile) fails soft inside the shell and leaves the draft untouched.
+      // (the user typed meanwhile) fails soft inside the shell and leaves the draft untouched. The sessions service is read at CLOSE time:
+      // capturing it at apply would race the finer 0.1.2 module composition (`ctx.get` is the inject-free reflect read — undefined, never a
+      // throw, when the service is not composed).
       const guard = takePendingConsume(sessionId)
+      const sessions = ctx.get('sessions') as SessionsFace | undefined
       if (guard === undefined || sessions === undefined) return
       const scope = sessions.scope(sessionId)
       if (scope !== undefined) scope.bail(scope, 'slash/input-consume-token', { guard })
-    }, [sessionId])
+    }, [ctx, sessionId])
 
     React.useEffect(() => {
       if (!open) return undefined
@@ -107,7 +113,7 @@ export function makeContextModal(ctx: ClientCtx, kit: ViewKit): (props: ContextM
               <ContextBrowser
                 data={data}
                 headers={headers}
-                useSession={props.useSession}
+                convNodes={convNodes}
                 fetchContent={fetchContent}
                 hoverKey={hoverCat}
                 onHoverKey={setHoverCat}
