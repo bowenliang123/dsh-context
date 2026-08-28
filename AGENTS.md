@@ -23,7 +23,9 @@ A DeepSeek Harness plugin for context insight, actions, and management.
 
 ## Exploring code
 - `codegraph` helps to search and explore the code graph of the dsh and plugin, which is very useful for understanding the code structure and dependencies.
-- Run `pnpm dlx @colbymchenry/codegraph query <Query or KeyWords>` to explore the code graph of the dsh and plugin, in the corresponding path of the source code folder.
+- Run `pnpm dlx @colbymchenry/codegraph explore <Query or KeyWords>` to explore the code graph of the dsh and plugin, in the corresponding path of the source code folder.
+  - `pnpm dlx @colbymchenry/codegraph explore --path some-path --max-files 1000 "What's Context Stats?"`
+  - `pnpm dlx @colbymchenry/codegraph query --path some-path --limit 10000 "FileActivity"`
 - Run `pnpm dlx @colbymchenry/codegraph sync` to sync the code graph with the latest code changes, before running the query command.
 - Run `pnpm dlx @colbymchenry/codegraph init` to initialize the code graph for the first time, if the code graph is not initialized yet as no `./.codegraph` folder present.
 
