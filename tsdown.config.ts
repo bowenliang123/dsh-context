@@ -11,13 +11,16 @@ const pkg = JSON.parse(readFileSync(join(process.cwd(), 'package.json'), 'utf8')
 
 // Mirrors packages/client/web/src/platform.ts in deepseek-harness: the shell
 // seeds these specifiers into the frozen browser module table, so client
-// bundles leave them to the injected `require` instead of inlining.
+// bundles leave them to the injected `require` instead of inlining. (Since
+// dsh 0.1.2 the preloaded-client-externals channel is gone —
+// `@deepseek-ai/dsh-client-runtime` was deleted and `dsh-client-store` joined
+// the platform baseline; bundles must require nothing beyond this list.)
 const PLATFORM_MODULES = [
   'react', 'react/jsx-runtime', 'react-dom', 'react-dom/client', '@deepseek-ai/cordis',
+  '@deepseek-ai/dsh-client-store',
   '@deepseek-ai/dsh-client-ui-slots',
   '@deepseek-ai/dsh-client-ui-primitives',
 ]
-const PRELOADED_CLIENT_EXTERNALS = ['@deepseek-ai/dsh-client-runtime/client']
 
 // Mirrors the purity-gate allowances in packages/client/tsdown.client.ts:
 // wire/type layers with no shared runtime identity may inline; every other
@@ -29,7 +32,6 @@ const GENERATED_REMOTE = /^@deepseek-ai\/dsh-[a-z0-9]+(?:-[a-z0-9]+)*\/remote$/
 
 const requested = new Set([
   ...PLATFORM_MODULES,
-  ...PRELOADED_CLIENT_EXTERNALS,
   ...(pkg.dsh?.client?.external ?? []),
 ])
 const isRequested = (specifier: string): boolean => requested.has(specifier)

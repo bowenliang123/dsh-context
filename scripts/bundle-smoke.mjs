@@ -91,7 +91,12 @@ const ctx = {
     }
     return undefined
   },
-  inject() { /* no settingsScope composed: the settings wiring stays pending */ },
+  inject(deps, cb) {
+    // Cordis fires the callback once every requested service exists; this
+    // fake answers every name it knows up front, so it fires immediately.
+    // The settingsScope wiring guards on the absent binder itself.
+    cb(ctx)
+  },
   effect(fn) { const d = fn(); effectDisposers.push(d); return d },
   locale: {
     register(ns, d) { dicts.set(ns, d); return () => dicts.delete(ns) },
