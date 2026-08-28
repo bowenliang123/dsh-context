@@ -70,6 +70,7 @@ The plugin lives off data it does not own: the durable session log (event shapes
 ## Git
 - When asked to commit, please commit the possibly mixed changes separately for each task or purpose.
 - Push the commits automatically.
+- `gh` cli is installed and logged in.
 
 ## Workflow
 
