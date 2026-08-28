@@ -23,7 +23,7 @@ A DeepSeek Harness plugin for context insight, actions, and management.
 
 ## Code Exploration Protocol (Mandatory)
 
-**Prerequisite:** The code graph in the current working directory has already been initialized (`.codegraph` directory exists). **Do not run `init` again.** Use it directly.
+**Prerequisite:** The code graph in the current working directory has already been initialized (`.codegraph` directory exists). Use it directly.
 
 ### Mandatory Pre-step
 Before any code analysis, exploration, or planning, you **MUST** first use `codegraph` to understand the codebase structure and dependencies. **This step is non-negotiable and cannot be skipped.**
@@ -104,7 +104,6 @@ The plugin lives off data it does not own: the durable session log (event shapes
 
 ## Git
 - When asked to commit, please commit the possibly mixed changes separately for each task or purpose.
-- Push the commits automatically.
 - `gh` cli is installed and logged in.
 
 ## Workflow
