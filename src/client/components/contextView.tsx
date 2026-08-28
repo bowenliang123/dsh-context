@@ -277,6 +277,10 @@ export function makeContextView(
       for (const req of displayRequests) if (req.seq === hoveredSeq) { activeTurn = req.turn ?? null; break }
     }
 
+    // The trend card mirrors the SAME shared category hover the browser's live link uses: the overview's 'free' key drops
+    // (no segment in the chart or the detail bar), and every bar + the detail bar light that category's segment.
+    const trendHoverCat = hoverCat !== null && hoverCat !== 'free' ? hoverCat : null
+
     // The cost cell prices in the active locale (zh → CNY, else USD), read at render time — the locale subscription above already
     // re-renders on a switch; older hosts without getLocale fall back to USD.
     const localeSvc = ctx.get('locale')
@@ -348,6 +352,7 @@ export function makeContextView(
                       granularity={granularity}
                       mode={trendMode}
                       focusTurn={focusTurn}
+                      hoverCat={trendHoverCat}
                       onSelect={setSelectedSeq}
                       onHover={setHoveredSeq}
                       onHoverTurn={setHoverTurn}
@@ -366,6 +371,7 @@ export function makeContextView(
                       brief={brief}
                       convOf={convOf}
                       onLocate={locateNode}
+                      hoverKey={trendHoverCat}
                     />
                   </div>
                 )}

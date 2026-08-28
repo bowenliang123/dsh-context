@@ -128,6 +128,20 @@
 .lc-bar-up { flex-direction: column-reverse; }
 .lc-bar-down { flex-direction: column; }
 .lc-bar-up > div, .lc-bar-down > div { width: 100%; }
+/*
+ Category hover-link (overview/browser → trend card): the chart container carries the hovered
+ category key (`data-catdim`), so CSS alone lights that key's segment in EVERY bar and recedes
+ the rest — the memoized bars never re-render on a cross-card hover. Same idiom as the stacked
+ bars' dim+brightness pairing.
+ */
+.lc-cat-seg { transition: filter 120ms ease, opacity 120ms ease; }
+.lc-chart[data-catdim] .lc-cat-seg { opacity: 0.35; }
+.lc-chart[data-catdim='system'] .lc-cat-seg[data-cat='system'],
+.lc-chart[data-catdim='tools'] .lc-cat-seg[data-cat='tools'],
+.lc-chart[data-catdim='user'] .lc-cat-seg[data-cat='user'],
+.lc-chart[data-catdim='inject'] .lc-cat-seg[data-cat='inject'],
+.lc-chart[data-catdim='assistant'] .lc-cat-seg[data-cat='assistant'],
+.lc-chart[data-catdim='tool'] .lc-cat-seg[data-cat='tool'] { opacity: 1; filter: brightness(1.18); }
 .lc-bar-marker { position: absolute; top: -16px; left: 50%; transform: translateX(-50%); font-size: 11px; color: var(--dsw-alias-state-warn-primary); }
 /*
  Turn strip: NEUTRAL zebra fills (inline, see TURN_FILLS) — never the category palette, or the strip reads as a detached bottom segment of the bars.
@@ -183,7 +197,13 @@ button.lc-brief-row-link { cursor: pointer; }
 .lc-brief-chip-link { cursor: pointer; }
 .lc-brief-chip-link:hover { background: var(--dsw-alias-interactive-bg-hover); }
 .lc-brief-more { flex: none; font-size: 11px; color: var(--dsw-alias-label-secondary); }
-.lc-detail-row { display: flex; align-items: center; gap: 8px; }
+.lc-detail-row { display: flex; align-items: center; gap: 8px; border-radius: 4px; /* Padding + matching negative margin: the highlight paints past the text while the layout stays put. */ padding: 1px 4px; margin: -1px -4px; transition: background-color 120ms ease; }
+/* Category hover-link: the shared hover lights the matching detail row — same pairing as the legend chips and the
+   browser rows (tinted background, bold label, ring on the color dot). */
+.lc-detail-row i { transition: box-shadow 120ms ease; }
+.lc-detail-row-on { background: var(--dsw-alias-interactive-bg-hover); }
+.lc-detail-row-on i { box-shadow: 0 0 0 1px var(--dsw-alias-brand-primary); }
+.lc-detail-row-on .lc-detail-label { font-weight: 600; }
 .lc-detail-label { min-width: 70px; white-space: nowrap; color: var(--dsw-alias-label-secondary); }
 .lc-bar-track { flex: 1; height: 5px; border-radius: 3px; background: rgba(128,128,128,0.18); overflow: hidden; display: block; position: relative; }
 .lc-bar-fill { display: block; height: 100%; border-radius: 3px; }

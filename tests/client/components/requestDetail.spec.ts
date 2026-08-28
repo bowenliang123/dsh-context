@@ -206,6 +206,39 @@ describe('RequestDetail delta mode', () => {
   })
 })
 
+describe('RequestDetail composition bar hover-link', () => {
+  test('the mirrored hoverKey dims the bar, lights the matching segment and detail row; the tip stays off', async () => {
+    const m = await mount(h(RequestDetail, { request: req({}), hoverKey: 'tools' }))
+    const bar = query(m.container, '.lc-stacked')
+    assert.ok(bar.className.includes('lc-stacked-dim'), 'a mirrored hover dims the bar')
+    const segs = queryAll(m.container, '.lc-stacked-seg')
+    assert.equal(segs.length, 6, 'all six categories render')
+    assert.ok(segs[1].className.includes('lc-stacked-seg-on'), 'exactly the tools segment (CATS order) lights')
+    assert.ok(segs.filter(s => s.className.includes('lc-stacked-seg-on')).length === 1)
+    // The per-category detail rows follow the same key.
+    const rows = queryAll(m.container, '.lc-detail-row')
+    assert.ok(rows[1].className.includes('lc-detail-row-on'), 'the tools row lights too')
+    assert.ok(rows.filter(r => r.className.includes('lc-detail-row-on')).length === 1)
+    assert.equal(queryAll(m.container, '.lc-bar-tip').length, 0, 'a mirrored hover floats no tooltip')
+
+    // No hover: the bar renders neutral, still tip-less.
+    const m2 = await mount(h(RequestDetail, { request: req({}) }))
+    assert.equal(query(m2.container, '.lc-stacked').className, 'lc-stacked')
+    assert.equal(queryAll(m2.container, '.lc-detail-row-on').length, 0)
+    assert.equal(queryAll(m2.container, '.lc-bar-tip').length, 0)
+    await m2.unmount()
+    await m.unmount()
+  })
+
+  test('delta-mode detail rows light the matching category too', async () => {
+    const m = await mount(h(RequestDetail, { request: req({}), prev: req({ ...FULL }), hoverKey: 'user' }))
+    const rows = queryAll(m.container, '.lc-detail-row')
+    assert.ok(rows[2].className.includes('lc-detail-row-on'), 'the user row lights in delta mode')
+    assert.ok(rows.filter(r => r.className.includes('lc-detail-row-on')).length === 1)
+    await m.unmount()
+  })
+})
+
 describe('RequestDetail brief section', () => {
   const convOk: ConversationNodeLike = {
     kind: 'tool-result', seq: 21,

@@ -19,6 +19,8 @@ export interface TrendChartProps {
   granularity: 'step' | 'turn'
   mode: 'total' | 'delta'
   focusTurn: number | null
+  /** Mirrored category hover (shared with the overview and the browser): lights that category's segment in every bar. */
+  hoverCat: string | null
   onSelect: (seq: number | null) => void
   onHover: (seq: number | null) => void
   onHoverTurn: (turn: number | null) => void
@@ -158,14 +160,14 @@ export function makeTrendChart(kit: ViewKit): (props: TrendChartProps) => ReactN
               {CATS.map((c) => {
                 const d = req[c.key] || 0
                 if (d <= 0) return null
-                return <div key={c.key} style={{ height: `${Math.max(1, Math.round(d * (props.deltaScale as number)))}px`, background: c.color }} />
+                return <div key={c.key} data-cat={c.key} className="lc-cat-seg" style={{ height: `${Math.max(1, Math.round(d * (props.deltaScale as number)))}px`, background: c.color }} />
               })}
             </div>
             <div className="lc-bar-down" style={{ top: `${props.upPx}px` }}>
               {CATS.map((c) => {
                 const d = req[c.key] || 0
                 if (d >= 0) return null
-                return <div key={c.key} style={{ height: `${Math.max(1, Math.round(-d * (props.deltaScale as number)))}px`, background: c.color }} />
+                return <div key={c.key} data-cat={c.key} className="lc-cat-seg" style={{ height: `${Math.max(1, Math.round(-d * (props.deltaScale as number)))}px`, background: c.color }} />
               })}
             </div>
           </>
@@ -175,7 +177,7 @@ export function makeTrendChart(kit: ViewKit): (props: TrendChartProps) => ReactN
               const v = (req[c.key] || 0) * anchorOf(req)
               if (!v) return null
               // px (not %) heights: the stack is content-driven, so percentage heights would collapse against an indefinite base.
-              return <div key={c.key} style={{ height: `${Math.max(1, Math.round(v / props.maxTotal * CHART_H))}px`, background: c.color }} />
+              return <div key={c.key} data-cat={c.key} className="lc-cat-seg" style={{ height: `${Math.max(1, Math.round(v / props.maxTotal * CHART_H))}px`, background: c.color }} />
             })}
           </div>
         )}
@@ -413,6 +415,9 @@ export function makeTrendChart(kit: ViewKit): (props: TrendChartProps) => ReactN
           >
             <div
               className="lc-chart"
+              // The shared category hover rides a plain attribute: the CSS lights that key's segment in EVERY bar
+              // and recedes the rest, so the memoized bars never re-render on a cross-card hover change.
+              data-catdim={props.hoverCat ?? undefined}
               onMouseLeave={() => { props.onHover(null) }}
             >
               <div className="lc-grid lc-grid-top" />

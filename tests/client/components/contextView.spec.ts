@@ -296,6 +296,30 @@ describe('ContextView — interactions', () => {
     await m.unmount()
   })
 
+  test('browser category hover lights the trend chart segments and the detail composition bar', async () => {
+    const m = await mountRich('sv-link-trend')
+    // Category rows render in CATS order; hover "tools" (second row).
+    const toolsRow = queryAll(m.container, '.lc-br-cat-row')[1]
+    await hover(toolsRow)
+    assert.equal(query(m.container, '.lc-chart').getAttribute('data-catdim'), 'tools')
+    // The detail's composition bar mirrors the same key with its tip off (covered in requestDetail.spec).
+    const detailBar = query(m.container, '.lc-detail .lc-stacked')
+    assert.ok(detailBar.className.includes('lc-stacked-dim'))
+    assert.ok(queryAll(detailBar, '.lc-stacked-seg-on').length === 1)
+    assert.ok(queryAll(m.container, '.lc-detail-row-on').length === 1, 'the matching detail row lights too')
+
+    await unhover(toolsRow)
+    assert.equal(query(m.container, '.lc-chart').hasAttribute('data-catdim'), false)
+    assert.ok(!query(m.container, '.lc-detail .lc-stacked').className.includes('lc-stacked-dim'))
+
+    // The overview's 'free' track hover names no category — the trend card stays neutral (same filter as the browser link).
+    await hover(query(m.container, '.lc-stacked-free'))
+    assert.equal(query(m.container, '.lc-chart').hasAttribute('data-catdim'), false)
+    assert.ok(!query(m.container, '.lc-detail .lc-stacked').className.includes('lc-stacked-dim'))
+    await unhover(query(m.container, '.lc-stacked-free'))
+    await m.unmount()
+  })
+
   test('delta mode pairs the detail with the previous record; first bar has none', async () => {
     const m = await mountRich('sv-delta')
     const chart = query(m.container, '.lc-chart')

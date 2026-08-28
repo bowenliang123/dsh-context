@@ -26,6 +26,11 @@ export interface RequestDetailProps {
   convOf?: (seq: number) => ConversationNodeLike | undefined
   /** Reveal a brief row's node in the Context browser; absent = rows render inert. */
   onLocate?: (node: SurfaceNode, isResponse: boolean) => void
+  /**
+   * Mirrored category hover (shared with the overview/browser): lights the composition bar's matching
+   * segment; the bar never reports hovers back.
+   */
+  hoverKey?: string | null
 }
 
 export function makeRequestDetail(
@@ -265,13 +270,15 @@ export function makeRequestDetail(
             : null}
         </div>
         <BriefSection brief={props.brief} convOf={props.convOf} onLocate={props.onLocate} />
-        <StackedBar parts={parts} height={10} />
+        {/* Mirrors the shared category hover with the tip off — a cross-card hover must not float a second tooltip
+            over a bar the pointer does not rest on (same rule as the browser's own bar). */}
+        <StackedBar parts={parts} height={10} hoverKey={props.hoverKey} tip={false} />
         <div className="lc-detail-rows">
           {CATS.map((c, i) => {
             const v = delta ? deltas[i] : req[c.key] || 0
             const mag = Math.abs(v)
             return (
-              <div key={c.key} className="lc-detail-row">
+              <div key={c.key} className={'lc-detail-row' + (props.hoverKey === c.key ? ' lc-detail-row-on' : '')}>
                 <i style={{ background: c.color }} />
                 <span className="lc-detail-label">{catLabel(c.key)}</span>
                 <span className="lc-bar-track">

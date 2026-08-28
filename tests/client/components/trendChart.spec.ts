@@ -110,6 +110,7 @@ function propsOf(requests: RequestRecord[], over: Partial<TrendChartProps> = {})
     granularity: 'step',
     mode: 'total',
     focusTurn: null,
+    hoverCat: null,
     ...handlers,
     ...over,
   }
@@ -382,6 +383,39 @@ describe('TrendChart selection and hover linking', () => {
     await m.update(h(TrendChart, propsOf([x1, x2], { ...handlers, selectedSeq: 2, activeTurn: 0 })))
     assert.ok(bars(m.container)[0].className.includes('lc-bar-in-turn'))
     assert.ok(!bars(m.container)[1].className.includes('lc-bar-in-turn'))
+    await m.unmount()
+  })
+})
+
+describe('TrendChart category hover-link', () => {
+  test('segments carry their category key; the container mirrors the shared hover for CSS to light', async () => {
+    const r1 = req(1, { turn: 1, step: 0 })
+    const r2 = req(2, { turn: 1, step: 1, system: 200 })
+    const r3 = req(3, { turn: 2, step: 0 })
+    const m = await mount(h(TrendChart, propsOf([r1, r2, r3], { hoverCat: 'tools' })))
+
+    // No hover: the container carries no dim attribute at all.
+    await m.update(h(TrendChart, propsOf([r1, r2, r3])))
+    const chart = query(m.container, '.lc-chart')
+    assert.equal(chart.hasAttribute('data-catdim'), false)
+
+    // Every total-mode segment is tagged with its category; a zero-value category renders no segment to light.
+    const segs = queryAll(chart, '.lc-bar[data-seq="1"] .lc-bar-stack > .lc-cat-seg')
+    assert.deepEqual(segs.map(s => s.getAttribute('data-cat')), CATS.map(c => c.key))
+
+    // The hovered key rides the container attribute — the dim/highlight pairing itself is CSS.
+    await m.update(h(TrendChart, propsOf([r1, r2, r3], { hoverCat: 'tools' })))
+    assert.equal(query(m.container, '.lc-chart').getAttribute('data-catdim'), 'tools')
+
+    // Delta mode: diverging stacks' segments are tagged the same way — an all-shrinking pair hangs all six below the line.
+    const big = req(4, { turn: 3, step: 0, system: 200, tools: 100, user: 60, inject: 40, assistant: 80, tool: 120 })
+    await m.update(h(TrendChart, propsOf([big, r1], { mode: 'delta', hoverCat: 'user' })))
+    const deltaChart = query(m.container, '.lc-chart')
+    assert.equal(deltaChart.getAttribute('data-catdim'), 'user')
+    assert.deepEqual(
+      queryAll(deltaChart, '.lc-bar-down > .lc-cat-seg').map(s => s.getAttribute('data-cat')),
+      CATS.map(c => c.key),
+    )
     await m.unmount()
   })
 })
