@@ -30,7 +30,7 @@ Before any code analysis, exploration, or planning, you **MUST** first use `code
   ### Usage
   1. **Explore code structure**
      ```bash
-     pnpm dlx @colbymchenry/codegraph explore --max-files 1000 "<Query or Keywords>"
+     pnpm dlx @colbymchenry/codegraph explore --path some-path --max-files 1000 "<Query or Keywords>"
      ```
   Example:
      ```bash
@@ -38,7 +38,7 @@ Before any code analysis, exploration, or planning, you **MUST** first use `code
      ```
   2. **Query specific symbols**
      ```bash
-     pnpm dlx @colbymchenry/codegraph query --limit 10000 "<SymbolName>"
+     pnpm dlx @colbymchenry/codegraph query --path some-path --limit 10000 "<SymbolName>"
      ```
      Example:
      ```bash
