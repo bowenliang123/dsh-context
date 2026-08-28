@@ -109,7 +109,7 @@ The plugin lives off data it does not own: the durable session log (event shapes
 ## Workflow
 
 - To-do list
-  - Keep the coding agent's to-do list up to date throughout planning, investigation and implementation.
+  - ALWAYS keep the coding agent's to-do list up to date throughout starting or finishing every step/task of planning, investigation and implementation.
   - Before closing any task, review all pending to-do items and ensure each is completed, cleaned up or explicitly closed.
 
 ## Tool Usage
