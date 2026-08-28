@@ -13,6 +13,37 @@ import { assertPlainJson, driveTimeline, timelineDef } from './helpers/projectio
 const bucket = (uncached: number, cacheRead: number, cacheWrite: number, output: number): CostBucketTotals =>
   ({ uncached, cacheRead, cacheWrite, output })
 
+describe('buildTimelineView unknown-model shape', () => {
+  test('optional scalars stay ABSENT keys until known — never undefined-valued (issue #29)', () => {
+    // A fold over events that name no model/provider/capacity: the served
+    // view must not carry `undefined`-valued properties, which fail the
+    // harness's lossless-JSON push pipeline whole.
+    const { view } = driveTimeline([
+      userMessage(1, [{ type: 'text', text: 'aaaa' }]),
+      assistantMessage(2, { turn: 1, step: 1 }),
+    ])
+    assert.equal(view.model, undefined)
+    assert.equal(view.provider, undefined)
+    assert.equal(view.contextWindow, undefined)
+    assert.ok(!('model' in view), 'no own `model` key')
+    assert.ok(!('provider' in view), 'no own `provider` key')
+    assert.ok(!('contextWindow' in view), 'no own `contextWindow` key')
+    assertPlainJson(view)
+  })
+
+  test('known scalars ride their own keys once a request names them', () => {
+    const { view } = driveTimeline([
+      header(1, { system: 'sys', config: { model: 'deepseek-v4-flash', provider: 'deepseek' } }),
+      requestContext(2, { provider: 'deepseek', model: 'deepseek-v4-flash', contextWindow: 128000 }),
+      userMessage(3, [{ type: 'text', text: 'hi' }]),
+    ])
+    assert.equal(view.model, 'deepseek-v4-flash')
+    assert.equal(view.provider, 'deepseek')
+    assert.equal(view.contextWindow, 128000)
+    assertPlainJson(view)
+  })
+})
+
 describe('buildTimelineView counters', () => {
   test('images sums per-node image counts, absent counting as zero', () => {
     const { view } = driveTimeline([

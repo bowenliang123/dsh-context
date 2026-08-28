@@ -690,11 +690,16 @@ export function buildTimelineView(state: TimelineState, bounds: FoldBounds): Sna
   // projection key for it (token-meter owns estimation and replay). This
   // value keeps only the heuristic composition; `current.total` includes the
   // envelope (system + tools) and the live surface.
+  // Optional scalars use conditional spread: an unknown value must not
+  // materialize an `undefined`-valued property on the served view. The wire
+  // value travels the harness's lossless-JSON pipeline — a single
+  // `undefined`-valued property can fail the whole push (the failure mode
+  // behind issue #29), so absence beats a present-but-undefined key.
   const result: Snapshot = {
     ok: true,
-    model: state.model,
-    provider: state.provider,
-    contextWindow: state.contextWindow,
+    ...(state.model !== undefined ? { model: state.model } : {}),
+    ...(state.provider !== undefined ? { provider: state.provider } : {}),
+    ...(state.contextWindow !== undefined ? { contextWindow: state.contextWindow } : {}),
     current: {
       system: state.systemTokens,
       tools: state.toolsTokens,
