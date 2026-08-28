@@ -601,6 +601,33 @@ describe('ContextBrowser tool schemas', () => {
     assert.equal(queryAll(chip, '.lc-br-tag').length, 0, 'no nested tag wrapper')
     await m.unmount()
   })
+
+  test('a single-tool category opens its schema row with the category; multi stays collapsed', async () => {
+    const lone: ContextHeaders = {
+      headers: [{ seq: 1, time: 1, system: 'SYS', tools: [
+        { name: 'only', tokens: 5, schema: { type: 'object', properties: { x: { type: 'string' } } } },
+      ] }],
+    }
+    const data = tl({ current: { system: 10, tools: 5, user: 0, inject: 0, assistant: 0, tool: 0, total: 15 } })
+    const m = await mount(h(Browser, props({ data, headers: lone })))
+    await click(catRow(m, 'tools'))
+    assert.equal(elemRows(m).length, 1)
+    const content = queryAll(m.container, '.lc-br-content')
+    assert.equal(content.length, 1, 'the lone tool schema is already expanded')
+    assert.equal(queryAll(content[0], '.lc-ts-param-row').length, 1, 'the schema body renders directly')
+    await click(catRow(m, 'tools'))
+    assert.equal(queryAll(m.container, '.lc-br-content').length, 0, 'toggling shut closes the row too')
+    await m.unmount()
+
+    const pair: ContextHeaders = {
+      headers: [{ seq: 1, time: 1, system: 'SYS', tools: [{ name: 'a', tokens: 2 }, { name: 'b', tokens: 1 }] }],
+    }
+    const m2 = await mount(h(Browser, props({ data, headers: pair })))
+    await click(catRow(m2, 'tools'))
+    assert.equal(elemRows(m2).length, 2)
+    assert.equal(queryAll(m2.container, '.lc-br-content').length, 0, 'multi-tool categories open collapsed')
+    await m2.unmount()
+  })
 })
 
 describe('ContextBrowser message categories', () => {
@@ -744,6 +771,22 @@ describe('ContextBrowser message categories', () => {
     await click(elemRows(m).find(r => text(r).includes('no content array')) as HTMLElement)
     const content = query(m.container, '.lc-br-content')
     assert.ok(text(content).includes('outside the loaded message window'))
+    await m.unmount()
+  })
+
+  test('a single-node category opens its node with the category', async () => {
+    const solo = tl({
+      current: { system: 0, tools: 0, user: 10, inject: 0, assistant: 0, tool: 0, total: 10 },
+      nodes: [node({ seq: 1, tokens: 10, text: 'only message', time: 100 })],
+    })
+    const m = await mount(h(Browser, props({
+      data: solo,
+      convNodes: [{ kind: 'user', seq: 1, content: [{ type: 'text', text: 'only message' }] }],
+    })))
+    await click(catRow(m, 'user'))
+    assert.equal(elemRows(m).length, 1)
+    assert.equal(queryAll(m.container, '.lc-br-content').length, 1, 'the lone node is already expanded')
+    assert.ok(text(query(m.container, '.lc-br-content')).includes('only message'))
     await m.unmount()
   })
 

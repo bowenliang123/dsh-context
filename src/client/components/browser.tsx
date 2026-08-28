@@ -690,6 +690,21 @@ export function makeContextBrowser(
 
     const toolCount = (c: string): number => countOf(view, byCat, c)
 
+    // A category holding exactly one item opens that row with the category, so
+    // one click lands on the content directly (the lone prompt / tool schema /
+    // surface node).
+    const singleKeyOf = (c: string): string | null => {
+      if (c === 'system') return view.header?.system !== undefined ? 'sys' : null
+      if (c === 'tools') {
+        const tools = view.header?.tools
+        return tools !== undefined && tools.length === 1 ? 'tool:' + tools[0].name : null
+      }
+      /* v8 ignore next 1 -- reached only through toggleCat's openable guard
+         (count > 0 ⟺ byCat[c] exists); the fallback is defensive. */
+      const nodes = byCat[c as Category] ?? []
+      return nodes.length === 1 ? 'n' + String(nodes[0].seq) : null
+    }
+
     const toggleCat = (c: string) => {
       // Empty cats stay shut — except system/tools with no header epoch, which open to explain the degradation note.
       const openable = toolCount(c) > 0
@@ -703,8 +718,7 @@ export function makeContextBrowser(
       setOpenCat(c)
       // A different category opens unfiltered — the lens belongs to the open one.
       setRowQuery('')
-      // The system prompt's single row opens by default, so one category click lands on the text directly.
-      setOpenElem(c === 'system' && view.header?.system !== undefined ? 'sys' : null)
+      setOpenElem(singleKeyOf(c))
     }
     const toggleElem = (key: string) => { setOpenElem(openElem === key ? null : key) }
 
