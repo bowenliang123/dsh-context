@@ -426,7 +426,14 @@ button.lc-brief-row-link { cursor: pointer; }
  */
 .lc-ts-desc-md > div { font-size: 13px; line-height: 1.55; }
 .lc-ts-desc-md div :is(h1, h2, h3, h4, h5, h6) { font-size: 13px; font-weight: 600; margin: 10px 0 4px; }
-.lc-ts-desc-md div p { margin: 6px 0; }
+/*
+ Line policy: the renderer bakes soft breaks into paragraph text and pairs
+ every hard break's <br> with a '\n'. pre-line shows each newline exactly
+ once and hides the redundant <br>, so both spellings break exactly one
+ line while block separators collapse at the container's normal white-space.
+*/
+.lc-ts-desc-md div p { margin: 6px 0; white-space: pre-line; }
+.lc-ts-desc-md div p br { display: none; }
 .lc-ts-desc-md div pre { margin: 6px 0; white-space: pre-wrap; overflow-wrap: anywhere; word-break: break-word; }
 .lc-ts-desc-md div :not(pre) > code { font-size: 1em !important; line-height: 1.3; padding: 1px 5px; box-decoration-break: clone; }
 .lc-ts-desc-md div table code { font-size: inherit; }
