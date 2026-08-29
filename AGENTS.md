@@ -71,6 +71,11 @@ The plugin lives off data it does not own: the durable session log (event shapes
 ## Docs
 - `docs` directory contains only end-user faced documents.
 - `docs/social-preview.png` (GitHub social preview) must be exactly **1280 × 640 pixels**.
+- `README.md`
+  - Images:
+    - Only embed external links in the `README.md`, in order to help the readers on both GitHub and NPM to access the images
+      - For example, putting the image in the `docs` directory and embedding it in the `README.md` with links:
+        - ![some image](https://raw.githubusercontent.com/bowenliang123/dsh-context/main/docs/some-image.png)
 
 ## Temp files
 - Generate one-time temp files in the `.tmp` directory, and properly clean them up right after use.
