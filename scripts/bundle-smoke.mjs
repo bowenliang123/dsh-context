@@ -64,11 +64,14 @@ const plugin = handoff.factory(moduleTable)
 assert.equal(plugin.name, 'dsh-context')
 assert.deepEqual(plugin.inject, ['slots', 'locale'])
 
-// The CSS channel: one plugin-owned style tag, minified, officially tagged.
-const styleTag = () => dom.window.document.head.querySelector('style[data-plugin="dsh-context"]')
-assert.ok(styleTag() !== null, 'plugin-owned <style data-plugin> injected at factory execution')
-assert.equal(styleTag().dataset.pluginCss, 'dsh-context/styles.css', 'official data-plugin-css tag id')
-const css = styleTag().textContent
+// The CSS channel: plugin-owned style tags — one per sheet, minified,
+// officially tagged.
+const styleTags = () => [...dom.window.document.head.querySelectorAll('style[data-plugin="dsh-context"]')]
+assert.ok(styleTags().length > 1, 'plugin-owned <style data-plugin> tags injected at factory execution')
+const tagIds = styleTags().map(tag => tag.dataset.pluginCss)
+assert.ok(tagIds.every(id => typeof id === 'string' && id.startsWith('dsh-context/')), 'official data-plugin-css tag ids')
+assert.equal(new Set(tagIds).size, tagIds.length, 'one tag per stylesheet, no duplicate tag ids')
+const css = styleTags().map(tag => tag.textContent).join('\n')
 for (const marker of ['.lc-root', '.lc-br-elem-row', '.lc-stacked-seg', '.lc-bar-tip-on', '.lc-stat-tip', '.lc-occupied-box-on']) {
   assert.ok(css.includes(marker), `styles carry ${marker}`)
 }
@@ -130,6 +133,6 @@ assert.equal(sources[0].trigger, '/', 'trigger is the slash')
 for (const d of effectDisposers) d()
 assert.equal(dicts.size, 0, 'dictionaries unregistered on dispose')
 assert.equal(sources.length, 0, 'trigger source removed on dispose')
-assert.ok(styleTag() !== null, 'style tag survives fiber dispose (the HMR receiver claims it)')
+assert.ok(styleTags().length > 0, 'style tags survive fiber dispose (the HMR receiver claims them)')
 
 console.log('✔ bundle smoke: handoff, CSS channel, registrations, HMR safety')

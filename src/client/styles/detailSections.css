@@ -1,0 +1,75 @@
+/* Element-body detail sections: section cards, tool-schema tables, call argument rows, rich-text toggle and the markdown overrides (browser.tsx + richText.tsx). */
+/*
+ ---- Detail sections: EVERYTHING in an open element body is a Section (labeled head + body) — prose, tool calls, parameter rows, image grids and raw JSON share one frame; the raw-schema JSON sits below as a collapsed toggle (no card chrome — a debug view, not a primary section). ----
+ */
+/*
+ Markdown cards: the section card is a flex child that otherwise refuses to shrink below its content (min-width: auto) — min-width: 0 on the card + overflow-wrap: anywhere on the body make long tokens/URLs/code wrap instead of stretching the card.
+ */
+.lc-ts-card { background: var(--dsw-alias-bg-layer-2); border: 1px solid var(--dsw-alias-border-l2); border-radius: 6px; overflow: hidden; min-width: 0; }
+.lc-ts-card-head { display: flex; align-items: center; gap: 8px; padding: 6px 10px; font-size: 11px; font-weight: 600; color: var(--dsw-alias-label-secondary); border-bottom: 1px solid var(--dsw-alias-border-l1); }
+.lc-ts-card-head b { color: var(--dsw-alias-label-primary); }
+.lc-ts-call-name { font-size: 13px; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+.lc-ts-card-count { margin-left: auto; }
+.lc-ts-card-right { margin-left: auto; display: inline-flex; align-items: center; gap: 8px; }
+.lc-ts-card-meta { color: var(--dsw-alias-label-secondary); font-size: 11px; font-weight: 400; white-space: nowrap; font-variant-numeric: tabular-nums; }
+.lc-ts-call-state { flex: none; display: inline-flex; align-items: center; gap: 4px; font-size: 11px; font-weight: 600; line-height: 1; padding: 2px 7px; border-radius: 999px; white-space: nowrap; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+.lc-ts-call-state i { flex: none; width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
+.lc-ts-call-ok { color: var(--dsw-alias-state-success-primary); background: color-mix(in srgb, var(--dsw-alias-state-success-primary) 12%, transparent); }
+.lc-ts-call-err { color: var(--dsw-alias-state-error-primary); background: color-mix(in srgb, var(--dsw-alias-state-error-primary) 12%, transparent); }
+.lc-ts-desc-body { margin: 0; padding: 8px 10px; color: var(--dsw-alias-label-primary); font-size: 12px; line-height: 1.55; white-space: pre-wrap; word-break: break-word; max-height: 320px; overflow-y: auto; scrollbar-width: thin; }
+.lc-ts-lines { counter-reset: lc-line; }
+.lc-ts-line { display: block; position: relative; padding-left: 26px; }
+.lc-ts-line::before { content: counter(lc-line); counter-increment: lc-line; position: absolute; left: 0; width: 20px; padding-right: 6px; text-align: right; color: var(--dsw-alias-label-tertiary); font-size: 11px; user-select: none; }
+.lc-ts-line:empty::after { content: '\200B'; }
+/* Columns squeeze under width pressure (desktop metrics unchanged) — fixed px tracks cannot shrink below 316px and would spill the nested section card. */
+.lc-ts-param-row { display: grid; grid-template-columns: minmax(0, 140px) minmax(0, 90px) 56px minmax(0, 1fr); column-gap: 10px; row-gap: 2px; padding: 6px 10px; border-top: 1px solid var(--dsw-alias-border-l1); font-size: 12px; align-items: baseline; }
+.lc-ts-param-row:first-of-type { border-top: 0; }
+.lc-ts-param-name { font-weight: 600; color: var(--dsw-alias-label-primary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.lc-ts-param-type { color: var(--dsw-alias-label-secondary); font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 11px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.lc-ts-param-req { color: var(--dsw-alias-state-warn-primary); font-size: 11px; font-weight: 600; }
+.lc-ts-param-req-off { color: var(--dsw-alias-label-secondary); font-size: 11px; }
+.lc-ts-param-desc { grid-column: 1 / -1; color: var(--dsw-alias-label-secondary); line-height: 1.5; overflow-wrap: anywhere; }
+.lc-ts-params-empty { padding: 8px 10px; color: var(--dsw-alias-label-secondary); font-size: 12px; }
+/*
+ Tool-call argument rows: name in a narrow left column, value wrapped/mono, height-capped so one huge payload (e.g. a full file write) never blows the card open.
+ */
+.lc-ts-arg-row { display: grid; grid-template-columns: minmax(0, 96px) 1fr; column-gap: 12px; padding: 6px 10px; border-top: 1px solid var(--dsw-alias-border-l1); font-size: 12px; align-items: start; }
+.lc-ts-arg-row:first-of-type { border-top: 0; }
+/* Arg rows override the shared name cell: wrap long names instead of
+ truncating them (the schema table keeps its one-line ellipsis). */
+.lc-ts-arg-row .lc-ts-param-name { overflow: visible; text-overflow: unset; white-space: normal; overflow-wrap: anywhere; }
+.lc-ts-arg-val { color: var(--dsw-alias-label-primary); font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12px; line-height: 1.55; white-space: pre-wrap; word-break: break-word; max-height: 200px; overflow-y: auto; scrollbar-width: thin; }
+.lc-ts-json { display: flex; flex-direction: column; gap: 4px; }
+.lc-ts-json-toggle { align-self: flex-start; border: 0; background: transparent; color: var(--dsw-alias-label-secondary); font: inherit; font-size: 11px; padding: 0; cursor: pointer; }
+.lc-ts-json-toggle:hover { color: var(--dsw-alias-label-primary); text-decoration: underline; }
+.lc-rich-seg { margin-left: auto; display: flex; gap: 2px; background: var(--dsw-alias-bg-layer-2); border: 1px solid var(--dsw-alias-border-l2); border-radius: 6px; padding: 1px; }
+.lc-rich-seg-btn { border: 0; background: transparent; color: var(--dsw-alias-label-secondary); font-size: 11px; line-height: 1; padding: 3px 8px; border-radius: 5px; cursor: pointer; font-family: inherit; }
+.lc-rich-seg-btn:hover { color: var(--dsw-alias-label-primary); }
+.lc-rich-seg-on, .lc-rich-seg-on:hover { background: var(--dsw-alias-button-primary-fill); color: var(--dsw-alias-label-primary-foreground); }
+.lc-ts-desc-md { padding: 4px 10px; color: var(--dsw-alias-label-primary); font-size: 12px; line-height: 1.55; word-break: break-word; overflow-wrap: anywhere; min-width: 0; max-height: 320px; overflow-y: auto; overflow-x: hidden; scrollbar-width: thin; }
+/*
+ The shared markdown renderer sizes its root/headings for chat bubbles;
+ inside a detail card the base size sits one step ABOVE the raw text
+ (13px vs 12px — a proportional face at 13px matches the visual weight
+ of the raw view's 12px monospace) and the heading scale collapses to a
+ weight-only bump (specificity beats the renderer's one-class rules).
+ Inline code keeps the FULL size too — the renderer shrinks it to
+ 0.875em (!important) and table code to 13px, both visibly off. Its
+ `font` shorthand also drags in a ~22px line-height, TALLER than the
+ 13px/1.55 paragraph line (~20px), so a code chip wrapping onto the
+ next line sticks to the neighbor line's chip; pin the chip just under
+ the paragraph line (1.3em + 1px padding ≈ 19px) to reopen the gap.
+ */
+.lc-ts-desc-md > div { font-size: 13px; line-height: 1.55; }
+.lc-ts-desc-md div :is(h1, h2, h3, h4, h5, h6) { font-size: 13px; font-weight: 600; margin: 10px 0 4px; }
+/*
+ Line policy: the renderer bakes soft breaks into paragraph text and pairs
+ every hard break's <br> with a '\n'. pre-line shows each newline exactly
+ once and hides the redundant <br>, so both spellings break exactly one
+ line while block separators collapse at the container's normal white-space.
+*/
+.lc-ts-desc-md div p { margin: 6px 0; white-space: pre-line; }
+.lc-ts-desc-md div p br { display: none; }
+.lc-ts-desc-md div pre { margin: 6px 0; white-space: pre-wrap; overflow-wrap: anywhere; word-break: break-word; }
+.lc-ts-desc-md div :not(pre) > code { font-size: 1em !important; line-height: 1.3; padding: 1px 5px; box-decoration-break: clone; }
+.lc-ts-desc-md div table code { font-size: inherit; }

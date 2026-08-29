@@ -1,0 +1,32 @@
+/* The composition stacked bar with occupied-window frame, reserve band, legend chips and hover tip (stackedBar.tsx). */
+.lc-stacked-wrap { position: relative; width: 100%; }
+.lc-stacked { display: flex; width: 100%; border-radius: 5px; overflow: hidden; background: rgba(128,128,128,0.18); position: relative; }
+/*
+ Hover reference frame around the OCCUPIED region of the composition bar: a solid box from the left edge to the used/window boundary so the legend/tooltip 'share of used' percentages visibly map to the boxed part; pointer-events: none keeps hover on the segments/free; the free track echoes it dashed so the two read as one system.
+ */
+.lc-occupied-box { position: absolute; top: 0; bottom: 0; left: 0; border: 2px solid var(--dsw-alias-label-tertiary); border-radius: 5px; box-sizing: border-box; pointer-events: none; opacity: 0; box-shadow: 0 0 0 1px var(--dsw-alias-bg-layer-2); transition: opacity 120ms ease; }
+.lc-occupied-box-on { opacity: 1; }
+.lc-bar-tip { position: absolute; bottom: calc(100% + 6px); transform: translateX(-50%); z-index: 5; white-space: nowrap; background: var(--dsw-alias-bg-layer-2); border: 1px solid var(--dsw-alias-border-l1); border-radius: 6px; padding: 3px 8px; font-size: 12px; color: var(--dsw-alias-label-primary); box-shadow: 0 2px 8px rgba(0,0,0,0.18); pointer-events: none; opacity: 0; transition: opacity 120ms ease; }
+.lc-bar-tip-on { opacity: 1; }
+.lc-stacked > div { height: 100%; }
+.lc-stacked-seg { transition: filter 120ms ease, opacity 120ms ease; }
+.lc-stacked-free { box-sizing: border-box; transition: box-shadow 120ms ease, opacity 120ms ease; }
+.lc-stacked-seg-on { filter: brightness(1.18); }
+/*
+ Free track mirrors the occupied frame as a 2px DASHED box — border, not the old inset shadow, so the dash pattern renders (box-shadow can't dash); the base box-sizing keeps the width from shifting. Reserve band: rightmost (1−ratio) of the window, striped 'headroom' above the track/segments, owning the pointer so its own hover explanation shows.
+ */
+.lc-reserve { position: absolute; top: 0; bottom: 0; z-index: 1; pointer-events: auto; cursor: help; background: repeating-linear-gradient(45deg, color-mix(in srgb, var(--dsw-alias-state-warn-primary) 24%, transparent) 0 5px, transparent 5px 10px); }
+.lc-stacked-free-on { border: 2px dashed var(--dsw-alias-label-secondary); border-radius: 3px; }
+.lc-stacked-dim .lc-stacked-seg { opacity: 0.35; }
+.lc-stacked-dim .lc-stacked-seg-on { opacity: 1; }
+.lc-stacked-dim .lc-stacked-free { opacity: 0.35; }
+.lc-stacked-dim .lc-stacked-free-on { opacity: 1; }
+.lc-legend { display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: 6px 14px; margin-top: 10px; }
+.lc-chip { display: flex; align-items: center; gap: 5px; min-width: 0; color: var(--dsw-alias-label-primary); padding: 1px 6px; border-radius: 6px; cursor: pointer; transition: background-color 120ms ease; }
+.lc-chip-label { font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+.lc-chip-nums { margin-left: auto; flex: none; display: inline-flex; align-items: baseline; gap: 6px; white-space: nowrap; }
+.lc-chip i, .lc-detail-row i { display: inline-block; width: 8px; height: 8px; border-radius: 2px; }
+.lc-chip i { transition: box-shadow 120ms ease; }
+.lc-chip em { font-style: normal; color: var(--dsw-alias-label-secondary); }
+.lc-chip-on { font-weight: 600; background: var(--dsw-alias-interactive-bg-hover); }
+.lc-chip-on i { box-shadow: 0 0 0 1px var(--dsw-alias-brand-primary); }

@@ -1,0 +1,20 @@
+/* The event log: list rows and kind tint pills (events.tsx). */
+.lc-event { display: flex; align-items: center; gap: 8px; padding: 3px 0; }
+.lc-event-icon { width: 18px; text-align: center; color: var(--dsw-alias-state-warn-primary); }
+.lc-event-icon.lc-event-inject { color: #a855f7; }
+.lc-event-icon.lc-event-model { color: var(--dsw-alias-brand-primary); }
+.lc-event-icon.lc-event-mode { color: var(--dsw-alias-label-secondary); }
+/*
+ Kind chip: the event classification at a glance — a fixed tint per kind: inject adds (success), compaction/prune free (error/violet), model/mode switch (brand/secondary).
+ */
+.lc-kind { flex: none; font-size: 10px; font-weight: 600; padding: 1px 6px; border-radius: 4px; white-space: nowrap; }
+.lc-kind-inject { background: color-mix(in srgb, var(--dsw-alias-state-success-primary) 15%, transparent); color: var(--dsw-alias-state-success-primary); }
+.lc-kind-compaction { background: color-mix(in srgb, var(--dsw-alias-state-error-primary) 15%, transparent); color: var(--dsw-alias-state-error-primary); }
+.lc-kind-prune { background: color-mix(in srgb, #8b5cf6 15%, transparent); color: #8b5cf6; }
+.lc-kind-model { background: color-mix(in srgb, var(--dsw-alias-brand-primary) 15%, transparent); color: var(--dsw-alias-brand-primary); }
+.lc-kind-mode { background: color-mix(in srgb, var(--dsw-alias-label-secondary) 15%, transparent); color: var(--dsw-alias-label-secondary); }
+.lc-event-label { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.lc-event-at { flex: none; color: var(--dsw-alias-label-secondary); font-size: 11px; white-space: nowrap; }
+.lc-event-tokens { color: var(--dsw-alias-state-success-primary); font-weight: 600; white-space: nowrap; }
+.lc-event-tokens.lc-up { color: var(--dsw-alias-state-warn-primary); }
+.lc-event-time { color: var(--dsw-alias-label-secondary); font-size: 12px; }

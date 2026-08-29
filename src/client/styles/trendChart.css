@@ -1,0 +1,72 @@
+/* The trend chart: axes, grid lines, bars, category hover-link and the turn strip (trendChart.tsx). */
+.lc-chartrow { display: flex; gap: 6px; align-items: stretch; }
+.lc-axis { position: relative; width: 40px; height: 150px; padding-top: 18px; box-sizing: border-box; color: var(--dsw-alias-label-secondary); font-size: 11px; }
+.lc-axis span { position: absolute; right: 0; line-height: 1; }
+.lc-axis-top { top: 13px; }
+.lc-axis-mid { top: 69px; }
+.lc-axis-bot { top: 125px; }
+/* Positioned wrapper owning the chart viewport: the scroller holds ONLY the scrolling content, while the hover
+   tip sits beside it anchored here — absolutely-positioned children of a scroller would contribute to its
+   scrollable overflow (a wide tooltip once flapped the horizontal scrollbar per hover) AND translate away with
+   the content on scroll. */
+.lc-chart-wrap { position: relative; flex: 1; min-width: 0; }
+/* No `scrollbar-width`/`scrollbar-color` here: either would make Chromium/Safari drop every
+   ::-webkit-scrollbar* rule (see dsh ui-theme scrollbar.css), falling back to the OS overlay
+   bar that auto-hides — dsh's global 8px skin below stays visible instead. */
+.lc-chart-scroll { overflow-x: auto; overflow-y: hidden; scrollbar-gutter: stable; padding-bottom: var(--dsh-scrollbar-width, 8px); }
+.lc-chart { position: relative; display: flex; align-items: flex-end; gap: 2px; height: 130px; padding-top: 18px; box-sizing: border-box; width: max-content; min-width: 100%; }
+.lc-grid { position: absolute; left: 0; right: 0; border-top: 1px dashed var(--dsw-alias-border-l1); pointer-events: none; }
+.lc-grid-top { top: 18px; }
+.lc-grid-mid { top: 74px; }
+/* Delta mode: a SOLID zero baseline (inline-positioned) replaces the dashed mid grid as the reading reference. */
+.lc-grid-zero { border-top-style: solid; border-top-color: rgba(128,128,128,0.5); }
+.lc-bar { position: relative; width: 14px; flex: none; height: 100%; display: flex; align-items: flex-end; cursor: pointer; border-radius: 2px; transition: opacity 120ms ease, background-color 120ms ease; }
+.lc-chart-dim .lc-bar { opacity: 0.35; }
+.lc-chart-dim .lc-bar-in-turn { opacity: 1; }
+.lc-chart-dim .lc-turn { opacity: 0.35; }
+.lc-chart-dim .lc-turn-on { opacity: 1; }
+/* Renders OUTSIDE the scroller (see .lc-chart-wrap); syncTip owns the whole transform: translate to the bar's
+   visible slice. translateX(-50%) is composed there too, so the tip stays width-agnostic without layout reads. */
+.lc-chart-tip { position: absolute; top: 0; left: 0; z-index: 5; white-space: nowrap; background: var(--dsw-alias-bg-layer-2); border: 1px solid var(--dsw-alias-border-l1); border-radius: 6px; padding: 3px 8px; font-size: 12px; color: var(--dsw-alias-label-primary); box-shadow: 0 2px 8px rgba(0,0,0,0.18); pointer-events: none; }
+.lc-bar:hover { background: var(--dsw-alias-bg-layer-2); }
+/*
+ Hovering previews a bar with a thin dashed frame; a CLICKED (locked)
+ bar must always show the strong solid frame, so the selected rule is
+ declared LAST (equal specificity) — otherwise the dashed hover frame
+ would keep overriding it while the pointer is still on the just-clicked
+ bar and the lock would only become visible after the pointer leaves.
+ */
+.lc-bar-hovered { outline: 1px dashed var(--dsw-alias-brand-primary); outline-offset: 1px; }
+.lc-bar-selected { outline: 2px solid var(--dsw-alias-label-primary); outline-offset: 1px; }
+.lc-bar-in-turn { background: rgba(128,128,128,0.14); }
+.lc-bar-stack { display: flex; flex-direction: column-reverse; width: 100%; }
+.lc-bar-stack > div { width: 100%; }
+/* Delta mode: diverging stacks anchored at the zero line — growth piles up from it, shrinkage hangs down. */
+.lc-bar-up, .lc-bar-down { position: absolute; left: 0; width: 100%; display: flex; }
+.lc-bar-up { flex-direction: column-reverse; }
+.lc-bar-down { flex-direction: column; }
+.lc-bar-up > div, .lc-bar-down > div { width: 100%; }
+/*
+ Category hover-link (overview/browser → trend card): the chart container carries the hovered
+ category key (`data-catdim`), so CSS alone lights that key's segment in EVERY bar and recedes
+ the rest — the memoized bars never re-render on a cross-card hover. Same idiom as the stacked
+ bars' dim+brightness pairing.
+ */
+.lc-cat-seg { transition: filter 120ms ease, opacity 120ms ease; }
+.lc-chart[data-catdim] .lc-cat-seg { opacity: 0.35; }
+.lc-chart[data-catdim='system'] .lc-cat-seg[data-cat='system'],
+.lc-chart[data-catdim='tools'] .lc-cat-seg[data-cat='tools'],
+.lc-chart[data-catdim='user'] .lc-cat-seg[data-cat='user'],
+.lc-chart[data-catdim='inject'] .lc-cat-seg[data-cat='inject'],
+.lc-chart[data-catdim='assistant'] .lc-cat-seg[data-cat='assistant'],
+.lc-chart[data-catdim='tool'] .lc-cat-seg[data-cat='tool'] { opacity: 1; filter: brightness(1.18); }
+.lc-bar-marker { position: absolute; top: -16px; left: 50%; transform: translateX(-50%); font-size: 11px; color: var(--dsw-alias-state-warn-primary); }
+/*
+ Turn strip: NEUTRAL zebra fills (inline, see TURN_FILLS) — never the category palette, or the strip reads as a detached bottom segment of the bars.
+ */
+.lc-turns { display: flex; gap: 2px; width: max-content; min-width: 100%; margin-top: 4px; }
+.lc-turn { flex: none; box-sizing: border-box; text-align: center; font-size: 10px; line-height: 14px; font-weight: 600; color: var(--dsw-alias-label-secondary); border-radius: 3px; height: 14px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; cursor: pointer; transition: filter 120ms, opacity 120ms; }
+.lc-turn-on { filter: brightness(1.35); color: var(--dsw-alias-label-primary); }
+/* The label is translated by JS to stay centered in the block's visible
+   slice; max-width keeps the block's ellipsis behavior for narrow blocks. */
+.lc-turn-label { display: inline-block; max-width: 100%; overflow: hidden; text-overflow: ellipsis; }

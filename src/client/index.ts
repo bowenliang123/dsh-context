@@ -32,10 +32,25 @@ import { makeContextView } from './components/contextView'
 import { makeContextJumpButton } from './components/contextJump'
 import { makeViewKit } from './viewkit'
 
-// Theme-native styles: the bundle's global-CSS channel injects the sheet as
+// Theme-native styles: the bundle's global-CSS channel injects each sheet as
 // a plugin-owned <style data-plugin> tag at factory execution (the web boot
-// loader and the HMR receiver claim tags carrying data-plugin).
-import './styles.css'
+// loader and the HMR receiver claim tags carrying data-plugin). Import order
+// IS cascade order across same-specificity rules: base first, then the
+// per-component sheets in their original section order.
+import './styles/base.css'
+import './styles/stats.css'
+import './styles/jump.css'
+import './styles/settings.css'
+import './styles/stackedBar.css'
+import './styles/trendChart.css'
+import './styles/requestDetail.css'
+import './styles/events.css'
+import './styles/fileCard.css'
+import './styles/modal.css'
+import './styles/browser.css'
+import './styles/detailSections.css'
+import './styles/attachments.css'
+import './styles/agentGraph.css'
 
 import { h } from './react'
 

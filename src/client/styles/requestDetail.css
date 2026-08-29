@@ -1,0 +1,65 @@
+/* The trend chart detail panel: step brief, metric rows and delta bars (requestDetail.tsx). */
+.lc-detail { margin-top: 12px; border-top: 1px solid var(--dsw-alias-border-l1); padding-top: 12px; }
+/* One wrapping row: title + event/tag chips + right-pinned tabular time, then uniform neutral metric pills —
+   same pill size/tabular figures, so a wrapped line still reads as a grid instead of scattered inline spans. */
+.lc-detail-head { display: flex; align-items: center; flex-wrap: wrap; gap: 6px 8px; margin-bottom: 10px; color: var(--dsw-alias-label-secondary); }
+.lc-detail-head b { font-size: 13px; color: var(--dsw-alias-label-primary); }
+.lc-detail-time { margin-left: auto; font-size: 12px; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.lc-detail-marker { color: var(--dsw-alias-state-warn-primary); font-size: 11px; background: color-mix(in srgb, var(--dsw-alias-state-warn-primary) 12%, transparent); border-radius: 6px; padding: 1px 7px; }
+.lc-detail-tag { background: var(--dsw-alias-bg-layer-2); border: 1px solid var(--dsw-alias-border-l1); border-radius: 4px; padding: 0 6px; font-size: 11px; color: var(--dsw-alias-label-secondary); }
+.lc-detail-metric { font-size: 12px; font-weight: 600; font-variant-numeric: tabular-nums; white-space: nowrap; padding: 2px 8px; border-radius: 6px; color: var(--dsw-alias-label-primary); background: color-mix(in srgb, var(--dsw-alias-label-secondary) 14%, transparent); }
+/* Delta sign semantics mirror the harness diff blocks: growth on the success token, shrinkage on the error token. */
+.lc-detail-metric-up { color: var(--dsw-alias-state-success-primary); background: color-mix(in srgb, var(--dsw-alias-state-success-primary) 15%, transparent); }
+.lc-detail-metric-down { color: var(--dsw-alias-state-error-primary); background: color-mix(in srgb, var(--dsw-alias-state-error-primary) 15%, transparent); }
+/* auto-fit: two columns when the card is wide (unchanged), one below ~424px — a fixed 1fr 1fr cannot shrink under each row's min-content (~196px) and would spill. */
+.lc-detail-rows { margin-top: 10px; display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 4px 24px; }
+/* Step brief: the bar's semantic identity under the detail head — one FIXED-WIDTH tag + one line per row, so content starts at
+   one shared left edge. Every line speaks the Context browser's row anatomy (fact tag + preview text), so a brief line reads
+   exactly like the browser element its click reveals; every clickable target (whole row or input chip) uses the standard
+   interactive hover token + 120ms transition. */
+/* Fixed three-row lane (min-height = 3 × 24px rows + 2 × 2px gaps): the container exists even when no row resolves, so
+   hovering around the trend chart never changes the detail panel's height. Rows appear INSIDE the lane; blanks degrade. */
+.lc-brief { display: flex; flex-direction: column; gap: 2px; margin: -4px 0 10px; min-height: 76px; }
+/* Input chips wrap onto a second line instead of forcing the row past the card edge (each chip's internal tag is flex-none). */
+.lc-brief-row { display: flex; align-items: center; gap: 8px; min-width: 0; padding: 3px 6px; margin-left: -6px; margin-right: -6px; border-radius: 6px; border: 0; background: transparent; font-family: inherit; font-size: 12px; line-height: 1.5; color: var(--dsw-alias-label-primary); text-align: left; transition: background-color 120ms ease; }
+/* The link class marks a hoverable ROW (buttons and the chip-carrying inputs row alike); the pointer cursor belongs only to the
+   actual click targets — button rows and individual chips. */
+.lc-brief-row-link:hover { background: var(--dsw-alias-interactive-bg-hover); }
+button.lc-brief-row-link { cursor: pointer; }
+.lc-brief-tag { flex: none; box-sizing: border-box; min-width: 56px; text-align: center; font-size: 11px; padding: 0 6px; border-radius: 4px; background: var(--dsw-alias-bg-layer-2); border: 1px solid var(--dsw-alias-border-l1); color: var(--dsw-alias-label-secondary); position: relative; }
+/* The tag's explanation bubble — the `.lc-stat-tip` pattern: instant styled reveal on tag hover, never intercepts the pointer. */
+.lc-brief-tip { position: absolute; bottom: calc(100% + 6px); left: 0; z-index: 6; width: max-content; max-width: 240px; white-space: normal; text-align: left; background: var(--dsw-alias-bg-layer-2); border: 1px solid var(--dsw-alias-border-l1); border-radius: 6px; padding: 6px 10px; font-size: 12px; line-height: 1.5; font-weight: 400; color: var(--dsw-alias-label-primary); box-shadow: 0 2px 8px rgba(0,0,0,0.18); pointer-events: none; opacity: 0; transition: opacity 120ms ease; }
+.lc-brief-tag:hover .lc-brief-tip { opacity: 1; }
+.lc-brief-text { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* The empty-state In row's placeholder: same anatomy as the preview text, muted. */
+.lc-brief-empty { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--dsw-alias-label-tertiary); }
+/* Standalone fact chip on the opener/reply rows (call breadcrumb, image count) — the row kind tag's look, content-sized. */
+.lc-brief-fact { flex: none; box-sizing: border-box; max-width: 160px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 11px; padding: 0 6px; border-radius: 4px; background: var(--dsw-alias-bg-layer-2); border: 1px solid var(--dsw-alias-border-l1); color: var(--dsw-alias-label-secondary); }
+/* Input chips: the name tag is flex-none so it always survives truncation — only the preview text ellipsizes. */
+.lc-brief-chip { display: inline-flex; align-items: center; gap: 5px; max-width: 260px; min-width: 0; overflow: hidden; font-size: 12px; padding: 0 7px; border-radius: 5px; background: var(--dsw-alias-bg-layer-2); border: 1px solid var(--dsw-alias-border-l1); color: var(--dsw-alias-label-primary); transition: background-color 120ms ease; }
+/* The reply row's single chip grows to the row's width, so a long reply text reads as far as the card allows. */
+.lc-brief-chip-grow { flex: 1; max-width: none; }
+.lc-brief-chip-tag { flex: none; max-width: 120px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 11px; padding: 0 6px; border-radius: 4px; background: var(--dsw-alias-bg-layer-1); border: 1px solid var(--dsw-alias-border-l1); color: var(--dsw-alias-label-secondary); }
+.lc-brief-chip-text { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.lc-brief-chip-link { cursor: pointer; }
+.lc-brief-chip-link:hover { background: var(--dsw-alias-interactive-bg-hover); }
+.lc-brief-more { flex: none; font-size: 11px; color: var(--dsw-alias-label-secondary); }
+.lc-detail-row { display: flex; align-items: center; gap: 8px; border-radius: 4px; /* Padding + matching negative margin: the highlight paints past the text while the layout stays put. */ padding: 1px 4px; margin: -1px -4px; transition: background-color 120ms ease; }
+/* Category hover-link: the shared hover lights the matching detail row — same pairing as the legend chips and the
+   browser rows (tinted background, bold label, ring on the color dot). */
+.lc-detail-row i { transition: box-shadow 120ms ease; }
+.lc-detail-row-on { background: var(--dsw-alias-interactive-bg-hover); }
+.lc-detail-row-on i { box-shadow: 0 0 0 1px var(--dsw-alias-brand-primary); }
+.lc-detail-row-on .lc-detail-label { font-weight: 600; }
+.lc-detail-label { min-width: 70px; white-space: nowrap; color: var(--dsw-alias-label-secondary); }
+.lc-bar-track { flex: 1; height: 5px; border-radius: 3px; background: rgba(128,128,128,0.18); overflow: hidden; display: block; position: relative; }
+.lc-bar-fill { display: block; height: 100%; border-radius: 3px; }
+/* Delta rows: a hairline zero at the middle, growth fills right of it, shrinkage left. */
+.lc-bar-zero { position: absolute; left: 50%; top: 0; bottom: 0; border-left: 1px solid rgba(128,128,128,0.45); }
+.lc-bar-fill-up, .lc-bar-fill-down { position: absolute; top: 0; height: 100%; display: block; }
+.lc-bar-fill-up { left: 50%; border-radius: 0 3px 3px 0; }
+.lc-bar-fill-down { right: 50%; border-radius: 3px 0 0 3px; }
+.lc-detail-num { width: 52px; text-align: right; font-variant-numeric: tabular-nums; }
+.lc-detail-num-up { color: var(--dsw-alias-state-success-primary); }
+.lc-detail-num-down { color: var(--dsw-alias-state-error-primary); }
+.lc-detail-pct { width: 34px; text-align: right; color: var(--dsw-alias-label-secondary); }

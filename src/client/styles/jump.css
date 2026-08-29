@@ -1,0 +1,5 @@
+/* The assistant-message jump action (contextJump.tsx). */
+/* The chat action-row jump button — mirrors the harness MessageIconActions `.action` chrome so it sits flush beside the shipped icons. */
+.lc-jump { display: inline-flex; align-items: center; justify-content: center; width: calc(28px + var(--dsh-content-font-delta, 0px)); height: calc(28px + var(--dsh-content-font-delta, 0px)); padding: 6px; border: 0; border-radius: 28px; background: transparent; color: var(--dsw-alias-label-tertiary); cursor: pointer; }
+.lc-jump svg { width: calc(16px + var(--dsh-content-font-delta, 0px)); height: calc(16px + var(--dsh-content-font-delta, 0px)); }
+.lc-jump:hover { background: var(--dsw-alias-interactive-bg-hover); color: var(--dsw-alias-label-secondary); }
