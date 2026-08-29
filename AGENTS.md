@@ -21,38 +21,6 @@ A DeepSeek Harness plugin for context insight, actions, and management.
   - Example plugins:
     - Available on GitHub topic `dsh-plugin`: https://github.com/topics/dsh-plugin
 
-## Code Exploration Protocol (Mandatory)
-
-**Prerequisite:** The code graph in the current working directory has already been initialized (`.codegraph` directory exists). Use it directly.
-
-### Mandatory Pre-step
-Before and during any code analysis, exploration, or planning, or investigating any term or keywords, you **MUST** first use `codegraph` to understand the codebase structure and dependencies. **This step is non-negotiable and cannot be skipped.**
-  ### Usage
-  1. **Explore code structure**
-     ```bash
-     pnpm dlx @colbymchenry/codegraph explore --path some-path --max-files 1000 "<Query or Keywords>"
-     ```
-  Example:
-     ```bash
-     pnpm dlx @colbymchenry/codegraph explore --max-files 1000 "What's Context Stats?"
-     ```
-  2. **Query specific symbols**
-     ```bash
-     pnpm dlx @colbymchenry/codegraph query --path some-path --limit 10000 "<SymbolName>"
-     ```
-     Example:
-     ```bash
-     pnpm dlx @colbymchenry/codegraph query --limit 10000 "FileActivity"
-     ```
-     3. **Sync latest changes (only if code has been modified)**
-        ```bash
-        pnpm dlx @colbymchenry/codegraph sync
-        ```
-  
-  ### Execution Order
-  1. Run `codegraph explore` or `codegraph query` to gather code context
-  2. Analyze, plan, or respond based on the returned results
-  3. Run `sync` **only if** the codebase has changed since the last query
 
 ## Coding
 - Always consider the minimal change and the most performance efficient implementation.
