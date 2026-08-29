@@ -52,7 +52,11 @@ In **Settings → Plugins → Plugin configuration**, the **Context / 上下文*
 
 ### 📊 Context stats — the session at a glance
 
-Turns, steps, how many injections, compactions, and prunes have happened.
+Four equal-width cards up top — the three stat cards, with the plugin info card keeping them company:
+
+- **Context Stats** — an eight-cell grid: turns, steps, live tool calls and images, the context-event tally (injections, compactions, prunes), and the list-price cost estimate with its per-1M rates on hover.
+- **Token Stats** — a ring of the provider-reported billing buckets (cache reads/writes, uncached input, output) around the cache-hit share.
+- **Timing Stats** — a ring splitting the session's active time into model calls vs tool runs (the center shows the total).
 
 ### 🧱 Current composition — what's in the window right now
 
