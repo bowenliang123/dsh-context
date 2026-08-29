@@ -166,7 +166,7 @@ export function makeFileCard(kit: ViewKit, settings: ContextSettings): ReactNS.C
                 /* The one styled tip of the card: it lives OUTSIDE the scrolling list, so the bubble never clips. */
                 <span className="lc-fa-meta-delta">
                   <DeltaPair added={activity.totals.added} removed={activity.totals.removed} />
-                  <span className="lc-fa-meta-tip" role="tooltip">{t('files.deltaTip')}</span>
+                  <span className="lc-tip lc-fa-meta-tip" role="tooltip">{t('files.deltaTip')}</span>
                 </span>
               ) : null}
               <span className="lc-gran lc-fa-sort" role="group" title={t('files.sortTip')}>

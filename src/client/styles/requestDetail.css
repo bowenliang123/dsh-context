@@ -27,8 +27,8 @@
 .lc-brief-row-link:hover { background: var(--dsw-alias-interactive-bg-hover); }
 button.lc-brief-row-link { cursor: pointer; }
 .lc-brief-tag { flex: none; box-sizing: border-box; min-width: 56px; text-align: center; font-size: 11px; padding: 0 6px; border-radius: 4px; background: var(--dsw-alias-bg-layer-2); border: 1px solid var(--dsw-alias-border-l1); color: var(--dsw-alias-label-secondary); position: relative; }
-/* The tag's explanation bubble — the `.lc-stat-tip` pattern: instant styled reveal on tag hover, never intercepts the pointer. */
-.lc-brief-tip { position: absolute; bottom: calc(100% + 6px); left: 0; z-index: 6; width: max-content; max-width: 240px; white-space: normal; text-align: left; background: var(--dsw-alias-bg-layer-2); border: 1px solid var(--dsw-alias-border-l1); border-radius: 6px; padding: 6px 10px; font-size: 12px; line-height: 1.5; font-weight: 400; color: var(--dsw-alias-label-primary); box-shadow: 0 2px 8px rgba(0,0,0,0.18); pointer-events: none; opacity: 0; transition: opacity 120ms ease; }
+/* The tag's explanation bubble — the shared `.lc-tip` chrome: instant styled reveal on tag hover, never intercepts the pointer. */
+.lc-brief-tip { bottom: calc(100% + 6px); left: 0; max-width: 240px; white-space: normal; text-align: left; line-height: 1.5; font-weight: 400; }
 .lc-brief-tag:hover .lc-brief-tip { opacity: 1; }
 .lc-brief-text { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 /* The empty-state In row's placeholder: same anatomy as the preview text, muted. */

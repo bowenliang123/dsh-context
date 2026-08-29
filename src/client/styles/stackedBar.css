@@ -6,7 +6,8 @@
  */
 .lc-occupied-box { position: absolute; top: 0; bottom: 0; left: 0; border: 2px solid var(--dsw-alias-label-tertiary); border-radius: 5px; box-sizing: border-box; pointer-events: none; opacity: 0; box-shadow: 0 0 0 1px var(--dsw-alias-bg-layer-2); transition: opacity 120ms ease; }
 .lc-occupied-box-on { opacity: 1; }
-.lc-bar-tip { position: absolute; bottom: calc(100% + 6px); transform: translateX(-50%); z-index: 5; white-space: nowrap; background: var(--dsw-alias-bg-layer-2); border: 1px solid var(--dsw-alias-border-l1); border-radius: 6px; padding: 3px 8px; font-size: 12px; color: var(--dsw-alias-label-primary); box-shadow: 0 2px 8px rgba(0,0,0,0.18); pointer-events: none; opacity: 0; transition: opacity 120ms ease; }
+/* The chart's hover tip rides the shared `.lc-tip` chrome — narrower padding, centered on the bar, under the legend's z-order. */
+.lc-bar-tip { bottom: calc(100% + 6px); transform: translateX(-50%); z-index: 5; white-space: nowrap; padding: 3px 8px; }
 .lc-bar-tip-on { opacity: 1; }
 .lc-stacked > div { height: 100%; }
 .lc-stacked-seg { transition: filter 120ms ease, opacity 120ms ease; }

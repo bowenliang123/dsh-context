@@ -155,7 +155,7 @@ export function makeStackedBar(kit: ViewKit): (props: StackedBarProps) => ReactN
         {props.tip !== false
           ? (
             <div
-              className={'lc-bar-tip' + (tip ? ' lc-bar-tip-on' : '')}
+              className={'lc-tip lc-bar-tip' + (tip ? ' lc-bar-tip-on' : '')}
               style={{ left: tip ? `${tip.leftPct}%` : '50%' }}
             >{tip ? tip.text : ''}</div>
           )

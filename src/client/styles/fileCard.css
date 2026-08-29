@@ -12,9 +12,9 @@
 .lc-fa-meta { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin-bottom: 6px; color: var(--dsw-alias-label-secondary); font-size: 12px; }
 /* The sort toggle rides the meta strip's right edge — the shared .lc-gran's own auto margin does the push. */
 .lc-fa-meta .lc-fa-sort { flex: none; }
-/* The aggregate delta pill carries the card's one styled tip (`.lc-stat-tip` pattern) — it sits outside the scrolling list, so the bubble never clips. */
+/* The aggregate delta pill carries the card's one styled tip (the shared `.lc-tip` chrome) — it sits outside the scrolling list, so the bubble never clips. */
 .lc-fa-meta-delta { position: relative; }
-.lc-fa-meta-tip { position: absolute; top: calc(100% + 6px); left: 0; z-index: 6; width: max-content; max-width: 260px; white-space: normal; background: var(--dsw-alias-bg-layer-2); border: 1px solid var(--dsw-alias-border-l1); border-radius: 6px; padding: 6px 10px; font-size: 12px; line-height: 1.5; color: var(--dsw-alias-label-primary); box-shadow: 0 2px 8px rgba(0,0,0,0.18); pointer-events: none; opacity: 0; transition: opacity 120ms ease; }
+.lc-fa-meta-tip { top: calc(100% + 6px); left: 0; max-width: 260px; white-space: normal; line-height: 1.5; }
 .lc-fa-meta-delta:hover .lc-fa-meta-tip { opacity: 1; }
 /* An expanded file reads as one contained card: layer-2 fill inside a hairline frame. */
 .lc-fa-item { border: 1px solid transparent; border-radius: 8px; transition: background-color 120ms ease, border-color 120ms ease; }

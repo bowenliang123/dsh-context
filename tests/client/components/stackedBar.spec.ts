@@ -35,7 +35,7 @@ describe('StackedBar layout', () => {
     assert.equal(box.className, 'lc-occupied-box')
     assert.equal(box.style.width, '0%')
     const tip = query(m.container, '.lc-bar-tip')
-    assert.equal(tip.className, 'lc-bar-tip')
+    assert.equal(tip.className, 'lc-tip lc-bar-tip')
     assert.equal(tip.textContent, '')
     assert.equal(tip.style.left, '50%')
     await m.unmount()
@@ -98,7 +98,7 @@ describe('StackedBar hover link', () => {
     assert.equal(tip.style.left, '27.5%')
     await unhover(query(m.container, '.lc-stacked'))
     assert.equal(query(m.container, '.lc-stacked').className, 'lc-stacked')
-    assert.equal(query(m.container, '.lc-bar-tip').className, 'lc-bar-tip')
+    assert.equal(query(m.container, '.lc-bar-tip').className, 'lc-tip lc-bar-tip')
     assert.equal(query(m.container, '.lc-occupied-box').className, 'lc-occupied-box')
     await m.unmount()
   })
@@ -121,7 +121,7 @@ describe('StackedBar hover link', () => {
     assert.equal(tip.textContent, 'Free Window 1.0k (50%)')
     assert.equal(tip.style.left, '75%')
     await unhover(query(m.container, '.lc-stacked'))
-    assert.equal(query(m.container, '.lc-bar-tip').className, 'lc-bar-tip')
+    assert.equal(query(m.container, '.lc-bar-tip').className, 'lc-tip lc-bar-tip')
     await m.unmount()
   })
 
@@ -129,13 +129,13 @@ describe('StackedBar hover link', () => {
     const m = await mount(h(StackedBar, { parts: [part('user', 1000)], hoverKey: 'free' }))
     assert.ok(query(m.container, '.lc-stacked').className.includes('lc-stacked-dim'))
     assert.equal(queryAll(m.container, '.lc-stacked-free').length, 0)
-    assert.equal(query(m.container, '.lc-bar-tip').className, 'lc-bar-tip')
+    assert.equal(query(m.container, '.lc-bar-tip').className, 'lc-tip lc-bar-tip')
     await m.unmount()
   })
 
   test('hoverKey on a zero-value part: no tooltip (scale 0 and value 0 arms)', async () => {
     const m = await mount(h(StackedBar, { parts: [part('zero', 0)], hoverKey: 'zero' }))
-    assert.equal(query(m.container, '.lc-bar-tip').className, 'lc-bar-tip')
+    assert.equal(query(m.container, '.lc-bar-tip').className, 'lc-tip lc-bar-tip')
     await m.unmount()
   })
 
@@ -184,12 +184,12 @@ describe('StackedBar reserve band', () => {
     assert.equal(tip.style.left, '88%') // clamped: 80 + 20/2 = 90 → 88
     assert.equal(query(m.container, '.lc-stacked').className, 'lc-stacked') // hoverKey cleared
     await unhover(band)
-    assert.equal(query(m.container, '.lc-bar-tip').className, 'lc-bar-tip')
+    assert.equal(query(m.container, '.lc-bar-tip').className, 'lc-tip lc-bar-tip')
     // Stack-level mouseleave also clears an active reserve hover.
     await hover(band)
     assert.ok(query(m.container, '.lc-bar-tip').className.includes('lc-bar-tip-on'))
     await unhover(query(m.container, '.lc-stacked'))
-    assert.equal(query(m.container, '.lc-bar-tip').className, 'lc-bar-tip')
+    assert.equal(query(m.container, '.lc-bar-tip').className, 'lc-tip lc-bar-tip')
     await m.unmount()
   })
 

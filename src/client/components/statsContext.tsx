@@ -75,7 +75,7 @@ export function makeStatsContext(kit: ViewKit): (props: {
           {tip !== undefined && <i className="lc-stat-q" aria-hidden="true">?</i>}
         </span>
         <b className="lc-stat-value">{typeof value === 'number' ? fmt(value) : value}</b>
-        {tip !== undefined && <span className="lc-stat-tip" role="tooltip">{tip}</span>}
+        {tip !== undefined && <span className="lc-tip lc-stat-tip" role="tooltip">{tip}</span>}
       </div>
     )
     return (

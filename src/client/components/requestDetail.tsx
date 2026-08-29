@@ -41,7 +41,7 @@ export function makeRequestDetail(
 
   /**
    * One brief row: a fixed-width kind tag plus one glanceable line. The tag carries a styled, instant explanation bubble (the
-   * `.lc-stat-tip` pattern); the content span keeps the native title (preview + locate hint), so the two never stack.
+   * shared `.lc-tip` chrome); the content span keeps the native title (preview + locate hint), so the two never stack.
    * Clickable when the browser linkage is wired AND the row carries a node (the always-present In row's empty state stays inert).
    */
   function BriefRow(props: {
@@ -57,7 +57,7 @@ export function makeRequestDetail(
       <>
         <span className="lc-brief-tag">
           {props.tag}
-          <span className="lc-brief-tip" role="tooltip">{props.tagTip}</span>
+          <span className="lc-tip lc-brief-tip" role="tooltip">{props.tagTip}</span>
         </span>
         {props.children}
       </>
