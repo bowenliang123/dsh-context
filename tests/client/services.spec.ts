@@ -1,6 +1,6 @@
 // Projection narrowing (src/client/services.ts): the no-white-screen wire
 // guards — numOf, timelineOf fast/slow paths, contextPressureOf,
-// contextBreakdownOf, tokenUsageOf, headersOf — plus the dual-face helpers
+// contextBreakdownOf, tokenUsageOf, timingOf, headersOf — plus the dual-face helpers
 // that keep the plugin alive across the dsh 0.1.1/0.1.2 service seams
 // (conversationNodesOf, imageLoaderOf).
 
@@ -16,10 +16,12 @@ import {
   numOf,
   openPathVia,
   timelineOf,
+  timingOf,
   tokenUsageOf,
   workspaceOf,
 } from '../../src/client/services'
 import type { ClientCtx, ConversationNodeLike } from '../../src/client/services'
+import type { TimingTotals } from '../../src/shared/types'
 
 /** The chat-view snapshot face: the selector sees the whole snapshot. */
 const useChatOf = (snapshot: unknown) => (<T>(sel: (s: unknown) => T) => sel(snapshot))
@@ -265,6 +267,98 @@ describe('tokenUsageOf', () => {
     assert.equal(tokenUsageOf(null), null)
     assert.equal(tokenUsageOf(undefined), null)
     assert.equal(tokenUsageOf(3), null)
+  })
+})
+
+describe('timingOf', () => {
+  const wellFormed = {
+    wallMs: 60_000, lmMs: 20_000, calls: 4, toolsMs: 30_000, toolCalls: 9,
+    tools: { bash: { calls: 5, ms: 20_000 }, read: { calls: 4, ms: 10_000 } },
+  }
+
+  test('non-records stay null', () => {
+    assert.equal(timingOf(null), null)
+    assert.equal(timingOf(undefined), null)
+    assert.equal(timingOf('x'), null)
+    assert.equal(timingOf(5), null)
+  })
+
+  test('a well-formed value round-trips every scalar and row', () => {
+    assert.deepEqual(timingOf(wellFormed), wellFormed)
+  })
+
+  test('wrong-typed or negative scalars zero out', () => {
+    const out = timingOf({ wallMs: -1, lmMs: 'x', calls: NaN, toolsMs: Infinity, toolCalls: 3 })
+    assert.deepEqual(out, { wallMs: 0, lmMs: 0, calls: 0, toolsMs: 0, toolCalls: 3, tools: {} })
+  })
+
+  test('rows failing the shape drop individually; the ranking survives', () => {
+    const out = timingOf({
+      wallMs: 10, tools: {
+        good: { calls: 1, ms: 5 },
+        noCalls: { ms: 5 },
+        negMs: { calls: 1, ms: -5 },
+        nullRow: null,
+        numRow: 7,
+      },
+    })
+    assert.deepEqual(out?.tools, { good: { calls: 1, ms: 5 } })
+  })
+
+  test('a non-record tools map degrades to an empty ranking', () => {
+    for (const tools of [null, 'x', 5, [ { calls: 1, ms: 1 } ]]) {
+      const out = timingOf({ wallMs: 1, tools })
+      assert.deepEqual(out?.tools, {})
+    }
+  })
+
+  test('a hostile __proto__ row is skipped, not assigned as the prototype', () => {
+    const out = timingOf({ wallMs: 1, tools: JSON.parse('{"__proto__": {"calls": 1, "ms": 5}}') })
+    assert.deepEqual(out?.tools, {})
+    assert.equal(Object.getPrototypeOf(out?.tools ?? {}), Object.prototype)
+  })
+})
+
+describe('timelineOf — timing integration', () => {
+  const current = { system: 1, tools: 2, user: 3, inject: 4, assistant: 5, tool: 6, total: 7 }
+  const base = { ok: true, current, requests: [], events: [], nodes: [], archive: [], droppedNodes: 0 }
+  const timing: TimingTotals = { wallMs: 60_000, lmMs: 20_000, calls: 4, toolsMs: 30_000, toolCalls: 9, tools: { bash: { calls: 5, ms: 20_000 } } }
+
+  test('a well-formed timing passes through by reference (fast path)', () => {
+    const wire = { ...base, timing }
+    assert.equal(timelineOf(wire), wire)
+  })
+
+  test('a malformed timing takes the sanitizing slow path', () => {
+    const wire = { ...base, timing: { ...timing, tools: { bash: { calls: 'nope' } } } }
+    const out = timelineOf(wire)
+    assert.ok(out !== (wire as unknown))
+    assert.deepEqual(out?.timing, { ...timing, tools: {} })
+  })
+
+  test('a non-record timing is omitted entirely (no null-valued key)', () => {
+    const out = timelineOf({ ...base, timing: 'corrupt' })
+    assert.ok(out !== null)
+    assert.ok(!('timing' in out))
+  })
+
+  test('every timingFastOk rejection arm routes down the sanitizing slow path', () => {
+    const sanitized = (timingValue: unknown): TimingTotals => {
+      const out = timelineOf({ ...base, timing: timingValue })
+      assert.ok(out !== null)
+      return out.timing as TimingTotals
+    }
+    // A non-number scalar zeroes out.
+    assert.deepEqual(sanitized({ ...timing, wallMs: 'x' }), { ...timing, wallMs: 0 })
+    // A non-record tools map (null / array / scalar) degrades to an empty ranking.
+    for (const tools of [null, [{ calls: 1, ms: 1 }], 5]) {
+      assert.deepEqual(sanitized({ ...timing, tools }), { ...timing, tools: {} })
+    }
+    // A row failing the shape (null / scalar / non-number fields) drops alone.
+    assert.deepEqual(sanitized({ ...timing, tools: { bash: null } }), { ...timing, tools: {} })
+    assert.deepEqual(sanitized({ ...timing, tools: { bash: 5 } }), { ...timing, tools: {} })
+    assert.deepEqual(sanitized({ ...timing, tools: { bash: { calls: 'x', ms: 1 } } }), { ...timing, tools: {} })
+    assert.deepEqual(sanitized({ ...timing, tools: { bash: { calls: 1, ms: 'x' } } }), { ...timing, tools: {} })
   })
 })
 

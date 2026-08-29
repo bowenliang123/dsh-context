@@ -85,7 +85,7 @@ describe('applySurface tool/result branch', () => {
       toolCall(2, { callId: 'c2', name: 'read' }),
       toolResult(3, { callId: 'c1', content: text('ok') }),
     ])
-    assert.deepEqual(state.callNames, { c2: 'read' }, 'the unanswered call stays armed')
+    assert.equal(state.callNames.c2?.name, 'read', 'the unanswered call stays armed')
   })
 
   test('a result with neither id leaves callNames untouched', () => {
@@ -96,7 +96,7 @@ describe('applySurface tool/result branch', () => {
     }
     const { state } = driveTimeline([toolCall(1, { callId: 'keep', name: 'read' }), ev])
     assert.equal(state.surface.at(-1)?.tool, undefined)
-    assert.deepEqual(state.callNames, { keep: 'read' })
+    assert.equal(state.callNames.keep?.name, 'read')
   })
 
   test('data.error flags the node', () => {

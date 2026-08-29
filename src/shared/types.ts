@@ -94,6 +94,12 @@ export interface Snapshot {
    */
   cost?: SessionCostUsage
   /**
+   * Whole-session timing totals (see TimingTotals). Absent until the first
+   * step lifecycle completes in the log (older plugin builds never folded
+   * one — clients treat absence as an empty timing card).
+   */
+  timing?: TimingTotals
+  /**
      * The served live surface: the newest `maxNodes` tail PLUS every live inject node older than the tail (injections land first and are
      * few,
     * so they are pinned). Seq-ordered, oldest first.
@@ -193,6 +199,39 @@ export interface CostBucketTotals {
   cacheRead: number
   cacheWrite: number
   output: number
+}
+
+/**
+ * One completed tool name's whole-session call tally behind the timing
+ * card's top-tools ranking (running totals, never trimmed).
+ */
+export interface ToolTimingTotals {
+  calls: number
+  ms: number
+}
+
+/**
+ * Whole-session timing totals, host-folded from the durable `step/start` /
+ `step/end` / `tool/call` / `tool/result` lifecycle (running totals over the
+ * COMPLETE session log — the same never-trimmed framing as `cost`). Durations
+ * are wall-clock milliseconds: `wallMs` sums whole steps, `lmMs` the
+ * step-start → assistant-message slice (the model call), `toolsMs` the sum of
+ * per-call tool durations (parallel calls each count, so it can overlap).
+ * Absent until the first step lifecycle completes in the log.
+ */
+export interface TimingTotals {
+  /** Summed wall time of completed steps (the session's active time). */
+  wallMs: number
+  /** Summed step-start → assistant-message time (model-call time). */
+  lmMs: number
+  /** Completed model calls (assistant messages folded). */
+  calls: number
+  /** Summed per-call durations of completed tool calls. */
+  toolsMs: number
+  /** Completed tool calls (call/result pairs folded). */
+  toolCalls: number
+  /** Per-tool-name tallies behind the timing card's ranking (bounded). */
+  tools: Record<string, ToolTimingTotals>
 }
 
 /** One model family's totals split by DeepSeek's pricing period (Beijing Time). */

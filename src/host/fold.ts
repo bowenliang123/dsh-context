@@ -19,7 +19,7 @@
  *   the request/event records are the raw material of `buildTimelineView`.
  */
 
-import type { Category, ContextEventRecord, CostFamilyUsage, RequestRecord, SessionCostUsage, Snapshot, SurfaceNode } from '../shared/types'
+import type { Category, ContextEventRecord, CostFamilyUsage, RequestRecord, SessionCostUsage, Snapshot, SurfaceNode, TimingTotals, ToolTimingTotals } from '../shared/types'
 import type { FoldBounds } from './config'
 import {
   estimateMessage,
@@ -101,12 +101,30 @@ export interface TimelineState {
   cost?: SessionCostUsage
   archiveFloor?: number
   /**
-   * Tool callId → name, armed by `tool/call` and DELETED when its
-   * `tool/result` folds in (one result per call, in log order) — the map
-   * stays at pending-call size instead of growing for the session's whole
-   * lifetime (it is persisted state, shallow-copied by every fold step).
+   * Whole-session timing totals (see TimingTotals) — running sums over the
+   * COMPLETE session log, like `cost`. Absent until the first step or tool
+   * lifecycle folds in; created once and cloned-on-touch afterwards (the
+   * object is shared with the persisted previous state — see `ensure`).
    */
-  callNames: Record<string, string>
+  timing?: TimingTotals
+  /**
+   * The open step's start instant, armed by `step/start` and consumed by the
+   * `assistant/message` (LM-call time) and `step/end` (wall time) that follow
+   * it. One slot, not a map: steps are sequential in the log, so the newest
+   * `step/start` is the one those events close — a hostile interleaved log
+   * degrades to skipped durations, never to unbounded state. Same
+   * arm/remove lifecycle as `pendingShadowedSeqs`.
+   */
+  stepStart?: { time: number }
+  /**
+   * Tool callId → the call's name and start instant, armed by `tool/call` and
+   * DELETED when its `tool/result` folds in (one result per call, in log
+   * order) — the map stays at pending-call size instead of growing for the
+   * session's whole lifetime (it is persisted state, shallow-copied by every
+   * fold step). The start instant prices the call's duration into
+   * `timing.toolsMs` when the result arrives.
+   */
+  callNames: Record<string, { name: string; start: number }>
   /**
    * Seq list of the surface nodes the next replacement will shadow, armed by
    * the metering event (`compaction/summary` | `compaction/prune`) and
@@ -301,7 +319,6 @@ function applySurface(
     // (`tool/result.message.source.callId`); the content block mirrors it as
     // `toolCallId` (not `callId` — a shape earlier plugin builds misread).
     const srcId = (source as { callId?: unknown } | undefined)?.callId
-    const srcName = typeof srcId === 'string' ? st.callNames[srcId] : undefined
     const block = message?.content?.[0] as { toolCallId?: unknown } | undefined
     const blockId = block?.toolCallId
     // The name is stamped only on a real map hit: an unpaired result (a call
@@ -309,20 +326,28 @@ function applySurface(
     // must not materialize an `undefined`-valued property — that one property
     // fails EVERY projection-cache write for the session (the plain-JSON
     // precondition, see TimelineState).
-    if (srcName !== undefined) node.tool = srcName
-    else if (typeof blockId === 'string' && Object.hasOwn(st.callNames, blockId)) {
-      // hasOwn, not a Map-style index check: a missing key IS possible at
-      // runtime (an unpaired result), and stamping it would write an
-      // `undefined`-valued property — failing every projection-cache write
-      // for the session (the plain-JSON precondition).
-      node.tool = st.callNames[blockId]
+    const srcEntry = typeof srcId === 'string' ? st.callNames[srcId] : undefined
+    const blockEntry = srcEntry === undefined && typeof blockId === 'string'
+      ? st.callNames[blockId]
+      : undefined
+    // Price the completed call into the timing totals: the same entry that
+    // names the node carries the call's start instant; an unpaired result
+    // carries neither name nor duration.
+    const toolEntry = srcEntry ?? blockEntry
+    if (toolEntry !== undefined) {
+      node.tool = toolEntry.name
+      const timing = ensureTiming(st)
+      const dur = durOf(toolEntry.start, ev.time)
+      timing.toolsMs += dur
+      timing.toolCalls += 1
+      bumpToolTotals(timing, toolEntry.name, dur)
     }
     // Consume-once: the entry is never looked up again after its result
     // folds in (see TimelineState.callNames). Rebuild without the used ids
     // (no dynamic delete, per repo lint) — consume-once holds the map at
     // pending-call size, so the copy is trivial.
     if (typeof srcId === 'string' || typeof blockId === 'string') {
-      const kept: Record<string, string> = {}
+      const kept: Record<string, { name: string; start: number }> = {}
       for (const k in st.callNames) {
         if (k !== srcId && k !== blockId) kept[k] = st.callNames[k]
       }
@@ -470,6 +495,62 @@ function accumulateCost(st: TimelineState, time: number, usage: UsageLike): void
  * `bounds` come from the plugin config (config.ts) — retention only, they
  * never change the state shape.
  */
+
+/** The timing card's per-tool ranking cap: the busiest 16 names are kept. */
+const TOOL_TIMING_CAP = 16
+
+/** Non-negative, NaN-proof duration between two instants (hostile times degrade to 0). */
+function durOf(from: number, to: number): number {
+  if (!Number.isFinite(from) || !Number.isFinite(to)) return 0
+  return Math.max(0, to - from)
+}
+
+/**
+ * The fold's private timing accumulator: created on first use, and CLONED on
+ * every later ensure() (see `applyTimeline`) — the object left in the
+ * persisted previous state is never written into in place.
+ */
+function ensureTiming(st: TimelineState): TimingTotals {
+  if (st.timing === undefined) {
+    st.timing = { wallMs: 0, lmMs: 0, calls: 0, toolsMs: 0, toolCalls: 0, tools: {} }
+  }
+  return st.timing
+}
+
+/**
+ * Tally one completed tool call into the per-name ranking, bounded to
+ * TOOL_TIMING_CAP names: repeated names update in place, a new name beyond
+ * the cap evicts the smallest tally first (the ranking's tail), so state
+ * stays bounded even over a hostile log of unique names.
+ */
+function bumpToolTotals(timing: TimingTotals, name: string, ms: number): void {
+  // hasOwn, not an index check: a missing key IS possible at runtime (a name
+  // outside the persisted tally), and the hasOwn guard reads honestly.
+  if (!Object.hasOwn(timing.tools, name)) {
+    if (Object.keys(timing.tools).length >= TOOL_TIMING_CAP) {
+      // The record is non-empty whenever the cap binds, so the scan always
+      // names a minimum (the first probe wins against +Infinity).
+      let minKey = ''
+      let minMs = Infinity
+      for (const k in timing.tools) {
+        if (timing.tools[k].ms < minMs) {
+          minMs = timing.tools[k].ms
+          minKey = k
+        }
+      }
+      const kept: Record<string, ToolTimingTotals> = {}
+      for (const k in timing.tools) {
+        if (k !== minKey) kept[k] = timing.tools[k]
+      }
+      timing.tools = kept
+    }
+    timing.tools[name] = { calls: 1, ms }
+    return
+  }
+  const cur = timing.tools[name]
+  timing.tools[name] = { calls: cur.calls + 1, ms: cur.ms + ms }
+}
+
 export function applyTimeline(state: TimelineState, event: TimelineEvent, bounds: FoldBounds): TimelineState {
   let st: TimelineState | undefined
   const ensure = (): TimelineState => st ??= {
@@ -480,6 +561,12 @@ export function applyTimeline(state: TimelineState, event: TimelineEvent, bounds
     events: [...state.events],
     archived: [...state.archived],
     callNames: { ...state.callNames },
+    // The timing totals are shared with the persisted previous state —
+    // private working copies for this event's accumulations (per-name rows
+    // are replaced, never mutated, so a one-level copy suffices for them).
+    ...(state.timing !== undefined
+      ? { timing: { ...state.timing, tools: { ...state.timing.tools } } }
+      : {}),
   }
 
   const data = event.data
@@ -534,8 +621,30 @@ export function applyTimeline(state: TimelineState, event: TimelineEvent, bounds
       case 'tool/call': {
         if (data && typeof data.callId === 'string' && typeof data.name === 'string') {
           const s = ensure()
-          s.callNames[data.callId] = data.name
+          s.callNames[data.callId] = { name: data.name, start: event.time }
         }
+        break
+      }
+      case 'step/start': {
+        // Arm the single pending-step slot (see TimelineState.stepStart): the
+        // following assistant/message and step/end price the LM call and the
+        // whole step against this instant. Always a state change (a new slot
+        // value), even over an un-consumed predecessor — sequential logs
+        // never hit that, hostile ones just supersede it.
+        const s = ensure()
+        s.stepStart = { time: event.time }
+        break
+      }
+      case 'step/end': {
+        // No open slot (an unpaired step/end, or the step aged past a
+        // refold) — nothing to price, and the state must stay reference-equal.
+        const start = state.stepStart
+        if (start === undefined) return state
+        const s = ensure()
+        ensureTiming(s).wallMs += durOf(start.time, event.time)
+        // Consume-once: DELETE the optional field — assigning `undefined`
+        // would break the plain-JSON persisted-state precondition.
+        delete s.stepStart
         break
       }
       case 'user/message': {
@@ -625,6 +734,13 @@ export function applyTimeline(state: TimelineState, event: TimelineEvent, bounds
           accumulateCost(s, event.time, usage)
         }
         s.requests.push(record)
+        // Timing: one completed model call; its duration is the open step's
+        // start → this response's instant (the pending slot stays armed —
+        // the step's tool calls and `step/end` still follow).
+        const timing = ensureTiming(s)
+        timing.calls += 1
+        const stepStart = state.stepStart
+        if (stepStart !== undefined) timing.lmMs += durOf(stepStart.time, event.time)
         // `deriveEventMessage` returns `data.message` for assistant/message, or
         // null when the content array is empty (usage-only events project to no
         // message — same rule as dsh's surface fold).
@@ -737,6 +853,12 @@ export function buildTimelineView(state: TimelineState, bounds: FoldBounds): Sna
     const pro = copyFam(state.cost.pro)
     if (pro !== undefined) cost.pro = pro
     result.cost = cost
+  }
+  // The timing totals ride the wire as COPIES too (per-name rows included).
+  if (state.timing !== undefined) {
+    const tools: Record<string, ToolTimingTotals> = {}
+    for (const k in state.timing.tools) tools[k] = { ...state.timing.tools[k] }
+    result.timing = { ...state.timing, tools }
   }
   // The served slice: the newest `maxNodes` tail PLUS every live inject node
   // older than the tail. Injections (AGENTS.md, session-start context, …)

@@ -54,6 +54,14 @@ export function toolCall(seq: number, opts: {
   return { type: 'tool/call', seq, time: at(), data: { callId: opts.callId, name: opts.name, arguments: opts.arguments ?? '{}' } }
 }
 
+export function stepStart(seq: number, opts: { time?: number } = {}): TimelineEvent {
+  return { type: 'step/start', seq, time: at(opts.time) }
+}
+
+export function stepEnd(seq: number, opts: { time?: number } = {}): TimelineEvent {
+  return { type: 'step/end', seq, time: at(opts.time) }
+}
+
 /** tool/result: the model-visible message rides data.message with the tool source. */
 export function toolResult(seq: number, opts: {
   callId: string

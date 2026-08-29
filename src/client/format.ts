@@ -36,3 +36,36 @@ export function fmtTime(t: number): string {
   if (isNaN(d.getTime())) return '—'
   return d.toLocaleTimeString('en-GB', { hour12: false })
 }
+
+/**
+ * Share of a whole as a compact leading percentage for the slice rows:
+ * '—' when nothing totals, '0%' for empty slices, '<1%' for non-zero crumbs
+ * a rounded-down integer would erase. Shares cap at 100% (parallel tool time
+ * can over-run the wall it belongs to).
+ */
+export function fmtShare(part: number, total: number): string {
+  if (!Number.isFinite(part) || !Number.isFinite(total) || total <= 0) return '—'
+  if (part <= 0) return '0%'
+  const pct = Math.min(1, part / total) * 100
+  if (pct < 1) return '<1%'
+  return `${Math.round(pct)}%`
+}
+
+/**
+ * Whole-session durations for the timing card, in the locale's units: raw ms
+ * under a second, one-decimal seconds under a minute, then m/s and h/m.
+ * Non-finite or non-positive input shows the dash (callers render their empty
+ * state anyway).
+ */
+export function fmtDuration(ms: number, lang: 'zh' | 'en'): string {
+  if (!Number.isFinite(ms) || ms <= 0) return '—'
+  if (ms < 1000) return `${Math.round(ms)}ms`
+  const zh = lang === 'zh'
+  if (ms < 60_000) return `${(ms / 1000).toFixed(1)}${zh ? '秒' : 's'}`
+  const totalSec = Math.floor(ms / 1000)
+  const m = Math.floor(totalSec / 60)
+  const s = totalSec % 60
+  if (ms < 3_600_000) return zh ? `${m}分${s}秒` : `${m}m ${s}s`
+  const h = Math.floor(m / 60)
+  return zh ? `${h}时${m % 60}分` : `${h}h ${m % 60}m`
+}

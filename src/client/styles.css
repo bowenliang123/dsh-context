@@ -4,8 +4,14 @@
    their own line instead of spilling past the card edge. */
 .lc-card-title { font-weight: 600; margin-bottom: 10px; display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; }
 .lc-card-title-text { flex: none; white-space: nowrap; }
-.lc-stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(62px, 1fr)); gap: 6px; }
+/* The context card's eight count cells: a fixed 2×4 grid (shape stats over
+   event tallies), so the head row stays at donut-card height — a 4-cell grid
+   would double the card's height for the same information. */
+.lc-stats { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 6px; }
 .lc-stat { background: var(--dsw-alias-bg-layer-2); border: 1px solid var(--dsw-alias-border-l1); border-radius: 8px; padding: 6px 6px; display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+/* The 8-cell stats grid quarters an equal head-row card, so its cells are narrow: tighter padding plus a corner-pinned '?' (out of the label's line) keep the longest label (预估费用) on one line. */
+.lc-stats .lc-stat { padding: 6px 3px; }
+.lc-stats .lc-stat-q { position: absolute; top: 3px; right: 4px; margin: 0; }
 .lc-stat-label { color: var(--dsw-alias-label-secondary); font-size: 11px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .lc-stat-value { color: var(--dsw-alias-label-primary); font-size: 14px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; text-align: center; }
 .lc-stat-sub { color: var(--dsw-alias-label-secondary); font-size: 11px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
@@ -230,10 +236,45 @@ button.lc-brief-row-link { cursor: pointer; }
 .lc-col-browser { display: flex; flex-direction: column; }
 .lc-col-browser > .lc-card { flex: 1; }
 /*
- Head row: stats/plugin split ~7:3 (flex 7 1 0 / 3 1 0) with per-card min-widths so each wraps onto its own line when narrow; the sizing lives on the head row's direct children so the shared card chrome doesn't change.
+ Head row: four EQUAL-width cards (context / timing / token / plugin) —
+ `flex-basis: 0` + equal grow quarters the row exactly at every pane width,
+ and `min-width: 0` keeps all four on one line (a content-based minimum would
+ let one card spill onto a stretched second line); narrow panes squeeze the
+ cards' internal grids instead of breaking the row.
  */
-.lc-head > .lc-card:first-child { flex: 7 1 0; min-width: 360px; }
-.lc-head > .lc-card:last-child { flex: 3 1 0; min-width: 220px; }
+.lc-head > .lc-card { flex: 1 1 0; min-width: 0; }
+/* The context card's cell grid stretches to the donut cards' height, so the four-equal row reads as one level band. */
+.lc-head > .lc-card:first-child { display: flex; flex-direction: column; }
+.lc-head > .lc-card:first-child .lc-stats { flex: 1; align-content: stretch; }
+.lc-head > .lc-card:first-child .lc-stat { justify-content: center; }
+/*
+ ---- Stats cards' shared anatomy: a small section heading, the donut+list
+ row, and the token card's cost line (the '.lc-stat-tip' bubble pattern). ----
+ */
+.lc-stat-head { font-size: 11px; font-weight: 600; color: var(--dsw-alias-label-secondary); margin: 12px 0 8px; }
+/* The ring hugs the left edge; the legend fills the rest of the card with its quantity and share columns right-aligned. The donut cards stretch the group over their full height, so the head row's extra space sits around the chart instead of pooling under it. */
+.lc-donut-row { display: flex; align-items: center; justify-content: flex-start; gap: 12px; min-width: 0; }
+.lc-col-donut { display: flex; flex-direction: column; }
+.lc-col-donut .lc-donut-row { flex: 1; }
+.lc-donut-row .lc-sl { flex: 1 1 auto; }
+.lc-donut { position: relative; flex: none; }
+.lc-donut svg { display: block; }
+.lc-donut-track { stroke: rgba(128,128,128,0.18); }
+.lc-donut-center { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 1px; pointer-events: none; text-align: center; padding: 0 7px; box-sizing: border-box; }
+.lc-donut-center b { line-height: 1.15; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
+.lc-donut-center span { color: var(--dsw-alias-label-secondary); white-space: nowrap; }
+/*
+ The slice rows — the donut's legend with numbers, no bars: the color dot +
+ label on the left, the quantity and the bold share right-aligned as closing
+ columns. Labels wrap onto a second line instead of ellipsizing — the
+ English names read in full; the dot stays pinned to the first line.
+ */
+.lc-sl { display: flex; flex-direction: column; gap: 5px; min-width: 0; }
+.lc-sl-row { display: flex; align-items: baseline; gap: 6px; font-size: 12px; min-width: 0; }
+.lc-sl-dot { flex: none; width: 8px; height: 8px; border-radius: 2px; align-self: flex-start; margin-top: 2px; }
+.lc-sl-label { flex: 0 1 auto; min-width: 80px; line-height: 1.25; overflow: hidden; }
+.lc-sl-count { flex: 1 1 auto; text-align: right; color: var(--dsw-alias-label-secondary); font-variant-numeric: tabular-nums; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.lc-sl-pct { flex: none; min-width: 30px; text-align: right; font-weight: 700; font-variant-numeric: tabular-nums; }
 .lc-pi-grid { display: grid; grid-template-columns: 1fr; gap: 8px; }
 .lc-pi-row { display: flex; flex-direction: row; justify-content: space-between; align-items: baseline; gap: 12px; min-width: 0; text-decoration: none; color: inherit; }
 .lc-pi-row:hover .lc-pi-value { text-decoration: underline; }

@@ -100,6 +100,20 @@ const costFamilySchema = z.object({
   off: costBucketsSchema.optional(),
 }).strict()
 
+const toolTimingSchema = z.object({
+  calls: z.number().int().nonnegative(),
+  ms: z.number().nonnegative(),
+}).strict()
+
+const timingTotalsSchema = z.object({
+  wallMs: z.number().nonnegative(),
+  lmMs: z.number().nonnegative(),
+  calls: z.number().int().nonnegative(),
+  toolsMs: z.number().nonnegative(),
+  toolCalls: z.number().int().nonnegative(),
+  tools: z.record(z.string(), toolTimingSchema),
+}).strict()
+
 const contextTimelineSchema = z.object({
   ok: z.literal(true),
   model: z.string().optional(),
@@ -111,6 +125,7 @@ const contextTimelineSchema = z.object({
   requests: z.array(requestRecordSchema),
   events: z.array(contextEventSchema),
   cost: z.object({ flash: costFamilySchema.optional(), pro: costFamilySchema.optional() }).strict().optional(),
+  timing: timingTotalsSchema.optional(),
   nodes: z.array(surfaceNodeSchema),
   droppedNodes: z.number().int().nonnegative(),
   archive: z.array(surfaceNodeSchema),
@@ -143,7 +158,9 @@ const timelineStateSchema = z.object({
   archived: z.array(surfaceNodeSchema),
   cost: z.object({ flash: costFamilySchema.optional(), pro: costFamilySchema.optional() }).strict().optional(),
   archiveFloor: z.number().optional(),
-  callNames: z.record(z.string(), z.string()),
+  timing: timingTotalsSchema.optional(),
+  stepStart: z.object({ time: z.number() }).strict().optional(),
+  callNames: z.record(z.string(), z.object({ name: z.string(), start: z.number() }).strict()),
   pendingShadowedSeqs: z.array(z.number()).optional(),
   pendingShadowEventSeq: z.number().optional(),
 }) as unknown as z.ZodType<TimelineState>
@@ -195,7 +212,11 @@ export function createContextTimelineDefinition(config: Config): CompatProjectio
     // 8: the image count moved to per-node `imgs` (live-surface cell); cached rows refolded.
     // 9: per-request billed cache-read tokens (`cacheRead`) joined request records; cached rows refolded.
     // 10: the `toolList` summary left the state and the wire view; cached rows refolded.
-    stateVersion: 10,
+    // 11: whole-session timing totals (`timing` + the `stepStart` slot) joined the
+    // state and `callNames` values grew a `start` instant ({name, start} — was a
+    // bare name string); cached rows refolded from the log, which rebuilds the
+    // timing totals for sessions started under older plugin builds.
+    stateVersion: 11,
   }
   return definition
 }

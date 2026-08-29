@@ -15,6 +15,8 @@ import {
   header,
   planMode,
   requestContext,
+  stepEnd,
+  stepStart,
   toolCall,
   toolResult,
   userMessage,
@@ -44,13 +46,15 @@ function realLog(): TimelineEvent[] {
       provider: 'deepseek',
     }),
     requestContext(2, { contextWindow: 128000 }),
-    userMessage(3, [{ type: 'text', text: 'hello there' }], { kind: 'user' }),
-    assistantMessage(4, { turn: 1, step: 0, usage: { inputTokens: 10, outputTokens: 5, cacheReadTokens: 3 } }),
-    toolCall(5, { callId: 'c1', name: 'bash' }),
-    toolResult(6, { callId: 'c1', content: [{ type: 'text', text: 'ok' }] }),
-    assistantMessage(7, { turn: 1, step: 1, usage: { inputTokens: 20, outputTokens: 8 } }),
-    compaction(8, 'summary', { shadowedTokenCount: 12, shadowedSeqs: [3] }),
-    planMode(9, { active: true }),
+    stepStart(3),
+    userMessage(4, [{ type: 'text', text: 'hello there' }], { kind: 'user' }),
+    assistantMessage(5, { turn: 1, step: 0, usage: { inputTokens: 10, outputTokens: 5, cacheReadTokens: 3 } }),
+    toolCall(6, { callId: 'c1', name: 'bash' }),
+    toolResult(7, { callId: 'c1', content: [{ type: 'text', text: 'ok' }] }),
+    stepEnd(8),
+    assistantMessage(9, { turn: 1, step: 1, usage: { inputTokens: 20, outputTokens: 8 } }),
+    compaction(10, 'summary', { shadowedTokenCount: 12, shadowedSeqs: [4] }),
+    planMode(11, { active: true }),
   ]
 }
 
@@ -58,7 +62,7 @@ describe('createContextTimelineDefinition', () => {
   test('carries both projection contracts on one unit', () => {
     const def = createContextTimelineDefinition({})
     assert.equal(def.key, 'contextTimeline')
-    assert.equal(def.stateVersion, 10)
+    assert.equal(def.stateVersion, 11)
     assert.equal(typeof def.init, 'function')
     assert.equal(typeof def.apply, 'function')
     // 0.1.0 contract: schema + top-level view.

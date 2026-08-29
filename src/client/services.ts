@@ -11,7 +11,7 @@
  */
 
 import type { Context } from '@deepseek-ai/cordis'
-import type { ContextBreakdown, ContextHeaders, ContextPressure, ContextTimeline, TokenUsage } from '../shared/types'
+import type { ContextBreakdown, ContextHeaders, ContextPressure, ContextTimeline, TimingTotals, TokenUsage, ToolTimingTotals } from '../shared/types'
 
 export interface LocaleService {
   register(ns: string, dicts: Record<string, Record<string, string>>): () => void
@@ -261,7 +261,8 @@ export function timelineOf(value: unknown): ContextTimeline | null {
     && Array.isArray(data.requests)
     && Array.isArray(data.events)
     && Array.isArray(data.nodes)
-    && Array.isArray(data.archive)) {
+    && Array.isArray(data.archive)
+    && timingFastOk(data.timing)) {
     // Well-formed: pass the delivered value through untouched (cheap, and reference-stable so plain re-renders stay zero-copy).
     return data as unknown as ContextTimeline
   }
@@ -269,6 +270,7 @@ export function timelineOf(value: unknown): ContextTimeline | null {
   const cost = typeof data.cost === 'object' && data.cost !== null && !Array.isArray(data.cost)
     ? data.cost as ContextTimeline['cost']
     : undefined
+  const timing = timingOf(data.timing)
   return {
     ok: true,
     ...(typeof data.model === 'string' ? { model: data.model } : {}),
@@ -291,6 +293,7 @@ export function timelineOf(value: unknown): ContextTimeline | null {
     ...(typeof data.toolCalls === 'number' ? { toolCalls: data.toolCalls } : {}),
     archive: objectsOf(data.archive),
     ...(cost !== undefined ? { cost } : {}),
+    ...(timing !== null ? { timing } : {}),
     ...(typeof data.surfaceFloor === 'number' ? { surfaceFloor: data.surfaceFloor } : {}),
     ...(typeof data.archiveFloor === 'number' ? { archiveFloor: data.archiveFloor } : {}),
   }
@@ -334,6 +337,73 @@ export function contextBreakdownOf(value: unknown): ContextBreakdown | null {
 export function tokenUsageOf(value: unknown): TokenUsage | null {
   const data: unknown = asRecord(value)
   return data as TokenUsage | null
+}
+
+/**
+ * A non-negative finite number (the timing totals' every field): NaN or a
+ * negative degrades to 0 instead of leaking into donut shares.
+ */
+function msNumOf(value: unknown): number {
+  return typeof value === 'number' && Number.isFinite(value) && value >= 0 ? value : 0
+}
+
+/**
+ * Cheap whole-value check for the pass-through path of `timelineOf`: absent
+ * timing passes; present timing must already be well-formed (every scalar
+ * numeric, every per-name row shaped) — anything else sends the payload down
+ * the sanitizing slow path.
+ */
+function timingFastOk(value: unknown): boolean {
+  if (value === undefined) return true
+  if (value === null || typeof value !== 'object' || Array.isArray(value)) return false
+  const t = value as Record<string, unknown>
+  for (const k of ['wallMs', 'lmMs', 'calls', 'toolsMs', 'toolCalls']) {
+    if (typeof t[k] !== 'number') return false
+  }
+  const tools = t.tools
+  if (tools === null || typeof tools !== 'object' || Array.isArray(tools)) return false
+  for (const k in tools) {
+    const row = (tools as Record<string, unknown>)[k]
+    if (row === null || typeof row !== 'object') return false
+    if (typeof (row as Record<string, unknown>).calls !== 'number') return false
+    if (typeof (row as Record<string, unknown>).ms !== 'number') return false
+  }
+  return true
+}
+
+/**
+ * Narrow a delivered timing totals value (see TimingTotals) to a RENDER-SAFE
+ * shape — the timing card's no-white-screen guarantee. A value that is not a
+ * record stays null (the card renders its empty state); wrong-typed scalars
+ * zero out and per-name rows failing the shape drop individually, so one
+ * hostile row never blanks the ranking.
+ */
+export function timingOf(value: unknown): TimingTotals | null {
+  const data = asRecord(value)
+  if (data === null) return null
+  const tools: Record<string, ToolTimingTotals> = {}
+  const rawTools = data.tools
+  if (rawTools !== null && typeof rawTools === 'object' && !Array.isArray(rawTools)) {
+    for (const k in rawTools) {
+      // A JSON-delivered record can carry an own '__proto__' key; assigning it
+      // would set the prototype instead of a row — skip it.
+      if (k === '__proto__' || !Object.hasOwn(rawTools, k)) continue
+      const row = (rawTools as Record<string, unknown>)[k]
+      if (row === null || typeof row !== 'object') continue
+      const calls = (row as Record<string, unknown>).calls
+      const ms = (row as Record<string, unknown>).ms
+      if (typeof calls !== 'number' || !(calls >= 0) || typeof ms !== 'number' || !(ms >= 0)) continue
+      tools[k] = { calls, ms }
+    }
+  }
+  return {
+    wallMs: msNumOf(data.wallMs),
+    lmMs: msNumOf(data.lmMs),
+    calls: msNumOf(data.calls),
+    toolsMs: msNumOf(data.toolsMs),
+    toolCalls: msNumOf(data.toolCalls),
+    tools,
+  }
 }
 
 /**

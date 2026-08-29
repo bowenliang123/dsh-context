@@ -18,12 +18,15 @@ import type { ContextSettings } from '../settings'
 import type { ViewKit } from '../viewkit'
 import { makeContextBrowser } from './browser'
 import { makeAgentGraph } from './agentGraph'
+import { makeDonut } from './donut'
 import { makeCurrentComposition } from './currentComposition'
 import { makeEventList } from './events'
 import { makeFileCard } from './fileCard'
 import { makePluginInfo } from './pluginInfo'
 import { makeRequestDetail } from './requestDetail'
-import { makeStatsBoard } from './statsBoard'
+import { makeStatsContext } from './statsContext'
+import { makeStatsTiming } from './statsTiming'
+import { makeStatsTokens } from './statsTokens'
 import { makeLegend, makeStackedBar } from './stackedBar'
 import { aggregateByTurn, attachMarkers, jumpTargetOf, makeTrendChart } from './trendChart'
 
@@ -53,7 +56,10 @@ export function makeContextView(
   const RequestDetail = makeRequestDetail(kit, StackedBar)
   const EventList = makeEventList(kit)
   const FileCard = makeFileCard(kit, settings)
-  const StatsBoard = makeStatsBoard(kit)
+  const Donut = makeDonut(kit)
+  const StatsContext = makeStatsContext(kit)
+  const StatsTiming = makeStatsTiming(kit, Donut)
+  const StatsTokens = makeStatsTokens(kit, Donut)
   const PluginInfo = makePluginInfo(kit)
   const ContextBrowser = makeContextBrowser(kit, StackedBar)
   const AgentGraph = makeAgentGraph(ctx, kit)
@@ -319,8 +325,10 @@ export function makeContextView(
       <div className="lc-root" ref={rootRef}>
 
         <div className="lc-cols lc-head">
-          <StatsBoard requests={requests} events={events} usage={usage} toolCalls={data.toolCalls} images={data.images}
+          <StatsContext requests={requests} events={events} toolCalls={data.toolCalls} images={data.images}
             cost={data.cost} locale={activeLocale} />
+          <StatsTokens usage={usage} />
+          <StatsTiming timing={data.timing ?? null} locale={activeLocale} />
           <PluginInfo />
         </div>
 

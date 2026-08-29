@@ -142,9 +142,10 @@ describe('request/context', () => {
 })
 
 describe('tool/call', () => {
-  test('a valid call arms the callNames entry', () => {
+  test('a valid call arms the callNames entry (name + start instant)', () => {
     const { state } = driveTimeline([toolCall(1, { callId: 'c1', name: 'bash' })])
-    assert.deepEqual(state.callNames, { c1: 'bash' })
+    assert.equal(state.callNames.c1?.name, 'bash')
+    assert.equal(typeof state.callNames.c1?.start, 'number')
   })
 
   test('a non-string callId returns the same state reference', () => {
