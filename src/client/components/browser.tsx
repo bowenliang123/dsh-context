@@ -150,7 +150,8 @@ function Section(props: {
   return (
     <div className="lc-ts-card">
       <div className="lc-ts-card-head">
-        <b className={props.labelClass}>{props.label}</b>
+        {/* The title recovers an ellipsized label: long mono call names truncate under width pressure. */}
+        <b className={props.labelClass} title={props.label}>{props.label}</b>
         {right ? <span className="lc-ts-card-right">{props.meta}{props.actions}</span> : null}
         {props.count !== undefined ? <span className="lc-ts-card-count">{props.count}</span> : null}
       </div>

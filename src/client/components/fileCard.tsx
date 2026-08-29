@@ -99,7 +99,7 @@ export function makeFileCard(kit: ViewKit, settings: ContextSettings): ReactNS.C
 
     const opLine = (op: FileOp): ReactNS.ReactElement => (
       <>
-        <span className="lc-fa-op-tool">{op.tool}</span>
+        <span className="lc-fa-op-tool" title={op.tool}>{op.tool}</span>
         {/* A read's line footprint: the exact `>>n` window off the result meta, or the ≈ limit estimate. */}
         {op.read !== undefined
           ? (

@@ -64,7 +64,7 @@
 /*
  Turn strip: NEUTRAL zebra fills (inline, see TURN_FILLS) — never the category palette, or the strip reads as a detached bottom segment of the bars.
  */
-.lc-turns { display: flex; gap: 2px; width: max-content; min-width: 100%; margin-top: 4px; }
+.lc-turns { display: flex; gap: 2px; overflow: hidden; margin-top: 4px; }
 .lc-turn { flex: none; box-sizing: border-box; text-align: center; font-size: 10px; line-height: 14px; font-weight: 600; color: var(--dsw-alias-label-secondary); border-radius: 3px; height: 14px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; cursor: pointer; transition: filter 120ms, opacity 120ms; }
 .lc-turn-on { filter: brightness(1.35); color: var(--dsw-alias-label-primary); }
 /* The label is translated by JS to stay centered in the block's visible

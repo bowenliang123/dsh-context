@@ -8,7 +8,12 @@
 .lc-ts-card { background: var(--dsw-alias-bg-layer-2); border: 1px solid var(--dsw-alias-border-l2); border-radius: 6px; overflow: hidden; min-width: 0; }
 .lc-ts-card-head { display: flex; align-items: center; gap: 8px; padding: 6px 10px; font-size: 11px; font-weight: 600; color: var(--dsw-alias-label-secondary); border-bottom: 1px solid var(--dsw-alias-border-l1); }
 .lc-ts-card-head b { color: var(--dsw-alias-label-primary); }
-.lc-ts-call-name { font-size: 13px; font-family: var(--ds-font-family-code, ui-monospace, SFMono-Regular, Menlo, monospace); }
+/*
+ Shrinkable under width pressure: a long mono call name (MCP tool names have
+ no break points) must ellipsize instead of pushing the head's status/meta
+ group out of the section card; the Section's label title recovers it.
+ */
+.lc-ts-call-name { font-size: 13px; font-family: var(--ds-font-family-code, ui-monospace, SFMono-Regular, Menlo, monospace); min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .lc-ts-card-count { margin-left: auto; }
 .lc-ts-card-right { margin-left: auto; display: inline-flex; align-items: center; gap: 8px; }
 .lc-ts-card-meta { color: var(--dsw-alias-label-secondary); font-size: 11px; font-weight: 400; white-space: nowrap; font-variant-numeric: tabular-nums; }
