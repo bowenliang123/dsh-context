@@ -8,6 +8,7 @@ import { describe, test } from 'vitest'
 import { createContextHeadersDefinition } from '../../src/host/headers'
 import type { HeadersState } from '../../src/host/headers'
 import { header, foreign } from './helpers/events'
+import { assertPlainJson } from './helpers/projection'
 import type { TimelineEvent } from '../../src/host/fold'
 
 type Def = ReturnType<typeof createContextHeadersDefinition>
@@ -28,9 +29,11 @@ function headerEvent(seq: number, rawHeader: unknown): TimelineEvent {
   return { type: 'request/header', seq, time: seq * 1000, data: { header: rawHeader, reason: 'initial' } }
 }
 
+/** Fold events through the unit, pinning the plain-JSON state precondition on every result. */
 function fold(def: Def, events: TimelineEvent[]): HeadersState {
   let state = def.init()
   for (const ev of events) state = def.apply(state, ev as never)
+  assertPlainJson(state)
   return state
 }
 
@@ -48,6 +51,7 @@ describe('createContextHeadersDefinition', () => {
       tools: [{ name: 'bash', description: 'run a command' }],
     }) as never)
     assert.notEqual(state, init, 'a header event produces a new state')
+    assertPlainJson(state)
     assert.equal(state.headers.length, 1)
     assert.equal(state.headers[0].seq, 1)
     assert.equal(state.headers[0].system, 'You are an agent.')
@@ -227,5 +231,29 @@ describe('hostile tool entries', () => {
       assert.ok(Number.isInteger(tool.tokens) && tool.tokens >= 0, 'tool tokens priced')
       assert.ok('schema' in tool, 'the raw schema rides the record')
     }
+  })
+
+  test('hostile shapes a committed log can hold keep the state lossless JSON', () => {
+    // Committed event data is already the harness's lossless-JSON snapshot (session.append
+    // throws on anything else), so the hostile surface here is wrong-SHAPED plain JSON —
+    // never functions, undefined-valued properties, or exotic objects.
+    const def = createContextHeadersDefinition()
+    const toolSchema = { name: 'bash', description: 'run a command', parameters: {} }
+    const state = fold(def, [headerEvent(1, {
+      tools: [
+        null,
+        42,
+        [],
+        { name: 123, extra: { deep: [true, 'x'] } }, // wrong-typed name, nested junk
+        toolSchema, // an empty-object parameters schema is legal and must survive verbatim
+        { name: 'read', parameters: { type: 'object', properties: {} } },
+      ],
+    })])
+    assert.deepEqual(state.headers[0].tools[4].schema, toolSchema, 'a real ToolSchema entry rides verbatim')
+    assert.deepEqual(
+      state.headers[0].tools[5].schema,
+      { name: 'read', parameters: { type: 'object', properties: {} } },
+      'nested empty-object schemas survive verbatim',
+    )
   })
 })

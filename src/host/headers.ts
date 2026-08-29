@@ -68,6 +68,8 @@ function recordOf(event: SessionEvent): HeaderRecord | null {
       const entry: HeaderTool = {
         name: typeof tool.name === 'string' ? tool.name : '?',
         tokens: estimateToolSchema(t),
+        // The raw entry rides state verbatim: committed event data is already the harness's
+        // lossless-JSON snapshot (session.append), so it can carry no non-JSON value.
         schema: t,
       }
       if (typeof tool.description === 'string' && tool.description !== '') {
