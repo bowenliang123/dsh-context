@@ -25,6 +25,38 @@ import { estimateToolSchema } from './pricing'
 /** Retention cap on header epochs (changes are rare; 50 is generous). */
 const HEADERS_MAX = 50
 
+/**
+ * Detach one tool entry into a plain-JSON schema for the projection state.
+ *
+ * The projection-cache precondition is lossless JSON (`isJsonValue`): the
+ * raw header entries are `ToolDefinition`s that also carry the `execute`
+ * callback and other non-JSON fields, and materializing one into persisted
+ * state fails EVERY projection push for the session (`api-session/added`
+ * rejects the whole payload — sessions then fail to open). Only the JSON
+ * schema surface the model received is kept: scalars survive, functions and
+ * `undefined`-valued properties are dropped, and exotic objects degrade to
+ * their plain-JSON parts (an entry with nothing JSON-safe left becomes
+ * `undefined`, which the caller omits).
+ */
+export function jsonSchemaOf(value: unknown): unknown {
+  if (value === null) return null
+  const type = typeof value
+  if (type === 'string' || type === 'boolean') return value
+  if (type === 'number') return Number.isFinite(value) ? value : undefined
+  if (type !== 'object') return undefined
+  if (Array.isArray(value)) {
+    const items = value.map(jsonSchemaOf)
+    return items.every(item => item !== undefined) ? items : undefined
+  }
+  const record = value as Record<string, unknown>
+  const out: Record<string, unknown> = {}
+  for (const key of Object.keys(record)) {
+    const clean = jsonSchemaOf(record[key])
+    if (clean !== undefined) out[key] = clean
+  }
+  return Object.keys(out).length > 0 ? out : undefined
+}
+
 export interface HeadersState {
   headers: HeaderRecord[]
 }
@@ -65,10 +97,11 @@ function recordOf(event: SessionEvent): HeaderRecord | null {
       // The log is untrusted input: a null or primitive entry degrades to an
       // unnamed, JSON-priced tool instead of throwing the fold.
       const tool = (t !== null && typeof t === 'object' ? t : {}) as { name?: unknown; description?: unknown; plugin?: unknown }
+      const schema = jsonSchemaOf(t)
       const entry: HeaderTool = {
         name: typeof tool.name === 'string' ? tool.name : '?',
         tokens: estimateToolSchema(t),
-        schema: t,
+        ...(schema !== undefined ? { schema } : {}),
       }
       if (typeof tool.description === 'string' && tool.description !== '') {
         entry.description = tool.description

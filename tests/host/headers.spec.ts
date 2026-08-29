@@ -228,4 +228,63 @@ describe('hostile tool entries', () => {
       assert.ok('schema' in tool, 'the raw schema rides the record')
     }
   })
+
+  test('a real ToolDefinition (with an execute callback) folds to a plain-JSON schema', () => {
+    const def = createContextHeadersDefinition()
+    const tool = {
+      name: 'bash',
+      description: 'Run shell commands',
+      parameters: { type: 'object', properties: { command: { type: 'string' } } },
+      output: { schema: { type: 'string' } },
+      execute: () => Promise.resolve('ok'), // non-JSON: must not ride the projection
+    }
+    const view = def.view(fold(def, [headerEvent(1, { tools: [tool] })]))
+    const folded = view.headers[0].tools[0]
+    assert.equal(folded.name, 'bash')
+    assert.equal(folded.description, 'Run shell commands')
+    assert.ok('schema' in folded, 'the JSON schema rides the record')
+    assert.ok(
+      !('execute' in (folded.schema as Record<string, unknown>)),
+      'execute never reaches the projection',
+    )
+    assert.deepEqual(
+      (folded.schema as { parameters: unknown }).parameters,
+      { type: 'object', properties: { command: { type: 'string' } } },
+      'the parameters schema survives',
+    )
+  })
+
+  test('non-finite numbers are dropped and function-only entries omit the schema key', () => {
+    const def = createContextHeadersDefinition()
+    const view = def.view(fold(def, [headerEvent(1, {
+      tools: [
+        { name: 'bad', parameters: { min: Number.NaN, max: 10 } },
+        { execute: () => undefined }, // no JSON-safe fields at all
+        { name: 'arr', parameters: { enum: ['a', () => 'x'] } }, // array with a function element
+        { name: 'empty', parameters: { enum: [] } }, // empty array keeps the schema
+      ],
+    })]))
+    const tools = view.headers[0].tools
+    assert.ok('schema' in tools[0], 'a schema with surviving fields rides the record')
+    assert.deepEqual(
+      tools[0].schema,
+      { name: 'bad', parameters: { max: 10 } },
+      'non-finite numbers are dropped, surviving fields stay',
+    )
+    assert.ok(!('schema' in tools[1]), 'a function-only entry omits the schema key')
+    assert.ok('schema' in tools[2], 'a surviving name keeps the schema')
+    assert.deepEqual(
+      tools[2].schema,
+      { name: 'arr' },
+      'a non-JSON array element drops that field, surviving fields stay',
+    )
+    assert.deepEqual(
+      tools[3].schema,
+      { name: 'empty', parameters: { enum: [] } },
+      'an empty array rides the schema',
+    )
+    assert.equal(tools[0].name, 'bad')
+    assert.equal(tools[1].name, '?')
+    assert.equal(tools[2].name, 'arr')
+  })
 })
