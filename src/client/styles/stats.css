@@ -55,7 +55,7 @@
  columns. Labels wrap onto a second line instead of ellipsizing — the
  English names read in full; the dot stays pinned to the first line.
  */
-.lc-sl { display: flex; flex-direction: column; gap: 5px; min-width: 0; }
+.lc-sl { display: flex; flex-direction: column; gap: 5px; min-width: 0; overflow: hidden; }
 .lc-sl-row { display: flex; align-items: baseline; gap: 6px; font-size: 12px; min-width: 0; }
 .lc-sl-dot { flex: none; width: 8px; height: 8px; border-radius: 2px; align-self: flex-start; margin-top: 2px; }
 .lc-sl-label { flex: 0 1 auto; min-width: 80px; line-height: 1.25; overflow: hidden; }
@@ -76,3 +76,20 @@
  */
 .lc-pi-value { min-width: 0; color: var(--dsw-alias-label-primary); font-size: 13px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; text-align: right; }
 .lc-pi-row-btn .lc-pi-value { font-weight: 400; }
+/*
+ Narrow head cards: below ~320px of card content width the 96px ring + its
+ legend no longer fit side by side, so the card reflows instead of ellipsizing
+ figures — the ring centers over the full-width legend rows, and the context
+ card's 2x4 cell grid folds to 2 columns so tile labels read in full. Cards
+ at or above the threshold keep the side-by-side anatomy unchanged; engines
+ without container queries drop the whole block and keep the wide layout.
+ */
+@container lc-head-card (max-width: 320px) {
+  .lc-donut-row { flex-wrap: wrap; }
+  .lc-donut { margin: 0 auto; }
+  .lc-donut-row .lc-sl { flex-basis: 100%; }
+  /* Full legend width leaves the 80px label floor as the only overflow path at
+     extreme splits — relax it so the label wraps and the figures keep room. */
+  .lc-sl-label { min-width: 40px; }
+  .lc-stats { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}

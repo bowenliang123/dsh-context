@@ -13,10 +13,12 @@ import { React } from '../react'
 
 export function makePluginInfo(kit: ViewKit): () => ReactNS.ReactElement {
   const { t } = kit
-  const row = (label: string, value: ReactNS.ReactNode, href: string) => (
+  // `title` carries the untruncated value: at narrow card widths the row's
+  // ellipsis can cut the repo or name short, and the hover text recovers it.
+  const row = (label: string, value: ReactNS.ReactNode, href: string, hint: string) => (
     <a className="lc-pi-row" href={href} target="_blank" rel="noreferrer">
       <div className="lc-pi-label">{label}</div>
-      <div className="lc-pi-value">{value}</div>
+      <div className="lc-pi-value" title={hint}>{value}</div>
     </a>
   )
   return function PluginInfo(): ReactNS.ReactElement {
@@ -30,7 +32,8 @@ export function makePluginInfo(kit: ViewKit): () => ReactNS.ReactElement {
       return () => { on = false }
     }, [])
     const update = latest !== null && isNewerVersion(latest, PLUGIN_VERSION) ? latest : null
-    const nameValue: ReactNS.ReactNode[] = [PLUGIN_NAME + ' (v' + PLUGIN_VERSION + ')']
+    const nameText = PLUGIN_NAME + ' (v' + PLUGIN_VERSION + ')'
+    const nameValue: ReactNS.ReactNode[] = [nameText]
     if (update) nameValue.push(<span key="update" className="lc-pi-update">{'↑ v' + update}</span>)
     return (
       <div className="lc-card">
@@ -42,12 +45,12 @@ export function makePluginInfo(kit: ViewKit): () => ReactNS.ReactElement {
           </a>
         </div>
         <div className="lc-pi-grid">
-          {row(t('plugin.name'), nameValue, PLUGIN_REPO + '/releases')}
-          {row(t('plugin.github'), PLUGIN_REPO_SHORT, PLUGIN_REPO)}
+          {row(t('plugin.name'), nameValue, PLUGIN_REPO + '/releases', update !== null ? nameText + ' ↑ v' + update : nameText)}
+          {row(t('plugin.github'), PLUGIN_REPO_SHORT, PLUGIN_REPO, PLUGIN_REPO_SHORT)}
           {/* Best-effort jump to this plugin's settings page — openPluginSettings silently no-ops when the host's chrome doesn't match. */}
           <button type="button" className="lc-pi-row lc-pi-row-btn" onClick={() => { openPluginSettings() }}>
             <div className="lc-pi-label">{t('plugin.settings')}</div>
-            <div className="lc-pi-value">{t('plugin.settingsOpen')}</div>
+            <div className="lc-pi-value" title={t('plugin.settingsOpen')}>{t('plugin.settingsOpen')}</div>
           </button>
         </div>
       </div>

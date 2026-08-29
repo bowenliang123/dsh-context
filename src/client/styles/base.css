@@ -48,7 +48,14 @@
  let one card spill onto a stretched second line); narrow panes squeeze the
  cards' internal grids instead of breaking the row.
  */
-.lc-head > .lc-card { flex: 1 1 0; min-width: 0; }
+/*
+ `container` hooks the narrow-card reflow in stats.css: below ~320px of card
+ content width (1080p + host sidebar, OS display scaling) the donut cards
+ stack the ring over the legend instead of truncating figures. Inline-size
+ containment is safe here — the equal-fourths split comes from the flex
+ basis, not from the cards' contents.
+ */
+.lc-head > .lc-card { flex: 1 1 0; min-width: 0; container: lc-head-card / inline-size; }
 /* The context card's cell grid stretches to the donut cards' height, so the four-equal row reads as one level band. */
 .lc-head > .lc-card:first-child { display: flex; flex-direction: column; }
 .lc-head > .lc-card:first-child .lc-stats { flex: 1; align-content: stretch; }

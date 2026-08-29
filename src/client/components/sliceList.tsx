@@ -31,7 +31,7 @@ export function makeSliceList(kit: ViewKit): (props: { rows: SliceRow[] }) => Re
           <div key={r.key} className="lc-sl-row">
             <i className="lc-sl-dot" style={{ background: r.color }} />
             <span className="lc-sl-label">{r.label}</span>
-            {r.count !== '' ? <span className="lc-sl-count">{r.count}</span> : null}
+            {r.count !== '' ? <span className="lc-sl-count" title={r.count}>{r.count}</span> : null}
             <span className="lc-sl-pct">{r.pct}</span>
           </div>
         ))}
