@@ -45,10 +45,10 @@ describe('StatsTiming', () => {
     const m = await mount(h(StatsTiming, { timing: TIMING, locale: 'en' }))
     assert.ok(text(m.container).includes('Timing Stats'))
     assert.equal(query(m.container, '.lc-donut-center b').textContent, '10m 0s')
-    assert.equal(query(m.container, '.lc-donut-center span').textContent, 'active time')
-    assert.deepEqual(rowOf(m.container, 0), { pct: '40%', label: 'Model calls 10×', count: '4m 0s' })
+    assert.equal(query(m.container, '.lc-donut-center span').textContent, 'Active Time')
+    assert.deepEqual(rowOf(m.container, 0), { pct: '40%', label: 'Model calls × 10', count: '4m 0s' })
     // The tools row keeps the true 5m sum even though the ring clamps it.
-    assert.deepEqual(rowOf(m.container, 1), { pct: '50%', label: 'Tool runs 25×', count: '5m 0s' })
+    assert.deepEqual(rowOf(m.container, 1), { pct: '50%', label: 'Tool runs × 25', count: '5m 0s' })
     assert.deepEqual(rowOf(m.container, 2), { pct: '10%', label: 'Overhead', count: '1m 0s' })
     // Three ring segments painted (lm + tools + overhead); exactly three rows.
     assert.equal(queryAll(m.container, '.lc-donut circle').length, 3)
@@ -67,7 +67,7 @@ describe('StatsTiming', () => {
     // 9 parallel 22s calls inside a 100s wall: tools sum 200s > wall.
     const timing: TimingTotals = { wallMs: 100_000, lmMs: 60_000, calls: 2, toolsMs: 200_000, toolCalls: 9, tools: { bash: { calls: 9, ms: 200_000 } } }
     const m = await mount(h(StatsTiming, { timing, locale: 'en' }))
-    assert.deepEqual(rowOf(m.container, 1), { pct: '100%', label: 'Tool runs 9×', count: '3m 20s' })
+    assert.deepEqual(rowOf(m.container, 1), { pct: '100%', label: 'Tool runs × 9', count: '3m 20s' })
     // The ring clamps tools into the 40s post-model window; the zero
     // overhead segment is skipped: 2 circles, not 3.
     assert.equal(queryAll(m.container, '.lc-donut circle').length, 2)
@@ -81,9 +81,9 @@ describe('StatsTiming', () => {
     const m = await mount(h(StatsTiming, { timing, locale: 'en' }))
     assert.equal(query(m.container, '.lc-donut-center b').textContent, '—')
     assert.equal(queryAll(m.container, '.lc-sl-row').length, 3)
-    assert.deepEqual(rowOf(m.container, 0), { pct: '—', label: 'Model calls 3×', count: '5.0s' })
+    assert.deepEqual(rowOf(m.container, 0), { pct: '—', label: 'Model calls × 3', count: '5.0s' })
     // A zero-duration slice shows the dash; its count still rides the label.
-    assert.deepEqual(rowOf(m.container, 1), { pct: '—', label: 'Tool runs 1×', count: '—' })
+    assert.deepEqual(rowOf(m.container, 1), { pct: '—', label: 'Tool runs × 1', count: '—' })
     await m.unmount()
   })
 })
