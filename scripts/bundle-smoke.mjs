@@ -114,12 +114,14 @@ const ctx = {
 plugin.apply(ctx)
 
 assert.ok(dicts.get('dsh-context')?.zh && dicts.get('dsh-context')?.en, 'bilingual dictionaries registered')
-assert.equal(slots.length, 2, 'view tab + input overlay slots')
+assert.equal(slots.length, 3, 'view tab + assistant action + input overlay slots')
 assert.equal(slots[0][0], 'conversation.view')
 assert.equal(slots[0][1].order, 20)
 assert.equal(slots[0][1].label(), '上下文', 'tab label localized')
-assert.equal(slots[1][0], 'conversation.input.overlay')
-assert.equal(typeof slots[1][1].inject('s1').hooks.contextModal.getSnapshot, 'function', 'overlay hooks carry the modal store')
+assert.equal(slots[1][0], 'conversation.chat.assistant-actions')
+assert.equal(slots[1][1].id, 'context-jump', 'jump action rides its own slot id')
+assert.equal(slots[2][0], 'conversation.input.overlay')
+assert.equal(typeof slots[2][1].inject('s1').hooks.contextModal.getSnapshot, 'function', 'overlay hooks carry the modal store')
 assert.equal(sources.length, 1, '/context trigger source registered')
 assert.equal(sources[0].trigger, '/', 'trigger is the slash')
 
