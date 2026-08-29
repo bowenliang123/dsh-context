@@ -23,7 +23,7 @@ A DeepSeek Harness plugin for context insight, actions, and management.
 
 ## 强制要求
 - **必须** 使用codegraph来对代码进行探索和理解，在调查代码、确认属于、文件细节、代码结构等，不管是前期调研还是事中还是事后。codegraph查询和更新性能很高、耗时特别少，能大幅加快探索代码的速度，尽量多用、并发用。在任何改动后，*必须*执行`pnpm dlx @colbymchenry/codegraph sync`刷新，耗时很短，请尽快尽量多用。
-  - Example 1:
+  - Example 1: explore with questions or suggested query
     Run `pnpm dlx @colbymchenry/codegraph explore --path /path --max-files 10000 "What's Context Stats?"`
     Result:
       =============
@@ -282,7 +282,7 @@ A DeepSeek Harness plugin for context insight, actions, and management.
           - ... and 22 more files
           =============
     
-    - Example 2:
+    - Example 2: query single symbol or keyword
       Run `pnpm dlx @colbymchenry/codegraph query --path /path --limit 10000 "FileActivity"`
       Result:  
         =============
