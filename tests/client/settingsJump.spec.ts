@@ -1,11 +1,12 @@
 // openPluginSettings (src/client/settingsJump.ts): the guarded DOM jump to
 // the plugin's settings page — settings trigger first, Plugins section nav
 // row second — plus the hostile degradations (missing chrome, throwing
-// elements, already-open panel). jsdom supplies the real document.
+// elements, already-open panel) and the expand request the surviving jump
+// leaves for the plugin's settings card. jsdom supplies the real document.
 
 import assert from 'node:assert/strict'
 import { afterEach, describe, test } from 'vitest'
-import { openPluginSettings } from '../../src/client/settingsJump'
+import { consumeCardExpand, openPluginSettings, requestCardExpand } from '../../src/client/settingsJump'
 
 /** Immediate scheduler: captures the deferred runs in issue order. */
 function syncSchedule(): { runs: Array<() => void>; schedule: (run: () => void, ms: number) => void } {
@@ -32,6 +33,7 @@ function clicks(el: HTMLElement): { count: () => number } {
 describe('openPluginSettings', () => {
   afterEach(() => {
     document.body.textContent = ''
+    consumeCardExpand()
   })
 
   test('clicks the collapsed trigger, then the Plugins section row', () => {
@@ -134,5 +136,39 @@ describe('openPluginSettings', () => {
 
     assert.equal(menuClicks.count(), 0, 'only dialog triggers are candidates')
     assert.equal(runs.length, 0)
+  })
+
+  test('a surviving jump leaves a fresh expand request for the settings card', () => {
+    trigger(document, 'false')
+    const section = document.createElement('button')
+    section.textContent = '插件'
+    document.body.appendChild(section)
+    const { schedule } = syncSchedule()
+
+    openPluginSettings(document, schedule)
+
+    assert.equal(consumeCardExpand(), true, 'the card mounts expanded on this jump')
+    assert.equal(consumeCardExpand(), false, 'the request is consumed once')
+  })
+
+  test('degraded jumps leave no expand request behind', () => {
+    const { runs, schedule } = syncSchedule()
+    openPluginSettings(document, schedule)
+    assert.equal(consumeCardExpand(), false, 'no settings dialog in this chrome: no request')
+
+    const t = trigger(document, 'false')
+    t.click = () => { throw new Error('detached') }
+    assert.doesNotThrow(() => openPluginSettings(document, schedule))
+    assert.equal(consumeCardExpand(), false, 'a failed trigger click leaves no stale request')
+    assert.equal(runs.length, 0)
+  })
+
+  test('the expand request is freshness-windowed (5s) and single-shot', () => {
+    requestCardExpand(1000)
+    assert.equal(consumeCardExpand(1000 + 4999), true, 'fresh within the window')
+    assert.equal(consumeCardExpand(1000 + 4999), false, 'already consumed')
+
+    requestCardExpand(1000)
+    assert.equal(consumeCardExpand(1000 + 5000), false, 'stale past the window')
   })
 })

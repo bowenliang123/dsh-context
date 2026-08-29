@@ -1,6 +1,8 @@
 // SettingsCard (src/client/components/settingsCard.tsx) rendered with real
 // React against the real DICT_EN strings; the select rows open the REAL
-// Menu primitive (portaled into document.body) and pick through it.
+// Menu primitive (portaled into document.body) and pick through it. The
+// "Open in Settings" jump path mounts the card pre-expanded (settingsJump.ts
+// expand request), with the scroll best-effort against stubbed prototypes.
 
 import assert from 'node:assert/strict'
 import { describe, test } from 'vitest'
@@ -8,6 +10,7 @@ import { h } from '../../../src/client/react'
 import { makeSettingsCard } from '../../../src/client/components/settingsCard'
 import type { SettingsState } from '../../../src/client/settings'
 import { DICT_EN } from '../../../src/client/i18n'
+import { requestCardExpand } from '../../../src/client/settingsJump'
 import { click, keydown, makeKit, mount, query, queryAll, text } from '../helpers/kit'
 
 const kit = makeKit()
@@ -24,6 +27,16 @@ function stateOf(partial: Partial<SettingsState> = {}): SettingsState {
 /** Menu items portaled into document.body while a select is open. */
 function menuItems(): HTMLElement[] {
   return queryAll(document.body, '[role="menu"] [role="menuitem"]')
+}
+
+type ScrollIntoViewLike = (this: Element, arg?: unknown) => void
+
+/** Swap Element.prototype.scrollIntoView (absent in jsdom); returns the original. */
+function stubScrollIntoView(impl: ScrollIntoViewLike | undefined): ScrollIntoViewLike | undefined {
+  const proto = Element.prototype as unknown as { scrollIntoView?: ScrollIntoViewLike }
+  const original = proto.scrollIntoView
+  proto.scrollIntoView = impl
+  return original
 }
 
 describe('SettingsCard', () => {
@@ -163,5 +176,55 @@ describe('SettingsCard', () => {
     await click(menuItems()[1])
     assert.equal(document.body.querySelector('[role="menu"]'), null)
     await m.unmount()
+  })
+
+  test('a fresh expand request mounts the card open, scrolled into view — once', async () => {
+    const scrolled: Array<{ el: Element; arg: unknown }> = []
+    const restore = stubScrollIntoView(function (this: Element, arg?: unknown) {
+      scrolled.push({ el: this, arg })
+    })
+    try {
+      requestCardExpand()
+      const m = await mount(h(SettingsCard, { useContextSettings: hookFor(stateOf()) }))
+      const card = query(m.container, '.lc-settings-card')
+      assert.ok(card.className.includes('lc-settings-open'))
+      assert.equal(query(m.container, '.lc-settings-head').getAttribute('aria-expanded'), 'true')
+      assert.equal(queryAll(m.container, '.lc-settings-select').length, 3)
+      assert.equal(scrolled.length, 1, 'the card scrolls itself into view')
+      assert.deepEqual(scrolled[0].arg, { block: 'nearest' })
+      assert.equal(scrolled[0].el, card)
+      await m.unmount()
+
+      // Consumed once: a later mount starts collapsed again.
+      const again = await mount(h(SettingsCard, { useContextSettings: hookFor(stateOf()) }))
+      assert.equal(query(again.container, '.lc-settings-head').getAttribute('aria-expanded'), 'false')
+      assert.equal(scrolled.length, 1)
+      await again.unmount()
+    } finally {
+      stubScrollIntoView(restore)
+    }
+  })
+
+  test('a host whose scrollIntoView throws still mounts expanded', async () => {
+    const restore = stubScrollIntoView(() => { throw new Error('no scrolling here') })
+    try {
+      requestCardExpand()
+      const m = await mount(h(SettingsCard, { useContextSettings: hookFor(stateOf()) }))
+      assert.equal(query(m.container, '.lc-settings-head').getAttribute('aria-expanded'), 'true')
+      await m.unmount()
+    } finally {
+      stubScrollIntoView(restore)
+    }
+  })
+
+  test('a pending request is consumed even when the card renders nothing', async () => {
+    requestCardExpand()
+    const m = await mount(h(SettingsCard, { useContextSettings: hookFor(stateOf({ status: 'unavailable' })) }))
+    assert.equal(m.container.childElementCount, 0)
+    await m.unmount()
+
+    const again = await mount(h(SettingsCard, { useContextSettings: hookFor(stateOf()) }))
+    assert.equal(query(again.container, '.lc-settings-head').getAttribute('aria-expanded'), 'false')
+    await again.unmount()
   })
 })

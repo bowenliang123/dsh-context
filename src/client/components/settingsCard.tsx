@@ -4,11 +4,14 @@
    * Host-served `dsh-context` settings namespace — the section itself supplies nothing; it renders nothing while the namespace is
    * unavailable
   * (a deployment without the Host half, or a remote browser, shows no trace).
- */
+  * Mounts expanded when the Plugin Info card's "Open in Settings" jump left a
+  * fresh expand request (settingsJump.ts), scrolling itself into view.
+*/
 
 import type * as ReactNS from 'react'
 import { IconChevronDownOutline14, Menu } from '@deepseek-ai/dsh-client-ui-primitives'
 import { React } from '../react'
+import { consumeCardExpand } from '../settingsJump'
 import type { SettingsField, SettingsState } from '../settings'
 import type { ViewKit } from '../viewkit'
 
@@ -61,11 +64,21 @@ export function makeSettingsCard(kit: ViewKit): (props: SettingsCardProps) => Re
   const { t } = kit
   return function SettingsCard(props: SettingsCardProps): ReactNS.ReactElement | null {
     const [open, setOpen] = React.useState(false)
+    const itemRef = React.useRef<HTMLLIElement | null>(null)
+    // "Open in Settings" jump: consume its fresh expand request once on mount
+    // and land open; every guard stays local so no host quirk can surface.
+    React.useEffect(() => {
+      if (!consumeCardExpand()) return
+      setOpen(true)
+      try {
+        itemRef.current?.scrollIntoView({ block: 'nearest' })
+      } catch { /* hosts without scrollIntoView: expanded but unscrolled */ }
+    }, [])
     const state = typeof props.useContextSettings === 'function' ? props.useContextSettings(s => s) : undefined
     if (state === undefined || state.status === 'unavailable') return null
     const disabled = state.status !== 'ready' || !state.writable
     return (
-      <li className={'lc-settings-card' + (open ? ' lc-settings-open' : '')}>
+      <li ref={itemRef} className={'lc-settings-card' + (open ? ' lc-settings-open' : '')}>
         <button
           type="button"
           className="lc-settings-head"
