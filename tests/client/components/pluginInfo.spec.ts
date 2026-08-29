@@ -43,7 +43,7 @@ describe('PluginInfo', () => {
     assert.equal(fetchMock.mock.calls.length, 0)
     assert.ok(text(m.container).includes('Plugin Info'))
     const rows = queryAll(m.container, '.lc-pi-row')
-    assert.equal(rows.length, 2)
+    assert.equal(rows.length, 3)
     assert.equal(query(rows[0], '.lc-pi-label').textContent, 'Plugin')
     assert.equal(query(rows[0], '.lc-pi-value').textContent, 'dsh-context (v0.0.0-dev)')
     assert.equal(rows[0].getAttribute('href'), 'https://github.com/bowenliang123/dsh-context/releases')
@@ -51,6 +51,10 @@ describe('PluginInfo', () => {
     assert.equal(query(rows[1], '.lc-pi-label').textContent, 'GitHub')
     assert.equal(query(rows[1], '.lc-pi-value').textContent, 'bowenliang123/dsh-context')
     assert.equal(rows[1].getAttribute('href'), 'https://github.com/bowenliang123/dsh-context')
+    // The settings entry: a button (no href) below GitHub — the guarded jump runs on click.
+    assert.equal(rows[2].getAttribute('href'), null)
+    assert.equal(query(rows[2], '.lc-pi-label').textContent, 'Settings')
+    assert.equal(query(rows[2], '.lc-pi-value').textContent, 'Open in Settings')
     // The tagline is the repo link too: hover underlines it, a click opens GitHub.
     const hint = query(m.container, '.lc-pi-hint')
     assert.ok(text(hint).includes('The best DSH context plugin'))
@@ -58,6 +62,9 @@ describe('PluginInfo', () => {
     assert.equal(hint.getAttribute('target'), '_blank')
     assert.equal(hint.getAttribute('rel'), 'noreferrer')
     assert.equal(queryAll(m.container, '.lc-pi-update').length, 0)
+    // The settings entry runs the guarded jump; without the harness chrome in
+    // the jsdom document it silently no-ops — safe to click in tests.
+    assert.doesNotThrow(() => rows[2].click())
     await m.unmount()
   })
 

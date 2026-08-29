@@ -6,6 +6,7 @@
 import type * as ReactNS from 'react'
 import { fetchLatestVersion, isNewerVersion } from '../latestVersion'
 import { PLUGIN_NAME, PLUGIN_REPO, PLUGIN_REPO_SHORT, PLUGIN_VERSION } from '../meta'
+import { openPluginSettings } from '../settingsJump'
 import type { ViewKit } from '../viewkit'
 
 import { React } from '../react'
@@ -43,6 +44,11 @@ export function makePluginInfo(kit: ViewKit): () => ReactNS.ReactElement {
         <div className="lc-pi-grid">
           {row(t('plugin.name'), nameValue, PLUGIN_REPO + '/releases')}
           {row(t('plugin.github'), PLUGIN_REPO_SHORT, PLUGIN_REPO)}
+          {/* Best-effort jump to this plugin's settings page — openPluginSettings silently no-ops when the host's chrome doesn't match. */}
+          <button type="button" className="lc-pi-row lc-pi-row-btn" onClick={() => { openPluginSettings() }}>
+            <div className="lc-pi-label">{t('plugin.settings')}</div>
+            <div className="lc-pi-value">{t('plugin.settingsOpen')}</div>
+          </button>
         </div>
       </div>
     )

@@ -276,6 +276,8 @@ button.lc-brief-row-link { cursor: pointer; }
 .lc-sl-count { flex: 1 1 auto; text-align: right; color: var(--dsw-alias-label-secondary); font-variant-numeric: tabular-nums; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .lc-sl-pct { flex: none; min-width: 30px; text-align: right; font-weight: 700; font-variant-numeric: tabular-nums; }
 .lc-pi-grid { display: grid; grid-template-columns: 1fr; gap: 8px; }
+/* The settings-entry row is a button wearing the link-row chrome — reset the button chrome the shared row style doesn't cover. */
+.lc-pi-row-btn { appearance: none; border: 0; background: none; font: inherit; color: inherit; text-align: left; padding: 0; cursor: pointer; width: 100%; }
 .lc-pi-row { display: flex; flex-direction: row; justify-content: space-between; align-items: baseline; gap: 12px; min-width: 0; text-decoration: none; color: inherit; }
 .lc-pi-row:hover .lc-pi-value { text-decoration: underline; }
 .lc-pi-hint { text-decoration: none; }
