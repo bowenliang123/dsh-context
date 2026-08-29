@@ -31,10 +31,24 @@ describe('StatsTokens', () => {
     // the rows normalize over the whole billed total (450).
     assert.equal(query(m.container, '.lc-donut-center b').textContent, '75.00%')
     assert.equal(query(m.container, '.lc-donut-center span').textContent, 'Cache hit')
+    // Zero buckets stay hidden: the always-zero DeepSeek cache write drops out.
+    assert.equal(queryAll(m.container, '.lc-sl-row').length, 3)
     assert.deepEqual(rowOf(m.container, 0), { pct: '67%', label: 'Cache read', count: '300' })
-    assert.deepEqual(rowOf(m.container, 1), { pct: '0%', label: 'Cache write', count: '0' })
-    assert.deepEqual(rowOf(m.container, 2), { pct: '22%', label: 'Uncached input', count: '100' })
-    assert.deepEqual(rowOf(m.container, 3), { pct: '11%', label: 'Output (incl. reasoning)', count: '50' })
+    assert.deepEqual(rowOf(m.container, 1), { pct: '22%', label: 'Uncached input', count: '100' })
+    assert.deepEqual(rowOf(m.container, 2), { pct: '11%', label: 'Output (incl. reasoning)', count: '50' })
+    await m.unmount()
+  })
+
+  test('non-zero cache writes render as a fourth bucket', async () => {
+    const written: TokenUsage = { uncachedInputTokens: 100, outputTokens: 50, cacheReadTokens: 300, cacheWriteTokens: 50 }
+    const m = await mount(h(StatsTokens, { usage: written }))
+    // Hit = 300 / (100 + 300 + 50) = 66.66%; rows normalize over billed 500.
+    assert.equal(query(m.container, '.lc-donut-center b').textContent, '66.66%')
+    assert.equal(queryAll(m.container, '.lc-sl-row').length, 4)
+    assert.deepEqual(rowOf(m.container, 0), { pct: '60%', label: 'Cache read', count: '300' })
+    assert.deepEqual(rowOf(m.container, 1), { pct: '10%', label: 'Cache write', count: '50' })
+    assert.deepEqual(rowOf(m.container, 2), { pct: '20%', label: 'Uncached input', count: '100' })
+    assert.deepEqual(rowOf(m.container, 3), { pct: '10%', label: 'Output (incl. reasoning)', count: '50' })
     await m.unmount()
   })
 

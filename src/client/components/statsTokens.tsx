@@ -3,7 +3,9 @@
  * official `tokenUsage` projection, whole session). The donut's center is
  * the cache-hit share — the same figure the harness chat stats line shows —
  * and the slice rows carry each bucket's token count: cache reads/writes,
- * uncached input, and output (reasoning included).
+ * uncached input, and output (reasoning included). Zero buckets stay hidden
+ * once any usage is reported (DeepSeek sessions never report cache writes);
+ * the empty state keeps all four rows.
  */
 
 import type * as ReactNS from 'react'
@@ -45,7 +47,8 @@ export function makeStatsTokens(kit: ViewKit, Donut: (props: {
       { key: 'uncached', color: '#6366f1', label: t('tokens.uncached'), value: uncached },
       { key: 'output', color: '#3b82f6', label: t('tokens.output'), value: output },
     ]
-    const rows: SliceRow[] = buckets.map(b => ({
+    const shown = billed > 0 ? buckets.filter(b => b.value > 0) : buckets
+    const rows: SliceRow[] = shown.map(b => ({
       key: b.key, color: b.color, label: b.label,
       pct: fmtShare(b.value, billed), count: fmt(b.value),
     }))
@@ -57,7 +60,7 @@ export function makeStatsTokens(kit: ViewKit, Donut: (props: {
         </div>
         <div className="lc-donut-row">
           <Donut
-            segments={buckets.map(b => ({ key: b.key, color: b.color, value: b.value }))}
+            segments={shown.map(b => ({ key: b.key, color: b.color, value: b.value }))}
             size={96}
             centerTop={hit === null ? '—' : `${hit}%`}
             centerSub={t('tokens.cacheHit')}
