@@ -1,5 +1,10 @@
 .lc-root { padding: 16px 20px 32px; overflow-y: auto; height: 100%; box-sizing: border-box; color: var(--dsw-alias-label-primary); font-size: 13px; }
-.lc-card { background: var(--dsw-alias-bg-layer-1); border: 1px solid var(--dsw-alias-border-l1); border-radius: 10px; padding: 14px 16px; margin-bottom: 14px; }
+/*
+ Border roles: l2 (0.1 black ≈ #E5E5E5 on white) draws the VISIBLE edges —
+ cards and controls, matching dsh's own Button/Input chrome; l1 stays for
+ hairline dividers and passive chips, where a stronger line is just noise.
+ */
+.lc-card { background: var(--dsw-alias-bg-layer-1); border: 1px solid var(--dsw-alias-border-l2); border-radius: 10px; padding: 14px 16px; margin-bottom: 14px; }
 /* Wraps under width pressure: toggle groups/kind chips in a header drop to
    their own line instead of spilling past the card edge. */
 .lc-card-title { font-weight: 600; margin-bottom: 10px; display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; }
@@ -8,7 +13,7 @@
    event tallies), so the head row stays at donut-card height — a 4-cell grid
    would double the card's height for the same information. */
 .lc-stats { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 6px; }
-.lc-stat { background: var(--dsw-alias-bg-layer-2); border: 1px solid var(--dsw-alias-border-l1); border-radius: 8px; padding: 6px 6px; display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.lc-stat { background: var(--dsw-alias-bg-layer-2); border: 1px solid var(--dsw-alias-border-l2); border-radius: 8px; padding: 6px 6px; display: flex; flex-direction: column; gap: 2px; min-width: 0; }
 /* The 8-cell stats grid quarters an equal head-row card, so its cells are narrow: tighter padding plus a corner-pinned '?' (out of the label's line) keep the longest label (预估费用) on one line. */
 .lc-stats .lc-stat { padding: 6px 3px; }
 .lc-stats .lc-stat-q { position: absolute; top: 3px; right: 4px; margin: 0; }
@@ -19,7 +24,7 @@
  Stats cell tooltip (cost cell): styled DOM bubble because native `title` can't hold the multi-row price breakdown; a '?' signals the affordance and hovering anywhere on the cell reveals the bubble below (the cell is the tip's position frame). Same chrome as `.lc-bar-tip`: layer-2 fill, border, 6px radius, soft shadow, 120ms opacity ease.
  */
 .lc-stat-tipped { position: relative; }
-.lc-stat-q { display: inline-block; margin-left: 4px; width: 11px; height: 11px; line-height: 11px; border-radius: 50%; text-align: center; font-size: 9px; font-weight: 700; font-style: normal; color: var(--dsw-alias-label-secondary); background: var(--dsw-alias-bg-layer-1); border: 1px solid var(--dsw-alias-border-l1); cursor: help; }
+.lc-stat-q { display: inline-block; margin-left: 4px; width: 11px; height: 11px; line-height: 11px; border-radius: 50%; text-align: center; font-size: 9px; font-weight: 700; font-style: normal; color: var(--dsw-alias-label-secondary); background: var(--dsw-alias-bg-layer-1); border: 1px solid var(--dsw-alias-border-l2); cursor: help; }
 .lc-stat-tipped:hover .lc-stat-q { color: var(--dsw-alias-label-primary); border-color: var(--dsw-alias-label-primary); }
 .lc-stat-tip { position: absolute; top: calc(100% + 6px); left: 0; z-index: 6; width: max-content; max-width: 280px; background: var(--dsw-alias-bg-layer-2); border: 1px solid var(--dsw-alias-border-l1); border-radius: 6px; padding: 6px 10px; font-size: 12px; line-height: 1.5; font-weight: 400; color: var(--dsw-alias-label-primary); box-shadow: 0 2px 8px rgba(0,0,0,0.18); pointer-events: none; opacity: 0; transition: opacity 120ms ease; }
 .lc-stat-tipped:hover .lc-stat-tip { opacity: 1; }
@@ -28,7 +33,7 @@
 .lc-stat-tip-row { display: block; margin-top: 2px; }
 .lc-stat-tip-model { color: var(--dsw-alias-label-primary); }
 .lc-card-sub { font-weight: 400; color: var(--dsw-alias-label-secondary); font-size: 12px; margin-left: auto; }
-.lc-gran, .lc-kinds { margin-left: auto; display: flex; gap: 2px; background: var(--dsw-alias-bg-layer-2); border: 1px solid var(--dsw-alias-border-l1); border-radius: 6px; padding: 1px; }
+.lc-gran, .lc-kinds { margin-left: auto; display: flex; gap: 2px; background: var(--dsw-alias-bg-layer-2); border: 1px solid var(--dsw-alias-border-l2); border-radius: 6px; padding: 1px; }
 /* A title carrying TWO toggle groups wraps them so the auto-margin push happens once — two bare .lc-gran siblings would split the free space and drift apart. */
 .lc-trend-ctl { margin-left: auto; display: flex; gap: 6px; align-items: center; }
 .lc-trend-ctl .lc-gran { margin-left: 0; }
@@ -289,6 +294,7 @@ button.lc-brief-row-link { cursor: pointer; }
  an ellipsis; without it a narrow card pushes the value over the label.
  */
 .lc-pi-value { min-width: 0; color: var(--dsw-alias-label-primary); font-size: 13px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; text-align: right; }
+.lc-pi-row-btn .lc-pi-value { font-weight: 400; }
 .lc-events, .lc-fa-list { display: flex; flex-direction: column; gap: 2px; height: 320px; overflow-y: auto; }
 .lc-event { display: flex; align-items: center; gap: 8px; padding: 3px 0; }
 .lc-event-icon { width: 18px; text-align: center; color: var(--dsw-alias-state-warn-primary); }
@@ -317,7 +323,7 @@ button.lc-brief-row-link { cursor: pointer; }
 .lc-fa-ctl, .lc-br-toolctl { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-bottom: 8px; }
 .lc-fa-ctl .lc-gran { margin-left: 0; }
 .lc-fa-n { margin-left: 4px; font-weight: 700; opacity: 0.75; }
-.lc-fa-search, .lc-br-tool-search { flex: 1; min-width: 80px; font: inherit; font-size: 12px; color: var(--dsw-alias-label-primary); background: var(--dsw-alias-bg-layer-2); border: 1px solid var(--dsw-alias-border-l1); border-radius: 6px; padding: 3px 8px; outline: none; }
+.lc-fa-search, .lc-br-tool-search { flex: 1; min-width: 80px; font: inherit; font-size: 12px; color: var(--dsw-alias-label-primary); background: var(--dsw-alias-bg-layer-2); border: 1px solid var(--dsw-alias-border-l2); border-radius: 6px; padding: 3px 8px; outline: none; }
 .lc-fa-search:focus, .lc-br-tool-search:focus { border-color: var(--dsw-alias-label-dimmed); }
 .lc-fa-meta { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin-bottom: 6px; color: var(--dsw-alias-label-secondary); font-size: 12px; }
 /* The sort toggle rides the meta strip's right edge — the shared .lc-gran's own auto margin does the push. */
@@ -328,7 +334,7 @@ button.lc-brief-row-link { cursor: pointer; }
 .lc-fa-meta-delta:hover .lc-fa-meta-tip { opacity: 1; }
 /* An expanded file reads as one contained card: layer-2 fill inside a hairline frame. */
 .lc-fa-item { border: 1px solid transparent; border-radius: 8px; transition: background-color 120ms ease, border-color 120ms ease; }
-.lc-fa-item-on { background: var(--dsw-alias-bg-layer-2); border-color: var(--dsw-alias-border-l1); }
+.lc-fa-item-on { background: var(--dsw-alias-bg-layer-2); border-color: var(--dsw-alias-border-l2); }
 .lc-fa-row { display: flex; align-items: center; gap: 7px; width: 100%; border: 0; background: transparent; color: var(--dsw-alias-label-primary); font: inherit; font-size: 12px; padding: 6px 8px; cursor: pointer; text-align: left; border-radius: 7px; transition: background-color 120ms ease; }
 .lc-fa-row:hover { background: var(--dsw-alias-interactive-bg-hover); }
 .lc-fa-form { flex: none; width: 20px; height: 14px; display: flex; align-items: center; justify-content: center; font-size: 11px; opacity: 0.85; }
@@ -368,18 +374,18 @@ button.lc-brief-row-link { cursor: pointer; }
 .lc-empty { color: var(--dsw-alias-label-secondary); padding: 18px 0; text-align: center; }
 .lc-error { display: flex; flex-direction: column; align-items: center; gap: 8px; padding: 40px 16px; }
 .lc-error-msg { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12px; color: var(--dsw-alias-state-error-primary); background: var(--dsw-alias-bg-layer-2); border: 1px solid var(--dsw-alias-border-l1); border-radius: 6px; padding: 4px 8px; max-width: 100%; overflow-wrap: anywhere; }
-.lc-error-retry { border: 1px solid var(--dsw-alias-border-l1); background: var(--dsw-alias-bg-layer-2); color: var(--dsw-alias-label-primary); font: inherit; font-size: 12px; padding: 4px 14px; border-radius: 6px; cursor: pointer; }
+.lc-error-retry { border: 1px solid var(--dsw-alias-border-l2); background: var(--dsw-alias-bg-layer-2); color: var(--dsw-alias-label-primary); font: inherit; font-size: 12px; padding: 4px 14px; border-radius: 6px; cursor: pointer; }
 .lc-error-retry:hover { border-color: var(--dsw-alias-label-primary); }
 .lc-foot { color: var(--dsw-alias-label-secondary); font-size: 12px; margin-top: 4px; }
 /* ---- /context modal: centered dialog; fixed positioning escapes the composer anchor ---- */
 .lc-modal-backdrop { position: fixed; inset: 0; z-index: 200; background: rgba(0, 0, 0, 0.45); display: flex; align-items: center; justify-content: center; }
-.lc-modal-card { width: min(720px, calc(100vw - 48px)); max-height: min(82vh, 760px); overflow-y: auto; box-sizing: border-box; background: var(--dsw-alias-bg-layer-1); border: 1px solid var(--dsw-alias-border-l1); border-radius: 12px; box-shadow: var(--dsw-shadow-lv3, 0 12px 32px rgba(0, 0, 0, 0.4)); padding: 16px 18px 18px; color: var(--dsw-alias-label-primary); font-size: 13px; }
+.lc-modal-card { width: min(720px, calc(100vw - 48px)); max-height: min(82vh, 760px); overflow-y: auto; box-sizing: border-box; background: var(--dsw-alias-bg-layer-1); border: 1px solid var(--dsw-alias-border-l2); border-radius: 12px; box-shadow: var(--dsw-shadow-lv3, 0 12px 32px rgba(0, 0, 0, 0.4)); padding: 16px 18px 18px; color: var(--dsw-alias-label-primary); font-size: 13px; }
 .lc-modal-head { display: flex; align-items: baseline; gap: 8px; margin-bottom: 12px; }
 .lc-modal-title { font-weight: 600; font-size: 14px; }
 .lc-modal-close { margin-left: auto; border: 0; background: transparent; color: var(--dsw-alias-label-secondary); font-size: 18px; line-height: 1; padding: 2px 6px; border-radius: 6px; cursor: pointer; font-family: inherit; }
 .lc-modal-close:hover { color: var(--dsw-alias-label-primary); background: var(--dsw-alias-bg-layer-2); }
 .lc-br-hint { margin-left: auto; color: var(--dsw-alias-label-secondary); font-size: 11px; font-weight: 400; white-space: nowrap; }
-.lc-br-pick { font: inherit; font-size: 12px; color: var(--dsw-alias-label-primary); background: var(--dsw-alias-bg-layer-2); border: 1px solid var(--dsw-alias-border-l1); border-radius: 6px; padding: 3px 6px; max-width: 240px; }
+.lc-br-pick { font: inherit; font-size: 12px; color: var(--dsw-alias-label-primary); background: var(--dsw-alias-bg-layer-2); border: 1px solid var(--dsw-alias-border-l2); border-radius: 6px; padding: 3px 6px; max-width: 240px; }
 .lc-br-meta { display: flex; flex-wrap: wrap; gap: 6px 16px; margin-bottom: 8px; color: var(--dsw-alias-label-secondary); }
 .lc-br-meta b { color: var(--dsw-alias-label-primary); }
 .lc-br-meta .lc-actual { color: var(--dsw-alias-state-success-primary); }
@@ -387,7 +393,7 @@ button.lc-brief-row-link { cursor: pointer; }
 .lc-br-retry { border: 0; background: transparent; padding: 0; color: var(--dsw-alias-brand-primary); font: inherit; font-size: 12px; cursor: pointer; text-decoration: underline; text-underline-offset: 2px; }
 .lc-br-retry:hover { filter: brightness(1.15); }
 .lc-br-cats { margin-top: 10px; display: flex; flex-direction: column; gap: 4px; }
-.lc-br-cat { border: 1px solid var(--dsw-alias-border-l1); border-radius: 8px; background: var(--dsw-alias-bg-layer-2); overflow: hidden; }
+.lc-br-cat { border: 1px solid var(--dsw-alias-border-l2); border-radius: 8px; background: var(--dsw-alias-bg-layer-2); overflow: hidden; }
 .lc-br-cat-empty { opacity: 0.55; }
 .lc-br-cat-row { display: flex; align-items: center; gap: 8px; width: 100%; border: 0; background: transparent; color: var(--dsw-alias-label-primary); font: inherit; padding: 7px 10px; cursor: pointer; text-align: left; transition: background-color 120ms ease; }
 .lc-br-cat-row:hover { background: var(--dsw-alias-interactive-bg-hover); }
@@ -440,7 +446,7 @@ button.lc-brief-row-link { cursor: pointer; }
 /*
  Markdown cards: the section card is a flex child that otherwise refuses to shrink below its content (min-width: auto) — min-width: 0 on the card + overflow-wrap: anywhere on the body make long tokens/URLs/code wrap instead of stretching the card.
  */
-.lc-ts-card { background: var(--dsw-alias-bg-layer-2); border: 1px solid var(--dsw-alias-border-l1); border-radius: 6px; overflow: hidden; min-width: 0; }
+.lc-ts-card { background: var(--dsw-alias-bg-layer-2); border: 1px solid var(--dsw-alias-border-l2); border-radius: 6px; overflow: hidden; min-width: 0; }
 .lc-ts-card-head { display: flex; align-items: center; gap: 8px; padding: 6px 10px; font-size: 11px; font-weight: 600; color: var(--dsw-alias-label-secondary); border-bottom: 1px solid var(--dsw-alias-border-l1); }
 .lc-ts-card-head b { color: var(--dsw-alias-label-primary); }
 .lc-ts-call-name { font-size: 13px; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
@@ -477,7 +483,7 @@ button.lc-brief-row-link { cursor: pointer; }
 .lc-ts-json { display: flex; flex-direction: column; gap: 4px; }
 .lc-ts-json-toggle { align-self: flex-start; border: 0; background: transparent; color: var(--dsw-alias-label-secondary); font: inherit; font-size: 11px; padding: 0; cursor: pointer; }
 .lc-ts-json-toggle:hover { color: var(--dsw-alias-label-primary); text-decoration: underline; }
-.lc-rich-seg { margin-left: auto; display: flex; gap: 2px; background: var(--dsw-alias-bg-layer-2); border: 1px solid var(--dsw-alias-border-l1); border-radius: 6px; padding: 1px; }
+.lc-rich-seg { margin-left: auto; display: flex; gap: 2px; background: var(--dsw-alias-bg-layer-2); border: 1px solid var(--dsw-alias-border-l2); border-radius: 6px; padding: 1px; }
 .lc-rich-seg-btn { border: 0; background: transparent; color: var(--dsw-alias-label-secondary); font-size: 11px; line-height: 1; padding: 3px 8px; border-radius: 5px; cursor: pointer; font-family: inherit; }
 .lc-rich-seg-btn:hover { color: var(--dsw-alias-label-primary); }
 .lc-rich-seg-on, .lc-rich-seg-on:hover { background: var(--dsw-alias-button-primary-fill); color: var(--dsw-alias-label-primary-foreground); }
@@ -509,8 +515,8 @@ button.lc-brief-row-link { cursor: pointer; }
 .lc-ts-desc-md div :not(pre) > code { font-size: 1em !important; line-height: 1.3; padding: 1px 5px; box-decoration-break: clone; }
 .lc-ts-desc-md div table code { font-size: inherit; }
 .lc-att-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; padding: 8px 10px; }
-.lc-att-item { display: flex; gap: 8px; align-items: center; min-width: 0; width: 100%; box-sizing: border-box; padding: 6px; border: 1px solid var(--dsw-alias-border-l1); border-radius: 8px; background: transparent; font: inherit; text-align: left; cursor: pointer; }
-.lc-att-item:hover { border-color: var(--dsw-alias-border-l2, var(--dsw-alias-border-l1)); background: var(--dsw-alias-interactive-bg-hover, var(--dsw-alias-bg-layer-2)); }
+.lc-att-item { display: flex; gap: 8px; align-items: center; min-width: 0; width: 100%; box-sizing: border-box; padding: 6px; border: 1px solid var(--dsw-alias-border-l2); border-radius: 8px; background: transparent; font: inherit; text-align: left; cursor: pointer; }
+.lc-att-item:hover { border-color: var(--dsw-alias-label-dimmed); background: var(--dsw-alias-interactive-bg-hover, var(--dsw-alias-bg-layer-2)); }
 .lc-att-thumb { width: 64px; height: 64px; flex: none; padding: 0; display: flex; align-items: center; justify-content: center; border: 1px solid var(--dsw-alias-border-l1); border-radius: 6px; overflow: hidden; background: var(--dsw-alias-bg-layer-1); }
 .lc-att-thumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
 .lc-att-ph, .lc-att-err { font-size: 10px; color: var(--dsw-alias-label-secondary); text-align: center; padding: 2px; }
@@ -556,7 +562,7 @@ button.lc-brief-row-link { cursor: pointer; }
 .lc-agent-label { font-size: 11px; color: var(--dsw-alias-label-primary); overflow-wrap: break-word; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 3; overflow: hidden; }
 .lc-agent-tokens { font-size: 10px; color: var(--dsw-alias-label-secondary); font-variant-numeric: tabular-nums; }
 .lc-agents-solo { padding: 4px 0 10px; }
-.lc-agents-inspector { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 8px; min-width: 0; margin-top: 10px; padding: 7px 10px; border: 1px solid var(--dsw-alias-border-l1); border-radius: 8px; background: var(--dsw-alias-bg-layer-2); font-size: 12px; }
+.lc-agents-inspector { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 8px; min-width: 0; margin-top: 10px; padding: 7px 10px; border: 1px solid var(--dsw-alias-border-l2); border-radius: 8px; background: var(--dsw-alias-bg-layer-2); font-size: 12px; }
 .lc-agents-inspector-name { color: var(--dsw-alias-label-primary); overflow-wrap: anywhere; }
 .lc-agents-badge { flex: none; font-size: 10px; padding: 1px 6px; border-radius: 999px; background: var(--dsw-alias-bg-layer-1); border: 1px solid var(--dsw-alias-border-l1); color: var(--dsw-alias-label-secondary); }
 .lc-agent-self-badge { margin-left: 5px; vertical-align: 1px; }
