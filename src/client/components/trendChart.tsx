@@ -517,9 +517,10 @@ export function makeTrendChart(kit: ViewKit): (props: TrendChartProps) => ReactN
             </div>
           </div>
           {/* Compact 2-row hover tooltip (identity / anchor total), shown instantly by the custom `.lc-chart-tip`
-              (the native title is delayed); the per-category breakdown lives in the detail panel below. Capped at
-              the wrapper's width and wrapped by CSS, positioned imperatively over its bar's visible slice (syncTip)
-              so scrolling keeps it glued without ever widening the scrollable area. */}
+              (the native title is delayed); the per-category breakdown lives in the detail panel below. It floats
+              ABOVE the plot (CSS bottom anchoring) so it never covers the bars, is capped at the wrapper's width
+              and wrapped, and is positioned imperatively over its bar's visible slice (syncTip) so scrolling keeps
+              it glued without ever widening the scrollable area. */}
           {hoveredReq !== null ? (
             <div className="lc-chart-tip">{tipRowsOf(hoveredReq).map((row, i) => <span key={i}>{row}</span>)}</div>
           ) : null}
