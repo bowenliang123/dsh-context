@@ -3,7 +3,11 @@
 .lc-axis { position: relative; width: 40px; height: 150px; padding-top: 18px; box-sizing: border-box; color: var(--dsw-alias-label-secondary); font-size: 11px; }
 .lc-axis span { position: absolute; right: 0; line-height: 1; }
 .lc-axis-top { top: 13px; }
+/* Quarter-mark labels (chart top 18 + ¼ / ¾ of the 112px bar area, minus half the 11px label box);
+   tops are mirrored as Q3_TOP/Q1_TOP in trendChart.tsx for the delta mode's overlap check. */
+.lc-axis-q3 { top: 41px; }
 .lc-axis-mid { top: 69px; }
+.lc-axis-q1 { top: 97px; }
 .lc-axis-bot { top: 125px; }
 /* Positioned wrapper owning the chart viewport: the scroller holds ONLY the scrolling content, while the hover
    tip sits beside it anchored here — absolutely-positioned children of a scroller would contribute to its
@@ -15,11 +19,15 @@
    bar that auto-hides — dsh's global 8px skin below stays visible instead. */
 .lc-chart-scroll { overflow-x: auto; overflow-y: hidden; scrollbar-gutter: stable; padding-bottom: var(--dsh-scrollbar-width, 8px); }
 .lc-chart { position: relative; display: flex; align-items: flex-end; gap: 2px; height: 130px; padding-top: 18px; box-sizing: border-box; width: max-content; min-width: 100%; }
-.lc-grid { position: absolute; left: 0; right: 0; border-top: 1px dashed var(--dsw-alias-border-l1); pointer-events: none; }
+.lc-grid { position: absolute; left: 0; right: 0; border-top: 1px dashed var(--dsw-alias-border-l2); pointer-events: none; }
 .lc-grid-top { top: 18px; }
+/* Quarter-mark guides (chart top 18 + ¼ / ¾ of the 112px bar area); their axis labels sit 5px above each line. */
+.lc-grid-q3 { top: 46px; }
 .lc-grid-mid { top: 74px; }
-/* Delta mode: a SOLID zero baseline (inline-positioned) replaces the dashed mid grid as the reading reference. */
-.lc-grid-zero { border-top-style: solid; border-top-color: rgba(128,128,128,0.5); }
+.lc-grid-q1 { top: 102px; }
+/* The SOLID zero baseline in BOTH modes — inline-positioned off the up-arm in delta, the chart floor
+   (top 130px, right under the bars) under the '0' label in total; painted after the dashed guides. */
+.lc-grid-zero { top: 130px; border-top-style: solid; border-top-color: rgba(128,128,128,0.5); }
 .lc-bar { position: relative; width: 14px; flex: none; height: 100%; display: flex; align-items: flex-end; cursor: pointer; border-radius: 2px; transition: opacity 120ms ease, background-color 120ms ease; }
 .lc-chart-dim .lc-bar { opacity: 0.35; }
 .lc-chart-dim .lc-bar-in-turn { opacity: 1; }

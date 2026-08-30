@@ -82,6 +82,12 @@ export function makeTrendChart(kit: ViewKit): (props: TrendChartProps) => ReactN
   const { t, fmt, fmtTime, eventLabel, eventAt } = kit
 
   const CHART_H = 112
+  // Quarter-mark label tops for the axis (mirrored to .lc-axis-q1/.lc-axis-q3 in trendChart.css): chart top 18
+  // plus a quarter/three-quarters of the 112px bar area, minus half the 11px label box (font-size 11, line-height 1).
+  const Q3_TOP = 41
+  const Q1_TOP = 97
+  // Delta axis ticks are signed: '+' only on positives — fmt already carries the minus for negatives.
+  const fmtSigned = (v: number): string => (v > 0 ? '+' : '') + fmt(v)
   // Constant bar width: sparse histories don't stretch bars, dense ones scroll instead of compressing; the turn strip below mirrors the
   // same column grid.
   const BAR_W = 14
@@ -229,6 +235,11 @@ export function makeTrendChart(kit: ViewKit): (props: TrendChartProps) => ReactN
     const deltaScale = CHART_H / span
     const upPx = Math.round(maxUp * deltaScale)
     const downPx = CHART_H - upPx
+    // A delta quarter mark (axis label + its dashed guide) yields ENTIRELY when its 11px label box would
+    // overlap the zero label (top 13+upPx) — the zero line is the reading reference. Total-mode marks never
+    // collide and always render.
+    const q3Clear = Math.abs(Q3_TOP - 13 - upPx) >= 11
+    const q1Clear = Math.abs(Q1_TOP - 13 - upPx) >= 11
 
     // Consecutive same-turn requests collapse into one labeled range; `span` counts the STEP columns the group covers (step records count
     // one each), so strip blocks align with the bars in both granularities.
@@ -398,15 +409,26 @@ export function makeTrendChart(kit: ViewKit): (props: TrendChartProps) => ReactN
         <div className="lc-axis">
           {delta ? (
             <>
-              <span className="lc-axis-top">{(maxUp > 0 ? '+' : '') + fmt(maxUp)}</span>
+              <span className="lc-axis-top">{fmtSigned(maxUp)}</span>
+              {/* Axis quartile marks on the uniform px-per-token scale (the value at each fixed height); a mark
+                  whose 11px label box would overlap the zero label drops itself — the zero line is the reading
+                  reference and keeps its place. */}
+              {q3Clear
+                ? <span className="lc-axis-q3">{fmtSigned(Math.round(maxUp - span / 4))}</span>
+                : null}
               {/* The 0 label rides the zero line (chart top padding 18px, half the 11px line-height up). */}
               <span className="lc-axis-mid" style={{ top: `${13 + upPx}px` }}>{'0'}</span>
-              <span className="lc-axis-bot">{(maxDown > 0 ? '-' : '') + fmt(maxDown)}</span>
+              {q1Clear
+                ? <span className="lc-axis-q1">{fmtSigned(Math.round(maxUp - 3 * span / 4))}</span>
+                : null}
+              <span className="lc-axis-bot">{fmtSigned(-maxDown)}</span>
             </>
           ) : (
             <>
               <span className="lc-axis-top">{fmt(maxTotal)}</span>
+              <span className="lc-axis-q3">{fmt(Math.round(maxTotal * 3 / 4))}</span>
               <span className="lc-axis-mid">{fmt(Math.round(maxTotal / 2))}</span>
+              <span className="lc-axis-q1">{fmt(Math.round(maxTotal / 4))}</span>
               <span className="lc-axis-bot">{'0'}</span>
             </>
           )}
@@ -431,10 +453,15 @@ export function makeTrendChart(kit: ViewKit): (props: TrendChartProps) => ReactN
               onMouseLeave={() => { props.onHover(null) }}
             >
               <div className="lc-grid lc-grid-top" />
-              {delta
-                // A SOLID zero baseline replaces the dashed mid grid in delta mode — it is the reading reference.
-                ? <div className="lc-grid lc-grid-zero" style={{ top: `${18 + upPx}px` }} />
-                : <div className="lc-grid lc-grid-mid" />}
+              {/* Dashed guides aligning the bars with the axis quarter marks (fixed heights, both modes); a delta
+                  mark that yielded to the zero label drops its guide too, and a coinciding guide sits under the
+                  solid zero line painted after it. */}
+              {(!delta || q3Clear) ? <div className="lc-grid lc-grid-q3" /> : null}
+              {(!delta || q1Clear) ? <div className="lc-grid lc-grid-q1" /> : null}
+              {!delta ? <div className="lc-grid lc-grid-mid" /> : null}
+              {/* The SOLID zero baseline — the reading reference in both modes: inline-positioned off the up-arm
+                  in delta mode, the chart floor (CSS default) under the '0' label in total mode. */}
+              <div className="lc-grid lc-grid-zero" style={delta ? { top: `${18 + upPx}px` } : undefined} />
               {requests.map((req, i) => (
                 <ChartBar
                   key={req.seq}

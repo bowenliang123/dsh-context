@@ -146,9 +146,14 @@ describe('TrendChart empty history', () => {
     assert.equal(bars(m.container).length, 0)
     assert.equal(queryAll(m.container, '.lc-turn').length, 0)
     assert.equal(query(m.container, '.lc-axis-top').textContent, '1')
+    assert.equal(query(m.container, '.lc-axis-q3').textContent, '1')
     assert.equal(query(m.container, '.lc-axis-mid').textContent, '1')
+    assert.equal(query(m.container, '.lc-axis-q1').textContent, '0')
     assert.equal(query(m.container, '.lc-axis-bot').textContent, '0')
     assert.ok(query(m.container, '.lc-grid-mid'), 'total mode keeps the dashed mid grid')
+    assert.ok(query(m.container, '.lc-grid-q3'), 'total mode keeps the dashed quarter guides')
+    assert.ok(query(m.container, '.lc-grid-q1'), 'total mode keeps the dashed quarter guides')
+    assert.ok(query(m.container, '.lc-grid-zero'), 'total mode draws the solid zero baseline at the chart floor')
     await m.unmount()
   })
 })
@@ -178,9 +183,12 @@ describe('TrendChart step granularity, total mode', () => {
     assert.equal(segs3.length, 5)
     assert.ok(![...segs3].some(s => s.style.background.includes('34, 197, 94') || s.style.background === '#22c55e'))
 
-    // Total-mode axis: top = maxTotal, mid = half, bottom = 0.
+    // Total-mode axis: full quartile graduation — max, ¾, ½, ¼, 0.
     assert.equal(query(m.container, '.lc-axis-top').textContent, '600')
+    assert.equal(query(m.container, '.lc-axis-q3').textContent, '450')
     assert.equal(query(m.container, '.lc-axis-mid').textContent, '300')
+    assert.equal(query(m.container, '.lc-axis-q1').textContent, '150')
+    assert.equal(query(m.container, '.lc-axis-bot').textContent, '0')
 
     // Turn strip: T1 spans two step columns (2*16-2 = 30px), the turnless request lands in group T0 (14px);
     // zebra fills alternate and stay disjoint from the category palette.
@@ -247,10 +255,18 @@ describe('TrendChart delta mode', () => {
 
     // maxUp=60 (grown: +10 x6), maxDown=120 (shrunk: -20 x6) → scale 112/180, zero line at upPx=37.
     assert.equal(query(m.container, '.lc-axis-top').textContent, '+60')
+    // Quarter marks sit on the uniform scale: +15 above (height ¼), -75 below (height ¾). The +15 mark's
+    // label box (top 41) is 9px from the zero label's (13+37=50) — under one 11px label height — so it
+    // drops itself instead of overlapping the zero reference; the -75 mark stays.
+    assert.equal(queryAll(m.container, '.lc-axis-q3').length, 0)
+    assert.equal(query(m.container, '.lc-axis-q1').textContent, '-75')
     assert.equal(query(m.container, '.lc-axis-mid').textContent, '0')
     assert.equal(query(m.container, '.lc-axis-mid').style.top, `${13 + 37}px`)
     assert.equal(query(m.container, '.lc-axis-bot').textContent, '-120')
     assert.equal(query(m.container, '.lc-grid-zero').style.top, `${18 + 37}px`)
+    // Each surviving quarter mark keeps its dashed guide; the mark that yielded to the zero label drops it too.
+    assert.equal(queryAll(m.container, '.lc-grid-q3').length, 0)
+    assert.ok(query(m.container, '.lc-grid-q1'))
 
     const bs = bars(m.container)
     // First bar starts from zero: both diverging stacks render empty.
@@ -287,17 +303,44 @@ describe('TrendChart delta mode', () => {
   test('growth-only history zeroes the negative axis arm; shrink-only zeroes the positive arm', async () => {
     const up = await mount(h(TrendChart, propsOf([zeroReq, base], { mode: 'delta' })))
     assert.equal(query(up.container, '.lc-axis-top').textContent, '+300')
+    // Zero line pinned to the chart bottom (upPx 112) clears both quarter marks: +225 / +75.
+    assert.equal(query(up.container, '.lc-axis-q3').textContent, '+225')
+    assert.equal(query(up.container, '.lc-axis-q1').textContent, '+75')
     assert.equal(query(up.container, '.lc-axis-bot').textContent, '0')
+    assert.ok(query(up.container, '.lc-grid-q3'))
+    assert.ok(query(up.container, '.lc-grid-q1'))
     const upSegs = queryAll(bars(up.container)[1], '.lc-bar-up > div')
     assert.equal(upSegs.length, 6)
     assert.equal(upSegs[0].style.height, `${Math.round(100 * CHART_H / 300)}px`)
     await up.unmount()
 
     const down = await mount(h(TrendChart, propsOf([base, zeroReq], { mode: 'delta' })))
+    // Zero line pinned to the chart top (upPx 0): the quarter marks read -75 / -225.
     assert.equal(query(down.container, '.lc-axis-top').textContent, '0')
+    assert.equal(query(down.container, '.lc-axis-q3').textContent, '-75')
+    assert.equal(query(down.container, '.lc-axis-q1').textContent, '-225')
     assert.equal(query(down.container, '.lc-axis-bot').textContent, '-300')
+    assert.ok(query(down.container, '.lc-grid-q3'))
+    assert.ok(query(down.container, '.lc-grid-q1'))
     assert.equal(queryAll(bars(down.container)[1], '.lc-bar-down > div').length, 6)
     await down.unmount()
+  })
+
+  test('a quarter mark landing on the zero label drops itself; the opposite mark keeps its place', async () => {
+    // maxUp=90 (+90 system), maxDown=30 (-30 tools) → upPx 84: the zero label (top 97) sits exactly on the
+    // ¼-height mark (top 97), which drops itself; the ¾-height mark renders +60 well clear of it.
+    const flat = req(1, { turn: 1, step: 0, system: 0, tools: 30, user: 0, inject: 0, assistant: 0, tool: 0, total: 30 })
+    const mixed = req(2, { turn: 1, step: 1, system: 90, tools: 0, user: 0, inject: 0, assistant: 0, tool: 0, total: 90 })
+    const m = await mount(h(TrendChart, propsOf([flat, mixed], { mode: 'delta' })))
+    assert.equal(query(m.container, '.lc-axis-top').textContent, '+90')
+    assert.equal(query(m.container, '.lc-axis-q3').textContent, '+60')
+    assert.equal(queryAll(m.container, '.lc-axis-q1').length, 0)
+    assert.equal(query(m.container, '.lc-axis-mid').textContent, '0')
+    assert.equal(query(m.container, '.lc-axis-mid').style.top, `${13 + 84}px`)
+    assert.equal(query(m.container, '.lc-axis-bot').textContent, '-30')
+    assert.ok(query(m.container, '.lc-grid-q3'))
+    assert.equal(queryAll(m.container, '.lc-grid-q1').length, 0)
+    await m.unmount()
   })
 })
 
