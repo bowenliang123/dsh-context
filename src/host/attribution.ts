@@ -16,7 +16,10 @@
  *   wraps that instance's `register` (once — an earlier wrapper of a previous
  *   hook incarnation is peeled back to the original, so a plugin reload
  *   re-wraps without stacking) to capture the reader at registration time
- *   into a live map.
+ *   into a live map. Every wrapper is undone when the plugin unloads: the
+ *   original `register` goes back on the instance, unless a newer hook
+ *   incarnation re-wrapped it first (that incarnation's own cleanup then
+ *   owns the restore).
  * - When the reader slot is missing, root-named, or this plugin's own (e.g.
  *   LOCAL-LINK plugins — dev installs via `dsh plugin add <path>` or
  *   npm/pnpm link — whose anonymous entrypoints make cordis fall back to the
@@ -155,8 +158,8 @@ interface ToolServiceLike {
 
 /**
  * Install the runtime-attribution hook on a cordis app context. The hook
- * rides the calling fiber's lifetime (`ctx.on` / `ctx.get`), so it is
- * disposed with the plugin.
+ * rides the calling fiber's lifetime (`ctx.on`, and an effect that restores
+ * every patched `register`), so it is disposed with the plugin.
  * @param ctx - the context the dsh-context plugin runs in; its fiber name is
  * excluded from attributions.
  */
@@ -165,6 +168,9 @@ export function createToolAttribution(ctx: Context): ToolAttribution {
   const wrapped = new WeakSet()
   const self = ctx.fiber.name
   let lastReader: Context | undefined
+  // Restore closures for every instance this incarnation patched, run by the
+  // unload effect below.
+  const patched: (() => void)[] = []
 
   const wrapInstance = (tools: unknown) => {
     if (!tools || typeof tools !== 'object' || wrapped.has(tools)) return
@@ -200,6 +206,9 @@ export function createToolAttribution(ctx: Context): ToolAttribution {
     }
     ;(wrappedRegister as { attributedOriginal?: unknown }).attributedOriginal = original
     instance.register = wrappedRegister
+    patched.push(() => {
+      if (instance.register === wrappedRegister) instance.register = original as typeof instance.register
+    })
   }
 
   ctx.on('internal/get', (reader, name, _error, next) => {
@@ -209,6 +218,15 @@ export function createToolAttribution(ctx: Context): ToolAttribution {
     wrapInstance(tools)
     return tools
   })
+
+  // Scope symmetry for the register patch: unloading peels every wrapper this
+  // incarnation installed back to the true original, so other plugins are
+  // never left running through a dead hook. A closure that finds a newer
+  // incarnation's wrapper installed does nothing — that incarnation's own
+  // effect then owns the restore.
+  ctx.effect(() => () => {
+    for (const restore of patched.splice(0)) restore()
+  }, 'tools.register attribution')
 
   // An instance provided before this plugin started is still wrapped so later
   // registrations on it are captured. The tools it already holds were

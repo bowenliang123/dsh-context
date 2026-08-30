@@ -206,6 +206,76 @@ describe('createToolAttribution', () => {
     assert.equal(second.ownerOf('reload_tool'), 'provider-b', 'the fresh hook records the registration')
   })
 
+  test('unloading the hook plugin restores the original register', async () => {
+    const app = new Context()
+    const fake = { register(_definition?: unknown) { return () => {} } }
+    app.provide('tools', fake)
+    const original = fake.register
+    let attribution!: ToolAttribution
+    const fiber = app.plugin({
+      name: 'dsh-context',
+      apply(sub) {
+        attribution = createToolAttribution(sub)
+      },
+    })
+    await fiber
+    assert.notEqual(fake.register, original, 'the hook wrapped the instance at apply')
+    await fiber.dispose()
+    assert.equal(fake.register, original, 'unload put the original register back on the instance')
+    fake.register({ name: 'orphan_tool' })
+    assert.equal(attribution.ownerOf('orphan_tool'), undefined, 'no dead-hook recording after unload')
+  })
+
+  test('an unloaded older incarnation leaves a newer wrapper installed', async () => {
+    const app = new Context()
+    const fake = { register() { return () => {} } }
+    app.provide('tools', fake)
+    const original = fake.register
+    let second!: ToolAttribution
+    const older = app.plugin({ name: 'older-hook', apply(sub) { createToolAttribution(sub) } })
+    await older
+    assert.notEqual(fake.register, original, 'the first hook wrapped the instance')
+    const newer = app.plugin({ name: 'newer-hook', apply(sub) { second = createToolAttribution(sub) } })
+    await newer
+    assert.notEqual(fake.register, original, 'the newer incarnation re-wrapped the instance')
+    await older.dispose()
+    assert.notEqual(fake.register, original, 'the older disposer did not strip the newer wrapper')
+    await app.plugin({
+      name: 'provider-c',
+      apply(sub) {
+        ;((sub as any).tools as { register(def?: unknown): () => void }).register({ name: 'late_tool' })
+      },
+    })
+    assert.equal(second.ownerOf('late_tool'), 'provider-c', 'the surviving hook still records')
+    await newer.dispose()
+    assert.equal(fake.register, original, 'the newer disposer restores the true original')
+  })
+
+  test('unload then re-apply re-wraps the restored original without stacking', async () => {
+    const app = new Context()
+    let calls = 0
+    app.provide('tools', { register() { calls++; return () => {} } })
+    let attribution!: ToolAttribution
+    const first = app.plugin({ name: 'dsh-context', apply(sub) { createToolAttribution(sub) } })
+    await first
+    await first.dispose()
+    const second = app.plugin({
+      name: 'dsh-context',
+      apply(sub) {
+        attribution = createToolAttribution(sub)
+      },
+    })
+    await second
+    await app.plugin({
+      name: 'provider-d',
+      apply(sub) {
+        ;((sub as any).tools as { register(def?: unknown): () => void }).register({ name: 'reloaded_tool' })
+      },
+    })
+    assert.equal(calls, 1, 'the original register ran once, through one wrapper only')
+    assert.equal(attribution.ownerOf('reloaded_tool'), 'provider-d', 'the re-applied hook records the registration')
+  })
+
   test('tags boot-time tools whose providers predate the hook as unknown', () => {
     const app = new Context()
     const fake = {
