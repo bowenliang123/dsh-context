@@ -11,6 +11,18 @@ import type { ViewKit } from '../viewkit'
 
 export type RichMode = 'raw' | 'md'
 
+/**
+ * The Markdown chrome dsh 0.1.2-alpha serves as a required `labels` prop
+ * (renamed from 0.1.1's optional `codeLabels`). Typed locally so the plugin
+ * typechecks against either face; 0.1.1-era renderers ignore the extra key.
+ */
+interface MarkdownChrome {
+  code: { copyLabel: string; copiedLabel: string }
+  footnotes: string
+}
+
+const Markdown = MarkdownText as (props: { text: string; labels?: MarkdownChrome }) => ReactNS.ReactElement
+
 export interface RichKit {
   RichText: (props: { text: string; mode: RichMode }) => ReactNS.ReactElement
   RichSwitch: (props: { mode: RichMode; onPick: (mode: RichMode) => void }) => ReactNS.ReactElement
@@ -63,8 +75,14 @@ export function makeRichText(kit: ViewKit): RichKit {
   }
 
   function RichText(props: { text: string; mode: RichMode }): ReactNS.ReactElement {
+    // Reference-stable per locale: a fresh object identity would discard the
+    // renderer's cached elements on every render (0.1.2+ faces).
+    const mdLabels = React.useMemo<MarkdownChrome>(() => ({
+      code: { copyLabel: t('rich.md.copy'), copiedLabel: t('rich.md.copied') },
+      footnotes: t('rich.md.footnotes'),
+    }), [t])
     if (props.mode === 'md') {
-      return <div className="lc-ts-desc-md"><MarkdownText text={props.text} /></div>
+      return <div className="lc-ts-desc-md"><Markdown text={props.text} labels={mdLabels} /></div>
     }
     return <RawText text={props.text} />
   }
