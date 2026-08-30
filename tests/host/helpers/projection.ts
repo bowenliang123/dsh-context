@@ -4,7 +4,7 @@
 // intermediate state.
 
 import assert from 'node:assert/strict'
-import { snapshotJsonValue, type SessionEvent } from '@deepseek-ai/dsh-session'
+import type { SessionEvent } from '@deepseek-ai/dsh-session'
 import type { Config } from '../../../src/host/config'
 import type { TimelineEvent, TimelineState } from '../../../src/host/fold'
 import type { HeadersState } from '../../../src/host/headers'
@@ -41,14 +41,56 @@ export function headersDef(): HeadersDefLike {
 }
 
 /**
+ * Lossless-JSON probe and detach, inlined with the dsh `snapshotJsonValue`
+ * semantics (the export left `@deepseek-ai/dsh-session` in 0.1.2-alpha.2, and
+ * the test fixtures must track no single dsh face). Returns undefined when the
+ * value is not losslessly JSON-serializable: an undefined/function/symbol
+ * member, a non-finite number, a non-plain object, or a cycle.
+ */
+function snapshotJson(value: unknown, ancestors: Set<object> = new Set()): unknown {
+  switch (typeof value) {
+    case 'string': case 'boolean': return value
+    case 'number': return Number.isFinite(value) ? value : undefined
+    case 'object': break
+    default: return undefined
+  }
+  if (value === null) return null
+  if (ancestors.has(value)) return undefined
+  ancestors.add(value)
+  try {
+    if (Array.isArray(value)) {
+      const out: unknown[] = []
+      for (let index = 0; index < value.length; index++) {
+        if (!Object.hasOwn(value, index)) return undefined
+        const entry = snapshotJson(value[index], ancestors)
+        if (entry === undefined) return undefined
+        out.push(entry)
+      }
+      return out
+    }
+    const proto = Object.getPrototypeOf(value)
+    if (proto !== Object.prototype && proto !== null) return undefined
+    const out: Record<string, unknown> = {}
+    for (const key of Object.keys(value)) {
+      const entry = snapshotJson((value as Record<string, unknown>)[key], ancestors)
+      if (entry === undefined) return undefined
+      out[key] = entry
+    }
+    return out
+  } finally {
+    ancestors.delete(value)
+  }
+}
+
+/**
  * The projection-cache precondition: every state the fold produces must be
  * losslessly JSON-serializable (a single undefined property fails EVERY cache
  * write for the session — see TimelineState). Returns the detached copy.
  */
 export function assertPlainJson<T>(state: T): T {
-  const copy = snapshotJsonValue(state)
+  const copy = snapshotJson(state)
   assert.ok(copy !== undefined, 'fold state must be losslessly JSON-serializable')
-  return copy
+  return copy as T
 }
 
 export interface TimelineDrive {
