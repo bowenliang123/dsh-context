@@ -4,7 +4,7 @@
 
 import assert from 'node:assert/strict'
 import { describe, test } from 'vitest'
-import { briefNodes, briefOf, replyTipsOf } from '../../src/client/brief'
+import { briefNodes, briefOf } from '../../src/client/brief'
 import type { ContextTimeline, RequestRecord, SurfaceNode } from '../../src/shared/types'
 
 function node(seq: number, over: Partial<SurfaceNode> = {}): SurfaceNode {
@@ -121,40 +121,5 @@ describe('briefOf inputs', () => {
     const requests = [req(3), req(7, { turn: 2 })]
     const brief = briefOf([], requests, 1)
     assert.deepEqual(brief?.inputs, [])
-  })
-})
-
-describe('replyTipsOf', () => {
-  test('an assistant reply previews its text', () => {
-    const tips = replyTipsOf([node(5, { cat: 'assistant', text: 'hello' })])
-    assert.equal(tips.get(5), 'hello')
-  })
-
-  test('text wins over the call breadcrumb', () => {
-    const tips = replyTipsOf([node(5, { cat: 'assistant', text: 'hello', calls: ['bash'] })])
-    assert.equal(tips.get(5), 'hello')
-  })
-
-  test('a text-less reply previews its joined call breadcrumb', () => {
-    const tips = replyTipsOf([node(5, { cat: 'assistant', calls: ['bash', 'read'] })])
-    assert.equal(tips.get(5), 'bash › read')
-  })
-
-  test('a reply with neither text nor calls is skipped', () => {
-    const tips = replyTipsOf([node(5, { cat: 'assistant' })])
-    assert.equal(tips.size, 0)
-  })
-
-  test('an empty text and an empty call list are both skipped', () => {
-    const tips = replyTipsOf([
-      node(5, { cat: 'assistant', text: '' }),
-      node(6, { cat: 'assistant', calls: [] }),
-    ])
-    assert.equal(tips.size, 0)
-  })
-
-  test('non-assistant nodes are skipped', () => {
-    const tips = replyTipsOf([node(5, { text: 'hi' })])
-    assert.equal(tips.size, 0)
   })
 })

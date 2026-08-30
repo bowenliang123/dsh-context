@@ -77,18 +77,3 @@ export function briefOf(nodes: SurfaceNode[], requests: RequestRecord[], idx: nu
   }
   return { opener, inputs, response }
 }
-
-/**
- * seq → one-line reply preview for the chart tooltip: the response node's
- * text, else its tool-call breadcrumb. Absent for usage-only replies and
- * steps outside retention.
- */
-export function replyTipsOf(nodes: SurfaceNode[]): Map<number, string> {
-  const m = new Map<number, string>()
-  for (const n of nodes) {
-    if (n.cat !== 'assistant') continue
-    const s = n.text ?? (n.calls !== undefined ? n.calls.join(' › ') : '')
-    if (s !== '') m.set(n.seq, s)
-  }
-  return m
-}

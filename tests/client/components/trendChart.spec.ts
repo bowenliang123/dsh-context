@@ -18,8 +18,7 @@ import { act } from 'react'
 import { h } from '../../../src/client/react'
 import { aggregateByTurn, attachMarkers, jumpTargetOf, makeTrendChart, type TrendChartProps } from '../../../src/client/components/trendChart'
 import { CATS } from '../../../src/client/categories'
-import { replyTipsOf } from '../../../src/client/brief'
-import type { ContextEventRecord, RequestRecord, SurfaceNode } from '../../../src/shared/types'
+import type { ContextEventRecord, RequestRecord } from '../../../src/shared/types'
 import { click, flush, hover, makeKit, mount, query, queryAll, unhover } from '../helpers/kit'
 
 const kit = makeKit()
@@ -224,10 +223,10 @@ describe('TrendChart step granularity, total mode', () => {
     const { spies, handlers } = makeSpies()
     await m.update(h(TrendChart, { ...propsOf([r1, r2, r3, r4]), ...handlers, hoveredSeq: 2 }))
     const tip = query(m.container, '.lc-chart-tip')
-    assert.equal(
-      tip.textContent,
-      kit.t('tip.step', { t: 1, s: 1 }) + ' · ' + kit.fmtTime(r2.time) + ' · '
-        + kit.t('tip.total', { n: '600' }) + ' · ' + kit.t('tip.actual', { n: '1.2k' }),
+    // Rows: identity, then the ACTUAL anchor total the bar is drawn against (provider prompt 1200 → '1.2k').
+    assert.deepEqual(
+      queryAll(tip, 'span').map(r => r.textContent),
+      [kit.t('tip.step', { t: 1, s: 1 }), kit.t('tip.total', { n: '1.2k' })],
     )
     assert.equal(tip.style.transform, 'translate(23px, 0)') // idx 1 * 16 + BAR_W/2, scrollLeft 0
     assert.ok(spies.hover.length === 0, 'hover callback only fires from real mouseover')
@@ -250,8 +249,7 @@ describe('TrendChart delta mode', () => {
   const zeroReq = req(9, { turn: 3, step: 0, system: 0, tools: 0, user: 0, inject: 0, assistant: 0, tool: 0, total: 0 })
 
   test('diverging stacks pile positive deltas up and hang negatives down off a solid zero line', async () => {
-    const nodes: SurfaceNode[] = [{ seq: 2, cat: 'assistant', tokens: 5, text: 'did work' }]
-    const m = await mount(h(TrendChart, propsOf([base, grown, shrunk], { mode: 'delta', replyTips: replyTipsOf(nodes) })))
+    const m = await mount(h(TrendChart, propsOf([base, grown, shrunk], { mode: 'delta' })))
 
     // maxUp=60 (grown: +10 x6), maxDown=120 (shrunk: -20 x6) → scale 112/180, zero line at upPx=37.
     assert.equal(query(m.container, '.lc-axis-top').textContent, '+60')
@@ -287,11 +285,11 @@ describe('TrendChart delta mode', () => {
     assert.equal(query(bs[1], '.lc-bar-up').style.bottom, '75px')
     assert.equal(query(bs[2], '.lc-bar-down').style.top, '37px')
 
-    // Delta tooltip: signed net change, '+' only for positive nets; the reply tail still appends.
-    await m.update(h(TrendChart, propsOf([base, grown, shrunk], { mode: 'delta', replyTips: replyTipsOf(nodes), hoveredSeq: 2 })))
-    assert.equal(
-      query(m.container, '.lc-chart-tip').textContent,
-      kit.t('tip.step', { t: 1, s: 1 }) + ' · ' + kit.fmtTime(grown.time) + ' · ' + kit.t('tip.delta', { n: '+60' }) + ' · “did work”',
+    // Delta tooltip: signed net change on the metric row, '+' only for positive nets.
+    await m.update(h(TrendChart, propsOf([base, grown, shrunk], { mode: 'delta', hoveredSeq: 2 })))
+    assert.deepEqual(
+      queryAll(query(m.container, '.lc-chart-tip'), 'span').map(r => r.textContent),
+      [kit.t('tip.step', { t: 1, s: 1 }), kit.t('tip.delta', { n: '+60' })],
     )
     await m.update(h(TrendChart, propsOf([base, grown, shrunk], { mode: 'delta', hoveredSeq: 3 })))
     assert.ok(query(m.container, '.lc-chart-tip').textContent!.includes(kit.t('tip.delta', { n: '-120' })))
@@ -349,7 +347,7 @@ describe('TrendChart turn granularity', () => {
   const t1s1 = req(2, { turn: 1, step: 1, total: 360 })
   const t2s0 = req(3, { turn: 2, step: 0, total: 280 })
 
-  test('turn aggregates render one bar per turn with aggregated labels and step-count tooltips', async () => {
+  test('turn aggregates render one bar per turn with aggregated labels and turn-count tooltips', async () => {
     const agg = aggregateByTurn([t1s0, t1s1, t2s0])
     const m = await mount(h(TrendChart, propsOf(agg, { granularity: 'turn' })))
     const bs = bars(m.container)
@@ -360,11 +358,11 @@ describe('TrendChart turn granularity', () => {
     assert.deepEqual(turns.map(t => t.style.width), ['14px', '14px'])
     assert.deepEqual(turns.map(t => t.textContent), ['T1', 'T2'])
 
-    // Multi-step aggregate → tip.turn; single-step aggregate falls back to tip.step.
+    // Multi-step aggregate → tip.turn; a single-step aggregate still speaks TURN ("共 1 步"), never the step index.
     await m.update(h(TrendChart, propsOf(agg, { granularity: 'turn', hoveredSeq: t1s1.seq })))
     assert.ok(query(m.container, '.lc-chart-tip').textContent!.includes(kit.t('tip.turn', { t: 1, n: 2 })))
     await m.update(h(TrendChart, propsOf(agg, { granularity: 'turn', hoveredSeq: t2s0.seq })))
-    assert.ok(query(m.container, '.lc-chart-tip').textContent!.includes(kit.t('tip.step', { t: 2, s: 0 })))
+    assert.ok(query(m.container, '.lc-chart-tip').textContent!.includes(kit.t('tip.turn1', { t: 2 })))
     await m.unmount()
 
     // A multi-step aggregate of TURNLESS requests reports turn 0.
@@ -372,6 +370,12 @@ describe('TrendChart turn granularity', () => {
     const m2 = await mount(h(TrendChart, propsOf(turnless, { granularity: 'turn', hoveredSeq: 11 })))
     assert.ok(query(m2.container, '.lc-chart-tip').textContent!.includes(kit.t('tip.turn', { t: 0, n: 2 })))
     await m2.unmount()
+
+    // A turn-mode record missing stepCount (the parent always aggregates, so this is defensive) degrades to 1 step;
+    // a missing turn field degrades to turn 0 the same way.
+    const m3 = await mount(h(TrendChart, propsOf([req(20, { turn: undefined, step: 3 })], { granularity: 'turn', hoveredSeq: 20 })))
+    assert.ok(query(m3.container, '.lc-chart-tip').textContent!.includes(kit.t('tip.turn1', { t: 0 })))
+    await m3.unmount()
   })
 
   test('turn strip hover/click drive the turn callbacks; activeTurn dims the chart and lights the block', async () => {
@@ -488,59 +492,40 @@ describe('TrendChart markers', () => {
 
 describe('TrendChart tooltips', () => {
   const r1 = req(1, { turn: 1, step: 0 })
-  const r2 = req(2, { turn: 1, step: 1, total: 360 })
-  const r3 = req(3, { turn: 2, step: 0 })
   const r4 = req(4, { turn: undefined, step: undefined })
-  const nodes: SurfaceNode[] = [
-    { seq: 1, cat: 'assistant', tokens: 5, text: 'fixed the bug' },
-    { seq: 2, cat: 'assistant', tokens: 5, text: 'a'.repeat(60) },
-    { seq: 3, cat: 'assistant', tokens: 5, calls: ['bash', 'read'] },
-  ]
 
-  test('hover floats a positioned tip with step identity, total, and reply preview variants', async () => {
+  test('hover floats a two-row tip (identity + anchor total) and clears on leave', async () => {
     const { spies, handlers } = makeSpies()
-    const reqs = [r1, r2, r3, r4]
+    const reqs = [r1, r4]
     const m = await mount(h(TrendChart, propsOf(reqs, handlers)))
 
-    // No replyTips prop at all: the tip renders without a tail.
     const bs = bars(m.container)
     await hover(bs[0])
     assert.deepEqual(spies.hover, [1])
     await m.update(h(TrendChart, propsOf(reqs, { ...handlers, hoveredSeq: 1 })))
-    assert.equal(
-      query(m.container, '.lc-chart-tip').textContent,
-      kit.t('tip.step', { t: 1, s: 0 }) + ' · ' + kit.fmtTime(r1.time) + ' · ' + kit.t('tip.total', { n: '300' }),
+    assert.deepEqual(
+      queryAll(query(m.container, '.lc-chart-tip'), 'span').map(r => r.textContent),
+      [kit.t('tip.step', { t: 1, s: 0 }), kit.t('tip.total', { n: '300' })],
     )
     assert.equal(query(m.container, '.lc-chart-tip').style.transform, 'translate(7px, 0)')
 
-    // With replyTips (built by the real replyTipsOf): short reply lands verbatim.
-    const withTips = (hoveredSeq: number | null): TrendChartProps =>
-      propsOf(reqs, { ...handlers, hoveredSeq, replyTips: replyTipsOf(nodes) })
-    await m.update(h(TrendChart, withTips(1)))
-    assert.ok(query(m.container, '.lc-chart-tip').textContent!.endsWith(' · “fixed the bug”'))
-
-    // Long replies truncate to 48 chars plus the ellipsis; call breadcrumbs join with ›.
-    await m.update(h(TrendChart, withTips(2)))
-    assert.ok(query(m.container, '.lc-chart-tip').textContent!.endsWith(' · “' + 'a'.repeat(48) + '…”'))
-    await m.update(h(TrendChart, withTips(3)))
-    assert.ok(query(m.container, '.lc-chart-tip').textContent!.endsWith(' · “bash › read”'))
-
-    // No reply row → no tail; turnless/step-less bars fall back to Turn 0 · Step 0.
-    await m.update(h(TrendChart, withTips(4)))
-    const tip4 = query(m.container, '.lc-chart-tip').textContent!
-    assert.ok(tip4.startsWith(kit.t('tip.step', { t: 0, s: 0 })))
-    assert.ok(!tip4.includes('“'))
+    // Turnless/step-less bars fall back to Turn 0 · Step 0.
+    await m.update(h(TrendChart, propsOf(reqs, { ...handlers, hoveredSeq: 4 })))
+    assert.deepEqual(
+      queryAll(query(m.container, '.lc-chart-tip'), 'span').map(r => r.textContent),
+      [kit.t('tip.step', { t: 0, s: 0 }), kit.t('tip.total', { n: '300' })],
+    )
 
     // A hoveredSeq outside the rendered list floats no tip.
-    await m.update(h(TrendChart, withTips(999)))
+    await m.update(h(TrendChart, propsOf(reqs, { ...handlers, hoveredSeq: 999 })))
     assert.equal(queryAll(m.container, '.lc-chart-tip').length, 0)
 
     // Leaving the chart clears the hover and hides the tip.
-    await m.update(h(TrendChart, withTips(1)))
+    await m.update(h(TrendChart, propsOf(reqs, { ...handlers, hoveredSeq: 1 })))
     assert.equal(queryAll(m.container, '.lc-chart-tip').length, 1)
     await unhover(query(m.container, '.lc-chart'))
     assert.deepEqual(spies.hover, [1, null])
-    await m.update(h(TrendChart, withTips(null)))
+    await m.update(h(TrendChart, propsOf(reqs, { ...handlers, hoveredSeq: null })))
     assert.equal(queryAll(m.container, '.lc-chart-tip').length, 0)
     await m.unmount()
   })
@@ -690,6 +675,31 @@ describe('TrendChart scroll anchoring', () => {
     assert.equal(labels[1].style.transform, '', 'fully out of view → shift cleared')
     await scrollEvent(scroll)
     assert.equal(labels[1].style.transform, '', 'repeat scroll with unchanged geometry writes nothing')
+    await m.unmount()
+  })
+
+  test('overflowing labels render whole and thin out: a label colliding with the kept one hides until it clears', async () => {
+    // Turn granularity: three 14px blocks at 16px pitch, all carrying two-digit labels.
+    const agg = aggregateByTurn([req(1, { turn: 10 }), req(2, { turn: 11 }), req(3, { turn: 12 })])
+    const m = await mount(h(TrendChart, propsOf(agg, { granularity: 'turn' })))
+    const scroll = query<LayoutEl>(m.container, '.lc-chart-scroll')
+    const labels = queryAll(m.container, '.lc-turn-label')
+    assert.deepEqual(labels.map(l => l.textContent), ['T10', 'T11', 'T12'])
+
+    // 20px labels over 14px blocks (dx pinned at 0, natively centered): boxes [-3,17], [13,33], [29,49] — T11
+    // collides with the kept T10 and hides; T12 clears it (past box + gap) and stays visible.
+    for (const l of labels) Object.defineProperty(l, 'offsetWidth', { configurable: true, get: () => 20 })
+    await scrollEvent(scroll)
+    assert.equal(labels[0].style.visibility, '')
+    assert.equal(labels[1].style.visibility, 'hidden')
+    assert.equal(labels[2].style.visibility, '')
+
+    // Narrower labels fit their blocks again → the hidden one is restored.
+    for (const l of labels) Object.defineProperty(l, 'offsetWidth', { configurable: true, get: () => 8 })
+    await scrollEvent(scroll)
+    assert.equal(labels[1].style.visibility, '')
+    await scrollEvent(scroll)
+    assert.equal(labels[1].style.visibility, '', 'repeat scroll with unchanged geometry writes nothing')
     await m.unmount()
   })
 })

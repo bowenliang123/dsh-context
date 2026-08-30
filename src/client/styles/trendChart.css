@@ -34,8 +34,11 @@
 .lc-chart-dim .lc-turn { opacity: 0.35; }
 .lc-chart-dim .lc-turn-on { opacity: 1; }
 /* Renders OUTSIDE the scroller (see .lc-chart-wrap); syncTip owns the whole transform: translate to the bar's
-   visible slice. translateX(-50%) is composed there too, so the tip stays width-agnostic without layout reads. */
-.lc-chart-tip { position: absolute; top: 0; left: 0; z-index: 5; white-space: nowrap; background: var(--dsw-alias-bg-layer-2); border: 1px solid var(--dsw-alias-border-l1); border-radius: 6px; padding: 3px 8px; font-size: 12px; color: var(--dsw-alias-label-primary); box-shadow: 0 2px 8px rgba(0,0,0,0.18); pointer-events: none; }
+   visible slice. translateX(-50%) is composed there too, so the tip stays width-agnostic without layout reads.
+   Rows stack vertically (identity / total), the whole card capped at the wrapper (= the card's chart
+   viewport) and wrapped: a long row can never hang the tip past the card into neighbouring panes or
+   off-screen. */
+.lc-chart-tip { position: absolute; top: 0; left: 0; z-index: 5; display: flex; flex-direction: column; gap: 2px; max-width: 100%; box-sizing: border-box; overflow-wrap: break-word; background: var(--dsw-alias-bg-layer-2); border: 1px solid var(--dsw-alias-border-l1); border-radius: 6px; padding: 3px 8px; font-size: 12px; color: var(--dsw-alias-label-primary); box-shadow: 0 2px 8px rgba(0,0,0,0.18); pointer-events: none; }
 .lc-bar:hover { background: var(--dsw-alias-bg-layer-2); }
 /*
  Hovering previews a bar with a thin dashed frame; a CLICKED (locked)
@@ -73,8 +76,8 @@
  Turn strip: NEUTRAL zebra fills (inline, see TURN_FILLS) — never the category palette, or the strip reads as a detached bottom segment of the bars.
  */
 .lc-turns { display: flex; gap: 2px; overflow: hidden; margin-top: 4px; }
-.lc-turn { flex: none; box-sizing: border-box; text-align: center; font-size: 10px; line-height: 14px; font-weight: 600; color: var(--dsw-alias-label-secondary); border-radius: 3px; height: 14px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; cursor: pointer; transition: filter 120ms, opacity 120ms; }
+.lc-turn { flex: none; box-sizing: border-box; text-align: center; font-size: 10px; line-height: 14px; font-weight: 600; color: var(--dsw-alias-label-secondary); border-radius: 3px; height: 14px; white-space: nowrap; cursor: pointer; transition: filter 120ms, opacity 120ms; }
 .lc-turn-on { filter: brightness(1.35); color: var(--dsw-alias-label-primary); }
-/* The label is translated by JS to stay centered in the block's visible
-   slice; max-width keeps the block's ellipsis behavior for narrow blocks. */
-.lc-turn-label { display: inline-block; max-width: 100%; overflow: hidden; text-overflow: ellipsis; }
+/* Labels render at natural width, centered over their block — a 2-digit "T12" over a 14px turn bar overflows the
+   block instead of ellipsizing away; updateTurnLabels thins labels that would collide. */
+.lc-turn-label { display: inline-block; }

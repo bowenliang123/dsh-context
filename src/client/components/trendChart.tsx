@@ -26,8 +26,6 @@ export interface TrendChartProps {
   onHoverTurn: (turn: number | null) => void
   onPickTurn: (turn: number) => void
   onFocusTurnHandled: () => void
-  /** seq → one-line reply preview (see brief.ts replyTipsOf); appended to the hover tooltip when present. */
-  replyTips?: Map<number, string>
 }
 
 /**
@@ -79,7 +77,7 @@ export function jumpTargetOf(requests: RequestRecord[], seq: number): RequestRec
 }
 
 export function makeTrendChart(kit: ViewKit): (props: TrendChartProps) => ReactNS.ReactElement {
-  const { t, fmt, fmtTime, eventLabel, eventAt } = kit
+  const { t, fmt, eventLabel, eventAt } = kit
 
   const CHART_H = 112
   // Quarter-mark label tops for the axis (mirrored to .lc-axis-q1/.lc-axis-q3 in trendChart.css): chart top 18
@@ -95,6 +93,12 @@ export function makeTrendChart(kit: ViewKit): (props: TrendChartProps) => ReactN
   // Neutral zebra, deliberately DISJOINT from the category palette — the strip must read as a partition layer, not a bottom segment of the
   // composition bars.
   const TURN_FILLS = ['rgba(128,128,128,0.12)', 'rgba(128,128,128,0.26)']
+  // Turn labels render at natural width (a 2-digit "T12" is wider than a 14px turn bar) and overflow their block, so
+  // near-viewport labels are thinned when they would collide. OVERHANG bounds how far such a label can reach beyond
+  // its block (a generous read of "T999" at 10px) for the viewport-participation test; GAP is the breathing room
+  // between kept labels' boxes.
+  const LABEL_OVERHANG = 48
+  const LABEL_GAP = 4
 
   // Anchor bar HEIGHT to the provider-reported prompt when the request carried usage: categories keep their heuristic ratios but the height
   // tracks the real billed tokens (matching the overview card and official chat ring), not the underpriced estimate.
@@ -283,33 +287,45 @@ export function makeTrendChart(kit: ViewKit): (props: TrendChartProps) => ReactN
     // `el.scrollWidth` is already the new (wider) value, so a near-edge check against it would miss the auto-follow.
     const prevScrollWidthRef = React.useRef(0)
     /**
-     * Keep each turn label centered within its block's VISIBLE slice so it never scrolls out while any part of the block is on screen
-     * (narrower-than-label blocks stay put); reads (offsetWidth) batch before writes (transform) to avoid layout thrash — out-of-view
-     * blocks need no measurement.
+     * Keep each turn label centered within its block's VISIBLE slice, then thin colliding labels: a label wider
+     * than its block overflows it, so consecutive narrow turns (14px bars, 2-digit "T12"s) would smear into each
+     * other — walking left→right in content coordinates, a label whose box reaches the previous KEPT one drops to
+     * visibility:hidden. Blocks that cannot reach the viewport even overhung by a label skip their reads/writes
+     * entirely (their transform/visibility just reset); reads (offsetWidth) batch before the writes to avoid layout
+     * thrash, and unchanged styles write nothing.
      */
     const updateTurnLabels = (el: HTMLDivElement): void => {
       const labels = el.querySelectorAll<HTMLElement>('.lc-turn-label')
       const n = Math.min(labels.length, turnOffsets.length)
       const sl = el.scrollLeft
       const vr = sl + el.clientWidth
-      const writes: [HTMLElement, string][] = []
+      const writes: [HTMLElement, string, string][] = []
+      // Right edge (content px) of the last kept label's box plus the gap; -Infinity opens the chain.
+      let chainR = -Infinity
       for (let i = 0; i < n; i++) {
         const off = turnOffsets[i]
         const w = turnWidths[i]
-        const visL = Math.max(off, sl)
-        const visR = Math.min(off + w, vr)
         let dx = 0
-        if (visR > visL) {
+        let vis = ''
+        if (off + w + LABEL_OVERHANG > sl && off - LABEL_OVERHANG < vr) {
           const lw = labels[i].offsetWidth
-          if (lw < w) {
+          const visL = Math.max(off, sl)
+          const visR = Math.min(off + w, vr)
+          if (visR > visL && lw < w) {
             const center = (visL + visR) / 2 - off
             dx = Math.min(Math.max(center, lw / 2), w - lw / 2) - w / 2
           }
+          const left = off + w / 2 + dx - lw / 2
+          if (left < chainR) vis = 'hidden'
+          else chainR = left + lw + LABEL_GAP
         }
         const next = dx !== 0 ? `translateX(${dx}px)` : ''
-        if (labels[i].style.transform !== next) writes.push([labels[i], next])
+        if (labels[i].style.transform !== next || labels[i].style.visibility !== vis) writes.push([labels[i], next, vis])
       }
-      for (const [label, next] of writes) label.style.transform = next
+      for (const [label, next, vis] of writes) {
+        label.style.transform = next
+        label.style.visibility = vis
+      }
     }
     React.useLayoutEffect(() => {
       const el = scrollRef.current
@@ -347,24 +363,23 @@ export function makeTrendChart(kit: ViewKit): (props: TrendChartProps) => ReactN
       syncTip(el)
     }, [props.granularity, props.focusTurn, requests])
 
-    // Compact single-line hover tooltip, shown instantly by the custom `.lc-chart-tip` (the native title is delayed).
-    const tipOf = (req: RequestRecord): string => {
-      const head = req.stepCount !== undefined && req.stepCount > 1
-        ? t('tip.turn', { t: req.turn ?? 0, n: req.stepCount })
+    // Compact 2-row hover tooltip, shown instantly by the custom `.lc-chart-tip` (the native title is delayed):
+    // identity and the bar's anchor total — the SAME actual value the bar height and axis are scaled against
+    // (provider prompt when reported, heuristic total otherwise). Identity phrasing follows the granularity —
+    // turn bars always speak TURN (the aggregate's step count, singular for a 1-step turn; a record missing
+    // stepCount degrades to that too), step bars carry the step index. Delta swaps the metric row for the net.
+    const tipRowsOf = (req: RequestRecord): [string, string] => {
+      const n = req.stepCount ?? 1
+      const head = props.granularity === 'turn'
+        ? (n > 1 ? t('tip.turn', { t: req.turn ?? 0, n }) : t('tip.turn1', { t: req.turn ?? 0 }))
         : t('tip.step', { t: req.turn ?? 0, s: req.step ?? 0 })
-      const reply = props.replyTips?.get(req.seq)
-      // The reply preview anchors the bar's identity at a glance; kept short so the tip stays one line.
-      const tail = reply !== undefined
-        ? ' · “' + (reply.length > 48 ? reply.slice(0, 48) + '…' : reply) + '”'
-        : ''
       if (delta) {
         /* v8 ignore next 1 -- delta mode only receives records from
            deltaOf, which always assigns net; the fallback is defensive. */
         const n = req.net ?? 0
-        return head + ' · ' + fmtTime(req.time) + ' · ' + t('tip.delta', { n: (n > 0 ? '+' : '') + fmt(n) }) + tail
+        return [head, t('tip.delta', { n: (n > 0 ? '+' : '') + fmt(n) })]
       }
-      return head + ' · ' + fmtTime(req.time) + ' · ' + t('tip.total', { n: fmt(req.total) })
-        + (req.prompt !== undefined ? ' · ' + t('tip.actual', { n: fmt(req.prompt) }) : '') + tail
+      return [head, t('tip.total', { n: fmt(barTotalOf(req)) })]
     }
     const hoveredIdx = props.hoveredSeq !== null ? requests.findIndex(r => r.seq === props.hoveredSeq) : -1
     const hoveredReq = hoveredIdx >= 0 ? requests[hoveredIdx] : null
@@ -501,12 +516,12 @@ export function makeTrendChart(kit: ViewKit): (props: TrendChartProps) => ReactN
               })}
             </div>
           </div>
-          {/* Compact single-line hover tooltip, shown instantly by the custom `.lc-chart-tip` (the native title is delayed):
-              position, time, estimated total, provider prompt when available; the per-category breakdown lives in the detail
-              panel below. Positioned imperatively over its bar's visible slice (syncTip) so scrolling keeps it glued without
-              ever widening the scrollable area. */}
+          {/* Compact 2-row hover tooltip (identity / anchor total), shown instantly by the custom `.lc-chart-tip`
+              (the native title is delayed); the per-category breakdown lives in the detail panel below. Capped at
+              the wrapper's width and wrapped by CSS, positioned imperatively over its bar's visible slice (syncTip)
+              so scrolling keeps it glued without ever widening the scrollable area. */}
           {hoveredReq !== null ? (
-            <div className="lc-chart-tip">{tipOf(hoveredReq)}</div>
+            <div className="lc-chart-tip">{tipRowsOf(hoveredReq).map((row, i) => <span key={i}>{row}</span>)}</div>
           ) : null}
         </div>
       </div>

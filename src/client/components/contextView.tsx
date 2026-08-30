@@ -5,7 +5,7 @@
 
 import type * as ReactNS from 'react'
 import type { ContextEventRecord, RequestRecord, SurfaceNode } from '../../shared/types'
-import { briefNodes, briefOf, replyTipsOf } from '../brief'
+import { briefNodes, briefOf } from '../brief'
 import { headlineOf } from '../headline'
 import type { SessionStandardProps } from '../services'
 import { contextBreakdownOf, contextPressureOf, conversationNodesOf, headersOf, imageLoaderOf, numOf, timelineOf, tokenUsageOf } from '../services'
@@ -205,10 +205,9 @@ export function makeContextView(
       if (scrollerRef.current !== null) scrollerRef.current.scrollTop = 0
     }, [jumpSeq, data, requests])
 
-    // Step-brief raw material: every served node seq-sorted (live tail + archive), the tooltip's reply previews, and the
-    // conversation-snapshot join the brief uses for call-argument enrichment (same join the Context browser builds).
+    // Step-brief raw material: every served node seq-sorted (live tail + archive), and the conversation-snapshot
+    // join the brief uses for call-argument enrichment (same join the Context browser builds).
     const briefList = React.useMemo(() => (data ? briefNodes(data) : []), [data])
-    const replyTips = React.useMemo(() => replyTipsOf(briefList), [briefList])
     // The conversation-window join, from whichever seat the harness provides
     // (`useChat` on 0.1.2+, the session snapshot before it). Both seats are
     // real hooks — invoked unconditionally per render (stable order), only
@@ -392,7 +391,6 @@ export function makeContextView(
                       onHoverTurn={setHoverTurn}
                       onPickTurn={(turn) => { setGranularity('turn'); setFocusTurn(turn) }}
                       onFocusTurnHandled={() => { setFocusTurn(null) }}
-                      replyTips={replyTips}
                     />
                     <RequestDetail
                       request={activeReq}
