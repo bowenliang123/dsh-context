@@ -14,7 +14,7 @@
  */
 
 import type { Context } from '@deepseek-ai/cordis'
-import { settingsNamespace } from '@deepseek-ai/dsh-settings'
+import type { SettingsNamespace } from '@deepseek-ai/dsh-settings'
 import z from '@deepseek-ai/schemastery'
 
 /** The namespace is the join key between the Host registration and the browser card. */
@@ -44,6 +44,11 @@ export const SettingsSchema: z<PluginSettings> = z.object({
 /** Serve the namespace while a settings provider is composed; inert otherwise. */
 export function installSettings(ctx: Context): void {
   ctx.inject(['settings'], (sctx) => {
-    sctx.settings.register(settingsNamespace(SETTINGS_NAMESPACE), SettingsSchema)
+    // dsh 0.1.2-alpha.2 removed the `settingsNamespace()` brand helper — its own
+    // packages now register the raw string. The literal matches the namespace
+    // pattern every version enforces somewhere (inside `register` on 0.1.2-alpha.2,
+    // inside the removed helper before that), and the branded cast only satisfies
+    // the pre-0.1.2 type face.
+    sctx.settings.register(SETTINGS_NAMESPACE as SettingsNamespace, SettingsSchema)
   })
 }

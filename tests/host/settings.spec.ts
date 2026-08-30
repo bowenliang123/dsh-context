@@ -6,7 +6,7 @@
 import assert from 'node:assert/strict'
 import { describe, test } from 'vitest'
 import { Context } from '@deepseek-ai/cordis'
-import { SettingsProvider, settingsNamespace } from '@deepseek-ai/dsh-settings'
+import { SettingsProvider } from '@deepseek-ai/dsh-settings'
 import type { SettingsNamespace } from '@deepseek-ai/dsh-settings'
 import { installSettings, SETTINGS_NAMESPACE } from '../../src/host/settings'
 import type { PluginSettings } from '../../src/host/settings'
@@ -34,7 +34,11 @@ class MemorySettings extends SettingsProvider {
   }
 }
 
-const ns = settingsNamespace(SETTINGS_NAMESPACE)
+// The raw string is what every supported dsh version's `register` accepts at
+// runtime; the branded cast satisfies the pre-0.1.2 type face (see
+// src/host/settings.ts — the `settingsNamespace()` helper was removed in
+// 0.1.2-alpha.2).
+const ns = SETTINGS_NAMESPACE as SettingsNamespace
 
 /** Poll until the inject callback inside installSettings has registered the namespace. */
 async function untilRegistered(ctx: Context): Promise<void> {
