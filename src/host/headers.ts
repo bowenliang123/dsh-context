@@ -18,7 +18,7 @@
 
 import { z } from 'zod'
 import type { SessionEvent } from '@deepseek-ai/dsh-session'
-import type { CompatProjectionDefinition } from './compat'
+import type { ProjectionDefinition } from './compat'
 import type { ContextHeaders, HeaderRecord, HeaderTool } from '../shared/types'
 import { estimateToolSchema } from './pricing'
 
@@ -91,14 +91,14 @@ function recordOf(event: SessionEvent): HeaderRecord | null {
 
 /**
   * The context-headers projection unit; registered alongside the timeline unit (host/index.ts); clients read it through
-  * `useProjection('contextHeaders')` and degrade to tokens-only header sections when the key is absent. Dual-contract definition (see
-  * compat.ts).
+  * `useProjection('contextHeaders')` and degrade to tokens-only header sections when the key is absent. Contract mirror
+  * with a REQUIRED `wire` block (see compat.ts).
   * @param resolve - best-effort tool-to-plugin attribution (see toolSources.ts); fills a missing `plugin` at view time so
   * epochs folded without attribution still render a tag when the source is known.
  */
 export function createContextHeadersDefinition(
   resolve?: (name: string) => string | undefined,
-): CompatProjectionDefinition<'contextHeaders', HeadersState> {
+): ProjectionDefinition<'contextHeaders', HeadersState> {
   const view = (state: HeadersState): ContextHeaders => ({
     headers: state.headers.map(h => ({
       ...h,
@@ -109,10 +109,8 @@ export function createContextHeadersDefinition(
       }),
     })),
   })
-  const definition: CompatProjectionDefinition<'contextHeaders', HeadersState> = {
+  const definition: ProjectionDefinition<'contextHeaders', HeadersState> = {
     key: 'contextHeaders',
-    schema: contextHeadersSchema,
-    view,
     stateSchema: contextHeadersStateSchema,
     wire: { viewSchema: contextHeadersSchema, view },
     init: (): HeadersState => ({ headers: [] }),

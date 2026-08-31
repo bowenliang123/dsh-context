@@ -15,21 +15,23 @@ import { createContextHeadersDefinition } from '../../../src/host/headers'
 /**
  * The fold's declared contract takes the core `SessionEvent` union; the log
  * also carries declaration-merged plugin events (compaction/*), so the fold
- * widens to TimelineEvent (src/host/fold.ts). These widened faces perform the
- * ONE documented cast inside the helper, keeping every spec call site clean.
+ * widens to TimelineEvent (src/host/fold.ts). These widened faces mirror the
+ * supported registry contract (src/host/compat.ts: stateSchema + required
+ * `wire`, zero-arg `init` — see ProjectionDefinition) and perform the ONE
+ * documented cast inside the helper, keeping every spec call site clean.
  */
 export interface TimelineDefLike {
   key: string
   init(): TimelineState
   apply(state: TimelineState, event: TimelineEvent): TimelineState
-  view(state: TimelineState): ContextTimeline
+  wire: { view(state: TimelineState): ContextTimeline }
 }
 
 export interface HeadersDefLike {
   key: string
   init(): HeadersState
   apply(state: HeadersState, event: TimelineEvent): HeadersState
-  view(state: HeadersState): ContextHeaders
+  wire: { view(state: HeadersState): ContextHeaders }
 }
 
 export function timelineDef(config?: Config): TimelineDefLike {
@@ -45,9 +47,10 @@ export function headersDef(): HeadersDefLike {
  * semantics (the export left `@deepseek-ai/dsh-session` in 0.1.2-alpha.2, and
  * the test fixtures must track no single dsh face). Returns undefined when the
  * value is not losslessly JSON-serializable: an undefined/function/symbol
- * member, a non-finite number, a non-plain object, or a cycle.
+ * member, a non-finite number, a non-plain object, or a cycle. Shared with the
+ * compat matrix's registry driver (tests/host/compat/registryDriver.ts).
  */
-function snapshotJson(value: unknown, ancestors: Set<object> = new Set()): unknown {
+export function snapshotJson(value: unknown, ancestors: Set<object> = new Set()): unknown {
   switch (typeof value) {
     case 'string': case 'boolean': return value
     case 'number': return Number.isFinite(value) ? value : undefined
@@ -110,7 +113,7 @@ export function driveTimeline(events: TimelineEvent[], config?: Config): Timelin
     state = def.apply(state, ev)
     states.push(state)
   }
-  return { def, state, states, view: def.view(state) }
+  return { def, state, states, view: def.wire.view(state) }
 }
 
 /** Pin the plain-JSON precondition on every intermediate fold state. */

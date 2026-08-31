@@ -11,26 +11,13 @@ import { header, foreign } from './helpers/events'
 import { assertPlainJson } from './helpers/projection'
 import type { TimelineEvent } from '../../src/host/fold'
 
-type Def = ReturnType<typeof createContextHeadersDefinition>
-
-/** The dual-contract fields ride the definition past its declared 0.1.0 return type. */
-function compat(def: Def) {
-  return def as unknown as {
-    stateSchema: { parse: (value: unknown) => HeadersState }
-    wire: {
-      viewSchema: { safeParse: (value: unknown) => { success: boolean } }
-      view: Def['view']
-    }
-  }
-}
-
 /** A raw request/header envelope with full control over the header payload. */
 function headerEvent(seq: number, rawHeader: unknown): TimelineEvent {
   return { type: 'request/header', seq, time: seq * 1000, data: { header: rawHeader, reason: 'initial' } }
 }
 
 /** Fold events through the unit, pinning the plain-JSON state precondition on every result. */
-function fold(def: Def, events: TimelineEvent[]): HeadersState {
+function fold(def: ReturnType<typeof createContextHeadersDefinition>, events: TimelineEvent[]): HeadersState {
   let state = def.init()
   for (const ev of events) state = def.apply(state, ev as never)
   assertPlainJson(state)
@@ -58,7 +45,7 @@ describe('createContextHeadersDefinition', () => {
     assert.equal(state.headers[0].tools.length, 1)
     assert.equal(state.headers[0].tools[0].name, 'bash')
 
-    const view = def.view(state)
+    const view = def.wire.view(state)
     assert.equal(view.headers.length, 1)
     assert.equal(view.headers[0].tools[0].description, 'run a command')
   })
@@ -79,13 +66,13 @@ describe('createContextHeadersDefinition', () => {
 
   test('a non-array tools field folds to an empty tool list', () => {
     const def = createContextHeadersDefinition()
-    const view = def.view(fold(def, [headerEvent(1, { tools: 'nope' })]))
+    const view = def.wire.view(fold(def, [headerEvent(1, { tools: 'nope' })]))
     assert.deepEqual(view.headers[0].tools, [])
   })
 
   test('tool entries degrade bad names and omit bad descriptions', () => {
     const def = createContextHeadersDefinition()
-    const view = def.view(fold(def, [headerEvent(1, {
+    const view = def.wire.view(fold(def, [headerEvent(1, {
       tools: [
         { name: 42, description: 'kept' }, // non-string name → '?'
         { name: 'a', description: 7 }, // non-string description → omitted
@@ -107,7 +94,7 @@ describe('createContextHeadersDefinition', () => {
 
   test('system is omitted unless a non-empty string', () => {
     const def = createContextHeadersDefinition()
-    const view = def.view(fold(def, [
+    const view = def.wire.view(fold(def, [
       headerEvent(1, { system: 42 }),
       headerEvent(2, { system: '' }),
       headerEvent(3, { system: 'sys' }),
@@ -136,14 +123,14 @@ describe('createContextHeadersDefinition', () => {
   test('view() copies records and tools off the state', () => {
     const def = createContextHeadersDefinition()
     const state = fold(def, [headerEvent(1, { system: 'sys', tools: [{ name: 'bash' }] })])
-    const view = def.view(state)
+    const view = def.wire.view(state)
     view.headers[0].tools[0].name = 'mutated'
     view.headers[0].system = 'mutated'
     assert.equal(state.headers[0].tools[0].name, 'bash', 'mutating the view must not alias state')
     assert.equal(state.headers[0].system, 'sys')
   })
 
-  test('schema, stateSchema, and the wire block validate a real folded view', () => {
+  test('stateSchema and the wire block validate a real folded view', () => {
     const def = createContextHeadersDefinition()
     const state = fold(def, [
       header(1, {
@@ -151,18 +138,15 @@ describe('createContextHeadersDefinition', () => {
         tools: [{ name: 'bash', description: 'run a command', parameters: { type: 'object' } }],
       }),
     ])
-    const view = def.view(state)
-    assert.equal(def.schema.safeParse(view).success, true, 'wire schema accepts the folded view')
-
-    const c = compat(def)
-    assert.deepEqual(c.stateSchema.parse(structuredClone(state)), state, 'state schema round-trips the fold state')
-    assert.equal(c.wire.view, def.view, 'the wire block shares the view function')
-    assert.equal(c.wire.viewSchema.safeParse(c.wire.view(state)).success, true)
+    const view = def.wire.view(state)
+    assert.equal(def.wire.viewSchema.safeParse(view).success, true, 'wire schema accepts the folded view')
+    assert.deepEqual(def.stateSchema.parse(structuredClone(state)), state, 'state schema round-trips the fold state')
+    assert.equal(def.wire.viewSchema.safeParse(def.wire.view(state)).success, true)
   })
 
   test('a harness-provided plugin field rides the raw tool entry verbatim', () => {
     const def = createContextHeadersDefinition()
-    const view = def.view(fold(def, [headerEvent(1, {
+    const view = def.wire.view(fold(def, [headerEvent(1, {
       tools: [
         { name: 'mcp__github__get_issue', plugin: 'mcp:github' },
         { name: 'plain', plugin: '' }, // empty plugin behaves as absent
@@ -179,7 +163,7 @@ describe('createContextHeadersDefinition', () => {
     const resolve = (name: string): string | undefined =>
       name === 'bash' ? '@deepseek-ai/dsh-tool-bash' : name === 'mcp__github__x' ? 'mcp:github' : undefined
     const def = createContextHeadersDefinition(resolve)
-    const view = def.view(fold(def, [headerEvent(1, {
+    const view = def.wire.view(fold(def, [headerEvent(1, {
       tools: [
         { name: 'bash' },
         { name: 'mcp__github__x' },
@@ -198,7 +182,7 @@ describe('createContextHeadersDefinition', () => {
 
   test('without a resolver no plugin is ever added', () => {
     const def = createContextHeadersDefinition()
-    const view = def.view(fold(def, [headerEvent(1, { tools: [{ name: 'mcp__github__x' }] })]))
+    const view = def.wire.view(fold(def, [headerEvent(1, { tools: [{ name: 'mcp__github__x' }] })]))
     assert.ok(!('plugin' in view.headers[0].tools[0]))
   })
 
@@ -207,18 +191,17 @@ describe('createContextHeadersDefinition', () => {
     const state = fold(def, [headerEvent(1, {
       tools: [{ name: 'bash', plugin: 'mcp:github' }, { name: 'read' }],
     })])
-    const view = def.view(state)
-    assert.equal(def.schema.safeParse(view).success, true)
-    const c = compat(def)
-    assert.deepEqual(c.stateSchema.parse(structuredClone(state)), state)
-    assert.equal(c.wire.viewSchema.safeParse(c.wire.view(state)).success, true)
+    const view = def.wire.view(state)
+    assert.equal(def.wire.viewSchema.safeParse(view).success, true)
+    assert.deepEqual(def.stateSchema.parse(structuredClone(state)), state)
+    assert.equal(def.wire.viewSchema.safeParse(def.wire.view(state)).success, true)
   })
 })
 
 describe('hostile tool entries', () => {
   test('null and primitive tool entries degrade to unnamed JSON-priced tools', () => {
     const def = createContextHeadersDefinition()
-    const view = def.view(fold(def, [headerEvent(1, {
+    const view = def.wire.view(fold(def, [headerEvent(1, {
       tools: [null, 42, 'x', { name: 'bash' }],
     })]))
     const tools = view.headers[0].tools

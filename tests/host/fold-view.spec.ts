@@ -1,7 +1,7 @@
 // Wire-view tests for buildTimelineView (src/host/fold.ts): counters,
 // non-aliasing copies, the cost buckets, the serving window (newest tail +
 // pinned injects + coverage floors), event→request attribution, and view
-// purity. Driven through the real projection unit (driveTimeline / def.view).
+// purity. Driven through the real projection unit (driveTimeline / def.wire.view).
 
 import assert from 'node:assert/strict'
 import { describe, test } from 'vitest'
@@ -113,7 +113,7 @@ describe('buildTimelineView cost copy', () => {
   test('a pro-only cost with a peak-only bucket copies the set half only', () => {
     const st = createTimelineState()
     st.cost = { pro: { peak: bucket(1, 2, 3, 4) } } as SessionCostUsage
-    const view = timelineDef({}).view(st)
+    const view = timelineDef({}).wire.view(st)
     assert.deepEqual<SessionCostUsage>(view.cost, { pro: { peak: bucket(1, 2, 3, 4) } })
     assert.notEqual(view.cost?.pro?.peak, st.cost.pro?.peak)
     assert.equal(view.cost?.flash, undefined, 'an absent family stays absent')
@@ -126,7 +126,7 @@ describe('buildTimelineView cost copy', () => {
       flash: { peak: bucket(1, 0, 0, 2), off: bucket(3, 0, 0, 4) },
       pro: { peak: bucket(5, 6, 0, 7), off: bucket(8, 0, 9, 10) },
     }
-    const view = timelineDef({}).view(st)
+    const view = timelineDef({}).wire.view(st)
     assert.deepEqual<SessionCostUsage | undefined>(view.cost, st.cost)
     assert.notEqual(view.cost?.flash, st.cost.flash)
     assert.notEqual(view.cost?.flash?.peak, st.cost.flash?.peak)
@@ -134,7 +134,7 @@ describe('buildTimelineView cost copy', () => {
   })
 
   test('no cost in state omits the wire field entirely', () => {
-    const view = timelineDef({}).view(createTimelineState())
+    const view = timelineDef({}).wire.view(createTimelineState())
     assert.equal('cost' in view, false)
   })
 })
@@ -178,7 +178,7 @@ describe('buildTimelineView serving window', () => {
   test('archiveFloor rides through when the state carries one', () => {
     const st = createTimelineState()
     st.archiveFloor = 7
-    assert.equal(timelineDef({}).view(st).archiveFloor, 7)
+    assert.equal(timelineDef({}).wire.view(st).archiveFloor, 7)
   })
 })
 
@@ -291,8 +291,8 @@ describe('buildTimelineView purity', () => {
       assistantMessage(3, { turn: 1, step: 1, usage: { inputTokens: 5, outputTokens: 2 } }),
     ])
     const before = assertPlainJson(state)
-    const v1 = def.view(state)
-    const v2 = def.view(state)
+    const v1 = def.wire.view(state)
+    const v2 = def.wire.view(state)
     assert.notEqual(v1, v2)
     assert.notEqual(v1.nodes, v2.nodes)
     assert.notEqual(v1.requests, v2.requests)

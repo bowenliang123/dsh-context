@@ -96,7 +96,7 @@ describe('dsh-context host plugin', () => {
     assert.ok(timeline.length > 0, 'contextTimeline changes notified')
     const last = timeline.at(-1)?.value
     assert.equal(
-      createContextTimelineDefinition({}).schema.safeParse(last).success,
+      createContextTimelineDefinition({}).wire.viewSchema.safeParse(last).success,
       true,
       'the notified value is the validated wire view',
     )

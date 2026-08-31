@@ -1,8 +1,8 @@
 // Unit tests for the contextTimeline projection unit (src/host/timeline.ts) —
-// the dual-contract definition shape, its wire/state schemas, and the
-// config-resolved retention bounds. Fold semantics themselves live in
-// fold.ts; here we pin the definition's contract surface over a real folded
-// log built with the shared envelope builders.
+// the projection-definition contract surface (stateSchema + required wire),
+// its wire/state schemas, and the config-resolved retention bounds. Fold
+// semantics themselves live in fold.ts; here we pin the definition's contract
+// over a real folded log built with the shared envelope builders.
 
 import assert from 'node:assert/strict'
 import { describe, test } from 'vitest'
@@ -22,19 +22,6 @@ import {
   userMessage,
 } from './helpers/events'
 import type { TimelineEvent } from '../../src/host/fold'
-
-type Def = ReturnType<typeof createContextTimelineDefinition>
-
-/** The dual-contract fields ride the definition past its declared 0.1.0 return type. */
-function compat(def: Def) {
-  return def as unknown as {
-    stateSchema: { parse: (value: unknown) => unknown }
-    wire: {
-      viewSchema: { safeParse: (value: unknown) => { success: boolean } }
-      view: Def['view']
-    }
-  }
-}
 
 /** A realistic session log touching every envelope family the fold serves. */
 function realLog(): TimelineEvent[] {
@@ -59,27 +46,22 @@ function realLog(): TimelineEvent[] {
 }
 
 describe('createContextTimelineDefinition', () => {
-  test('carries both projection contracts on one unit', () => {
+  test('carries the supported projection contract on one unit', () => {
     const def = createContextTimelineDefinition({})
     assert.equal(def.key, 'contextTimeline')
     assert.equal(def.stateVersion, 11)
     assert.equal(typeof def.init, 'function')
     assert.equal(typeof def.apply, 'function')
-    // 0.1.0 contract: schema + top-level view.
-    assert.equal(typeof def.schema.safeParse, 'function')
-    assert.equal(typeof def.view, 'function')
-    // 0.1.1-rc.1+ contract: stateSchema + wire block sharing the view.
-    const c = compat(def)
-    assert.equal(typeof c.stateSchema.parse, 'function')
-    assert.equal(typeof c.wire.viewSchema.safeParse, 'function')
-    assert.equal(c.wire.view, def.view, 'the wire block shares the view function')
+    // The supported registry contract: stateSchema + a REQUIRED wire block.
+    assert.equal(typeof def.stateSchema.parse, 'function')
+    assert.equal(typeof def.wire.viewSchema.safeParse, 'function')
+    assert.equal(typeof def.wire.view, 'function')
   })
 
   test('the wire schema accepts a real folded view; the state schema accepts every intermediate state', () => {
     const def = createContextTimelineDefinition({})
-    const c = compat(def)
     const drive = driveTimeline(realLog())
-    const parsed = def.schema.safeParse(drive.view)
+    const parsed = def.wire.viewSchema.safeParse(drive.view)
     assert.equal(parsed.success, true, 'a real folded view validates')
 
     const view = drive.view
@@ -92,10 +74,10 @@ describe('createContextTimelineDefinition', () => {
     assert.ok(view.events.length > 0)
 
     for (const [index, state] of drive.states.entries()) {
-      c.stateSchema.parse(structuredClone(state)) // throws on drift
+      def.stateSchema.parse(structuredClone(state)) // throws on drift
       assert.ok(true, `state ${index} validates`)
     }
-    assert.equal(c.wire.viewSchema.safeParse(c.wire.view(drive.state)).success, true)
+    assert.equal(def.wire.viewSchema.safeParse(def.wire.view(drive.state)).success, true)
   })
 
   test('the wire schema rejects drift', () => {
@@ -104,15 +86,15 @@ describe('createContextTimelineDefinition', () => {
 
     const extra = structuredClone(drive.view) as unknown as Record<string, unknown>
     extra.bogus = 1
-    assert.equal(def.schema.safeParse(extra).success, false, 'strict: unknown keys rejected')
+    assert.equal(def.wire.viewSchema.safeParse(extra).success, false, 'strict: unknown keys rejected')
 
     const badCat = structuredClone(drive.view)
     ;(badCat.nodes[0] as SurfaceNode).cat = 'weird' as SurfaceNode['cat']
-    assert.equal(def.schema.safeParse(badCat).success, false, 'the cat enum rejects unknown categories')
+    assert.equal(def.wire.viewSchema.safeParse(badCat).success, false, 'the cat enum rejects unknown categories')
 
     const badTokens = structuredClone(drive.view)
     badTokens.nodes[0].tokens = -1
-    assert.equal(def.schema.safeParse(badTokens).success, false, 'negative token counts rejected')
+    assert.equal(def.wire.viewSchema.safeParse(badTokens).success, false, 'negative token counts rejected')
   })
 
   test('maxNodes bounds the served surface nodes', () => {

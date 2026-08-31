@@ -14,7 +14,7 @@
  * 3. Shipped first-party tools: a PINNED name → package map derived from the
  *    deepseek-harness tool-schema catalog (packages/core/tools + the shipped
  *    `tool-*` packages at dsh 0.1.1-rc.2; names are stable across the plugin's
- *    supported 0.1.0-rc7+ / 0.1.1-rc2+ range). Third-party tools stay
+ *    supported 0.1.1-rc2+ / 0.1.2-alpha2+ range). Third-party tools stay
  *    unattributed rather than guessed.
  *
  * Pure string functions: fully unit-testable, no harness imports.

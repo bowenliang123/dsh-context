@@ -21,7 +21,7 @@ import { z } from 'zod'
 import type { SessionEvent } from '@deepseek-ai/dsh-session'
 import type { Config } from './config'
 import { resolveBounds } from './config'
-import type { CompatProjectionDefinition } from './compat'
+import type { ProjectionDefinition } from './compat'
 import type { ContextTimeline } from '../shared/types'
 import { applyTimeline, buildTimelineView, createTimelineState } from './fold'
 import type { TimelineState } from './fold'
@@ -175,23 +175,20 @@ const timelineStateSchema = z.object({
  * or fold semantics change (invalidation of cached rows); config-only
  * changes never require it (bounds tune retention, not state shape).
  *
- * The definition carries BOTH session-projection contracts (see compat.ts):
- * `schema`/`view` for dsh <= 0.1.0-rc.8, `stateSchema`/`wire` for
- * dsh >= 0.1.1-rc.1 — each registry reads its own fields off the same unit.
- * (The return type is the mirrored dual contract, not the installed dts
- * `ProjectionDefinition`: the 0.1.1+ registry's wired-register overload
- * demands `wire` PRESENT, which the dts's optional `wire?` fails.)
- * Without the `wire` block the 0.1.1-rc.1+ registry treats the unit as
- * host-only and never delivers `contextTimeline` to the browser (the Context
- * tab would stay on its loading screen forever).
+ * The definition carries the session-projection contract served by every
+ * supported harness (see compat.ts): `stateSchema` + a REQUIRED `wire` block.
+ * (The return type is the mirrored contract, not the installed dts
+ * `ProjectionDefinition`: the registry's wired-register overload demands
+ * `wire` PRESENT, which the dts's optional `wire?` fails.) Without the
+ * `wire` block the registry treats the unit as host-only and never delivers
+ * `contextTimeline` to the browser (the Context tab would stay on its
+ * loading screen forever).
  */
-export function createContextTimelineDefinition(config: Config): CompatProjectionDefinition<'contextTimeline', TimelineState> {
+export function createContextTimelineDefinition(config: Config): ProjectionDefinition<'contextTimeline', TimelineState> {
   const bounds = resolveBounds(config)
   const view = (state: TimelineState): ContextTimeline => buildTimelineView(state, bounds)
-  const definition: CompatProjectionDefinition<'contextTimeline', TimelineState> = {
+  const definition: ProjectionDefinition<'contextTimeline', TimelineState> = {
     key: 'contextTimeline',
-    schema: contextTimelineSchema,
-    view,
     stateSchema: timelineStateSchema,
     wire: { viewSchema: contextTimelineSchema, view },
     init: () => createTimelineState(),
