@@ -58,9 +58,6 @@ jobs:
       - name: Test
         run: DSH_REPO="$PWD/.tmp/dsh-repo" pnpm test
 
-      - name: Bundle smoke
-        run: pnpm run test:bundle
-
       - name: Verify version matches the tag
         run: |
           TAG="${{ github.ref_name }}"

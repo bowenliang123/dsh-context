@@ -11,7 +11,7 @@
 // the 0.1.2 header argument.
 //
 // The real-code complement — the ACTUAL dsh registry sources per tag — runs
-// via `pnpm run test:compat` (scripts/compat-matrix.mjs).
+// in the `compat` vitest project (tests/compat/matrix.spec.ts).
 
 import assert from 'node:assert/strict'
 import { describe, test } from 'vitest'

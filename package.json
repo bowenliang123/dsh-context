@@ -38,8 +38,6 @@
     "register": "bash scripts/register.sh",
     "typecheck": "tsc --noEmit && tsc --noEmit -p tsconfig.tests.json",
     "test": "pnpm run typecheck && vitest run --coverage",
-    "test:bundle": "node scripts/bundle-smoke.mjs",
-    "test:compat": "vitest run --project compat",
     "coverage": "vitest run --coverage",
     "release": "bash scripts/publish.sh",
     "hooks": "bash scripts/install-hooks.sh",

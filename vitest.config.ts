@@ -37,14 +37,15 @@ export default defineConfig({
         },
       },
       {
-        // The compat matrix (tests/compat/matrix.spec.ts): the real-code
-        // regression against the ACTUAL harness sources at every baseline
-        // tag (tests/baselines.ts). Spawns a staged driver per baseline and
-        // git-shows tag sources, so it needs a dsh checkout (env DSH_REPO)
-        // and the BUILT plugin (lib/) — skipped cleanly when either is
-        // absent; the release workflow fetches the tags before `pnpm test`.
-        // The first run per baseline installs the tag's vendored cordis into
-        // the staging dir (.tmp/compat, npm-cached) — hence the timeout.
+        // The built-artifact lane (tests/compat/): the bundle smoke over
+        // lib/client.js, plus the real-code compat matrix against the
+        // ACTUAL harness sources at every baseline tag (tests/baselines.ts).
+        // Both exercise the BUILT plugin and skip cleanly when lib/ is
+        // absent; the matrix also needs a dsh checkout (env DSH_REPO) — the
+        // release workflow builds and fetches the tags before `pnpm test`.
+        // The first matrix run per baseline installs the tag's vendored
+        // cordis into the staging dir (.tmp/compat, npm-cached) — hence the
+        // timeout.
         test: {
           name: 'compat',
           include: ['tests/compat/**/*.spec.ts'],

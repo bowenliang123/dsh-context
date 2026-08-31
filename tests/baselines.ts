@@ -5,9 +5,9 @@
  * Consumed by:
  *   - tests/host/compat/  (always-on registry-contract drivers, vitest host lane)
  *   - tests/client/compat/ (always-on client-face matrix, vitest jsdom lane)
- *   - scripts/compat-matrix.mjs (the real-code matrix: boots the REAL dsh
- *     registry + settings + platform-table sources per baseline tag and runs
- *     the built plugin through them; `pnpm run test:compat`)
+ *   - tests/compat/ (the `compat` vitest project: the real-code matrix boots
+ *     the REAL dsh registry + settings + platform-table sources per baseline
+ *     tag and runs the built plugin through them; plus the bundle smoke)
  *
  * Adding a future harness version = adding one entry here (its tag, its
  * cordis, and a face for every seam that differs), then running the matrix.

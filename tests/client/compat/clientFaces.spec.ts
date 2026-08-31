@@ -7,8 +7,8 @@
 // (required `labels` since 0.1.2-alpha). These are the seams whose drift
 // produced the recurring client-side incidents (issues #8, #12, #26).
 //
-// The real-code complement — the ACTUAL dsh sources per tag — runs via
-// `pnpm run test:compat` (scripts/compat-matrix.mjs).
+// The real-code complement — the ACTUAL dsh sources per tag — runs in the
+// `compat` vitest project (tests/compat/matrix.spec.ts).
 
 import assert from 'node:assert/strict'
 import { describe, test, vi } from 'vitest'
