@@ -51,7 +51,8 @@
 /*
  `container` hooks the narrow-card reflow in stats.css: below ~320px of card
  content width (1080p + host sidebar, OS display scaling) the donut cards
- stack the ring over the legend instead of truncating figures. Inline-size
+ switch to the compact side-by-side ring/legend anatomy, and below ~240px they
+ stack the ring over the legend — never truncating figures. Inline-size
  containment is safe here — the equal-fourths split comes from the flex
  basis, not from the cards' contents.
  */

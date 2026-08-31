@@ -77,19 +77,30 @@
 .lc-pi-value { min-width: 0; color: var(--dsw-alias-label-primary); font-size: 13px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; text-align: right; }
 .lc-pi-row-btn .lc-pi-value { font-weight: 400; }
 /*
- Narrow head cards: below ~320px of card content width the 96px ring + its
- legend no longer fit side by side, so the card reflows instead of ellipsizing
- figures — the ring centers over the full-width legend rows, and the context
- card's 2x4 cell grid folds to 2 columns so tile labels read in full. Cards
- at or above the threshold keep the side-by-side anatomy unchanged; engines
- without container queries drop the whole block and keep the wide layout.
+ Narrow head cards: the side-by-side ring + legend reads single-line only
+ above ~320px of card content width. Below that the card switches to a
+ COMPACT side-by-side anatomy instead of ellipsizing figures — the 96px ring
+ stays (its center figures are sized for it), the row gap tightens, the
+ relaxed 40px label floor wraps long labels onto a second line, and the count
+ column keeps its natural width so durations/percentages never truncate. The
+ context card's 2x4 cell grid folds to 4x2 so the head row stays level with
+ the shorter donut cards. Below 240px even that stops fitting, so the card
+ stacks: the ring centers over the full-width legend rows with the figures
+ right-aligned again, and the cell grid re-folds to 2 columns so tile labels
+ read in full. Engines without container queries drop both blocks and keep
+ the wide layout. The 240px block must stay AFTER the 320px one — at that
+ width both match and the stack rules win by order.
  */
 @container lc-head-card (max-width: 320px) {
+  .lc-donut-row { gap: 8px; }
+  .lc-sl-label { min-width: 40px; }
+  .lc-sl-count { flex: 0 0 auto; }
+  .lc-stats { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+}
+@container lc-head-card (max-width: 240px) {
   .lc-donut-row { flex-wrap: wrap; }
   .lc-donut { margin: 0 auto; }
   .lc-donut-row .lc-sl { flex-basis: 100%; }
-  /* Full legend width leaves the 80px label floor as the only overflow path at
-     extreme splits — relax it so the label wraps and the figures keep room. */
-  .lc-sl-label { min-width: 40px; }
+  .lc-sl-count { flex: 1 1 auto; }
   .lc-stats { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
