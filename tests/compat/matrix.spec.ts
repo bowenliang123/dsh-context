@@ -1,0 +1,114 @@
+// The compatibility matrix as a vitest project (`compat`): the REAL-CODE
+// regression for the supported dsh baselines (tests/baselines.ts). The
+// always-on host/client lanes pin the plugin against MIRRORED seam
+// semantics; this project runs the plugin against the harness's ACTUAL
+// sources at each baseline tag — the tag's real `SessionProjectionRegistry`
+// on the cordis release that line vendors, the tag's own settings-namespace
+// pattern, its durable-event vocabulary, its platform module table, and its
+// client seam sources (slots, seats, image/history faces, markdown chrome).
+// A failing probe names the SEAM — the connection point to re-fit or
+// refactor — not just "it broke somewhere".
+//
+// Preconditions (skipped cleanly when absent; the release workflow fetches
+// the baseline tags before `pnpm test`, so it always runs there):
+//   - a dsh checkout with the baseline tags (env DSH_REPO, default
+//     ~/dev/deepseek-harness),
+//   - the built plugin (`pnpm run build` first — the matrix exercises the
+//     BUILT artifacts, lib/index.js + lib/client.js).
+
+import assert from 'node:assert/strict'
+import { beforeAll, describe, test } from 'vitest'
+import { BASELINES } from '../baselines'
+import * as staging from './staging'
+
+const reasons = staging.skipReasons()
+if (reasons.length > 0) {
+  console.warn(`[compat] matrix skipped — ${reasons.join('; ')}`)
+}
+
+// The always-runnable part (no checkout needed): every specifier the built
+// bundle requires at runtime must be seeded by EACH baseline's platform
+// module table — a require the shell cannot answer is a guaranteed boot
+// crash on that generation (0.1.1's table, for one, lacks dsh-client-store).
+describe.skipIf(staging.artifactsMissing())('compat matrix — bundle requires vs baseline module tables', () => {
+  test.each(BASELINES)('$id: the platform module table answers every bundle require', (baseline) => {
+    assert.deepEqual(
+      staging.bundleRequires().filter(spec => !baseline.client.platformModules.includes(spec)),
+      [],
+    )
+  })
+})
+
+describe.skipIf(reasons.length > 0)('compat matrix — real dsh sources per baseline', () => {
+  describe.each(BASELINES)('$id (tag $tag, cordis $cordis)', (baseline) => {
+    let report: staging.DriverReport
+    beforeAll(() => {
+      report = staging.runDriver(baseline)
+    })
+
+    test('host: the plugin applies into the tag\'s real registry', () => {
+      assert.equal(report.registered, true)
+    })
+
+    test('host: both projection values served through the wire', () => {
+      assert.deepEqual(report.keys, ['contextHeaders', 'contextTimeline'])
+    })
+
+    test('host: checkpoint rows pass the tag\'s lossless-JSON cache-write gate', () => {
+      assert.equal(report.gateOk, true)
+    })
+
+    test('host: cold restore refolds to the live snapshot', () => {
+      assert.equal(report.coldMatches, true)
+    })
+
+    test('settings: the tag\'s namespace enforcement accepts the plugin literal', () => {
+      const pattern = staging.namespacePatternOf(baseline)
+      assert.ok(pattern !== null, 'the tag source carries NAMESPACE_PATTERN')
+      assert.equal(pattern.test('dsh-context'), true)
+    })
+
+    for (const slot of staging.SLOT_SEAMS) {
+      test(`client: slot "${slot}" exists`, () => {
+        assert.equal(staging.dshHasString(baseline.tag, slot, 'packages/client/*/src/**'), true)
+      })
+    }
+
+    test('client: finalized-nodes seat (useChat on 0.1.2+, session snapshot before)', () => {
+      const ok = baseline.client.chatNodesSeat === 'useChat'
+        ? staging.dshHasString(baseline.tag, 'useChat', 'packages/client/ui-chat/src/client/contract/slots.ts')
+        : staging.dshHasString(baseline.tag, 'nodes: legacy.nodes', 'packages/client/runtime/src/client/sessions/session.ts')
+      assert.equal(ok, true)
+    })
+
+    test('client: durable-image loader service', () => {
+      assert.equal(staging.dshHasString(baseline.tag, baseline.client.imageFace.method, 'packages/client/*/src/**'), true)
+    })
+
+    test('client: the history face of this generation', () => {
+      if (baseline.client.historyFace === 'remote.session.page') {
+        assert.equal(staging.dshHasString(baseline.tag, "'remote.session'", 'packages/api/*/src/**'), true)
+      } else {
+        assert.equal(staging.dshHasString(baseline.tag, 'api.sessions.history', 'packages/client/connection/src/**'), true)
+        // The plugin must fall back: no gateway session namespace on this line.
+        assert.equal(staging.dshHasString(baseline.tag, "'remote.session'", 'packages/api/*/src/**'), false)
+      }
+    })
+
+    test('client: MarkdownText chrome prop', () => {
+      assert.equal(staging.dshHasString(baseline.tag, baseline.client.markdownChrome, 'packages/client/ui-primitives/src/markdown/MarkdownText.tsx'), true)
+    })
+
+    test('host: the fold\'s event vocabulary exists in the durable log', async () => {
+      const known = await staging.knownEventTypesOf(baseline)
+      const missing = staging.FOLD_EVENT_TYPES.filter(type => !known.has(type))
+      assert.deepEqual(missing, [])
+    })
+
+    test('client: platform module table answers every bundle require', async () => {
+      const table = await staging.platformModulesOf(baseline)
+      const unanswerable = staging.bundleRequires().filter(spec => !table.includes(spec))
+      assert.deepEqual(unanswerable, [])
+    })
+  })
+})

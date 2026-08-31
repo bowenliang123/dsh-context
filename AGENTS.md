@@ -388,6 +388,14 @@ The plugin lives off data it does not own: the durable session log (event shapes
 - Low-level logic (e.g. token counting) should track the implementation of the newest supported dsh version.
 
 
+### Compatibility verification mechanism
+- `tests/baselines.ts` is the ONE source of truth for the supported baselines and the per-version seam faces (host registry, settings, client seats/history/image/markdown, platform module table).
+- Always-on layers (run with `pnpm test`):
+  - `tests/host/compat/` — per-baseline registry-contract drivers over the REAL projection definitions (registration rules, wire delivery, plain-JSON cache-write gate, checkpoint restore, init-header tolerance).
+  - `tests/client/compat/` — per-baseline client-face matrix (finalized-nodes seat, image loader service, history face + envelope, markdown chrome prop, full Context-tab render through that generation's seats).
+- Real-code layer (the `compat` vitest project, `tests/compat/`): runs as part of `pnpm test`, and standalone via `pnpm run test:compat` (= `vitest run --project compat`). It stages the ACTUAL harness sources at each baseline tag, boots the tag's real registry on the cordis release that line vendors, applies the BUILT plugin (`pnpm run build` first), and probes slots/faces/vocabulary/platform table from the tag's sources. A failing probe names the SEAM. Skips cleanly when the dsh checkout (env `DSH_REPO`, default `~/dev/deepseek-harness`) or `lib/` is absent — the release workflow fetches the baseline tags before `pnpm test`, so the matrix always runs there.
+- To add a future dsh version: add one `Baseline` entry to `tests/baselines.ts` (tag, vendored cordis, faces), add its tag to the release workflow fetch step, then run `pnpm run test:compat`. Re-fit or refactor the seam a failing probe names.
+
 ## I18n
 - Chinese (Simplified) and English are supported for UI elements.
 - Update all the supported languages translations when adding or modifying the UI elements.

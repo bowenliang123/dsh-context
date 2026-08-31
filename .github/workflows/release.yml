@@ -39,8 +39,24 @@ jobs:
       - name: Lint
         run: pnpm run lint
 
+      # The `compat` vitest project inside `pnpm test` stages the REAL harness
+      # sources at every supported baseline tag (tests/baselines.ts is the
+      # source of truth — keep this fetch list in step when a baseline is
+      # added) and runs the built plugin through them; it skips silently
+      # without the tags, so this fetch sits BEFORE Test. Only the tags are
+      # fetched, so the clone stays shallow.
+      - name: Fetch the dsh baseline tags
+        run: |
+          mkdir -p .tmp/dsh-repo
+          cd .tmp/dsh-repo
+          git init -q
+          git remote add origin https://github.com/deepseek-ai/deepseek-harness.git
+          git fetch --depth 1 -q origin \
+            refs/tags/dsh-v0.1.1-rc.2:refs/tags/dsh-v0.1.1-rc.2 \
+            refs/tags/dsh-v0.1.2-alpha.2:refs/tags/dsh-v0.1.2-alpha.2
+
       - name: Test
-        run: pnpm test
+        run: DSH_REPO="$PWD/.tmp/dsh-repo" pnpm test
 
       - name: Bundle smoke
         run: pnpm run test:bundle

@@ -1,10 +1,12 @@
 import { defineConfig } from 'vitest/config'
 
 // Specs import src/ directly (never the built lib/ artifacts), so the suite
-// runs with no build step and coverage reflects exactly what ships. Two
-// projects split by runtime: host/shared run in plain node, client specs in
-// jsdom (React 18 + the real @deepseek-ai/dsh-client-ui-primitives, inlined
-// so vite resolves its CSS-module imports). Files are small, single-module,
+// runs with no build step and coverage reflects exactly what ships. Three
+// projects split by runtime and preconditions: host/shared run in plain
+// node, client specs in jsdom (React 18 + the real
+// @deepseek-ai/dsh-client-ui-primitives, inlined so vite resolves its
+// CSS-module imports), and the compat matrix drives the BUILT plugin against
+// real harness sources per baseline tag. Files are small, single-module,
 // and stateless — vitest forks them across workers in parallel.
 export default defineConfig({
   test: {
@@ -32,6 +34,22 @@ export default defineConfig({
               inline: ['@deepseek-ai/dsh-client-ui-primitives'],
             },
           },
+        },
+      },
+      {
+        // The compat matrix (tests/compat/matrix.spec.ts): the real-code
+        // regression against the ACTUAL harness sources at every baseline
+        // tag (tests/baselines.ts). Spawns a staged driver per baseline and
+        // git-shows tag sources, so it needs a dsh checkout (env DSH_REPO)
+        // and the BUILT plugin (lib/) — skipped cleanly when either is
+        // absent; the release workflow fetches the tags before `pnpm test`.
+        // The first run per baseline installs the tag's vendored cordis into
+        // the staging dir (.tmp/compat, npm-cached) — hence the timeout.
+        test: {
+          name: 'compat',
+          include: ['tests/compat/**/*.spec.ts'],
+          environment: 'node',
+          testTimeout: 120_000,
         },
       },
     ],
