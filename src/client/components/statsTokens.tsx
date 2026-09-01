@@ -18,19 +18,16 @@ import { React } from '../react'
 
 import { makeSliceList } from './sliceList'
 import type { SliceRow } from './sliceList'
-import type { DonutSegment } from './donut'
+import type { DonutProps } from './donut'
 
-export function makeStatsTokens(kit: ViewKit, Donut: (props: {
-  segments: DonutSegment[]
-  centerTop: ReactNS.ReactNode
-  centerSub?: ReactNS.ReactNode
-  size?: number
-}) => ReactNS.ReactElement): (props: {
+export function makeStatsTokens(kit: ViewKit, Donut: (props: DonutProps) => ReactNS.ReactElement): (props: {
   usage: TokenUsage | null
 }) => ReactNS.ReactElement {
   const { t, fmt, fmtShare } = kit
   const SliceList = makeSliceList(kit)
   return function StatsTokens(props: { usage: TokenUsage | null }): ReactNS.ReactElement {
+    // The legend row ↔ donut segment hover link (shared key, set from either side).
+    const [hoverKey, setHoverKey] = React.useState<string | null>(null)
     const reads = props.usage !== null ? numOf(props.usage.cacheReadTokens) : 0
     const writes = props.usage !== null ? numOf(props.usage.cacheWriteTokens) : 0
     const uncached = props.usage !== null ? numOf(props.usage.uncachedInputTokens) : 0
@@ -44,7 +41,7 @@ export function makeStatsTokens(kit: ViewKit, Donut: (props: {
     const buckets: { key: string; color: string; label: string; note?: string; value: number }[] = [
       { key: 'read', color: '#22c55e', label: t('tokens.cacheRead'), value: reads },
       { key: 'write', color: '#f59e0b', label: t('tokens.cacheWrite'), value: writes },
-      { key: 'uncached', color: '#6366f1', label: t('tokens.uncached'), value: uncached },
+      { key: 'uncached', color: '#a855f7', label: t('tokens.uncached'), value: uncached },
       { key: 'output', color: '#3b82f6', label: t('tokens.output'), note: t('tokens.outputNote'), value: output },
     ]
     const shown = billed > 0 ? buckets.filter(b => b.value > 0) : buckets
@@ -65,8 +62,10 @@ export function makeStatsTokens(kit: ViewKit, Donut: (props: {
             size={96}
             centerTop={hit === null ? '—' : `${hit}%`}
             centerSub={t('tokens.cacheHit')}
+            hoverKey={hoverKey}
+            onHoverKey={setHoverKey}
           />
-          <SliceList rows={rows} />
+          <SliceList rows={rows} hoverKey={hoverKey} onHoverKey={setHoverKey} />
         </div>
       </div>
     )

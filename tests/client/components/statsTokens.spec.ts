@@ -8,7 +8,7 @@ import { h } from '../../../src/client/react'
 import { makeDonut } from '../../../src/client/components/donut'
 import { makeStatsTokens } from '../../../src/client/components/statsTokens'
 import type { TokenUsage } from '../../../src/shared/types'
-import { makeKit, mount, query, queryAll } from '../helpers/kit'
+import { makeKit, mount, query, queryAll, hover, unhover } from '../helpers/kit'
 
 const kit = makeKit()
 const StatsTokens = makeStatsTokens(kit, makeDonut(kit))
@@ -30,12 +30,25 @@ describe('StatsTokens', () => {
     // Prompt-side hit = 300 / (100 + 300 + 0) = 75.00% (the chat line's formula);
     // the rows normalize over the whole billed total (450).
     assert.equal(query(m.container, '.lc-donut-center b').textContent, '75.00%')
-    assert.equal(query(m.container, '.lc-donut-center span').textContent, 'Cache hit')
+    assert.equal(query(m.container, '.lc-donut-center span').textContent, 'Cache Hit')
     // Zero buckets stay hidden: the always-zero DeepSeek cache write drops out.
     assert.equal(queryAll(m.container, '.lc-sl-row').length, 3)
-    assert.deepEqual(rowOf(m.container, 0), { pct: '67%', label: 'Cache read', count: '300' })
-    assert.deepEqual(rowOf(m.container, 1), { pct: '22%', label: 'Uncached input', count: '100' })
+    assert.deepEqual(rowOf(m.container, 0), { pct: '67%', label: 'Cached Input', count: '300' })
+    assert.deepEqual(rowOf(m.container, 1), { pct: '22%', label: 'Uncached Input', count: '100' })
     assert.deepEqual(rowOf(m.container, 2), { pct: '11%', label: 'Output', count: '50 · incl. reasoning' })
+    await m.unmount()
+  })
+
+  test('hovering a legend row lights its donut segment and the row itself', async () => {
+    const m = await mount(h(StatsTokens, { usage: USAGE }))
+    const rows = queryAll(m.container, '.lc-sl-row')
+    await hover(rows[0])
+    assert.ok(query(m.container, '.lc-donut').className.includes('lc-donut-dim'))
+    assert.ok((queryAll(m.container, '.lc-donut-seg')[0]?.getAttribute('class') ?? '').includes('lc-donut-seg-on'))
+    assert.ok(rows[0].className.includes('lc-sl-row-on'))
+    await unhover(rows[0])
+    assert.ok(!query(m.container, '.lc-donut').className.includes('lc-donut-dim'))
+    assert.ok(!rows[0].className.includes('lc-sl-row-on'))
     await m.unmount()
   })
 
@@ -45,9 +58,9 @@ describe('StatsTokens', () => {
     // Hit = 300 / (100 + 300 + 50) = 66.66%; rows normalize over billed 500.
     assert.equal(query(m.container, '.lc-donut-center b').textContent, '66.66%')
     assert.equal(queryAll(m.container, '.lc-sl-row').length, 4)
-    assert.deepEqual(rowOf(m.container, 0), { pct: '60%', label: 'Cache read', count: '300' })
-    assert.deepEqual(rowOf(m.container, 1), { pct: '10%', label: 'Cache write', count: '50' })
-    assert.deepEqual(rowOf(m.container, 2), { pct: '20%', label: 'Uncached input', count: '100' })
+    assert.deepEqual(rowOf(m.container, 0), { pct: '60%', label: 'Cached Input', count: '300' })
+    assert.deepEqual(rowOf(m.container, 1), { pct: '10%', label: 'Cache Write', count: '50' })
+    assert.deepEqual(rowOf(m.container, 2), { pct: '20%', label: 'Uncached Input', count: '100' })
     assert.deepEqual(rowOf(m.container, 3), { pct: '10%', label: 'Output', count: '50 · incl. reasoning' })
     await m.unmount()
   })

@@ -17,14 +17,9 @@ import { React } from '../react'
 
 import { makeSliceList } from './sliceList'
 import type { SliceRow } from './sliceList'
-import type { DonutSegment } from './donut'
+import type { DonutProps, DonutSegment } from './donut'
 
-export function makeStatsTiming(kit: ViewKit, Donut: (props: {
-  segments: DonutSegment[]
-  centerTop: ReactNS.ReactNode
-  centerSub?: ReactNS.ReactNode
-  size?: number
-}) => ReactNS.ReactElement): (props: {
+export function makeStatsTiming(kit: ViewKit, Donut: (props: DonutProps) => ReactNS.ReactElement): (props: {
   timing: TimingTotals | null
   locale: string
 }) => ReactNS.ReactElement {
@@ -32,6 +27,8 @@ export function makeStatsTiming(kit: ViewKit, Donut: (props: {
   const SliceList = makeSliceList(kit)
   return function StatsTiming(props: { timing: TimingTotals | null; locale: string }): ReactNS.ReactElement {
     const lang: 'zh' | 'en' = props.locale === 'zh' ? 'zh' : 'en'
+    // The legend row ↔ donut segment hover link (shared key, set from either side).
+    const [hoverKey, setHoverKey] = React.useState<string | null>(null)
     const timing = props.timing
     const wall = timing !== null && Number.isFinite(timing.wallMs) && timing.wallMs > 0 ? timing.wallMs : 0
     let segments: DonutSegment[] = []
@@ -91,8 +88,10 @@ export function makeStatsTiming(kit: ViewKit, Donut: (props: {
                 size={96}
                 centerTop={wall > 0 ? fmtDuration(wall, lang) : '—'}
                 centerSub={t('timing.total')}
+                hoverKey={hoverKey}
+                onHoverKey={setHoverKey}
               />
-              <SliceList rows={rows} />
+              <SliceList rows={rows} hoverKey={hoverKey} onHoverKey={setHoverKey} />
             </div>
           )}
       </div>

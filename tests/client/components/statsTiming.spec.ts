@@ -9,7 +9,7 @@ import { h } from '../../../src/client/react'
 import { makeDonut } from '../../../src/client/components/donut'
 import { makeStatsTiming } from '../../../src/client/components/statsTiming'
 import type { TimingTotals } from '../../../src/shared/types'
-import { makeKit, mount, query, queryAll, text } from '../helpers/kit'
+import { makeKit, mount, query, queryAll, text, hover } from '../helpers/kit'
 
 const kit = makeKit()
 const kitZh = makeKit('zh')
@@ -74,6 +74,15 @@ describe('StatsTiming', () => {
     assert.equal(queryAll(m.container, '.lc-donut circle').length, 2)
     // The zero overhead row dims whole.
     assert.deepEqual(rowOf(m.container, 2), { pct: '0%', label: 'Overhead', count: '—', dim: true })
+    // The hover link: the zero-overhead row tints itself but leaves the ring
+    // at rest (no painted arc to light); a painted row dims the ring.
+    const rows = queryAll(m.container, '.lc-sl-row')
+    await hover(rows[2])
+    assert.ok(rows[2].className.includes('lc-sl-row-on'))
+    assert.ok(!query(m.container, '.lc-donut').className.includes('lc-donut-dim'))
+    await hover(rows[1])
+    assert.ok(query(m.container, '.lc-donut').className.includes('lc-donut-dim'))
+    assert.ok((queryAll(m.container, '.lc-donut-seg')[1]?.getAttribute('class') ?? '').includes('lc-donut-seg-on'))
     await m.unmount()
   })
 

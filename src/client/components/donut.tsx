@@ -26,6 +26,10 @@ export interface DonutProps {
   centerSub?: ReactNS.ReactNode
   /** Outer size in px (default 118). */
   size?: number
+  /** The hovered slice key — the legend row ↔ segment hover link. */
+  hoverKey?: string | null
+  /** Hover relay; absent renders the ring inert. */
+  onHoverKey?: (key: string | null) => void
 }
 
 export function makeDonut(kit: ViewKit): (props: DonutProps) => ReactNS.ReactElement {
@@ -50,14 +54,23 @@ export function makeDonut(kit: ViewKit): (props: DonutProps) => ReactNS.ReactEle
         acc += pct
       }
     }
+    // The ring dims only for a hover that lands on a painted arc — a legend
+    // row without a segment (a zero slice) leaves the ring at rest.
+    const hovering = props.hoverKey !== null && props.hoverKey !== undefined
+      && arcs.some(a => a.key === props.hoverKey)
     return (
-      <div className="lc-donut" style={{ width: size, height: size }}>
+      <div
+        className={'lc-donut' + (hovering ? ' lc-donut-dim' : '')}
+        style={{ width: size, height: size }}
+        onMouseLeave={() => { if (props.onHoverKey !== undefined) props.onHoverKey(null) }}
+      >
         <svg viewBox="0 0 42 42" width={size} height={size} aria-hidden="true">
           {arcs.length === 0
             ? <circle className="lc-donut-track" cx="21" cy="21" r="15.9155" fill="none" strokeWidth="4" />
             : arcs.map(a => (
               <circle
                 key={a.key}
+                className={'lc-donut-seg' + (props.hoverKey === a.key ? ' lc-donut-seg-on' : '')}
                 cx="21"
                 cy="21"
                 r="15.9155"
@@ -66,6 +79,7 @@ export function makeDonut(kit: ViewKit): (props: DonutProps) => ReactNS.ReactEle
                 strokeWidth="4"
                 strokeDasharray={`${a.pct} ${100 - a.pct}`}
                 strokeDashoffset={a.offset}
+                onMouseEnter={() => { if (props.onHoverKey !== undefined) props.onHoverKey(a.key) }}
               />
             ))}
         </svg>

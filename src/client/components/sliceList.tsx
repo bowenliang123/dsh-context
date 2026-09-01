@@ -3,8 +3,10 @@
  * per slice — the primary line pairs the color dot and the name with the
  * bold share closing a fixed right column, and the secondary line drops the
  * absolute quantity (plus a qualifier like the call count) under the name in
- * muted small print. No tracks or bars — the donut IS the proportion chart;
- * the rows are its legend. Preformatted strings in, dumb markup out.
+ * muted small print. Hovering a row lights it and its donut segment together
+ * (the shared hover key), and vice versa. No tracks or bars — the donut IS
+ * the proportion chart; the rows are its legend. Preformatted strings in,
+ * dumb markup out.
  */
 
 import type * as ReactNS from 'react'
@@ -24,13 +26,29 @@ export interface SliceRow {
   dim?: boolean
 }
 
-export function makeSliceList(kit: ViewKit): (props: { rows: SliceRow[] }) => ReactNS.ReactElement {
+export function makeSliceList(kit: ViewKit): (props: {
+  rows: SliceRow[]
+  /** The hovered slice key — the legend row ↔ segment hover link. */
+  hoverKey?: string | null
+  /** Hover relay; absent renders the rows inert. */
+  onHoverKey?: (key: string | null) => void
+}) => ReactNS.ReactElement {
   void kit
-  return function SliceList(props: { rows: SliceRow[] }): ReactNS.ReactElement {
+  return function SliceList(props: {
+    rows: SliceRow[]
+    hoverKey?: string | null
+    onHoverKey?: (key: string | null) => void
+  }): ReactNS.ReactElement {
     return (
-      <div className="lc-sl">
+      <div className="lc-sl" onMouseLeave={() => { if (props.onHoverKey !== undefined) props.onHoverKey(null) }}>
         {props.rows.map(r => (
-          <div key={r.key} className={'lc-sl-row' + (r.dim ? ' lc-sl-row-dim' : '')}>
+          <div
+            key={r.key}
+            className={'lc-sl-row'
+              + (r.dim ? ' lc-sl-row-dim' : '')
+              + (props.hoverKey !== undefined && props.hoverKey === r.key ? ' lc-sl-row-on' : '')}
+            onMouseEnter={() => { if (props.onHoverKey !== undefined) props.onHoverKey(r.key) }}
+          >
             <div className="lc-sl-main">
               <i className="lc-sl-dot" style={{ background: r.color }} />
               <span className="lc-sl-label" title={r.label}>{r.label}</span>
