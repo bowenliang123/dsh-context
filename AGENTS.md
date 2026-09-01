@@ -354,8 +354,8 @@ A DeepSeek Harness plugin for context insight, actions, and management.
 - Avoid adding unnecessary code comments (unless for the pinned major decision or for those provide significant value) and code duplication.
 - Before any commit, MUST ALWAYS do ALL the following checks:
   - Check the to-do list, and ensure all the items are properly completed or closed.
-  - Review and simplify all the code changes, to ensure they are necessary, correct and not over-engineered.
-  - Cleanup all temporary files. Cleanup temporary or unhelpful comments.
+  - Carefully independently review and simplify all the diffs and all code changes, to ensure they are necessary, correct and not over-engineered. 
+  - Cleanup the generated temporary files. Cleanup temporary or unhelpful comments.
   - MUST Run `pnpm run lint:fix && pnpm run test && pnpm run build` in single command and capture FULL output, to ensure:
     - passing all the linting and test
     - the per-file code coverage MUST BE literally 100%.
