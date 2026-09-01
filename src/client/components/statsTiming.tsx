@@ -2,10 +2,11 @@
  * The Timing card: where the session's ACTIVE time went. The donut splits
  * whole-step wall time into the model-call slice (step start → assistant
  * message) and the tool-execution slice, with the residue as overhead; the
- * slice rows name the call count (in the label) and the true duration. The
- * donut and the rows sit side by side so the head row stays half-height.
- * Parallel tool calls each count, so the tools figure can overlap — the ring
- * clamps it into the post-model window while the row numbers stay true.
+ * slice rows lead with the true duration and qualify it with the call count
+ * on the secondary line. The donut and the rows sit side by side so the head
+ * row stays half-height. Parallel tool calls each count, so the tools figure
+ * can overlap — the ring clamps it into the post-model window while the row
+ * numbers stay true.
  */
 
 import type * as ReactNS from 'react'
@@ -33,8 +34,6 @@ export function makeStatsTiming(kit: ViewKit, Donut: (props: {
     const lang: 'zh' | 'en' = props.locale === 'zh' ? 'zh' : 'en'
     const timing = props.timing
     const wall = timing !== null && Number.isFinite(timing.wallMs) && timing.wallMs > 0 ? timing.wallMs : 0
-    // The call count rides the row's label (the row's name); the duration
-    // trails as the row's figure — fmtDuration's dash covers no-time slices.
     let segments: DonutSegment[] = []
     let rows: SliceRow[] = []
     if (timing !== null && (wall > 0 || timing.calls > 0 || timing.toolCalls > 0)) {
@@ -47,6 +46,14 @@ export function makeStatsTiming(kit: ViewKit, Donut: (props: {
       // Segment shares over the wall total; every value is already clamped
       // into [0, wall], so the ratio needs no further bounding.
       const share = (ms: number): number => (wall > 0 ? ms / wall : 0)
+      // The secondary line leads with the duration and qualifies it with the
+      // call count; a zero-duration slice keeps just the count (its dash has
+      // nothing to qualify).
+      const countOf = (ms: number, times?: string): string => {
+        const dur = fmtDuration(ms, lang)
+        if (times === undefined) return dur
+        return ms > 0 ? `${dur} · ${times}` : times
+      }
       segments = [
         { key: 'lm', color: '#3b82f6', value: share(lm) },
         { key: 'tools', color: '#14b8a6', value: share(toolRing) },
@@ -54,18 +61,18 @@ export function makeStatsTiming(kit: ViewKit, Donut: (props: {
       ]
       rows = [
         {
-          key: 'lm', color: '#3b82f6',
-          label: `${t('timing.lm')} ${t('timing.times', { n: fmt(timing.calls) })}`,
-          pct: fmtShare(timing.lmMs, wall), count: fmtDuration(timing.lmMs, lang),
+          key: 'lm', color: '#3b82f6', label: t('timing.lm'), dim: timing.lmMs === 0,
+          pct: fmtShare(timing.lmMs, wall),
+          count: countOf(timing.lmMs, t('timing.lmTimes', { n: fmt(timing.calls) })),
         },
         {
-          key: 'tools', color: '#14b8a6',
-          label: `${t('timing.tools')} ${t('timing.times', { n: fmt(timing.toolCalls) })}`,
-          pct: fmtShare(timing.toolsMs, wall), count: fmtDuration(timing.toolsMs, lang),
+          key: 'tools', color: '#14b8a6', label: t('timing.tools'), dim: timing.toolsMs === 0,
+          pct: fmtShare(timing.toolsMs, wall),
+          count: countOf(timing.toolsMs, t('timing.toolTimes', { n: fmt(timing.toolCalls) })),
         },
         {
-          key: 'other', color: '#94a3b8', label: t('timing.other'),
-          pct: fmtShare(other, wall), count: fmtDuration(other, lang),
+          key: 'other', color: '#94a3b8', label: t('timing.other'), dim: other === 0,
+          pct: fmtShare(other, wall), count: countOf(other),
         },
       ]
     }

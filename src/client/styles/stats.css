@@ -50,17 +50,21 @@
 .lc-donut-center b { line-height: 1.15; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
 .lc-donut-center span { color: var(--dsw-alias-label-secondary); white-space: nowrap; }
 /*
- The slice rows — the donut's legend with numbers, no bars: the color dot +
- label on the left, the quantity and the bold share right-aligned as closing
- columns. Labels wrap onto a second line instead of ellipsizing — the
- English names read in full; the dot stays pinned to the first line.
+ The slice rows — the donut's legend with numbers, no bars, two tiers per
+ row: the primary line pairs the color dot + name with the bold share
+ closing a fixed right column, and the secondary line drops the absolute
+ quantity (plus a qualifier like the call count) under the name in muted
+ small print. The name takes the whole primary line and only ellipsizes as
+ a last resort; a zero-figure row dims — the ring already carries the share.
  */
-.lc-sl { display: flex; flex-direction: column; gap: 5px; min-width: 0; overflow: hidden; }
-.lc-sl-row { display: flex; align-items: baseline; gap: 6px; font-size: 12px; min-width: 0; }
-.lc-sl-dot { flex: none; width: 8px; height: 8px; border-radius: 2px; align-self: flex-start; margin-top: 2px; }
-.lc-sl-label { flex: 0 1 auto; min-width: 80px; line-height: 1.25; overflow: hidden; }
-.lc-sl-count { flex: 1 1 auto; text-align: right; color: var(--dsw-alias-label-secondary); font-variant-numeric: tabular-nums; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.lc-sl-pct { flex: none; min-width: 30px; text-align: right; font-weight: 700; font-variant-numeric: tabular-nums; }
+.lc-sl { display: flex; flex-direction: column; gap: 6px; min-width: 0; overflow: hidden; }
+.lc-sl-row { display: flex; flex-direction: column; gap: 1px; font-size: 12px; min-width: 0; }
+.lc-sl-row-dim { opacity: 0.55; }
+.lc-sl-main { display: flex; align-items: center; gap: 6px; min-width: 0; }
+.lc-sl-dot { flex: none; width: 8px; height: 8px; border-radius: 2px; }
+.lc-sl-label { flex: 1 1 auto; min-width: 0; line-height: 1.25; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.lc-sl-pct { flex: none; min-width: 34px; text-align: right; font-weight: 700; font-variant-numeric: tabular-nums; }
+.lc-sl-sub { margin-left: 14px; color: var(--dsw-alias-label-secondary); font-size: 11px; line-height: 1.3; font-variant-numeric: tabular-nums; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .lc-pi-grid { display: grid; grid-template-columns: 1fr; gap: 8px; }
 /* The settings-entry row is a button wearing the link-row chrome — reset the button chrome the shared row style doesn't cover. */
 .lc-pi-row-btn { appearance: none; border: 0; background: none; font: inherit; color: inherit; text-align: left; padding: 0; cursor: pointer; width: 100%; }
@@ -78,29 +82,24 @@
 .lc-pi-row-btn .lc-pi-value { font-weight: 400; }
 /*
  Narrow head cards: the side-by-side ring + legend reads single-line only
- above ~320px of card content width. Below that the card switches to a
- COMPACT side-by-side anatomy instead of ellipsizing figures — the 96px ring
- stays (its center figures are sized for it), the row gap tightens, the
- relaxed 40px label floor wraps long labels onto a second line, and the count
- column keeps its natural width so durations/percentages never truncate. The
- context card's 2x4 cell grid folds to 4x2 so the head row stays level with
- the shorter donut cards. Below 240px even that stops fitting, so the card
- stacks: the ring centers over the full-width legend rows with the figures
- right-aligned again, and the cell grid re-folds to 2 columns so tile labels
- read in full. Engines without container queries drop both blocks and keep
- the wide layout. The 240px block must stay AFTER the 320px one — at that
- width both match and the stack rules win by order.
+ above ~320px of card content width. The two-tier rows already absorb the
+ squeeze — the name gives ground before the fixed share column — so the
+ compact block only tightens the ring gap. Below 240px even that stops
+ fitting, so the card stacks: the ring centers over the full-width legend
+ rows. The context card's 2x4 cell grid folds to 4x2 so the head row stays
+ level with the shorter donut cards, and re-folds to 2 columns in the
+ stacked card so tile labels read in full. Engines without container
+ queries drop both blocks and keep the wide layout. The 240px block must
+ stay AFTER the 320px one — at that width both match and the stack rules
+ win by order.
  */
 @container lc-head-card (max-width: 320px) {
   .lc-donut-row { gap: 8px; }
-  .lc-sl-label { min-width: 40px; }
-  .lc-sl-count { flex: 0 0 auto; }
   .lc-stats { grid-template-columns: repeat(4, minmax(0, 1fr)); }
 }
 @container lc-head-card (max-width: 240px) {
   .lc-donut-row { flex-wrap: wrap; }
   .lc-donut { margin: 0 auto; }
   .lc-donut-row .lc-sl { flex-basis: 100%; }
-  .lc-sl-count { flex: 1 1 auto; }
   .lc-stats { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }

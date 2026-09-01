@@ -20,7 +20,7 @@ function rowOf(container: HTMLElement, i: number): { pct: string; label: string;
   return {
     pct: row.querySelector('.lc-sl-pct')?.textContent ?? '',
     label: row.querySelector('.lc-sl-label')?.textContent ?? '',
-    count: row.querySelector('.lc-sl-count')?.textContent ?? '',
+    count: row.querySelector('.lc-sl-sub')?.textContent ?? '',
   }
 }
 
@@ -35,7 +35,7 @@ describe('StatsTokens', () => {
     assert.equal(queryAll(m.container, '.lc-sl-row').length, 3)
     assert.deepEqual(rowOf(m.container, 0), { pct: '67%', label: 'Cache read', count: '300' })
     assert.deepEqual(rowOf(m.container, 1), { pct: '22%', label: 'Uncached input', count: '100' })
-    assert.deepEqual(rowOf(m.container, 2), { pct: '11%', label: 'Output (incl. reasoning)', count: '50' })
+    assert.deepEqual(rowOf(m.container, 2), { pct: '11%', label: 'Output', count: '50 · incl. reasoning' })
     await m.unmount()
   })
 
@@ -48,7 +48,7 @@ describe('StatsTokens', () => {
     assert.deepEqual(rowOf(m.container, 0), { pct: '60%', label: 'Cache read', count: '300' })
     assert.deepEqual(rowOf(m.container, 1), { pct: '10%', label: 'Cache write', count: '50' })
     assert.deepEqual(rowOf(m.container, 2), { pct: '20%', label: 'Uncached input', count: '100' })
-    assert.deepEqual(rowOf(m.container, 3), { pct: '10%', label: 'Output (incl. reasoning)', count: '50' })
+    assert.deepEqual(rowOf(m.container, 3), { pct: '10%', label: 'Output', count: '50 · incl. reasoning' })
     await m.unmount()
   })
 
@@ -58,8 +58,9 @@ describe('StatsTokens', () => {
     assert.equal(queryAll(m.container, '.lc-sl-row').length, 4)
     for (const row of queryAll(m.container, '.lc-sl-row')) {
       assert.equal(row.querySelector('.lc-sl-pct')?.textContent, '—')
-      assert.equal(row.querySelector('.lc-sl-count')?.textContent, '0')
     }
+    assert.deepEqual(queryAll(m.container, '.lc-sl-sub').map(n => n.textContent),
+      ['0', '0', '0', '0 · incl. reasoning'])
     await m.unmount()
   })
 

@@ -41,16 +41,17 @@ export function makeStatsTokens(kit: ViewKit, Donut: (props: {
     // figure the harness stats line shows; the donut/rows normalize over the
     // whole billed total instead.
     const hit = props.usage !== null ? cacheHitPercentOf(reads, uncached + reads + writes) : null
-    const buckets: { key: string; color: string; label: string; value: number }[] = [
+    const buckets: { key: string; color: string; label: string; note?: string; value: number }[] = [
       { key: 'read', color: '#22c55e', label: t('tokens.cacheRead'), value: reads },
       { key: 'write', color: '#f59e0b', label: t('tokens.cacheWrite'), value: writes },
       { key: 'uncached', color: '#6366f1', label: t('tokens.uncached'), value: uncached },
-      { key: 'output', color: '#3b82f6', label: t('tokens.output'), value: output },
+      { key: 'output', color: '#3b82f6', label: t('tokens.output'), note: t('tokens.outputNote'), value: output },
     ]
     const shown = billed > 0 ? buckets.filter(b => b.value > 0) : buckets
     const rows: SliceRow[] = shown.map(b => ({
       key: b.key, color: b.color, label: b.label,
-      pct: fmtShare(b.value, billed), count: fmt(b.value),
+      pct: fmtShare(b.value, billed),
+      count: b.note === undefined ? fmt(b.value) : `${fmt(b.value)} · ${b.note}`,
     }))
     return (
       <div className="lc-card lc-col-stats lc-col-donut">
