@@ -12,7 +12,7 @@ import { modalStoreOf, setPendingConsume, takePendingConsume } from '../../../sr
 import type { ContextTimeline } from '../../../src/shared/types'
 import { DICT_EN } from '../../../src/client/i18n'
 import { TestClientCtx, TestSessions, asClientCtx } from '../helpers/harness'
-import { click, hover, keydown, makeKit, mount, query, queryAll, text, unhover } from '../helpers/kit'
+import { click, flush, hover, keydown, makeKit, mount, query, queryAll, text, unhover } from '../helpers/kit'
 
 const kit = makeKit()
 
@@ -252,6 +252,60 @@ describe('ContextModal', () => {
     await click(query(m.container, '.lc-modal-backdrop'))
     assert.equal(modalStoreOf(sid).getSnapshot(), false)
     assert.deepEqual(scoped, [sid])
+    await m.unmount()
+  })
+
+  test('the mask docks beside the frame ancestor, follows template rewrites, and disconnects on close', async () => {
+    const sessions = new TestSessions()
+    const ctx = new TestClientCtx({ services: { sessions } })
+    const ContextModal = makeContextModal(asClientCtx(ctx), kit)
+    const sid = 'sm-dock'
+    // The shell frame: the plugin matches its INLINE grid template, the one
+    // host anchor carried by every supported baseline (dockMeasure.ts).
+    const frame = document.createElement('div')
+    frame.style.gridTemplateColumns = '280px minmax(0, 1fr) 360px'
+    const seat = document.createElement('div')
+    frame.appendChild(seat)
+    document.body.appendChild(frame)
+
+    const disconnectSpy = vi.spyOn(MutationObserver.prototype, 'disconnect')
+    const m = await mount(h(ContextModal, {
+      sessionId: sid,
+      useContextModal: boundModalHook(sid),
+      useProjection: () => undefined,
+    }))
+    // Relocate the mount container under the frame before opening, so the
+    // measure walks the real ancestor chain.
+    seat.appendChild(m.container)
+    await act(async () => {
+      modalStoreOf(sid).set(true)
+    })
+    assert.equal(query(m.container, '.lc-modal-backdrop').style.left, '280px')
+
+    // A sidebar collapse rewrite while open is followed through the observer.
+    await act(async () => {
+      frame.style.gridTemplateColumns = '56px minmax(0, 1fr) 360px'
+    })
+    await flush()
+    assert.equal(query(m.container, '.lc-modal-backdrop').style.left, '56px')
+
+    disconnectSpy.mockClear()
+    await click(query(m.container, '.lc-modal-backdrop'))
+    assert.equal(m.container.querySelector('.lc-modal-backdrop'), null)
+    assert.equal(disconnectSpy.mock.calls.length, 1)
+    frame.remove()
+    await m.unmount()
+  })
+
+  test('without a frame ancestor the mask stays full-viewport', async () => {
+    const ctx = new TestClientCtx({ services: { sessions: new TestSessions() } })
+    const ContextModal = makeContextModal(asClientCtx(ctx), kit)
+    const m = await mount(h(ContextModal, {
+      sessionId: 'sm-noframe',
+      useContextModal: OPEN,
+      useProjection: () => undefined,
+    }))
+    assert.equal(query(m.container, '.lc-modal-backdrop').style.left, '0px')
     await m.unmount()
   })
 

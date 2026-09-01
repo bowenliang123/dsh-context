@@ -5,6 +5,7 @@
  */
 
 import type * as ReactNS from 'react'
+import { measureDock } from '../dockMeasure'
 import { headlineOf } from '../headline'
 import { modalStoreOf, takePendingConsume } from '../modalStore'
 import type { ClientCtx, SessionStandardProps, SessionsFace } from '../services'
@@ -51,6 +52,10 @@ export function makeContextModal(ctx: ClientCtx, kit: ViewKit): (props: ContextM
     // stays stable across open/close).
     const convNodes = conversationNodesOf(props)
     const [hoverCat, setHoverCat] = React.useState<string | null>(null)
+    // Dock the mask beside the shell sidebar: 0 until the frame measure lands
+    // (the layout effect below resolves it before first paint).
+    const [dockLeft, setDockLeft] = React.useState(0)
+    const backdropRef = React.useRef<HTMLDivElement | null>(null)
     // Same targeted content fetch the Context tab wires (one seq-anchored history read per expanded row), plus the on-demand header
     // epoch content read for the browser's system/tools sections.
     const fetchContent = React.useMemo(
@@ -92,13 +97,29 @@ export function makeContextModal(ctx: ClientCtx, kit: ViewKit): (props: ContextM
       }
     }, [open, close])
 
+    // Dock the mask to the main column: measure the sidebar track once before
+    // first paint, then follow the frame's inline template while open (sidebar
+    // drags, collapse toggles and narrow-viewport re-solves all rewrite it).
+    // An unresolved frame keeps the full-viewport mask.
+    React.useLayoutEffect(() => {
+      if (!open) return undefined
+      const dock = measureDock(backdropRef.current)
+      setDockLeft(dock.left)
+      if (dock.frame === null) return undefined
+      const observer = new MutationObserver(() => {
+        setDockLeft(measureDock(backdropRef.current).left)
+      })
+      observer.observe(dock.frame, { attributes: true, attributeFilter: ['style'] })
+      return () => { observer.disconnect() }
+    }, [open])
+
     if (!open) return null
 
     const head = data !== null ? headlineOf(data, pressure, breakdown) : null
     const subtitle = data !== null ? (data.model ? data.model : '') + (data.provider ? ' · ' + data.provider : '') : ''
 
     return (
-      <div className="lc-modal-backdrop" onClick={close}>
+      <div ref={backdropRef} className="lc-modal-backdrop" style={{ left: dockLeft }} onClick={close}>
         <div className="lc-modal-card" onClick={(ev) => { ev.stopPropagation() }}>
           <div className="lc-modal-head">
             <span className="lc-modal-title">{t('tab')}</span>

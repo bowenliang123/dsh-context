@@ -74,6 +74,13 @@ describe.skipIf(reasons.length > 0)('compat matrix — real dsh sources per base
       })
     }
 
+    test('client: the app frame carries the inline sidebar track (modal dock seam, dockMeasure.ts)', () => {
+      assert.equal(
+        staging.dshHasString(baseline.tag, '${cols.sidebar}px minmax(0, 1fr)', 'packages/client/ui-layout/src/client/AppFrame.tsx'),
+        true,
+      )
+    })
+
     test('client: finalized-nodes seat (useChat on 0.1.2+, session snapshot before)', () => {
       const ok = baseline.client.chatNodesSeat === 'useChat'
         ? staging.dshHasString(baseline.tag, 'useChat', 'packages/client/ui-chat/src/client/contract/slots.ts')
