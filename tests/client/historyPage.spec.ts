@@ -4,7 +4,7 @@
 
 import assert from 'node:assert/strict'
 import { describe, test } from 'vitest'
-import { makeContentFetcher, pageNodesOf } from '../../src/client/historyPage'
+import { makeContentFetcher, makeHeaderFetcher, pageNodesOf } from '../../src/client/historyPage'
 
 /** One well-formed history row. */
 function row(type: string, seq: number, data: unknown): unknown {
@@ -296,5 +296,114 @@ describe('makeContentFetcher — the per-session targeted read', () => {
       connection: { api: { sessions: { history: async () => { throw new Error('transport down') } } } },
     }), 's')!
     await assert.rejects(broken(1), /transport down/)
+  })
+})
+
+describe('makeHeaderFetcher — the lazy epoch content read', () => {
+  function ctxWith(services: Record<string, unknown>): Parameters<typeof makeHeaderFetcher>[0] {
+    return { get: (key: string) => services[key] } as Parameters<typeof makeHeaderFetcher>[0]
+  }
+
+  const apiFace = (events: unknown[], calls: { beforeSeq: number }[] = []) => ({
+    sessions: {
+      history: (request: { sessionId: string; beforeSeq: number }) => {
+        calls.push({ beforeSeq: request.beforeSeq })
+        return Promise.resolve({ result: { ok: true, value: { events } } })
+      },
+    },
+  })
+
+  test('undefined without the history faces (older hosts)', () => {
+    assert.equal(makeHeaderFetcher(ctxWith({}), 's'), undefined)
+    assert.equal(makeHeaderFetcher(ctxWith({ connection: {} }), 's'), undefined)
+    assert.equal(makeHeaderFetcher(ctxWith({ connection: { api: { sessions: {} } } }), 's'), undefined)
+  })
+
+  test('fetches the epoch page, maps the raw header, and caches per seq', async () => {
+    const calls: { beforeSeq: number }[] = []
+    const headerEvent = {
+      event: {
+        type: 'request/header', seq: 5, time: 5,
+        data: {
+          header: {
+            system: 'You are an agent.',
+            tools: [
+              { name: 'bash', description: 'run a command', parameters: { type: 'object' } },
+              { name: 'mcp__gh__issue', description: '', plugin: 'mcp:github' },
+              null, // hostile entry degrades to an unnamed row
+              42,
+            ],
+          },
+        },
+      },
+    }
+    const fetch = makeHeaderFetcher(ctxWith({ connection: { api: apiFace([headerEvent], calls) } }), 'sess')!
+    const content = await fetch(5)
+    assert.deepEqual(calls, [{ beforeSeq: 6 }])
+    assert.equal(content?.system, 'You are an agent.')
+    assert.equal(content?.tools.length, 4)
+    assert.equal(content?.tools[0]?.name, 'bash')
+    assert.equal(content?.tools[0]?.description, 'run a command')
+    assert.deepEqual(content?.tools[0]?.schema, headerEvent.event.data.header.tools[0])
+    assert.equal(content?.tools[1]?.description, undefined, 'empty description omitted')
+    assert.equal(content?.tools[1]?.schema, headerEvent.event.data.header.tools[1])
+    assert.equal(content?.tools[2]?.name, '?')
+    assert.equal(content?.tools[3]?.name, '?')
+    // Cached: the second read of the epoch costs no RPC.
+    assert.equal(await fetch(5), content)
+    assert.equal(calls.length, 1)
+  })
+
+  test('an epoch with no system text and an absent tools list maps to empty tools', async () => {
+    const fetch = makeHeaderFetcher(ctxWith({
+      connection: { api: apiFace([row('request/header', 2, { header: {} })]) },
+    }), 's')!
+    const content = await fetch(2)
+    assert.deepEqual(content, { tools: [] })
+    assert.equal('system' in (content ?? {}), false)
+  })
+
+  test('a page holding OLDER epochs caches them for free alongside the picked one', async () => {
+    const older = row('request/header', 1, { header: { system: 'OLD', tools: [] } })
+    const picked = row('request/header', 5, { header: { system: 'NEW', tools: [] } })
+    const calls: { beforeSeq: number }[] = []
+    const fetch = makeHeaderFetcher(ctxWith({ connection: { api: apiFace([older, picked], calls) } }), 's')!
+    const c5 = await fetch(5)
+    assert.equal(c5?.system, 'NEW')
+    assert.deepEqual(calls, [{ beforeSeq: 6 }])
+    // The older epoch resolves from the cache — no second page read.
+    const c1 = await fetch(1)
+    assert.equal(c1?.system, 'OLD')
+    assert.deepEqual(calls, [{ beforeSeq: 6 }])
+  })
+
+  test('a page without the epoch resolves null; a non-header-only page too', async () => {
+    const fetch = makeHeaderFetcher(ctxWith({
+      connection: { api: apiFace([row('user/message', 9, {}), row('request/header', 3, {})]) },
+    }), 's')!
+    assert.equal(await fetch(500), null, 'the seq is not on the page')
+    assert.equal(await fetch(3), null, 'a header envelope without a header object maps to nothing')
+  })
+
+  test('malformed rpc envelopes reject so the caller can offer a retry', async () => {
+    const rejector = makeHeaderFetcher(ctxWith({
+      connection: { api: { sessions: { history: async () => ({ result: { ok: false, value: undefined } }) } } },
+    }), 's')!
+    await assert.rejects(rejector(1))
+    const rowsGarbage = makeHeaderFetcher(ctxWith({
+      'remote.session': { page: async () => ({ ok: true, value: { records: 'nope' } }) },
+    }), 's')!
+    await assert.rejects(rowsGarbage(1))
+    const broken = makeHeaderFetcher(ctxWith({
+      'remote.session': { page: async () => { throw new Error('transport down') } },
+    }), 's')!
+    await assert.rejects(broken(1), /transport down/)
+  })
+
+  test('a throwing service read degrades to no fetcher', () => {
+    const hostile = {
+      get: () => { throw new Error('service absent') },
+    } as unknown as Parameters<typeof makeHeaderFetcher>[0]
+    assert.equal(makeHeaderFetcher(hostile, 's'), undefined)
   })
 })

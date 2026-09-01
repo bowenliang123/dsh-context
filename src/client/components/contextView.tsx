@@ -10,7 +10,7 @@ import { headlineOf } from '../headline'
 import type { SessionStandardProps } from '../services'
 import { contextBreakdownOf, contextPressureOf, conversationNodesOf, headersOf, imageLoaderOf, numOf, timelineOf, tokenUsageOf } from '../services'
 import type { ClientCtx, ConversationNodeLike } from '../services'
-import { makeContentFetcher } from '../historyPage'
+import { makeContentFetcher, makeHeaderFetcher } from '../historyPage'
 import { canOpenPathsOf, openPathVia, workspaceOf } from '../services'
 import { activityOf, locateStepOf } from '../fileActivity'
 import type { FileOp } from '../fileActivity'
@@ -130,6 +130,12 @@ export function makeContextView(
     // absent face/session degrades to the static hint — never an error.
     const fetchContent = React.useMemo(
       () => (typeof sessionId === 'string' && sessionId !== '' ? makeContentFetcher(ctx, sessionId) : undefined),
+      [ctx, sessionId],
+    )
+    // On-demand header epoch content (system prompt text, tool schemas) for the Context browser — one seq-anchored history read per
+    // opened epoch; the `contextHeaders` projection carries metadata only. Same degradation shape as fetchContent.
+    const fetchHeader = React.useMemo(
+      () => (typeof sessionId === 'string' && sessionId !== '' ? makeHeaderFetcher(ctx, sessionId) : undefined),
       [ctx, sessionId],
     )
 
@@ -419,6 +425,7 @@ export function makeContextView(
               headers={headers}
               convNodes={convNodes}
               fetchContent={fetchContent}
+              fetchHeader={fetchHeader}
               previewSeq={hoveredSeq}
               pinSeq={pinnedReq !== null ? pinnedReq.seq : null}
               hoverKey={hoverCat}

@@ -14,9 +14,10 @@
  */
 
 import type {
-  ClientCtx, ConnectionFace, ContentFetcher, ConversationNodeLike, HistoryEntryLike,
-  SessionPageFace,
+  ClientCtx, ConnectionFace, ContentFetcher, ConversationNodeLike, HeaderFetcher,
+  HistoryEntryLike, SessionPageFace,
 } from './services'
+import type { HeaderEpochContent } from '../shared/types'
 
 /** Narrow one served row to a validated durable event envelope, or null. */
 function eventOf(entry: unknown): { type: string; seq: number; data: Record<string, unknown> } | null {
@@ -189,16 +190,16 @@ function rowsOf(response: unknown): readonly unknown[] {
 }
 
 /**
- * Build the browser's per-session fetcher over whichever history face the
- * running harness serves — the 0.1.2+ gateway remotes (`remote.session.page`)
- * first, the pre-0.1.2 api client verb (`connection.api.sessions.history`)
- * beneath it. Both cut message-aligned pages, so `beforeSeq: seq + 1` (with
- * the inclusive cut pinned to `seq` on the newer face) covers the seq whenever
- * the durable log still holds it. Undefined when no face exists (older
- * hosts) — the caller keeps its static preview-plus-hint degradation. Found
- * nodes cache in the closure: one mount re-reading a row never re-fetches.
+ * The session's history readers over whichever face the running harness
+ * serves — the 0.1.2+ gateway remotes (`remote.session.page`) first, the
+ * pre-0.1.2 api client verb (`connection.api.sessions.history`) beneath it.
+ * Both cut message-aligned pages, so the returned read covers `seq` whenever
+ * the durable log still holds it: the newer face pins the inclusive cut to
+ * the seq itself, the legacy reader uses the exclusive bound one past it.
+ * Undefined when no face exists (older hosts) — callers keep their static
+ * degradation.
  */
-export function makeContentFetcher(ctx: ClientCtx, sessionId: string): ContentFetcher | undefined {
+function pageReadersOf(ctx: ClientCtx, sessionId: string): ((seq: number) => Promise<unknown>) | undefined {
   // The 0.1.2+ session namespace is a traced cordis service literally named
   // `remote.session` — read through `ctx.get`, whose reflect read needs no
   // inject declaration and yields undefined on harnesses that never mount
@@ -209,27 +210,109 @@ export function makeContentFetcher(ctx: ClientCtx, sessionId: string): ContentFe
   const historyFace = (serviceOf(ctx, 'connection') as ConnectionFace | undefined)?.api?.sessions
   const history = historyFace !== undefined && typeof historyFace.history === 'function' ? historyFace.history.bind(historyFace) : undefined
   if (page === undefined && history === undefined) return undefined
-  // The 0.1.2 page request: the inclusive log cut pinned to the target seq,
-  // the exclusive bound one past it — the newer face's exact-pinning of the
-  // legacy `beforeSeq` page.
-  const pageRequest = (seq: number) => ({
-    address: { kind: 'session' as const, sessionId },
-    throughSeq: seq,
-    beforeSeq: seq + 1,
-  })
-  // The legacy reader, guarded by construction (only selected when the page
-  // face is absent — the guard above leaves a face for either arm).
-  const historyCall = (seq: number): Promise<unknown> =>
-    (history as (request: { sessionId: string; beforeSeq: number }) => Promise<unknown>)({ sessionId, beforeSeq: seq + 1 })
+  return (seq) => {
+    if (page !== undefined) {
+      // The inclusive log cut pinned to the target seq, the exclusive bound
+      // one past it — the newer face's exact-pinning of the legacy page.
+      return page({
+        address: { kind: 'session' as const, sessionId },
+        throughSeq: seq,
+        beforeSeq: seq + 1,
+      }, new AbortController().signal)
+    }
+    return (history as (request: { sessionId: string; beforeSeq: number }) => Promise<unknown>)({ sessionId, beforeSeq: seq + 1 })
+  }
+}
+
+/**
+ * Build the browser's per-session fetcher over whichever history face the
+ * running harness serves — the 0.1.2+ gateway remotes (`remote.session.page`)
+ * first, the pre-0.1.2 api client verb (`connection.api.sessions.history`)
+ * beneath it. Both cut message-aligned pages, so `beforeSeq: seq + 1` (with
+ * the inclusive cut pinned to `seq` on the newer face) covers the seq whenever
+ * the durable log still holds it. Undefined when no face exists (older
+ * hosts) — the caller keeps its static preview-plus-hint degradation. Found
+ * nodes cache in the closure: one mount re-reading a row never re-fetches.
+ */
+export function makeContentFetcher(ctx: ClientCtx, sessionId: string): ContentFetcher | undefined {
+  const read = pageReadersOf(ctx, sessionId)
+  if (read === undefined) return undefined
+  // Fetched nodes cache in the closure: history is immutable, so one mount
+  // re-reading a row never re-fetches.
   const cache = new Map<number, ConversationNodeLike>()
   return async (seq) => {
     const hit = cache.get(seq)
     if (hit !== undefined) return hit
     // The whole envelope is re-proven (no-white-screen guarantee): a failed or
     // malformed read rejects so the browser offers a retry instead of guessing.
-    const response = page !== undefined ? await page(pageRequest(seq), new AbortController().signal) : await historyCall(seq)
-    const node = pageNodesOf(rowsOf(response)).get(seq) ?? null
+    const node = pageNodesOf(rowsOf(await read(seq))).get(seq) ?? null
     if (node !== null) cache.set(seq, node)
     return node
+  }
+}
+
+/**
+ * Map one raw `request/header` event into the epoch content the browser
+ * renders — the full system prompt text plus each tool's producer
+ * description and raw schema, mirroring the host fold's per-entry guards
+ * (a null or primitive tool entry degrades to an unnamed row instead of
+ * throwing the read). Null when the envelope carries no usable header.
+ */
+function headerContentOf(data: Record<string, unknown>): HeaderEpochContent | null {
+  const rawHeader = data.header !== null && typeof data.header === 'object'
+    ? data.header as Record<string, unknown>
+    : null
+  if (rawHeader === null) return null
+  const toolsRaw = Array.isArray(rawHeader.tools) ? rawHeader.tools : []
+  const tools: HeaderEpochContent['tools'] = []
+  for (const t of toolsRaw) {
+    const tool = t !== null && typeof t === 'object' ? t as Record<string, unknown> : null
+    tools.push({
+      name: tool !== null && typeof tool.name === 'string' ? tool.name : '?',
+      ...(tool !== null && typeof tool.description === 'string' && tool.description !== ''
+        ? { description: tool.description }
+        : {}),
+      schema: t,
+    })
+  }
+  return {
+    ...(typeof rawHeader.system === 'string' && rawHeader.system !== '' ? { system: rawHeader.system } : {}),
+    tools,
+  }
+}
+
+/**
+ * The on-demand CONTENT fetch for `contextHeaders` epochs — the lazy
+ * counterpart of the node fetcher above. One seq-anchored history read off
+ * the epoch's `seq` returns the page holding that epoch's `request/header`
+ * event (non-message events ride the page verbatim); the raw header is
+ * mapped client-side into the renderable content. Epochs cache per session
+ * (history is immutable), and OLDER epochs sharing the page cache for free —
+ * stepping back through epochs walks the same pages. Undefined when no
+ * history face exists (older hosts) — the browser keeps a metadata-only
+ * degradation instead.
+ */
+export function makeHeaderFetcher(ctx: ClientCtx, sessionId: string): HeaderFetcher | undefined {
+  const read = pageReadersOf(ctx, sessionId)
+  if (read === undefined) return undefined
+  const cache = new Map<number, HeaderEpochContent>()
+  return async (seq) => {
+    const hit = cache.get(seq)
+    if (hit !== undefined) return hit
+    // Same re-prove contract as the node fetcher: a failed or malformed read
+    // rejects so the browser offers a retry instead of guessing.
+    const rows = rowsOf(await read(seq))
+    let picked: HeaderEpochContent | null = null
+    for (const entry of rows) {
+      const ev = eventOf(entry)
+      if (ev === null || ev.type !== 'request/header') continue
+      const content = headerContentOf(ev.data)
+      if (content === null) continue
+      // The page's exclusive bound is seq + 1, so every header event on it
+      // is the picked epoch or an OLDER one — cache them all.
+      cache.set(ev.seq, content)
+      if (ev.seq === seq) picked = content
+    }
+    return picked
   }
 }

@@ -341,12 +341,10 @@ export interface ContextEventRecord {
  */
 export const UNKNOWN_TOOL_SOURCE = '<unknown-plugin>'
 
-/** One tool schema as assembled into a request header, with its display price. */
+/** One tool of a request-header epoch, with its display price. */
 export interface HeaderTool {
   name: string
   tokens: number
-  /** Producer-declared description (may be long; the browser truncates). */
-  description?: string
   /**
    * The registering plugin's label, when attribution is known: either a
    * `plugin` field carried by the raw header entry (harness-provided) or the
@@ -356,21 +354,42 @@ export interface HeaderTool {
    * the browser shows no tag.
    */
   plugin?: string
-  /** The raw JSON schema object the model received (plain JSON). */
-  schema?: unknown
 }
 
 /**
- * One request-header epoch: the full system prompt and tool schemas in force from this event's seq until the next epoch.
+ * One request-header epoch's METADATA: the epoch boundaries and token prices
+ * in force from this event's seq until the next epoch. The epoch CONTENT
+ * (full system prompt text, tool descriptions/schemas) is not projected —
+ * every session.list row, control baseline, push frame, and projection-cache
+ * checkpoint would otherwise carry it per session × epoch. The client
+ * fetches one epoch's content on demand (a seq-anchored history read off
+ * `seq`) as a {@link HeaderEpochContent}.
  */
 export interface HeaderRecord {
   seq: number
   time: number
-  system?: string
+  /** The epoch's estimated system-prompt tokens; absent when it logged no system prompt. */
+  systemTokens?: number
   tools: HeaderTool[]
 }
 
 /** The `contextHeaders` projection value: the bounded epoch list (newest last). */
 export interface ContextHeaders {
   headers: HeaderRecord[]
+}
+
+/**
+ * The fetched CONTENT of one request-header epoch — the full system prompt
+ * text and per-tool descriptions/schemas, mapped client-side off the raw
+ * durable event (see historyPage.ts). Tool identity joins the epoch metadata
+ * by `name`; absent description/schema means the raw entry carried none.
+ */
+export interface HeaderEpochContent {
+  system?: string
+  tools: Array<{
+    name: string
+    description?: string
+    /** The raw JSON schema object the model received (plain JSON). */
+    schema?: unknown
+  }>
 }
