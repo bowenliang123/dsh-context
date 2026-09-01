@@ -34,4 +34,4 @@ jobs:
       # The packaging glue (module handoff, CSS channel) only exists after
       # tsdown runs — the smoke script verifies the built bundle.
       - name: Build + bundle smoke
-        run: pnpm run build && pnpm run test:bundle
+        run: pnpm run build && pnpm run test
