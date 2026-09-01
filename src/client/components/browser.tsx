@@ -1,10 +1,10 @@
 import type * as ReactNS from 'react'
-import { UNKNOWN_TOOL_SOURCE, type Category, type ContextHeaders, type ContextTimeline, type HeaderTool, type RequestRecord, type SurfaceNode } from '../../shared/types'
+import { UNKNOWN_TOOL_SOURCE, type Category, type ContextHeaders, type ContextTimeline, type HeaderEpochContent, type HeaderTool, type RequestRecord, type SurfaceNode } from '../../shared/types'
 import { assemble } from '../assemble'
 import type { Assembled } from '../assemble'
 import { CATS, partsOf } from '../categories'
 import { React } from '../react'
-import type { ContentFetcher, ConversationNodeLike } from '../services'
+import type { ContentFetcher, ConversationNodeLike, HeaderFetcher } from '../services'
 import type { ViewKit } from '../viewkit'
 import { blockSummaryOf, callSummaryOf, parseCallArgs } from '../callSummary'
 import { makeNodeText } from './nodes'
@@ -31,6 +31,13 @@ export interface ContextBrowserProps {
    * those keep the preview-plus-hint degradation).
    */
   fetchContent?: ContentFetcher
+  /**
+   * On-demand CONTENT fetch for the selected step's `contextHeaders` epoch
+   * (system prompt text, tool descriptions/schemas) — one seq-anchored
+   * history read per epoch, cached per session (absent on older hosts —
+   * those keep the metadata-only degradation).
+   */
+  fetchHeader?: HeaderFetcher
   /** Preview-seq: hover transiently previews that step; the picker's own selection resumes when the pointer leaves the chart. */
   previewSeq?: number | null
   /** Pin-seq: a pin selects that step; pinSeq null returns the browser to the live surface. */
@@ -271,9 +278,12 @@ function ToolSchema(props: {
     }
     return out
   }, [params])
+  // Pretty-printed only while the row's JSON is open: a tools section lists
+  // dozens of schemas, and eager stringification of every collapsed row
+  // dominated the section's render cost.
   const schemaJson = React.useMemo(
-    () => props.schema !== undefined ? JSON.stringify(props.schema, null, 2) : '',
-    [props.schema],
+    () => jsonOpen ? JSON.stringify(props.schema, null, 2) : '',
+    [props.schema, jsonOpen],
   )
   return (
     <>
@@ -287,16 +297,14 @@ function ToolSchema(props: {
       ) : params !== null ? (
         <div className="lc-ts-params-empty">{props.labels.empty}</div>
       ) : null}
-      {schemaJson !== '' ? (
-        <div className="lc-ts-json">
-          <button
-            type="button"
-            className="lc-ts-json-toggle"
-            onClick={() => { setJsonOpen(o => !o) }}
-          >{(jsonOpen ? '▾ ' : '▸ ') + (jsonOpen ? props.labels.hide : props.labels.show)}</button>
-          {jsonOpen ? <pre className="lc-ts-desc-body lc-br-dim">{schemaJson}</pre> : null}
-        </div>
-      ) : null}
+      <div className="lc-ts-json">
+        <button
+          type="button"
+          className="lc-ts-json-toggle"
+          onClick={() => { setJsonOpen(o => !o) }}
+        >{(jsonOpen ? '▾ ' : '▸ ') + (jsonOpen ? props.labels.hide : props.labels.show)}</button>
+        {jsonOpen ? <pre className="lc-ts-desc-body lc-br-dim">{schemaJson}</pre> : null}
+      </div>
     </>
   )
 }
@@ -533,7 +541,7 @@ function byCatOf(asm: Assembled): Partial<Record<Category, SurfaceNode[]>> {
 }
 
 function countOf(asm: Assembled, byCat: Partial<Record<Category, SurfaceNode[]>>, c: string): number {
-  if (c === 'system') return asm.header !== null && asm.header.system !== undefined ? 1 : 0
+  if (c === 'system') return asm.header !== null && asm.header.systemTokens !== undefined ? 1 : 0
   if (c === 'tools') return asm.header !== null ? asm.header.tools.length : 0
   return byCat[c as Category]?.length ?? 0
 }
@@ -670,6 +678,58 @@ export function makeContextBrowser(
       ? props.hoverKey
       : null
     const view = assemble(data, headers, seq)
+
+    // Header epoch CONTENT (system prompt text, tool descriptions/schemas):
+    // the projection carries metadata only, so the selected step's epoch is
+    // fetched on demand — one seq-anchored history read when its system or
+    // tools section first opens. Content caches per epoch (history is
+    // immutable); the fetch states mirror the row-miss machine above.
+    const [headerContent, setHeaderContent] = React.useState<Map<number, HeaderEpochContent>>(() => new Map())
+    const [headerState, setHeaderState] = React.useState<'idle' | 'loading' | 'absent' | 'failed'>('idle')
+    const [headerRetry, setHeaderRetry] = React.useState(0)
+    const fetchHeader = props.fetchHeader
+    const headerSeq = view.header !== null ? view.header.seq : null
+    const headerNeeded = view.header !== null
+      && headerSeq !== null
+      && !headerContent.has(headerSeq)
+      && (openCat === 'system' || openCat === 'tools')
+    React.useEffect(() => {
+      if (!headerNeeded || fetchHeader === undefined) return
+      let live = true
+      setHeaderState('loading')
+      fetchHeader(headerSeq).then((content) => {
+        if (!live) return
+        if (content === null) {
+          setHeaderState('absent')
+          return
+        }
+        setHeaderContent((prev) => {
+          const next = new Map(prev)
+          next.set(headerSeq, content)
+          return next
+        })
+        setHeaderState('idle')
+      }, (error: unknown) => {
+        console.warn('dsh-context: header content fetch failed', error)
+        if (live) setHeaderState('failed')
+      })
+      return () => { live = false }
+    }, [headerNeeded, headerSeq, fetchHeader, headerRetry])
+    // The note a not-yet-loaded epoch section shows, per fetch state: legacy
+    // metadata-only hint (no fetcher), in-flight loading, log-absent, or a
+    // failed read with retry.
+    const headerNote: ReactNS.ReactNode = fetchHeader === undefined
+      ? t('browser.headerMetaOnly')
+      : headerState === 'loading' || headerState === 'idle'
+        ? t('browser.loading')
+        : headerState === 'absent'
+          ? t('browser.notInLog')
+          : (
+            <button type="button" className="lc-br-retry" onClick={() => { setHeaderRetry(r => r + 1) }}>
+              {t('browser.loadFailed')}
+            </button>
+          )
+
     const breakdown = req !== null ? req : data.current
     const parts = partsOf(breakdown)
     const total = breakdown.total
@@ -695,7 +755,7 @@ export function makeContextBrowser(
     // one click lands on the content directly (the lone prompt / tool schema /
     // surface node).
     const singleKeyOf = (c: string): string | null => {
-      if (c === 'system') return view.header?.system !== undefined ? 'sys' : null
+      if (c === 'system') return view.header?.systemTokens !== undefined ? 'sys' : null
       if (c === 'tools') {
         const tools = view.header?.tools
         return tools !== undefined && tools.length === 1 ? 'tool:' + tools[0].name : null
@@ -752,12 +812,13 @@ export function makeContextBrowser(
     const catBody = (c: string): ReactNS.ReactNode => {
       if (c === 'system') {
         if (view.header === null) return <div className="lc-br-note">{t(headers === null ? 'browser.noHeader' : 'browser.noEpoch')}</div>
-        const system = view.header.system
-        /* v8 ignore next 1 -- the category opens only when its count > 0
-           (countOf ⟺ system defined); the undefined arm is defensive. */
-        if (system === undefined) return null
-        return elemRow('sys', null, system.replace(/\s+/g, ' ').trim().slice(0, 80), breakdown.system, undefined,
-          <TextSection label={catLabel('system')} text={system} rich={rich} lines={lineLabel} />)
+        const content = headerContent.get(view.header.seq)
+        // Metadata-only until the epoch's content resolves (fetched when the
+        // section opens; the note names the state).
+        if (content === undefined) return <div className="lc-br-note">{headerNote}</div>
+        if (content.system === undefined) return <div className="lc-br-note">{t('browser.noSystem')}</div>
+        return elemRow('sys', null, content.system.replace(/\s+/g, ' ').trim().slice(0, 80), breakdown.system, undefined,
+          <TextSection label={catLabel('system')} text={content.system} rich={rich} lines={lineLabel} />)
       }
       if (c === 'tools') {
         if (view.header === null) return <div className="lc-br-note">{t(headers === null ? 'browser.noHeader' : 'browser.noEpoch')}</div>
@@ -768,15 +829,24 @@ export function makeContextBrowser(
           show: t('tool.jsonToggle'),
           hide: t('tool.jsonHide'),
         }
+        // The epoch's fetched content, joined onto the metadata rows by tool
+        // name (the open row's body renders description/params/JSON from it).
+        const content = headerContent.get(view.header.seq)
+        const contentByName = new Map(content?.tools.map(t => [t.name, t]) ?? [])
         // The text filter scans everything the rows can say: the name, the
-        // producer description, the plugin chip, and the raw parameter JSON.
+        // producer description, the plugin chip, and the raw parameter JSON —
+        // the latter two only once the epoch's content is loaded.
         const q = rowQuery.trim().toLowerCase()
         const shown = view.header.tools
-          .filter((tool: HeaderTool) => q === ''
-            || tool.name.toLowerCase().includes(q)
-            || (tool.description ?? '').toLowerCase().includes(q)
-            || (tool.plugin ?? '').toLowerCase().includes(q)
-            || schemaTextOf(tool.schema).toLowerCase().includes(q))
+          .filter((tool: HeaderTool) => {
+            if (q === '') return true
+            if (tool.name.toLowerCase().includes(q)) return true
+            if ((tool.plugin ?? '').toLowerCase().includes(q)) return true
+            const row = contentByName.get(tool.name)
+            if (row === undefined) return false
+            return (row.description ?? '').toLowerCase().includes(q)
+              || schemaTextOf(row.schema).toLowerCase().includes(q)
+          })
           // Size order mirrors the overview's Top chips — the producer's header
           // order is not meaningful; name order gives lookup instead of ranking
           // (names are unique keys, so a two-way comparison orders them fully).
@@ -805,6 +875,15 @@ export function makeContextBrowser(
             </div>
           )
         }
+        // The open row's body: the fetched content's description, parameter
+        // table, and raw JSON — or the epoch's fetch-state note.
+        const toolBody = (tool: HeaderTool): ReactNS.ReactNode => {
+          if (content === undefined) return <div className="lc-br-note">{headerNote}</div>
+          const row = contentByName.get(tool.name)
+          return row === undefined
+            ? <div className="lc-br-note">{t('browser.notInLog')}</div>
+            : <ToolSchema description={row.description} schema={row.schema} rich={rich} lines={lineLabel} labels={labels} />
+        }
         return (
           <div>
             {toolctl}
@@ -821,7 +900,7 @@ export function makeContextBrowser(
                 </span>
                 : null
               return elemRow('tool:' + tool.name, null, tool.name, tool.tokens, undefined,
-                <ToolSchema description={tool.description} schema={tool.schema} rich={rich} lines={lineLabel} labels={labels} />,
+                toolBody(tool),
                 false, trailing)
             })}
           </div>

@@ -9,7 +9,7 @@ import { describe, test } from 'vitest'
 import { h } from '../../../src/client/react'
 import { makeContextBrowser, type ContextBrowserProps } from '../../../src/client/components/browser'
 import { makeStackedBar } from '../../../src/client/components/stackedBar'
-import { UNKNOWN_TOOL_SOURCE, type ContextHeaders, type ContextTimeline, type RequestRecord, type SurfaceNode } from '../../../src/shared/types'
+import { UNKNOWN_TOOL_SOURCE, type ContextHeaders, type ContextTimeline, type HeaderEpochContent, type RequestRecord, type SurfaceNode } from '../../../src/shared/types'
 import type { ConversationNodeLike, ImageLoader } from '../../../src/client/services'
 import { click, flush, hover, makeKit, mount, query, queryAll, text, unhover, type Mounted } from '../helpers/kit'
 
@@ -68,6 +68,18 @@ async function pickStep(m: Mounted, value: string): Promise<void> {
 
 function props(over: Partial<ContextBrowserProps>): ContextBrowserProps {
   return { data: tl({}), headers: null, ...over }
+}
+
+/**
+ * Pair metadata-only `contextHeaders` with a fetchHeader serving per-epoch
+ * CONTENT — the lazy-load contract the browser consumes: the projection
+ * carries boundaries and token prices, the content arrives on demand.
+ */
+function withEpochContent(
+  headers: ContextHeaders,
+  contents: Record<number, HeaderEpochContent>,
+): { headers: ContextHeaders; fetchHeader: (seq: number) => Promise<HeaderEpochContent | null> } {
+  return { headers, fetchHeader: seq => Promise.resolve(contents[seq] ?? null) }
 }
 
 describe('ContextBrowser live surface', () => {
@@ -275,17 +287,24 @@ describe('ContextBrowser live surface', () => {
 })
 
 describe('ContextBrowser header epochs', () => {
+  // The projection carries METADATA only; the epoch content arrives via fetchHeader.
   const HEADERS: ContextHeaders = {
     headers: [
-      { seq: 15, time: 1500, system: 'SYS A', tools: [{ name: 'old', tokens: 1 }] },
-      { seq: 35, time: 3500, system: 'SYS B\nsecond line', tools: [{ name: 'fresh', tokens: 9, description: 'fresh tool' }] },
+      { seq: 15, time: 1500, systemTokens: 8, tools: [{ name: 'old', tokens: 1 }] },
+      { seq: 35, time: 3500, systemTokens: 12, tools: [{ name: 'fresh', tokens: 9 }] },
     ],
   }
+  const CONTENTS: Record<number, HeaderEpochContent> = {
+    15: { system: 'SYS A', tools: [{ name: 'old', schema: {} }] },
+    35: { system: 'SYS B\nsecond line', tools: [{ name: 'fresh', description: 'fresh tool', schema: {} }] },
+  }
+  const lazy = withEpochContent(HEADERS, CONTENTS)
 
   test('system category opens its prompt row directly; rich switch toggles raw/markdown', async () => {
     const data = tl({ current: { system: 30, tools: 9, user: 0, inject: 0, assistant: 0, tool: 0, total: 39 } })
-    const m = await mount(h(Browser, props({ data, headers: HEADERS })))
+    const m = await mount(h(Browser, props({ data, ...lazy })))
     await click(catRow(m, 'system'))
+    await flush()
     const body = query(m.container, '.lc-br-body')
     assert.ok(text(body).includes('SYS B'), 'the newest epoch’s prompt shows on the live surface')
     assert.ok(text(body).includes('2 lines'), 'line count rides the section head')
@@ -309,10 +328,127 @@ describe('ContextBrowser header epochs', () => {
       current: { system: 30, tools: 9, user: 0, inject: 0, assistant: 0, tool: 0, total: 39 },
       requests: [req({ seq: 20, turn: 1, step: 0 }), req({ seq: 40, turn: 1, step: 1 })],
     })
-    const m = await mount(h(Browser, props({ data, headers: HEADERS })))
+    const m = await mount(h(Browser, props({ data, ...lazy })))
     await pickStep(m, '20')
     await click(catRow(m, 'system'))
+    await flush()
     assert.ok(text(query(m.container, '.lc-br-body')).includes('SYS A'), 'epoch before the request applies')
+    await m.unmount()
+  })
+
+  test('an epoch fetches once and the content stays cached across steps', async () => {
+    const data = tl({
+      current: { system: 30, tools: 9, user: 0, inject: 0, assistant: 0, tool: 0, total: 39 },
+      requests: [req({ seq: 20, turn: 1, step: 0 }), req({ seq: 40, turn: 1, step: 1 })],
+    })
+    let calls = 0
+    const counting = { ...lazy, fetchHeader: (seq: number) => { calls += 1; return lazy.fetchHeader(seq) } }
+    const m = await mount(h(Browser, props({ data, ...counting })))
+    await click(catRow(m, 'system'))
+    await flush()
+    assert.ok(text(query(m.container, '.lc-br-body')).includes('SYS B'))
+    assert.equal(calls, 1)
+    // The other epoch costs its own fetch.
+    await pickStep(m, '20')
+    await click(catRow(m, 'system'))
+    await flush()
+    assert.ok(text(query(m.container, '.lc-br-body')).includes('SYS A'))
+    assert.equal(calls, 2)
+    // Re-opening the first epoch's section hits the cache, not the fetcher.
+    await pickStep(m, 'live')
+    await click(catRow(m, 'system'))
+    await flush()
+    assert.ok(text(query(m.container, '.lc-br-body')).includes('SYS B'))
+    assert.equal(calls, 2)
+    await m.unmount()
+  })
+
+  test('a failed epoch fetch arms the retry button; retrying succeeds', async () => {
+    const data = tl({ current: { system: 30, tools: 9, user: 0, inject: 0, assistant: 0, tool: 0, total: 39 } })
+    const pendings: Array<{ resolve: (v: HeaderEpochContent | null) => void; reject: (e: unknown) => void }> = []
+    const deferred: () => Promise<HeaderEpochContent | null> = () =>
+      new Promise((resolve, reject) => { pendings.push({ resolve, reject }) })
+    const m = await mount(h(Browser, props({ data, headers: HEADERS, fetchHeader: deferred })))
+    await click(catRow(m, 'system'))
+    await flush()
+    assert.ok(text(query(m.container, '.lc-br-body')).includes('Loading'), 'the fetch is in flight')
+    await act(async () => { pendings[0]!.reject(new Error('down')) })
+    await flush()
+    assert.ok(text(query(m.container, '.lc-br-body')).includes('Load failed'), 'a rejected read arms the retry')
+    await click(query(m.container, '.lc-br-retry'))
+    await flush()
+    assert.ok(text(query(m.container, '.lc-br-body')).includes('Loading'), 'the retry refetches')
+    await act(async () => { pendings[1]!.resolve(CONTENTS[35]!) })
+    await flush()
+    assert.ok(text(query(m.container, '.lc-br-body')).includes('SYS B'), 'the retried read renders')
+    await m.unmount()
+  })
+
+  test('a stale epoch fetch resolves and rejects ignored once another epoch takes over', async () => {
+    const data = tl({
+      current: { system: 30, tools: 9, user: 0, inject: 0, assistant: 0, tool: 0, total: 39 },
+      requests: [req({ seq: 20, turn: 1, step: 0 }), req({ seq: 40, turn: 1, step: 1 })],
+    })
+    const pendings: Array<{ resolve: (v: HeaderEpochContent | null) => void; reject: (e: unknown) => void }> = []
+    const deferred = (): Promise<HeaderEpochContent | null> =>
+      new Promise((resolve, reject) => { pendings.push({ resolve, reject }) })
+    const m = await mount(h(Browser, props({ data, headers: HEADERS, fetchHeader: deferred })))
+    // Epoch 35's fetch is in flight; picking step 20 re-arms for epoch 15.
+    await click(catRow(m, 'system'))
+    await flush()
+    await pickStep(m, '20')
+    await click(catRow(m, 'system'))
+    await flush()
+    assert.equal(pendings.length, 2)
+    // The stale epoch REJECTS first — ignored: no retry button, still loading epoch 15.
+    await act(async () => { pendings[0]!.reject(new Error('stale')) })
+    await flush()
+    assert.ok(!text(m.container).includes('Load failed'))
+    assert.ok(text(query(m.container, '.lc-br-body')).includes('Loading'))
+    // The live epoch settles and renders.
+    await act(async () => { pendings[1]!.resolve(CONTENTS[15]!) })
+    await flush()
+    assert.ok(text(query(m.container, '.lc-br-body')).includes('SYS A'))
+    // Back to live: epoch 35's fetch is in flight; the cached epoch 15 renders
+    // without a fetch — then the stale resolve lands, ignored.
+    await pickStep(m, 'live')
+    await click(catRow(m, 'system'))
+    await flush()
+    assert.equal(pendings.length, 3)
+    await pickStep(m, '20')
+    await click(catRow(m, 'system'))
+    await flush()
+    assert.equal(pendings.length, 3, 'epoch 15 is cached')
+    assert.ok(text(query(m.container, '.lc-br-body')).includes('SYS A'))
+    await act(async () => { pendings[2]!.resolve(CONTENTS[35]!) })
+    await flush()
+    assert.ok(!text(m.container).includes('SYS B'), 'the stale content is ignored')
+    await m.unmount()
+  })
+
+  test('an epoch missing from the durable log degrades to the not-in-log note', async () => {
+    const data = tl({ current: { system: 30, tools: 9, user: 0, inject: 0, assistant: 0, tool: 0, total: 39 } })
+    const m = await mount(h(Browser, props({
+      data, headers: HEADERS, fetchHeader: () => Promise.resolve(null),
+    })))
+    await click(catRow(m, 'system'))
+    await flush()
+    assert.ok(text(query(m.container, '.lc-br-body')).includes('not in the session log'))
+    await click(catRow(m, 'tools'))
+    await flush()
+    assert.ok(text(queryAll(m.container, '.lc-br-body')[0]).includes('not in the session log'))
+    await m.unmount()
+  })
+
+  test('a host without the history face degrades to the metadata-only note', async () => {
+    const data = tl({ current: { system: 30, tools: 9, user: 0, inject: 0, assistant: 0, tool: 0, total: 39 } })
+    const m = await mount(h(Browser, props({ data, headers: HEADERS })))
+    await click(catRow(m, 'system'))
+    assert.ok(text(query(m.container, '.lc-br-body')).includes('token estimates only'))
+    await click(catRow(m, 'tools'))
+    assert.equal(elemRows(m).length, 1, 'metadata rows still render')
+    // The lone metadata row auto-opens with the category; its body explains the degradation.
+    assert.ok(text(query(m.container, '.lc-br-content')).includes('token estimates only'))
     await m.unmount()
   })
 
@@ -331,7 +467,7 @@ describe('ContextBrowser header epochs', () => {
       current: { system: 30, tools: 9, user: 0, inject: 0, assistant: 0, tool: 0, total: 39 },
       requests: [req({ seq: 10, turn: 1, step: 0 })],
     })
-    const m = await mount(h(Browser, props({ data, headers: HEADERS })))
+    const m = await mount(h(Browser, props({ data, ...lazy })))
     await pickStep(m, '10')
     await click(catRow(m, 'system'))
     assert.ok(text(query(m.container, '.lc-br-body')).includes('outside retention'))
@@ -343,67 +479,97 @@ describe('ContextBrowser header epochs', () => {
   test('an epoch without a system prompt keeps the system category shut', async () => {
     const headers: ContextHeaders = { headers: [{ seq: 1, time: 1, tools: [{ name: 'x', tokens: 1 }] }] }
     const data = tl({ current: { system: 0, tools: 1, user: 0, inject: 0, assistant: 0, tool: 0, total: 1 } })
-    const m = await mount(h(Browser, props({ data, headers })))
+    const m = await mount(h(Browser, props({ data, ...withEpochContent(headers, { 1: { tools: [] } }) })))
     assert.ok(text(catRow(m, 'system')).includes('0 Items'))
     await click(catRow(m, 'system'))
     assert.equal(queryAll(m.container, '.lc-br-body').length, 0, 'no prompt, no body')
     await m.unmount()
   })
+
+  test('a fetched epoch without a system prompt explains its absence', async () => {
+    const headers: ContextHeaders = { headers: [{ seq: 3, time: 3, systemTokens: 0, tools: [] }] }
+    const data = tl({ current: { system: 0, tools: 0, user: 0, inject: 0, assistant: 0, tool: 0, total: 0 } })
+    const m = await mount(h(Browser, props({
+      data, headers, fetchHeader: () => Promise.resolve({ tools: [] }),
+    })))
+    await click(catRow(m, 'system'))
+    await flush()
+    assert.ok(text(query(m.container, '.lc-br-body')).includes('carried no system prompt'))
+    await m.unmount()
+  })
 })
 
 describe('ContextBrowser tool schemas', () => {
+  // Metadata rows (name/token/plugin) pair with fetched CONTENT carrying the
+  // descriptions and schemas — the lazy epoch contract.
   const headers: ContextHeaders = {
     headers: [{
-      seq: 1, time: 1, system: 'SYS',
+      seq: 1, time: 1, systemTokens: 3,
       tools: [
         // Producer order is NOT meaningful: rows re-rank by token price.
         { name: 'omega', tokens: 5, plugin: 'mcp:github' },
-        { name: 'rho', tokens: 6, schema: 'nope' },
-        { name: 'theta', tokens: 8, schema: { type: 'object', properties: null } },
-        { name: 'zeta', tokens: 10, schema: { type: 'object' } },
-        { name: 'epsilon', tokens: 20, schema: { type: 'object', properties: { z: { type: 'integer' } } } },
-        { name: 'delta', tokens: 30, schema: { parameters: 'junk', input_schema: { properties: { y: { type: 'integer' } } } } },
-        { name: 'gamma', tokens: 40, schema: { inputSchema: { properties: 'nope' } } },
-        { name: 'beta', tokens: 50, schema: { input_schema: { properties: { x: { type: 'string' } } } } },
-        {
-          name: 'mega', tokens: 100, description: 'does everything',
-          schema: {
-            name: 'mega',
-            parameters: {
-              type: 'object',
-              properties: {
-                a: { type: 'string', description: 'the a param' },
-                b: { type: 'object', properties: { x: {}, y: {} } },
-                c: { type: 'array', items: { type: 'number' } },
-                d: { type: 'array' },
-                d2: { type: 'array', items: null },
-                e: { type: 'string', enum: ['x', 'y'] },
-                e2: { type: 'string', enum: [] },
-                f: { enum: [1, 2] },
-                g: { anyOf: [{ type: 'string' }, { type: 'number' }] },
-                h: { oneOf: [{ type: 'boolean' }] },
-                i: { anyOf: [null, { type: 'string' }] },
-                j: { anyOf: [] },
-                k: { anyOf: [42, null] },
-                l: { type: 'object', properties: {} },
-                m: { type: 'object', properties: null },
-                n: { type: 'object', properties: 42 },
-                o: 'not-an-object',
-                p: { description: 42 },
-                q: { description: '' },
-              },
-              required: ['a', 42],
-            },
-          },
-        },
+        { name: 'rho', tokens: 6 },
+        { name: 'theta', tokens: 8 },
+        { name: 'zeta', tokens: 10 },
+        { name: 'epsilon', tokens: 20 },
+        { name: 'delta', tokens: 30 },
+        { name: 'gamma', tokens: 40 },
+        { name: 'beta', tokens: 50 },
+        { name: 'mega', tokens: 100 },
       ],
     }],
   }
+  const content: HeaderEpochContent = {
+    system: 'SYS',
+    tools: [
+      { name: 'omega', schema: {} },
+      { name: 'rho', schema: 'nope' },
+      { name: 'theta', schema: { type: 'object', properties: null } },
+      { name: 'zeta', schema: { type: 'object' } },
+      { name: 'epsilon', schema: { type: 'object', properties: { z: { type: 'integer' } } } },
+      { name: 'delta', schema: { parameters: 'junk', input_schema: { properties: { y: { type: 'integer' } } } } },
+      { name: 'gamma', schema: { inputSchema: { properties: 'nope' } } },
+      { name: 'beta', schema: { input_schema: { properties: { x: { type: 'string' } } } } },
+      {
+        name: 'mega', description: 'does everything',
+        schema: {
+          name: 'mega',
+          parameters: {
+            type: 'object',
+            properties: {
+              a: { type: 'string', description: 'the a param' },
+              b: { type: 'object', properties: { x: {}, y: {} } },
+              c: { type: 'array', items: { type: 'number' } },
+              d: { type: 'array' },
+              d2: { type: 'array', items: null },
+              e: { type: 'string', enum: ['x', 'y'] },
+              e2: { type: 'string', enum: [] },
+              f: { enum: [1, 2] },
+              g: { anyOf: [{ type: 'string' }, { type: 'number' }] },
+              h: { oneOf: [{ type: 'boolean' }] },
+              i: { anyOf: [null, { type: 'string' }] },
+              j: { anyOf: [] },
+              k: { anyOf: [42, null] },
+              l: { type: 'object', properties: {} },
+              m: { type: 'object', properties: null },
+              n: { type: 'object', properties: 42 },
+              o: 'not-an-object',
+              p: { description: 42 },
+              q: { description: '' },
+            },
+            required: ['a', 42],
+          },
+        },
+      },
+    ],
+  }
   const data = tl({ current: { system: 10, tools: 248, user: 0, inject: 0, assistant: 0, tool: 0, total: 258 } })
+  const lazyProps = () => props({ data, headers, fetchHeader: () => Promise.resolve(content) })
 
   test('rows rank by token price; the schema narrowing matrix renders', async () => {
-    const m = await mount(h(Browser, props({ data, headers })))
+    const m = await mount(h(Browser, lazyProps()))
     await click(catRow(m, 'tools'))
+    await flush()
     const rows = elemRows(m)
     assert.equal(rows.length, 9)
     assert.deepEqual(rows.map(r => text(query(r, '.lc-br-preview'))),
@@ -411,9 +577,9 @@ describe('ContextBrowser tool schemas', () => {
 
     // mega: the full parameter matrix.
     await click(rows[0])
-    const content = query(m.container, '.lc-br-content')
-    assert.ok(text(content).includes('does everything'), 'description section renders')
-    const paramRows = queryAll(content, '.lc-ts-param-row')
+    const body = query(m.container, '.lc-br-content')
+    assert.ok(text(body).includes('does everything'), 'description section renders')
+    const paramRows = queryAll(body, '.lc-ts-param-row')
     assert.equal(paramRows.length, 18, 'one row per object-valued property')
     const byName = (n: string) => paramRows.find(r => text(query(r, '.lc-ts-param-name')) === n)
     const typeOf = (n: string) => text(query(byName(n) as HTMLElement, '.lc-ts-param-type'))
@@ -439,23 +605,24 @@ describe('ContextBrowser tool schemas', () => {
     assert.ok(text(byName('a') as HTMLElement).includes('the a param'))
     assert.equal(queryAll(byName('p') as HTMLElement, '.lc-ts-param-desc').length, 0, 'non-string description hidden')
     assert.equal(queryAll(byName('q') as HTMLElement, '.lc-ts-param-desc').length, 0, 'empty description hidden')
-    assert.ok(text(content).includes('Parameters'))
+    assert.ok(text(body).includes('Parameters'))
 
-    const toggle = query(content, '.lc-ts-json-toggle')
+    const toggle = query(body, '.lc-ts-json-toggle')
     assert.ok(text(toggle).includes('View Raw JSON'))
     await click(toggle)
-    assert.ok(text(query(content, '.lc-ts-desc-body')).includes('"parameters"'))
-    assert.ok(text(query(content, '.lc-ts-json-toggle')).includes('Collapse'))
-    await click(query(content, '.lc-ts-json-toggle'))
-    assert.equal(queryAll(content, 'pre').length, 0)
+    assert.ok(text(query(body, '.lc-ts-desc-body')).includes('"parameters"'))
+    assert.ok(text(query(body, '.lc-ts-json-toggle')).includes('Collapse'))
+    await click(query(body, '.lc-ts-json-toggle'))
+    assert.equal(queryAll(body, 'pre').length, 0)
     await click(elemRows(m)[0])
     assert.equal(queryAll(m.container, '.lc-br-content').length, 0)
     await m.unmount()
   })
 
   test('a text filter and the size/name sort narrow and re-rank the rows', async () => {
-    const m = await mount(h(Browser, props({ data, headers })))
+    const m = await mount(h(Browser, lazyProps()))
     await click(catRow(m, 'tools'))
+    await flush()
     const input = query<HTMLInputElement>(m.container, '.lc-br-tool-search')
     assert.equal(input.placeholder, 'Filter by name, description, or parameters…')
     const sortBtns = queryAll(m.container, '.lc-br-toolctl .lc-gran-btn')
@@ -490,16 +657,40 @@ describe('ContextBrowser tool schemas', () => {
     await m.unmount()
   })
 
+  test('before the epoch content loads, the filter scans names and plugins only', async () => {
+    const m = await mount(h(Browser, props({ data, headers, fetchHeader: () => new Promise(() => {}) })))
+    await click(catRow(m, 'tools'))
+    const names = () => elemRows(m).map(r => text(query(r, '.lc-br-preview')))
+    // The plugin chip is metadata: it matches pre-fetch.
+    await typeToolSearch(m, 'github')
+    assert.deepEqual(names(), ['omega'])
+    // Content-borne text cannot match before the fetch resolves.
+    await typeToolSearch(m, 'everything')
+    assert.equal(names().length, 0)
+    assert.ok(text(m.container).includes('No tools match the current filter'))
+    await m.unmount()
+  })
+
   test('a hostile schema degrades the text filter, not the rows', async () => {
     const cyclic: Record<string, unknown> = { type: 'object' }
     cyclic['self'] = cyclic
-    const hostile: ContextHeaders = { headers: [{ seq: 1, time: 1, system: 'SYS', tools: [
-      { name: 'loop', tokens: 3, schema: cyclic },
+    const hostileContent: HeaderEpochContent = {
+      system: 'SYS',
+      tools: [
+        { name: 'loop', schema: cyclic },
+        { name: 'nully', schema: null },
+        { name: 'plain', schema: {} },
+      ],
+    }
+    const hostile: ContextHeaders = { headers: [{ seq: 1, time: 1, systemTokens: 3, tools: [
+      { name: 'loop', tokens: 3 },
+      { name: 'nully', tokens: 1 },
       { name: 'plain', tokens: 2 },
     ] }] }
-    const m = await mount(h(Browser, props({ data, headers: hostile })))
+    const m = await mount(h(Browser, props({ data, headers: hostile, fetchHeader: () => Promise.resolve(hostileContent) })))
     await click(catRow(m, 'tools'))
-    assert.equal(elemRows(m).length, 2)
+    await flush()
+    assert.equal(elemRows(m).length, 3)
     // The name still matches; the unstringifiable schema contributes no text.
     await typeToolSearch(m, 'loop')
     assert.deepEqual(elemRows(m).map(r => text(query(r, '.lc-br-preview'))), ['loop'])
@@ -511,65 +702,81 @@ describe('ContextBrowser tool schemas', () => {
   })
 
   test('schema nesting variants and the empty/degenerate arms', async () => {
-    const m = await mount(h(Browser, props({ data, headers })))
+    const m = await mount(h(Browser, lazyProps()))
     await click(catRow(m, 'tools'))
+    await flush()
     const rows = elemRows(m)
     const open = async (name: string) => {
       const row = rows.find(r => text(query(r, '.lc-br-preview')) === name) as HTMLElement
       await click(row)
       return query(m.container, '.lc-br-content')
     }
+    const close = async (name: string) => {
+      await click(rows.find(r => text(query(r, '.lc-br-preview')) === name) as HTMLElement)
+    }
     // beta: input_schema nesting, no description.
     let body = await open('beta')
     assert.equal(queryAll(body, '.lc-ts-param-row').length, 1)
     assert.ok(!text(body).includes('Description'), 'no description section without one')
-    await click(elemRows(m).find(r => text(query(r, '.lc-br-preview')) === 'beta') as HTMLElement)
+    await close('beta')
 
     // gamma: inputSchema nesting with non-object properties → params empty.
     body = await open('gamma')
     assert.ok(text(body).includes('(no parameters)'))
-    await click(elemRows(m).find(r => text(query(r, '.lc-br-preview')) === 'gamma') as HTMLElement)
+    await close('gamma')
 
     // delta: a non-object `parameters` falls through to input_schema.
     body = await open('delta')
     assert.equal(queryAll(body, '.lc-ts-param-row').length, 1)
-    await click(elemRows(m).find(r => text(query(r, '.lc-br-preview')) === 'delta') as HTMLElement)
+    await close('delta')
 
     // epsilon: bare-root object schema is itself the parameter object.
     body = await open('epsilon')
     assert.equal(queryAll(body, '.lc-ts-param-row').length, 1)
     assert.ok(text(body).includes('integer'))
-    await click(elemRows(m).find(r => text(query(r, '.lc-br-preview')) === 'epsilon') as HTMLElement)
+    await close('epsilon')
 
     // zeta: object type without properties → no params section at all.
     body = await open('zeta')
     assert.equal(queryAll(body, '.lc-ts-param-row').length, 0)
     assert.ok(!text(body).includes('(no parameters)'))
     assert.ok(queryAll(body, '.lc-ts-json-toggle').length === 1, 'raw JSON still available')
-    await click(elemRows(m).find(r => text(query(r, '.lc-br-preview')) === 'zeta') as HTMLElement)
+    await close('zeta')
 
     // theta: null properties counts as a (bare) params object with no rows.
     body = await open('theta')
     assert.ok(text(body).includes('(no parameters)'))
-    await click(elemRows(m).find(r => text(query(r, '.lc-br-preview')) === 'theta') as HTMLElement)
+    await close('theta')
 
     // rho: non-object schema → no params, JSON toggle shows the literal.
     body = await open('rho')
     assert.equal(queryAll(body, '.lc-ts-param-row').length, 0)
     await click(query(body, '.lc-ts-json-toggle'))
     assert.ok(text(query(body, 'pre')).includes('"nope"'))
-    await click(elemRows(m).find(r => text(query(r, '.lc-br-preview')) === 'rho') as HTMLElement)
+    await close('rho')
 
-    // omega: no schema and no description → nothing behind the row.
+    // omega: the fetched raw entry carries no description and a bare schema —
+    // only the JSON toggle renders behind the row.
     body = await open('omega')
-    assert.equal(queryAll(body, '.lc-ts-json-toggle').length, 0)
-    assert.equal(text(body), '')
+    assert.equal(queryAll(body, '.lc-ts-param-row').length, 0)
+    assert.ok(!text(body).includes('does everything'))
+    assert.ok(queryAll(body, '.lc-ts-json-toggle').length === 1)
+    await m.unmount()
+  })
+
+  test('a metadata row missing from the fetched content degrades to the not-in-log note', async () => {
+    const partial: HeaderEpochContent = { system: 'SYS', tools: [{ name: 'other', schema: {} }] }
+    const m = await mount(h(Browser, props({ data, headers, fetchHeader: () => Promise.resolve(partial) })))
+    await click(catRow(m, 'tools'))
+    await flush()
+    await click(elemRows(m).find(r => text(query(r, '.lc-br-preview')) === 'mega') as HTMLElement)
+    assert.ok(text(query(m.container, '.lc-br-content')).includes('not in the session log'))
     await m.unmount()
   })
 
   test('tool rows tag the registering plugin when attribution exists', async () => {
     const attributed: ContextHeaders = {
-      headers: [{ seq: 1, time: 1, system: 'SYS', tools: [
+      headers: [{ seq: 1, time: 1, systemTokens: 3, tools: [
         { name: 'write', tokens: 5, plugin: '@deepseek-ai/dsh-tool-fs' },
         { name: 'mcp__github__get_issue', tokens: 3, plugin: 'mcp:github' },
         { name: 'agent_teams_add_member', tokens: 2 }, // no attribution → no chip
@@ -604,13 +811,18 @@ describe('ContextBrowser tool schemas', () => {
 
   test('a single-tool category opens its schema row with the category; multi stays collapsed', async () => {
     const lone: ContextHeaders = {
-      headers: [{ seq: 1, time: 1, system: 'SYS', tools: [
-        { name: 'only', tokens: 5, schema: { type: 'object', properties: { x: { type: 'string' } } } },
+      headers: [{ seq: 1, time: 1, systemTokens: 3, tools: [
+        { name: 'only', tokens: 5 },
       ] }],
     }
+    const loneContent: HeaderEpochContent = {
+      system: 'SYS',
+      tools: [{ name: 'only', schema: { type: 'object', properties: { x: { type: 'string' } } } }],
+    }
     const data = tl({ current: { system: 10, tools: 5, user: 0, inject: 0, assistant: 0, tool: 0, total: 15 } })
-    const m = await mount(h(Browser, props({ data, headers: lone })))
+    const m = await mount(h(Browser, props({ data, headers: lone, fetchHeader: () => Promise.resolve(loneContent) })))
     await click(catRow(m, 'tools'))
+    await flush()
     assert.equal(elemRows(m).length, 1)
     const content = queryAll(m.container, '.lc-br-content')
     assert.equal(content.length, 1, 'the lone tool schema is already expanded')
@@ -620,7 +832,7 @@ describe('ContextBrowser tool schemas', () => {
     await m.unmount()
 
     const pair: ContextHeaders = {
-      headers: [{ seq: 1, time: 1, system: 'SYS', tools: [{ name: 'a', tokens: 2 }, { name: 'b', tokens: 1 }] }],
+      headers: [{ seq: 1, time: 1, systemTokens: 3, tools: [{ name: 'a', tokens: 2 }, { name: 'b', tokens: 1 }] }],
     }
     const m2 = await mount(h(Browser, props({ data, headers: pair })))
     await click(catRow(m2, 'tools'))
@@ -1173,10 +1385,10 @@ describe('ContextBrowser targeted content fetch', () => {
 describe('ContextBrowser focus bridges', () => {
   const headers: ContextHeaders = {
     headers: [{
-      seq: 1, time: 1, system: 'SYS',
+      seq: 1, time: 1, systemTokens: 3,
       tools: [
-        { name: 'beta', tokens: 50, description: 'the beta tool', schema: { input_schema: { properties: { x: { type: 'string' } } } } },
-        { name: 'alpha', tokens: 10, description: 'the alpha tool' },
+        { name: 'beta', tokens: 50 },
+        { name: 'alpha', tokens: 10 },
       ],
     }],
   }

@@ -9,7 +9,7 @@ import { headlineOf } from '../headline'
 import { modalStoreOf, takePendingConsume } from '../modalStore'
 import type { ClientCtx, SessionStandardProps, SessionsFace } from '../services'
 import { contextBreakdownOf, contextPressureOf, conversationNodesOf, headersOf, timelineOf } from '../services'
-import { makeContentFetcher } from '../historyPage'
+import { makeContentFetcher, makeHeaderFetcher } from '../historyPage'
 import type { ViewKit } from '../viewkit'
 import { makeContextBrowser } from './browser'
 import { makeCurrentComposition } from './currentComposition'
@@ -51,9 +51,14 @@ export function makeContextModal(ctx: ClientCtx, kit: ViewKit): (props: ContextM
     // stays stable across open/close).
     const convNodes = conversationNodesOf(props)
     const [hoverCat, setHoverCat] = React.useState<string | null>(null)
-    // Same targeted content fetch the Context tab wires (one seq-anchored history read per expanded row).
+    // Same targeted content fetch the Context tab wires (one seq-anchored history read per expanded row), plus the on-demand header
+    // epoch content read for the browser's system/tools sections.
     const fetchContent = React.useMemo(
       () => (sessionId !== '' ? makeContentFetcher(ctx, sessionId) : undefined),
+      [ctx, sessionId],
+    )
+    const fetchHeader = React.useMemo(
+      () => (sessionId !== '' ? makeHeaderFetcher(ctx, sessionId) : undefined),
       [ctx, sessionId],
     )
 
@@ -115,6 +120,7 @@ export function makeContextModal(ctx: ClientCtx, kit: ViewKit): (props: ContextM
                 headers={headers}
                 convNodes={convNodes}
                 fetchContent={fetchContent}
+                fetchHeader={fetchHeader}
                 hoverKey={hoverCat}
                 onHoverKey={setHoverCat}
               />

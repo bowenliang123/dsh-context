@@ -80,7 +80,8 @@ describe('dsh-context host plugin', () => {
     const headers = snapshot.values.contextHeaders
     assert.ok(headers !== undefined, 'contextHeaders served after real appends')
     assert.equal(headers.headers.length, 1)
-    assert.equal(headers.headers[0].system, 'sys')
+    assert.ok(!('system' in headers.headers[0]), 'system text stays in the log, not the projection')
+    assert.ok((headers.headers[0].systemTokens ?? 0) > 0, 'the epoch carries its system token price')
   })
 
   test('the change feed fires with the schema-validated view', async () => {

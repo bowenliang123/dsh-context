@@ -11,7 +11,7 @@
  */
 
 import type { Context } from '@deepseek-ai/cordis'
-import type { ContextBreakdown, ContextHeaders, ContextPressure, ContextTimeline, TimingTotals, TokenUsage, ToolTimingTotals } from '../shared/types'
+import type { ContextBreakdown, ContextHeaders, ContextPressure, ContextTimeline, HeaderEpochContent, TimingTotals, TokenUsage, ToolTimingTotals } from '../shared/types'
 
 export interface LocaleService {
   register(ns: string, dicts: Record<string, Record<string, string>>): () => void
@@ -408,23 +408,24 @@ export function timingOf(value: unknown): TimingTotals | null {
 
 /**
  * Narrow a delivered projection value to the plugin's `contextHeaders`
- * (request-header content epochs). Absent key = an older Host half without
- * the companion unit — the Context browser degrades its system/tools
- * sections to tokens-only with a note.
+ * (request-header epoch METADATA — boundaries, token prices, attribution).
+ * Absent key = an older Host half without the companion unit — the Context
+ * browser degrades its system/tools sections to a metadata-only note.
  *
  * Entry-level shape is checked too: a malformed epoch (corrupt payload with
- * a missing tools list or wrong-typed system prompt) would crash the
+ * a missing tools list or wrong-typed systemTokens) would crash the
  * browser's tools/sections reads, so the WHOLE projection degrades to null
- * and the card falls back to its tokens-only note.
+ * and the card falls back to its metadata-only note. The epoch CONTENT is
+ * not part of this value — the browser fetches it per epoch on demand.
  */
 export function headersOf(value: unknown): ContextHeaders | null {
   const headers = asRecord(value)
   if (headers === null || !Array.isArray(headers.headers)) return null
   for (const h of headers.headers as unknown[]) {
     if (h === null || typeof h !== 'object') return null
-    const entry = h as { tools?: unknown; system?: unknown }
+    const entry = h as { tools?: unknown; systemTokens?: unknown }
     if (!Array.isArray(entry.tools)) return null
-    if (entry.system !== undefined && typeof entry.system !== 'string') return null
+    if (entry.systemTokens !== undefined && (typeof entry.systemTokens !== 'number' || !Number.isFinite(entry.systemTokens))) return null
   }
   return headers as unknown as ContextHeaders
 }
@@ -605,3 +606,11 @@ export function openPathVia(ctx: ClientCtx): ((path: string) => void) | undefine
  * rejects on transport/RPC failure (the caller distinguishes the three).
  */
 export type ContentFetcher = (seq: number) => Promise<ConversationNodeLike | null>
+
+/**
+ * On-demand CONTENT for one `contextHeaders` epoch seq: the fetched system
+ * prompt and tool schemas (see historyPage.ts), `null` when the durable log
+ * does not hold the epoch, rejects on transport/RPC failure (the caller
+ * distinguishes the three).
+ */
+export type HeaderFetcher = (seq: number) => Promise<HeaderEpochContent | null>

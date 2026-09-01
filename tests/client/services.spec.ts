@@ -382,14 +382,15 @@ describe('headersOf', () => {
     assert.equal(headersOf({ headers: [{ tools: 'x' }] }), null)
   })
 
-  test('an entry with a defined non-string system degrades the whole value to null', () => {
-    assert.equal(headersOf({ headers: [{ tools: [], system: 5 }] }), null)
+  test('an entry with a defined non-numeric systemTokens degrades the whole value to null', () => {
+    assert.equal(headersOf({ headers: [{ tools: [], systemTokens: 'x' }] }), null)
+    assert.equal(headersOf({ headers: [{ tools: [], systemTokens: Number.NaN }] }), null)
   })
 
   test('a valid value passes through by reference', () => {
     const value = {
       headers: [
-        { seq: 1, time: 1000, tools: [], system: 'prompt' },
+        { seq: 1, time: 1000, tools: [], systemTokens: 12 },
         { seq: 2, time: 2000, tools: [{ name: 'bash', tokens: 10 }] },
       ],
     }

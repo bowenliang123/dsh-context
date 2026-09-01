@@ -1,10 +1,11 @@
 // Unit tests for the contextHeaders projection unit (src/host/headers.ts) —
-// the request-header CONTENT epochs behind the timeline's envelope figures.
+// the request-header EPOCH METADATA behind the timeline's envelope figures.
 // The unit is pure init/apply/view: each case drives real event envelopes
 // through the real definition (no harness plumbing).
 
 import assert from 'node:assert/strict'
 import { describe, test } from 'vitest'
+import { estimateSystem } from '../../src/host/pricing'
 import { createContextHeadersDefinition } from '../../src/host/headers'
 import type { HeadersState } from '../../src/host/headers'
 import { header, foreign } from './helpers/events'
@@ -25,10 +26,10 @@ function fold(def: ReturnType<typeof createContextHeadersDefinition>, events: Ti
 }
 
 describe('createContextHeadersDefinition', () => {
-  test('init/apply/view fold header epochs', () => {
+  test('init/apply/view fold header epoch metadata', () => {
     const def = createContextHeadersDefinition()
     assert.equal(def.key, 'contextHeaders')
-    assert.equal(def.stateVersion, 1)
+    assert.equal(def.stateVersion, 1, 'pinned: a bump would orphan idle cold sessions (no refresh channel)')
 
     const init = def.init()
     assert.deepEqual(init, { headers: [] })
@@ -41,13 +42,16 @@ describe('createContextHeadersDefinition', () => {
     assertPlainJson(state)
     assert.equal(state.headers.length, 1)
     assert.equal(state.headers[0].seq, 1)
-    assert.equal(state.headers[0].system, 'You are an agent.')
+    assert.equal(state.headers[0].systemTokens, estimateSystem('You are an agent.'))
     assert.equal(state.headers[0].tools.length, 1)
     assert.equal(state.headers[0].tools[0].name, 'bash')
 
     const view = def.wire.view(state)
     assert.equal(view.headers.length, 1)
-    assert.equal(view.headers[0].tools[0].description, 'run a command')
+    assert.equal(view.headers[0].tools[0].name, 'bash')
+    assert.ok(!('description' in view.headers[0].tools[0]), 'descriptions stay in the log')
+    assert.ok(!('schema' in view.headers[0].tools[0]), 'schemas stay in the log')
+    assert.ok(!('system' in view.headers[0]), 'system text stays in the log')
   })
 
   test('a non-header event returns the same state reference', () => {
@@ -70,38 +74,38 @@ describe('createContextHeadersDefinition', () => {
     assert.deepEqual(view.headers[0].tools, [])
   })
 
-  test('tool entries degrade bad names and omit bad descriptions', () => {
+  test('tool entries degrade bad names; descriptions and schemas never ride the record', () => {
     const def = createContextHeadersDefinition()
     const view = def.wire.view(fold(def, [headerEvent(1, {
       tools: [
         { name: 42, description: 'kept' }, // non-string name → '?'
-        { name: 'a', description: 7 }, // non-string description → omitted
-        { name: 'b', description: '' }, // empty description → omitted
-        { name: 'c', description: 'ok' },
+        { name: 'a', description: 7 },
+        { name: 'b', description: '' },
+        { name: 'c', description: 'ok', schema: { type: 'object' } },
       ],
     })]))
     const tools = view.headers[0].tools
     assert.equal(tools[0].name, '?')
-    assert.equal(tools[0].description, 'kept')
-    assert.ok(!('description' in tools[1]))
-    assert.ok(!('description' in tools[2]))
-    assert.equal(tools[3].description, 'ok')
+    assert.equal(tools[1].name, 'a')
+    assert.equal(tools[2].name, 'b')
+    assert.equal(tools[3].name, 'c')
     for (const tool of tools) {
       assert.ok(Number.isInteger(tool.tokens) && tool.tokens >= 0, 'tool tokens priced')
-      assert.ok('schema' in tool, 'the raw schema rides the record')
+      assert.ok(!('description' in tool), 'descriptions stay in the durable log')
+      assert.ok(!('schema' in tool), 'schemas stay in the durable log')
     }
   })
 
-  test('system is omitted unless a non-empty string', () => {
+  test('systemTokens is omitted unless a non-empty system string was logged', () => {
     const def = createContextHeadersDefinition()
     const view = def.wire.view(fold(def, [
       headerEvent(1, { system: 42 }),
       headerEvent(2, { system: '' }),
       headerEvent(3, { system: 'sys' }),
     ]))
-    assert.ok(!('system' in view.headers[0]))
-    assert.ok(!('system' in view.headers[1]))
-    assert.equal(view.headers[2].system, 'sys')
+    assert.ok(!('systemTokens' in view.headers[0]))
+    assert.ok(!('systemTokens' in view.headers[1]))
+    assert.equal(view.headers[2].systemTokens, estimateSystem('sys'))
   })
 
   test('the same epoch seq twice in a row returns the same state reference', () => {
@@ -125,9 +129,9 @@ describe('createContextHeadersDefinition', () => {
     const state = fold(def, [headerEvent(1, { system: 'sys', tools: [{ name: 'bash' }] })])
     const view = def.wire.view(state)
     view.headers[0].tools[0].name = 'mutated'
-    view.headers[0].system = 'mutated'
+    view.headers[0].time = -1
     assert.equal(state.headers[0].tools[0].name, 'bash', 'mutating the view must not alias state')
-    assert.equal(state.headers[0].system, 'sys')
+    assert.ok(state.headers[0].time > 0)
   })
 
   test('stateSchema and the wire block validate a real folded view', () => {
@@ -144,7 +148,7 @@ describe('createContextHeadersDefinition', () => {
     assert.equal(def.wire.viewSchema.safeParse(def.wire.view(state)).success, true)
   })
 
-  test('a harness-provided plugin field rides the raw tool entry verbatim', () => {
+  test('a harness-provided plugin field rides the tool metadata verbatim', () => {
     const def = createContextHeadersDefinition()
     const view = def.wire.view(fold(def, [headerEvent(1, {
       tools: [
@@ -212,31 +216,86 @@ describe('hostile tool entries', () => {
     assert.equal(tools[3].name, 'bash')
     for (const tool of tools) {
       assert.ok(Number.isInteger(tool.tokens) && tool.tokens >= 0, 'tool tokens priced')
-      assert.ok('schema' in tool, 'the raw schema rides the record')
+      assert.ok(!('schema' in tool), 'the raw entry never rides the metadata record')
     }
   })
 
-  test('hostile shapes a committed log can hold keep the state lossless JSON', () => {
+  test('hostile shapes a committed log can hold keep the state lossless JSON and bounded', () => {
     // Committed event data is already the harness's lossless-JSON snapshot (session.append
     // throws on anything else), so the hostile surface here is wrong-SHAPED plain JSON —
-    // never functions, undefined-valued properties, or exotic objects.
+    // never functions, undefined-valued properties, or exotic objects. Content-sized
+    // junk (nested schema bodies) must not leak into the metadata state.
     const def = createContextHeadersDefinition()
-    const toolSchema = { name: 'bash', description: 'run a command', parameters: {} }
     const state = fold(def, [headerEvent(1, {
       tools: [
         null,
         42,
         [],
         { name: 123, extra: { deep: [true, 'x'] } }, // wrong-typed name, nested junk
-        toolSchema, // an empty-object parameters schema is legal and must survive verbatim
         { name: 'read', parameters: { type: 'object', properties: {} } },
       ],
     })])
-    assert.deepEqual(state.headers[0].tools[4].schema, toolSchema, 'a real ToolSchema entry rides verbatim')
-    assert.deepEqual(
-      state.headers[0].tools[5].schema,
-      { name: 'read', parameters: { type: 'object', properties: {} } },
-      'nested empty-object schemas survive verbatim',
-    )
+    assert.equal(state.headers[0].tools.length, 5)
+    for (const tool of state.headers[0].tools) {
+      assert.deepEqual(Object.keys(tool).filter(k => k !== 'name' && k !== 'tokens' && k !== 'plugin'), [])
+    }
+  })
+})
+
+describe('read-compat over v1 rows', () => {
+  /** A v1-era state: content-bearing records exactly as the old build persisted them. */
+  function v1State(): HeadersState {
+    return {
+      headers: [
+        {
+          seq: 1, time: 1000, system: 'You are an agent.',
+          tools: [
+            { name: 'bash', tokens: 12, description: 'run a command', schema: { type: 'object' } },
+            { name: 'mcp__gh__issue', tokens: 8, plugin: 'mcp:github' },
+          ],
+        },
+        { seq: 9, time: 9000, tools: [{ name: 'read', tokens: 5, description: 'read a file', schema: {} }] },
+      ],
+    }
+  }
+
+  test('a v1 cached row seeds the fold and the view normalizes it to metadata', () => {
+    const def = createContextHeadersDefinition()
+    // The state schema accepts the v1 shape — the row is usable, not discarded.
+    assert.deepEqual(def.stateSchema.parse(structuredClone(v1State())), v1State())
+    const view = def.wire.view(v1State())
+    assert.equal(def.wire.viewSchema.safeParse(view).success, true, 'normalized view passes the strict wire schema')
+    assert.equal(view.headers[0].systemTokens, estimateSystem('You are an agent.'), 'legacy system text priced at view time')
+    assert.ok(!('system' in view.headers[0]), 'system text stripped from the wire')
+    assert.deepEqual(view.headers[0].tools, [
+      { name: 'bash', tokens: 12 },
+      { name: 'mcp__gh__issue', tokens: 8, plugin: 'mcp:github' },
+    ], 'descriptions and schemas stripped; attribution kept')
+    assert.ok(!('systemTokens' in view.headers[1]), 'a v1 epoch without system text stays absent')
+    assert.deepEqual(view.headers[1].tools, [{ name: 'read', tokens: 5 }])
+  })
+
+  test('the resolver fills plugins on seeded legacy entries at view time', () => {
+    const def = createContextHeadersDefinition(name => (name === 'bash' ? '@deepseek-ai/dsh-tool-bash' : undefined))
+    const view = def.wire.view(v1State())
+    assert.equal(view.headers[0].tools[0].plugin, '@deepseek-ai/dsh-tool-bash', 'absent plugin resolved')
+    assert.equal(view.headers[0].tools[1].plugin, 'mcp:github', 'logged plugin never overridden')
+  })
+
+  test('new epochs fold alongside seeded v1 epochs and the cap keeps trimming', () => {
+    const def = createContextHeadersDefinition()
+    let state: HeadersState = v1State()
+    state = def.apply(state, header(10, { system: 'next', tools: [{ name: 'write' }] }) as never)
+    assert.equal(state.headers.length, 3)
+    const view = def.wire.view(state)
+    assert.equal(def.wire.viewSchema.safeParse(view).success, true)
+    assert.equal(view.headers[2].systemTokens, estimateSystem('next'))
+    assert.ok(!('system' in state.headers[2]), 'new folds stay metadata-only in state')
+    assert.ok('system' in state.headers[0], 'seeded legacy epochs keep their state shape until they age out')
+
+    // Retention: the oldest epochs leave regardless of generation.
+    for (let seq = 11; seq <= 60; seq++) state = def.apply(state, header(seq, { system: 's' }) as never)
+    assert.equal(state.headers.length, 50)
+    assert.equal(state.headers[0].seq, 11, 'the seeded v1 epoch aged out first')
   })
 })
