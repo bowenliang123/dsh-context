@@ -396,6 +396,36 @@ describe('headersOf', () => {
     }
     assert.equal(headersOf(value), value)
   })
+
+  test('a legacy content-bearing epoch (pre-#37 wire) normalizes to the metadata shape', () => {
+    // 16 chars → ceil(16/4) + 4 = 8, the harness meter's own heuristic.
+    const legacy = { headers: [{ seq: 12, time: 1000, system: 'x'.repeat(16), tools: [{ name: 'bash', tokens: 815 }] }] }
+    const out = headersOf(legacy)
+    assert.equal(out?.headers[0]?.systemTokens, 8)
+    // The content fields ride along untouched — the browser never reads them
+    // from the delivered value (content fetches per epoch on demand).
+    assert.equal((out?.headers[0] as { system?: string }).system, 'x'.repeat(16))
+  })
+
+  test('mixed generations price only the unpriced legacy entries', () => {
+    const value = {
+      headers: [
+        { seq: 1, time: 1000, system: 'prompt', tools: [] },
+        { seq: 2, time: 2000, system: 'kept', systemTokens: 55, tools: [] },
+        { seq: 3, time: 3000, tools: [] },
+      ],
+    }
+    const out = headersOf(value)
+    assert.equal(out?.headers[0]?.systemTokens, Math.ceil(6 / 4) + 4)
+    assert.equal(out?.headers[1]?.systemTokens, 55)
+    assert.equal(out?.headers[2]?.systemTokens, undefined)
+  })
+
+  test('a legacy entry whose system is not a non-empty string stays unpriced', () => {
+    const out = headersOf({ headers: [{ seq: 1, time: 1, system: '', tools: [] }, { seq: 2, time: 2, system: 7, tools: [] }] })
+    assert.equal(out?.headers[0]?.systemTokens, undefined)
+    assert.equal(out?.headers[1]?.systemTokens, undefined)
+  })
 })
 
 describe('workspaceOf', () => {

@@ -10,7 +10,7 @@ import { h } from '../../../src/client/react'
 import { makeContextBrowser, type ContextBrowserProps } from '../../../src/client/components/browser'
 import { makeStackedBar } from '../../../src/client/components/stackedBar'
 import { UNKNOWN_TOOL_SOURCE, type ContextHeaders, type ContextTimeline, type HeaderEpochContent, type RequestRecord, type SurfaceNode } from '../../../src/shared/types'
-import type { ConversationNodeLike, ImageLoader } from '../../../src/client/services'
+import { headersOf, type ConversationNodeLike, type ImageLoader } from '../../../src/client/services'
 import { click, flush, hover, makeKit, mount, query, queryAll, text, unhover, type Mounted } from '../helpers/kit'
 
 const kit = makeKit()
@@ -483,6 +483,25 @@ describe('ContextBrowser header epochs', () => {
     assert.ok(text(catRow(m, 'system')).includes('0 Items'))
     await click(catRow(m, 'system'))
     assert.equal(queryAll(m.container, '.lc-br-body').length, 0, 'no prompt, no body')
+    await m.unmount()
+  })
+
+  test('a legacy content-bearing epoch (pre-#37 wire) still counts the system prompt', async () => {
+    // The value shape a host running the pre-#37 view serves: the system TEXT
+    // rides the epoch and no systemTokens price exists (the real cached row
+    // that read 0 项 while the breakdown still showed ≈1.6k). Routed through
+    // headersOf — the boundary the real callers sanitize the projection with.
+    const legacy = {
+      headers: [{
+        seq: 12,
+        time: 1_000,
+        system: 'You are an AI agent.\n',
+        tools: [{ name: 'bash', tokens: 815, description: 'run', schema: { type: 'object' } }],
+      }],
+    } as unknown as ContextHeaders
+    const data = tl({ current: { system: 9, tools: 815, user: 0, inject: 0, assistant: 0, tool: 0, total: 824 } })
+    const m = await mount(h(Browser, props({ data, headers: headersOf(legacy) })))
+    assert.ok(text(catRow(m, 'system')).includes(kit.t('browser.items', { n: 1 })))
     await m.unmount()
   })
 

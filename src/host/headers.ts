@@ -37,7 +37,8 @@ import { z } from 'zod'
 import type { SessionEvent } from '@deepseek-ai/dsh-session'
 import type { ProjectionDefinition } from './compat'
 import type { ContextHeaders, HeaderRecord, HeaderTool } from '../shared/types'
-import { estimateSystem, estimateToolSchema } from './pricing'
+import { estimateToolSchema } from './pricing'
+import { estimateSystemTokens } from '../shared/estimate'
 
 /** Retention cap on header epochs (metadata only; changes are rare; 50 is generous). */
 const HEADERS_MAX = 50
@@ -137,7 +138,7 @@ function recordOf(event: SessionEvent): StoredHeaderRecord | null {
     }),
   }
   if (typeof header.system === 'string' && header.system.length > 0) {
-    record.systemTokens = estimateSystem(header.system)
+    record.systemTokens = estimateSystemTokens(header.system)
   }
   return record
 }
@@ -169,7 +170,7 @@ export function createContextHeadersDefinition(
         }),
       }
       const systemTokens = h.systemTokens
-        ?? (typeof h.system === 'string' && h.system !== '' ? estimateSystem(h.system) : undefined)
+        ?? (typeof h.system === 'string' && h.system !== '' ? estimateSystemTokens(h.system) : undefined)
       if (systemTokens !== undefined) record.systemTokens = systemTokens
       return record
     }),

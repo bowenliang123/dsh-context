@@ -92,11 +92,7 @@ export function estimateMessage(message: { content?: ContentBlock[] } | undefine
   return estimateBlocks(message?.content) + ROLE_OVERHEAD
 }
 
-export function estimateSystem(text: unknown): number {
-  if (typeof text !== 'string' || text.length === 0) return 0
-  return Math.ceil(text.length / CHARS_PER_TOKEN) + ROLE_OVERHEAD
-}
-
+/** The shared meter heuristic over rendered system-prompt text (shared/estimate.ts). */
 /** Per-tool price for the top-tools display (the total uses dsh's whole-array price). */
 export function estimateToolSchema(tool: unknown): number {
   return Math.ceil(JSON.stringify(tool).length / CHARS_PER_TOKEN) + BLOCK_OVERHEAD

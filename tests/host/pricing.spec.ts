@@ -6,7 +6,6 @@ import assert from 'node:assert/strict'
 import { describe, test } from 'vitest'
 import {
   estimateMessage,
-  estimateSystem,
   estimateToolSchema,
   estimateToolsTotal,
   firstText,
@@ -15,6 +14,7 @@ import {
   isInjection,
   toolCallNames,
 } from '../../src/host/pricing'
+import { estimateSystemTokens } from '../../src/shared/estimate'
 import type { ContentBlock } from '../../src/host/pricing'
 
 describe('estimateToolsTotal', () => {
@@ -115,14 +115,14 @@ describe('estimateMessage', () => {
 
 describe('estimateSystem', () => {
   test('non-strings and the empty string price zero', () => {
-    assert.equal(estimateSystem(undefined), 0)
-    assert.equal(estimateSystem(null), 0)
-    assert.equal(estimateSystem(42), 0)
-    assert.equal(estimateSystem(''), 0)
+    assert.equal(estimateSystemTokens(undefined), 0)
+    assert.equal(estimateSystemTokens(null), 0)
+    assert.equal(estimateSystemTokens(42), 0)
+    assert.equal(estimateSystemTokens(''), 0)
   })
 
   test('text prices chars/4 plus role framing', () => {
-    assert.equal(estimateSystem('abcd'), 5)
+    assert.equal(estimateSystemTokens('abcd'), 5)
   })
 })
 

@@ -5,7 +5,7 @@
 
 import assert from 'node:assert/strict'
 import { describe, test } from 'vitest'
-import { estimateSystem } from '../../src/host/pricing'
+import { estimateSystemTokens } from '../../src/shared/estimate'
 import { createContextHeadersDefinition } from '../../src/host/headers'
 import type { HeadersState } from '../../src/host/headers'
 import { header, foreign } from './helpers/events'
@@ -42,7 +42,7 @@ describe('createContextHeadersDefinition', () => {
     assertPlainJson(state)
     assert.equal(state.headers.length, 1)
     assert.equal(state.headers[0].seq, 1)
-    assert.equal(state.headers[0].systemTokens, estimateSystem('You are an agent.'))
+    assert.equal(state.headers[0].systemTokens, estimateSystemTokens('You are an agent.'))
     assert.equal(state.headers[0].tools.length, 1)
     assert.equal(state.headers[0].tools[0].name, 'bash')
 
@@ -105,7 +105,7 @@ describe('createContextHeadersDefinition', () => {
     ]))
     assert.ok(!('systemTokens' in view.headers[0]))
     assert.ok(!('systemTokens' in view.headers[1]))
-    assert.equal(view.headers[2].systemTokens, estimateSystem('sys'))
+    assert.equal(view.headers[2].systemTokens, estimateSystemTokens('sys'))
   })
 
   test('the same epoch seq twice in a row returns the same state reference', () => {
@@ -265,7 +265,7 @@ describe('read-compat over v1 rows', () => {
     assert.deepEqual(def.stateSchema.parse(structuredClone(v1State())), v1State())
     const view = def.wire.view(v1State())
     assert.equal(def.wire.viewSchema.safeParse(view).success, true, 'normalized view passes the strict wire schema')
-    assert.equal(view.headers[0].systemTokens, estimateSystem('You are an agent.'), 'legacy system text priced at view time')
+    assert.equal(view.headers[0].systemTokens, estimateSystemTokens('You are an agent.'), 'legacy system text priced at view time')
     assert.ok(!('system' in view.headers[0]), 'system text stripped from the wire')
     assert.deepEqual(view.headers[0].tools, [
       { name: 'bash', tokens: 12 },
@@ -289,7 +289,7 @@ describe('read-compat over v1 rows', () => {
     assert.equal(state.headers.length, 3)
     const view = def.wire.view(state)
     assert.equal(def.wire.viewSchema.safeParse(view).success, true)
-    assert.equal(view.headers[2].systemTokens, estimateSystem('next'))
+    assert.equal(view.headers[2].systemTokens, estimateSystemTokens('next'))
     assert.ok(!('system' in state.headers[2]), 'new folds stay metadata-only in state')
     assert.ok('system' in state.headers[0], 'seeded legacy epochs keep their state shape until they age out')
 

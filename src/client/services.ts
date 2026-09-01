@@ -11,6 +11,7 @@
  */
 
 import type { Context } from '@deepseek-ai/cordis'
+import { estimateSystemTokens } from '../shared/estimate'
 import type { ContextBreakdown, ContextHeaders, ContextPressure, ContextTimeline, HeaderEpochContent, TimingTotals, TokenUsage, ToolTimingTotals } from '../shared/types'
 
 export interface LocaleService {
@@ -417,6 +418,13 @@ export function timingOf(value: unknown): TimingTotals | null {
  * browser's tools/sections reads, so the WHOLE projection degrades to null
  * and the card falls back to its metadata-only note. The epoch CONTENT is
  * not part of this value — the browser fetches it per epoch on demand.
+ *
+ * The pre-#37 wire generation carries the system TEXT instead of its token
+ * price (a host still running the old view — stale watch build, an app not
+ * restarted since the upgrade — serves it from its cache verbatim), so the
+ * two generations are normalized to the metadata shape here: unpriced legacy
+ * entries get the shared meter heuristic applied, priced ones and
+ * new-shape values pass through untouched.
  */
 export function headersOf(value: unknown): ContextHeaders | null {
   const headers = asRecord(value)
@@ -427,7 +435,20 @@ export function headersOf(value: unknown): ContextHeaders | null {
     if (!Array.isArray(entry.tools)) return null
     if (entry.systemTokens !== undefined && (typeof entry.systemTokens !== 'number' || !Number.isFinite(entry.systemTokens))) return null
   }
-  return headers as unknown as ContextHeaders
+  let legacy = false
+  for (const entry of headers.headers as { systemTokens?: unknown; system?: unknown }[]) {
+    if (entry.systemTokens === undefined && typeof entry.system === 'string' && entry.system !== '') {
+      legacy = true
+      break
+    }
+  }
+  if (!legacy) return headers as unknown as ContextHeaders
+  return {
+    headers: (headers.headers as { systemTokens?: number; system?: unknown }[]).map((entry) => {
+      if (entry.systemTokens !== undefined) return entry
+      return { ...entry, systemTokens: estimateSystemTokens(entry.system) || undefined }
+    }),
+  } as unknown as ContextHeaders
 }
 
 export interface TriggerCandidate {

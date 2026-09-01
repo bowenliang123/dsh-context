@@ -20,10 +20,10 @@
  */
 
 import type { Category, ContextEventRecord, CostFamilyUsage, RequestRecord, SessionCostUsage, Snapshot, SurfaceNode, TimingTotals, ToolTimingTotals } from '../shared/types'
+import { estimateSystemTokens } from '../shared/estimate'
 import type { FoldBounds } from './config'
 import {
   estimateMessage,
-  estimateSystem,
   estimateToolsTotal,
   firstText,
   imageCountOf,
@@ -588,7 +588,7 @@ export function applyTimeline(state: TimelineState, event: TimelineEvent, bounds
         const s = ensure()
         // Tools TOTAL = dsh's whole-array price (one JSON string of every schema).
         s.toolsTokens = estimateToolsTotal(tools)
-        s.systemTokens = estimateSystem(header.system)
+        s.systemTokens = estimateSystemTokens(header.system)
         // Current route/model: the durable request envelope is the source of
         // truth (request/context is only route/capacity metadata, appended
         // AFTER request/header per request — see agent-loop `buildRequest`).
