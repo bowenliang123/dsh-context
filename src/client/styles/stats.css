@@ -19,7 +19,7 @@
  Stats cell tooltip (cost cell): styled DOM bubble because native `title` can't hold the multi-row price breakdown; a '?' signals the affordance and hovering anywhere on the cell reveals the bubble below (the cell is the tip's position frame). Chrome rides the shared `.lc-tip`.
  */
 .lc-stat-tipped { position: relative; }
-.lc-stat-q { display: inline-block; margin-left: 4px; width: 11px; height: 11px; line-height: 11px; border-radius: 50%; text-align: center; font-size: 9px; font-weight: 700; font-style: normal; color: var(--dsw-alias-label-secondary); background: var(--dsw-alias-bg-layer-1); border: 1px solid var(--dsw-alias-border-l2); cursor: help; }
+.lc-stat-q { display: inline-block; margin-left: 4px; width: 11px; height: 11px; line-height: 11px; border-radius: 50%; text-align: center; font-size: 9px; font-weight: 700; font-style: normal; color: var(--dsw-alias-label-secondary); background: var(--dsw-alias-bg-layer-1); border: 1px solid var(--dsw-alias-border-l2); cursor: help; transition: color var(--ds-transition-duration, 0.2s) var(--ds-ease-in-out, ease-in-out), border-color var(--ds-transition-duration, 0.2s) var(--ds-ease-in-out, ease-in-out); }
 .lc-stat-tipped:hover .lc-stat-q { color: var(--dsw-alias-label-primary); border-color: var(--dsw-alias-label-primary); }
 .lc-stat-tip { top: calc(100% + 6px); left: 0; max-width: 280px; line-height: 1.5; font-weight: 400; }
 .lc-stat-tipped:hover .lc-stat-tip { opacity: 1; }
@@ -49,7 +49,7 @@
 /* The legend row ↔ segment hover link: hovering either side dims the ring's
    other slices to 0.35 (the stacked bars' idiom) while the active one stays
    solid; the center figures stay at rest. */
-.lc-donut-seg { transition: opacity 120ms ease; }
+.lc-donut-seg { transition: opacity var(--ds-transition-duration, 0.2s) var(--ds-ease-in-out, ease-in-out); }
 .lc-donut-dim .lc-donut-seg { opacity: 0.35; }
 .lc-donut-dim .lc-donut-seg-on { opacity: 1; }
 .lc-donut-center { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 1px; pointer-events: none; text-align: center; padding: 0 7px; box-sizing: border-box; }
@@ -66,7 +66,7 @@
 .lc-sl { display: flex; flex-direction: column; gap: 6px; min-width: 0; overflow: hidden; }
 /* The pill tint spreads 6px past the text column (negative margins) so the
    hovered row reads as one lit surface without shifting the columns. */
-.lc-sl-row { display: flex; flex-direction: column; gap: 1px; font-size: 12px; min-width: 0; border-radius: 6px; padding: 1px 6px; margin: 0 -6px; transition: background-color 120ms ease; }
+.lc-sl-row { display: flex; flex-direction: column; gap: 1px; font-size: 12px; min-width: 0; border-radius: 6px; padding: 1px 6px; margin: 0 -6px; transition: background-color var(--ds-transition-duration, 0.2s) var(--ds-ease-in-out, ease-in-out); }
 .lc-sl-row-on { background: var(--dsw-alias-interactive-bg-hover); }
 .lc-sl-row-dim { opacity: 0.55; }
 .lc-sl-main { display: flex; align-items: center; gap: 6px; min-width: 0; }

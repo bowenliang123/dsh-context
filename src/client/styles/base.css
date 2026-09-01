@@ -21,7 +21,7 @@
 /* A title carrying TWO toggle groups wraps them so the auto-margin push happens once — two bare .lc-gran siblings would split the free space and drift apart. */
 .lc-trend-ctl { margin-left: auto; display: flex; gap: 6px; align-items: center; }
 .lc-trend-ctl .lc-gran { margin-left: 0; }
-.lc-gran-btn { border: 0; background: transparent; color: var(--dsw-alias-label-secondary); font-size: 11px; line-height: 1; padding: 3px 8px; border-radius: 5px; cursor: pointer; font-family: inherit; }
+.lc-gran-btn { border: 0; background: transparent; color: var(--dsw-alias-label-secondary); font-size: 11px; line-height: 1; padding: 3px 8px; border-radius: 5px; cursor: pointer; font-family: inherit; transition: color var(--ds-transition-duration, 0.2s) var(--ds-ease-in-out, ease-in-out); }
 .lc-gran-btn:hover { color: var(--dsw-alias-label-primary); }
 .lc-gran-on, .lc-gran-on:hover { background: var(--dsw-alias-button-primary-fill); color: var(--dsw-alias-label-primary-foreground); }
 /*
@@ -30,7 +30,7 @@
  The component sheets carry the four shippers (.lc-stat-tip / .lc-brief-tip /
  .lc-fa-meta-tip / .lc-bar-tip); a new tip never re-declares this chrome.
  */
-.lc-tip { position: absolute; z-index: 6; width: max-content; background: var(--dsw-alias-bg-layer-2); border: 1px solid var(--dsw-alias-border-l1); border-radius: 6px; padding: 6px 10px; font-size: 12px; color: var(--dsw-alias-label-primary); box-shadow: var(--dsw-shadow-lv3, 0 2px 8px rgba(0, 0, 0, 0.18)); pointer-events: none; opacity: 0; transition: opacity 120ms ease; }
+.lc-tip { position: absolute; z-index: 6; width: max-content; background: var(--dsw-alias-bg-layer-2); border: 1px solid var(--dsw-alias-border-l1); border-radius: 6px; padding: 6px 10px; font-size: 12px; color: var(--dsw-alias-label-primary); box-shadow: var(--dsw-shadow-lv3, 0 2px 8px rgba(0, 0, 0, 0.18)); pointer-events: none; opacity: 0; transition: opacity var(--ds-transition-duration, 0.2s) var(--ds-ease-in-out, ease-in-out); }
 .lc-events, .lc-fa-list { display: flex; flex-direction: column; gap: 2px; height: 320px; overflow-y: auto; }
 /*
  The row owns the 14px vertical rhythm (lc-cols gap); cards drop their own bottom margin (incl. the last in a column) so every section boundary measures exactly one 14px whichever way the flex wraps.
@@ -64,7 +64,7 @@
 .lc-empty { color: var(--dsw-alias-label-secondary); padding: 18px 0; text-align: center; }
 .lc-error { display: flex; flex-direction: column; align-items: center; gap: 8px; padding: 40px 16px; }
 .lc-error-msg { font-family: var(--ds-font-family-code, ui-monospace, SFMono-Regular, Menlo, monospace); font-size: 12px; color: var(--dsw-alias-state-error-primary); background: var(--dsw-alias-bg-layer-2); border: 1px solid var(--dsw-alias-border-l1); border-radius: 6px; padding: 4px 8px; max-width: 100%; overflow-wrap: anywhere; }
-.lc-error-retry { border: 1px solid var(--dsw-alias-border-l2); background: var(--dsw-alias-bg-layer-2); color: var(--dsw-alias-label-primary); font: inherit; font-size: 12px; padding: 4px 14px; border-radius: 6px; cursor: pointer; }
+.lc-error-retry { border: 1px solid var(--dsw-alias-border-l2); background: var(--dsw-alias-bg-layer-2); color: var(--dsw-alias-label-primary); font: inherit; font-size: 12px; padding: 4px 14px; border-radius: 6px; cursor: pointer; transition: border-color var(--ds-transition-duration, 0.2s) var(--ds-ease-in-out, ease-in-out); }
 .lc-error-retry:hover { border-color: var(--dsw-alias-label-primary); }
 .lc-foot { color: var(--dsw-alias-label-secondary); font-size: 12px; margin-top: 4px; }
 [data-conversation-scroll]:has(.lc-root) > [data-composer-seat]:not(:has([data-approval-key], [data-question-key], [data-plan-review-key])) { display: none; }

@@ -5,19 +5,19 @@
 .lc-br-meta b { color: var(--dsw-alias-label-primary); }
 .lc-br-meta .lc-actual { color: var(--dsw-alias-state-success-primary); }
 .lc-br-note { margin-top: 8px; color: var(--dsw-alias-label-secondary); font-size: 12px; }
-.lc-br-retry { border: 0; background: transparent; padding: 0; color: var(--dsw-alias-brand-primary); font: inherit; font-size: 12px; cursor: pointer; text-decoration: underline; text-underline-offset: 2px; }
+.lc-br-retry { border: 0; background: transparent; padding: 0; color: var(--dsw-alias-brand-primary); font: inherit; font-size: 12px; cursor: pointer; text-decoration: underline; text-underline-offset: 2px; transition: filter var(--ds-transition-duration, 0.2s) var(--ds-ease-in-out, ease-in-out); }
 .lc-br-retry:hover { filter: brightness(1.15); }
 .lc-br-cats { margin-top: 10px; display: flex; flex-direction: column; gap: 4px; }
 .lc-br-cat { border: 1px solid var(--dsw-alias-border-l2); border-radius: 8px; background: var(--dsw-alias-bg-layer-2); overflow: hidden; }
 .lc-br-cat-empty { opacity: 0.55; }
-.lc-br-cat-row { display: flex; align-items: center; gap: 8px; width: 100%; border: 0; background: transparent; color: var(--dsw-alias-label-primary); font: inherit; padding: 7px 10px; cursor: pointer; text-align: left; transition: background-color 120ms ease; }
+.lc-br-cat-row { display: flex; align-items: center; gap: 8px; width: 100%; border: 0; background: transparent; color: var(--dsw-alias-label-primary); font: inherit; padding: 7px 10px; cursor: pointer; text-align: left; transition: background-color var(--ds-transition-duration, 0.2s) var(--ds-ease-in-out, ease-in-out); }
 .lc-br-cat-row:hover { background: var(--dsw-alias-interactive-bg-hover); }
 /*
  Current-composition hover echo: the category row lit by the shared hover link looks hovered — same tint as a physical hover, plus a ring on its color dot.
  */
 .lc-br-cat-on { background: var(--dsw-alias-interactive-bg-hover); }
 .lc-br-cat-on i { box-shadow: 0 0 0 1px var(--dsw-alias-brand-primary); }
-.lc-br-cat-row i { display: inline-block; width: 8px; height: 8px; border-radius: 2px; flex: none; transition: box-shadow 120ms ease; }
+.lc-br-cat-row i { display: inline-block; width: 8px; height: 8px; border-radius: 2px; flex: none; transition: box-shadow var(--ds-transition-duration, 0.2s) var(--ds-ease-in-out, ease-in-out); }
 .lc-br-cat-label { font-weight: 600; }
 .lc-br-cat-count { color: var(--dsw-alias-label-secondary); font-size: 12px; white-space: nowrap; }
 .lc-br-count-grp { flex: 1; min-width: 0; display: inline-flex; align-items: center; gap: 4px; }
@@ -25,7 +25,7 @@
    of a ▸ glyph: the box rotates about its true center — no glyph wobble — and
    stays crisp at any zoom. */
 .lc-br-chev { flex: none; width: 12px; height: 14px; display: flex; align-items: center; justify-content: center; color: var(--dsw-alias-label-tertiary); }
-.lc-br-chev::before { content: ''; width: 5px; height: 5px; border-right: 1px solid currentColor; border-bottom: 1px solid currentColor; transform: rotate(-45deg); transition: transform 120ms ease; }
+.lc-br-chev::before { content: ''; width: 5px; height: 5px; border-right: 1px solid currentColor; border-bottom: 1px solid currentColor; transform: rotate(-45deg); transition: transform var(--ds-transition-duration, 0.2s) var(--ds-ease-in-out, ease-in-out); }
 .lc-br-chev-on::before { transform: rotate(45deg); }
 .lc-br-tokens { flex: none; color: var(--dsw-alias-label-secondary); font-size: 12px; }
 /*
@@ -39,7 +39,7 @@
 .lc-br-body { border-top: 1px solid var(--dsw-alias-border-l1); padding: 4px 6px; display: flex; flex-direction: column; gap: 2px; }
 .lc-br-elem { border-radius: 6px; }
 .lc-br-elem-on { background: var(--dsw-alias-interactive-bg-active); }
-.lc-br-elem-row { display: flex; align-items: center; gap: 8px; width: 100%; border: 0; background: transparent; color: var(--dsw-alias-label-primary); font: inherit; font-size: 12px; padding: 5px 6px; cursor: pointer; text-align: left; border-radius: 6px; transition: background-color 120ms ease; }
+.lc-br-elem-row { display: flex; align-items: center; gap: 8px; width: 100%; border: 0; background: transparent; color: var(--dsw-alias-label-primary); font: inherit; font-size: 12px; padding: 5px 6px; cursor: pointer; text-align: left; border-radius: 6px; transition: background-color var(--ds-transition-duration, 0.2s) var(--ds-ease-in-out, ease-in-out); }
 .lc-br-elem-row:hover { background: var(--dsw-alias-interactive-bg-hover); }
 /* Failed tool result: the chat's red run-state dot (6px core on a 10px
  halo) leads the collapsed row, so the failure scans without expanding. */

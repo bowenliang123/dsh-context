@@ -1,17 +1,17 @@
 /* The settings-entry card at the foot of the Context tab (settingsCard.tsx). */
-.lc-settings-card { background: var(--dsw-alias-bg-layer-3); border: 1px solid var(--dsw-alias-border-l2); border-radius: 12px; transition: border-color .16s, background .16s; }
+.lc-settings-card { background: var(--dsw-alias-bg-layer-3); border: 1px solid var(--dsw-alias-border-l2); border-radius: 12px; transition: border-color var(--ds-transition-duration, 0.2s) var(--ds-ease-in-out, ease-in-out), background-color var(--ds-transition-duration, 0.2s) var(--ds-ease-in-out, ease-in-out); }
 .lc-settings-card:hover { border-color: var(--dsw-alias-label-dimmed); }
 .lc-settings-open, .lc-settings-open:hover { background: var(--dsw-alias-bg-layer-2); border-color: var(--dsw-alias-label-dimmed); }
 .lc-settings-head { width: 100%; appearance: none; border: 0; background: none; font: inherit; color: inherit; text-align: left; cursor: pointer; display: flex; align-items: center; gap: 12px; padding: 14px 16px; border-radius: 12px; }
 .lc-settings-headtext { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 4px; }
 .lc-settings-name { font-size: 15px; font-weight: 600; line-height: 1.4; color: var(--dsw-alias-label-primary); }
 .lc-settings-desc { font-size: 13px; line-height: 1.5; color: var(--dsw-alias-label-tertiary); }
-.lc-settings-chevron { flex: none; color: var(--dsw-alias-label-tertiary); transition: transform .16s; }
+.lc-settings-chevron { flex: none; color: var(--dsw-alias-label-tertiary); transition: transform var(--ds-transition-duration, 0.2s) var(--ds-ease-in-out, ease-in-out); }
 .lc-settings-open .lc-settings-chevron { transform: rotate(180deg); }
 .lc-settings-body { border-top: 1px solid var(--dsw-alias-border-l2); margin: 0 16px; padding: 4px 0 12px; }
 .lc-settings-row { display: flex; align-items: center; gap: 8px; padding: 8px 0; }
 .lc-settings-label { flex: 1; min-width: 0; font-size: 14px; color: var(--dsw-alias-label-primary); }
-.lc-settings-select { display: inline-flex; align-items: center; gap: 12px; height: 36px; padding: 0 14px; border: none; border-radius: 18px; background: var(--dsw-alias-bg-module-platform); font: inherit; font-size: 14px; line-height: 22px; color: var(--dsw-alias-label-primary); cursor: pointer; }
+.lc-settings-select { display: inline-flex; align-items: center; gap: 12px; height: 36px; padding: 0 14px; border: none; border-radius: 18px; background: var(--dsw-alias-bg-module-platform); font: inherit; font-size: 14px; line-height: 22px; color: var(--dsw-alias-label-primary); cursor: pointer; transition: background-color var(--ds-transition-duration, 0.2s) var(--ds-ease-in-out, ease-in-out); }
 .lc-settings-select:hover:not(:disabled) { background: var(--dsw-alias-interactive-bg-hover); }
 .lc-settings-select:disabled { opacity: .5; cursor: default; }
 .lc-settings-note { color: var(--dsw-alias-label-tertiary); font-size: 12px; line-height: 1.5; margin: 12px 0 4px; }

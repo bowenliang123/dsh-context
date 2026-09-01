@@ -15,7 +15,7 @@
 .lc-agent-node { outline: none; }
 .lc-agent-clickable { cursor: pointer; }
 /* The halo carries node state: hover wash, brand tint for self, breathing green while running, a faint green rest for done. */
-.lc-agent-halo { fill: transparent; transition: fill 120ms ease; }
+.lc-agent-halo { fill: transparent; transition: fill var(--ds-transition-duration, 0.2s) var(--ds-ease-in-out, ease-in-out); }
 .lc-agent-hover .lc-agent-halo, .lc-agent-node:focus-visible .lc-agent-halo { fill: var(--dsw-alias-interactive-bg-hover, var(--dsw-alias-bg-layer-2)); }
 .lc-agent-self .lc-agent-halo { fill: var(--dsw-alias-bg-layer-2); }
 .lc-agent-running .lc-agent-halo { fill: color-mix(in srgb, var(--dsw-alias-state-success-primary) 12%, transparent); animation: lc-agent-glow 1.8s ease-in-out infinite; }

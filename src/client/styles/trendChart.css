@@ -28,7 +28,7 @@
 /* The SOLID zero baseline in BOTH modes — inline-positioned off the up-arm in delta, the chart floor
    (top 130px, right under the bars) under the '0' label in total; painted after the dashed guides. */
 .lc-grid-zero { top: 130px; border-top-style: solid; border-top-color: rgba(128,128,128,0.5); }
-.lc-bar { position: relative; width: 14px; flex: none; height: 100%; display: flex; align-items: flex-end; cursor: pointer; border-radius: 2px; transition: opacity 120ms ease, background-color 120ms ease; }
+.lc-bar { position: relative; width: 14px; flex: none; height: 100%; display: flex; align-items: flex-end; cursor: pointer; border-radius: 2px; outline: 1px dashed transparent; outline-offset: 1px; transition: opacity var(--ds-transition-duration, 0.2s) var(--ds-ease-in-out, ease-in-out), background-color var(--ds-transition-duration, 0.2s) var(--ds-ease-in-out, ease-in-out), outline-color var(--ds-transition-duration, 0.2s) var(--ds-ease-in-out, ease-in-out); }
 .lc-chart-dim .lc-bar { opacity: 0.35; }
 .lc-chart-dim .lc-bar-in-turn { opacity: 1; }
 .lc-chart-dim .lc-turn { opacity: 0.35; }
@@ -48,7 +48,7 @@
  would keep overriding it while the pointer is still on the just-clicked
  bar and the lock would only become visible after the pointer leaves.
  */
-.lc-bar-hovered { outline: 1px dashed var(--dsw-alias-brand-primary); outline-offset: 1px; }
+.lc-bar-hovered { outline-color: var(--dsw-alias-brand-primary); }
 .lc-bar-selected { outline: 2px solid var(--dsw-alias-label-primary); outline-offset: 1px; }
 .lc-bar-in-turn { background: rgba(128,128,128,0.14); }
 .lc-bar-stack { display: flex; flex-direction: column-reverse; width: 100%; }
@@ -64,7 +64,7 @@
  the rest — the memoized bars never re-render on a cross-card hover. Same idiom as the stacked
  bars' dim+brightness pairing.
  */
-.lc-cat-seg { transition: filter 120ms ease, opacity 120ms ease; }
+.lc-cat-seg { transition: filter var(--ds-transition-duration, 0.2s) var(--ds-ease-in-out, ease-in-out), opacity var(--ds-transition-duration, 0.2s) var(--ds-ease-in-out, ease-in-out); }
 .lc-chart[data-catdim] .lc-cat-seg { opacity: 0.35; }
 .lc-chart[data-catdim='system'] .lc-cat-seg[data-cat='system'],
 .lc-chart[data-catdim='tools'] .lc-cat-seg[data-cat='tools'],
@@ -77,7 +77,7 @@
  Turn strip: NEUTRAL zebra fills (inline, see TURN_FILLS) — never the category palette, or the strip reads as a detached bottom segment of the bars.
  */
 .lc-turns { display: flex; gap: 2px; overflow: hidden; margin-top: 4px; }
-.lc-turn { flex: none; box-sizing: border-box; text-align: center; font-size: 10px; line-height: 14px; font-weight: 600; color: var(--dsw-alias-label-secondary); border-radius: 3px; height: 14px; white-space: nowrap; cursor: pointer; transition: filter 120ms, opacity 120ms; }
+.lc-turn { flex: none; box-sizing: border-box; text-align: center; font-size: 10px; line-height: 14px; font-weight: 600; color: var(--dsw-alias-label-secondary); border-radius: 3px; height: 14px; white-space: nowrap; cursor: pointer; transition: filter var(--ds-transition-duration, 0.2s) var(--ds-ease-in-out, ease-in-out), opacity var(--ds-transition-duration, 0.2s) var(--ds-ease-in-out, ease-in-out); }
 .lc-turn-on { filter: brightness(1.35); color: var(--dsw-alias-label-primary); }
 /* Labels render at natural width, centered over their block — a 2-digit "T12" over a 14px turn bar overflows the
    block instead of ellipsizing away; updateTurnLabels thins labels that would collide. */

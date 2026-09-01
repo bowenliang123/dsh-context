@@ -4,14 +4,14 @@
 /*
  Hover reference frame around the OCCUPIED region of the composition bar: a solid box from the left edge to the used/window boundary so the legend/tooltip 'share of used' percentages visibly map to the boxed part; pointer-events: none keeps hover on the segments/free; the free track echoes it dashed so the two read as one system.
  */
-.lc-occupied-box { position: absolute; top: 0; bottom: 0; left: 0; border: 2px solid var(--dsw-alias-label-tertiary); border-radius: 5px; box-sizing: border-box; pointer-events: none; opacity: 0; box-shadow: 0 0 0 1px var(--dsw-alias-bg-layer-2); transition: opacity 120ms ease; }
+.lc-occupied-box { position: absolute; top: 0; bottom: 0; left: 0; border: 2px solid var(--dsw-alias-label-tertiary); border-radius: 5px; box-sizing: border-box; pointer-events: none; opacity: 0; box-shadow: 0 0 0 1px var(--dsw-alias-bg-layer-2); transition: opacity var(--ds-transition-duration, 0.2s) var(--ds-ease-in-out, ease-in-out); }
 .lc-occupied-box-on { opacity: 1; }
 /* The chart's hover tip rides the shared `.lc-tip` chrome — narrower padding, centered on the bar, under the legend's z-order. */
 .lc-bar-tip { bottom: calc(100% + 6px); transform: translateX(-50%); z-index: 5; white-space: nowrap; padding: 3px 8px; }
 .lc-bar-tip-on { opacity: 1; }
 .lc-stacked > div { height: 100%; }
-.lc-stacked-seg { transition: filter 120ms ease, opacity 120ms ease; }
-.lc-stacked-free { box-sizing: border-box; transition: box-shadow 120ms ease, opacity 120ms ease; }
+.lc-stacked-seg { transition: filter var(--ds-transition-duration, 0.2s) var(--ds-ease-in-out, ease-in-out), opacity var(--ds-transition-duration, 0.2s) var(--ds-ease-in-out, ease-in-out); }
+.lc-stacked-free { box-sizing: border-box; transition: box-shadow var(--ds-transition-duration, 0.2s) var(--ds-ease-in-out, ease-in-out), opacity var(--ds-transition-duration, 0.2s) var(--ds-ease-in-out, ease-in-out); }
 .lc-stacked-seg-on { filter: brightness(1.18); }
 /*
  Free track mirrors the occupied frame as a 2px DASHED box — border, not the old inset shadow, so the dash pattern renders (box-shadow can't dash); the base box-sizing keeps the width from shifting. Reserve band: rightmost (1−ratio) of the window, striped 'headroom' above the track/segments, owning the pointer so its own hover explanation shows.
@@ -23,11 +23,11 @@
 .lc-stacked-dim .lc-stacked-free { opacity: 0.35; }
 .lc-stacked-dim .lc-stacked-free-on { opacity: 1; }
 .lc-legend { display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: 6px 14px; margin-top: 10px; }
-.lc-chip { display: flex; align-items: center; gap: 5px; min-width: 0; color: var(--dsw-alias-label-primary); padding: 1px 6px; border-radius: 6px; cursor: pointer; transition: background-color 120ms ease; }
+.lc-chip { display: flex; align-items: center; gap: 5px; min-width: 0; color: var(--dsw-alias-label-primary); padding: 1px 6px; border-radius: 6px; cursor: pointer; transition: background-color var(--ds-transition-duration, 0.2s) var(--ds-ease-in-out, ease-in-out); }
 .lc-chip-label { font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
 .lc-chip-nums { margin-left: auto; flex: none; display: inline-flex; align-items: baseline; gap: 6px; white-space: nowrap; }
 .lc-chip i, .lc-detail-row i { display: inline-block; width: 8px; height: 8px; border-radius: 2px; }
-.lc-chip i { transition: box-shadow 120ms ease; }
+.lc-chip i { transition: box-shadow var(--ds-transition-duration, 0.2s) var(--ds-ease-in-out, ease-in-out); }
 .lc-chip em { font-style: normal; color: var(--dsw-alias-label-secondary); }
 .lc-chip-on { font-weight: 600; background: var(--dsw-alias-interactive-bg-hover); }
 .lc-chip-on i { box-shadow: 0 0 0 1px var(--dsw-alias-brand-primary); }
