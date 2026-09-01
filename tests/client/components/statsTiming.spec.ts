@@ -47,10 +47,10 @@ describe('StatsTiming', () => {
     assert.ok(text(m.container).includes('Timing Stats'))
     assert.equal(query(m.container, '.lc-donut-center b').textContent, '10m 0s')
     assert.equal(query(m.container, '.lc-donut-center span').textContent, 'Active Time')
-    assert.deepEqual(rowOf(m.container, 0), { pct: '40%', label: 'Model calls', count: '4m 0s · 10 calls', dim: false })
+    assert.deepEqual(rowOf(m.container, 0), { pct: '40.0%', label: 'Model calls', count: '4m 0s · 10 calls', dim: false })
     // The tools row keeps the true 5m sum even though the ring clamps it.
-    assert.deepEqual(rowOf(m.container, 1), { pct: '50%', label: 'Tool runs', count: '5m 0s · 25 runs', dim: false })
-    assert.deepEqual(rowOf(m.container, 2), { pct: '10%', label: 'Overhead', count: '1m 0s', dim: false })
+    assert.deepEqual(rowOf(m.container, 1), { pct: '50.0%', label: 'Tool runs', count: '5m 0s · 25 runs', dim: false })
+    assert.deepEqual(rowOf(m.container, 2), { pct: '10.0%', label: 'Overhead', count: '1m 0s', dim: false })
     // Three ring segments painted (lm + tools + overhead); exactly three rows.
     assert.equal(queryAll(m.container, '.lc-donut circle').length, 3)
     assert.equal(queryAll(m.container, '.lc-sl-row').length, 3)
@@ -60,7 +60,7 @@ describe('StatsTiming', () => {
   test('the zh locale formats durations and counts in Chinese units', async () => {
     const m = await mount(h(StatsTimingZh, { timing: TIMING, locale: 'zh' }))
     assert.equal(query(m.container, '.lc-donut-center b').textContent, '10分0秒')
-    assert.deepEqual(rowOf(m.container, 0), { pct: '40%', label: '模型调用', count: '4分0秒 · 10次', dim: false })
+    assert.deepEqual(rowOf(m.container, 0), { pct: '40.0%', label: '模型调用', count: '4分0秒 · 10次', dim: false })
     await m.unmount()
   })
 
@@ -68,12 +68,12 @@ describe('StatsTiming', () => {
     // 9 parallel 22s calls inside a 100s wall: tools sum 200s > wall.
     const timing: TimingTotals = { wallMs: 100_000, lmMs: 60_000, calls: 2, toolsMs: 200_000, toolCalls: 9, tools: { bash: { calls: 9, ms: 200_000 } } }
     const m = await mount(h(StatsTiming, { timing, locale: 'en' }))
-    assert.deepEqual(rowOf(m.container, 1), { pct: '100%', label: 'Tool runs', count: '3m 20s · 9 runs', dim: false })
+    assert.deepEqual(rowOf(m.container, 1), { pct: '100.0%', label: 'Tool runs', count: '3m 20s · 9 runs', dim: false })
     // The ring clamps tools into the 40s post-model window; the zero
     // overhead segment is skipped: 2 circles, not 3.
     assert.equal(queryAll(m.container, '.lc-donut circle').length, 2)
     // The zero overhead row dims whole.
-    assert.deepEqual(rowOf(m.container, 2), { pct: '0%', label: 'Overhead', count: '—', dim: true })
+    assert.deepEqual(rowOf(m.container, 2), { pct: '0.0%', label: 'Overhead', count: '—', dim: true })
     // The hover link: the zero-overhead row tints itself but leaves the ring
     // at rest (no painted arc to light); a painted row dims the ring.
     const rows = queryAll(m.container, '.lc-sl-row')

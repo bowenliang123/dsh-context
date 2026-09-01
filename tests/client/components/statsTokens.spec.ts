@@ -33,9 +33,9 @@ describe('StatsTokens', () => {
     assert.equal(query(m.container, '.lc-donut-center span').textContent, 'Cache Hit')
     // Zero buckets stay hidden: the always-zero DeepSeek cache write drops out.
     assert.equal(queryAll(m.container, '.lc-sl-row').length, 3)
-    assert.deepEqual(rowOf(m.container, 0), { pct: '67%', label: 'Cached Input', count: '300' })
-    assert.deepEqual(rowOf(m.container, 1), { pct: '22%', label: 'Uncached Input', count: '100' })
-    assert.deepEqual(rowOf(m.container, 2), { pct: '11%', label: 'Output', count: '50 · incl. reasoning' })
+    assert.deepEqual(rowOf(m.container, 0), { pct: '66.7%', label: 'Cached Input', count: '300' })
+    assert.deepEqual(rowOf(m.container, 1), { pct: '22.2%', label: 'Uncached Input', count: '100' })
+    assert.deepEqual(rowOf(m.container, 2), { pct: '11.1%', label: 'Output', count: '50 · incl. reasoning' })
     await m.unmount()
   })
 
@@ -58,10 +58,10 @@ describe('StatsTokens', () => {
     // Hit = 300 / (100 + 300 + 50) = 66.66%; rows normalize over billed 500.
     assert.equal(query(m.container, '.lc-donut-center b').textContent, '66.66%')
     assert.equal(queryAll(m.container, '.lc-sl-row').length, 4)
-    assert.deepEqual(rowOf(m.container, 0), { pct: '60%', label: 'Cached Input', count: '300' })
-    assert.deepEqual(rowOf(m.container, 1), { pct: '10%', label: 'Cache Write', count: '50' })
-    assert.deepEqual(rowOf(m.container, 2), { pct: '20%', label: 'Uncached Input', count: '100' })
-    assert.deepEqual(rowOf(m.container, 3), { pct: '10%', label: 'Output', count: '50 · incl. reasoning' })
+    assert.deepEqual(rowOf(m.container, 0), { pct: '60.0%', label: 'Cached Input', count: '300' })
+    assert.deepEqual(rowOf(m.container, 1), { pct: '10.0%', label: 'Cache Write', count: '50' })
+    assert.deepEqual(rowOf(m.container, 2), { pct: '20.0%', label: 'Uncached Input', count: '100' })
+    assert.deepEqual(rowOf(m.container, 3), { pct: '10.0%', label: 'Output', count: '50 · incl. reasoning' })
     await m.unmount()
   })
 

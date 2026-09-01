@@ -77,18 +77,21 @@ describe('fmtShare', () => {
     assert.equal(fmtShare(5, Infinity), '—')
   })
 
-  test('empty slices are 0%; crumbs below a point round up to <1%', () => {
-    assert.equal(fmtShare(0, 100), '0%')
-    assert.equal(fmtShare(-1, 100), '0%')
-    assert.equal(fmtShare(0.5, 100), '<1%')
-    assert.equal(fmtShare(1, 300), '<1%')
+  test('empty slices are 0.0%; crumbs below 0.1% degrade to <0.1%', () => {
+    assert.equal(fmtShare(0, 100), '0.0%')
+    assert.equal(fmtShare(-1, 100), '0.0%')
+    assert.equal(fmtShare(1, 2000), '<0.1%')
+    assert.equal(fmtShare(1, 1000), '0.1%')
+    assert.equal(fmtShare(0.5, 100), '0.5%')
+    assert.equal(fmtShare(1, 300), '0.3%')
   })
 
-  test('shares round to whole percents and cap at 100', () => {
-    assert.equal(fmtShare(844, 1000), '84%')
-    assert.equal(fmtShare(996, 1000), '100%')
-    assert.equal(fmtShare(3000, 1000), '100%')
-    assert.equal(fmtShare(1, 3), '33%')
+  test('shares carry one decimal and cap at 100', () => {
+    assert.equal(fmtShare(844, 1000), '84.4%')
+    assert.equal(fmtShare(738.4, 1000), '73.8%')
+    assert.equal(fmtShare(996, 1000), '99.6%')
+    assert.equal(fmtShare(3000, 1000), '100.0%')
+    assert.equal(fmtShare(1, 3), '33.3%')
   })
 })
 

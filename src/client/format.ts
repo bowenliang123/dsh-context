@@ -39,16 +39,16 @@ export function fmtTime(t: number): string {
 
 /**
  * Share of a whole as a compact leading percentage for the slice rows:
- * '—' when nothing totals, '0%' for empty slices, '<1%' for non-zero crumbs
- * a rounded-down integer would erase. Shares cap at 100% (parallel tool time
- * can over-run the wall it belongs to).
+ * '—' when nothing totals, '0.0%' for empty slices, '<0.1%' for non-zero
+ * crumbs a 0.1%-precision figure would erase. One decimal everywhere; shares
+ * cap at 100% (parallel tool time can over-run the wall it belongs to).
  */
 export function fmtShare(part: number, total: number): string {
   if (!Number.isFinite(part) || !Number.isFinite(total) || total <= 0) return '—'
-  if (part <= 0) return '0%'
+  if (part <= 0) return '0.0%'
   const pct = Math.min(1, part / total) * 100
-  if (pct < 1) return '<1%'
-  return `${Math.round(pct)}%`
+  if (pct < 0.1) return '<0.1%'
+  return `${pct.toFixed(1)}%`
 }
 
 /**
