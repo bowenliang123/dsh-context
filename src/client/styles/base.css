@@ -13,6 +13,17 @@
  hairline dividers and passive chips, where a stronger line is just noise.
  */
 .lc-card { background: var(--dsw-alias-bg-layer-1); border: 1px solid var(--dsw-alias-border-l2); border-radius: 10px; padding: 14px 16px; margin-bottom: 14px; }
+/*
+ The Context tab runs the card rhythm at HALF the shared chrome — padding
+ inside each card, and the gaps between cards (the `.lc-cols` row gap + row
+ margin, and the stacked-column cards' bottom margin) all halved. This block
+ must sit BEFORE the `.lc-cols`/`.lc-col` margin-zeroing rules below so their
+ equal-or-higher specificity keeps row children at 0 while column-stacked
+ cards take the halved margin. The /context modal sits outside `.lc-root` and
+ keeps the shared values.
+ */
+.lc-root .lc-card { padding: 7px 8px; margin-bottom: 7px; }
+.lc-root .lc-cols { gap: 7px; margin-bottom: 7px; }
 /* Wraps under width pressure: toggle groups/kind chips in a header drop to
    their own line instead of spilling past the card edge. */
 .lc-card-title { font-weight: 600; margin-bottom: 10px; display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; }
