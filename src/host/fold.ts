@@ -109,13 +109,16 @@ export interface TimelineState {
   timing?: TimingTotals
   /**
    * The open step's start instant, armed by `step/start` and consumed by the
-   * `assistant/message` (LM-call time) and `step/end` (wall time) that follow
-   * it. One slot, not a map: steps are sequential in the log, so the newest
-   * `step/start` is the one those events close — a hostile interleaved log
-   * degrades to skipped durations, never to unbounded state. Same
-   * arm/remove lifecycle as `pendingShadowedSeqs`.
+   * `assistant/message` (TTFT/generation split) and `step/end` (wall time)
+   * that follow it; `assistant/chunk` stamps `firstToken` on the step's first
+   * token delta — absent when the stream carried none (legacy or aborted
+   * steps), which leaves that call's model time unattributed. One slot, not a
+   * map: steps are sequential in the log, so the newest `step/start` is the
+   * one those events close — a hostile interleaved log degrades to skipped
+   * durations, never to unbounded state. Same arm/remove lifecycle as
+   * `pendingShadowedSeqs`.
    */
-  stepStart?: { time: number }
+  stepStart?: { time: number; firstToken?: number }
   /**
    * Tool callId → the call's name and start instant, armed by `tool/call` and
    * DELETED when its `tool/result` folds in (one result per call, in log
@@ -506,13 +509,32 @@ function durOf(from: number, to: number): number {
 }
 
 /**
+ * Whether a stream chunk carries a non-empty token delta — the first-token
+ * marker the TTFT fold waits for (the same rule as the harness's own
+ * session-stats fold). Shape-guarded: a malformed chunk is just not a token.
+ */
+function isTokenDelta(chunk: unknown): boolean {
+  if (chunk === null || typeof chunk !== 'object') return false
+  const c = chunk as { type?: unknown; text?: unknown; argumentsDelta?: unknown; name?: unknown }
+  switch (c.type) {
+    case 'text-delta':
+    case 'reasoning-delta':
+      return typeof c.text === 'string' && c.text !== ''
+    case 'tool-call-delta':
+      return (typeof c.argumentsDelta === 'string' && c.argumentsDelta !== '') || c.name !== undefined
+    default:
+      return false
+  }
+}
+
+/**
  * The fold's private timing accumulator: created on first use, and CLONED on
  * every later ensure() (see `applyTimeline`) — the object left in the
  * persisted previous state is never written into in place.
  */
 function ensureTiming(st: TimelineState): TimingTotals {
   if (st.timing === undefined) {
-    st.timing = { wallMs: 0, lmMs: 0, calls: 0, toolsMs: 0, toolCalls: 0, tools: {} }
+    st.timing = { wallMs: 0, ttftMs: 0, genMs: 0, calls: 0, toolsMs: 0, toolCalls: 0, tools: {} }
   }
   return st.timing
 }
@@ -625,11 +647,24 @@ export function applyTimeline(state: TimelineState, event: TimelineEvent, bounds
         }
         break
       }
+      case 'assistant/chunk': {
+      // The token flood: every stream chunk is one event, so this case stays
+      // cheap and mostly reference-stable — only the open step's FIRST token
+      // delta stamps the slot (later deltas and steps without a slot return
+      // the same state). A malformed chunk just is not a token.
+        const start = state.stepStart
+        if (start === undefined || start.firstToken !== undefined) return state
+        if (!isTokenDelta(data?.chunk)) return state
+        const s = ensure()
+        s.stepStart = { time: start.time, firstToken: event.time }
+        break
+      }
       case 'step/start': {
         // Arm the single pending-step slot (see TimelineState.stepStart): the
-        // following assistant/message and step/end price the LM call and the
-        // whole step against this instant. Always a state change (a new slot
-        // value), even over an un-consumed predecessor — sequential logs
+        // following assistant/chunk stamps the first token on it, and the
+        // assistant/message and step/end price the model wait/generation and
+        // the whole step against this instant. Always a state change (a new
+        // slot value), even over an un-consumed predecessor — sequential logs
         // never hit that, hostile ones just supersede it.
         const s = ensure()
         s.stepStart = { time: event.time }
@@ -734,13 +769,18 @@ export function applyTimeline(state: TimelineState, event: TimelineEvent, bounds
           accumulateCost(s, event.time, usage)
         }
         s.requests.push(record)
-        // Timing: one completed model call; its duration is the open step's
-        // start → this response's instant (the pending slot stays armed —
-        // the step's tool calls and `step/end` still follow).
+        // Timing: one completed model call; its wait/generation split prices
+        // off the slot's first-token stamp when the stream carried one (a
+        // chunk-less call — legacy log, aborted step — stays unattributed and
+        // lands in the card's residue). The pending slot stays armed —
+        // the step's tool calls and `step/end` still follow.
         const timing = ensureTiming(s)
         timing.calls += 1
         const stepStart = state.stepStart
-        if (stepStart !== undefined) timing.lmMs += durOf(stepStart.time, event.time)
+        if (stepStart !== undefined && stepStart.firstToken !== undefined) {
+          timing.ttftMs += durOf(stepStart.time, stepStart.firstToken)
+          timing.genMs += durOf(stepStart.firstToken, event.time)
+        }
         // `deriveEventMessage` returns `data.message` for assistant/message, or
         // null when the content array is empty (usage-only events project to no
         // message — same rule as dsh's surface fold).

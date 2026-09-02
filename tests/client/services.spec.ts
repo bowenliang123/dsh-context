@@ -272,7 +272,7 @@ describe('tokenUsageOf', () => {
 
 describe('timingOf', () => {
   const wellFormed = {
-    wallMs: 60_000, lmMs: 20_000, calls: 4, toolsMs: 30_000, toolCalls: 9,
+    wallMs: 60_000, ttftMs: 8_000, genMs: 12_000, calls: 4, toolsMs: 30_000, toolCalls: 9,
     tools: { bash: { calls: 5, ms: 20_000 }, read: { calls: 4, ms: 10_000 } },
   }
 
@@ -288,8 +288,8 @@ describe('timingOf', () => {
   })
 
   test('wrong-typed or negative scalars zero out', () => {
-    const out = timingOf({ wallMs: -1, lmMs: 'x', calls: NaN, toolsMs: Infinity, toolCalls: 3 })
-    assert.deepEqual(out, { wallMs: 0, lmMs: 0, calls: 0, toolsMs: 0, toolCalls: 3, tools: {} })
+    const out = timingOf({ wallMs: -1, ttftMs: 'x', genMs: NaN, calls: Infinity, toolsMs: Infinity, toolCalls: 3 })
+    assert.deepEqual(out, { wallMs: 0, ttftMs: 0, genMs: 0, calls: 0, toolsMs: 0, toolCalls: 3, tools: {} })
   })
 
   test('rows failing the shape drop individually; the ranking survives', () => {
@@ -322,7 +322,7 @@ describe('timingOf', () => {
 describe('timelineOf — timing integration', () => {
   const current = { system: 1, tools: 2, user: 3, inject: 4, assistant: 5, tool: 6, total: 7 }
   const base = { ok: true, current, requests: [], events: [], nodes: [], archive: [], droppedNodes: 0 }
-  const timing: TimingTotals = { wallMs: 60_000, lmMs: 20_000, calls: 4, toolsMs: 30_000, toolCalls: 9, tools: { bash: { calls: 5, ms: 20_000 } } }
+  const timing: TimingTotals = { wallMs: 60_000, ttftMs: 8_000, genMs: 12_000, calls: 4, toolsMs: 30_000, toolCalls: 9, tools: { bash: { calls: 5, ms: 20_000 } } }
 
   test('a well-formed timing passes through by reference (fast path)', () => {
     const wire = { ...base, timing }

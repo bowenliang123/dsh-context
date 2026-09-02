@@ -107,7 +107,8 @@ const toolTimingSchema = z.object({
 
 const timingTotalsSchema = z.object({
   wallMs: z.number().nonnegative(),
-  lmMs: z.number().nonnegative(),
+  ttftMs: z.number().nonnegative(),
+  genMs: z.number().nonnegative(),
   calls: z.number().int().nonnegative(),
   toolsMs: z.number().nonnegative(),
   toolCalls: z.number().int().nonnegative(),
@@ -159,7 +160,7 @@ const timelineStateSchema = z.object({
   cost: z.object({ flash: costFamilySchema.optional(), pro: costFamilySchema.optional() }).strict().optional(),
   archiveFloor: z.number().optional(),
   timing: timingTotalsSchema.optional(),
-  stepStart: z.object({ time: z.number() }).strict().optional(),
+  stepStart: z.object({ time: z.number(), firstToken: z.number().optional() }).strict().optional(),
   callNames: z.record(z.string(), z.object({ name: z.string(), start: z.number() }).strict()),
   pendingShadowedSeqs: z.array(z.number()).optional(),
   pendingShadowEventSeq: z.number().optional(),
@@ -213,7 +214,11 @@ export function createContextTimelineDefinition(config: Config): ProjectionDefin
     // state and `callNames` values grew a `start` instant ({name, start} — was a
     // bare name string); cached rows refolded from the log, which rebuilds the
     // timing totals for sessions started under older plugin builds.
-    stateVersion: 11,
+    // 12: the timing totals split the model call into `ttftMs` (step start →
+    // first token) + `genMs` (first token → message) — `lmMs` left the shape,
+    // and the `stepStart` slot gained the `firstToken` stamp; cached rows
+    // refolded from the log, which rebuilds the split.
+    stateVersion: 12,
   }
   return definition
 }

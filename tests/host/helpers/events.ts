@@ -58,6 +58,11 @@ export function stepStart(seq: number, opts: { time?: number } = {}): TimelineEv
   return { type: 'step/start', seq, time: at(opts.time) }
 }
 
+/** assistant/chunk: one stream chunk of the open step (the token flood). */
+export function assistantChunk(seq: number, chunk: unknown, opts: { time?: number } = {}): TimelineEvent {
+  return { type: 'assistant/chunk', seq, time: at(opts.time), data: { chunk } }
+}
+
 export function stepEnd(seq: number, opts: { time?: number } = {}): TimelineEvent {
   return { type: 'step/end', seq, time: at(opts.time) }
 }

@@ -212,18 +212,22 @@ export interface ToolTimingTotals {
 
 /**
  * Whole-session timing totals, host-folded from the durable `step/start` /
- `step/end` / `tool/call` / `tool/result` lifecycle (running totals over the
- * COMPLETE session log — the same never-trimmed framing as `cost`). Durations
- * are wall-clock milliseconds: `wallMs` sums whole steps, `lmMs` the
- * step-start → assistant-message slice (the model call), `toolsMs` the sum of
- * per-call tool durations (parallel calls each count, so it can overlap).
+ `step/end` / `assistant/chunk` / `tool/call` / `tool/result` lifecycle
+ * (running totals over the COMPLETE session log — the same never-trimmed
+ * framing as `cost`). Durations are wall-clock milliseconds: `wallMs` sums
+ * whole steps, `ttftMs` the step-start → first-token slice (the model wait)
+ * and `genMs` the first-token → assistant-message slice (the generation) —
+ * both only over calls whose stream carried a token delta, `toolsMs` the sum
+ * of per-call tool durations (parallel calls each count, so it can overlap).
  * Absent until the first step lifecycle completes in the log.
  */
 export interface TimingTotals {
   /** Summed wall time of completed steps (the session's active time). */
   wallMs: number
-  /** Summed step-start → assistant-message time (model-call time). */
-  lmMs: number
+  /** Summed step-start → first-token time (the model wait, TTFT). */
+  ttftMs: number
+  /** Summed first-token → assistant-message time (the generation). */
+  genMs: number
   /** Completed model calls (assistant messages folded). */
   calls: number
   /** Summed per-call durations of completed tool calls. */

@@ -358,7 +358,7 @@ function timingFastOk(value: unknown): boolean {
   if (value === undefined) return true
   if (value === null || typeof value !== 'object' || Array.isArray(value)) return false
   const t = value as Record<string, unknown>
-  for (const k of ['wallMs', 'lmMs', 'calls', 'toolsMs', 'toolCalls']) {
+  for (const k of ['wallMs', 'ttftMs', 'genMs', 'calls', 'toolsMs', 'toolCalls']) {
     if (typeof t[k] !== 'number') return false
   }
   const tools = t.tools
@@ -399,7 +399,8 @@ export function timingOf(value: unknown): TimingTotals | null {
   }
   return {
     wallMs: msNumOf(data.wallMs),
-    lmMs: msNumOf(data.lmMs),
+    ttftMs: msNumOf(data.ttftMs),
+    genMs: msNumOf(data.genMs),
     calls: msNumOf(data.calls),
     toolsMs: msNumOf(data.toolsMs),
     toolCalls: msNumOf(data.toolCalls),
