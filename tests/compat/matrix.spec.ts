@@ -62,6 +62,27 @@ describe.skipIf(reasons.length > 0)('compat matrix — real dsh sources per base
       assert.equal(report.coldMatches, true)
     })
 
+    test('host: hostile gateway usage keeps the served view schema-valid (issue #44)', () => {
+      // Negative uncached input (cached_tokens > prompt_tokens), fractional
+      // counts, string buckets, and a hostile NaN must all survive the REAL
+      // registry's strict wire parse — billed from sanitized buckets, never
+      // frozen.
+      assert.equal(report.hostileSnapshotOk, true)
+      assert.equal(report.hostilePrompt, 161)
+      assert.equal(report.hostileCacheRead, 151)
+    })
+
+    test('host: a poisoned upstream unit starves downstream units and throws the whole snapshot (dsh containment gap)', () => {
+      // The registry drives every unit in ONE uncontained loop: the first
+      // schema-invalid view throws out of drive() per event, units registered
+      // after it stop receiving events entirely, and snapshot() — every
+      // reconnect baseline — throws wholesale. The plugin cannot fix this
+      // seam from outside; the probe pins the defect to the dsh generation.
+      assert.ok(report.poisonedEscapedDrive >= 1)
+      assert.equal(report.poisonedStarves, true)
+      assert.equal(report.poisonedSnapshotThrows, true)
+    })
+
     test('settings: the tag\'s namespace enforcement accepts the plugin literal', () => {
       const pattern = staging.namespacePatternOf(baseline)
       assert.ok(pattern !== null, 'the tag source carries NAMESPACE_PATTERN')

@@ -97,6 +97,16 @@ export interface DriverReport {
   keys: string[]
   gateOk: boolean
   coldMatches: boolean
+  /** Issue #44: hostile gateway usage keeps the served values schema-valid on the REAL registry. */
+  hostileSnapshotOk: boolean
+  hostilePrompt: number | null
+  hostileCacheRead: number | null
+  /** The registry-side containment gap: throws escaping drive() per poisoned event. */
+  poisonedEscapedDrive: number
+  /** …while downstream units starve (no change notification for the poisoned event) … */
+  poisonedStarves: boolean
+  /** …and the whole snapshot (every reconnect baseline) throws. */
+  poisonedSnapshotThrows: boolean
 }
 
 /**
@@ -118,6 +128,13 @@ plugin.apply(ctx, {})
 const session = { seq: 0, header: { id: 'compat-session', cwd: '/tmp' }, events: [] }
 ctx.emit('session/created', session)
 const ev = (seq, type, data = {}) => ({ seq, time: 1700000000000 + seq * 1000, type, data })
+const drive = (context, target, events) => {
+  for (const event of events) {
+    target.events[event.seq] = event
+    target.seq = event.seq + 1
+    context.emit('session/event', target, event)
+  }
+}
 const log = [
   ev(0, 'session/created'),
   ev(1, 'request/header', { header: { system: 'You are an agent.', tools: [{ name: 'bash', description: 'run' }], config: { model: 'deepseek-v4-flash', provider: 'deepseek' } }, reason: 'initial' }),
@@ -131,19 +148,92 @@ const log = [
   ev(9, 'plan/mode', { active: true }),
   ev(10, 'compaction/summary', { summary: [{ type: 'text', text: 'so far' }], shadowedSeqs: [4] }),
 ]
-for (const event of log) {
-  session.events[event.seq] = event
-  session.seq = event.seq + 1
-  ctx.emit('session/event', session, event)
-}
+drive(ctx, session, log)
 const snapshot = registry.snapshot(session)
 const gate = snapshotJsonValue(registry.checkpoint(session))
 const cold = registry.restore({}, log, 0, session.header)
+
+// ---- Probe A (issue #44): hostile provider usage on the REAL registry. ----
+// A mis-accounting gateway's figures (negative uncached input from
+// cached_tokens > prompt_tokens, fractional counts, string buckets, a NaN a
+// hostile direct-drive could supply) ride the durable log legally; the
+// plugin's served values must stay schema-valid through the registry's own
+// strict parse on every later delivery.
+const hostile = [
+  ev(11, 'step/start'),
+  ev(12, 'assistant/message', { turn: 1, step: 2, message: { content: [{ type: 'text', text: 'h1' }] }, usage: { inputTokens: -80, cacheReadTokens: 150.7, cacheWriteTokens: '10', outputTokens: 22.4 } }),
+  ev(13, 'assistant/message', { turn: 1, step: 3, message: { content: [] }, usage: { inputTokens: NaN, outputTokens: null } }),
+]
+drive(ctx, session, hostile)
+let hostileSnapshotOk = true
+let hostilePrompt = null
+let hostileCacheRead = null
+try {
+  const hostileSnap = registry.snapshot(session)
+  const rec = hostileSnap.values.contextTimeline.requests.find(r => r.seq === 12)
+  hostilePrompt = rec ? rec.prompt : null
+  hostileCacheRead = rec ? rec.cacheRead : null
+} catch {
+  hostileSnapshotOk = false
+}
+
+// ---- Probe B (issue #44): the registry-side containment gap. ----
+// One upstream wire unit whose view goes schema-invalid on the same gateway
+// data (mimicking an official usage-gated unit; official rows register
+// BEFORE user plugins) starves every unit registered after it and kills the
+// whole snapshot — while the session itself survives (the real Session.append
+// contains per-listener throws, which this raw emit mimics with try/catch).
+const ctxB = new Context()
+const registryB = new SessionProjectionRegistry(ctxB)
+ctxB.sessionProjections = registryB
+registryB.register({
+  key: 'gatewayPoison',
+  stateVersion: 1,
+  stateSchema: { parse: (v) => v },
+  init: () => ({ uncached: 0 }),
+  apply: (state, event) => {
+    if (event.type !== 'assistant/message' || !event.data || event.data.usage === undefined) return state
+    return { uncached: event.data.usage.inputTokens }
+  },
+  wire: {
+    viewSchema: { parse: (v) => { if (typeof v.uncached !== 'number' || !Number.isInteger(v.uncached) || v.uncached < 0) throw new Error('nonconforming gateway figure fails the integer/nonnegative gate'); return v } },
+    view: (state) => ({ uncached: state.uncached }),
+  },
+})
+plugin.apply(ctxB, {})
+const sessionB = { seq: 0, header: { id: 'poison-session', cwd: '/tmp' }, events: [] }
+ctxB.emit('session/created', sessionB)
+const notified = []
+registryB.onChanged((s, key) => { if (s === sessionB && key === 'contextTimeline') notified.push(key) })
+const poisonLog = [
+  ev(0, 'request/header', { header: { system: 's', tools: [], config: { model: 'deepseek-v4-flash', provider: 'p' } }, reason: 'initial' }),
+  ev(1, 'assistant/message', { turn: 1, step: 1, message: { content: [{ type: 'text', text: 'ok' }] }, usage: { inputTokens: 10, cacheReadTokens: 20, outputTokens: 5 } }),
+]
+drive(ctxB, sessionB, poisonLog)
+const beforePoison = notified.length
+let poisonedEscapedDrive = 0
+const gatewayStep = ev(2, 'assistant/message', { turn: 1, step: 2, message: { content: [{ type: 'text', text: 'bad gateway step' }] }, usage: { inputTokens: -80, cacheReadTokens: 150, outputTokens: 22 } })
+sessionB.events[2] = gatewayStep
+sessionB.seq = 3
+try {
+  ctxB.emit('session/event', sessionB, gatewayStep)
+} catch {
+  poisonedEscapedDrive += 1
+}
+let poisonedSnapshotThrows = false
+try { registryB.snapshot(sessionB) } catch { poisonedSnapshotThrows = true }
+
 process.stdout.write('DRIVER-JSON ' + JSON.stringify({
   registered: true,
   keys: Object.keys(snapshot.values).sort(),
   gateOk: gate !== undefined,
   coldMatches: JSON.stringify(cold.snapshot.values) === JSON.stringify(snapshot.values),
+  hostileSnapshotOk,
+  hostilePrompt,
+  hostileCacheRead,
+  poisonedEscapedDrive,
+  poisonedStarves: beforePoison > 0 && notified.length === beforePoison,
+  poisonedSnapshotThrows,
 }) + '\\n')
 `
 }
