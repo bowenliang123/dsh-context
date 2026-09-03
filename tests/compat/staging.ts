@@ -62,17 +62,27 @@ export function stageFile(baseline: Baseline, tagPath: string, localName: string
   return file
 }
 
-/** The tag's vendored cordis, installed once per baseline (npm-cached afterwards). */
-export function ensureCordis(baseline: Baseline): void {
+/** The host packages the tag's staged sources import at runtime, at this line's own versions. */
+function hostDepsOf(baseline: Baseline): Record<string, string> {
+  return {
+    '@deepseek-ai/cordis': baseline.cordis,
+    '@deepseek-ai/dsh-session': baseline.session,
+  }
+}
+
+/** The baseline's host deps, installed once per baseline (npm-cached afterwards). */
+export function ensureHostDeps(baseline: Baseline): void {
   const dir = join(STAGE, baseline.id)
-  if (existsSync(join(dir, 'node_modules', '@deepseek-ai', 'cordis'))) return
+  const deps = hostDepsOf(baseline)
   mkdirSync(dir, { recursive: true })
   writeFileSync(join(dir, 'package.json'), JSON.stringify({
     name: `dsh-context-compat-${baseline.id}`, private: true, type: 'module',
-    dependencies: { '@deepseek-ai/cordis': baseline.cordis },
+    dependencies: deps,
   }, null, 2))
+  const missing = Object.keys(deps).filter(name => !existsSync(join(dir, 'node_modules', ...name.split('/'))))
+  if (missing.length === 0) return
   const run = spawnSync('npm', ['install', '--no-audit', '--no-fund', '--loglevel=error'], { cwd: dir, encoding: 'utf8' })
-  if (run.status !== 0) throw new Error(`npm install cordis ${baseline.cordis} failed: ${(run.stderr ?? '').trim().slice(0, 300)}`)
+  if (run.status !== 0) throw new Error(`npm install ${JSON.stringify(deps)} failed: ${(run.stderr ?? '').trim().slice(0, 300)}`)
 }
 
 /** The namespace pattern the tag's settings module enforces (module-private on every baseline). */
@@ -140,7 +150,7 @@ process.stdout.write('DRIVER-JSON ' + JSON.stringify({
 
 /** Stage the registry sources + the lossless-JSON probe and run the driver for one baseline. */
 export function runDriver(baseline: Baseline): DriverReport {
-  ensureCordis(baseline)
+  ensureHostDeps(baseline)
   stageFile(baseline, 'packages/session/session-projection/src/index.ts', join('registry', 'index.ts'))
   stageFile(baseline, 'packages/session/session-projection/src/types.ts', join('registry', 'types.ts'))
   // The lossless-JSON probe the projection cache's write path uses (moved

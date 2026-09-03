@@ -16,7 +16,7 @@
  */
 
 /** Every dsh line this plugin must install and work on (see AGENTS.md "Compatibility"). */
-export const SUPPORTED_BASELINES = ['v0.1.1-rc.2', 'v0.1.2-alpha.2'] as const
+export const SUPPORTED_BASELINES = ['v0.1.1-rc.2', 'v0.1.2-alpha.2', 'v0.1.2-alpha.5', 'v0.1.2-rc.1'] as const
 
 export type BaselineId = (typeof SUPPORTED_BASELINES)[number]
 
@@ -73,8 +73,31 @@ export interface Baseline {
   tag: string
   /** The vendored @deepseek-ai/cordis release that harness line ships. */
   cordis: string
+  /**
+   * The @deepseek-ai/dsh-session release that line vendors. The staged
+   * session-projection sources import runtime values from it (SessionLogOffset /
+   * SessionSeq, non-type imports since 0.1.2-alpha.3), so the compat driver must
+   * resolve the specifier to the tag's own generation.
+   */
+  session: string
   host: HostSeam
   client: ClientSeam
+}
+
+/** The client faces shared by the whole 0.1.2 generation (verified identical alpha.2 through rc.1). */
+const CLIENT_0_1_2: ClientSeam = {
+  chatNodesSeat: 'useChat',
+  imageFace: { service: 'uiConversation', method: 'imageUrl' },
+  historyFace: 'remote.session.page',
+  historyEnvelope: 'clientResult',
+  historyRowsField: 'records',
+  markdownChrome: 'labels',
+  platformModules: [
+    'react', 'react/jsx-runtime', 'react-dom', 'react-dom/client', '@deepseek-ai/cordis',
+    '@deepseek-ai/dsh-client-store',
+    '@deepseek-ai/dsh-client-ui-slots',
+    '@deepseek-ai/dsh-client-ui-primitives',
+  ],
 }
 
 export const BASELINES: readonly Baseline[] = [
@@ -82,6 +105,7 @@ export const BASELINES: readonly Baseline[] = [
     id: 'v0.1.1-rc.2',
     tag: 'dsh-v0.1.1-rc.2',
     cordis: '4.0.1',
+    session: '0.1.1-rc.2',
     host: { initHeader: false, seedsOnCreate: false },
     client: {
       chatNodesSeat: 'useSession',
@@ -101,20 +125,28 @@ export const BASELINES: readonly Baseline[] = [
     id: 'v0.1.2-alpha.2',
     tag: 'dsh-v0.1.2-alpha.2',
     cordis: '4.0.2',
+    session: '0.1.2-alpha.2',
     host: { initHeader: true, seedsOnCreate: true },
-    client: {
-      chatNodesSeat: 'useChat',
-      imageFace: { service: 'uiConversation', method: 'imageUrl' },
-      historyFace: 'remote.session.page',
-      historyEnvelope: 'clientResult',
-      historyRowsField: 'records',
-      markdownChrome: 'labels',
-      platformModules: [
-        'react', 'react/jsx-runtime', 'react-dom', 'react-dom/client', '@deepseek-ai/cordis',
-        '@deepseek-ai/dsh-client-store',
-        '@deepseek-ai/dsh-client-ui-slots',
-        '@deepseek-ai/dsh-client-ui-primitives',
-      ],
-    },
+    client: CLIENT_0_1_2,
+  },
+  {
+    // The preview window's head — the DSH STORE latest-three compatibility
+    // window currently ends here (alpha.3/alpha.4 sit between the probed
+    // alpha.2 and alpha.5 tags with no seam drift).
+    id: 'v0.1.2-alpha.5',
+    tag: 'dsh-v0.1.2-alpha.5',
+    cordis: '4.0.2',
+    session: '0.1.2-alpha.5',
+    host: { initHeader: true, seedsOnCreate: true },
+    client: CLIENT_0_1_2,
+  },
+  {
+    // The `next`-channel release candidate — the newest declared dsh release.
+    id: 'v0.1.2-rc.1',
+    tag: 'dsh-v0.1.2-rc.1',
+    cordis: '4.0.2',
+    session: '0.1.2-rc.1',
+    host: { initHeader: true, seedsOnCreate: true },
+    client: CLIENT_0_1_2,
   },
 ]
