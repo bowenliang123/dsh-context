@@ -428,11 +428,42 @@ function applySurface(
   return node
 }
 
+/** The durable usage object, as far as the fold reads it — every bucket is re-proved by `tokenCountOf`, never trusted. */
 interface UsageLike {
-  inputTokens?: number
-  cacheReadTokens?: number
-  cacheWriteTokens?: number
-  outputTokens?: number
+  inputTokens?: unknown
+  cacheReadTokens?: unknown
+  cacheWriteTokens?: unknown
+  outputTokens?: unknown
+}
+
+/** One usage object's buckets, deeply normalized to billed counts (see {@link tokenCountOf}). */
+interface BilledUsage {
+  input: number
+  cacheRead: number
+  cacheWrite: number
+  output: number
+}
+
+/**
+ * One provider-reported usage bucket as a billed count, or null when the
+ * field carries no readable number. Accepts finite numbers and numeric
+ * strings; fractions round (some gateways report fractional counts) and
+ * negatives clamp to 0 — a mis-accounting gateway that reports
+ * `cached_tokens > prompt_tokens` drives the disjoint uncached-input figure
+ * below zero, and one raw figure in the state would fail the wire and state
+ * schemas' `.int().nonnegative()` gates on EVERY later delivery, permanently
+ * freezing the projection feed for the session (issue #44). NaN, infinities,
+ * and non-numeric values read as absent.
+ */
+function tokenCountOf(value: unknown): number | null {
+  if (typeof value === 'number') {
+    return Number.isFinite(value) ? Math.max(0, Math.round(value)) : null
+  }
+  if (typeof value === 'string' && value.trim() !== '') {
+    const parsed = Number(value)
+    return Number.isFinite(parsed) ? Math.max(0, Math.round(parsed)) : null
+  }
+  return null
 }
 
 /**
@@ -466,9 +497,11 @@ function isPeakUtc(time: number): boolean {
 /**
  * Fold one billed request into the session-cost totals, cloning along the
  * mutated path only (the untouched branch stays shared with the persisted
- * previous state — the apply contract never mutates it in place).
+ * previous state — the apply contract never mutates it in place). The
+ * buckets arrive sanitized ({@link BilledUsage}), so the totals stay at the
+ * schemas' non-negative safe integers no matter what the provider reported.
  */
-function accumulateCost(st: TimelineState, time: number, usage: UsageLike): void {
+function accumulateCost(st: TimelineState, time: number, usage: BilledUsage): void {
   const family = costFamilyOf(st.model)
   if (family === null) return
   const prev: SessionCostUsage = st.cost ?? {}
@@ -477,13 +510,10 @@ function accumulateCost(st: TimelineState, time: number, usage: UsageLike): void
   const b = fam[period] ?? { uncached: 0, cacheRead: 0, cacheWrite: 0, output: 0 }
   const nextFam: CostFamilyUsage = { ...fam }
   nextFam[period] = {
-    /* v8 ignore next 1 -- accumulateCost only runs under the
-       `typeof usage.inputTokens === 'number'` guard; the fallback is
-       defensive against a hand-built UsageLike. */
-    uncached: b.uncached + (usage.inputTokens ?? 0),
-    cacheRead: b.cacheRead + (usage.cacheReadTokens ?? 0),
-    cacheWrite: b.cacheWrite + (usage.cacheWriteTokens ?? 0),
-    output: b.output + (usage.outputTokens ?? 0),
+    uncached: b.uncached + usage.input,
+    cacheRead: b.cacheRead + usage.cacheRead,
+    cacheWrite: b.cacheWrite + usage.cacheWrite,
+    output: b.output + usage.output,
   }
   const next: SessionCostUsage = { ...prev }
   next[family] = nextFam
@@ -738,7 +768,7 @@ export function applyTimeline(state: TimelineState, event: TimelineEvent, bounds
       case 'assistant/message': {
       // Snapshot the request exactly as dispatched: current surface + header,
       // before this response joins the surface.
-        const usage = data?.usage as UsageLike | undefined
+        const usage = data?.usage as UsageLike | null | undefined
         const s = ensure()
         const total = s.systemTokens + s.toolsTokens + s.sums.user + s.sums.inject + s.sums.assistant + s.sums.tool
         const record: RequestRecord = {
@@ -755,18 +785,35 @@ export function applyTimeline(state: TimelineState, event: TimelineEvent, bounds
         // materialize an `undefined` property (plain-JSON precondition, the trap that broke the projection cache here).
         if (data && typeof data.turn === 'number') record.turn = data.turn
         if (data && typeof data.step === 'number') record.step = data.step
-        if (usage && typeof usage.inputTokens === 'number') {
+        if (usage !== null && typeof usage === 'object') {
         // Official TokenUsage semantics (dsh-llm): the buckets are disjoint —
         // inputTokens is uncached input only, cache read/write are separate,
         // and billed prompt-side = input + cacheRead + cacheWrite. outputTokens
         // already includes reasoningTokens. No separate prompt/output field
-        // exists in the durable vocabulary.
-          record.prompt = usage.inputTokens + (usage.cacheReadTokens || 0) + (usage.cacheWriteTokens || 0)
-          // Cache-hit share of the billed prompt (the step line's 缓存 figure):
-          // keep the cache-served half of `prompt`; absent = no cache buckets.
-          if (typeof usage.cacheReadTokens === 'number') record.cacheRead = usage.cacheReadTokens
-          if (typeof usage.outputTokens === 'number') record.output = usage.outputTokens
-          accumulateCost(s, event.time, usage)
+        // exists in the durable vocabulary. Every bucket passes the deep
+        // `tokenCountOf` read first: the durable log is untrusted input, and a
+        // raw nonconforming figure must never enter the state (issue #44).
+          const input = tokenCountOf(usage.inputTokens)
+          const cacheRead = tokenCountOf(usage.cacheReadTokens)
+          const cacheWrite = tokenCountOf(usage.cacheWriteTokens)
+          const output = tokenCountOf(usage.outputTokens)
+          // Any readable bucket is a billing sample (the official meter folds
+          // every reported usage object; an output-only sample bills prompt 0
+          // there too). A fully unreadable object is treated as absent, so a
+          // fabricated 0 never reaches the client's derived-occupancy anchor.
+          if (input !== null || cacheRead !== null || cacheWrite !== null || output !== null) {
+            record.prompt = (input ?? 0) + (cacheRead ?? 0) + (cacheWrite ?? 0)
+            // Cache-hit share of the billed prompt (the step line's 缓存 figure):
+            // keep the cache-served half of `prompt`; absent = no cache bucket.
+            if (cacheRead !== null) record.cacheRead = cacheRead
+            if (output !== null) record.output = output
+            accumulateCost(s, event.time, {
+              input: input ?? 0,
+              cacheRead: cacheRead ?? 0,
+              cacheWrite: cacheWrite ?? 0,
+              output: output ?? 0,
+            })
+          }
         }
         s.requests.push(record)
         // Timing: one completed model call; its wait/generation split prices

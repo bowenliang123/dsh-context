@@ -117,7 +117,7 @@ for (const [index, baseline] of BASELINES.entries()) {
       assert.ok(rows !== undefined, 'checkpoint rows are losslessly JSON-serializable')
       for (const key of ['contextTimeline', 'contextHeaders']) {
         const row = rows[key] as { ver: number; seq: number }
-        assert.equal(row.ver, key === 'contextTimeline' ? 12 : 1)
+        assert.equal(row.ver, key === 'contextTimeline' ? 13 : 1)
         assert.equal(row.seq, 11)
       }
       // And the write-gate equivalent on every intermediate state of a fresh fold.
@@ -151,6 +151,72 @@ for (const [index, baseline] of BASELINES.entries()) {
       const viewed = driver.viewCheckpoint(rows)
       assert.equal(viewed.contextTimeline, undefined)
       assert.ok(viewed.contextHeaders !== undefined)
+    })
+
+    test('issue #44 recovery: the version bump discards the poisoned row and the refold re-tracks every step', () => {
+      // The reporter's situation: a pre-fix checkpoint row (stateVersion 12)
+      // carries a raw nonconforming gateway figure, while the durable log
+      // holds every committed step. The bump makes the stale row unusable, so
+      // the cold read refolds from init over the FULL log — the steps the
+      // frozen feed never showed come back, billed with sanitized figures and
+      // passing the real wire schema on the way out.
+      const log = [
+        ...fullLog(),
+        assistantMessage(12, { turn: 1, step: 2, usage: { inputTokens: -80, cacheReadTokens: 150.7, outputTokens: 22.4 } }),
+        assistantMessage(13, { turn: 1, step: 3, usage: { inputTokens: NaN, outputTokens: null } }),
+        assistantMessage(14, { turn: 1, step: 4, usage: { inputTokens: 12 } }),
+      ]
+      const stale: Checkpoint = {
+        contextTimeline: {
+          ver: 12,
+          seq: 14,
+          val: {
+            // The poisoned v12 shape: the newest record carries the raw
+            // gateway figure that failed the integer gates on every delivery.
+            surface: [],
+            sums: { user: 0, inject: 0, assistant: 0, tool: 0 },
+            systemTokens: 0,
+            toolsTokens: 0,
+            requests: [{ seq: 9, time: 0, system: 0, tools: 0, user: 0, inject: 0, assistant: 0, tool: 0, total: 0, prompt: -80, cacheRead: 150, output: 22 }],
+            events: [],
+            archived: [],
+            callNames: {},
+          },
+        },
+      }
+      // The cache-read rung skips the stale-version row instead of serving it.
+      const { driver, session } = bootSession(index, log)
+      assert.equal(driver.viewCheckpoint(stale).contextTimeline, undefined)
+      // The cold read refolds from init over the full durable log; a schema
+      // violation anywhere would throw right here (restore parses each wire
+      // value through the unit's real viewSchema).
+      const restored = driver.restore(stale, log, 0, session.header)
+      const timeline = restored.values.contextTimeline as { requests: { seq: number; prompt?: number; cacheRead?: number; output?: number }[] }
+      // Every step is tracked again — the hostile ones included…
+      assert.deepEqual(timeline.requests.map(r => r.seq), [5, 9, 12, 13, 14])
+      // …each billed from its sanitized buckets (no figure dropped, none raw).
+      assert.deepEqual(
+        timeline.requests.filter(r => r.seq >= 12).map(r => [r.prompt, r.cacheRead, r.output]),
+        [[151, 151, 22], [undefined, undefined, undefined], [12, undefined, undefined]],
+      )
+    })
+
+    test('issue #44 rollback: a pre-bump plugin discards the v13 rows and refolds clean, never crashes', () => {
+      // The reverse upgrade direction: v13-written rows read by a plugin
+      // still pinned at v12. The state SHAPE never changed (only value
+      // normalization), so the version mismatch just discards the rows and
+      // refolds from the log — the same graceful ladder as every bump.
+      const log = fullLog()
+      const { driver: current, session } = bootSession(index, log)
+      const rows = current.checkpoint(session)
+      const rolledBack = new RegistryDriver(baseline)
+      rolledBack.register({ ...createContextTimelineDefinition({}), stateVersion: 12 })
+      rolledBack.register(createContextHeadersDefinition())
+      assert.equal(rolledBack.viewCheckpoint(rows).contextTimeline, undefined)
+      const restored = rolledBack.restore(rows, log, 0, session.header)
+      const timeline = restored.values.contextTimeline as { current: { total: number }; requests: unknown[] }
+      assert.ok(timeline.current.total > 0)
+      assert.equal(timeline.requests.length, 2)
     })
 
     test('the change gate: an uninteresting event keeps its state reference and notifies nothing', () => {
@@ -191,7 +257,7 @@ for (const [index, baseline] of BASELINES.entries()) {
       driver.register(def)
       // Same key at the SAME stateVersion shares the registration (preset ref-counting).
       assert.doesNotThrow(() => driver.register(createContextTimelineDefinition({})))
-      assert.throws(() => driver.register({ ...def, stateVersion: 13 }), RegistryViolationError)
+      assert.throws(() => driver.register({ ...def, stateVersion: 14 }), RegistryViolationError)
     })
   })
 }

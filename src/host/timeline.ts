@@ -218,7 +218,14 @@ export function createContextTimelineDefinition(config: Config): ProjectionDefin
     // first token) + `genMs` (first token → message) — `lmMs` left the shape,
     // and the `stepStart` slot gained the `firstToken` stamp; cached rows
     // refolded from the log, which rebuilds the split.
-    stateVersion: 12,
+    // 13: provider-reported usage buckets are sanitized (deep-read, rounded,
+    // clamped non-negative — see fold.ts `tokenCountOf`) before they enter
+    // request records and the session-cost totals. A nonconforming raw figure
+    // (fractional counts, a gateway reporting cached_tokens > prompt_tokens)
+    // previously rode the state verbatim and failed the wire/state schemas'
+    // integer gates on EVERY later delivery, permanently freezing the
+    // session's projection feed (issue #44); cached rows refold clean.
+    stateVersion: 13,
   }
   return definition
 }

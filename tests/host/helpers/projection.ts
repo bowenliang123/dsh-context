@@ -22,9 +22,15 @@ import { createContextHeadersDefinition } from '../../../src/host/headers'
  */
 export interface TimelineDefLike {
   key: string
+  /** The persisted-state gate the projection cache's cold path parses rows with. */
+  stateSchema: { parse(value: unknown): unknown }
   init(): TimelineState
   apply(state: TimelineState, event: TimelineEvent): TimelineState
-  wire: { view(state: TimelineState): ContextTimeline }
+  wire: {
+    /** The wire gate every delivery channel parses the served value with. */
+    viewSchema: { parse(value: unknown): unknown }
+    view(state: TimelineState): ContextTimeline
+  }
 }
 
 export interface HeadersDefLike {

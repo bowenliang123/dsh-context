@@ -92,7 +92,8 @@ export function assistantMessage(seq: number, opts: {
   turn?: number
   step?: number
   content?: ContentBlock[]
-  usage?: { inputTokens?: number; outputTokens?: number; cacheReadTokens?: number; cacheWriteTokens?: number }
+  /** Widened: hostile fixtures ride the same field (the fold re-proves every bucket). */
+  usage?: Record<string, unknown>
   time?: number
   surfaceOp?: TimelineEvent['surfaceOp']
 }): TimelineEvent {

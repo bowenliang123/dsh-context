@@ -322,10 +322,11 @@ describe('assistant/message request records', () => {
     assert.equal(state.cost, undefined)
   })
 
-  test('usage without inputTokens is not a billing sample', () => {
+  test('output-only usage is a billing sample: prompt 0 with the output split', () => {
     const { state } = driveTimeline([assistantMessage(1, { usage: { outputTokens: 5 } })])
-    assert.ok(!('prompt' in state.requests[0]))
-    assert.ok(!('output' in state.requests[0]))
+    assert.equal(state.requests[0].prompt, 0)
+    assert.equal(state.requests[0].output, 5)
+    assert.ok(!('cacheRead' in state.requests[0]))
     assert.equal(state.cost, undefined)
   })
 
@@ -353,6 +354,85 @@ describe('assistant/message request records', () => {
     assert.equal(node?.cat, 'assistant')
     assert.equal(node?.tokens, 0, 'usage-only events project to no message')
     assert.equal(state.requests.length, 1, 'the request record still lands')
+  })
+})
+
+describe('hostile provider usage (issue #44: stats must survive nonconforming figures)', () => {
+  // The registry parses every served view (and every cold-restored state)
+  // against the unit's strict integer schemas with no containment: one raw
+  // nonconforming figure in the state fails the gate on EVERY later delivery
+  // and permanently freezes the session's projection feed. The fold therefore
+  // sanitizes each bucket before it touches the state, and the records stay
+  // complete (billed, not dropped).
+  test('fractional buckets round to integers', () => {
+    const { state } = driveTimeline([
+      assistantMessage(1, { usage: { inputTokens: 10.4, cacheReadTokens: 20.6, outputTokens: 3.5 } }),
+    ])
+    const rec = state.requests[0]
+    assert.equal(rec.prompt, 31)
+    assert.equal(rec.cacheRead, 21)
+    assert.equal(rec.output, 4)
+  })
+
+  test('a gateway reporting cached_tokens above prompt_tokens clamps to billed zeros', () => {
+    const { state } = driveTimeline([
+      assistantMessage(1, { usage: { inputTokens: -80, cacheReadTokens: 150, outputTokens: 22 } }),
+    ])
+    const rec = state.requests[0]
+    assert.equal(rec.prompt, 150)
+    assert.equal(rec.cacheRead, 150)
+    assert.equal(rec.output, 22)
+  })
+
+  test('string-reported buckets are read', () => {
+    const { state } = driveTimeline([
+      assistantMessage(1, { usage: { inputTokens: '100', cacheWriteTokens: ' 7 ' } }),
+    ])
+    const rec = state.requests[0]
+    assert.equal(rec.prompt, 107)
+    assert.ok(!('cacheRead' in rec))
+    assert.ok(!('output' in rec))
+  })
+
+  test('non-finite and garbage buckets read as absent', () => {
+    const { state } = driveTimeline([
+      assistantMessage(1, { usage: { inputTokens: Number.NaN, outputTokens: null, cacheReadTokens: {}, cacheWriteTokens: '   ' } }),
+    ])
+    assert.ok(!('prompt' in state.requests[0]), 'no readable bucket → the sample is absent, not a bogus zero')
+    assert.equal(state.cost, undefined)
+  })
+
+  test('a readable minority still bills: garbage input with a valid output', () => {
+    const { state } = driveTimeline([
+      assistantMessage(1, { usage: { inputTokens: 'n/a', outputTokens: 9 } }),
+    ])
+    const rec = state.requests[0]
+    assert.equal(rec.prompt, 0)
+    assert.equal(rec.output, 9)
+  })
+
+  test('the folded state and served view stay schema-valid under hostile usage', () => {
+    const drive = driveTimeline([
+      header(1, { model: 'deepseek-v4-flash' }),
+      assistantMessage(2, { turn: 1, step: 1, usage: { inputTokens: -80, cacheReadTokens: 150.7, outputTokens: '22.2' } }),
+      assistantMessage(3, { turn: 1, step: 2, usage: { inputTokens: Number.NaN, outputTokens: null } }),
+      assistantMessage(4, { turn: 1, step: 3, usage: { inputTokens: 12.4 } }),
+    ])
+    // The gates the registry itself parses with: a throw here is exactly the
+    // issue #44 freeze (the drive loop and every later delivery die on it).
+    drive.def.stateSchema.parse(assertPlainJson(drive.state))
+    drive.def.wire.viewSchema.parse(drive.def.wire.view(drive.state))
+  })
+
+  test('sanitized buckets accumulate into the session-cost totals', () => {
+    const { state } = driveTimeline([
+      header(1, { model: 'deepseek-v4-flash' }),
+      assistantMessage(2, {
+        usage: { inputTokens: -100, cacheReadTokens: 300.4, cacheWriteTokens: '10', outputTokens: 0.2 },
+        time: Date.UTC(2024, 0, 1, 22, 0, 0), // 06:00 Beijing Monday — off-peak
+      }),
+    ])
+    assert.deepEqual(state.cost?.flash?.off, { uncached: 0, cacheRead: 300, cacheWrite: 10, output: 0 })
   })
 })
 
