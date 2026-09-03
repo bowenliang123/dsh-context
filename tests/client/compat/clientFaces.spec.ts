@@ -22,7 +22,7 @@ import { createContextSettings } from '../../../src/client/settings'
 import { DICT_EN } from '../../../src/client/i18n'
 import type { ContextTimeline } from '../../../src/shared/types'
 import { h } from '../../../src/client/react'
-import { asClientCtx } from '../helpers/harness'
+import { asClientCtx, TestClientCtx } from '../helpers/harness'
 import { click, makeKit, mount, queryAll, text } from '../helpers/kit'
 import { baselineCtx, chatSeat, convNodes, sessionSeat } from './baselineFaces'
 
@@ -135,6 +135,34 @@ for (const baseline of BASELINES) {
       // lone row auto-expands, and the joined full content rides the baseline seat.
       await click(queryAll(m.container, '.lc-br-cat-row')[2])
       assert.ok(text(m.container).includes('window node hello'), 'the conversation-window join surfaced the seat node')
+      await m.unmount()
+    })
+
+    test('a throwing history-service proxy degrades the tab, never crashes it', async () => {
+      // Issue #42: an undeclared-service proxy can throw on the property READ
+      // itself ("cannot get property "remote.session" without inject") — the
+      // no-white-screen guarantee must degrade it to the static hint, not let
+      // it escape the view and take the whole web client down.
+      const ctx = new TestClientCtx()
+      if (baseline.client.historyFace === 'remote.session.page') {
+        ctx.setService('remote.session', {
+          get page() { throw new Error('cannot get property "remote.session" without inject') },
+        })
+      } else {
+        ctx.setService('connection', { get api() { throw new Error('hostile connection') } })
+      }
+      const settings = createContextSettings()
+      const View = makeContextView(asClientCtx(ctx), kit, settings)
+      const nodes = convNodes()
+      const props: SessionStandardProps = {
+        sessionId: 's-face',
+        useProjection: (key: string) => (key === 'contextTimeline' ? timeline() : undefined),
+        ...(baseline.client.chatNodesSeat === 'useChat'
+          ? { useChat: chatSeat(nodes) }
+          : { useSession: sessionSeat(nodes) }),
+      }
+      const m = await mount(h(View, props))
+      assert.ok(text(m.container).includes(DICT_EN['overview.title']), 'the tab still rendered around a hostile face')
       await m.unmount()
     })
   })

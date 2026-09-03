@@ -11,11 +11,21 @@
  * map into the same conversation-node shapes the window join delivers (a
  * thin display subset of dsh's own fold). Fetched nodes cache per session —
  * history is immutable, so a seq never needs fetching twice.
+ *
+ * The remote face is resolved through the DECLARED inject
+ * (`watchHistoryFaces`): this plugin's module inject lists only slots/
+ * locale, and a top-level `remote.session` would stall the whole plugin on
+ * pre-0.1.2 hosts that never mount the namespace — while NONDECLARED reads
+ * of the traced service proxy throw "cannot get property … without inject"
+ * and can take a view down. The injection callback runs under a fiber that
+ * declares both `remote` and `remote.session` (the dsh idiom), so the
+ * property path resolves; the guarded reflect reads beneath it degrade to
+ * the legacy face or to no face instead of ever throwing.
  */
 
 import type {
-  ClientCtx, ConnectionFace, ContentFetcher, ConversationNodeLike, HeaderFetcher,
-  HistoryEntryLike, SessionPageFace,
+  ClientCtx, ContentFetcher, ConversationNodeLike, HeaderFetcher,
+  HistoryEntryLike, SessionPageFace, SessionsHistoryFace,
 } from './services'
 import type { HeaderEpochContent } from '../shared/types'
 
@@ -163,6 +173,69 @@ function serviceOf(ctx: ClientCtx, name: string): unknown {
   }
 }
 
+/**
+ * Walk a (possibly traced/proxied) service value down a plain-property path,
+ * degrading at the FIRST throw. cordis's undeclared-service proxies are one
+ * hostile object class — any accessor backed by host state can throw too —
+ * and the no-white-screen contract needs the whole chain guarded, not just
+ * the `ctx.get` call.
+ */
+function readKeysOf(value: unknown, ...keys: string[]): unknown {
+  let current = value
+  for (const key of keys) {
+    if (current === null || typeof current !== 'object') return undefined
+    try {
+      current = (current as Record<string, unknown>)[key]
+    } catch {
+      return undefined
+    }
+  }
+  return current
+}
+
+/** The `page` verb of a history face, re-proved and bound to its owner. */
+function readPageOf(face: unknown): SessionPageFace['page'] | undefined {
+  const fn = readKeysOf(face, 'page')
+  return typeof fn === 'function' ? (fn as SessionPageFace['page']).bind(face) : undefined
+}
+
+/** The `history` verb of the legacy api client face, re-proved and bound. */
+function readHistoryOf(face: unknown): SessionsHistoryFace['history'] | undefined {
+  const sessions = readKeysOf(face, 'api', 'sessions')
+  const fn = readKeysOf(sessions, 'history')
+  return typeof fn === 'function' ? (fn as SessionsHistoryFace['history']).bind(sessions) : undefined
+}
+
+/**
+ * The 0.1.2+ gateway history page verb, resolved through the DECLARED inject
+ * (see {@link watchHistoryFaces}) and bound up front: a method extracted
+ * unbound loses `this`, and the traced `remote` proxy that hands it out
+ * requires the inject to resolve at all.
+ */
+let declaredPage: SessionPageFace['page'] | undefined
+
+/**
+ * Register the plugin's 0.1.2+ history faces with the harness through the
+ * DECLARED inject — both `remote` AND `remote.session` (the ui-chat idiom)
+ * must be in one fiber's requirement list, because the traced `remote`
+ * proxy resolves `.session` through the context and each name needs the
+ * other's declaration. Pre-0.1.2 hosts never provide either name, so the
+ * callback simply never fires and the legacy `connection` face carries the
+ * reads. The callback re-runs on every unload/remount, so it owns the
+ * slot's lifetime. The face itself is re-proven (a never-fired or hostile
+ * invocation leaves the slot unset — nothing here can throw).
+ */
+export function watchHistoryFaces(ctx: ClientCtx): void {
+  ctx.inject(['remote', 'remote.session'], (c) => {
+    const session = (c as ClientCtx & { remote?: { session?: SessionPageFace } }).remote?.session
+    const page = session !== undefined ? readPageOf(session) : undefined
+    declaredPage = page
+    return () => {
+      declaredPage = undefined
+    }
+  })
+}
+
 /** The rows array of a history/page response, under every served envelope. */
 function rowsOf(response: unknown): readonly unknown[] {
   // Envelope unwrapping, both served shapes: the 0.1.2 remote resolves to
@@ -195,20 +268,19 @@ function rowsOf(response: unknown): readonly unknown[] {
  * pre-0.1.2 api client verb (`connection.api.sessions.history`) beneath it.
  * Both cut message-aligned pages, so the returned read covers `seq` whenever
  * the durable log still holds it: the newer face pins the inclusive cut to
- * the seq itself, the legacy reader uses the exclusive bound one past it.
- * Undefined when no face exists (older hosts) — callers keep their static
- * degradation.
+ * the seq itself, the legacy reader uses the exclusive bound one past it —
+ * and because a non-declared read of the traced remote proxy throws
+ * ("cannot get property … without inject"), the page face prefers the
+ * injection-resolved slot and only then tries the reflect read. Every
+ * service property access degrades at its own guard instead of taking the
+ * view down. Undefined when no face exists (older hosts) — callers keep
+ * their static degradation.
  */
 function pageReadersOf(ctx: ClientCtx, sessionId: string): ((seq: number) => Promise<unknown>) | undefined {
-  // The 0.1.2+ session namespace is a traced cordis service literally named
-  // `remote.session` — read through `ctx.get`, whose reflect read needs no
-  // inject declaration and yields undefined on harnesses that never mount
-  // the namespace (0.1.1). The faces are bound up front: a method extracted
-  // unbound loses `this`, and a transport relying on it would throw.
-  const pageFace = serviceOf(ctx, 'remote.session') as SessionPageFace | undefined
-  const page = pageFace !== undefined && typeof pageFace.page === 'function' ? pageFace.page.bind(pageFace) : undefined
-  const historyFace = (serviceOf(ctx, 'connection') as ConnectionFace | undefined)?.api?.sessions
-  const history = historyFace !== undefined && typeof historyFace.history === 'function' ? historyFace.history.bind(historyFace) : undefined
+  // The declared-inject face wins; the reflect read beneath it is the
+  // bounded second chance on hosts where the inject callback never fired.
+  const page = declaredPage ?? readPageOf(serviceOf(ctx, 'remote.session'))
+  const history = readHistoryOf(serviceOf(ctx, 'connection'))
   if (page === undefined && history === undefined) return undefined
   return (seq) => {
     if (page !== undefined) {

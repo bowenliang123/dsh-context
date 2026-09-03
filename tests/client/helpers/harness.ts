@@ -96,14 +96,21 @@ export class TestClientCtx {
       const p = this.pending[i]
       if (p.deps.every(d => this.services.has(d))) {
         this.pending.splice(i, 1)
-        p.cb(this)
+        this.runInjected(p.cb)
       }
     }
   }
 
+  private runInjected(cb: (ctx: TestClientCtx) => void): void {
+    // Cordis runs the inject callback as a disposable plugin: a returned
+    // disposer belongs to the fiber and runs on unload.
+    const dispose = cb(this)
+    if (typeof dispose === 'function') this.disposers.push(dispose)
+  }
+
   inject(deps: string[] | Record<string, unknown>, cb: (ctx: TestClientCtx) => void): void {
     const list = Array.isArray(deps) ? deps : Object.keys(deps)
-    if (list.every(d => this.services.has(d))) cb(this)
+    if (list.every(d => this.services.has(d))) this.runInjected(cb)
     else this.pending.push({ deps: list, cb })
   }
 

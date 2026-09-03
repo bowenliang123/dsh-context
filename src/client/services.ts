@@ -540,16 +540,17 @@ export interface SessionsHistoryFace {
 /**
  * The seq-anchored history page verb of the dsh 0.1.2+ gateway remotes: the
  * session namespace mounts as a traced cordis service literally named
- * `remote.session`, so `ctx.get('remote.session')` reaches it without an
- * inject declaration (undefined on harnesses that never mount it — the
- * 0.1.1 remotes carry no session namespace). `throughSeq` is the inclusive
- * log cut (a seq that must exist in the log), `beforeSeq` the exclusive
- * upper bound, and the response wraps the rows in a `ClientResult`-style
- * envelope. Rows are `SessionHistoryRecord`s — `{type:'event', event}`
- * entries plus packed `{type:'chunks', …}` runs the mapper skips (every
- * event the fold needs — user/assistant messages, tool calls/results,
- * compaction summaries — is always served verbatim; only streaming deltas
- * pack).
+ * `remote.session`. The plugin resolves it through the DECLARED inject
+ * (`watchHistoryFaces` in historyPage.ts — a non-declared read of the
+ * traced proxy throws), so reads are undefined on harnesses that never
+ * mount it (the 0.1.1 remotes carry no session namespace) rather than
+ * crashing. `throughSeq` is the inclusive log cut (a seq that must exist in
+ * the log), `beforeSeq` the exclusive upper bound, and the response wraps
+ * the rows in a `ClientResult`-style envelope. Rows are
+ * `SessionHistoryRecord`s — `{type:'event', event}` entries plus packed
+ * `{type:'chunks', …}` runs the mapper skips (every event the fold needs —
+ * user/assistant messages, tool calls/results, compaction summaries — is
+ * always served verbatim; only streaming deltas pack).
  */
 export interface SessionPageFace {
   page(request: {

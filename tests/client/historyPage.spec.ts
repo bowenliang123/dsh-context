@@ -4,7 +4,8 @@
 
 import assert from 'node:assert/strict'
 import { describe, test } from 'vitest'
-import { makeContentFetcher, makeHeaderFetcher, pageNodesOf } from '../../src/client/historyPage'
+import { makeContentFetcher, makeHeaderFetcher, pageNodesOf, watchHistoryFaces } from '../../src/client/historyPage'
+import { asClientCtx, TestClientCtx } from './helpers/harness'
 
 /** One well-formed history row. */
 function row(type: string, seq: number, data: unknown): unknown {
@@ -222,6 +223,87 @@ describe('makeContentFetcher — the per-session targeted read', () => {
     }) as Parameters<typeof makeContentFetcher>[0]
     assert.equal(makeContentFetcher(hostile('remote.session'), 's'), undefined)
     assert.equal(makeContentFetcher(hostile('connection'), 's'), undefined)
+  })
+
+  // The issue-42 failure: the injected-service PROXY throws on the `.page`
+  // read itself ("cannot get property "remote.session" without inject") —
+  // the guard around `ctx.get` alone cannot catch it. A throwing getter must
+  // degrade to the legacy face (or to no face), never out of the fetcher.
+  test('a throwing service-property read degrades to the legacy face', async () => {
+    const calls: { beforeSeq: number }[] = []
+    const hostilePage = {
+      get page() {
+        throw new Error('cannot get property "remote.session" without inject')
+      },
+    }
+    const fetch = makeContentFetcher(ctxWith({
+      'remote.session': hostilePage,
+      connection: { api: apiFace([row('user/message', 7, { content: [{ type: 'text', text: 'LEGACY BODY' }] })], calls) },
+    }), 's')!
+    const node = await fetch(7)
+    assert.deepEqual(calls, [{ beforeSeq: 8 }], 'the throwing page face falls back to the legacy verb')
+    assert.equal((node?.content as { text: string }[])[0]?.text, 'LEGACY BODY')
+    // No legacy face beneath it: the fetcher itself degrades, no throw.
+    assert.equal(makeContentFetcher(ctxWith({ 'remote.session': hostilePage }), 's'), undefined)
+  })
+
+  test('a throwing connection-property chain degrades to no fetcher', () => {
+    const hostileApi = {
+      get api() {
+        throw new Error('cannot get property "api" without inject')
+      },
+    }
+    assert.equal(makeContentFetcher(ctxWith({ connection: hostileApi }), 's'), undefined)
+    assert.equal(makeContentFetcher(ctxWith({ connection: { api: { get sessions() { throw new Error('hostile sessions') } } } }), 's'), undefined)
+  })
+
+  test('the declared remote.session inject carries the page read and unloads cleanly', async () => {
+    // The harness mirrors the traced `remote` service: factory→`.session`
+    // is the facade property path the DECLARED fiber resolves. The direct
+    // `remote.session` service value is hostile on purpose — the injection
+    // path must be the one that carries the read.
+    const calls: unknown[] = []
+    const declared = {
+      session: {
+        page(request: unknown, _signal: AbortSignal): Promise<unknown> {
+          calls.push(request)
+          return Promise.resolve({ ok: true, value: { records: [] } })
+        },
+      },
+    }
+    const ctx = new TestClientCtx()
+    ctx.setService('remote', declared)
+    ctx.setService('remote.session', { get page() { throw new Error('cannot get property "remote.session" without inject') } })
+    watchHistoryFaces(asClientCtx(ctx))
+    const fetch = makeContentFetcher(asClientCtx(ctx), 'sess-1')!
+    const node = await fetch(7)
+    assert.deepEqual(calls, [{ address: { kind: 'session', sessionId: 'sess-1' }, throughSeq: 7, beforeSeq: 8 }])
+    assert.equal(node, null, 'the declared page face mapped the (empty) page')
+    // Unload clears the slot: the hostile reflect read (and the absent
+    // legacy face) then degrade to no fetcher — nothing stales across
+    // plugin reloads.
+    ctx.dispose()
+    assert.equal(makeContentFetcher(asClientCtx(ctx), 's'), undefined, 'the unloaded slot leaves no face behind')
+  })
+
+  test('the declared inject never fires without both remote services', () => {
+    const ctx = new TestClientCtx()
+    // Only `remote`: the injected fiber requires BOTH names, so nothing
+    // fires and the legacy verb carries the reads (the pre-0.1.2 line).
+    ctx.setService('remote', { session: {} })
+    watchHistoryFaces(asClientCtx(ctx))
+    ctx.dispose()
+  })
+
+  test('the declared inject tolerates a shapeless remote service', () => {
+    const ctx = new TestClientCtx()
+    // Both names exist but the facade bears no session namespace: the
+    // callback fires and leaves the slot unset, never throwing.
+    ctx.setService('remote', {})
+    ctx.setService('remote.session', {})
+    watchHistoryFaces(asClientCtx(ctx))
+    assert.equal(makeContentFetcher(asClientCtx(ctx), 's'), undefined)
+    ctx.dispose()
   })
 
   test('the 0.1.2 page face wins over the legacy history verb and maps its records', async () => {
