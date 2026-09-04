@@ -42,9 +42,12 @@ describe.skipIf(staging.artifactsMissing())('compat matrix — bundle requires v
 describe.skipIf(reasons.length > 0)('compat matrix — real dsh sources per baseline', () => {
   describe.each(BASELINES)('$id (tag $tag, cordis $cordis)', (baseline) => {
     let report: staging.DriverReport
+    // 60s: the driver's own spawn budget. A cold stage dir (fresh clone,
+    // cache miss, dependency re-pin) runs a real npm install inside the hook,
+    // which the 10s default ceiling cannot cover.
     beforeAll(() => {
       report = staging.runDriver(baseline)
-    })
+    }, 60_000)
 
     test('host: the plugin applies into the tag\'s real registry', () => {
       assert.equal(report.registered, true)
