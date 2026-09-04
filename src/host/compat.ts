@@ -18,9 +18,10 @@
  *   A unit WITHOUT `wire` is host-only — its value is never delivered to
  *   clients, and the Context tab would sit on its loading screen forever.
  *
- * The registry hands the session's immutable header to a fresh fold:
- * `init(header: SessionHeader)`. A zero-argument `init` satisfies that
- * contract as-is (the extra argument is simply not observed).
+ * The registry hands a fresh fold the session's immutable header and the
+ * fork-inherited prefix length: `init(header: SessionHeader,
+ * inheritedEventCount: SessionLogOffset)`. A zero-argument `init` satisfies
+ * that contract as-is (both arguments go unobserved).
  *
  * The installed devDependency types pin the newest published surface
  * (0.1.2-rc.1), whose `wire?` is optional; this plugin's units are always
@@ -40,8 +41,8 @@ export interface ProjectionDefinition<K extends keyof SessionProjectionMap, S> {
   stateSchema: z.ZodType<S>
   /**
    * Fresh fold state for the empty log. The registry passes the session's
-   * immutable header; a zero-argument init satisfies the contract (the
-   * extra argument goes unobserved).
+   * immutable header and the fork-inherited prefix length; a zero-argument
+   * init satisfies the contract (both arguments go unobserved).
    */
   init(): S
   /**
