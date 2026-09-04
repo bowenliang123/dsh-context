@@ -1,0 +1,46 @@
+name: Bug Report
+description: Report a problem with the dsh-context plugin on DeepSeek Harness.
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time to report an issue! Please fill in all the required
+        fields below so the problem can be reproduced and fixed quickly.
+  - type: input
+    id: dsh-version
+    attributes:
+      label: DeepSeek Harness version
+      description: The version of `@deepseek-ai/dsh` in use (e.g. from `dsh --version`).
+      placeholder: e.g. 0.1.2-rc.1
+    validations:
+      required: true
+  - type: input
+    id: plugin-version
+    attributes:
+      label: dsh-context version
+      description: The installed dsh-context plugin version that you're using
+      placeholder: e.g. v0.41.3
+    validations:
+      required: true
+  - type: textarea
+    id: description
+    attributes:
+      label: Problem description
+      description: A clear and concise statement of the problem — what you did, what you expected to happen, and what actually happened.
+    validations:
+      required: true
+  - type: textarea
+    id: screenshots
+    attributes:
+      label: Screenshots
+      description: Drag & drop screenshots or screen recordings here.
+    validations:
+      required: true
+  - type: textarea
+    id: error-stack
+    attributes:
+      label: Error stack
+      description: The full error message and stack trace, from the DeepSeek Harness logs or the browser console, if any.
+      render: shell
+    validations:
+      required: false
