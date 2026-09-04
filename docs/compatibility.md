@@ -2,7 +2,7 @@
 
 dsh-context declares per-release compatibility with `@deepseek-ai/dsh` in its package manifest (`dsh.compatibility.dshReleases`). This page records what is actually verified for each declared release, and how.
 
-Last verified: **2026-09-04** (plugin `dsh-context@0.41.3` source tree).
+Last verified: **2026-09-05** (plugin `dsh-context@0.42.0` source tree).
 
 ## Supported dsh releases
 
