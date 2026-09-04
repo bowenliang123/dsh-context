@@ -20,9 +20,12 @@
 import type { Context } from '@deepseek-ai/cordis'
 import { createToolAttribution } from './attribution'
 import { Config } from './config'
+import { createFallbackHeadersDefinition, createFallbackTimelineDefinition } from './fallback'
 import { createContextHeadersDefinition } from './headers'
 import { installSettings } from './settings'
 import { createContextTimelineDefinition } from './timeline'
+import { detectHarnessVersion } from './version'
+import { meetsBaseline } from '../shared/version'
 
 export const name = 'dsh-context'
 
@@ -35,6 +38,21 @@ export const inject = ['sessionProjections']
 export { Config } from './config'
 
 export function apply(ctx: Context, config: Config): void {
+  // The baseline gate: a harness BELOW the supported baseline (detected at
+  // apply time — see version.ts) never gets the real folds, since its log
+  // shapes and seam faces are outside the compat matrix. Fallback units
+  // serve the client zeroed data plus the gate record instead. An
+  // UNDETECTABLE version is not a gate: detection failure fails open into
+  // the normal composition below.
+  const harnessVersion = detectHarnessVersion(ctx)
+  if (harnessVersion !== undefined && !meetsBaseline(harnessVersion)) {
+    // The dts register() constrains a unit's state to the declared
+    // SessionProjectionStateMap entry; the gate's opaque empty state is
+    // deliberately neither (nothing is folded) — cast through.
+    ctx.sessionProjections.register(createFallbackTimelineDefinition(harnessVersion) as never)
+    ctx.sessionProjections.register(createFallbackHeadersDefinition() as never)
+    return
+  }
   // Tool-to-plugin attribution (see attribution.ts): the static chain from
   // toolSources.ts stays the backbone, the runtime register() hook adds
   // third-party / agent-scoped / dynamic tools on top. Strictly additive — an

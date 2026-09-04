@@ -99,7 +99,8 @@ const headerToolWireSchema = z.object({
   plugin: z.string().optional(),
 }).strict()
 
-const contextHeadersSchema = z.object({
+/** Exported for the fallback unit (fallback.ts): one wire contract, one schema. */
+export const contextHeadersSchema = z.object({
   headers: z.array(z.object({
     seq: z.number(),
     time: z.number(),

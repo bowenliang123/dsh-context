@@ -61,6 +61,7 @@ The plugin lives off data it does not own: the durable session log (event shapes
 - MUST be able to install and work correctly on `@deepseek-ai/dsh` **0.1.2-rc1+** — no regressions in runtime dependencies, message parsing, or any user-visible behavior. Older lines (0.1.0-rc.x, 0.1.1-rc.x, 0.1.2-alpha.x) are out of the support matrix.
 - Check carefully in depth for the compatibility of the plugin with all supported dsh version, investigate and dive deep into details of dsh source code and its dependencies (run pnpm install in dsh source code folder).
 - Low-level logic (e.g. token counting) should track the implementation of the newest supported dsh version.
+- The runtime baseline gate (host side, see `src/host/version.ts` / `src/host/fallback.ts` / `src/shared/version.ts`): at apply time the host probes the RUNNING harness's version (the `dshHomePath`-anchored profiles mirror first, the plugin's own module anchor second) and compares it against `BASELINE_DSH_VERSION` (channel order: release > rc > beta > alpha). A harness below the baseline gets fallback projection units that fold nothing and serve zeroed data plus an `unsupported` wire record — the client keeps rendering the (blank) cards and pops a modal naming both versions and urging the update. Detection failure or an unparseable version FAILS OPEN (the gate never trips), so a probe misfire can never blank a working deployment.
 
 
 ### Compatibility verification mechanism

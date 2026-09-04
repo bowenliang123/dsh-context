@@ -17,6 +17,7 @@ import {
   timelineOf,
   timingOf,
   tokenUsageOf,
+  unsupportedOf,
   workspaceOf,
 } from '../../src/client/services'
 import type { ClientCtx, ConversationNodeLike } from '../../src/client/services'
@@ -197,6 +198,35 @@ describe('timelineOf', () => {
   test('droppedNodes is numOf-coerced', () => {
     assert.equal(timelineOf({ current: 1, droppedNodes: 4 })?.droppedNodes, 4)
     assert.equal(timelineOf({ current: 1, droppedNodes: 'x' })?.droppedNodes, 0)
+  })
+
+  test('the unsupported gate record survives the sanitizing slow path only when well-formed', () => {
+    const kept = timelineOf({ current: 1, unsupported: { current: '0.1.1-rc.2', minimum: '0.1.2-rc.1' } })
+    assert.ok(kept !== null)
+    assert.deepEqual(kept.unsupported, { current: '0.1.1-rc.2', minimum: '0.1.2-rc.1' })
+    for (const bad of ['x', null, {}, { current: 1, minimum: 'm' }, { current: 'c' }]) {
+      const out = timelineOf({ current: 1, unsupported: bad })
+      assert.ok(out !== null)
+      assert.ok(!('unsupported' in out), JSON.stringify(bad))
+    }
+  })
+})
+
+describe('unsupportedOf', () => {
+  test('well-formed records pass through as plain data', () => {
+    assert.deepEqual(unsupportedOf({ current: '0.1.1-rc.2', minimum: '0.1.2-rc.1' }), { current: '0.1.1-rc.2', minimum: '0.1.2-rc.1' })
+  })
+
+  test('non-records and wrong-typed fields degrade to null', () => {
+    assert.equal(unsupportedOf(null), null)
+    assert.equal(unsupportedOf(undefined), null)
+    assert.equal(unsupportedOf('x'), null)
+    assert.equal(unsupportedOf(5), null)
+    assert.equal(unsupportedOf({}), null)
+    assert.equal(unsupportedOf({ current: 'c' }), null)
+    assert.equal(unsupportedOf({ minimum: 'm' }), null)
+    assert.equal(unsupportedOf({ current: 1, minimum: 'm' }), null)
+    assert.equal(unsupportedOf({ current: 'c', minimum: null }), null)
   })
 })
 

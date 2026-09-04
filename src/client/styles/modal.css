@@ -7,3 +7,16 @@
 .lc-modal-title { font-weight: 600; font-size: 14px; }
 .lc-modal-close { margin-left: auto; border: 0; background: transparent; color: var(--dsw-alias-label-secondary); font-size: 18px; line-height: 1; padding: 2px 6px; border-radius: 6px; cursor: pointer; font-family: inherit; transition: color var(--ds-transition-duration, 0.2s) var(--ds-ease-in-out, ease-in-out), background-color var(--ds-transition-duration, 0.2s) var(--ds-ease-in-out, ease-in-out); }
 .lc-modal-close:hover { color: var(--dsw-alias-label-primary); background: var(--dsw-alias-bg-layer-2); }
+
+/* ---- the baseline-gate dialog (upgradeGate.tsx): narrower card, version rows, one primary action ---- */
+.lc-gate-card { width: min(440px, calc(100vw - 48px)); }
+.lc-gate-body { color: var(--dsw-alias-label-secondary); line-height: 1.7; }
+.lc-gate-versions { display: flex; gap: 24px; margin-top: 14px; }
+.lc-gate-version { display: flex; flex-direction: column; gap: 2px; }
+.lc-gate-version-label { font-size: 11px; color: var(--dsw-alias-label-secondary); }
+.lc-gate-version-value { font-weight: 600; font-family: var(--dsw-font-family-mono, monospace); color: var(--dsw-alias-label-primary); }
+/* The muted suffix beside the required version: recovers the body face and de-emphasizes against the mono value. */
+.lc-gate-or-newer { margin-left: 6px; font-family: inherit; font-weight: 400; font-size: 11px; color: var(--dsw-alias-label-secondary); }
+.lc-gate-actions { display: flex; justify-content: flex-end; margin-top: 16px; }
+.lc-gate-ok { border: 0; border-radius: 6px; padding: 6px 16px; font-size: 12px; font-family: inherit; cursor: pointer; background: var(--dsw-alias-button-primary-fill); color: var(--dsw-alias-label-primary-foreground); transition: filter var(--ds-transition-duration, 0.2s) var(--ds-ease-in-out, ease-in-out); }
+.lc-gate-ok:hover { filter: brightness(1.1); }

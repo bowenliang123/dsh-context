@@ -197,6 +197,18 @@ function objectsOf<T>(value: unknown): T[] {
 }
 
 /**
+ * Narrow a delivered `unsupported` gate record (the host's baseline gate —
+ * see host/fallback.ts): both version strings re-proved, anything else
+ * degrades to null (no gate shown) instead of rendering garbage.
+ */
+export function unsupportedOf(value: unknown): { current: string; minimum: string } | null {
+  const data = asRecord(value)
+  if (data === null) return null
+  if (typeof data.current !== 'string' || typeof data.minimum !== 'string') return null
+  return { current: data.current, minimum: data.minimum }
+}
+
+/**
  * Narrow a delivered projection value to a RENDER-SAFE context timeline —
  * the client's no-white-screen guarantee against backend/parse failures.
  *
@@ -234,8 +246,12 @@ export function timelineOf(value: unknown): ContextTimeline | null {
     ? data.cost as ContextTimeline['cost']
     : undefined
   const timing = timingOf(data.timing)
+  // The baseline-gate record survives sanitizing: a fallback payload that
+  // somehow fails the fast path must still pop the gate modal.
+  const unsupported = unsupportedOf(data.unsupported)
   return {
     ok: true,
+    ...(unsupported !== null ? { unsupported } : {}),
     ...(typeof data.model === 'string' ? { model: data.model } : {}),
     ...(typeof data.provider === 'string' ? { provider: data.provider } : {}),
     ...(typeof data.contextWindow === 'number' ? { contextWindow: data.contextWindow } : {}),

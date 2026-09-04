@@ -46,6 +46,17 @@ export type Category = 'user' | 'inject' | 'assistant' | 'tool'
 
 export interface Snapshot {
   ok: boolean
+  /**
+   * The host's baseline-gate record, present ONLY when the running harness
+   * is below the plugin's supported baseline: the host then folds nothing
+   * and every figure in this snapshot is zero/empty. The client keeps
+   * rendering the (blank) cards and pops the upgrade gate modal naming
+   * `current` (the detected harness version) and `minimum` (the baseline).
+   */
+  unsupported?: {
+    current: string
+    minimum: string
+  }
   model?: string
   provider?: string
   contextWindow?: number

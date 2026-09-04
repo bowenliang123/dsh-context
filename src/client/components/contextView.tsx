@@ -8,7 +8,7 @@ import type { ContextEventRecord, RequestRecord, SurfaceNode } from '../../share
 import { briefNodes, briefOf } from '../brief'
 import { headlineOf } from '../headline'
 import type { SessionStandardProps } from '../services'
-import { contextBreakdownOf, contextPressureOf, conversationNodesOf, headersOf, imageLoaderOf, numOf, timelineOf, tokenUsageOf } from '../services'
+import { contextBreakdownOf, contextPressureOf, conversationNodesOf, headersOf, imageLoaderOf, numOf, timelineOf, tokenUsageOf, unsupportedOf } from '../services'
 import type { ClientCtx, ConversationNodeLike } from '../services'
 import { makeContentFetcher, makeHeaderFetcher } from '../historyPage'
 import { canOpenPathsOf, openPathVia, workspaceOf } from '../services'
@@ -23,6 +23,7 @@ import { makeCurrentComposition } from './currentComposition'
 import { makeEventList } from './events'
 import { makeFileCard } from './fileCard'
 import { makePluginInfo } from './pluginInfo'
+import { makeUpgradeGate } from './upgradeGate'
 import { makeRequestDetail } from './requestDetail'
 import { makeStatsContext } from './statsContext'
 import { makeStatsTiming } from './statsTiming'
@@ -61,6 +62,7 @@ export function makeContextView(
   const StatsTiming = makeStatsTiming(kit, Donut)
   const StatsTokens = makeStatsTokens(kit, Donut)
   const PluginInfo = makePluginInfo(kit)
+  const UpgradeGate = makeUpgradeGate(kit)
   const ContextBrowser = makeContextBrowser(kit, StackedBar)
   const AgentGraph = makeAgentGraph(ctx, kit)
   const ErrorBoundary = makeErrorBoundary(t)
@@ -324,6 +326,10 @@ export function makeContextView(
       ? localeSvc.getLocale().active
       : 'en'
     const subtitle = (data.model ?? '') + (data.provider ? ' · ' + data.provider : '')
+    // The host's baseline gate (host/fallback.ts): the cards below render
+    // the fallback's zeroed data while the modal names both versions and
+    // urges the upgrade. Absent record = a supported harness, no gate.
+    const gate = unsupportedOf(data.unsupported)
 
     return (
       <div className="lc-root" ref={rootRef}>
@@ -466,6 +472,10 @@ export function makeContextView(
         />
 
         <div className="lc-foot">{t('footer')}</div>
+
+        {gate !== null && (
+          <UpgradeGate sessionId={sessionId} current={gate.current} minimum={gate.minimum} />
+        )}
       </div>
     )
   }

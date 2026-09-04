@@ -182,6 +182,42 @@ describe('ContextView — projection guards', () => {
   })
 })
 
+describe('ContextView — baseline gate', () => {
+  test('a gated host renders the zeroed cards under the upgrade modal', async () => {
+    const View = makeView(new TestClientCtx())
+    const m = await mount(h(View, {
+      sessionId: 'sv-gated',
+      useProjection: projectionsFor(timeline({ unsupported: { current: '0.1.1-rc.2', minimum: '0.1.2-rc.1' } })),
+    }))
+    // The modal pops over the tab, naming both versions.
+    assert.ok(m.container.querySelector('.lc-modal-backdrop') !== null)
+    const card = query(m.container, '.lc-gate-card')
+    assert.ok(text(card).includes(DICT_EN['gate.title']))
+    assert.ok(text(card).includes('v0.1.1-rc.2'))
+    assert.ok(text(card).includes('v0.1.2-rc.1'))
+    // The cards keep rendering the fallback's zeroed data behind it.
+    assert.ok(text(m.container).includes(DICT_EN['overview.title']))
+    assert.ok(text(m.container).includes(DICT_EN['trend.empty']))
+    assert.ok(text(m.container).includes(DICT_EN['events.empty']))
+    // Dismissal reveals the (blank) cards.
+    await click(buttonByText(m.container, DICT_EN['gate.ok']))
+    assert.equal(m.container.querySelector('.lc-modal-backdrop'), null)
+    assert.ok(text(m.container).includes(DICT_EN['stats.title']))
+    await m.unmount()
+  })
+
+  test('a malformed gate record never opens the modal', async () => {
+    const View = makeView(new TestClientCtx())
+    const m = await mount(h(View, {
+      sessionId: 'sv-gate-junk',
+      useProjection: projectionsFor(timeline({ unsupported: { current: 7 } })),
+    }))
+    assert.equal(m.container.querySelector('.lc-modal-backdrop'), null)
+    assert.ok(text(m.container).includes(DICT_EN['overview.title']))
+    await m.unmount()
+  })
+})
+
 /** The rich tab: full projection (stats, chart, markers, browser headers) over two turns plus a turn-less step. */
 async function mountRich(sessionId: string) {
   const View = makeView(new TestClientCtx())

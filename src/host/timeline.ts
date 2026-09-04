@@ -115,8 +115,16 @@ const timingTotalsSchema = z.object({
   tools: z.record(z.string(), toolTimingSchema),
 }).strict()
 
-const contextTimelineSchema = z.object({
+/** The baseline-gate record the fallback unit serves (see fallback.ts). */
+const unsupportedSchema = z.object({
+  current: z.string(),
+  minimum: z.string(),
+}).strict()
+
+/** Exported for the fallback unit (fallback.ts): one wire contract, one schema. */
+export const contextTimelineSchema = z.object({
   ok: z.literal(true),
+  unsupported: unsupportedSchema.optional(),
   model: z.string().optional(),
   provider: z.string().optional(),
   contextWindow: z.number().optional(),
