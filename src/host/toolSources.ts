@@ -12,9 +12,9 @@
  * 2. MCP tools: `dsh-mcp-client` names every proxied tool
  *    `mcp__<server>__<rawName>`, so the server is recoverable from the name.
  * 3. Shipped first-party tools: a PINNED name → package map derived from the
- *    deepseek-harness tool-schema catalog (packages/core/tools + the shipped
- *    `tool-*` packages at dsh 0.1.1-rc.2; names are stable across the plugin's
- *    supported 0.1.1-rc2+ / 0.1.2-alpha2+ range). Third-party tools stay
+ *    deepseek-harness official tool-schema catalog (the shipped tool packages
+ *    at the supported dsh baseline, tests/baselines.ts; names verified stable
+ *    across the plugin's supported range). Third-party tools stay
  *    unattributed rather than guessed.
  *
  * Pure string functions: fully unit-testable, no harness imports.
@@ -52,10 +52,11 @@ export function pinnedSourceOf(name: string): string | undefined {
 
 /**
  * Pinned first-party tool → plugin package map (see header comment). One entry
- * per model-facing name of the shipped tool packages at dsh 0.1.1-rc.2, from
- * the official tool-schema catalog; names are stable across the supported
- * harness range. Packages that mount under distinct names per composition
- * (bash/pwsh persistent variants, subagent fork) map to their primary package.
+ * per model-facing name of the shipped tool packages in the official
+ * tool-schema catalog of the supported dsh baseline; names are verified
+ * stable across the supported harness range. Packages that mount under
+ * distinct names per composition (bash/pwsh persistent variants, the
+ * `subagent_fork` fixed-route alias) map to their primary package.
  */
 export const FIRST_PARTY_SOURCES: Readonly<Record<string, string>> = Object.freeze({
   read: '@deepseek-ai/dsh-tool-fs',

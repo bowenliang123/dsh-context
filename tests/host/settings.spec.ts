@@ -34,10 +34,9 @@ class MemorySettings extends SettingsProvider {
   }
 }
 
-// The raw string is what every supported dsh version's `register` accepts at
-// runtime; the branded cast satisfies the pre-0.1.2 type face (see
-// src/host/settings.ts — the `settingsNamespace()` helper was removed in
-// 0.1.2-alpha.2).
+// The raw string is what the dsh settings `register` accepts at runtime; the
+// branded cast satisfies the SettingsNamespace type face (see
+// src/host/settings.ts).
 const ns = SETTINGS_NAMESPACE as SettingsNamespace
 
 /** Poll until the inject callback inside installSettings has registered the namespace. */

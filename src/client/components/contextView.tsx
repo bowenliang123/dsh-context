@@ -118,9 +118,8 @@ export function makeContextView(
     const [nodeFocus, setNodeFocus] = React.useState<{ step: number | 'live'; seq: number; cat: SurfaceNode['cat'] } | null>(null)
     const clearNodeFocus = React.useCallback(() => { setNodeFocus(null) }, [])
 
-    // Session-authorized durable-image loader for the browser's attachment cards, resolved through the harness conversation service —
-    // whichever face the running harness serves (`resolveImage` pre-0.1.2, `imageUrl` since); absent service/session degrades the cards
-    // to metadata-only, never an error.
+    // Session-authorized durable-image loader for the browser's attachment cards, resolved through the harness `uiConversation` service
+    // (`imageUrl`); absent service/session degrades the cards to metadata-only, never an error.
     const loadImage = React.useMemo(
       () => imageLoaderOf(ctx, typeof sessionId === 'string' ? sessionId : undefined),
       [ctx, sessionId],
@@ -129,14 +128,14 @@ export function makeContextView(
     // Targeted full-content fetch for browser nodes outside the conversation window (one seq-anchored history read per expanded row);
     // absent face/session degrades to the static hint — never an error.
     const fetchContent = React.useMemo(
-      () => (typeof sessionId === 'string' && sessionId !== '' ? makeContentFetcher(ctx, sessionId) : undefined),
-      [ctx, sessionId],
+      () => (typeof sessionId === 'string' && sessionId !== '' ? makeContentFetcher(sessionId) : undefined),
+      [sessionId],
     )
     // On-demand header epoch content (system prompt text, tool schemas) for the Context browser — one seq-anchored history read per
     // opened epoch; the `contextHeaders` projection carries metadata only. Same degradation shape as fetchContent.
     const fetchHeader = React.useMemo(
-      () => (typeof sessionId === 'string' && sessionId !== '' ? makeHeaderFetcher(ctx, sessionId) : undefined),
-      [ctx, sessionId],
+      () => (typeof sessionId === 'string' && sessionId !== '' ? makeHeaderFetcher(sessionId) : undefined),
+      [sessionId],
     )
 
     const rootRef = React.useRef<HTMLDivElement | null>(null)

@@ -8,7 +8,7 @@
 // state that fails the projection cache's plain-JSON write gate (issues
 // #5-#7, #27-#30 — session creation/titles broke host-wide), a stale-row
 // restore that must seed through stateSchema, and an init that must tolerate
-// the 0.1.2 header argument.
+// the registry's header argument.
 //
 // The real-code complement — the ACTUAL dsh registry sources per tag — runs
 // in the `compat` vitest project (tests/compat/matrix.spec.ts).
@@ -68,7 +68,7 @@ function bootSession(baselineIndex: number, log = fullLog()): { driver: Registry
   const driver = new RegistryDriver(baseline)
   driver.register(createContextTimelineDefinition({}))
   driver.register(createContextHeadersDefinition())
-  const session: SessionLike = { seq: 0, header: { id: 's-matrix', cwd: '/tmp' }, events: [] }
+  const session: SessionLike = { seq: 0, header: { id: 's-matrix', cwd: '/tmp' }, inheritedEventCount: 0, events: [] }
   driver.sessionCreated(session)
   for (const event of log) {
     session.events[event.seq] = event
@@ -92,19 +92,19 @@ for (const [index, baseline] of BASELINES.entries()) {
       assert.equal(headers.headers[0].tools[0].name, 'bash')
     })
 
-    test('init tolerates the baseline call shape: with the header arg when the registry passes one, without before', () => {
+    test('init tolerates the registry call shape: the header and inherited-count arguments go unobserved', () => {
       const timelineDef = createContextTimelineDefinition({})
       const headersDef = createContextHeadersDefinition()
       const probe = { id: 's-init', cwd: '/tmp' }
       for (const def of [timelineDef, headersDef]) {
         const bare = (def.init as () => unknown)()
-        const headed = (def.init as (header: unknown) => unknown)(probe)
-        assert.deepEqual(bare, headed, 'the zero-argument init ignores the 0.1.2 header argument')
+        const headed = (def.init as (header: unknown, inheritedEventCount: number) => unknown)(probe, 7)
+        assert.deepEqual(bare, headed, 'the zero-argument init ignores the registry arguments')
       }
-      // And through the driver, whose init arity follows the baseline.
+      // And through the driver, whose init arity follows the registry's.
       const driver = new RegistryDriver(baseline)
       driver.register(createContextTimelineDefinition({}))
-      const session: SessionLike = { seq: 0, header: probe, events: [] }
+      const session: SessionLike = { seq: 0, header: probe, inheritedEventCount: 7, events: [] }
       driver.sessionCreated(session)
       assert.equal(driver.snapshot(session).values.contextTimeline !== undefined, true)
     })
@@ -263,10 +263,10 @@ for (const [index, baseline] of BASELINES.entries()) {
 }
 
 describe('registry contract — settings namespace seam', () => {
-  // Both baselines enforce `/^[a-z][a-z0-9-]*$/` on registered namespaces —
-  // inside the removed `settingsNamespace()` helper before 0.1.2-alpha.2,
-  // inside `settings.register` since. The plugin registers the raw literal
-  // (branded cast), so the literal must pass the pattern on every baseline.
+  // The settings module enforces `/^[a-z][a-z0-9-]*$/` on registered
+  // namespaces (inside `settings.register` on the supported baselines). The
+  // plugin registers the raw literal (branded cast), so the literal must
+  // pass the pattern.
   const NAMESPACE_PATTERN = /^[a-z][a-z0-9-]*$/
   const SETTINGS_NAMESPACE = 'dsh-context'
 

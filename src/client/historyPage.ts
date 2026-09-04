@@ -4,39 +4,37 @@
  * conversation window, ONE seq-anchored history read returns the page
  * containing that event: the host cuts pages on whole append-origin message
  * boundaries, so the newest group on the page covers `seq` whenever the
- * durable log still holds it. The read rides whichever face the running
- * harness serves — the 0.1.2+ gateway remotes (`remote.session.page`, with
- * the inclusive cut `throughSeq` pinned to the target seq) or the pre-0.1.2
- * api client verb (`sessions.history({ beforeSeq })`) — and the raw events
- * map into the same conversation-node shapes the window join delivers (a
- * thin display subset of dsh's own fold). Fetched nodes cache per session —
- * history is immutable, so a seq never needs fetching twice.
+ * durable log still holds it. The read rides the harness gateway remotes
+ * (`remote.session.page`, with the inclusive cut `throughSeq` pinned to the
+ * target seq) and the raw events map into the same conversation-node shapes
+ * the window join delivers (a thin display subset of dsh's own fold).
+ * Fetched nodes cache per session — history is immutable, so a seq never
+ * needs fetching twice.
  *
  * The remote face is resolved through the DECLARED inject
  * (`watchHistoryFaces`): this plugin's module inject lists only slots/
- * locale, and a top-level `remote.session` would stall the whole plugin on
- * pre-0.1.2 hosts that never mount the namespace — while NONDECLARED reads
- * of the traced service proxy throw "cannot get property … without inject"
- * and can take a view down. The injection callback runs under a fiber that
- * declares both `remote` and `remote.session` (the dsh idiom), so the
- * property path resolves; the guarded reflect reads beneath it degrade to
- * the legacy face or to no face instead of ever throwing.
+ * locale, and NONDECLARED reads of the traced service proxy throw "cannot
+ * get property … without inject" and can take a view down. The injection
+ * callback runs under a fiber that declares both `remote` and
+ * `remote.session` (the dsh idiom), so the property path resolves there and
+ * nowhere else; the resolved face is re-proved and a hostile read leaves
+ * the slot unset instead of ever throwing.
  */
 
 import type {
   ClientCtx, ContentFetcher, ConversationNodeLike, HeaderFetcher,
-  HistoryEntryLike, SessionPageFace, SessionsHistoryFace,
+  HistoryEntryLike, SessionPageFace,
 } from './services'
 import type { HeaderEpochContent } from '../shared/types'
 
 /** Narrow one served row to a validated durable event envelope, or null. */
 function eventOf(entry: unknown): { type: string; seq: number; data: Record<string, unknown> } | null {
   if (entry === null || typeof entry !== 'object') return null
-  // Both eras wrap the envelope in an `event` field (0.1.1 history entries
-  // `{event, view?}`, 0.1.2 records `{type:'event'|'chunks', event}`); a bare
-  // envelope passes too, so shape drift across versions degrades instead of
-  // breaking the page. Packed chunk-row records flow through as unknown types
-  // and project to nothing downstream — only final events matter here.
+  // History records wrap the envelope in an `event` field
+  // (`{type:'event'|'chunks', event}`); a bare envelope passes too, so shape
+  // drift degrades instead of breaking the page. Packed chunk-row records
+  // flow through as unknown types and project to nothing downstream — only
+  // final events matter here.
   const inner = (entry as HistoryEntryLike).event ?? entry
   if (typeof inner !== 'object') return null
   const e = inner as { type?: unknown; seq?: unknown; data?: unknown }
@@ -163,51 +161,21 @@ export function pageNodesOf(entries: readonly unknown[]): Map<number, Conversati
   return nodes
 }
 
-/** Read a service off the client context without letting an absent/foreign
- * cordis service (a throwing `ctx.get`) escape: returns undefined instead. */
-function serviceOf(ctx: ClientCtx, name: string): unknown {
+/** The `page` verb of a history face, re-proved and bound to its owner.
+ * Hostile objects (any accessor backed by host state can throw) degrade to
+ * undefined instead of escaping the read. */
+function readPageOf(face: unknown): SessionPageFace['page'] | undefined {
+  if (face === null || typeof face !== 'object') return undefined
   try {
-    return ctx.get(name)
+    const fn = (face as Record<string, unknown>).page
+    return typeof fn === 'function' ? (fn as SessionPageFace['page']).bind(face) : undefined
   } catch {
     return undefined
   }
 }
 
 /**
- * Walk a (possibly traced/proxied) service value down a plain-property path,
- * degrading at the FIRST throw. cordis's undeclared-service proxies are one
- * hostile object class — any accessor backed by host state can throw too —
- * and the no-white-screen contract needs the whole chain guarded, not just
- * the `ctx.get` call.
- */
-function readKeysOf(value: unknown, ...keys: string[]): unknown {
-  let current = value
-  for (const key of keys) {
-    if (current === null || typeof current !== 'object') return undefined
-    try {
-      current = (current as Record<string, unknown>)[key]
-    } catch {
-      return undefined
-    }
-  }
-  return current
-}
-
-/** The `page` verb of a history face, re-proved and bound to its owner. */
-function readPageOf(face: unknown): SessionPageFace['page'] | undefined {
-  const fn = readKeysOf(face, 'page')
-  return typeof fn === 'function' ? (fn as SessionPageFace['page']).bind(face) : undefined
-}
-
-/** The `history` verb of the legacy api client face, re-proved and bound. */
-function readHistoryOf(face: unknown): SessionsHistoryFace['history'] | undefined {
-  const sessions = readKeysOf(face, 'api', 'sessions')
-  const fn = readKeysOf(sessions, 'history')
-  return typeof fn === 'function' ? (fn as SessionsHistoryFace['history']).bind(sessions) : undefined
-}
-
-/**
- * The 0.1.2+ gateway history page verb, resolved through the DECLARED inject
+ * The gateway history page verb, resolved through the DECLARED inject
  * (see {@link watchHistoryFaces}) and bound up front: a method extracted
  * unbound loses `this`, and the traced `remote` proxy that hands it out
  * requires the inject to resolve at all.
@@ -215,39 +183,35 @@ function readHistoryOf(face: unknown): SessionsHistoryFace['history'] | undefine
 let declaredPage: SessionPageFace['page'] | undefined
 
 /**
- * Register the plugin's 0.1.2+ history faces with the harness through the
- * DECLARED inject — both `remote` AND `remote.session` (the ui-chat idiom)
- * must be in one fiber's requirement list, because the traced `remote`
- * proxy resolves `.session` through the context and each name needs the
- * other's declaration. Pre-0.1.2 hosts never provide either name, so the
- * callback simply never fires and the legacy `connection` face carries the
- * reads. The callback re-runs on every unload/remount, so it owns the
- * slot's lifetime. The face itself is re-proven (a never-fired or hostile
- * invocation leaves the slot unset — nothing here can throw).
+ * Register the plugin's history face with the harness through the DECLARED
+ * inject — both `remote` AND `remote.session` (the ui-chat idiom) must be in
+ * one fiber's requirement list, because the traced `remote` proxy resolves
+ * `.session` through the context and each name needs the other's
+ * declaration; an undeclared read of the traced proxy throws instead of
+ * resolving. The callback re-runs on every unload/remount, so it owns the
+ * slot's lifetime. The face itself is re-proven: a never-fired invocation
+ * or a hostile property read leaves the slot unset — nothing here can throw.
  */
 export function watchHistoryFaces(ctx: ClientCtx): void {
   ctx.inject(['remote', 'remote.session'], (c) => {
-    const session = (c as ClientCtx & { remote?: { session?: SessionPageFace } }).remote?.session
-    const page = session !== undefined ? readPageOf(session) : undefined
-    declaredPage = page
+    try {
+      const session = (c as ClientCtx & { remote?: { session?: SessionPageFace } }).remote?.session
+      declaredPage = session !== undefined ? readPageOf(session) : undefined
+    } catch {
+      declaredPage = undefined
+    }
     return () => {
       declaredPage = undefined
     }
   })
 }
 
-/** The rows array of a history/page response, under every served envelope. */
+/** The rows array of a successful history page, under the served envelope. */
 function rowsOf(response: unknown): readonly unknown[] {
-  // Envelope unwrapping, both served shapes: the 0.1.2 remote resolves to
-  // the ClientResult itself ({ok, value}); the 0.1.1 api client nests it
-  // under `result` ({result: {ok, value}}). A bare {records}/{events}
-  // payload passes too. Anything else rejects so the caller can offer a
-  // retry instead of claiming absence.
+  // Envelope unwrapping: the remote resolves to the ClientResult itself
+  // ({ok, value}). A bare {records} payload passes too. Anything else
+  // rejects so the caller can offer a retry instead of claiming absence.
   let payload: unknown = response
-  if (payload !== null && typeof payload === 'object') {
-    const nested = (payload as { result?: unknown }).result
-    if (nested !== null && typeof nested === 'object') payload = nested
-  }
   if (payload !== null && typeof payload === 'object' && 'ok' in payload) {
     const r = payload as { ok?: unknown; value?: unknown }
     if (r.ok !== true || r.value === null || typeof r.value !== 'object') {
@@ -256,58 +220,45 @@ function rowsOf(response: unknown): readonly unknown[] {
     payload = r.value
   }
   if (payload === null || typeof payload !== 'object') throw new Error('history rpc failed')
-  const rows = (payload as { records?: unknown; events?: unknown }).records
-    ?? (payload as { events?: unknown }).events
+  const rows = (payload as { records?: unknown }).records
   if (!Array.isArray(rows)) throw new Error('history rpc failed')
   return rows
 }
 
 /**
- * The session's history readers over whichever face the running harness
- * serves — the 0.1.2+ gateway remotes (`remote.session.page`) first, the
- * pre-0.1.2 api client verb (`connection.api.sessions.history`) beneath it.
- * Both cut message-aligned pages, so the returned read covers `seq` whenever
- * the durable log still holds it: the newer face pins the inclusive cut to
- * the seq itself, the legacy reader uses the exclusive bound one past it —
- * and because a non-declared read of the traced remote proxy throws
- * ("cannot get property … without inject"), the page face prefers the
- * injection-resolved slot and only then tries the reflect read. Every
- * service property access degrades at its own guard instead of taking the
- * view down. Undefined when no face exists (older hosts) — callers keep
- * their static degradation.
+ * The session's history reader over the gateway remotes (`remote.session.page`),
+ * from the declared-inject slot. The page cuts message-aligned pages, so the
+ * returned read covers `seq` whenever the durable log still holds it: the
+ * inclusive cut is pinned to the seq itself, the exclusive bound one past
+ * it. Undefined when the slot holds no face (the inject never fired or
+ * served no usable page verb) — callers keep their static degradation.
  */
-function pageReadersOf(ctx: ClientCtx, sessionId: string): ((seq: number) => Promise<unknown>) | undefined {
-  // The declared-inject face wins; the reflect read beneath it is the
-  // bounded second chance on hosts where the inject callback never fired.
-  const page = declaredPage ?? readPageOf(serviceOf(ctx, 'remote.session'))
-  const history = readHistoryOf(serviceOf(ctx, 'connection'))
-  if (page === undefined && history === undefined) return undefined
+function pageReaderOf(sessionId: string): ((seq: number) => Promise<unknown>) | undefined {
+  // The face resolved at build time: absent face = the caller's static
+  // degradation, a resolved face stays bound for the fetcher's lifetime.
+  const page = declaredPage
+  if (page === undefined) return undefined
   return (seq) => {
-    if (page !== undefined) {
-      // The inclusive log cut pinned to the target seq, the exclusive bound
-      // one past it — the newer face's exact-pinning of the legacy page.
-      return page({
-        address: { kind: 'session' as const, sessionId },
-        throughSeq: seq,
-        beforeSeq: seq + 1,
-      }, new AbortController().signal)
-    }
-    return (history as (request: { sessionId: string; beforeSeq: number }) => Promise<unknown>)({ sessionId, beforeSeq: seq + 1 })
+    // The inclusive log cut pinned to the target seq, the exclusive bound
+    // one past it.
+    return page({
+      address: { kind: 'session' as const, sessionId },
+      throughSeq: seq,
+      beforeSeq: seq + 1,
+    }, new AbortController().signal)
   }
 }
 
 /**
- * Build the browser's per-session fetcher over whichever history face the
- * running harness serves — the 0.1.2+ gateway remotes (`remote.session.page`)
- * first, the pre-0.1.2 api client verb (`connection.api.sessions.history`)
- * beneath it. Both cut message-aligned pages, so `beforeSeq: seq + 1` (with
- * the inclusive cut pinned to `seq` on the newer face) covers the seq whenever
- * the durable log still holds it. Undefined when no face exists (older
- * hosts) — the caller keeps its static preview-plus-hint degradation. Found
- * nodes cache in the closure: one mount re-reading a row never re-fetches.
+ * Build the browser's per-session fetcher over the gateway history face
+ * (`remote.session.page`): message-aligned pages whose inclusive cut pinned
+ * to `seq` (exclusive bound one past it) cover the seq whenever the durable
+ * log still holds it. Undefined when no face was resolved at build time —
+ * the caller keeps its static preview-plus-hint degradation. Found nodes
+ * cache in the closure: one mount re-reading a row never re-fetches.
  */
-export function makeContentFetcher(ctx: ClientCtx, sessionId: string): ContentFetcher | undefined {
-  const read = pageReadersOf(ctx, sessionId)
+export function makeContentFetcher(sessionId: string): ContentFetcher | undefined {
+  const read = pageReaderOf(sessionId)
   if (read === undefined) return undefined
   // Fetched nodes cache in the closure: history is immutable, so one mount
   // re-reading a row never re-fetches.
@@ -361,11 +312,11 @@ function headerContentOf(data: Record<string, unknown>): HeaderEpochContent | nu
  * mapped client-side into the renderable content. Epochs cache per session
  * (history is immutable), and OLDER epochs sharing the page cache for free —
  * stepping back through epochs walks the same pages. Undefined when no
- * history face exists (older hosts) — the browser keeps a metadata-only
- * degradation instead.
+ * history face exists — the browser keeps a metadata-only degradation
+ * instead.
  */
-export function makeHeaderFetcher(ctx: ClientCtx, sessionId: string): HeaderFetcher | undefined {
-  const read = pageReadersOf(ctx, sessionId)
+export function makeHeaderFetcher(sessionId: string): HeaderFetcher | undefined {
+  const read = pageReaderOf(sessionId)
   if (read === undefined) return undefined
   const cache = new Map<number, HeaderEpochContent>()
   return async (seq) => {

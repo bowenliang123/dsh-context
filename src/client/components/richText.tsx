@@ -12,9 +12,9 @@ import type { ViewKit } from '../viewkit'
 export type RichMode = 'raw' | 'md'
 
 /**
- * The Markdown chrome dsh 0.1.2-alpha serves as a required `labels` prop
- * (renamed from 0.1.1's optional `codeLabels`). Typed locally so the plugin
- * typechecks against either face; 0.1.1-era renderers ignore the extra key.
+ * The Markdown chrome the harness primitives serve as a required `labels`
+ * prop. Typed locally so the plugin typechecks without a primitives
+ * dependency.
  */
 interface MarkdownChrome {
   code: { copyLabel: string; copiedLabel: string }

@@ -1,8 +1,7 @@
 // Projection narrowing (src/client/services.ts): the no-white-screen wire
 // guards — numOf, timelineOf fast/slow paths, contextPressureOf,
-// contextBreakdownOf, tokenUsageOf, timingOf, headersOf — plus the dual-face helpers
-// that keep the plugin alive across the dsh 0.1.1/0.1.2 service seams
-// (conversationNodesOf, imageLoaderOf).
+// contextBreakdownOf, tokenUsageOf, timingOf, headersOf — plus the seat
+// helpers over the harness service faces (conversationNodesOf, imageLoaderOf).
 
 import assert from 'node:assert/strict'
 import { describe, test } from 'vitest'
@@ -26,58 +25,39 @@ import type { TimingTotals } from '../../src/shared/types'
 /** The chat-view snapshot face: the selector sees the whole snapshot. */
 const useChatOf = (snapshot: unknown) => (<T>(sel: (s: unknown) => T) => sel(snapshot))
 
-describe('conversationNodesOf — the dual-seat window join', () => {
+describe('conversationNodesOf — the chat-seat window join', () => {
   const nodes: ConversationNodeLike[] = [{ kind: 'user', seq: 1 }, { kind: 'assistant', seq: 2 }]
 
-  test('prefers the 0.1.2+ chat seat (ChatSnapshot.legacy.nodes)', () => {
-    const out = conversationNodesOf({ useChat: useChatOf({ legacy: { nodes } }), useSession: (sel) => sel({ nodes: [] }) })
-    assert.equal(out, nodes)
-  })
-
-  test('falls back to the pre-0.1.2 session-snapshot nodes', () => {
-    const out = conversationNodesOf({ useSession: (sel) => sel({ nodes }) })
+  test('serves the chat seat (ChatSnapshot.legacy.nodes)', () => {
+    const out = conversationNodesOf({ useChat: useChatOf({ legacy: { nodes } }) })
     assert.equal(out, nodes)
   })
 
   test('absent seats, non-array payloads, and hostile seats degrade to undefined', () => {
     assert.equal(conversationNodesOf({}), undefined)
     assert.equal(conversationNodesOf({ useChat: useChatOf({}) }), undefined, 'chat snapshot without legacy')
-    assert.equal(conversationNodesOf({ useSession: (sel) => sel({}) }), undefined, 'session snapshot without nodes')
-    assert.equal(
-      conversationNodesOf({ useChat: useChatOf(null), useSession: (sel) => sel(null as unknown as { nodes?: readonly ConversationNodeLike[] }) }),
-      undefined,
-      'null snapshots',
-    )
-    const hostile = () => { throw new Error('boom') }
-    assert.equal(conversationNodesOf({ useChat: hostile, useSession: hostile }), undefined)
-    // A hostile chat seat still lets the session seat answer — both are probed.
-    const out = conversationNodesOf({ useChat: hostile, useSession: (sel) => sel({ nodes }) })
-    assert.equal(out, nodes)
+    assert.equal(conversationNodesOf({ useChat: useChatOf(null) }), undefined, 'null snapshot')
+    assert.equal(conversationNodesOf({ useChat: () => { throw new Error('boom') } }), undefined, 'hostile seat')
   })
 })
 
-describe('imageLoaderOf — the dual-conversation-face loader', () => {
+describe('imageLoaderOf — the uiConversation loader', () => {
   const ctxWith = (services: Record<string, unknown>): ClientCtx => ({ get: (name: string) => services[name] }) as unknown as ClientCtx
   const attachment = { attachmentId: 'a1' }
 
-  test('prefers the legacy resolveImage face (dsh <= 0.1.1)', async () => {
+  test('uses the uiConversation.imageUrl face', async () => {
     const calls: string[] = []
-    const load = imageLoaderOf(ctxWith({ conversation: { resolveImage: (sid: string, att: { attachmentId: string }) => {
+    const load = imageLoaderOf(ctxWith({ uiConversation: { imageUrl: (sid: string, att: { attachmentId: string }) => {
       calls.push(sid + ':' + att.attachmentId)
-      return Promise.resolve('blob:legacy')
+      return Promise.resolve('blob:modern')
     } } }), 'sv')
-    assert.equal(await load!(attachment), 'blob:legacy')
-    assert.deepEqual(calls, ['sv:a1'])
-  })
-
-  test('uses the 0.1.2+ uiConversation.imageUrl face when the legacy one is absent', async () => {
-    const load = imageLoaderOf(ctxWith({ uiConversation: { imageUrl: () => Promise.resolve('blob:modern') } }), 'sv')
     assert.equal(await load!(attachment), 'blob:modern')
+    assert.deepEqual(calls, ['sv:a1'])
   })
 
   test('absent faces, bad session ids, and hostile service reads degrade to undefined', () => {
     assert.equal(imageLoaderOf(ctxWith({}), 'sv'), undefined)
-    assert.equal(imageLoaderOf(ctxWith({ conversation: {} }), 'sv'), undefined)
+    assert.equal(imageLoaderOf(ctxWith({ uiConversation: {} }), 'sv'), undefined)
     assert.equal(imageLoaderOf(ctxWith({}), undefined), undefined)
     assert.equal(imageLoaderOf(ctxWith({}), ''), undefined)
     const ctxThrows = { get: (): never => { throw new Error('service absent') } } as unknown as ClientCtx

@@ -1,6 +1,6 @@
 /**
  * dsh's multimodal pipeline stores only a normalized reference per image (never inline bytes); the block carries everything the card needs
- * except the display URL, which comes from the harness conversation service's `resolveImage` (the same loader the chat history rides on),
+ * except the display URL, which comes from the harness `uiConversation` service's `imageUrl` (the same loader the chat history rides on),
  * handed down as `load`; absent loader or failed load degrades to the metadata row alone — the card never throws.
  */
 
@@ -19,7 +19,7 @@ export interface ImageKit {
 
 /**
  * Narrow an unknown content block to a durable image ref: accepts both raw message blocks (`{ type: 'image', attachment }`) and the
- * snapshot's assistant blocks (`{ kind: 'image', attachment }`); everything else null. Lenient on the optional facts — resolveImage reads
+ * snapshot's assistant blocks (`{ kind: 'image', attachment }`); everything else null. Lenient on the optional facts — imageUrl reads
  * only attachmentId.
  */
 export function imageRefOf(block: unknown): ImageRefLike | null {

@@ -135,7 +135,7 @@ const contextTimelineSchema = z.object({
 }).strict() as unknown as z.ZodType<ContextTimeline>
 
 /**
- * The persisted fold-state schema (the dsh 0.1.1-rc.1+ `stateSchema`
+ * The persisted fold-state schema (the registry's `stateSchema`
  * contract). Validates the plain-JSON `TimelineState` before a checkpoint
  * row seeds a fold — the same shape guarantee the projection cache's
  * plain-JSON precondition already enforces at write time.

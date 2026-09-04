@@ -160,138 +160,96 @@ describe('pageNodesOf — the durable-page mapper', () => {
   })
 })
 
+/** Arm the DECLARED inject with one `remote` facade (the way the harness
+ * serves it) and prove the fetchers read through that path only. The direct
+ * `remote.session` service is hostile on purpose — an undeclared read of the
+ * traced proxy throws on the real host, so the declared path must be the one
+ * that carries the read. Dispose the returned ctx to unload the slot. */
+function armHistoryFaces(remote: unknown): TestClientCtx {
+  const ctx = new TestClientCtx()
+  ctx.setService('remote', remote)
+  ctx.setService('remote.session', { get page() { throw new Error('cannot get property "remote.session" without inject') } })
+  watchHistoryFaces(asClientCtx(ctx))
+  return ctx
+}
+
+/** One raw durable-log event, as a page record carries it. */
+const ev = (type: string, seq: number, data: unknown) => ({ type, seq, time: seq, data })
+
+/** The gateway session-page face: records of `{type:'event', event}` rows. */
+const pageFace = (events: unknown[], calls: unknown[] = [], envelope: (records: unknown[]) => unknown = (r) => ({ ok: true, value: { records: r } })) => ({
+  page: (request: unknown) => {
+    calls.push(request)
+    return Promise.resolve(envelope(events.map(event => ({ type: 'event', event }))))
+  },
+})
+
 describe('makeContentFetcher — the per-session targeted read', () => {
-  /** A minimal cordis-like ctx over one service map. */
-  function ctxWith(services: Record<string, unknown>): Parameters<typeof makeContentFetcher>[0] {
-    return { get: (key: string) => services[key] } as Parameters<typeof makeContentFetcher>[0]
-  }
-
-  const apiFace = (events: unknown[], calls: { beforeSeq: number }[] = []) => ({
-    sessions: {
-      history: (request: { sessionId: string; beforeSeq: number }) => {
-        calls.push({ beforeSeq: request.beforeSeq })
-        return Promise.resolve({ result: { ok: true, value: { events } } })
-      },
-    },
-  })
-
-  test('undefined without the connection face or the history verb (older hosts)', () => {
-    assert.equal(makeContentFetcher(ctxWith({}), 's'), undefined)
-    assert.equal(makeContentFetcher(ctxWith({ connection: {} }), 's'), undefined)
-    assert.equal(makeContentFetcher(ctxWith({ connection: { api: { sessions: {} } } }), 's'), undefined)
+  test('undefined while the declared slot holds no face', () => {
+    assert.equal(makeContentFetcher('s'), undefined)
   })
 
   test('fetches the page anchored past the seq, maps it, and caches the hit', async () => {
-    const calls: { beforeSeq: number }[] = []
-    const fetch = makeContentFetcher(ctxWith({
-      connection: { api: apiFace([
-        row('user/message', 7, { content: [{ type: 'text', text: 'CACHED BODY' }] }),
-      ], calls) },
-    }), 'sess-1')!
+    const calls: unknown[] = []
+    const ctx = armHistoryFaces({ session: pageFace([
+      ev('user/message', 7, { content: [{ type: 'text', text: 'CACHED BODY' }] }),
+    ], calls) })
+    const fetch = makeContentFetcher('sess-1')!
     assert.deepEqual(calls, [])
     const node = await fetch(7)
-    assert.deepEqual(calls, [{ beforeSeq: 8 }])
+    assert.deepEqual(calls, [{ address: { kind: 'session', sessionId: 'sess-1' }, throughSeq: 7, beforeSeq: 8 }])
     assert.equal((node?.content as { text: string }[])[0]?.text, 'CACHED BODY')
     // Second read hits the closure cache — no second RPC.
     const again = await fetch(7)
     assert.equal(again, node)
-    assert.deepEqual(calls.length, 1)
+    assert.equal(calls.length, 1)
+    // Unload clears the slot: nothing stales across plugin reloads.
+    ctx.dispose()
+    assert.equal(makeContentFetcher('sess-1'), undefined, 'the unloaded slot leaves no face behind')
   })
 
-  test('a page without the seq resolves null; an empty events page too', async () => {
-    const fetch = makeContentFetcher(ctxWith({ connection: { api: apiFace([row('user/message', 9, {})]) } }), 's')!
+  test('a page without the seq resolves null; an empty records page too', async () => {
+    const calls: unknown[] = []
+    const ctx = armHistoryFaces({ session: pageFace([ev('user/message', 9, {})], calls) })
+    const fetch = makeContentFetcher('s')!
     assert.equal(await fetch(500), null)
-    const empty = makeContentFetcher(ctxWith({
-      connection: { api: { sessions: { history: async () => ({ result: { ok: true, value: { events: [] } } }) } } },
-    }), 's')!
-    assert.equal(await empty(1), null)
+    ctx.dispose()
+    const empty = armHistoryFaces({ session: pageFace([]) })
+    assert.equal(await makeContentFetcher('s')!(1), null)
+    empty.dispose()
   })
 
   test('a payload with no rows array at all rejects (never claims absence)', async () => {
-    const garbage = makeContentFetcher(ctxWith({
-      connection: { api: { sessions: { history: async () => ({ result: { ok: true, value: {} } }) } } },
-    }), 's')!
-    await assert.rejects(garbage(1))
-  })
-
-  test('a throwing service read degrades to no fetcher', () => {
-    const hostile = (throwing: string): Parameters<typeof makeContentFetcher>[0] => ({
-      get: (key: string) => {
-        if (key === throwing) throw new Error('service absent')
-        return undefined
-      },
-    }) as Parameters<typeof makeContentFetcher>[0]
-    assert.equal(makeContentFetcher(hostile('remote.session'), 's'), undefined)
-    assert.equal(makeContentFetcher(hostile('connection'), 's'), undefined)
-  })
-
-  // The issue-42 failure: the injected-service PROXY throws on the `.page`
-  // read itself ("cannot get property "remote.session" without inject") —
-  // the guard around `ctx.get` alone cannot catch it. A throwing getter must
-  // degrade to the legacy face (or to no face), never out of the fetcher.
-  test('a throwing service-property read degrades to the legacy face', async () => {
-    const calls: { beforeSeq: number }[] = []
-    const hostilePage = {
-      get page() {
-        throw new Error('cannot get property "remote.session" without inject')
-      },
-    }
-    const fetch = makeContentFetcher(ctxWith({
-      'remote.session': hostilePage,
-      connection: { api: apiFace([row('user/message', 7, { content: [{ type: 'text', text: 'LEGACY BODY' }] })], calls) },
-    }), 's')!
-    const node = await fetch(7)
-    assert.deepEqual(calls, [{ beforeSeq: 8 }], 'the throwing page face falls back to the legacy verb')
-    assert.equal((node?.content as { text: string }[])[0]?.text, 'LEGACY BODY')
-    // No legacy face beneath it: the fetcher itself degrades, no throw.
-    assert.equal(makeContentFetcher(ctxWith({ 'remote.session': hostilePage }), 's'), undefined)
-  })
-
-  test('a throwing connection-property chain degrades to no fetcher', () => {
-    const hostileApi = {
-      get api() {
-        throw new Error('cannot get property "api" without inject')
-      },
-    }
-    assert.equal(makeContentFetcher(ctxWith({ connection: hostileApi }), 's'), undefined)
-    assert.equal(makeContentFetcher(ctxWith({ connection: { api: { get sessions() { throw new Error('hostile sessions') } } } }), 's'), undefined)
-  })
-
-  test('the declared remote.session inject carries the page read and unloads cleanly', async () => {
-    // The harness mirrors the traced `remote` service: factory→`.session`
-    // is the facade property path the DECLARED fiber resolves. The direct
-    // `remote.session` service value is hostile on purpose — the injection
-    // path must be the one that carries the read.
-    const calls: unknown[] = []
-    const declared = {
-      session: {
-        page(request: unknown, _signal: AbortSignal): Promise<unknown> {
-          calls.push(request)
-          return Promise.resolve({ ok: true, value: { records: [] } })
-        },
-      },
-    }
-    const ctx = new TestClientCtx()
-    ctx.setService('remote', declared)
-    ctx.setService('remote.session', { get page() { throw new Error('cannot get property "remote.session" without inject') } })
-    watchHistoryFaces(asClientCtx(ctx))
-    const fetch = makeContentFetcher(asClientCtx(ctx), 'sess-1')!
-    const node = await fetch(7)
-    assert.deepEqual(calls, [{ address: { kind: 'session', sessionId: 'sess-1' }, throughSeq: 7, beforeSeq: 8 }])
-    assert.equal(node, null, 'the declared page face mapped the (empty) page')
-    // Unload clears the slot: the hostile reflect read (and the absent
-    // legacy face) then degrade to no fetcher — nothing stales across
-    // plugin reloads.
+    const ctx = armHistoryFaces({ session: pageFace([], [], () => ({ ok: true, value: {} })) })
+    await assert.rejects(makeContentFetcher('s')!(1))
     ctx.dispose()
-    assert.equal(makeContentFetcher(asClientCtx(ctx), 's'), undefined, 'the unloaded slot leaves no face behind')
+  })
+
+  test('a hostile or shapeless declared face leaves the slot unset (issue #42)', () => {
+    // The traced proxy can throw on the property READ itself, or serve a
+    // null / primitive / verb-less / hostile-verb face — the declared
+    // callback contains all of it, the slot stays unset, and the fetcher
+    // degrades instead of taking the view down.
+    const remotes = [
+      { get session() { throw new Error('traced read failed') } },
+      { session: null },
+      { session: 'x' },
+      { session: { get page() { throw new Error('hostile page read') } } },
+      { session: { page: 42 } },
+    ]
+    for (const remote of remotes) {
+      const ctx = armHistoryFaces(remote)
+      assert.equal(makeContentFetcher('s'), undefined)
+      ctx.dispose()
+    }
   })
 
   test('the declared inject never fires without both remote services', () => {
     const ctx = new TestClientCtx()
-    // Only `remote`: the injected fiber requires BOTH names, so nothing
-    // fires and the legacy verb carries the reads (the pre-0.1.2 line).
+    // Only `remote`: the injected fiber requires BOTH names, so nothing fires.
     ctx.setService('remote', { session: {} })
     watchHistoryFaces(asClientCtx(ctx))
+    assert.equal(makeContentFetcher('s'), undefined)
     ctx.dispose()
   })
 
@@ -302,190 +260,139 @@ describe('makeContentFetcher — the per-session targeted read', () => {
     ctx.setService('remote', {})
     ctx.setService('remote.session', {})
     watchHistoryFaces(asClientCtx(ctx))
-    assert.equal(makeContentFetcher(asClientCtx(ctx), 's'), undefined)
+    assert.equal(makeContentFetcher('s'), undefined)
     ctx.dispose()
   })
 
-  test('the 0.1.2 page face wins over the legacy history verb and maps its records', async () => {
+  test('the page face maps its records', async () => {
     const calls: unknown[] = []
-    // The real 0.1.2 shape: the remote resolves to the ClientResult itself.
-    const pageFace = (records: unknown[], envelope: (records: unknown[]) => unknown = (r) => ({ ok: true, value: { records: r } })) => ({
-      page: (request: unknown) => {
-        calls.push(request)
-        return Promise.resolve(envelope(records))
-      },
-    })
+    // The real shape: the remote resolves to the ClientResult itself.
     const records = [
-      { type: 'event', event: { type: 'user/message', seq: 7, time: 7, data: { content: [{ type: 'text', text: 'PAGED BODY' }] } } },
+      { type: 'event', event: ev('user/message', 7, { content: [{ type: 'text', text: 'PAGED BODY' }] }) },
       // A packed chunk-row record projects to nothing — only final events matter.
       { type: 'chunks', event: { type: 'chunkrow/text-chunks', seq: 8, time: 8, data: { turn: 1, step: 0, index: 0, dt: [1], texts: ['delta'] } } },
     ]
-    const historyCalls: unknown[] = []
-    const fetch = makeContentFetcher(ctxWith({
-      'remote.session': pageFace(records),
-      connection: { api: { sessions: { history: () => { historyCalls.push(1); return Promise.resolve({}) } } } },
-    }), 'sess-9')!
-    const node = await fetch(7)
+    const ctx = armHistoryFaces({ session: pageFace([], calls, () => ({ ok: true, value: { records } })) })
+    const node = await makeContentFetcher('sess-9')!(7)
     assert.deepEqual(calls, [{
       address: { kind: 'session', sessionId: 'sess-9' },
       throughSeq: 7,
       beforeSeq: 8,
     }])
     assert.equal((node?.content as { text: string }[])[0]?.text, 'PAGED BODY')
-    assert.equal(historyCalls.length, 0, 'the legacy verb stays untouched')
+    ctx.dispose()
     // A bare (non-enveloped) SessionPage passes too.
-    const bare = makeContentFetcher(ctxWith({ 'remote.session': pageFace(records, (r) => ({ records: r })) }), 's')!
-    assert.equal((await bare(7))?.kind, 'user')
+    const bare = armHistoryFaces({ session: pageFace([], [], () => ({ records })) })
+    assert.equal((await makeContentFetcher('s')!(7))?.kind, 'user')
+    bare.dispose()
   })
 
   test('page-face failures reject so the caller can offer a retry', async () => {
-    const bad = makeContentFetcher(ctxWith({
-      'remote.session': { page: async () => ({ result: { ok: false, value: undefined } }) },
-    }), 's')!
-    await assert.rejects(bad(1))
-    const badTop = makeContentFetcher(ctxWith({
-      'remote.session': { page: async () => ({ ok: false, error: { message: 'gone' } }) },
-    }), 's')!
-    await assert.rejects(badTop(1))
-    const garbage = makeContentFetcher(ctxWith({
-      'remote.session': { page: async () => ({ records: 'nope' }) },
-    }), 's')!
-    await assert.rejects(garbage(1))
-    const broken = makeContentFetcher(ctxWith({
-      'remote.session': { page: async () => { throw new Error('transport down') } } ,
-    }), 's')!
-    await assert.rejects(broken(1), /transport down/)
+    const badTop = armHistoryFaces({ session: { page: async () => ({ ok: false, error: { message: 'gone' } }) } })
+    await assert.rejects(makeContentFetcher('s')!(1))
+    badTop.dispose()
+    const garbage = armHistoryFaces({ session: { page: async () => ({ records: 'nope' }) } })
+    await assert.rejects(makeContentFetcher('s')!(1))
+    garbage.dispose()
+    const broken = armHistoryFaces({ session: { page: async () => { throw new Error('transport down') } } })
+    await assert.rejects(makeContentFetcher('s')!(1), /transport down/)
+    broken.dispose()
   })
 
   test('malformed rpc envelopes reject so the caller can offer a retry', async () => {
-    const fetch = makeContentFetcher(ctxWith({
-      connection: { api: { sessions: { history: async () => ({ result: { ok: false, value: undefined } }) } } },
-    }), 's')!
-    await assert.rejects(fetch(1))
-    const nullResponse = makeContentFetcher(ctxWith({
-      connection: { api: { sessions: { history: async () => null } } },
-    }), 's')!
-    await assert.rejects(nullResponse(1))
-    const noResult = makeContentFetcher(ctxWith({
-      connection: { api: { sessions: { history: async () => ({}) } } },
-    }), 's')!
-    await assert.rejects(noResult(1))
-    const scalarValue = makeContentFetcher(ctxWith({
-      connection: { api: { sessions: { history: async () => ({ result: { ok: true, value: 'nope' } }) } } },
-    }), 's')!
-    await assert.rejects(scalarValue(1))
-    const broken = makeContentFetcher(ctxWith({
-      connection: { api: { sessions: { history: async () => { throw new Error('transport down') } } } },
-    }), 's')!
-    await assert.rejects(broken(1), /transport down/)
+    const nullResponse = armHistoryFaces({ session: { page: async () => null } })
+    await assert.rejects(makeContentFetcher('s')!(1))
+    nullResponse.dispose()
+    const noResult = armHistoryFaces({ session: { page: async () => ({}) } })
+    await assert.rejects(makeContentFetcher('s')!(1))
+    noResult.dispose()
+    const scalarValue = armHistoryFaces({ session: { page: async () => ({ ok: true, value: 'nope' }) } })
+    await assert.rejects(makeContentFetcher('s')!(1))
+    scalarValue.dispose()
   })
 })
 
 describe('makeHeaderFetcher — the lazy epoch content read', () => {
-  function ctxWith(services: Record<string, unknown>): Parameters<typeof makeHeaderFetcher>[0] {
-    return { get: (key: string) => services[key] } as Parameters<typeof makeHeaderFetcher>[0]
-  }
-
-  const apiFace = (events: unknown[], calls: { beforeSeq: number }[] = []) => ({
-    sessions: {
-      history: (request: { sessionId: string; beforeSeq: number }) => {
-        calls.push({ beforeSeq: request.beforeSeq })
-        return Promise.resolve({ result: { ok: true, value: { events } } })
-      },
-    },
-  })
-
-  test('undefined without the history faces (older hosts)', () => {
-    assert.equal(makeHeaderFetcher(ctxWith({}), 's'), undefined)
-    assert.equal(makeHeaderFetcher(ctxWith({ connection: {} }), 's'), undefined)
-    assert.equal(makeHeaderFetcher(ctxWith({ connection: { api: { sessions: {} } } }), 's'), undefined)
+  test('undefined while the declared slot holds no face', () => {
+    assert.equal(makeHeaderFetcher('s'), undefined)
   })
 
   test('fetches the epoch page, maps the raw header, and caches per seq', async () => {
-    const calls: { beforeSeq: number }[] = []
+    const calls: unknown[] = []
     const headerEvent = {
-      event: {
-        type: 'request/header', seq: 5, time: 5,
-        data: {
-          header: {
-            system: 'You are an agent.',
-            tools: [
-              { name: 'bash', description: 'run a command', parameters: { type: 'object' } },
-              { name: 'mcp__gh__issue', description: '', plugin: 'mcp:github' },
-              null, // hostile entry degrades to an unnamed row
-              42,
-            ],
-          },
+      type: 'request/header', seq: 5, time: 5,
+      data: {
+        header: {
+          system: 'You are an agent.',
+          tools: [
+            { name: 'bash', description: 'run a command', parameters: { type: 'object' } },
+            { name: 'mcp__gh__issue', description: '', plugin: 'mcp:github' },
+            null, // hostile entry degrades to an unnamed row
+            42,
+          ],
         },
       },
     }
-    const fetch = makeHeaderFetcher(ctxWith({ connection: { api: apiFace([headerEvent], calls) } }), 'sess')!
+    const ctx = armHistoryFaces({ session: pageFace([headerEvent], calls) })
+    const fetch = makeHeaderFetcher('sess')!
     const content = await fetch(5)
-    assert.deepEqual(calls, [{ beforeSeq: 6 }])
+    assert.deepEqual(calls, [{ address: { kind: 'session', sessionId: 'sess' }, throughSeq: 5, beforeSeq: 6 }])
     assert.equal(content?.system, 'You are an agent.')
     assert.equal(content?.tools.length, 4)
     assert.equal(content?.tools[0]?.name, 'bash')
     assert.equal(content?.tools[0]?.description, 'run a command')
-    assert.deepEqual(content?.tools[0]?.schema, headerEvent.event.data.header.tools[0])
+    assert.deepEqual(content?.tools[0]?.schema, headerEvent.data.header.tools[0])
     assert.equal(content?.tools[1]?.description, undefined, 'empty description omitted')
-    assert.equal(content?.tools[1]?.schema, headerEvent.event.data.header.tools[1])
+    assert.equal(content?.tools[1]?.schema, headerEvent.data.header.tools[1])
     assert.equal(content?.tools[2]?.name, '?')
     assert.equal(content?.tools[3]?.name, '?')
     // Cached: the second read of the epoch costs no RPC.
     assert.equal(await fetch(5), content)
     assert.equal(calls.length, 1)
+    ctx.dispose()
   })
 
   test('an epoch with no system text and an absent tools list maps to empty tools', async () => {
-    const fetch = makeHeaderFetcher(ctxWith({
-      connection: { api: apiFace([row('request/header', 2, { header: {} })]) },
-    }), 's')!
-    const content = await fetch(2)
+    const ctx = armHistoryFaces({ session: pageFace([ev('request/header', 2, { header: {} })]) })
+    const content = await makeHeaderFetcher('s')!(2)
     assert.deepEqual(content, { tools: [] })
     assert.equal('system' in (content ?? {}), false)
+    ctx.dispose()
   })
 
   test('a page holding OLDER epochs caches them for free alongside the picked one', async () => {
-    const older = row('request/header', 1, { header: { system: 'OLD', tools: [] } })
-    const picked = row('request/header', 5, { header: { system: 'NEW', tools: [] } })
-    const calls: { beforeSeq: number }[] = []
-    const fetch = makeHeaderFetcher(ctxWith({ connection: { api: apiFace([older, picked], calls) } }), 's')!
+    const older = ev('request/header', 1, { header: { system: 'OLD', tools: [] } })
+    const picked = ev('request/header', 5, { header: { system: 'NEW', tools: [] } })
+    const calls: unknown[] = []
+    const ctx = armHistoryFaces({ session: pageFace([older, picked], calls) })
+    const fetch = makeHeaderFetcher('s')!
     const c5 = await fetch(5)
     assert.equal(c5?.system, 'NEW')
-    assert.deepEqual(calls, [{ beforeSeq: 6 }])
+    assert.deepEqual(calls, [{ address: { kind: 'session', sessionId: 's' }, throughSeq: 5, beforeSeq: 6 }])
     // The older epoch resolves from the cache — no second page read.
     const c1 = await fetch(1)
     assert.equal(c1?.system, 'OLD')
-    assert.deepEqual(calls, [{ beforeSeq: 6 }])
+    assert.equal(calls.length, 1)
+    ctx.dispose()
   })
 
   test('a page without the epoch resolves null; a non-header-only page too', async () => {
-    const fetch = makeHeaderFetcher(ctxWith({
-      connection: { api: apiFace([row('user/message', 9, {}), row('request/header', 3, {})]) },
-    }), 's')!
+    const ctx = armHistoryFaces({ session: pageFace([ev('user/message', 9, {}), ev('request/header', 3, {})]) })
+    const fetch = makeHeaderFetcher('s')!
     assert.equal(await fetch(500), null, 'the seq is not on the page')
     assert.equal(await fetch(3), null, 'a header envelope without a header object maps to nothing')
+    ctx.dispose()
   })
 
   test('malformed rpc envelopes reject so the caller can offer a retry', async () => {
-    const rejector = makeHeaderFetcher(ctxWith({
-      connection: { api: { sessions: { history: async () => ({ result: { ok: false, value: undefined } }) } } },
-    }), 's')!
-    await assert.rejects(rejector(1))
-    const rowsGarbage = makeHeaderFetcher(ctxWith({
-      'remote.session': { page: async () => ({ ok: true, value: { records: 'nope' } }) },
-    }), 's')!
-    await assert.rejects(rowsGarbage(1))
-    const broken = makeHeaderFetcher(ctxWith({
-      'remote.session': { page: async () => { throw new Error('transport down') } },
-    }), 's')!
-    await assert.rejects(broken(1), /transport down/)
-  })
-
-  test('a throwing service read degrades to no fetcher', () => {
-    const hostile = {
-      get: () => { throw new Error('service absent') },
-    } as unknown as Parameters<typeof makeHeaderFetcher>[0]
-    assert.equal(makeHeaderFetcher(hostile, 's'), undefined)
+    const rejector = armHistoryFaces({ session: { page: async () => ({ ok: false, value: undefined }) } })
+    await assert.rejects(makeHeaderFetcher('s')!(1))
+    rejector.dispose()
+    const rowsGarbage = armHistoryFaces({ session: { page: async () => ({ ok: true, value: { records: 'nope' } }) } })
+    await assert.rejects(makeHeaderFetcher('s')!(1))
+    rowsGarbage.dispose()
+    const broken = armHistoryFaces({ session: { page: async () => { throw new Error('transport down') } } })
+    await assert.rejects(makeHeaderFetcher('s')!(1), /transport down/)
+    broken.dispose()
   })
 })

@@ -11,10 +11,11 @@ import { createRoot } from 'react-dom/client'
 import { afterEach, describe, test, vi } from 'vitest'
 import { h } from '../../../src/client/react'
 import { makeContextView } from '../../../src/client/components/contextView'
+import { watchHistoryFaces } from '../../../src/client/historyPage'
 import { requestContextFocus, takeContextFocus } from '../../../src/client/viewFocus'
 import { createContextSettings } from '../../../src/client/settings'
 import type { SettingsScopeLike } from '../../../src/client/settings'
-import type { UseSessionLike } from '../../../src/client/services'
+import type { UseChatLike } from '../../../src/client/services'
 import type { ContextTimeline } from '../../../src/shared/types'
 import { DICT_EN } from '../../../src/client/i18n'
 import { TestClientCtx, TestLocale, asClientCtx } from '../helpers/harness'
@@ -189,7 +190,9 @@ async function mountRich(sessionId: string) {
     useProjection: projectionsFor(richTimeline(), {
       contextHeaders: { headers: [{ seq: 1, time: T0, system: 'SYS', tools: [{ name: 'bash', tokens: 12, description: 'run' }] }] },
     }),
-    useSession: (sel => sel({ nodes: [] })) as UseSessionLike,
+    useChat: (sel =>
+        sel({
+          legacy: { nodes: [] } })) as UseChatLike,
   }))
   return m
 }
@@ -420,7 +423,9 @@ describe('ContextView — file activity card', () => {
     const m = await mount(h(View, {
       sessionId,
       useProjection: projectionsFor(fileTimeline()),
-      useSession: (sel => sel({ nodes: fileConv })) as UseSessionLike,
+      useChat: (sel =>
+        sel({
+          legacy: { nodes: fileConv } })) as UseChatLike,
     }))
     const card = queryAll(m.container, '.lc-card').find(c => text(c).includes(DICT_EN['files.title']))
     assert.ok(card !== undefined)
@@ -512,7 +517,9 @@ describe('ContextView — file activity card', () => {
     const m = await mount(h(View, {
       sessionId: 'sv-ptc-locate',
       useProjection: projectionsFor(ptcTimeline),
-      useSession: (sel => sel({ nodes: ptcConv })) as UseSessionLike,
+      useChat: (sel =>
+        sel({
+          legacy: { nodes: ptcConv } })) as UseChatLike,
     }))
     const card = queryAll(m.container, '.lc-card').find(c => text(c).includes(DICT_EN['files.title']))
     assert.ok(card !== undefined)
@@ -546,7 +553,9 @@ describe('ContextView — file activity card', () => {
     const m = await mount(h(View, {
       sessionId: 'sv-files-open',
       useProjection: projectionsFor(fileTimeline()),
-      useSession: (sel => sel({ nodes: conv })) as UseSessionLike,
+      useChat: (sel =>
+        sel({
+          legacy: { nodes: conv } })) as UseChatLike,
     }))
     const card = queryAll(m.container, '.lc-card').find(c => text(c).includes(DICT_EN['files.title']))
     assert.ok(card !== undefined)
@@ -572,53 +581,59 @@ describe('ContextView — file activity card', () => {
 })
 
 describe('ContextView — targeted content fetch and image loading', () => {
-  test('opening an un-joined node reads one seq-anchored history page through the connection api', async () => {
-    const calls: { sessionId: string; beforeSeq: number }[] = []
+  test('opening an un-joined node reads one seq-anchored history page through the gateway remote', async () => {
+    const calls: { sessionId: string; throughSeq: number; beforeSeq: number }[] = []
     const ctx = new TestClientCtx({
       services: {
-        connection: {
-          api: {
-            sessions: {
-              history: (request: { sessionId: string; beforeSeq: number }) => {
-                calls.push(request)
-                return Promise.resolve({
-                  result: {
-                    ok: true,
-                    value: {
-                      events: [
-                        { event: { type: 'user/message', seq: request.beforeSeq - 1, data: { content: [{ type: 'text', text: 'OLD FULL BODY' }] } } },
-                      ],
-                    },
-                  },
-                })
-              },
+        remote: {
+          session: {
+            page: (request: { address: { sessionId: string }; throughSeq: number; beforeSeq: number }) => {
+              calls.push({ sessionId: request.address.sessionId, throughSeq: request.throughSeq, beforeSeq: request.beforeSeq })
+              return Promise.resolve({
+                ok: true,
+                value: {
+                  records: [
+                    { type: 'event', event: { type: 'user/message', seq: request.throughSeq, data: { content: [{ type: 'text', text: 'OLD FULL BODY' }] } } },
+                  ],
+                },
+              })
             },
           },
         },
       },
     })
+    // The direct `remote.session` service is hostile, as on the real host:
+    // the face resolves only through the declared inject.
+    ctx.setService('remote.session', { get page() { throw new Error('cannot get property "remote.session" without inject') } })
+    watchHistoryFaces(asClientCtx(ctx))
     const View = makeView(ctx)
     const m = await mount(h(View, {
       sessionId: 'sv-page',
       useProjection: projectionsFor(timeline({ nodes: [{ seq: 1, cat: 'user', tokens: 5, text: 'old msg' }] })),
-      useSession: (sel => sel({ nodes: [] })) as UseSessionLike,
+      useChat: (sel =>
+        sel({
+          legacy: { nodes: [] } })) as UseChatLike,
     }))
     const catRow = queryAll(m.container, '.lc-br-cat-row').find(r => text(r).includes(DICT_EN['cat.user']))
     assert.ok(catRow !== undefined)
     // The lone node auto-expands with the category, which triggers the fetch.
     await click(catRow)
     await flush()
-    assert.deepEqual(calls, [{ sessionId: 'sv-page', beforeSeq: 2 }], 'one read anchored just past the seq')
+    assert.deepEqual(calls, [{ sessionId: 'sv-page', throughSeq: 1, beforeSeq: 2 }], 'one read anchored just past the seq')
     assert.ok(text(m.container).includes('OLD FULL BODY'), 'mapped page content renders')
     await m.unmount()
+    // Unload the declared slot so no face stales into the next test.
+    ctx.dispose()
   })
 
-  test('without a connection face an uncached node shows the static note', async () => {
+  test('without a history face an uncached node shows the static note', async () => {
     const View = makeView(new TestClientCtx())
     const m = await mount(h(View, {
       sessionId: 'sv-nopage',
       useProjection: projectionsFor(timeline({ nodes: [{ seq: 1, cat: 'user', tokens: 5, text: 'old msg' }] })),
-      useSession: (sel => sel({ nodes: [] })) as UseSessionLike,
+      useChat: (sel =>
+        sel({
+          legacy: { nodes: [] } })) as UseChatLike,
     }))
     const catRow = queryAll(m.container, '.lc-br-cat-row').find(r => text(r).includes(DICT_EN['cat.user']))
     assert.ok(catRow !== undefined)
@@ -631,8 +646,8 @@ describe('ContextView — targeted content fetch and image loading', () => {
     const resolved: [string, unknown][] = []
     const ctx = new TestClientCtx({
       services: {
-        conversation: {
-          resolveImage: (sessionId: string, attachment: unknown) => {
+        uiConversation: {
+          imageUrl: (sessionId: string, attachment: unknown) => {
             resolved.push([sessionId, attachment])
             return Promise.resolve('blob:pic')
           },
@@ -646,14 +661,14 @@ describe('ContextView — targeted content fetch and image loading', () => {
         images: 1,
         nodes: [{ seq: 1, cat: 'user', tokens: 400, text: 'see this', imgs: 1 }],
       })),
-      useSession: (sel =>
+      useChat: (sel =>
         sel({
-          nodes: [{
+          legacy: { nodes: [{
             kind: 'user',
             seq: 1,
             content: [{ type: 'image', attachment: { attachmentId: 'att-1', name: 'pic.png', bytes: 2048, width: 640, height: 480 } }],
-          }],
-        })) as UseSessionLike,
+          }] }
+        })) as UseChatLike,
     }))
     const catRow = queryAll(m.container, '.lc-br-cat-row').find(r => text(r).includes(DICT_EN['cat.user']))
     assert.ok(catRow !== undefined)
@@ -666,8 +681,8 @@ describe('ContextView — targeted content fetch and image loading', () => {
     await m.unmount()
   })
 
-  test('a conversation service without resolveImage degrades quietly', async () => {
-    const ctx = new TestClientCtx({ services: { conversation: {} } })
+  test('a conversation service without imageUrl degrades quietly', async () => {
+    const ctx = new TestClientCtx({ services: { uiConversation: {} } })
     const View = makeView(ctx)
     const m = await mount(h(View, {
       sessionId: 'sv-noimg',
@@ -772,11 +787,13 @@ describe('ContextView — locale and settings', () => {
           { seq: 9, cat: 'tool', tokens: 30, tool: 'read', text: 'z', time: T0 + 8000 },
         ],
       })),
-      useSession: (sel => sel({ nodes: [
+      useChat: (sel =>
+        sel({
+          legacy: { nodes: [
         { kind: 'tool', seq: 7, call: { name: 'read', argsRaw: JSON.stringify({ file_path: '/z.ts' }) } },
         { kind: 'tool', seq: 8, call: { name: 'read', argsRaw: JSON.stringify({ file_path: '/a.ts' }) } },
         { kind: 'tool', seq: 9, call: { name: 'read', argsRaw: JSON.stringify({ file_path: '/z.ts' }) } },
-      ] })) as UseSessionLike,
+      ] } })) as UseChatLike,
     }))
     assert.ok(buttonByText(m.container, DICT_EN['gran.turn']).className.includes('lc-gran-on'))
     assert.ok(buttonByText(m.container, DICT_EN['gran.delta']).className.includes('lc-gran-on'))

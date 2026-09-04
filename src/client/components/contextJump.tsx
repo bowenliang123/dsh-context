@@ -2,9 +2,8 @@
  * The assistant-message action that jumps to the Context tab at this reply's
  * turn. Registered on the harness `conversation.chat.assistant-actions` seat
  * (the icon row beside copy/branch), it receives the finalized reply's durable
- * message id, resolves the matching assistant node's seq off whichever node
- * seat the running harness serves (`useChat` on 0.1.2+, the session snapshot
- * before it), records it in the viewFocus relay, and activates the Context
+ * message id, resolves the matching assistant node's seq off the `useChat`
+ * node seat, records it in the viewFocus relay, and activates the Context
  * tab — where the jump pins the reply's TURN (see contextView's leg 2). An
  * unresolvable seq still switches tabs, just without a pin; a message id that
  * is not a plain string renders nothing at all.
@@ -12,7 +11,7 @@
 
 import { Tooltip } from '@deepseek-ai/dsh-client-ui-primitives'
 import type * as ReactNS from 'react'
-import type { ConversationNodeLike, UseChatLike, UseSessionLike } from '../services'
+import type { ConversationNodeLike, UseChatLike } from '../services'
 import { conversationNodesOf } from '../services'
 import { React } from '../react'
 import { activateContextTab, requestContextFocus } from '../viewFocus'
@@ -23,7 +22,6 @@ export interface ContextJumpProps {
   messageId?: unknown
   sessionId?: unknown
   useChat?: UseChatLike
-  useSession?: UseSessionLike
 }
 
 /**

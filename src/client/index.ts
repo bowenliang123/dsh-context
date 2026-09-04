@@ -68,12 +68,12 @@ function apply(ctx: ClientCtx): void {
   const t = ctx.locale.bind(NS)
 
   const kit = makeViewKit(t)
-  // History faces of the 0.1.2+ gateway remotes, resolved through the
+  // History face of the harness gateway remotes, resolved through the
   // DECLARED inject — a non-declared read of the traced `remote.session`
   // proxy throws ("cannot get property … without inject") and would take
-  // the browser down with the view. Injection waits for the service and
-  // never fires on hosts that lack the namespace (the pre-0.1.2 legacy
-  // `connection` face carries those reads instead).
+  // the browser down with the view. Injection waits for the service; a
+  // harness that never composes the namespace never fires the callback and
+  // the targeted fetches simply stay absent.
   watchHistoryFaces(ctx)
   const settings = createContextSettings()
   const ContextView = makeContextView(ctx, kit, settings)

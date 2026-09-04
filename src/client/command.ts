@@ -18,11 +18,10 @@ const COMMAND = 'context'
 const LINE = '/' + COMMAND
 
 export function registerContextCommand(ctx: ClientCtx, kit: ViewKit): void {
-  // Wait for the SERVICE, not for module arrival order: dsh 0.1.2 composes
+  // Wait for the SERVICE, not for module arrival order: dsh composes
   // the client from finer modules, so `inputTriggers` may not be provided
-  // yet when this plugin applies (the 0.1.1 monolith made a ctx.get at
-  // apply time reliable). A harness without the service never fires the
-  // callback — the tab keeps working and only the command is absent.
+  // yet when this plugin applies. A harness without the service never fires
+  // the callback — the tab keeps working and only the command is absent.
   ctx.inject(['inputTriggers'], (ictx) => {
     const inputTriggers = (ictx as ClientCtx).get('inputTriggers') as InputTriggersFace | undefined
     if (inputTriggers === undefined || typeof inputTriggers.registerSource !== 'function') return

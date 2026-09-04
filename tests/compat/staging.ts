@@ -243,13 +243,7 @@ export function runDriver(baseline: Baseline): DriverReport {
   ensureHostDeps(baseline)
   stageFile(baseline, 'packages/session/session-projection/src/index.ts', join('registry', 'index.ts'))
   stageFile(baseline, 'packages/session/session-projection/src/types.ts', join('registry', 'types.ts'))
-  // The lossless-JSON probe the projection cache's write path uses (moved
-  // between packages across the baselines; self-contained either way).
-  if (baseline.id === 'v0.1.1-rc.2') {
-    stageFile(baseline, 'packages/core/session/src/json.ts', join('dsh', 'json-values.ts'))
-  } else {
-    stageFile(baseline, 'packages/util/values/src/index.ts', join('dsh', 'json-values.ts'))
-  }
+  stageFile(baseline, 'packages/util/values/src/index.ts', join('dsh', 'json-values.ts'))
   const driver = join(STAGE, baseline.id, 'driver.mjs')
   writeFileSync(driver, driverSource(`file://${join(REPO, 'lib', 'index.js')}`))
   const run = spawnSync(process.execPath, [driver], { cwd: STAGE, encoding: 'utf8', timeout: 60_000 })

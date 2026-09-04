@@ -29,7 +29,7 @@ if (reasons.length > 0) {
 // The always-runnable part (no checkout needed): every specifier the built
 // bundle requires at runtime must be seeded by EACH baseline's platform
 // module table — a require the shell cannot answer is a guaranteed boot
-// crash on that generation (0.1.1's table, for one, lacks dsh-client-store).
+// crash on that generation.
 describe.skipIf(staging.artifactsMissing())('compat matrix — bundle requires vs baseline module tables', () => {
   test.each(BASELINES)('$id: the platform module table answers every bundle require', (baseline) => {
     assert.deepEqual(
@@ -102,25 +102,16 @@ describe.skipIf(reasons.length > 0)('compat matrix — real dsh sources per base
       )
     })
 
-    test('client: finalized-nodes seat (useChat on 0.1.2+, session snapshot before)', () => {
-      const ok = baseline.client.chatNodesSeat === 'useChat'
-        ? staging.dshHasString(baseline.tag, 'useChat', 'packages/client/ui-chat/src/client/contract/slots.ts')
-        : staging.dshHasString(baseline.tag, 'nodes: legacy.nodes', 'packages/client/runtime/src/client/sessions/session.ts')
-      assert.equal(ok, true)
+    test('client: finalized-nodes seat (useChat ChatSnapshot)', () => {
+      assert.equal(staging.dshHasString(baseline.tag, 'useChat', 'packages/client/ui-chat/src/client/contract/slots.ts'), true)
     })
 
     test('client: durable-image loader service', () => {
-      assert.equal(staging.dshHasString(baseline.tag, baseline.client.imageFace.method, 'packages/client/*/src/**'), true)
+      assert.equal(staging.dshHasString(baseline.tag, baseline.client.imageFaceMethod, 'packages/client/*/src/**'), true)
     })
 
-    test('client: the history face of this generation', () => {
-      if (baseline.client.historyFace === 'remote.session.page') {
-        assert.equal(staging.dshHasString(baseline.tag, "'remote.session'", 'packages/api/*/src/**'), true)
-      } else {
-        assert.equal(staging.dshHasString(baseline.tag, 'api.sessions.history', 'packages/client/connection/src/**'), true)
-        // The plugin must fall back: no gateway session namespace on this line.
-        assert.equal(staging.dshHasString(baseline.tag, "'remote.session'", 'packages/api/*/src/**'), false)
-      }
+    test('client: the gateway history face of this generation', () => {
+      assert.equal(staging.dshHasString(baseline.tag, "'remote.session'", 'packages/api/*/src/**'), true)
     })
 
     test('client: MarkdownText chrome prop', () => {

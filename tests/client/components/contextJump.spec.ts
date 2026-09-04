@@ -6,7 +6,7 @@
 import assert from 'node:assert/strict'
 import { describe, test } from 'vitest'
 import { makeContextJumpButton } from '../../../src/client/components/contextJump'
-import type { ConversationNodeLike, UseSessionLike } from '../../../src/client/services'
+import type { ConversationNodeLike, UseChatLike } from '../../../src/client/services'
 import { takeContextFocus } from '../../../src/client/viewFocus'
 import { DICT_EN } from '../../../src/client/i18n'
 import { h } from '../../../src/client/react'
@@ -17,9 +17,9 @@ const Jump = makeContextJumpButton(kit)
 
 const SESSION = 'sv-jump'
 
-/** The chat node seat: the session snapshot arm carrying assistant nodes with message ids (hostile shapes forced past the seat type). */
-function sessionWith(nodes: unknown): { useSession?: UseSessionLike } {
-  return { useSession: (sel => sel({ nodes: nodes as readonly ConversationNodeLike[] })) as UseSessionLike }
+/** The chat node seat: the ChatSnapshot arm carrying assistant nodes with message ids (hostile shapes forced past the seat type). */
+function chatWith(nodes: unknown): { useChat?: UseChatLike } {
+  return { useChat: (sel => sel({ legacy: { nodes: nodes as readonly ConversationNodeLike[] } })) as UseChatLike }
 }
 
 const reply = { kind: 'assistant', seq: 4, messageId: 'msg-4' }
@@ -69,7 +69,7 @@ describe('ContextJump — click flow', () => {
     bar.append(chat, context)
     document.body.appendChild(bar)
     try {
-      const m = await mount(h(Jump, { messageId: 'msg-4', sessionId: SESSION, ...sessionWith([reply, toolNode]) }))
+      const m = await mount(h(Jump, { messageId: 'msg-4', sessionId: SESSION, ...chatWith([reply, toolNode]) }))
       await click(query(m.container, 'button.lc-jump'))
       assert.equal(takeContextFocus(SESSION), 4, 'the clicked reply’s request seq rides the relay')
       assert.equal(contextClicks, 1, 'the Context tab button was clicked')
@@ -81,13 +81,13 @@ describe('ContextJump — click flow', () => {
   })
 
   test('the seq resolution prefers the matching assistant node and drops non-finite seqs', async () => {
-    const m = await mount(h(Jump, { messageId: 'msg-tool', sessionId: SESSION, ...sessionWith([reply, toolNode]) }))
+    const m = await mount(h(Jump, { messageId: 'msg-tool', sessionId: SESSION, ...chatWith([reply, toolNode]) }))
     await click(query(m.container, 'button.lc-jump'))
     assert.equal(takeContextFocus(SESSION), null, 'a tool node never mints a focus')
     await m.unmount()
 
     const broken = { kind: 'assistant', seq: Number.NaN, messageId: 'msg-x' }
-    const m2 = await mount(h(Jump, { messageId: 'msg-x', sessionId: SESSION, ...sessionWith([broken]) }))
+    const m2 = await mount(h(Jump, { messageId: 'msg-x', sessionId: SESSION, ...chatWith([broken]) }))
     await click(query(m2.container, 'button.lc-jump'))
     assert.equal(takeContextFocus(SESSION), null, 'a non-finite seq never mints a focus')
     await m2.unmount()
@@ -95,7 +95,7 @@ describe('ContextJump — click flow', () => {
 
   test('a hostile node that throws on property access is skipped, not fatal', async () => {
     const hostile = { get kind(): string { throw new Error('boom') } }
-    const m = await mount(h(Jump, { messageId: 'msg-4', sessionId: SESSION, ...sessionWith([hostile, reply]) }))
+    const m = await mount(h(Jump, { messageId: 'msg-4', sessionId: SESSION, ...chatWith([hostile, reply]) }))
     await click(query(m.container, 'button.lc-jump'))
     assert.equal(takeContextFocus(SESSION), 4, 'the real reply after the hostile element still resolves')
     await m.unmount()
@@ -104,7 +104,7 @@ describe('ContextJump — click flow', () => {
       get kind(): string { return 'assistant' },
       get messageId(): string { throw new Error('boom') },
     }
-    const m2 = await mount(h(Jump, { messageId: 'msg-9', sessionId: SESSION, ...sessionWith([hostileMatch]) }))
+    const m2 = await mount(h(Jump, { messageId: 'msg-9', sessionId: SESSION, ...chatWith([hostileMatch]) }))
     await click(query(m2.container, 'button.lc-jump'))
     assert.equal(takeContextFocus(SESSION), null, 'a hostile match candidate degrades to no focus')
     await m2.unmount()
@@ -120,13 +120,13 @@ describe('ContextJump — click flow', () => {
     bar.appendChild(context)
     document.body.appendChild(bar)
     try {
-      const m = await mount(h(Jump, { messageId: 'msg-none', sessionId: SESSION, ...sessionWith([reply]) }))
+      const m = await mount(h(Jump, { messageId: 'msg-none', sessionId: SESSION, ...chatWith([reply]) }))
       await click(query(m.container, 'button.lc-jump'))
       assert.equal(takeContextFocus(SESSION), null)
       assert.equal(contextClicks, 1, 'the tab still opens, just without a pinned step')
       await m.unmount()
 
-      const m2 = await mount(h(Jump, { messageId: 'msg-4', sessionId: 7, ...sessionWith([reply]) }))
+      const m2 = await mount(h(Jump, { messageId: 'msg-4', sessionId: 7, ...chatWith([reply]) }))
       await click(query(m2.container, 'button.lc-jump'))
       assert.equal(contextClicks, 2)
       await m2.unmount()

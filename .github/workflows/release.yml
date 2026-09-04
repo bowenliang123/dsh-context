@@ -52,9 +52,6 @@ jobs:
           git init -q
           git remote add origin https://github.com/deepseek-ai/deepseek-harness.git
           git fetch --depth 1 -q origin \
-            refs/tags/dsh-v0.1.1-rc.2:refs/tags/dsh-v0.1.1-rc.2 \
-            refs/tags/dsh-v0.1.2-alpha.2:refs/tags/dsh-v0.1.2-alpha.2 \
-            refs/tags/dsh-v0.1.2-alpha.5:refs/tags/dsh-v0.1.2-alpha.5 \
             refs/tags/dsh-v0.1.2-rc.1:refs/tags/dsh-v0.1.2-rc.1
 
       - name: Test

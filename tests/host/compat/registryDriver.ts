@@ -3,10 +3,9 @@
 // source at each baseline tag so the always-on suite pins the plugin's units
 // against every supported registry generation:
 //
-//   dsh-v0.1.1-rc.2  packages/session/session-projection/src/index.ts
-//   dsh-v0.1.2-alpha.2  same file (delta: init(header) + session/created seeding)
+//   dsh-v0.1.2-rc.1  packages/session/session-projection/src/index.ts
 //
-// The real-code matrix (scripts/compat-matrix.mjs) runs the ACTUAL registry
+// The real-code matrix (tests/compat/matrix.spec.ts) runs the ACTUAL registry
 // sources per tag; this driver exists so `pnpm test` alone still detects a
 // definition that drifts from any supported generation's rules (a missing
 // wire block, a non-plain-JSON state, an init that cannot take the header…).
@@ -17,7 +16,7 @@ import type { Baseline } from '../../baselines'
 interface ErasedDefinition {
   key: string
   stateSchema: { parse(value: unknown): unknown }
-  init(header: unknown): unknown
+  init(header: unknown, inheritedEventCount: number): unknown
   apply(state: unknown, event: unknown): unknown
   wire: { viewSchema: { parse(value: unknown): unknown }; view(state: unknown): unknown } | undefined
   stateVersion: number
@@ -41,6 +40,8 @@ interface UnitCell {
 export interface SessionLike {
   seq: number
   header: unknown
+  /** Inherited events from pre-identity log compaction (registry hands it to init). */
+  inheritedEventCount: number
   events: unknown[]
 }
 
@@ -60,8 +61,8 @@ export interface CheckpointRow {
 export type Checkpoint = Record<string, CheckpointRow>
 
 /**
- * The registry's register-time rules (both baselines): a non-negative safe
- * integer `stateVersion`, and a shared key must agree on it.
+ * The registry's register-time rules: a non-negative safe integer
+ * `stateVersion`, and a shared key must agree on the version.
  */
 export class RegistryViolationError extends Error {}
 
@@ -79,11 +80,6 @@ export class RegistryDriver {
     if (!Number.isSafeInteger(definition.stateVersion) || definition.stateVersion < 0) {
       throw new RegistryViolationError(`stateVersion must be a non-negative integer, got ${String(definition.stateVersion)}`)
     }
-    if (definition.wire !== undefined
-      && (typeof definition.wire.view !== 'function'
-        || typeof definition.wire.viewSchema?.parse !== 'function')) {
-      throw new RegistryViolationError('a wire block needs viewSchema.parse + view')
-    }
     const rawWire = definition.wire
     const wire = rawWire === undefined ? undefined : {
       viewSchema: rawWire.viewSchema,
@@ -92,9 +88,9 @@ export class RegistryDriver {
     const def: ErasedDefinition = {
       key: definition.key,
       stateSchema: definition.stateSchema,
-      // dsh 0.1.2-alpha.1+ calls init(header); before that, init() — the
-      // registry's arity is the BASELINE's, not the definition's.
-      init: header => this.baseline.host.initHeader ? definition.init(header) : definition.init(),
+      // The registry calls init(header, inheritedEventCount); the plugin's
+      // zero-argument init observes neither argument.
+      init: (header, inheritedEventCount) => definition.init(header, inheritedEventCount),
       apply: (state, event) => definition.apply(state, event),
       wire,
       stateVersion: definition.stateVersion,
@@ -116,13 +112,12 @@ export class RegistryDriver {
     this.listeners.add(listener)
   }
 
-  /** The `session/created` eager seeding (dsh 0.1.2-alpha.1+ only). */
+  /** The `session/created` eager seeding (seq-0 sessions only). */
   sessionCreated(session: SessionLike): void {
-    if (!this.baseline.host.seedsOnCreate) return
     if (session.seq !== 0) return
     for (const { def, cells } of this.registrations.values()) {
       if (cells.has(session)) continue
-      cells.set(session, { state: def.init(session.header), observedSeq: -1 })
+      cells.set(session, { state: def.init(session.header, session.inheritedEventCount), observedSeq: -1 })
     }
   }
 
@@ -132,7 +127,7 @@ export class RegistryDriver {
       let cell = cells.get(session)
       if (cell !== undefined && cell.observedSeq >= event.seq) continue
       if (cell === undefined) {
-        cell = { state: def.init(session.header), observedSeq: -1 }
+        cell = { state: def.init(session.header, session.inheritedEventCount), observedSeq: -1 }
         cells.set(session, cell)
       }
       const previous = cell.state
@@ -151,7 +146,7 @@ export class RegistryDriver {
       if (def.wire === undefined) continue
       let cell = cells.get(session)
       if (cell === undefined) {
-        cell = { state: def.init(session.header), observedSeq: -1 }
+        cell = { state: def.init(session.header, session.inheritedEventCount), observedSeq: -1 }
         cells.set(session, cell)
       }
       this.advanceCell(def, cell, session.events, session.seq - 1)
@@ -166,7 +161,7 @@ export class RegistryDriver {
     for (const { def, cells } of this.registrations.values()) {
       let cell = cells.get(session)
       if (cell === undefined) {
-        cell = { state: def.init(session.header), observedSeq: -1 }
+        cell = { state: def.init(session.header, session.inheritedEventCount), observedSeq: -1 }
         cells.set(session, cell)
       }
       this.advanceCell(def, cell, session.events, session.seq - 1)
@@ -215,8 +210,12 @@ export class RegistryDriver {
     return floor === undefined ? undefined : Math.max(floor - 1, 0)
   }
 
-  /** Cold read: seed usable rows through stateSchema.parse, refold the rest. */
-  restore(checkpoint: Checkpoint, events: { seq: number }[], baseSeq: number, header: unknown): ProjectionSnapshot {
+  /**
+   * Cold read: seed usable rows through stateSchema.parse, refold the rest.
+   * `inheritedEventCount` is the fork-inherited prefix length the registry
+   * hands to unit initialization (0 for a plain session).
+   */
+  restore(checkpoint: Checkpoint, events: { seq: number }[], baseSeq: number, header: unknown, inheritedEventCount = 0): ProjectionSnapshot {
     const endSeq = events.at(-1)?.seq ?? baseSeq - 1
     const values: Record<string, unknown> = {}
     for (const { def } of this.registrations.values()) {
@@ -228,7 +227,7 @@ export class RegistryDriver {
       if (!usable && baseSeq > 0) {
         throw new RegistryViolationError(`${def.key} cannot restore from seq ${baseSeq}: re-read from seq 0`)
       }
-      let state = usable ? def.stateSchema.parse(row.val) : def.init(header)
+      let state = usable ? def.stateSchema.parse(row.val) : def.init(header, inheritedEventCount)
       const from = usable ? row.seq : baseSeq - 1
       for (let index = from - baseSeq + 1; index < events.length; index++) {
         state = def.apply(state, events[index])

@@ -2,18 +2,15 @@
 
 dsh-context declares per-release compatibility with `@deepseek-ai/dsh` in its package manifest (`dsh.compatibility.dshReleases`). This page records what is actually verified for each declared release, and how.
 
-Last verified: **2026-09-03** (plugin `dsh-context@0.41.2` source tree).
+Last verified: **2026-09-04** (plugin `dsh-context@0.41.3` source tree).
 
 ## Supported dsh releases
 
 | dsh release | npm channel | Declared | Automated seam matrix | Disposable-profile install / uninstall |
 | --- | --- | --- | --- | --- |
-| `0.1.1-rc.2` | `latest` (stable) | compatible | ✅ baseline `v0.1.1-rc.2` | ✅ install OK → 1 composed row → uninstall OK → 0 rows |
-| `0.1.2-alpha.2` | — | compatible | ✅ baseline `v0.1.2-alpha.2` | not run (covered by the seam matrix at its tag) |
-| `0.1.2-alpha.3` | — | compatible | same generation, bracketed by the alpha.2 / alpha.5 baselines | ✅ install OK → 1 composed row → uninstall OK → 0 rows |
-| `0.1.2-alpha.4` | — | compatible | same generation, bracketed by the alpha.2 / alpha.5 baselines | ✅ install OK → 1 composed row → uninstall OK → 0 rows |
-| `0.1.2-alpha.5` | `alpha` (preview) | compatible | ✅ baseline `v0.1.2-alpha.5` | ✅ install OK → 1 composed row → uninstall OK → 0 rows |
 | `0.1.2-rc.1` | `next` | compatible | ✅ baseline `v0.1.2-rc.1` | ✅ install OK → 1 composed row → uninstall OK → 0 rows |
+
+Releases older than `0.1.2-rc.1` — the `0.1.1` line and the `0.1.2-alpha.*` previews — were supported and verified through `dsh-context@0.41.x` and are no longer in the support matrix.
 
 ## What each check means
 

@@ -58,7 +58,7 @@ The plugin lives off data it does not own: the durable session log (event shapes
 - Consider updating the dependencies to the latest version if possible, as the deepseek-harness is evolving rapidly.
 
 ## Compatibility - Important!
-- MUST be able to install and work correctly on `@deepseek-ai/dsh` all of **0.1.1-rc2+** and **0.1.2-alpha2+** — no regressions in runtime dependencies, message parsing, or any user-visible behavior. Older lines (0.1.0-rc.x, 0.1.2-alpha.1) are out of the support matrix.
+- MUST be able to install and work correctly on `@deepseek-ai/dsh` **0.1.2-rc1+** — no regressions in runtime dependencies, message parsing, or any user-visible behavior. Older lines (0.1.0-rc.x, 0.1.1-rc.x, 0.1.2-alpha.x) are out of the support matrix.
 - Check carefully in depth for the compatibility of the plugin with all supported dsh version, investigate and dive deep into details of dsh source code and its dependencies (run pnpm install in dsh source code folder).
 - Low-level logic (e.g. token counting) should track the implementation of the newest supported dsh version.
 

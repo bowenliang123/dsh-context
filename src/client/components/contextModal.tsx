@@ -59,12 +59,12 @@ export function makeContextModal(ctx: ClientCtx, kit: ViewKit): (props: ContextM
     // Same targeted content fetch the Context tab wires (one seq-anchored history read per expanded row), plus the on-demand header
     // epoch content read for the browser's system/tools sections.
     const fetchContent = React.useMemo(
-      () => (sessionId !== '' ? makeContentFetcher(ctx, sessionId) : undefined),
-      [ctx, sessionId],
+      () => (sessionId !== '' ? makeContentFetcher(sessionId) : undefined),
+      [sessionId],
     )
     const fetchHeader = React.useMemo(
-      () => (sessionId !== '' ? makeHeaderFetcher(ctx, sessionId) : undefined),
-      [ctx, sessionId],
+      () => (sessionId !== '' ? makeHeaderFetcher(sessionId) : undefined),
+      [sessionId],
     )
 
     const close = React.useCallback(() => {
@@ -72,7 +72,7 @@ export function makeContextModal(ctx: ClientCtx, kit: ViewKit): (props: ContextM
       modalStoreOf(sessionId).set(false)
       // Consume the `/context` token now (it stayed in the composer while the modal was open) via the scoped input event — a stale guard
       // (the user typed meanwhile) fails soft inside the shell and leaves the draft untouched. The sessions service is read at CLOSE time:
-      // capturing it at apply would race the finer 0.1.2 module composition (`ctx.get` is the inject-free reflect read — undefined, never a
+      // capturing it at apply would race the finer module composition (`ctx.get` is the inject-free reflect read — undefined, never a
       // throw, when the service is not composed).
       const guard = takePendingConsume(sessionId)
       const sessions = ctx.get('sessions') as SessionsFace | undefined

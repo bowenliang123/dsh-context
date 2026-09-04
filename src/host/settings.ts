@@ -44,11 +44,9 @@ export const SettingsSchema: z<PluginSettings> = z.object({
 /** Serve the namespace while a settings provider is composed; inert otherwise. */
 export function installSettings(ctx: Context): void {
   ctx.inject(['settings'], (sctx) => {
-    // dsh 0.1.2-alpha.2 removed the `settingsNamespace()` brand helper — its own
-    // packages now register the raw string. The literal matches the namespace
-    // pattern every version enforces somewhere (inside `register` on 0.1.2-alpha.2,
-    // inside the removed helper before that), and the branded cast only satisfies
-    // the pre-0.1.2 type face.
+    // The settings packages register the raw namespace string (the
+    // `settingsNamespace()` brand helper is long gone); the branded cast
+    // only satisfies the dsh-settings type face.
     sctx.settings.register(SETTINGS_NAMESPACE as SettingsNamespace, SettingsSchema)
   })
 }
