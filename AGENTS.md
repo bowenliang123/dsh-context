@@ -27,6 +27,7 @@ A DeepSeek Harness plugin for context insight, actions, and management.
 - Use English in code comments, documentation, Pull Request description, and commit messages.
 - Smaller, less-coupling and modulized code and tests are preferred for better maintainability and testability.
 - Avoid adding unnecessary code comments (unless for the pinned major decision or for those provide significant value) and code duplication.
+- Update or remove the outdated or unhelpful code comments when modifying the code.
 - Before any commit, MUST ALWAYS do ALL the following checks:
   - Check the to-do list, and ensure all the items are properly completed or closed.
   - Carefully independently review and simplify all the diffs and all code changes, to ensure they are necessary, correct and not over-engineered. 
