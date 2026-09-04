@@ -3,3 +3,8 @@
 .lc-jump { display: inline-flex; align-items: center; justify-content: center; width: calc(28px + var(--dsh-content-font-delta, 0px)); height: calc(28px + var(--dsh-content-font-delta, 0px)); padding: 6px; border: 0; border-radius: 28px; background: transparent; color: var(--dsw-alias-label-tertiary); cursor: pointer; transition: background-color var(--ds-transition-duration, 0.2s) var(--ds-ease-in-out, ease-in-out), color var(--ds-transition-duration, 0.2s) var(--ds-ease-in-out, ease-in-out); }
 .lc-jump svg { width: calc(16px + var(--dsh-content-font-delta, 0px)); height: calc(16px + var(--dsh-content-font-delta, 0px)); }
 .lc-jump:hover { background: var(--dsw-alias-interactive-bg-hover); color: var(--dsw-alias-label-secondary); }
+
+/* The chat stats-line jump (statsJump.tsx): the harness stats row is decorated in place — pointer cursor with a hover/focus underline; the plugin's own dock anchor renders nothing. */
+.lc-stats-jump { display: none; }
+.lc-stats-jump-row { cursor: pointer; }
+.lc-stats-jump-row:hover, .lc-stats-jump-row:focus-visible { text-decoration: underline; }

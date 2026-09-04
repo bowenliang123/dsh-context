@@ -264,6 +264,7 @@ export function bundleRequires(): string[] {
 export const SLOT_SEAMS = [
   'conversation.view',
   'conversation.chat.assistant-actions',
+  'conversation.composer.dock',
   'conversation.input.overlay',
   'settings.plugin.item',
 ] as const

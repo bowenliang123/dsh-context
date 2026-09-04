@@ -30,6 +30,7 @@ import type { ClientCtx } from './services'
 import { createContextSettings, type SettingsField, type SettingsScopeBinderFace } from './settings'
 import { makeContextView } from './components/contextView'
 import { makeContextJumpButton } from './components/contextJump'
+import { makeStatsJump } from './components/statsJump'
 import { watchHistoryFaces } from './historyPage'
 import { makeViewKit } from './viewkit'
 
@@ -96,6 +97,21 @@ function apply(ctx: ClientCtx): void {
       // After the shipped feedback entry (10), still inside the icon row.
       { name: 'conversation.chat.assistant-actions', id: 'context-jump', order: 20, locale: NS },
       props => h(ContextJump, props),
+    )
+  })
+
+  // Stats-line jump: the harness's chat stats row (the composer dock's own
+  // `stats` entry) gains a hover underline and opens this tab on click. The
+  // plugin contributes a sibling dock entry that only wires the row beside
+  // it (see statsJump.tsx) — a host whose dock lacks the row keeps the
+  // affordance silently absent.
+  const StatsJump = makeStatsJump(kit)
+  ctx.slots.inject('conversation.composer.dock', () => {
+    return ctx.slots.register(
+      // Below the shipped stats entry (order 0), inside the dock's slot
+      // anchor: invisible — behavior only.
+      { name: 'conversation.composer.dock', id: 'stats-jump', order: 10, locale: NS },
+      props => h(StatsJump, props),
     )
   })
 

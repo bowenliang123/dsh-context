@@ -126,16 +126,19 @@ describe.skipIf(staging.artifactsMissing())('bundle smoke — the built lib/clie
     assert.ok(!css.includes('120ms ease'), 'lightningcss minified the sheet')
   })
 
-  test('registrations: bilingual dictionaries, three slots, the /context trigger source', () => {
+  test('registrations: bilingual dictionaries, four slots, the /context trigger source', () => {
     assert.ok(state.dicts.get('dsh-context')?.zh && state.dicts.get('dsh-context')?.en, 'bilingual dictionaries registered')
-    assert.equal(state.slots.length, 3, 'view tab + assistant action + input overlay slots')
+    assert.equal(state.slots.length, 4, 'view tab + assistant action + composer dock + input overlay slots')
     assert.equal(state.slots[0]?.[0], 'conversation.view')
     assert.equal(state.slots[0]?.[1].order, 20)
     assert.equal(state.slots[0]?.[1].label?.(), '上下文', 'tab label localized')
     assert.equal(state.slots[1]?.[0], 'conversation.chat.assistant-actions')
     assert.equal(state.slots[1]?.[1].id, 'context-jump', 'jump action rides its own slot id')
-    assert.equal(state.slots[2]?.[0], 'conversation.input.overlay')
-    const overlayInject = state.slots[2]?.[1].inject
+    assert.equal(state.slots[2]?.[0], 'conversation.composer.dock')
+    assert.equal(state.slots[2]?.[1].id, 'stats-jump', 'stats-line jump rides its own slot id')
+    assert.equal(state.slots[2]?.[1].order, 10, 'below the shipped stats entry (order 0)')
+    assert.equal(state.slots[3]?.[0], 'conversation.input.overlay')
+    const overlayInject = state.slots[3]?.[1].inject
     const overlayHooks = overlayInject?.('s1') as { hooks: { contextModal: { getSnapshot: unknown } } } | undefined
     assert.equal(typeof overlayHooks?.hooks.contextModal.getSnapshot, 'function', 'overlay hooks carry the modal store')
     assert.equal(state.sources.length, 1, '/context trigger source registered')

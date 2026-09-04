@@ -128,6 +128,31 @@ describe('client entry: assistant-actions seat', () => {
   })
 })
 
+describe('client entry: composer dock seat', () => {
+  test('registers the stats-line jump entry below the shipped stats row', async () => {
+    const ctx = new TestClientCtx()
+    applyTo(ctx)
+    const entries = ctx.slots.of('conversation.composer.dock')
+    assert.equal(entries.length, 1)
+    const { registration, component } = entries[0]
+    assert.equal(registration.name, 'conversation.composer.dock')
+    assert.equal(registration.id, 'stats-jump')
+    assert.equal(registration.order, 10, 'below the shipped stats entry (order 0)')
+    assert.equal(registration.locale, 'dsh-context')
+
+    // The entry renders only the invisible anchor: this bare mount has no
+    // stats row beside it, so nothing gets decorated.
+    const el = component({}) as ReactElement
+    assert.equal(typeof el.type, 'function')
+    assert.equal((el.type as { name: string }).name, 'StatsJump')
+    const m = await mount(el)
+    assert.equal(queryAll(m.container, 'span.lc-stats-jump[hidden]').length, 1)
+    assert.equal(queryAll(m.container, '.lc-stats-jump-row').length, 0)
+    await m.unmount()
+    ctx.dispose()
+  })
+})
+
 describe('client entry: sessions scope seam', () => {
   test('absent sessions service: apply is a noop for the sessions seams', () => {
     const ctx = new TestClientCtx()
