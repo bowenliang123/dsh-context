@@ -128,8 +128,10 @@ function recordOf(event: SessionEvent): StoredHeaderRecord | null {
         name: typeof tool.name === 'string' ? tool.name : '?',
         tokens: estimateToolSchema(t),
       }
-      // A harness/MCP-provided attribution rides the raw entry; kept verbatim
-      // so the view-time resolver never overrides it. The epoch CONTENT
+      // An attribution carried by the raw entry is kept verbatim so the
+      // view-time resolver never overrides it. No supported-baseline harness
+      // path writes one (ToolSchema has no plugin field) — the read stays
+      // defensive for foreign/newer producers. The epoch CONTENT
       // (descriptions, schemas, system text) stays in the durable log for the
       // client's on-demand fetch.
       if (typeof tool.plugin === 'string' && tool.plugin !== '') {

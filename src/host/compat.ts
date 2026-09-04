@@ -4,7 +4,10 @@
  * Supported harness baseline (see AGENTS.md "Compatibility"): dsh
  * 0.1.2-rc.1+. On it, the session-projection registry drives the unit
  * contract (introduced in dsh 0.1.1-rc.1, replacing the pre-0.1.1
- * `{ schema, view }` shape this plugin no longer emits):
+ * `{ schema, view }` shape): the real projection units emit only the modern
+ * shape, while the below-baseline fallback units (fallback.ts) still carry
+ * the legacy top-level aliases so the gate serves on any harness that can
+ * deliver projections at all.
  *
  *   `{ key, stateSchema, init, apply, wire?, stateVersion }`
  *

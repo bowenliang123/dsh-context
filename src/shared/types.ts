@@ -361,12 +361,13 @@ export interface HeaderTool {
   name: string
   tokens: number
   /**
-   * The registering plugin's label, when attribution is known: either a
-   * `plugin` field carried by the raw header entry (harness-provided) or the
-   * host's best-effort attribution (`mcp:<server>` for MCP tools, or the
-   * pinned first-party package map). `UNKNOWN_TOOL_SOURCE` marks a tool whose
-   * provider predates the attribution hook; absent means nothing is known and
-   * the browser shows no tag.
+   * The registering plugin's label, when attribution is known: the host's
+   * best-effort attribution (`mcp:<server>` for MCP tools, or the pinned
+   * first-party package map), or a `plugin` field carried by the raw header
+   * entry — no supported-baseline harness path writes one, but the read
+   * stays defensive for foreign/newer producers. `UNKNOWN_TOOL_SOURCE` marks
+   * a tool whose provider predates the attribution hook; absent means
+   * nothing is known and the browser shows no tag.
    */
   plugin?: string
 }
