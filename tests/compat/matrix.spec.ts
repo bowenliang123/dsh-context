@@ -117,6 +117,13 @@ describe.skipIf(reasons.length > 0)('compat matrix — real dsh sources per base
       assert.equal(staging.dshHasString(baseline.tag, "'remote.session'", 'packages/api/*/src/**'), true)
     })
 
+    test('detail channel: the Connection RPC faces and the registry stateOf exist', () => {
+      const dc = baseline.client.detailChannel
+      assert.equal(staging.dshHasString(baseline.tag, dc.hostRpcNeedle, dc.hostRpcFile), true, 'host RPC registry face')
+      assert.equal(staging.dshHasString(baseline.tag, dc.clientRpcNeedle, dc.clientRpcFile), true, 'browser RPC caller face')
+      assert.equal(staging.dshHasString(baseline.tag, dc.registryNeedle, dc.registryFile), true, 'registry stateOf face')
+    })
+
     test('client: MarkdownText chrome prop', () => {
       assert.equal(staging.dshHasString(baseline.tag, baseline.client.markdownChrome, 'packages/client/ui-primitives/src/markdown/MarkdownText.tsx'), true)
     })

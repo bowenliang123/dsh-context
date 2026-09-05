@@ -1,6 +1,8 @@
 /**
- * Context tab root: renders the harness-pushed `contextTimeline` projection and composes stats, composition, history, events and messages;
- * never calls RPC and holds no cache — the harness owns the projection pipeline end to end.
+ * Context tab root: renders the `contextTimeline` projection and composes stats, composition, history, events and messages.
+ * The data plane is the harness's projection pipeline end to end; the one addition is the split generation's on-demand
+ * detail read (timelineSource.ts) — the pushed wire value is the slim head, and the heavy collections arrive from the
+ * host's detail endpoint only while the tab (or modal) is open.
  */
 
 import type * as ReactNS from 'react'
@@ -8,9 +10,11 @@ import type { ContextEventRecord, RequestRecord, SurfaceNode } from '../../share
 import { briefNodes, briefOf } from '../brief'
 import { headlineOf } from '../headline'
 import type { SessionStandardProps } from '../services'
-import { contextBreakdownOf, contextPressureOf, conversationNodesOf, headersOf, imageLoaderOf, numOf, projectionOf, timelineOf, tokenUsageOf, unsupportedOf } from '../services'
+import { contextBreakdownOf, contextPressureOf, conversationNodesOf, headersOf, imageLoaderOf, numOf, projectionOf, tokenUsageOf, unsupportedOf } from '../services'
 import type { ClientCtx, ConversationNodeLike } from '../services'
 import { makeContentFetcher, makeHeaderFetcher } from '../historyPage'
+import { useTimelineSource } from '../timelineSource'
+import { makeDetailNote } from './detailNote'
 import { canOpenPathsOf, openPathVia, workspaceOf } from '../services'
 import { activityOf, locateStepOf } from '../fileActivity'
 import type { FileOp } from '../fileActivity'
@@ -25,7 +29,7 @@ import { makeFileCard } from './fileCard'
 import { makePluginInfo } from './pluginInfo'
 import { makeUpgradeGate } from './upgradeGate'
 import { makeRequestDetail } from './requestDetail'
-import { makeStatsContext } from './statsContext'
+import { countsOfRecords, makeStatsContext } from './statsContext'
 import { makeStatsTiming } from './statsTiming'
 import { makeStatsTokens } from './statsTokens'
 import { makeLegend, makeStackedBar } from './stackedBar'
@@ -61,6 +65,7 @@ export function makeContextView(
   const StatsTokens = makeStatsTokens(kit, Donut)
   const PluginInfo = makePluginInfo(kit)
   const UpgradeGate = makeUpgradeGate(kit)
+  const DetailNote = makeDetailNote(kit)
   const ContextBrowser = makeContextBrowser(kit, StackedBar)
   const AgentGraph = makeAgentGraph(ctx, kit)
   const ErrorBoundary = makeErrorBoundary(t)
@@ -69,7 +74,12 @@ export function makeContextView(
   // card, not a white screen; the boundary itself has NO hooks, so the body's hook order and loading/data flow stay unchanged.
   function ContextViewBody(props: SessionStandardProps): ReactNS.ReactElement {
     const sessionId = props.sessionId
-    const data = projectionOf(props, 'contextTimeline', timelineOf)
+    // The timeline source (timelineSource.ts): the pushed value on the inline
+    // generation, or the slim head merged with the on-demand detail on the
+    // split generation. `detailState`/`retryDetail` drive the detail cards'
+    // loading/failed notes.
+    const source = useTimelineSource(ctx, props)
+    const data = source.data
     // Official token-meter `contextPressure` projection — the same key the chat's context ring reads; token-meter owns estimation, the Host
     // no longer mirrors it. Absent → derived fallback.
     const pressure = projectionOf(props, 'contextPressure', contextPressureOf)
@@ -188,8 +198,11 @@ export function makeContextView(
     // Leg 2: the action row belongs to the reply that CLOSED a turn, so the jump is turn-level — flip the chart to turn bars, pin that
     // turn's aggregate (the relayed seq is the turn's last request, exactly the aggregate's record), and center it: the same flow as a
     // turn-strip click. An aged-out turn clamps to the oldest retained bar. No page-scroller anchor → the reset degrades quietly.
+    // The split generation waits for the detail read first: the relayed seq resolves against the served request records, so the
+    // one-shot request must not be consumed while the collections are still pending (it re-fires when they land).
+    const detailReady = source.detailState === 'ready' || source.detailState === 'legacy'
     React.useEffect(() => {
-      if (jumpSeq === null || data === null) return
+      if (jumpSeq === null || data === null || !detailReady) return
       setJumpSeq(null)
       const target = jumpTargetOf(aggregateByTurn(requests), jumpSeq)
       if (target === null) return
@@ -198,7 +211,7 @@ export function makeContextView(
       setFocusTurn(target.turn ?? 0)
       // The restore layout effect resolved the shared scroller on this same data render (layout effects precede this one).
       if (scrollerRef.current !== null) scrollerRef.current.scrollTop = 0
-    }, [jumpSeq, data, requests])
+    }, [jumpSeq, data, requests, detailReady])
 
     // Step-brief raw material: every served node seq-sorted (live tail + archive), and the conversation-snapshot
     // join the brief uses for call-argument enrichment (same join the Context browser builds).
@@ -322,7 +335,7 @@ export function makeContextView(
       <div className="lc-root" ref={rootRef}>
 
         <div className="lc-cols lc-head">
-          <StatsContext requests={requests} events={events} toolCalls={data.toolCalls} images={data.images}
+          <StatsContext counts={data.counts ?? countsOfRecords(requests, events)} toolCalls={data.toolCalls} images={data.images}
             cost={data.cost} locale={activeLocale} />
           <StatsTokens usage={usage} />
           <StatsTiming timing={data.timing ?? null} locale={activeLocale} />
@@ -366,7 +379,11 @@ export function makeContextView(
                 </div>
               </div>
               {displayRequests.length === 0
-                ? <div className="lc-empty">{t('trend.empty')}</div>
+                // Split generation, first detail read pending or failed: say
+                // so instead of claiming the session has no history.
+                ? (detailReady
+                  ? <div className="lc-empty">{t('trend.empty')}</div>
+                  : <DetailNote state={source.detailState === 'failed' ? 'failed' : 'loading'} onRetry={source.retryDetail} />)
                 : (
                   <div>
                     <TrendChart
@@ -425,6 +442,8 @@ export function makeContextView(
               nodeFocus={nodeFocus}
               onNodeFocusHandled={clearNodeFocus}
               loadImage={loadImage}
+              detailState={source.detailState}
+              onDetailRetry={source.retryDetail}
             />
           </div>
         </div>
@@ -443,9 +462,10 @@ export function makeContextView(
                 ))}
               </div>
             </div>
-            <EventList events={shownEvents} />
+            <EventList events={shownEvents} state={source.detailState} onRetry={source.retryDetail} />
           </div>
-          <FileCard activity={fileActivity} scope={fileScope} workspace={workspace} onOpen={fileOpener} onLocate={locateFileOp} />
+          <FileCard activity={fileActivity} scope={fileScope} workspace={workspace} onOpen={fileOpener} onLocate={locateFileOp}
+            state={source.detailState} onRetry={source.retryDetail} />
         </div>
 
         <AgentGraph

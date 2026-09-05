@@ -130,6 +130,19 @@ describe('agentStatsOf', () => {
     assert.deepEqual(stats.identity, { mode: 'continuable', label: 'helper' })
   })
 
+  test('split-generation rows: the precomputed tally serves without the request records', () => {
+    // The slim wire head carries no `requests` collection — the Agent card
+    // reads the host-precomputed tally off `counts.steps` instead.
+    const slim = {
+      ...timeline(500, 0),
+      counts: { turns: 2, steps: 7, injects: 1, compactions: 0, prunes: 0 },
+      detailRev: 7,
+    }
+    const stats = agentStatsOf({ contextTimeline: slim })
+    assert.equal(stats.requests, 7)
+    assert.ok(stats.head !== null, 'the head still derives from the slim row')
+  })
+
   test('pressure-only rows still yield an occupancy head without slices', () => {
     const projected = agentStatsOf({ contextPressure: { projectedTokens: 250, contextWindow: 1000 } })
     assert.deepEqual(projected.head, { tokens: 250, window: 1000, pct: 25, parts: [] })

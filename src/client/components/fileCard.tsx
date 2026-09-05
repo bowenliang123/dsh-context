@@ -15,7 +15,9 @@ import type * as ReactNS from 'react'
 import { absPathOf, displayPathOf, glyphOf } from '../fileActivity'
 import type { FileActivity, FileEntry, FileOp, FileOpKind } from '../fileActivity'
 import type { ContextSettings, DefaultFileSort } from '../settings'
+import type { DetailState } from '../timelineSource'
 import type { ViewKit } from '../viewkit'
+import { makeDetailNote } from './detailNote'
 
 import { React } from '../react'
 
@@ -31,10 +33,18 @@ export interface FileCardProps {
   onOpen?: (absPath: string) => void
   /** Reveal one operation's result node in the Context browser; absent = op lines render inert. */
   onLocate?: (op: FileOp) => void
+  /**
+   * The timeline source's detail state (split generation): the activity fold
+   * reads the detail collections, so a pending/failed first read replaces the
+   * empty claim with the pending note / retry button.
+   */
+  state?: DetailState
+  onRetry?: () => void
 }
 
 export function makeFileCard(kit: ViewKit, settings: ContextSettings): ReactNS.ComponentType<FileCardProps> {
   const { t, fmt, fmtTime } = kit
+  const DetailNote = makeDetailNote(kit)
 
   function matches(e: FileEntry, f: FileFilter): boolean {
     if (f === 'all') return true
@@ -130,7 +140,11 @@ export function makeFileCard(kit: ViewKit, settings: ContextSettings): ReactNS.C
           <span className="lc-card-title-text">{t('files.title')}</span>
           <span className="lc-card-sub">{props.scope}</span>
         </div>
-        {activity.entries.length === 0 ? (
+        {activity.entries.length === 0 && props.state === 'loading' ? (
+          <DetailNote state="loading" />
+        ) : activity.entries.length === 0 && props.state === 'failed' && props.onRetry !== undefined ? (
+          <DetailNote state="failed" onRetry={props.onRetry} />
+        ) : activity.entries.length === 0 ? (
           <div className="lc-empty">{t('files.empty')}</div>
         ) : (
           <div>

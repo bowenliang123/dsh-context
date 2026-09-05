@@ -9,8 +9,9 @@ import { measureDock } from '../dockMeasure'
 import { headlineOf } from '../headline'
 import { modalStoreOf, takePendingConsume } from '../modalStore'
 import type { ClientCtx, SessionStandardProps, SessionsFace } from '../services'
-import { contextBreakdownOf, contextPressureOf, conversationNodesOf, headersOf, projectionOf, timelineOf } from '../services'
+import { contextBreakdownOf, contextPressureOf, conversationNodesOf, headersOf, projectionOf } from '../services'
 import { makeContentFetcher, makeHeaderFetcher } from '../historyPage'
+import { useTimelineSource } from '../timelineSource'
 import type { ViewKit } from '../viewkit'
 import { makeContextBrowser } from './browser'
 import { makeCurrentComposition } from './currentComposition'
@@ -36,7 +37,10 @@ export function makeContextModal(ctx: ClientCtx, kit: ViewKit): (props: ContextM
   function ContextModalBody(props: ContextModalProps): ReactNS.ReactElement | null {
     const sessionId = typeof props.sessionId === 'string' ? props.sessionId : ''
     const open = typeof props.useContextModal === 'function' ? props.useContextModal(s => s) : false
-    const data = projectionOf(props, 'contextTimeline', timelineOf)
+    // The timeline source (timelineSource.ts) — shares the tab's per-session
+    // detail store, so an open tab's detail serves the modal with no refetch.
+    const source = useTimelineSource(ctx, props)
+    const data = source.data
     const pressure = projectionOf(props, 'contextPressure', contextPressureOf)
     const breakdown = projectionOf(props, 'contextBreakdown', contextBreakdownOf)
     const headers = projectionOf(props, 'contextHeaders', headersOf)
@@ -124,6 +128,8 @@ export function makeContextModal(ctx: ClientCtx, kit: ViewKit): (props: ContextM
                 fetchHeader={fetchHeader}
                 hoverKey={hoverCat}
                 onHoverKey={setHoverCat}
+                detailState={source.detailState}
+                onDetailRetry={source.retryDetail}
               />
             </div>
           )}

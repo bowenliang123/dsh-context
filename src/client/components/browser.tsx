@@ -7,6 +7,8 @@ import { React } from '../react'
 import type { ContentFetcher, ConversationNodeLike, HeaderFetcher } from '../services'
 import type { ViewKit } from '../viewkit'
 import { blockSummaryOf, callSummaryOf, parseCallArgs } from '../callSummary'
+import type { DetailState } from '../timelineSource'
+import { makeDetailNote } from './detailNote'
 import { makeNodeText } from './nodes'
 import { fetchMissNote, useFetchOnMiss } from './fetchOnMiss'
 import { imageRefOf, makeImageCard } from './images'
@@ -51,6 +53,13 @@ export interface ContextBrowserProps {
   hoverKey?: string | null
   onHoverKey?: (key: string | null) => void
   loadImage?: ImageLoader
+  /**
+   * The timeline source's detail state (split generation): while the first
+   * detail read is pending or settled without data, a note strip names the
+   * state (the picker/sections otherwise show a misleading empty surface).
+   */
+  detailState?: DetailState
+  onDetailRetry?: () => void
 }
 
 interface ParamSchema {
@@ -556,6 +565,7 @@ export function makeContextBrowser(
   StackedBar: (props: StackedBarProps) => ReactNS.ReactElement,
 ): (props: ContextBrowserProps) => ReactNS.ReactElement {
   const { t, fmt, fmtTime, catLabel } = kit
+  const DetailNote = makeDetailNote(kit)
   const nodeText = makeNodeText(kit)
   const rich = makeRichText(kit)
   const ImageCard = makeImageCard(kit)
@@ -984,6 +994,12 @@ export function makeContextBrowser(
           : null}
         {view.approximate
           ? <div className="lc-br-note">{t('browser.approx')}</div>
+          : null}
+        {props.detailState === 'loading'
+          ? <DetailNote state="loading" className="lc-br-note" />
+          : null}
+        {props.detailState === 'failed' && props.onDetailRetry !== undefined
+          ? <DetailNote state="failed" onRetry={props.onDetailRetry} className="lc-br-note" />
           : null}
 
         <div className="lc-br-cats">

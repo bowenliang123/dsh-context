@@ -113,7 +113,7 @@ describe('dsh-context host plugin', () => {
     assert.ok(timeline.length > 0, 'contextTimeline changes notified')
     const last = timeline.at(-1)?.value
     assert.equal(
-      createContextTimelineDefinition({}).wire.viewSchema.safeParse(last).success,
+      createContextTimelineDefinition({}, () => false).wire.viewSchema.safeParse(last).success,
       true,
       'the notified value is the validated wire view',
     )
@@ -182,6 +182,52 @@ describe('dsh-context host plugin', () => {
     const snapshot = ctx.sessionProjections.snapshot(session)
     assert.equal(snapshot.values.contextTimeline, undefined, 'an unloaded plugin reads as capability absence')
     assert.equal(snapshot.values.contextHeaders, undefined)
+  })
+
+  test('the split generation with the detail channel live: slim wire head + the endpoint serves the collections', async () => {
+    const ctx = new Context()
+    let handler: ((endpoint: string, payload: unknown) => Promise<unknown>) | undefined
+    ctx.provide('connection', {
+      rpc: {
+        handle: (_channel: string, h: never) => {
+          handler = h
+          return () => {}
+        },
+      },
+    })
+    await ctx.plugin(SessionStore)
+    await ctx.plugin(SessionProjectionRegistry)
+    await ctx.plugin(plugin, noConfig)
+    const session = ctx.sessions.create()
+    appendRealEnvelopes(session)
+
+    const timeline = ctx.sessionProjections.snapshot(session).values.contextTimeline
+    assert.ok(timeline !== undefined)
+    assert.equal(typeof timeline.detailRev, 'number', 'the split marker rides the slim head')
+    assert.deepEqual(timeline.counts, { turns: 1, steps: 1, injects: 0, compactions: 0, prunes: 0 })
+    assert.equal(timeline.nodes.length, 0, 'the collections stay off the wire value')
+    assert.equal(timeline.requests.length, 0)
+
+    assert.ok(handler !== undefined, 'the detail channel registered')
+    const result = await handler('detail', { sessionId: session.header.id }) as {
+      ok: boolean
+      value: { rev: number; nodes: unknown[]; requests: unknown[] } | null
+    }
+    assert.equal(result.ok, true)
+    assert.ok(result.value !== null, 'a viewed session is live — its detail serves')
+    assert.equal(result.value.rev, timeline.detailRev, 'the payload mirrors the head revision')
+    assert.equal(result.value.nodes.length, 2, 'user + assistant surface nodes')
+    assert.equal(result.value.requests.length, 1)
+  })
+
+  test('without the connection service the wire value stays inline', async () => {
+    const { ctx } = await boot()
+    const session = ctx.sessions.create()
+    appendRealEnvelopes(session)
+    const timeline = ctx.sessionProjections.snapshot(session).values.contextTimeline
+    assert.ok(timeline !== undefined)
+    assert.equal(timeline.detailRev, undefined, 'no channel, no split marker')
+    assert.equal(timeline.nodes.length, 2, 'the collections ride the wire value as before')
   })
 
   test('stays pending without the registry, starts when it arrives', async () => {

@@ -7,13 +7,24 @@ import type * as ReactNS from 'react'
 import type { ContextEventRecord } from '../../shared/types'
 import { IconBranchOutline16, IconPlusOutline16 } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { Translate } from '../i18n'
+import type { DetailState } from '../timelineSource'
 import type { ViewKit } from '../viewkit'
+import { makeDetailNote } from './detailNote'
 
 import { React } from '../react'
 
 const EVENT_ICONS: Record<string, string> = { compaction: '✂', prune: '✂', inject: '＋', model: '⇄', mode: '⇄' }
 
-export interface EventListProps { events: ContextEventRecord[] }
+export interface EventListProps {
+  events: ContextEventRecord[]
+  /**
+   * The timeline source's detail state (split generation): with no events to
+   * list, `loading`/`failed` replace the empty claim with the pending note /
+   * retry button — an un-fetched list is not an empty one.
+   */
+  state?: DetailState
+  onRetry?: () => void
+}
 
 export function makeEventText(t: Translate): {
   eventLabel: (ev: ContextEventRecord) => string
@@ -70,6 +81,7 @@ function syncTitles(root: HTMLElement): void {
 
 export function makeEventList(kit: ViewKit): (props: EventListProps) => ReactNS.ReactElement {
   const { t, fmt, fmtTime, eventLabel, eventAt } = kit
+  const DetailNote = makeDetailNote(kit)
   return function EventList(props: EventListProps): ReactNS.ReactElement {
     // Hooks stay unconditional (Rules of Hooks): events going empty ->
     // non-empty in one mounted instance must not grow the hook count — an
@@ -92,6 +104,10 @@ export function makeEventList(kit: ViewKit): (props: EventListProps) => ReactNS.
       return () => { window.removeEventListener('resize', onResize) }
     }, [])
     if (props.events.length === 0) {
+      if (props.state === 'loading') return <DetailNote state="loading" />
+      if (props.state === 'failed' && props.onRetry !== undefined) {
+        return <DetailNote state="failed" onRetry={props.onRetry} />
+      }
       return <div className="lc-empty">{t('events.empty')}</div>
     }
     const sorted = props.events.slice().reverse()

@@ -211,7 +211,8 @@ export function numOf(value: unknown): number {
   return typeof value === 'number' && Number.isFinite(value) ? value : 0
 }
 
-function objectsOf<T>(value: unknown): T[] {
+/** Shared per-item collection guard: drop non-object entries, keep the rest. */
+export function objectsOf<T>(value: unknown): T[] {
   if (!Array.isArray(value)) return []
   return value.filter((v): v is T => v !== null && typeof v === 'object')
 }
@@ -279,7 +280,10 @@ export function timelineOf(value: unknown): ContextTimeline | null {
   // The baseline-gate record survives sanitizing: a fallback payload that
   // somehow fails the fast path must still pop the gate modal.
   const unsupported = unsupportedOf(data.unsupported)
-  return {
+  // The split-generation head fields survive sanitizing too.
+  const counts = countsOf(data.counts)
+  const last = lastOf(data.last)
+  const safe: ContextTimeline = {
     ok: true,
     ...(unsupported !== null ? { unsupported } : {}),
     ...(typeof data.model === 'string' ? { model: data.model } : {}),
@@ -301,10 +305,45 @@ export function timelineOf(value: unknown): ContextTimeline | null {
     ...(typeof data.images === 'number' ? { images: data.images } : {}),
     ...(typeof data.toolCalls === 'number' ? { toolCalls: data.toolCalls } : {}),
     archive: objectsOf(data.archive),
+    ...(counts !== undefined ? { counts } : {}),
+    ...(last !== undefined ? { last } : {}),
+    ...(typeof data.detailRev === 'number' && Number.isFinite(data.detailRev) ? { detailRev: data.detailRev } : {}),
     ...(cost !== undefined ? { cost } : {}),
     ...(timing !== null ? { timing } : {}),
     ...(typeof data.surfaceFloor === 'number' ? { surfaceFloor: data.surfaceFloor } : {}),
     ...(typeof data.archiveFloor === 'number' ? { archiveFloor: data.archiveFloor } : {}),
+  }
+  return safe
+}
+
+/**
+ * The split head's count figures, re-proved field by field: a present-but-
+ * partial record zeroes its unreadable fields (the stats board's no-NaN
+ * guarantee), an absent or non-record value stays absent (legacy generation
+ * — callers derive the counts from the collections instead).
+ */
+function countsOf(value: unknown): ContextTimeline['counts'] {
+  const data = asRecord(value)
+  if (data === null) return undefined
+  return {
+    turns: numOf(data.turns),
+    steps: numOf(data.steps),
+    injects: numOf(data.injects),
+    compactions: numOf(data.compactions),
+    prunes: numOf(data.prunes),
+  }
+}
+
+/** The split head's newest-request summary; absent or shapeless stays absent. */
+function lastOf(value: unknown): ContextTimeline['last'] {
+  const data = asRecord(value)
+  if (data === null) return undefined
+  if (typeof data.seq !== 'number' || !Number.isFinite(data.seq)) return undefined
+  if (typeof data.total !== 'number' || !Number.isFinite(data.total)) return undefined
+  return {
+    seq: data.seq,
+    total: data.total,
+    ...(typeof data.prompt === 'number' && Number.isFinite(data.prompt) ? { prompt: data.prompt } : {}),
   }
 }
 

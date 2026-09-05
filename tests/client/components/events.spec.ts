@@ -9,7 +9,8 @@ import { h } from '../../../src/client/react'
 import { makeEventList, makeEventText } from '../../../src/client/components/events'
 import { fmtTime } from '../../../src/client/format'
 import type { ContextEventRecord } from '../../../src/shared/types'
-import { flush, makeKit, mount, query, queryAll, text } from '../helpers/kit'
+import { DICT_EN } from '../../../src/client/i18n'
+import { click, flush, makeKit, mount, query, queryAll, text } from '../helpers/kit'
 
 const kit = makeKit()
 const { eventLabel, eventAt } = makeEventText(kit.t)
@@ -194,6 +195,29 @@ describe('EventList', () => {
     assert.ok(text(m.container).includes('Tool output pruned'))
     await m.update(h(EventList, { events: [] }))
     assert.ok(text(m.container).includes('No context events yet'))
+    await m.unmount()
+  })
+})
+
+describe('EventList — the split generation detail states', () => {
+  test('a pending detail read shows the loading note instead of the empty claim', async () => {
+    const m = await mount(h(EventList, { events: [], state: 'loading', onRetry: () => {} }))
+    assert.ok(text(m.container).includes(DICT_EN['detail.loading']))
+    assert.ok(!text(m.container).includes('No context events yet'))
+    await m.unmount()
+  })
+
+  test('a failed detail read arms the retry button; a failed read without one falls back to the empty claim', async () => {
+    let retries = 0
+    const m = await mount(h(EventList, { events: [], state: 'failed', onRetry: () => { retries++ } }))
+    const retry = query(m.container, '.lc-br-retry')
+    assert.ok(text(m.container).includes(DICT_EN['detail.loadFailed']))
+    await click(retry)
+    assert.equal(retries, 1)
+
+    const inert = await mount(h(EventList, { events: [], state: 'failed' }))
+    assert.ok(text(inert.container).includes('No context events yet'), 'no retry wired — the plain empty state')
+    await inert.unmount()
     await m.unmount()
   })
 })

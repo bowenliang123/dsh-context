@@ -943,3 +943,108 @@ describe('ContextView — chat→Context jump', () => {
     await m2.unmount()
   })
 })
+
+describe('ContextView — the split generation (slim head + detail channel)', () => {
+  /** A slim wire head: the pushed value with the collections empty and the counters/markers on. */
+  function slimHead(over: Record<string, unknown> = {}): ContextTimeline {
+    return timeline({
+      model: 'deepseek-v4-flash',
+      provider: 'deepseek',
+      contextWindow: 128000,
+      toolCalls: 3,
+      images: 1,
+      counts: { turns: 1, steps: 3, injects: 1, compactions: 1, prunes: 0 },
+      last: { seq: 6, total: 420, prompt: 410 },
+      detailRev: 6,
+      ...over,
+    })
+  }
+
+  /** The matching detail payload (richTimeline's collections). */
+  function slimDetail(rev = 6): Record<string, unknown> {
+    const rich = richTimeline()
+    return {
+      rev,
+      requests: rich.requests,
+      events: rich.events,
+      nodes: rich.nodes,
+      droppedNodes: rich.droppedNodes,
+      archive: rich.archive,
+    }
+  }
+
+  /** A ctx whose connection.rpc.call serves (or fails) the detail endpoint. */
+  function slimCtx(serve: () => Promise<unknown>): TestClientCtx {
+    return new TestClientCtx({
+      services: {
+        connection: { rpc: { call: (_channel: string, _endpoint: string, _payload: unknown) => serve() } },
+      },
+    })
+  }
+
+  async function until(fn: () => boolean, message: string): Promise<void> {
+    for (let i = 0; i < 400; i++) {
+      if (fn()) return
+      await new Promise(resolve => setTimeout(resolve, 5))
+    }
+    assert.fail(message)
+  }
+
+  test('the head paints the counters immediately; the detail collections land through the channel', async () => {
+    const ctx = slimCtx(async () => ({ ok: true, value: slimDetail() }))
+    const View = makeView(ctx)
+    const m = await mount(h(View, { sessionId: 'sv-slim', useProjection: projectionsFor(slimHead()) }))
+
+    // First paint: the counters are real (no detail needed), the detail cards name the pending read.
+    const values = queryAll(m.container, '.lc-stat-value').map(el => text(el))
+    assert.deepEqual(values.slice(0, 2), ['1', '3'], 'turns/steps from the head counters')
+    assert.ok(text(m.container).includes(DICT_EN['detail.loading']))
+    assert.equal(queryAll(m.container, '.lc-bar').length, 0, 'the chart waits for the detail')
+    assert.equal(queryAll(m.container, '.lc-br-pick option').length, 1, 'the picker holds only the live row')
+
+    // The detail lands: every card renders its real content, the notes clear.
+    await until(() => queryAll(m.container, '.lc-bar').length === 3, 'the detail never landed')
+    assert.ok(!text(m.container).includes(DICT_EN['detail.loading']))
+    assert.ok(text(m.container).includes('heads-up'), 'the events list serves the detail')
+    assert.equal(queryAll(m.container, '.lc-br-pick option').length, 4, 'live + three steps')
+    assert.ok(text(m.container).includes('reply three'), 'the brief rows serve the detail')
+    assert.ok(text(m.container).includes(DICT_EN['files.empty']), 'no file ops in this detail')
+    await m.unmount()
+  })
+
+  test('a failed detail read arms the retry notes; one click refires and the cards land', async () => {
+    let online = false
+    const ctx = slimCtx(async () => {
+      if (!online) throw new Error('offline')
+      return { ok: true, value: slimDetail() }
+    })
+    const View = makeView(ctx)
+    const m = await mount(h(View, { sessionId: 'sv-slim-fail', useProjection: projectionsFor(slimHead()) }))
+    await until(() => text(m.container).includes(DICT_EN['detail.loadFailed']), 'the failure never surfaced')
+    assert.equal(queryAll(m.container, '.lc-bar').length, 0)
+
+    online = true
+    await click(query(m.container, '.lc-br-retry'))
+    await until(() => queryAll(m.container, '.lc-bar').length === 3, 'the retry never recovered the cards')
+    assert.ok(!text(m.container).includes(DICT_EN['detail.loadFailed']))
+    assert.ok(text(m.container).includes('heads-up'))
+    await m.unmount()
+  })
+
+  test('the jump relay survives the split: held while the detail reads, resolves when it lands', async () => {
+    const ctx = slimCtx(async () => ({ ok: true, value: slimDetail() }))
+    const View = makeView(ctx)
+    // The jump is armed BEFORE the view mounts (the chat action relay) — the
+    // detail read is still pending, so the pin must wait for it (not consume
+    // and clamp against an empty record list).
+    requestContextFocus('sv-slim-jump', 4)
+    const m = await mount(h(View, { sessionId: 'sv-slim-jump', useProjection: projectionsFor(slimHead()) }))
+    assert.equal(queryAll(m.container, '.lc-bar-selected').length, 0, 'nothing pins before the detail')
+    await until(
+      () => queryAll(m.container, '.lc-bar[data-seq="4"]')[0]?.className.includes('lc-bar-selected') === true,
+      'the jump never resolved',
+    )
+    assert.equal(takeContextFocus('sv-slim-jump'), null)
+    await m.unmount()
+  })
+})

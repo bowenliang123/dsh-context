@@ -523,3 +523,34 @@ describe('FileCard — workspace display and system open', () => {
     await m2.unmount()
   })
 })
+
+describe('FileCard — the split generation detail states', () => {
+  test('a pending detail read shows the loading note instead of the empty claim', async () => {
+    const m = await mount(h(FileCard, {
+      activity: richActivity({ entries: [] }),
+      scope: 'live',
+      state: 'loading',
+      onRetry: () => {},
+    }))
+    assert.ok(text(m.container).includes('Loading history'))
+    assert.ok(!text(m.container).includes('No file reads'))
+    await m.unmount()
+  })
+
+  test('a failed detail read arms the retry button; without one the empty claim stays', async () => {
+    let retries = 0
+    const m = await mount(h(FileCard, {
+      activity: richActivity({ entries: [] }),
+      scope: 'live',
+      state: 'failed',
+      onRetry: () => { retries++ },
+    }))
+    await click(query(m.container, '.lc-br-retry'))
+    assert.equal(retries, 1)
+
+    const inert = await mount(h(FileCard, { activity: richActivity({ entries: [] }), scope: 'live', state: 'failed' }))
+    assert.ok(text(inert.container).includes('No file reads'), 'no retry wired — the plain empty state')
+    await inert.unmount()
+    await m.unmount()
+  })
+})

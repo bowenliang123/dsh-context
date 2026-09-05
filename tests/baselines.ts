@@ -26,6 +26,24 @@ export interface ClientSeam {
   markdownChrome: string
   /** The platform module table the shell seeds (client-bundle requires must resolve). */
   platformModules: readonly string[]
+  /**
+   * The faces the split timeline's on-demand detail channel rides
+   * (host/detail.ts + client/timelineSource.ts): the host's generic
+   * Connection RPC registry, the browser caller, and the projection
+   * registry's `stateOf` read. Each probe is a needle in the named source
+   * file of the baseline tag.
+   */
+  detailChannel: {
+    /** `HostConnectionRpc` in the connection package's shared rpc source. */
+    hostRpcFile: string
+    hostRpcNeedle: string
+    /** The browser caller's `call(channel, endpoint, payload…)` in the connection client source. */
+    clientRpcFile: string
+    clientRpcNeedle: string
+    /** The registry's `stateOf` unit-state read (the detail endpoint's data source). */
+    registryFile: string
+    registryNeedle: string
+  }
 }
 
 export interface Baseline {
@@ -60,6 +78,14 @@ export const BASELINES: readonly Baseline[] = [
         '@deepseek-ai/dsh-client-ui-slots',
         '@deepseek-ai/dsh-client-ui-primitives',
       ],
+      detailChannel: {
+        hostRpcFile: 'packages/client/connection/src/rpc.ts',
+        hostRpcNeedle: 'HostConnectionRpc',
+        clientRpcFile: 'packages/client/connection/src/client/rpc.ts',
+        clientRpcNeedle: 'call(channel, endpoint, payload',
+        registryFile: 'packages/session/session-projection/src/index.ts',
+        registryNeedle: 'stateOf<',
+      },
     },
   },
 ]

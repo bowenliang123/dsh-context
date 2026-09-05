@@ -19,7 +19,7 @@
  *   the request/event records are the raw material of `buildTimelineView`.
  */
 
-import type { Category, ContextEventRecord, CostFamilyUsage, RequestRecord, SessionCostUsage, Snapshot, SurfaceNode, TimingTotals, ToolTimingTotals } from '../shared/types'
+import type { Category, ContextEventRecord, ContextTimelineDetail, CostFamilyUsage, RequestRecord, SessionCostUsage, Snapshot, SurfaceNode, TimingTotals, ToolTimingTotals } from '../shared/types'
 import { estimateSystemTokens } from '../shared/estimate'
 import type { FoldBounds } from './config'
 import {
@@ -100,6 +100,15 @@ export interface TimelineState {
    */
   cost?: SessionCostUsage
   archiveFloor?: number
+  /**
+   * The detail collections' revision marker (see ContextTimelineDetail):
+   * bumped by every fold that mutates the request records, context events,
+   * live surface, or the removed-node archive — the slim wire head carries
+   * it so an open tab knows its fetched detail went stale. Absent until the
+   * first detail fold (undefined reads as 0; never materialize an
+   * `undefined`-valued property — the plain-JSON precondition above).
+   */
+  detailRev?: number
   /**
    * Whole-session timing totals (see TimingTotals) — running sums over the
    * COMPLETE session log, like `cost`. Absent until the first step or tool
@@ -232,6 +241,17 @@ function categoryOf(type: string, message: { source?: MessageSource } | undefine
   if (type === 'tool/result') return 'tool'
   if (isInjection(message?.source)) return 'inject'
   return 'user'
+}
+
+/**
+ * Mark the detail collections dirty (TimelineState.detailRev). Every caller
+ * is a fold branch that just mutated the requests/events/surface/archive;
+ * branches that touch only the working slots (stepStart, callNames, the
+ * shadow claim) or the envelope scalars do NOT bump — the served detail is
+ * unchanged, and an open tab has nothing to refetch.
+ */
+function bumpDetailRev(st: TimelineState): void {
+  st.detailRev = (st.detailRev ?? 0) + 1
 }
 
 /**
@@ -657,6 +677,7 @@ export function applyTimeline(state: TimelineState, event: TimelineEvent, bounds
         // too. Firing only on a real change keeps the list equal to the record.
         if ((data?.reason === 'change' || data?.reason === 'resume') && s.model && s.lastModel && s.model !== s.lastModel) {
           s.events.push({ seq: event.seq, time: event.time, kind: 'model', from: s.lastModel, to: s.model })
+          bumpDetailRev(s)
         }
         if (s.model) s.lastModel = s.model
         break
@@ -717,6 +738,7 @@ export function applyTimeline(state: TimelineState, event: TimelineEvent, bounds
       // `event.data` for user/message (no `data.message` indirection).
         const msg = deriveEventMessage(event as never) as MessageLike | null
         const s = ensure()
+        bumpDetailRev(s)
         const node = applySurface(s, event, event.type, data, msg)
         const source = msg?.source
         if (isInjection(source)) {
@@ -744,6 +766,7 @@ export function applyTimeline(state: TimelineState, event: TimelineEvent, bounds
       // the envelope would miss all content).
         const toolMsg = deriveEventMessage(event as never) as MessageLike | null
         const s = ensure()
+        bumpDetailRev(s)
         const node = applySurface(s, event, event.type, data, toolMsg)
         // A skill load via the `skill` tool returns the loaded skill's
         // instructions as a tool result — content the harness injected into the
@@ -770,6 +793,7 @@ export function applyTimeline(state: TimelineState, event: TimelineEvent, bounds
       // before this response joins the surface.
         const usage = data?.usage as UsageLike | null | undefined
         const s = ensure()
+        bumpDetailRev(s)
         const total = s.systemTokens + s.toolsTokens + s.sums.user + s.sums.inject + s.sums.assistant + s.sums.tool
         const record: RequestRecord = {
           time: event.time, seq: event.seq,
@@ -841,12 +865,14 @@ export function applyTimeline(state: TimelineState, event: TimelineEvent, bounds
         if (data && typeof data.active === 'boolean') {
           const s = ensure()
           s.events.push({ seq: event.seq, time: event.time, kind: 'mode', name: data.active ? 'plan.on' : 'plan.off' })
+          bumpDetailRev(s)
         }
         break
       }
       case 'compaction/summary':
       case 'compaction/prune': {
         const s = ensure()
+        bumpDetailRev(s)
         // Arm the shadow-price claim: the replacement that follows this
         // event synchronously shadows exactly these node seqs.
         if (data && Array.isArray(data.shadowedSeqs)) {
@@ -882,22 +908,21 @@ export function applyTimeline(state: TimelineState, event: TimelineEvent, bounds
 }
 
 /**
-   * Serve the projection's wire view: bound the surface nodes to the newest tail and attach each event to the request around it; stamp
-   * COPIES
-  * — the persisted state objects are never mutated.
+ * The envelope scalars both wire generations share: current composition, the
+ * live-surface counters, and the copied cost/timing totals. Served value
+ * fields are COPIES — the served value must never alias persisted state.
+ * Optional scalars use conditional spread: an unknown value must not
+ * materialize an `undefined`-valued property (the lossless-JSON pipeline —
+ * a single such property can fail the whole push, the failure mode behind
+ * issue #29).
  */
-export function buildTimelineView(state: TimelineState, bounds: FoldBounds): Snapshot {
+function headFieldsOf(state: TimelineState): Snapshot {
   const surfaceTotal = state.sums.user + state.sums.inject + state.sums.assistant + state.sums.tool
   // NOTE: provider-anchored occupancy (the official chat ring) is NOT folded
   // here since 0.11 — the Client reads token-meter's own `contextPressure`
   // projection key for it (token-meter owns estimation and replay). This
   // value keeps only the heuristic composition; `current.total` includes the
   // envelope (system + tools) and the live surface.
-  // Optional scalars use conditional spread: an unknown value must not
-  // materialize an `undefined`-valued property on the served view. The wire
-  // value travels the harness's lossless-JSON pipeline — a single
-  // `undefined`-valued property can fail the whole push (the failure mode
-  // behind issue #29), so absence beats a present-but-undefined key.
   const result: Snapshot = {
     ok: true,
     ...(state.model !== undefined ? { model: state.model } : {}),
@@ -918,13 +943,13 @@ export function buildTimelineView(state: TimelineState, bounds: FoldBounds): Sna
     // count. Calls still in flight (no result yet) and results compacted or
     // pruned out of the surface are both excluded.
     toolCalls: state.surface.reduce((n, node) => node.cat === 'tool' ? n + 1 : n, 0),
-    requests: state.requests.map(r => ({ ...r })),
-    events: state.events.map(e => ({ ...e })),
+    requests: [],
+    events: [],
     nodes: [],
     droppedNodes: 0,
-    archive: state.archived.map(n => ({ ...n })),
+    archive: [],
   }
-  // The cost totals ride the wire as COPIES (same rule as requests/events:
+  // The cost totals ride the wire as COPIES (same rule as the collections:
   // the served value must never alias persisted state).
   if (state.cost !== undefined) {
     const copyFam = (f: CostFamilyUsage | undefined): CostFamilyUsage | undefined => {
@@ -946,6 +971,24 @@ export function buildTimelineView(state: TimelineState, bounds: FoldBounds): Sna
     const tools: Record<string, ToolTimingTotals> = {}
     for (const k in state.timing.tools) tools[k] = { ...state.timing.tools[k] }
     result.timing = { ...state.timing, tools }
+  }
+  return result
+}
+
+/**
+ * The heavy collections: copies of the retained request records and context
+ * events (each event attached to the requests around it — the chart's ✂
+ * anchoring), the bounded served surface window, and the removed-node
+ * archive. Shared verbatim by the inline wire view (channel-less hosts) and
+ * the on-demand detail payload (host/detail.ts).
+ */
+function detailCollectionsOf(state: TimelineState, bounds: FoldBounds): Omit<ContextTimelineDetail, 'rev'> {
+  const result: Omit<ContextTimelineDetail, 'rev'> = {
+    requests: state.requests.map(r => ({ ...r })),
+    events: state.events.map(e => ({ ...e })),
+    nodes: [],
+    droppedNodes: 0,
+    archive: state.archived.map(n => ({ ...n })),
   }
   // The served slice: the newest `maxNodes` tail PLUS every live inject node
   // older than the tail. Injections (AGENTS.md, session-start context, …)
@@ -994,4 +1037,53 @@ export function buildTimelineView(state: TimelineState, bounds: FoldBounds): Sna
     }
   }
   return result
+}
+
+/**
+ * The split generation's SLIM wire head: the envelope scalars plus the
+ * precomputed count figures, the newest request's billing summary (the
+ * headline's derived anchor), and the detail revision marker. Small enough
+ * to ride every delivery channel whole (~1KB) — the heavy collections moved
+ * to the on-demand detail channel (host/detail.ts).
+ */
+export function buildTimelineHead(state: TimelineState): Snapshot {
+  const result = headFieldsOf(state)
+  // The stats board's count figures, over the RETAINED records (the same set
+  // the detail serves): distinct turn values and per-kind event tallies.
+  const turns = new Set<number>()
+  for (const r of state.requests) turns.add(r.turn ?? 0)
+  let injects = 0
+  let compactions = 0
+  let prunes = 0
+  for (const e of state.events) {
+    if (e.kind === 'inject') injects++
+    else if (e.kind === 'compaction') compactions++
+    else if (e.kind === 'prune') prunes++
+  }
+  result.counts = { turns: turns.size, steps: state.requests.length, injects, compactions, prunes }
+  const last = state.requests.at(-1)
+  if (last !== undefined) {
+    result.last = { seq: last.seq, total: last.total, ...(typeof last.prompt === 'number' ? { prompt: last.prompt } : {}) }
+  }
+  result.detailRev = state.detailRev ?? 0
+  return result
+}
+
+/**
+ * The on-demand detail payload (host/detail.ts serves it off the live fold
+ * state): the heavy collections plus the revision marker the head carries.
+ */
+export function buildTimelineDetail(state: TimelineState, bounds: FoldBounds): ContextTimelineDetail {
+  return { rev: state.detailRev ?? 0, ...detailCollectionsOf(state, bounds) }
+}
+
+/**
+   * Serve the INLINE projection wire view (channel-less hosts): the head
+   * scalars with the detail collections in place — the shape every delivery
+   * channel carried before the split generation. Bound the surface nodes to
+   * the newest tail and attach each event to the request around it; stamp
+   * COPIES — the persisted state objects are never mutated.
+ */
+export function buildTimelineView(state: TimelineState, bounds: FoldBounds): Snapshot {
+  return { ...headFieldsOf(state), ...detailCollectionsOf(state, bounds) }
 }

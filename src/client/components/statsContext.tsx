@@ -10,19 +10,44 @@
  * marker + styled DOM tip) explains the whole-session estimate and lists the
  * per-1M-token table straight from cost.ts, so printed rates can never drift
  * from the math.
+ *
+ * The counts arrive precomputed: the split-generation wire head carries them
+ * (shared/types.ts `TimelineCounts` — computed over the retained records),
+ * and the caller derives them from the collections on the inline generation
+ * (`countsOfRecords`). The card itself never touches the collections.
  */
 
 import type * as ReactNS from 'react'
-import type { ContextEventRecord, RequestRecord, SessionCostUsage } from '../../shared/types'
+import type { ContextEventRecord, RequestRecord, SessionCostUsage, TimelineCounts } from '../../shared/types'
 import { estimateSessionCost, formatCost, formatPriceRate, sessionPrices } from '../cost'
 import type { CostCurrency } from '../cost'
 import type { ViewKit } from '../viewkit'
 
 import { React } from '../react'
 
+/**
+ * The inline generation's counter derivation — the exact tally the card ran
+ * over the served collections before the split (distinct turn values, record
+ * count, per-kind event tallies). The host's split-generation counts match
+ * it by construction (fold.ts buildTimelineHead).
+ */
+export function countsOfRecords(requests: readonly RequestRecord[], events: readonly ContextEventRecord[]): TimelineCounts {
+  const turns = new Set<number>()
+  for (const req of requests) turns.add(req.turn ?? 0)
+  let injects = 0
+  let compactions = 0
+  let prunes = 0
+  for (const ev of events) {
+    if (ev.kind === 'inject') injects++
+    else if (ev.kind === 'compaction') compactions++
+    else if (ev.kind === 'prune') prunes++
+  }
+  return { turns: turns.size, steps: requests.length, injects, compactions, prunes }
+}
+
 export function makeStatsContext(kit: ViewKit): (props: {
-  requests: RequestRecord[]
-  events: ContextEventRecord[]
+  /** The session-shape and event tallies (host-precomputed on the split generation). */
+  counts: TimelineCounts
   /** Tool calls with a result live in the current context (absent on older hosts). */
   toolCalls?: number
   /** Image blocks live in the current context (absent on older hosts). */
@@ -32,25 +57,12 @@ export function makeStatsContext(kit: ViewKit): (props: {
 }) => ReactNS.ReactElement {
   const { t, fmt } = kit
   return function StatsContext(props: {
-    requests: RequestRecord[]
-    events: ContextEventRecord[]
+    counts: TimelineCounts
     toolCalls?: number
     images?: number
     cost?: SessionCostUsage
     locale: string
   }): ReactNS.ReactElement {
-    const turns = new Set<number>()
-    let steps = 0
-    for (const req of props.requests) {
-      turns.add(req.turn ?? 0)
-      steps++
-    }
-    let injects = 0, compactions = 0, prunes = 0
-    for (const ev of props.events) {
-      if (ev.kind === 'inject') injects++
-      else if (ev.kind === 'compaction') compactions++
-      else if (ev.kind === 'prune') prunes++
-    }
     const currency: CostCurrency = props.locale === 'zh' ? 'cny' : 'usd'
     const cost = estimateSessionCost(props.cost, currency)
     const fmtRate = (n: number): string => formatPriceRate(n, currency)
@@ -85,14 +97,14 @@ export function makeStatsContext(kit: ViewKit): (props: {
           <span className="lc-card-sub">{t('stats.hint')}</span>
         </div>
         <div className="lc-stats">
-          {cell(t('stats.turns'), turns.size)}
-          {cell(t('stats.steps'), steps)}
+          {cell(t('stats.turns'), props.counts.turns)}
+          {cell(t('stats.steps'), props.counts.steps)}
           {cell(t('stats.toolCalls'), props.toolCalls ?? 0)}
           {cell(t('stats.images'), props.images ?? 0)}
           {cell(t('stats.cost'), cost === null ? '—' : formatCost(cost, currency), costTip)}
-          {cell(t('stats.injects'), injects)}
-          {cell(t('stats.compactions'), compactions)}
-          {cell(t('stats.prunes'), prunes)}
+          {cell(t('stats.injects'), props.counts.injects)}
+          {cell(t('stats.compactions'), props.counts.compactions)}
+          {cell(t('stats.prunes'), props.counts.prunes)}
         </div>
       </div>
     )

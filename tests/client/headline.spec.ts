@@ -66,6 +66,17 @@ describe('headlineOf occupancy', () => {
     const h = headlineOf(timeline())
     assert.equal(h.tokens, 100)
   })
+
+  test('the split head anchors the derivation from `last` (the records ride the detail channel)', () => {
+    // lastReq.prompt + surface movement since: 150 + (100 - 80).
+    const h = headlineOf(timeline({ last: { seq: 9, total: 80, prompt: 150 } }), null)
+    assert.equal(h.tokens, 170)
+  })
+
+  test('a `last` without a numeric prompt yields no derived anchor', () => {
+    const h = headlineOf(timeline({ last: { seq: 9, total: 80 } }), null)
+    assert.equal(h.tokens, 100)
+  })
 })
 
 describe('headlineOf window and pct', () => {

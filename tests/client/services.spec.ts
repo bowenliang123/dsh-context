@@ -223,6 +223,63 @@ describe('timelineOf', () => {
       assert.ok(!('unsupported' in out), JSON.stringify(bad))
     }
   })
+
+  test('the split-generation slim head: counters/anchor/revision survive, the absent collections zero out', () => {
+    const head = {
+      ok: true,
+      model: 'm',
+      current,
+      counts: { turns: 3, steps: 12, injects: 2, compactions: 1, prunes: 0 },
+      last: { seq: 9, total: 100, prompt: 90 },
+      detailRev: 12,
+    }
+    const out = timelineOf(head)
+    assert.ok(out !== null)
+    assert.deepEqual(out.counts, { turns: 3, steps: 12, injects: 2, compactions: 1, prunes: 0 })
+    assert.deepEqual(out.last, { seq: 9, total: 100, prompt: 90 })
+    assert.equal(out.detailRev, 12)
+    assert.deepEqual(out.requests, [])
+    assert.deepEqual(out.nodes, [])
+    assert.deepEqual(out.archive, [])
+  })
+
+  test('the slim head fields re-prove: partial counts zero per field, shapeless last/detailRev drop', () => {
+    const out = timelineOf({ current, counts: { turns: 2, steps: 'many' }, last: { seq: 'x' }, detailRev: 'r' })
+    assert.ok(out !== null)
+    assert.deepEqual(out.counts, { turns: 2, steps: 0, injects: 0, compactions: 0, prunes: 0 })
+    assert.ok(!('last' in out), 'a wrong-typed seq drops the anchor whole')
+    assert.ok(!('detailRev' in out), 'a wrong-typed revision drops the marker (reads as the inline generation)')
+    const noCounts = timelineOf({ current, counts: 'junk', last: null, detailRev: NaN })
+    assert.ok(noCounts !== null)
+    assert.ok(!('counts' in noCounts))
+    assert.ok(!('last' in noCounts))
+    assert.ok(!('detailRev' in noCounts))
+    // A wrong-typed total drops the anchor too; a prompt-less anchor keeps just seq/total.
+    const badTotal = timelineOf({ current, last: { seq: 1, total: 'x' } })
+    assert.ok(badTotal !== null && !('last' in badTotal))
+    const noPrompt = timelineOf({ current, last: { seq: 1, total: 7 } })
+    assert.ok(noPrompt !== null)
+    assert.deepEqual(noPrompt.last, { seq: 1, total: 7 })
+  })
+
+  test('a slim head carrying the (empty) collections passes through by reference, markers intact', () => {
+    // The host's head builder emits the four collections as empty lists, so
+    // the split generation rides the cheap pass-through path like any
+    // well-formed value — the markers/counts survive untouched.
+    const head = {
+      ok: true,
+      current,
+      counts: { turns: 1, steps: 1, injects: 0, compactions: 0, prunes: 0 },
+      last: { seq: 1, total: 7 },
+      detailRev: 1,
+      requests: [],
+      events: [],
+      nodes: [],
+      archive: [],
+      droppedNodes: 0,
+    }
+    assert.equal(timelineOf(head), head)
+  })
 })
 
 describe('unsupportedOf', () => {

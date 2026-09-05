@@ -9,6 +9,7 @@ import { describe, test } from 'vitest'
 import { h } from '../../../src/client/react'
 import { makeContextBrowser, type ContextBrowserProps } from '../../../src/client/components/browser'
 import { makeStackedBar } from '../../../src/client/components/stackedBar'
+import { DICT_EN } from '../../../src/client/i18n'
 import { UNKNOWN_TOOL_SOURCE, type ContextHeaders, type ContextTimeline, type HeaderEpochContent, type RequestRecord, type SurfaceNode } from '../../../src/shared/types'
 import { headersOf, type ConversationNodeLike, type ImageLoader } from '../../../src/client/services'
 import { click, flush, hover, makeKit, mount, query, queryAll, text, unhover, type Mounted } from '../helpers/kit'
@@ -1465,6 +1466,42 @@ describe('ContextBrowser focus bridges', () => {
     assert.equal(query<HTMLSelectElement>(m.container, 'select.lc-br-pick').value, '10')
     await m.update(h(Browser, props({ data, headers, pinSeq: null })))
     assert.ok(text(query(m.container, '.lc-br-meta')).includes('Live · Next Request'))
+    await m.unmount()
+  })
+})
+
+describe('ContextBrowser — the split generation detail states', () => {
+  test('a pending detail read names the state on the note strip', async () => {
+    const m = await mount(h(Browser, { data: tl({}), headers: null, detailState: 'loading' }))
+    assert.ok(text(m.container).includes(DICT_EN['detail.loading']))
+    // The picker still offers the live surface (the sections read zero until the detail lands).
+    assert.equal(queryAll(m.container, '.lc-br-pick option').length, 1)
+    await m.unmount()
+  })
+
+  test('a failed detail read arms the retry button on the strip', async () => {
+    let retries = 0
+    const m = await mount(h(Browser, {
+      data: tl({}),
+      headers: null,
+      detailState: 'failed',
+      onDetailRetry: () => { retries++ },
+    }))
+    await click(query(m.container, '.lc-br-retry'))
+    assert.equal(retries, 1)
+    await m.unmount()
+  })
+
+  test('a landed (or inline) detail renders no strip', async () => {
+    for (const state of ['ready', 'legacy'] as const) {
+      const m = await mount(h(Browser, { data: tl({}), headers: null, detailState: state }))
+      assert.ok(!text(m.container).includes(DICT_EN['detail.loading']))
+      assert.ok(!text(m.container).includes(DICT_EN['detail.loadFailed']))
+      await m.unmount()
+    }
+    // And the prop-less caller (older hosts) renders nothing either.
+    const m = await mount(h(Browser, { data: tl({}), headers: null }))
+    assert.ok(queryAll(m.container, '.lc-br-retry').length === 0)
     await m.unmount()
   })
 })

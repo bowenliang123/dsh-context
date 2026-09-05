@@ -198,7 +198,10 @@ export function agentStatsOf(values: Record<string, unknown> | undefined): Agent
     : null
   return {
     head,
-    requests: timeline !== null ? timeline.requests.length : 0,
+    // The split-generation wire head carries the tally precomputed (the
+    // request records ride the detail channel); the inline generation's rows
+    // count their served records.
+    requests: timeline !== null ? (timeline.counts?.steps ?? timeline.requests.length) : 0,
     billed,
     durationMs: agentDurationOf(values?.subagentTiming),
     identity: agentIdentityOf(values?.subagent),

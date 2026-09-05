@@ -23,7 +23,7 @@ import type { Config } from './config'
 import { resolveBounds } from './config'
 import type { ProjectionDefinition } from './compat'
 import type { ContextTimeline } from '../shared/types'
-import { applyTimeline, buildTimelineView, createTimelineState } from './fold'
+import { applyTimeline, buildTimelineHead, buildTimelineView, createTimelineState } from './fold'
 import type { TimelineState } from './fold'
 
 /** Validate the wire payload before it leaves the host (strict: no drift). */
@@ -121,7 +121,30 @@ const unsupportedSchema = z.object({
   minimum: z.string(),
 }).strict()
 
-/** Exported for the fallback unit (fallback.ts): one wire contract, one schema. */
+/** The stats board's precomputed count figures (the split head — see Snapshot.counts). */
+const countsSchema = z.object({
+  turns: z.number().int().nonnegative(),
+  steps: z.number().int().nonnegative(),
+  injects: z.number().int().nonnegative(),
+  compactions: z.number().int().nonnegative(),
+  prunes: z.number().int().nonnegative(),
+}).strict()
+
+/** The newest retained request's billing summary (the split head's headline anchor). */
+const lastSchema = z.object({
+  seq: z.number(),
+  total: z.number().int().nonnegative(),
+  prompt: z.number().int().nonnegative().optional(),
+}).strict()
+
+/**
+ * One wire contract for both generations: the SPLIT head (envelope scalars +
+ * counts/last/detailRev; the heavy collections stay absent — they ride the
+ * on-demand detail channel, host/detail.ts) and the INLINE value
+ * (channel-less hosts and the fallback unit carry the collections in place).
+ * The collections are therefore optional on the schema; the split marker is
+ * `detailRev` (present ⟺ split).
+ */
 export const contextTimelineSchema = z.object({
   ok: z.literal(true),
   unsupported: unsupportedSchema.optional(),
@@ -131,13 +154,16 @@ export const contextTimelineSchema = z.object({
   current: currentSchema,
   images: z.number().int().nonnegative().optional(),
   toolCalls: z.number().int().nonnegative().optional(),
-  requests: z.array(requestRecordSchema),
-  events: z.array(contextEventSchema),
+  counts: countsSchema.optional(),
+  last: lastSchema.optional(),
+  detailRev: z.number().int().nonnegative().optional(),
+  requests: z.array(requestRecordSchema).optional(),
+  events: z.array(contextEventSchema).optional(),
   cost: z.object({ flash: costFamilySchema.optional(), pro: costFamilySchema.optional() }).strict().optional(),
   timing: timingTotalsSchema.optional(),
-  nodes: z.array(surfaceNodeSchema),
-  droppedNodes: z.number().int().nonnegative(),
-  archive: z.array(surfaceNodeSchema),
+  nodes: z.array(surfaceNodeSchema).optional(),
+  droppedNodes: z.number().int().nonnegative().optional(),
+  archive: z.array(surfaceNodeSchema).optional(),
   surfaceFloor: z.number().int().nonnegative().optional(),
   archiveFloor: z.number().int().nonnegative().optional(),
 }).strict() as unknown as z.ZodType<ContextTimeline>
@@ -172,6 +198,7 @@ const timelineStateSchema = z.object({
   callNames: z.record(z.string(), z.object({ name: z.string(), start: z.number() }).strict()),
   pendingShadowedSeqs: z.array(z.number()).optional(),
   pendingShadowEventSeq: z.number().optional(),
+  detailRev: z.number().int().nonnegative().optional(),
 }) as unknown as z.ZodType<TimelineState>
 
 /**
@@ -192,10 +219,25 @@ const timelineStateSchema = z.object({
  * `wire` block the registry treats the unit as host-only and never delivers
  * `contextTimeline` to the browser (the Context tab would stay on its
  * loading screen forever).
+ *
+ * `slim` selects the wire generation PER SERVE (a liveness probe, not a
+ * fixed flag): while the on-demand detail channel is live (host/detail.ts),
+ * the wire value is the SLIM head (buildTimelineHead) — the heavy
+ * collections no longer ride every session.list row, control baseline,
+ * follow snapshot, and push frame. Before the channel arms (the connection
+ * service may activate after this plugin) or on a deployment whose
+ * connection/sessions services never compose, the unit serves the INLINE
+ * value so the tab keeps working end to end. Both generations validate
+ * against the same schema (the collections are optional on it), and both
+ * fold the SAME state — the split is view-only, so no `stateVersion` bump
+ * and no cached-row invalidation comes with it (the `detailRev` state field
+ * is additive-optional: older rows restore without it and read as revision
+ * 0).
  */
-export function createContextTimelineDefinition(config: Config): ProjectionDefinition<'contextTimeline', TimelineState> {
+export function createContextTimelineDefinition(config: Config, slim: () => boolean): ProjectionDefinition<'contextTimeline', TimelineState> {
   const bounds = resolveBounds(config)
-  const view = (state: TimelineState): ContextTimeline => buildTimelineView(state, bounds)
+  const view = (state: TimelineState): ContextTimeline =>
+    slim() ? buildTimelineHead(state) : buildTimelineView(state, bounds)
   const definition: ProjectionDefinition<'contextTimeline', TimelineState> = {
     key: 'contextTimeline',
     stateSchema: timelineStateSchema,

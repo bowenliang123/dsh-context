@@ -43,13 +43,17 @@ export function headlineOf(
   const projected = pressure !== null && typeof pressure.projectedTokens === 'number'
     ? pressure.projectedTokens
     : undefined
-  const requests = data.requests
-  const lastReq = requests.length > 0 ? requests[requests.length - 1] : null
   // Fallback anchor: the newest request's provider prompt plus the heuristic
   // surface movement since it was logged (same shape as the projection, one
-  // request behind).
-  const derived = lastReq !== null && typeof lastReq.prompt === 'number'
-    ? lastReq.prompt + (current.total - lastReq.total)
+  // request behind). The split-generation wire head carries that record's
+  // billing summary as `last` (the request records ride the detail channel);
+  // the inline generation reads its newest record directly.
+  const last = data.last
+  const requests = data.requests
+  const lastReq = requests.length > 0 ? requests[requests.length - 1] : null
+  const anchor = last !== undefined ? last : lastReq
+  const derived = anchor !== null && typeof anchor.prompt === 'number'
+    ? anchor.prompt + (current.total - anchor.total)
     : undefined
   const occupancyTokens = projected ?? derived ?? null
   const window = pressure !== null && typeof pressure.contextWindow === 'number'

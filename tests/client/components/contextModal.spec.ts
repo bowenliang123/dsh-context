@@ -406,3 +406,56 @@ describe('ContextModal', () => {
     await m.unmount()
   })
 })
+
+describe('ContextModal — the split generation', () => {
+  /** Poll until the predicate holds (the detail store's debounce rides real timers). */
+  async function until(fn: () => boolean, message: string): Promise<void> {
+    for (let i = 0; i < 400; i++) {
+      if (fn()) return
+      await new Promise(resolve => setTimeout(resolve, 5))
+    }
+    assert.fail(message)
+  }
+
+  test('the modal shares the detail channel: the browser lands the collections on open', async () => {
+    const ctx = new TestClientCtx({
+      services: {
+        sessions: new TestSessions(),
+        connection: {
+          rpc: {
+            call: async () => ({
+              ok: true,
+              value: {
+                rev: 1,
+                requests: [{ seq: 1, turn: 1, step: 1, time: 1, system: 1, tools: 2, user: 3, inject: 4, assistant: 5, tool: 6, total: 21 }],
+                events: [],
+                nodes: [{ seq: 1, cat: 'assistant', tokens: 5, text: 'modal reply' }],
+                droppedNodes: 0,
+                archive: [],
+              },
+            }),
+          },
+        },
+      },
+    })
+    const ContextModal = makeContextModal(asClientCtx(ctx), kit)
+    const head = timeline({
+      counts: { turns: 1, steps: 1, injects: 0, compactions: 0, prunes: 0 },
+      last: { seq: 1, total: 21, prompt: 20 },
+      detailRev: 1,
+    })
+    const m = await mount(h(ContextModal, {
+      sessionId: 'sm-slim',
+      useContextModal: OPEN,
+      useProjection: (key: string) => (key === 'contextTimeline' ? head : undefined),
+    }))
+    // The composition card paints off the head while the browser's detail note shows.
+    assert.ok(text(m.container).includes(DICT_EN['overview.title']))
+    assert.ok(text(m.container).includes(DICT_EN['detail.loading']))
+    // The detail lands: the browser serves the step picker + the sections.
+    await until(() => !text(m.container).includes(DICT_EN['detail.loading']), 'the modal detail never landed')
+    assert.equal(queryAll(m.container, '.lc-br-pick option').length, 2, 'live + the one served step')
+    assert.ok(text(m.container).includes('1 Item'), 'the assistant section counts the served node')
+    await m.unmount()
+  })
+})

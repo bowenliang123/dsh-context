@@ -2,11 +2,14 @@
  * dsh-context — Host half (installed package entry).
  *
  * A plain Cordis plugin module (ESM) loaded by the harness as the
- * `dsh-context` loader row. Since v0.9 the Host half is a single *projection
- * unit* (`timeline.ts`): registered on `ctx.sessionProjections`, it folds a
+ * `dsh-context` loader row. Since v0.9 the Host half is built on *projection
+ * units* (`timeline.ts`): registered on `ctx.sessionProjections`, they fold a
  * session's durable event log into the per-request context-composition
- * timeline and lets the harness stream the finished value to the browser
- * through its push pipeline. There is no custom RPC channel anymore.
+ * timeline and let the harness stream the finished values to the browser
+ * through its push pipeline. The one exception is the on-demand detail
+ * channel (detail.ts): a single generic Connection RPC endpoint serving the
+ * heavy collections per VIEWING client, so the wire value every channel
+ * carries whole stays a slim head.
  *
  * Required service: the session-projection registry (the framework drives
  * the unit over `session/event` and persists its state via the projection
@@ -19,7 +22,8 @@
 
 import type { Context } from '@deepseek-ai/cordis'
 import { createToolAttribution } from './attribution'
-import { Config } from './config'
+import { Config, resolveBounds } from './config'
+import { watchDetailChannel } from './detail'
 import { createFallbackHeadersDefinition, createFallbackTimelineDefinition } from './fallback'
 import { createContextHeadersDefinition } from './headers'
 import { installSettings } from './settings'
@@ -58,7 +62,12 @@ export function apply(ctx: Context, config: Config): void {
   // third-party / agent-scoped / dynamic tools on top. Strictly additive — an
   // unsupported cordis or a missed read degrades to the static chain.
   const attribution = createToolAttribution(ctx)
-  ctx.sessionProjections.register(createContextTimelineDefinition(config))
+  // The split wire generation (detail.ts): the detail channel arms whenever
+  // the connection/sessions services compose (load order never assumed), and
+  // the unit's view reads the gate per serve — slim while the channel is
+  // live, inline otherwise.
+  const gate = watchDetailChannel(ctx, resolveBounds(config))
+  ctx.sessionProjections.register(createContextTimelineDefinition(config, () => gate.live))
   ctx.sessionProjections.register(createContextHeadersDefinition(name => attribution.ownerOf(name)))
   installSettings(ctx)
 }
@@ -66,6 +75,6 @@ export function apply(ctx: Context, config: Config): void {
 // ---- public type surface (stable for downstream consumers) -------------------
 
 export type { Category, ContextEventRecord, RequestRecord, Snapshot, ContextTimeline, SurfaceNode } from '../shared/types'
-export type { ContextHeaders, HeaderRecord, HeaderTool } from '../shared/types'
+export type { ContextHeaders, HeaderRecord, HeaderTool, ContextTimelineDetail, TimelineCounts, TimelineLast } from '../shared/types'
 export type { TimelineState } from './fold'
 export type { HeadersState } from './headers'

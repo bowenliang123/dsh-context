@@ -47,7 +47,7 @@ function realLog(): TimelineEvent[] {
 
 describe('createContextTimelineDefinition', () => {
   test('carries the supported projection contract on one unit', () => {
-    const def = createContextTimelineDefinition({})
+    const def = createContextTimelineDefinition({}, () => false)
     assert.equal(def.key, 'contextTimeline')
     assert.equal(def.stateVersion, 13)
     assert.equal(typeof def.init, 'function')
@@ -59,7 +59,7 @@ describe('createContextTimelineDefinition', () => {
   })
 
   test('the wire schema accepts a real folded view; the state schema accepts every intermediate state', () => {
-    const def = createContextTimelineDefinition({})
+    const def = createContextTimelineDefinition({}, () => false)
     const drive = driveTimeline(realLog())
     const parsed = def.wire.viewSchema.safeParse(drive.view)
     assert.equal(parsed.success, true, 'a real folded view validates')
@@ -81,7 +81,7 @@ describe('createContextTimelineDefinition', () => {
   })
 
   test('the wire schema rejects drift', () => {
-    const def = createContextTimelineDefinition({})
+    const def = createContextTimelineDefinition({}, () => false)
     const drive = driveTimeline(realLog())
 
     const extra = structuredClone(drive.view) as unknown as Record<string, unknown>

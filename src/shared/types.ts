@@ -20,10 +20,14 @@ declare module '@deepseek-ai/dsh-session-projection/types' {
   // dsh 0.1.1 — the definition's K constraint moved to the state map).
   interface SessionProjectionMap {
     /**
-     * The plugin's whole-value context timeline: current composition,
-     * per-request history, context events, and the model-visible surface.
-     * The Host folds it from the session log; clients receive the finished
-     * value (key absence = the plugin's host half is not composed).
+     * The plugin's context timeline: current composition, counters, and the
+     * headline anchor. Since the split generation the wire value is the SLIM
+     * head (every delivery channel — session.list rows, control baselines,
+     * push frames — carries it whole); the per-request history, context
+     * events, and the surface/archive collections ride the on-demand detail
+     * channel ({@link ContextTimelineDetail}, host/detail.ts). Channel-less
+     * hosts keep the inline generation (the collections stay in the value).
+     * Key absence = the plugin's host half is not composed.
      */
     contextTimeline: ContextTimeline
     /**
@@ -43,6 +47,33 @@ declare module '@deepseek-ai/dsh-session-projection/types' {
 }
 
 export type Category = 'user' | 'inject' | 'assistant' | 'tool'
+
+/**
+ * The stats board's count figures, precomputed host-side over the RETAINED
+ * request/event records (the same set the detail payload serves). Carried by
+ * the split-generation wire head so the board — and the Agent card's
+ * per-session request tally — never need the collections themselves.
+ * `steps` doubles as the retained request-record count.
+ */
+export interface TimelineCounts {
+  turns: number
+  steps: number
+  injects: number
+  compactions: number
+  prunes: number
+}
+
+/**
+ * The newest retained request record's billing summary — the headline's
+ * derived-occupancy anchor (`prompt + surface movement since`), carried by
+ * the split-generation wire head so the headline never needs the request
+ * records themselves.
+ */
+export interface TimelineLast {
+  seq: number
+  total: number
+  prompt?: number
+}
 
 /**
  * The per-user display-preference vocabulary of the `dsh-context` settings
@@ -106,6 +137,23 @@ export interface Snapshot {
    * hosts; clients treat absence as zero.
    */
   toolCalls?: number
+  /**
+   * Split-generation head fields — present exactly when the host serves the
+   * SLIM head (the heavy collections moved to the on-demand detail channel,
+   * host/detail.ts) and absent on the inline generation (older or
+   * channel-less hosts serve the collections in place). `detailRev` is the
+   * detail's revision marker: it bumps whenever the detail collections
+   * change, so an open tab refetches on the push alone.
+   */
+  counts?: TimelineCounts
+  last?: TimelineLast
+  detailRev?: number
+  /**
+   * The per-request history / context-event collections. On the split
+   * generation these stay ABSENT from the wire value (every session.list row,
+   * control baseline, and push frame would carry them whole otherwise); the
+   * client fills them from the detail channel ({@link ContextTimelineDetail}).
+   */
   requests: RequestRecord[]
   events: ContextEventRecord[]
   /**
@@ -145,6 +193,26 @@ export interface Snapshot {
    * retention bounds dropped. Steps with seq < archiveFloor may miss removed
    * nodes (the browser shows the reconstruction as approximate).
    */
+  archiveFloor?: number
+}
+
+/**
+ * The on-demand DETAIL payload of the split `contextTimeline` generation —
+ * the heavy collections (per-request records, context events, the served
+ * surface window, and the removed-node archive) that the slim wire head no
+ * longer carries through every delivery channel. The host serves it off the
+ * live fold state at the `/dsh-context` `detail` endpoint (host/detail.ts);
+ * `rev` mirrors the head's `detailRev` at build time and acts as the
+ * client's latest-wins cursor.
+ */
+export interface ContextTimelineDetail {
+  rev: number
+  requests: RequestRecord[]
+  events: ContextEventRecord[]
+  nodes: SurfaceNode[]
+  droppedNodes: number
+  archive: SurfaceNode[]
+  surfaceFloor?: number
   archiveFloor?: number
 }
 

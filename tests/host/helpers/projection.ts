@@ -28,7 +28,7 @@ export interface TimelineDefLike {
   apply(state: TimelineState, event: TimelineEvent): TimelineState
   wire: {
     /** The wire gate every delivery channel parses the served value with. */
-    viewSchema: { parse(value: unknown): unknown }
+    viewSchema: { parse(value: unknown): unknown; safeParse(value: unknown): { success: boolean } }
     view(state: TimelineState): ContextTimeline
   }
 }
@@ -40,8 +40,8 @@ export interface HeadersDefLike {
   wire: { view(state: HeadersState): ContextHeaders }
 }
 
-export function timelineDef(config?: Config): TimelineDefLike {
-  return createContextTimelineDefinition(config ?? {}) as unknown as TimelineDefLike
+export function timelineDef(config?: Config, slim = false): TimelineDefLike {
+  return createContextTimelineDefinition(config ?? {}, () => slim) as unknown as TimelineDefLike
 }
 
 export function headersDef(): HeadersDefLike {

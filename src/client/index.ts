@@ -6,12 +6,13 @@
  * context-composition timeline: current makeup, per-request stacked-bar
  * history, context events, and the live message list.
  *
- * Since v0.9 the tab needs no custom data plane: the Host half pushes its
- * fold through the harness's session-projection pipeline
- * (`contextTimeline` projection key), and this half reads the finished value
- * from the framework standard kit (`useProjection('contextTimeline')`, a
- * standard prop on every session-scope slot component). No polling, no RPC,
- * no client-side cache.
+ * Since v0.9 the tab rides the harness's session-projection pipeline
+ * (`contextTimeline` projection key), read from the framework standard kit
+ * (`useProjection('contextTimeline')`, a standard prop on every session-scope
+ * slot component). The wire value is the split generation's slim head; the
+ * heavy collections arrive on demand from the host's detail endpoint, one
+ * read per viewing client (timelineSource.ts). No polling, no stale-while-
+ * revalidate cache.
  *
  * This module is the body of the package's `./client` bundle: tsdown
  * (tsdown.config.ts) bundles it (external `react` — the browser module table

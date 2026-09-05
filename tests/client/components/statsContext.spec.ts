@@ -1,11 +1,14 @@
 // StatsContext (src/client/components/statsContext.tsx) rendered with real
 // React: the eight-cell 2×4 grid — session shape, the priced cost cell with
-// its rate tooltip, and the context-event tally — in both locales.
+// its rate tooltip, and the context-event tally — in both locales. The count
+// figures arrive precomputed (the split generation's wire head carries them);
+// `countsOfRecords` is the inline generation's derivation, pinned here to the
+// same totals.
 
 import assert from 'node:assert/strict'
 import { describe, test } from 'vitest'
 import { h } from '../../../src/client/react'
-import { makeStatsContext } from '../../../src/client/components/statsContext'
+import { countsOfRecords, makeStatsContext } from '../../../src/client/components/statsContext'
 import type { ContextEventRecord, RequestRecord, SessionCostUsage } from '../../../src/shared/types'
 import { makeKit, mount, query, queryAll, text } from '../helpers/kit'
 
@@ -35,12 +38,26 @@ function cells(container: HTMLElement): { labels: string[]; values: string[] } {
   }
 }
 
+describe('countsOfRecords (the inline generation derivation)', () => {
+  test('tallies distinct turns, records, and the three priced event kinds', () => {
+    // Two steps in turn 1, one in turn 2, one without a turn (folds as turn 0).
+    const counts = countsOfRecords(
+      [req(1), req(1), req(2), req()],
+      [ev('inject'), ev('inject'), ev('inject'), ev('compaction'), ev('compaction'), ev('prune'), ev('model'), ev('mode')],
+    )
+    // model/mode events do not appear (only the three priced kinds do).
+    assert.deepEqual(counts, { turns: 3, steps: 4, injects: 3, compactions: 2, prunes: 1 })
+  })
+
+  test('empty collections tally zero', () => {
+    assert.deepEqual(countsOfRecords([], []), { turns: 0, steps: 0, injects: 0, compactions: 0, prunes: 0 })
+  })
+})
+
 describe('StatsContext', () => {
   test('folds the eight-cell grid: shape stats, cost, and the event tally', async () => {
     const m = await mount(h(StatsContext, {
-      // Two steps in turn 1, one in turn 2, one without a turn (folds as turn 0).
-      requests: [req(1), req(1), req(2), req()],
-      events: [ev('inject'), ev('inject'), ev('inject'), ev('compaction'), ev('compaction'), ev('prune'), ev('model'), ev('mode')],
+      counts: { turns: 3, steps: 4, injects: 3, compactions: 2, prunes: 1 },
       toolCalls: 3,
       images: 2,
       cost: COST,
@@ -53,19 +70,25 @@ describe('StatsContext', () => {
       'Turns', 'Steps', 'Tool Calls', 'Images',
       'Cost?', 'Injections', 'Compactions', 'Prunes',
     ])
-    // model/mode events do not appear (only their three priced kinds do).
     assert.deepEqual(values, ['3', '4', '3', '2', '$0.44', '3', '2', '1'])
     await m.unmount()
   })
 
   test('absent counters and cost degrade to zeros and the dash', async () => {
-    const m = await mount(h(StatsContext, { requests: [], events: [], locale: 'en' }))
+    const m = await mount(h(StatsContext, {
+      counts: { turns: 0, steps: 0, injects: 0, compactions: 0, prunes: 0 },
+      locale: 'en',
+    }))
     assert.deepEqual(cells(m.container).values, ['0', '0', '0', '0', '—', '0', '0', '0'])
     await m.unmount()
   })
 
   test('only the cost cell is tipped; the bubble lists both families with peak/off rates', async () => {
-    const m = await mount(h(StatsContext, { requests: [], events: [], cost: COST, locale: 'en' }))
+    const m = await mount(h(StatsContext, {
+      counts: { turns: 0, steps: 0, injects: 0, compactions: 0, prunes: 0 },
+      cost: COST,
+      locale: 'en',
+    }))
     assert.equal(queryAll(m.container, '.lc-stat-tip').length, 1)
     assert.equal(queryAll(m.container, '.lc-stat-q').length, 1)
     const tip = text(query(m.container, '.lc-stat-tip'))
@@ -78,7 +101,11 @@ describe('StatsContext', () => {
   })
 
   test('the zh locale localizes labels and prices the cost in CNY', async () => {
-    const m = await mount(h(StatsContextZh, { requests: [req(1)], events: [ev('compaction')], cost: COST, locale: 'zh' }))
+    const m = await mount(h(StatsContextZh, {
+      counts: { turns: 1, steps: 1, injects: 0, compactions: 1, prunes: 0 },
+      cost: COST,
+      locale: 'zh',
+    }))
     assert.ok(text(m.container).includes('上下文统计'))
     const { labels, values } = cells(m.container)
     assert.deepEqual(labels, ['轮次', '步数', '工具调用', '图片', '预估费用?', '注入', '压缩', '剪枝'])
