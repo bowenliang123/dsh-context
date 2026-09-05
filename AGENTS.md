@@ -51,6 +51,16 @@ The plugin lives off data it does not own: the durable session log (event shapes
 - Re-prove every field at runtime. Structural narrowing over blind casts; optional chaining over non-null assertions; skip elements that fail the shape instead of throwing.
 - Every parser carries hostile fixtures next to its happy path: wrong types, null/missing fields, null or primitive elements inside arrays, unpaired references, and objects that throw on property access. The 100% coverage bar applies to every guard branch — an untested guard is an unverified promise.
 
+## Layout & responsive (the pane is not the viewport)
+
+The plugin renders inside the shell's center column, whose width follows the sidebar (JS-driven collapse at `SIDEBAR_AUTO_COLLAPSE = 1024`, plus manual drags) — never the raw viewport. Use container queries, the harness's own idiom (ProducedFiles' five-band cascade, TrajectoryTable's `trajectory-table`), not viewport media queries.
+
+- `.lc-root .lc-card` is the shared `lc-card` inline-size query container and `.lc-head` the `lc-head-row` one: card-internal reflows key off the card's own width, row folds off the row's. The `/context` modal sits outside `.lc-root` and stays container-free.
+- Engine traps, verified live in the harness webview: a container query cannot style the container element itself (self-targeted rules are ignored — fold rules must target descendants), and a `calc(% - px)` flex-basis inside a size container mis-resolves (items balloon to full width) — use a plain percentage and let flex-grow even the split out.
+- `container-type: inline-size` applies layout containment, so a contained card becomes the containing block for `position: fixed` descendants — a fullscreen overlay MUST portal to `document.body` (the image lightbox is the precedent).
+- Fold, never crush. Under width pressure a row wraps to a two-line anatomy and a grid folds columns — never truncate into unreadability, never a horizontal scrollbar, every field survives on the narrowest pane.
+- Verify layout changes visually before shipping: 1920 / 1280 (sidebar both expanded and collapsed) / 768 / 390, in BOTH locales on a long session, `/context` modal included. English is the truncation stress case — its labels run about twice as wide as the Chinese ones.
+
 ## Building
 - Run `pnpm run build` after code changes applied.
 - Run `pnpm run watch` to keep hot-reloaded on dsh with local plugin installed. It also helps developer to see the code changes in the browser.
