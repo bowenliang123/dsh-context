@@ -1,15 +1,17 @@
 /**
- * Client-side service contracts — the exact API surface this plugin consumes
- * from the harness web half.
+ * Client-side harness boundary — the exact API surface this plugin consumes
+ * from the harness web half, plus the sanitizers that re-prove every
+ * delivered value at that boundary.
  *
  * The plugin bundles its own code but relies on the reader to deliver the
  * framework standard kit to slot components (`sessionId`, `useChat`,
  * `useProjection`, `t` …); only the small faces below are referenced across
- * modules. These are TYPE-ONLY: the runtime services come from the user's
- * harness. Data arrives as pushed session projections (`useProjection`
- * standard seat); the ONE exception is the gateway history page read
- * (`remote.session.page`, see historyPage.ts) that fetches a request-header
- * epoch's content on demand.
+ * modules. The INTERFACES are type-only (the runtime services come from the
+ * user's harness); the `*Of` functions are the runtime guards the
+ * no-white-screen guarantee rides on. Data arrives as pushed session
+ * projections (`useProjection` standard seat); the ONE exception is the
+ * gateway history page read (`remote.session.page`, see historyPage.ts) that
+ * fetches a request-header epoch's content on demand.
  */
 
 import type { Context } from '@deepseek-ai/cordis'
@@ -171,6 +173,18 @@ export interface SessionStandardProps {
   useChat?: UseChatLike
 }
 
+/**
+ * Read one projection key through the standard seat, narrowed at the
+ * boundary: null when the seat is absent (a harness without the projection
+ * pipeline) or the delivered value fails the narrow. The seat is a real
+ * hook — call this unconditionally at the top of the component, one call
+ * per key, in a stable order.
+ */
+export function projectionOf<T>(props: SessionStandardProps, key: string, narrow: (value: unknown) => T | null): T | null {
+  if (typeof props.useProjection !== 'function') return null
+  return narrow(props.useProjection(key))
+}
+
 export type ClientCtx = Context & {
   locale: LocaleService
   slots: SlotsService
@@ -181,8 +195,10 @@ export type ClientCtx = Context & {
  * it is not one. The boundary type is Record<string, unknown> on purpose:
  * every field read below must re-prove itself (the no-white-screen
  * guarantee), so no field may borrow the wire type before its check.
+ * Shared by every sanitizer here and by the agent-tree derivation
+ * (agentTree.ts) — the ONE record guard for the whole client half.
  */
-function asRecord(value: unknown): Record<string, unknown> | null {
+export function asRecord(value: unknown): Record<string, unknown> | null {
   if (value === null || value === undefined || typeof value !== 'object') return null
   return value as Record<string, unknown>
 }
@@ -198,6 +214,16 @@ export function numOf(value: unknown): number {
 function objectsOf<T>(value: unknown): T[] {
   if (!Array.isArray(value)) return []
   return value.filter((v): v is T => v !== null && typeof v === 'object')
+}
+
+/**
+ * The fast path's collection check: a real array whose entries are ALL
+ * records. A null/primitive entry would pass a bare Array.isArray yet throw
+ * on the first property read downstream (`req.seq` on null), so it sends the
+ * value down the sanitizing slow path, where `objectsOf` drops it.
+ */
+function recordsOnly(value: unknown): boolean {
+  return Array.isArray(value) && value.every(e => e !== null && typeof e === 'object')
 }
 
 /**
@@ -237,10 +263,10 @@ export function timelineOf(value: unknown): ContextTimeline | null {
     && ['system', 'tools', 'user', 'inject', 'assistant', 'tool', 'total']
       .every(k => typeof (current as Record<string, unknown>)[k] === 'number')
   if (numericBreakdown
-    && Array.isArray(data.requests)
-    && Array.isArray(data.events)
-    && Array.isArray(data.nodes)
-    && Array.isArray(data.archive)
+    && recordsOnly(data.requests)
+    && recordsOnly(data.events)
+    && recordsOnly(data.nodes)
+    && recordsOnly(data.archive)
     && timingFastOk(data.timing)) {
     // Well-formed: pass the delivered value through untouched (cheap, and reference-stable so plain re-renders stay zero-copy).
     return data as unknown as ContextTimeline
@@ -287,11 +313,19 @@ export function timelineOf(value: unknown): ContextTimeline | null {
  * `contextPressure` projection (provider-anchored occupancy of the next
  * request). Absent key or value = the meter's projection is not composed
  * (e.g. a harness without the session-projection registry) — callers fall
- * back to their derived anchor, so the UI degrades gracefully.
+ * back to their derived anchor, so the UI degrades gracefully. The three
+ * fields are independent last-wins records on the wire (dsh's strict wire
+ * schema), so each is re-proved on its own: a wrong-typed field drops out,
+ * the readable ones survive.
  */
 export function contextPressureOf(value: unknown): ContextPressure | null {
-  const data: unknown = asRecord(value)
-  return data as ContextPressure | null
+  const data = asRecord(value)
+  if (data === null) return null
+  const out: ContextPressure = {}
+  if (typeof data.pressureTokens === 'number' && Number.isFinite(data.pressureTokens)) out.pressureTokens = data.pressureTokens
+  if (typeof data.projectedTokens === 'number' && Number.isFinite(data.projectedTokens)) out.projectedTokens = data.projectedTokens
+  if (typeof data.contextWindow === 'number' && Number.isFinite(data.contextWindow)) out.contextWindow = data.contextWindow
+  return out
 }
 
 /**
@@ -315,11 +349,20 @@ export function contextBreakdownOf(value: unknown): ContextBreakdown | null {
  * Narrow a delivered projection value to the official token-meter
  * `tokenUsage` projection (durable cumulative provider usage). Absent key or
  * value = the meter's projection is not composed (or no request has reported
- * usage yet) — callers drop the cache-hit cell to a dash.
+ * usage yet) — callers drop the cache-hit cell to a dash. The wire schema is
+ * strict with all four buckets REQUIRED (dsh token-meter's projectionSchema),
+ * so a partial/corrupt value degrades the whole value to null instead of
+ * undercounting the billed total.
  */
 export function tokenUsageOf(value: unknown): TokenUsage | null {
-  const data: unknown = asRecord(value)
-  return data as TokenUsage | null
+  const data = asRecord(value)
+  if (data === null) return null
+  const { uncachedInputTokens, outputTokens, cacheReadTokens, cacheWriteTokens } = data
+  if (typeof uncachedInputTokens !== 'number' || !Number.isFinite(uncachedInputTokens)) return null
+  if (typeof outputTokens !== 'number' || !Number.isFinite(outputTokens)) return null
+  if (typeof cacheReadTokens !== 'number' || !Number.isFinite(cacheReadTokens)) return null
+  if (typeof cacheWriteTokens !== 'number' || !Number.isFinite(cacheWriteTokens)) return null
+  return { uncachedInputTokens, outputTokens, cacheReadTokens, cacheWriteTokens }
 }
 
 /**
@@ -397,9 +440,11 @@ export function timingOf(value: unknown): TimingTotals | null {
  * browser degrades its system/tools sections to a metadata-only note.
  *
  * Entry-level shape is checked too: a malformed epoch (corrupt payload with
- * a missing tools list or wrong-typed systemTokens) would crash the
- * browser's tools/sections reads, so the WHOLE projection degrades to null
- * and the card falls back to its metadata-only note. The epoch CONTENT is
+ * a missing tools list, a wrong-typed systemTokens, or a tool row whose
+ * name/tokens the browser reads blindly — `tool.name.toLowerCase()` and
+ * `b.tokens - a.tokens` throw on junk) would crash the browser's
+ * tools/sections reads, so the WHOLE projection degrades to null and the
+ * card falls back to its metadata-only note. The epoch CONTENT is
  * not part of this value — the browser fetches it per epoch on demand.
  *
  * The pre-#37 wire generation carries the system TEXT instead of its token
@@ -417,6 +462,13 @@ export function headersOf(value: unknown): ContextHeaders | null {
     const entry = h as { tools?: unknown; systemTokens?: unknown }
     if (!Array.isArray(entry.tools)) return null
     if (entry.systemTokens !== undefined && (typeof entry.systemTokens !== 'number' || !Number.isFinite(entry.systemTokens))) return null
+    for (const t of entry.tools as unknown[]) {
+      if (t === null || typeof t !== 'object') return null
+      const tool = t as { name?: unknown; tokens?: unknown; plugin?: unknown }
+      if (typeof tool.name !== 'string') return null
+      if (typeof tool.tokens !== 'number' || !Number.isFinite(tool.tokens)) return null
+      if (tool.plugin !== undefined && typeof tool.plugin !== 'string') return null
+    }
   }
   let legacy = false
   for (const entry of headers.headers as { systemTokens?: unknown; system?: unknown }[]) {
@@ -486,17 +538,6 @@ export interface SessionScopeFace {
 
 export interface SessionsFace {
   scope(id: string): SessionScopeFace | undefined
-}
-
-/**
- * One raw durable-log event as the history RPC serves it (the wire envelope
- * the Host fold consumes, minimally re-typed): every field re-proved by the
- * mapper before use (the no-white-screen guarantee).
- */
-export interface HistoryEventLike {
-  type?: unknown
-  seq?: unknown
-  data?: unknown
 }
 
 /** One history page row: the raw event plus the optional host-computed view. */

@@ -155,6 +155,19 @@ describe('timelineOf', () => {
     assert.deepEqual(out.nodes, [node])
   })
 
+  test('a junk entry inside an otherwise well-formed value leaves the fast path and is dropped', () => {
+    // The cheap pass-through requires every collection's entries to be records:
+    // a null/primitive element would throw on the first downstream property
+    // read (`req.seq` on null), so the value takes the sanitizing path instead.
+    const good = { seq: 1, time: 1, system: 0, tools: 0, user: 1, inject: 0, assistant: 0, tool: 0, total: 1 }
+    const out = timelineOf({ ok: true, current, requests: [good, null], events: [], nodes: [], archive: [], droppedNodes: 0 })
+    assert.ok(out !== null)
+    assert.deepEqual(out.requests, [good])
+    const junkNodes = timelineOf({ ok: true, current, requests: [], events: [7], nodes: [], archive: [], droppedNodes: 0 })
+    assert.ok(junkNodes !== null)
+    assert.deepEqual(junkNodes.events, [])
+  })
+
   test('model/provider/contextWindow: wrong-typed dropped, right-typed kept', () => {
     const kept = timelineOf({ current: 1, model: 'm', provider: 'p', contextWindow: 100 })
     assert.ok(kept !== null)
@@ -231,9 +244,20 @@ describe('unsupportedOf', () => {
 })
 
 describe('contextPressureOf', () => {
-  test('records pass through', () => {
-    const value = { pressureTokens: 10, surfaceTokens: 20 }
-    assert.equal(contextPressureOf(value), value)
+  test('the three wire fields pass, each re-proved as a finite number', () => {
+    assert.deepEqual(
+      contextPressureOf({ pressureTokens: 10, projectedTokens: 30, contextWindow: 128000 }),
+      { pressureTokens: 10, projectedTokens: 30, contextWindow: 128000 },
+    )
+  })
+
+  test('wrong-typed/non-finite fields drop out individually; unknown fields never ride along', () => {
+    // surfaceTokens is a state-internal field of the meter's fold — the strict
+    // wire schema never delivers it, and the sanitizer must not either.
+    assert.deepEqual(contextPressureOf({ pressureTokens: 10, surfaceTokens: 20 }), { pressureTokens: 10 })
+    assert.deepEqual(contextPressureOf({ projectedTokens: 'x' }), {})
+    assert.deepEqual(contextPressureOf({ contextWindow: Number.NaN }), {})
+    assert.deepEqual(contextPressureOf({}), {})
   })
 
   test('non-records degrade to null', () => {
@@ -268,9 +292,23 @@ describe('contextBreakdownOf', () => {
 })
 
 describe('tokenUsageOf', () => {
-  test('records pass through', () => {
-    const value = { total: { input: 100 } }
-    assert.equal(tokenUsageOf(value), value)
+  test('the four-bucket wire value passes as a value', () => {
+    assert.deepEqual(
+      tokenUsageOf({ uncachedInputTokens: 1, outputTokens: 2, cacheReadTokens: 3, cacheWriteTokens: 4 }),
+      { uncachedInputTokens: 1, outputTokens: 2, cacheReadTokens: 3, cacheWriteTokens: 4 },
+    )
+  })
+
+  test('a missing/wrong-typed/non-finite bucket degrades the WHOLE value to null', () => {
+    // The buckets sum into the billed total — a partial value would silently
+    // undercount, so anything short of the strict wire shape is dropped whole.
+    assert.equal(tokenUsageOf({ uncachedInputTokens: 1, outputTokens: 2, cacheReadTokens: 3 }), null, 'missing bucket')
+    assert.equal(tokenUsageOf({ total: { input: 100 } }), null, 'a foreign record shape')
+    const good = { uncachedInputTokens: 1, outputTokens: 2, cacheReadTokens: 3, cacheWriteTokens: 4 }
+    for (const key of Object.keys(good) as (keyof typeof good)[]) {
+      assert.equal(tokenUsageOf({ ...good, [key]: 'x' }), null, `${key} wrong-typed`)
+      assert.equal(tokenUsageOf({ ...good, [key]: Number.NaN }), null, `${key} non-finite`)
+    }
   })
 
   test('non-records degrade to null', () => {
@@ -395,6 +433,21 @@ describe('headersOf', () => {
   test('an entry with a defined non-numeric systemTokens degrades the whole value to null', () => {
     assert.equal(headersOf({ headers: [{ tools: [], systemTokens: 'x' }] }), null)
     assert.equal(headersOf({ headers: [{ tools: [], systemTokens: Number.NaN }] }), null)
+  })
+
+  test('a malformed tool entry degrades the whole value to null (the browser reads name/tokens blindly)', () => {
+    assert.equal(headersOf({ headers: [{ tools: [42] }] }), null, 'primitive tool row')
+    assert.equal(headersOf({ headers: [{ tools: [null] }] }), null, 'null tool row')
+    assert.equal(headersOf({ headers: [{ tools: [{ name: 7, tokens: 10 }] }] }), null, 'non-string name')
+    assert.equal(headersOf({ headers: [{ tools: [{ name: 'bash' }] }] }), null, 'missing tokens')
+    assert.equal(headersOf({ headers: [{ tools: [{ name: 'bash', tokens: 'x' }] }] }), null, 'non-numeric tokens')
+    assert.equal(headersOf({ headers: [{ tools: [{ name: 'bash', tokens: Number.NaN }] }] }), null, 'NaN tokens')
+    assert.equal(headersOf({ headers: [{ tools: [{ name: 'bash', tokens: 1, plugin: 7 }] }] }), null, 'non-string plugin')
+  })
+
+  test('a tool entry with an optional plugin string passes', () => {
+    const value = { headers: [{ seq: 1, time: 1, tools: [{ name: 'bash', tokens: 10, plugin: 'mcp:x' }] }] }
+    assert.equal(headersOf(value), value)
   })
 
   test('a valid value passes through by reference', () => {

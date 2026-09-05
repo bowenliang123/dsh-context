@@ -73,6 +73,20 @@ export function createContextSettings(): ContextSettings {
     state = next
     for (const listener of listeners) listener()
   }
+  // Republish from the bound scope's current snapshot; the attach sync and
+  // the failed-write rollback share this one read.
+  const sync = (bound: SettingsScopeLike): void => {
+    const snap = bound.getSnapshot()
+    const prefs = prefsOf(snap.value)
+    publish({
+      status: snap.status === 'ready' || snap.status === 'unavailable' ? snap.status : 'loading',
+      // A section without the field (older Host half) keeps the default.
+      granularity: prefs.granularity ?? state.granularity,
+      mode: prefs.mode ?? state.mode,
+      fileSort: prefs.fileSort ?? state.fileSort,
+      writable: snap.writable,
+    })
+  }
   return {
     store: {
       subscribe(listener) {
@@ -86,24 +100,19 @@ export function createContextSettings(): ContextSettings {
     defaultFileSort: () => state.fileSort,
     attach(bound) {
       scope = bound
-      const sync = (): void => {
-        const snap = bound.getSnapshot()
-        const prefs = prefsOf(snap.value)
-        publish({
-          status: snap.status === 'ready' || snap.status === 'unavailable' ? snap.status : 'loading',
-          // A section without the field (older Host half) keeps the default.
-          granularity: prefs.granularity ?? state.granularity,
-          mode: prefs.mode ?? state.mode,
-          fileSort: prefs.fileSort ?? state.fileSort,
-          writable: snap.writable,
-        })
-      }
-      sync()
-      return bound.subscribe(sync)
+      sync(bound)
+      return bound.subscribe(() => { sync(bound) })
     },
     set(field, value) {
       publish({ ...state, ...prefsOf({ [field]: value }) })
-      void scope?.set(field, value)
+      // The scope write settles asynchronously and its promise REJECTS on a
+      // transport failure (dsh keeps only its internal queue tail fulfilled)
+      // — never let it float unhandled. Roll the optimistic echo back to the
+      // scope's truth; a refused (non-2xx) write needs nothing here, the
+      // scope's own recovery re-reads the Host and republishes via subscribe.
+      const bound = scope
+      if (bound === undefined) return
+      void bound.set(field, value).catch(() => { sync(bound) })
     },
   }
 }

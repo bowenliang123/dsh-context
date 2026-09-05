@@ -143,8 +143,8 @@ describe('agentStatsOf', () => {
     assert.equal(agentStatsOf({ contextPressure: { contextWindow: 1000 } }).head, null)
   })
 
-  test('usage sums into billed; malformed members zero out', () => {
-    assert.equal(agentStatsOf({ tokenUsage: { uncachedInputTokens: 'x' } }).billed, 0)
+  test('usage sums into billed; a malformed usage value degrades whole (the buckets sum into the total)', () => {
+    assert.equal(agentStatsOf({ tokenUsage: { uncachedInputTokens: 'x' } }).billed, null)
     assert.equal(agentStatsOf({ tokenUsage: null }).billed, null)
   })
 })

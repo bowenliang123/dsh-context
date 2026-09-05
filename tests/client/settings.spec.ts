@@ -27,9 +27,12 @@ class TestSettingsScope implements SettingsScopeLike {
     return () => { this.listeners.delete(listener) }
   }
 
+  /** When true the write rejects, like a transport failure on the wire call. */
+  failSet = false
+
   set(field: string, value: unknown): Promise<void> {
     this.sets.push({ field, value })
-    return Promise.resolve()
+    return this.failSet ? Promise.reject(new Error('write failed')) : Promise.resolve()
   }
 
   /** Push a new snapshot, like the Host delivering a section update. */
@@ -100,6 +103,30 @@ describe('set', () => {
     s.set('defaultTrendMode', 'delta')
     assert.equal(s.defaultTrendMode(), 'delta')
     assert.deepEqual(scope.sets, [{ field: 'defaultTrendMode', value: 'delta' }])
+  })
+
+  test('a rejected scope write settles handled and rolls the echo back to the scope truth', async () => {
+    const s = createContextSettings()
+    const scope = new TestSettingsScope({ status: 'ready', value: { defaultTrendMode: 'total' }, writable: true })
+    s.attach(scope)
+    scope.failSet = true
+    s.set('defaultTrendMode', 'delta')
+    assert.equal(s.defaultTrendMode(), 'delta', 'the optimistic echo lands first')
+    // Let the rejection settle: the catch re-syncs from the scope's snapshot.
+    await new Promise(resolve => setTimeout(resolve, 0))
+    assert.equal(s.defaultTrendMode(), 'total', 'the echo rolls back to the scope truth')
+  })
+
+  test('a rejected write keeps a preference the scope does not carry', async () => {
+    // The scope's snapshot lacks the field entirely (older Host half): the
+    // rollback sync keeps the in-session choice rather than dropping it.
+    const s = createContextSettings()
+    const scope = new TestSettingsScope({ status: 'ready', value: {}, writable: true })
+    s.attach(scope)
+    scope.failSet = true
+    s.set('defaultFileSort', 'path')
+    await new Promise(resolve => setTimeout(resolve, 0))
+    assert.equal(s.defaultFileSort(), 'path')
   })
 })
 
