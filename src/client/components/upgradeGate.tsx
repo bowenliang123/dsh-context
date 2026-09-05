@@ -12,6 +12,7 @@
 
 import type * as ReactNS from 'react'
 import type { ViewKit } from '../viewkit'
+import { useEscapeClose } from './escapeClose'
 
 import { React } from '../react'
 
@@ -39,19 +40,9 @@ export function makeUpgradeGate(kit: ViewKit): (props: UpgradeGateProps) => Reac
       setClosedFor(sessionId)
     }, [sessionId])
 
-    // Same Escape contract as the /context modal: capture-phase, so the
-    // composer's own key handling never swallows it first.
-    React.useEffect(() => {
-      if (closed) return undefined
-      const onKey = (ev: KeyboardEvent) => {
-        if (ev.key !== 'Escape') return
-        ev.preventDefault()
-        ev.stopPropagation()
-        close()
-      }
-      window.addEventListener('keydown', onKey, true)
-      return () => { window.removeEventListener('keydown', onKey, true) }
-    }, [closed, close])
+    // Same overlay contract as the /context modal (escapeClose.ts):
+    // capture-phase Escape, and focus returns to the pre-open element.
+    useEscapeClose(!closed, close)
 
     if (closed) return null
 

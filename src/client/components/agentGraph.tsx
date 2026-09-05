@@ -20,7 +20,7 @@ import {
   AGENT_NODE_R,
   AGENT_RING_R,
   agentForestOf,
-  fmtDuration,
+  fmtDurationCompact,
   layoutForest,
   openAgentSession,
   ringSegments,
@@ -297,7 +297,7 @@ function Inspector(props: { node: AgentNode; t: ViewKit['t']; fmt: ViewKit['fmt'
   }
   if (node.requests > 0) bits.push(t('agents.requests', { n: node.requests }))
   if (node.billed !== null && node.billed > 0) bits.push(t('agents.billed', { n: fmt(node.billed) }))
-  if (node.durationMs !== null) bits.push(fmtDuration(node.durationMs))
+  if (node.durationMs !== null) bits.push(fmtDurationCompact(node.durationMs))
   return (
     <div className="lc-agents-inspector">
       <b className="lc-agents-inspector-name">{node.label}</b>

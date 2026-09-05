@@ -11,7 +11,7 @@ import type { ViewKit } from '../viewkit'
 
 import { React } from '../react'
 
-export const EVENT_ICONS: Record<string, string> = { compaction: '✂', prune: '✂', inject: '＋', model: '⇄', mode: '⇄' }
+const EVENT_ICONS: Record<string, string> = { compaction: '✂', prune: '✂', inject: '＋', model: '⇄', mode: '⇄' }
 
 export interface EventListProps { events: ContextEventRecord[] }
 

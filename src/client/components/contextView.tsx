@@ -8,7 +8,7 @@ import type { ContextEventRecord, RequestRecord, SurfaceNode } from '../../share
 import { briefNodes, briefOf } from '../brief'
 import { headlineOf } from '../headline'
 import type { SessionStandardProps } from '../services'
-import { contextBreakdownOf, contextPressureOf, conversationNodesOf, headersOf, imageLoaderOf, numOf, timelineOf, tokenUsageOf, unsupportedOf } from '../services'
+import { contextBreakdownOf, contextPressureOf, conversationNodesOf, headersOf, imageLoaderOf, numOf, projectionOf, timelineOf, tokenUsageOf, unsupportedOf } from '../services'
 import type { ClientCtx, ConversationNodeLike } from '../services'
 import { makeContentFetcher, makeHeaderFetcher } from '../historyPage'
 import { canOpenPathsOf, openPathVia, workspaceOf } from '../services'
@@ -42,13 +42,11 @@ const viewScroll = new Map<string, number>()
 
 const EVENT_KINDS = ['inject', 'compaction', 'prune', 'model', 'mode'] as const
 
-export type ContextViewProps = SessionStandardProps
-
 export function makeContextView(
   ctx: ClientCtx,
   kit: ViewKit,
   settings: ContextSettings,
-): (props: ContextViewProps) => ReactNS.ReactElement {
+): (props: SessionStandardProps) => ReactNS.ReactElement {
   const { t } = kit
   const StackedBar = makeStackedBar(kit)
   const Legend = makeLegend(kit)
@@ -69,31 +67,21 @@ export function makeContextView(
 
   // The body renders under the error boundary: a corrupt projection value (past the timelineOf shape guard) degrades to a styled error
   // card, not a white screen; the boundary itself has NO hooks, so the body's hook order and loading/data flow stay unchanged.
-  function ContextViewBody(props: ContextViewProps): ReactNS.ReactElement {
+  function ContextViewBody(props: SessionStandardProps): ReactNS.ReactElement {
     const sessionId = props.sessionId
-    const data = typeof props.useProjection === 'function'
-      ? timelineOf(props.useProjection('contextTimeline'))
-      : null
+    const data = projectionOf(props, 'contextTimeline', timelineOf)
     // Official token-meter `contextPressure` projection — the same key the chat's context ring reads; token-meter owns estimation, the Host
     // no longer mirrors it. Absent → derived fallback.
-    const pressure = typeof props.useProjection === 'function'
-      ? contextPressureOf(props.useProjection('contextPressure'))
-      : null
+    const pressure = projectionOf(props, 'contextPressure', contextPressureOf)
     // Official token-meter `tokenUsage` projection — the same data the chat stats line below the input box reads for its '缓存命中' figure, so
     // the stats board's cache-hit cell reuses it verbatim; absent → the cell drops to a dash instead of estimating.
-    const usage = typeof props.useProjection === 'function'
-      ? tokenUsageOf(props.useProjection('tokenUsage'))
-      : null
+    const usage = projectionOf(props, 'tokenUsage', tokenUsageOf)
     // Official token-meter `contextBreakdown` projection — the exact rows the chat ring's click-open panel shows, so the overview legend
     // reads identically by construction; absent → the fold's own same-estimator sums inside headlineOf.
-    const breakdown = typeof props.useProjection === 'function'
-      ? contextBreakdownOf(props.useProjection('contextBreakdown'))
-      : null
+    const breakdown = projectionOf(props, 'contextBreakdown', contextBreakdownOf)
     // `contextHeaders` companion projection (full system prompt + tool schemas) for the Context browser; absent key = older Host half →
     // those sections degrade to tokens-only with a note.
-    const headers = typeof props.useProjection === 'function'
-      ? headersOf(props.useProjection('contextHeaders'))
-      : null
+    const headers = projectionOf(props, 'contextHeaders', headersOf)
     const [selectedSeq, setSelectedSeq] = React.useState<number | null>(null)
     const [hoveredSeq, setHoveredSeq] = React.useState<number | null>(null)
     const [hoverTurn, setHoverTurn] = React.useState<number | null>(null)
@@ -215,10 +203,9 @@ export function makeContextView(
     // Step-brief raw material: every served node seq-sorted (live tail + archive), and the conversation-snapshot
     // join the brief uses for call-argument enrichment (same join the Context browser builds).
     const briefList = React.useMemo(() => (data ? briefNodes(data) : []), [data])
-    // The conversation-window join, from whichever seat the harness provides
-    // (`useChat` on 0.1.2+, the session snapshot before it). Both seats are
-    // real hooks — invoked unconditionally per render (stable order), only
-    // the result picked; undefined join = render without it, never an error.
+    // The conversation-window join, from the `useChat` seat. The seat is a
+    // real hook — invoked unconditionally per render (stable order);
+    // undefined join = render without it, never an error.
     const convNodes = conversationNodesOf(props)
     const bySeq = React.useMemo(() => {
       const m = new Map<number, ConversationNodeLike>()
@@ -480,7 +467,7 @@ export function makeContextView(
     )
   }
 
-  return function ContextView(props: ContextViewProps): ReactNS.ReactElement {
+  return function ContextView(props: SessionStandardProps): ReactNS.ReactElement {
     return h(ErrorBoundary, null, h(ContextViewBody, props))
   }
 }

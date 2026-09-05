@@ -17,7 +17,7 @@ import {
   agentStatsOf,
   familyHue,
   ringSegments,
-  fmtDuration,
+  fmtDurationCompact,
   layoutForest,
   openAgentSession,
   sessionsFaceOf,
@@ -584,12 +584,12 @@ describe('sessionsFaceOf', () => {
   })
 })
 
-describe('fmtDuration', () => {
+describe('fmtDurationCompact', () => {
   test('compacts milliseconds', () => {
-    assert.equal(fmtDuration(NaN), '—')
-    assert.equal(fmtDuration(-5), '—')
-    assert.equal(fmtDuration(42000), '42s')
-    assert.equal(fmtDuration(185000), '3m05s')
-    assert.equal(fmtDuration(4020000), '1h07m')
+    assert.equal(fmtDurationCompact(NaN), '—')
+    assert.equal(fmtDurationCompact(-5), '—')
+    assert.equal(fmtDurationCompact(42000), '42s')
+    assert.equal(fmtDurationCompact(185000), '3m05s')
+    assert.equal(fmtDurationCompact(4020000), '1h07m')
   })
 })

@@ -20,7 +20,7 @@
 
 import type { PartsPart } from './categories'
 import { headlineOf, type Headline } from './headline'
-import { contextBreakdownOf, contextPressureOf, numOf, timelineOf, tokenUsageOf } from './services'
+import { asRecord, contextBreakdownOf, contextPressureOf, numOf, timelineOf, tokenUsageOf } from './services'
 
 /**
  * The outward `ctx.sessions` client face, minimally re-typed for the card:
@@ -121,11 +121,6 @@ const LEVEL_H = 154
    connector never crosses a label. */
 const CELL_H = AGENT_NODE_R + 64
 const PAD_Y = 56
-
-function asRecord(value: unknown): Record<string, unknown> | null {
-  if (value === null || value === undefined || typeof value !== 'object') return null
-  return value as Record<string, unknown>
-}
 
 /** Narrow one list-row value; null when it is not a row at all. */
 export function agentRowOf(value: unknown): AgentRow | null {
@@ -564,8 +559,13 @@ export function sessionsFaceOf(ctx: { get(name: string): unknown }): SessionsFac
   return rec
 }
 
-/** Compact duration: `42s`, `3m05s`, `1h07m` (shared by both locales). */
-export function fmtDuration(ms: number): string {
+/**
+ * Compact duration: `42s`, `3m05s`, `1h07m` (shared by both locales).
+ * Deliberately distinct from format.ts's locale-aware `fmtDuration` (the
+ * timing card's `12.3s` / `4分0秒`): the inspector's caption column needs
+ * whole-second, fixed-width, locale-free text.
+ */
+export function fmtDurationCompact(ms: number): string {
   if (!Number.isFinite(ms) || ms < 0) return '—'
   const s = Math.round(ms / 1000)
   if (s < 60) return `${s}s`

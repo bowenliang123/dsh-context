@@ -44,6 +44,29 @@ declare module '@deepseek-ai/dsh-session-projection/types' {
 
 export type Category = 'user' | 'inject' | 'assistant' | 'tool'
 
+/**
+ * The per-user display-preference vocabulary of the `dsh-context` settings
+ * namespace — the ONE declaration both halves share: the Host registers the
+ * namespace schema against it (host/settings.ts), the Client binds the scope
+ * and edits fields by name (client/settings.ts). Type-only, so both bundles
+ * erase it.
+ */
+export type DefaultGranularity = 'step' | 'turn'
+
+export type DefaultTrendMode = 'total' | 'delta'
+
+/** File Activity row order: most operations first, most-recently-touched first, or path ascending. */
+export type DefaultFileSort = 'count' | 'latest' | 'path'
+
+export interface PluginSettings {
+  defaultGranularity: DefaultGranularity
+  defaultTrendMode: DefaultTrendMode
+  defaultFileSort: DefaultFileSort
+}
+
+/** The section fields the settings card edits, as the Host schema names them. */
+export type SettingsField = keyof PluginSettings
+
 export interface Snapshot {
   ok: boolean
   /**
@@ -68,19 +91,6 @@ export interface Snapshot {
     assistant: number
     tool: number
     total: number
-  }
-  /**
-   * Provider-anchored occupancy of the NEXT request. LEGACY since 0.11: the
-   * Host no longer folds this — the Client reads the official token-meter
-   * `contextPressure` projection key (`useProjection('contextPressure')`)
-   * instead. Kept optional for wire compatibility with older clients.
-   */
-  occupancy?: {
-    pressureTokens?: number
-    surfaceTokens: number
-    sampledSurfaceTokens?: number
-    projectedTokens?: number
-    contextWindow?: number
   }
   /**
    * Image blocks live in the CURRENT context (user uploads plus tool-result

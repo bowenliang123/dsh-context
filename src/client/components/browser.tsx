@@ -1,5 +1,5 @@
 import type * as ReactNS from 'react'
-import { UNKNOWN_TOOL_SOURCE, type Category, type ContextHeaders, type ContextTimeline, type HeaderEpochContent, type HeaderTool, type RequestRecord, type SurfaceNode } from '../../shared/types'
+import { UNKNOWN_TOOL_SOURCE, type Category, type ContextHeaders, type ContextTimeline, type HeaderTool, type RequestRecord, type SurfaceNode } from '../../shared/types'
 import { assemble } from '../assemble'
 import type { Assembled } from '../assemble'
 import { CATS, partsOf } from '../categories'
@@ -8,6 +8,7 @@ import type { ContentFetcher, ConversationNodeLike, HeaderFetcher } from '../ser
 import type { ViewKit } from '../viewkit'
 import { blockSummaryOf, callSummaryOf, parseCallArgs } from '../callSummary'
 import { makeNodeText } from './nodes'
+import { fetchMissNote, useFetchOnMiss } from './fetchOnMiss'
 import { imageRefOf, makeImageCard } from './images'
 import type { ImageKit } from './images'
 import { makeRichText } from './richText'
@@ -19,10 +20,9 @@ export interface ContextBrowserProps {
   data: ContextTimeline
   headers: ContextHeaders | null
   /**
-   * The conversation-window nodes, already resolved by the caller from
-   * whichever seat the harness provides (`useChat` on 0.1.2+, the session
-   * snapshot before it) — the browser itself stays seat-free so the hook
-   * order lives in exactly one place.
+   * The conversation-window nodes, resolved by the caller from the `useChat`
+   * seat — the browser itself stays seat-free so the hook order lives in
+   * exactly one place.
    */
   convNodes?: readonly ConversationNodeLike[]
   /**
@@ -580,47 +580,32 @@ export function makeContextBrowser(
     // plus nodes fetched on demand for seqs outside the window (node arrays
     // are stable references per snapshot; the map memoizes over them).
     const convNodes = props.convNodes
-    const [fetched, setFetched] = React.useState<Map<number, ConversationNodeLike>>(() => new Map())
-    const bySeq = React.useMemo(() => {
+    const convBySeq = React.useMemo(() => {
       const m = new Map<number, ConversationNodeLike>()
       for (const n of convNodes ?? []) m.set(n.seq, n)
-      for (const [seq, n] of fetched) if (!m.has(seq)) m.set(seq, n)
       return m
-    }, [convNodes, fetched])
+    }, [convNodes])
 
     // The open element's surface-node seq ('sys'/'tool:*' keys never join).
     const openSeq = openElem !== null && openElem.startsWith('n')
       ? Number(openElem.slice(1))
       : null
-    // Fetch-on-miss state machine: one targeted history read per expanded row
-    // whose seq the join missed. `failed` arms the retry button; `absent`
-    // means the page came back without the seq — it is not in the durable log.
-    const missingSeq = openSeq !== null && !bySeq.has(openSeq) ? openSeq : null
+    // Fetch-on-miss: one targeted history read per expanded row whose seq the
+    // join missed (fetchOnMiss.tsx; landed values cache by seq — history is
+    // immutable). `failed` arms the retry button; `absent` means the page
+    // came back without the seq — it is not in the durable log.
     const fetchContent = props.fetchContent
-    const [missState, setMissState] = React.useState<'idle' | 'loading' | 'absent' | 'failed'>('idle')
-    const [retry, setRetry] = React.useState(0)
-    React.useEffect(() => {
-      if (missingSeq === null || fetchContent === undefined) return
-      let live = true
-      setMissState('loading')
-      fetchContent(missingSeq).then((node) => {
-        if (!live) return
-        if (node === null) {
-          setMissState('absent')
-          return
-        }
-        setFetched((prev) => {
-          const next = new Map(prev)
-          next.set(missingSeq, node)
-          return next
-        })
-        setMissState('idle')
-      }, (error: unknown) => {
-        console.warn('dsh-context: targeted history read failed', error)
-        if (live) setMissState('failed')
-      })
-      return () => { live = false }
-    }, [missingSeq, fetchContent, retry])
+    const miss = useFetchOnMiss(
+      openSeq !== null && !convBySeq.has(openSeq) ? openSeq : null,
+      fetchContent,
+      'dsh-context: targeted history read failed',
+    )
+    const bySeq = React.useMemo(() => {
+      if (miss.values.size === 0) return convBySeq
+      const m = new Map(convBySeq)
+      for (const [seq, n] of miss.values) if (!m.has(seq)) m.set(seq, n)
+      return m
+    }, [convBySeq, miss.values])
     // Pin linkage: a pinned bar selects its step (same accordion reset as a manual pick); unpin returns to live — a manual pick here is
     // overridden only when a NEW pin lands.
     const pinSeq = props.pinSeq
@@ -647,21 +632,8 @@ export function makeContextBrowser(
       focusScrollRef.current = false
       rootRef.current?.querySelector('.lc-br-elem-on')?.scrollIntoView({ block: 'nearest' })
     })
-    // The note an un-joined open row shows, per fetch state: legacy static hint
-    // (no fetcher), in-flight loading, log-absent, or a failed read with retry.
-    const missNote: ReactNS.ReactNode = fetchContent === undefined
-      ? t('browser.noContent')
-      : missState === 'loading'
-        ? t('browser.loading')
-        : missState === 'absent'
-          ? t('browser.notInLog')
-          : missState === 'failed'
-            ? (
-              <button type="button" className="lc-br-retry" onClick={() => { setRetry(r => r + 1) }}>
-                {t('browser.loadFailed')}
-              </button>
-            )
-            : t('browser.noContent')
+    // The note an un-joined open row shows, per fetch state (fetchOnMiss.tsx).
+    const missNote = fetchMissNote(t, fetchContent, miss.state, miss.retry, 'browser.noContent')
 
     const requests = data.requests
     const hoverReq = props.previewSeq !== null && props.previewSeq !== undefined
@@ -682,53 +654,18 @@ export function makeContextBrowser(
     // Header epoch CONTENT (system prompt text, tool descriptions/schemas):
     // the projection carries metadata only, so the selected step's epoch is
     // fetched on demand — one seq-anchored history read when its system or
-    // tools section first opens. Content caches per epoch (history is
-    // immutable); the fetch states mirror the row-miss machine above.
-    const [headerContent, setHeaderContent] = React.useState<Map<number, HeaderEpochContent>>(() => new Map())
-    const [headerState, setHeaderState] = React.useState<'idle' | 'loading' | 'absent' | 'failed'>('idle')
-    const [headerRetry, setHeaderRetry] = React.useState(0)
+    // tools section first opens. The same fetch-on-miss machine as the row
+    // read above (content caches per epoch — history is immutable).
     const fetchHeader = props.fetchHeader
     const headerSeq = view.header !== null ? view.header.seq : null
-    const headerNeeded = view.header !== null
-      && headerSeq !== null
-      && !headerContent.has(headerSeq)
-      && (openCat === 'system' || openCat === 'tools')
-    React.useEffect(() => {
-      if (!headerNeeded || fetchHeader === undefined) return
-      let live = true
-      setHeaderState('loading')
-      fetchHeader(headerSeq).then((content) => {
-        if (!live) return
-        if (content === null) {
-          setHeaderState('absent')
-          return
-        }
-        setHeaderContent((prev) => {
-          const next = new Map(prev)
-          next.set(headerSeq, content)
-          return next
-        })
-        setHeaderState('idle')
-      }, (error: unknown) => {
-        console.warn('dsh-context: header content fetch failed', error)
-        if (live) setHeaderState('failed')
-      })
-      return () => { live = false }
-    }, [headerNeeded, headerSeq, fetchHeader, headerRetry])
-    // The note a not-yet-loaded epoch section shows, per fetch state: legacy
-    // metadata-only hint (no fetcher), in-flight loading, log-absent, or a
-    // failed read with retry.
-    const headerNote: ReactNS.ReactNode = fetchHeader === undefined
-      ? t('browser.headerMetaOnly')
-      : headerState === 'loading' || headerState === 'idle'
-        ? t('browser.loading')
-        : headerState === 'absent'
-          ? t('browser.notInLog')
-          : (
-            <button type="button" className="lc-br-retry" onClick={() => { setHeaderRetry(r => r + 1) }}>
-              {t('browser.loadFailed')}
-            </button>
-          )
+    const epoch = useFetchOnMiss(
+      headerSeq !== null && (openCat === 'system' || openCat === 'tools') ? headerSeq : null,
+      fetchHeader,
+      'dsh-context: header content fetch failed',
+    )
+    const headerContent = epoch.values
+    // The note a not-yet-loaded epoch section shows, per fetch state (fetchOnMiss.tsx).
+    const headerNote = fetchMissNote(t, fetchHeader, epoch.state, epoch.retry, 'browser.headerMetaOnly')
 
     const breakdown = req !== null ? req : data.current
     const parts = partsOf(breakdown)

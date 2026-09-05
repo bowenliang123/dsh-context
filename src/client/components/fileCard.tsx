@@ -20,8 +20,6 @@ import type { ViewKit } from '../viewkit'
 import { React } from '../react'
 
 export type FileFilter = 'all' | FileOpKind | 'image'
-/** Row order: most operations first (default), most-recently-touched first, or path ascending. */
-export type FileSort = DefaultFileSort
 
 export interface FileCardProps {
   activity: FileActivity
@@ -62,7 +60,7 @@ export function makeFileCard(kit: ViewKit, settings: ContextSettings): ReactNS.C
     const { activity } = props
     const [filter, setFilter] = React.useState<FileFilter>('all')
     // Mount-time default from the plugin settings card; in-card toggling stays mount-local and never writes back.
-    const [sort, setSort] = React.useState<FileSort>(() => settings.defaultFileSort())
+    const [sort, setSort] = React.useState<DefaultFileSort>(() => settings.defaultFileSort())
     const [query, setQuery] = React.useState('')
     const [openPath, setOpenPath] = React.useState<string | null>(null)
 

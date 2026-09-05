@@ -12,13 +12,11 @@
  * members keeps the dependency graph honest.
  */
 
-export type DefaultGranularity = 'step' | 'turn'
-export type DefaultTrendMode = 'total' | 'delta'
-/** File Activity row order: most operations first, most-recently-touched first, or path ascending. */
-export type DefaultFileSort = 'count' | 'latest' | 'path'
+import type { DefaultFileSort, DefaultGranularity, DefaultTrendMode, SettingsField } from '../shared/types'
 
-/** The section fields the card edits, as the Host schema names them. */
-export type SettingsField = 'defaultGranularity' | 'defaultTrendMode' | 'defaultFileSort'
+// The preference vocabulary is declared once in shared/types.ts; re-exported
+// here so client-side consumers keep their canonical import path.
+export type { DefaultFileSort, DefaultGranularity, DefaultTrendMode, SettingsField } from '../shared/types'
 
 /** The bound settings scope (ctx.settingsScope.bind result), as consumed. */
 export interface SettingsScopeLike {
