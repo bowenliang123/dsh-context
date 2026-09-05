@@ -26,6 +26,21 @@
 /* The chevron sits close to the icon: only half the row gap stays visible. */
 .lc-fa-row .lc-br-chev { margin-right: -2px; }
 .lc-fa-path { flex: 1; min-width: 0; word-break: break-all; }
+/*
+ Narrow cards (phone panes): the nowrap row's break-all path otherwise
+ collapses into a one-character-wide vertical strip beside the chips. Wrap
+ instead: the path's near-full-width basis keeps line 1 to chevron + icon +
+ path (free to wrap to two text lines), and the badges/delta/time fold onto
+ line 2 intact. The 46px reservation is chevron (12) + gaps (2×7) + form
+ icon (20). Must sit AFTER the `.lc-fa-path` base rule — equal specificity,
+ so only source order lets the query's basis beat the `flex: 1` shorthand.
+ */
+@container lc-card (max-width: 380px) {
+  .lc-fa-row { flex-wrap: wrap; }
+  .lc-fa-path { flex-basis: calc(100% - 46px); }
+  /* The five purpose chips (labels + counts) overflow a ~300px card in English — let the segmented group flow to two lines. */
+  .lc-fa-ctl .lc-gran { flex-wrap: wrap; }
+}
 .lc-fa-file { cursor: pointer; }
 .lc-fa-file:hover { text-decoration: underline; }
 .lc-fa-path em { font-style: normal; color: var(--dsw-alias-label-secondary); }

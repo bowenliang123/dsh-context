@@ -93,22 +93,22 @@
  Narrow head cards: the side-by-side ring + legend reads single-line only
  above ~320px of card content width. The two-tier rows already absorb the
  squeeze — the name gives ground before the fixed share column — so the
- compact block only tightens the ring gap. Below 240px even that stops
+ compact block only tightens the ring gap. The context card's 8-cell grid
+ folds to 2 columns instead: four ~65px cells would ellipsize the longer
+ English labels (Compactions, Injections). Below 240px even the ring stops
  fitting, so the card stacks: the ring centers over the full-width legend
- rows. The context card's 2x4 cell grid folds to 4x2 so the head row stays
- level with the shorter donut cards, and re-folds to 2 columns in the
- stacked card so tile labels read in full. Engines without container
- queries drop both blocks and keep the wide layout. The 240px block must
- stay AFTER the 320px one — at that width both match and the stack rules
- win by order.
+ rows. Cards resolve these queries against themselves (the shared `lc-card`
+ container in base.css) at every split of the head row — 4-across, 2×2 or
+ single-column. Engines without container queries drop both blocks and keep
+ the wide layout. The 240px block must stay AFTER the 320px one — at that
+ width both match and the stack rules win by order.
  */
-@container lc-head-card (max-width: 320px) {
+@container lc-card (max-width: 320px) {
   .lc-donut-row { gap: 8px; }
-  .lc-stats { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+  .lc-stats { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
-@container lc-head-card (max-width: 240px) {
+@container lc-card (max-width: 240px) {
   .lc-donut-row { flex-wrap: wrap; }
   .lc-donut { margin: 0 auto; }
   .lc-donut-row .lc-sl { flex-basis: 100%; }
-  .lc-stats { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }

@@ -18,3 +18,15 @@
 .lc-event-tokens { color: var(--dsw-alias-state-success-primary); font-weight: 600; white-space: nowrap; }
 .lc-event-tokens.lc-up { color: var(--dsw-alias-state-warn-primary); }
 .lc-event-time { color: var(--dsw-alias-label-secondary); font-size: 12px; }
+/*
+ Narrow cards (phone panes): the single-line row crushes the label to a
+ couple of characters and the no-shrink meta tail (at/tokens/time) overflows
+ into a horizontal scrollbar. Wrap instead: the label's near-full-width
+ basis keeps line 1 to icon + kind + label, and the meta tail folds onto
+ line 2 intact. The 92px reservation covers icon + gap + the widest kind
+ chip (both locales) + gap.
+ */
+@container lc-card (max-width: 380px) {
+  .lc-event { flex-wrap: wrap; }
+  .lc-event-label { flex-basis: calc(100% - 92px); }
+}

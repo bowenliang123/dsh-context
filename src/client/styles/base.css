@@ -20,9 +20,17 @@
  must sit BEFORE the `.lc-cols`/`.lc-col` margin-zeroing rules below so their
  equal-or-higher specificity keeps row children at 0 while column-stacked
  cards take the halved margin. The /context modal sits outside `.lc-root` and
- keeps the shared values.
+ keeps the shared values (and its cards stay non-containers).
+
+ Every tab card is ALSO the `lc-card` query container: card-internal reflows
+ (the donut cards in stats.css, the events/file rows' two-line anatomy) key
+ off the card's own width, not the viewport — the pane depends on the shell's
+ sidebar state. Inline-size containment is safe: every card's width comes
+ from its flex row, never from its contents; the one fixed-position overlay
+ (the image lightbox) portals to <body>, so the layout-containment fixed-CB
+ trap cannot catch it.
  */
-.lc-root .lc-card { padding: 7px 8px; margin-bottom: 7px; }
+.lc-root .lc-card { padding: 7px 8px; margin-bottom: 7px; container: lc-card / inline-size; }
 .lc-root .lc-cols { gap: 7px; margin-bottom: 7px; }
 /* Wraps under width pressure: toggle groups/kind chips in a header drop to
    their own line instead of spilling past the card edge. */
@@ -47,27 +55,33 @@
  The row owns the 14px vertical rhythm (lc-cols gap); cards drop their own bottom margin (incl. the last in a column) so every section boundary measures exactly one 14px whichever way the flex wraps.
  */
 .lc-cols { display: flex; gap: 14px; flex-wrap: wrap; margin-bottom: 14px; }
-.lc-col { flex: 1; min-width: 280px; }
+/* min() caps the column floor at the row's own width: on a sub-280px pane (phone rail + padding) the column narrows instead of overflowing. */
+.lc-col { flex: 1; min-width: min(280px, 100%); }
 .lc-cols > .lc-card { margin-bottom: 0; }
 .lc-col > .lc-card:last-child { margin-bottom: 0; }
 .lc-col-browser { display: flex; flex-direction: column; }
 .lc-col-browser > .lc-card { flex: 1; }
 /*
- Head row: four EQUAL-width cards (context / timing / token / plugin) —
- `flex-basis: 0` + equal grow quarters the row exactly at every pane width,
- and `min-width: 0` keeps all four on one line (a content-based minimum would
- let one card spill onto a stretched second line); narrow panes squeeze the
- cards' internal grids instead of breaking the row.
+ Head row: four EQUAL-width cards (context / token / timing / plugin). Wide
+ panes keep them on one line — `flex-basis: 0` + equal grow quarters the row
+ exactly, and `min-width: 0` lets the split ignore content. The row is the
+ `lc-head-row` query container, so the split folds instead of crushing the
+ cards (issue #48): below 1045px (a quarter under ~256px — where the donut
+ cards would leave their side-by-side anatomy) the row wraps to 2×2, and
+ below 480px (phone panes) it stacks single-column. Engines without
+ container queries keep the wide four-across layout.
  */
-/*
- `container` hooks the narrow-card reflow in stats.css: below ~320px of card
- content width (1080p + host sidebar, OS display scaling) the donut cards
- switch to the compact side-by-side ring/legend anatomy, and below ~240px they
- stack the ring over the legend — never truncating figures. Inline-size
- containment is safe here — the equal-fourths split comes from the flex
- basis, not from the cards' contents.
- */
-.lc-head > .lc-card { flex: 1 1 0; min-width: 0; container: lc-head-card / inline-size; }
+.lc-head { container: lc-head-row / inline-size; }
+.lc-head > .lc-card { flex: 1 1 0; min-width: 0; }
+@container lc-head-row (max-width: 1045px) {
+  /* 40% keeps three cards from ever fitting one line; grow evens the pair
+     to halves. Plain percentage only — a calc(% - gap) basis mis-resolves
+     against a size-container row (each card balloons to full width). */
+  .lc-head > .lc-card { flex-basis: 40%; }
+}
+@container lc-head-row (max-width: 480px) {
+  .lc-head > .lc-card { flex-basis: 100%; }
+}
 /* The context card's cell grid stretches to the donut cards' height, so the four-equal row reads as one level band. */
 .lc-head > .lc-card:first-child { display: flex; flex-direction: column; }
 .lc-head > .lc-card:first-child .lc-stats { flex: 1; align-content: stretch; }
