@@ -121,5 +121,5 @@ The plugin lives off data it does not own: the durable session log (event shapes
 ## CodeGraph
 This repo is indexed by CodeGraph (a `.codegraph/` directory exists at the repo root, if not run `codegraph init` to initialize it).
 - MUST reach for it BEFORE any grep/find or reading files when you need to understand or locate code:
-- **Shell** (always works): `codegraph sync && codegraph --path /some-path explore "<symbol names or question>"` prints the output and MUST collect all the output for references.
+- **Shell** (always works): `codegraph sync && codegraph explore --path /some-path "<symbol names or question>"` prints the output and MUST collect all the output for references.
 <!-- CODEGRAPH_END -->
