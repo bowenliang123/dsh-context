@@ -88,7 +88,6 @@ export function makeStatsTiming(kit: ViewKit, Donut: (props: DonutProps) => Reac
       <div className="lc-card lc-col-stats lc-col-donut">
         <div className="lc-card-title">
           <span className="lc-card-title-text">{t('timing.title')}</span>
-          <span className="lc-card-sub">{t('timing.hint')}</span>
         </div>
         {rows.length === 0
           ? <div className="lc-empty">{t('timing.empty')}</div>

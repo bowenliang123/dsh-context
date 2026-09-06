@@ -94,7 +94,6 @@ export function makeStatsContext(kit: ViewKit): (props: {
       <div className="lc-card lc-col-stats">
         <div className="lc-card-title">
           <span className="lc-card-title-text">{t('stats.title')}</span>
-          <span className="lc-card-sub">{t('stats.hint')}</span>
         </div>
         <div className="lc-stats">
           {cell(t('stats.turns'), props.counts.turns)}

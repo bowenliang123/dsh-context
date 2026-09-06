@@ -54,7 +54,6 @@ export function makeStatsTokens(kit: ViewKit, Donut: (props: DonutProps) => Reac
       <div className="lc-card lc-col-stats lc-col-donut">
         <div className="lc-card-title">
           <span className="lc-card-title-text">{t('tokens.title')}</span>
-          <span className="lc-card-sub">{t('tokens.hint')}</span>
         </div>
         <div className="lc-donut-row">
           <Donut
