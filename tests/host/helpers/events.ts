@@ -76,6 +76,8 @@ export function toolResult(seq: number, opts: {
   noSource?: boolean
   /** Drop the envelope callId (source carries it). */
   noEnvelopeId?: boolean
+  /** The bounded presentation meta (search matches / read window) on the durable event. */
+  meta?: unknown
   time?: number
 }): TimelineEvent {
   const message: Record<string, unknown> = {
@@ -85,6 +87,7 @@ export function toolResult(seq: number, opts: {
   const data: Record<string, unknown> = { message }
   if (opts.noEnvelopeId !== true) data.callId = opts.callId
   if (opts.error === true) data.error = true
+  if (opts.meta !== undefined) data.meta = opts.meta
   return { type: 'tool/result', seq, time: at(opts.time), data, surfaceOp: 'append' }
 }
 
@@ -115,4 +118,30 @@ export function planMode(seq: number, data?: Record<string, unknown>): TimelineE
 /** An event the fold does not care about (chunk, todo, …). */
 export function foreign(seq: number, type = 'assistant/chunk'): TimelineEvent {
   return { type, seq, time: at(), data: {} }
+}
+
+/** tool/code-dispatch: one nested Code-Mode call settling inside a run_code program (PTC). */
+export function codeDispatch(seq: number, opts: {
+  rootCallId?: unknown
+  parentCallId?: unknown
+  subCallId?: unknown
+  name?: unknown
+  arguments?: unknown
+  isError?: unknown
+  time?: number
+}): TimelineEvent {
+  return {
+    type: 'tool/code-dispatch',
+    seq,
+    time: at(opts.time),
+    data: {
+      rootCallId: opts.rootCallId,
+      parentCallId: opts.parentCallId ?? opts.rootCallId,
+      subCallId: opts.subCallId ?? `${String(opts.rootCallId)}:code:0`,
+      name: opts.name,
+      arguments: opts.arguments,
+      isError: opts.isError ?? false,
+      content: [],
+    },
+  }
 }

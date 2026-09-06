@@ -55,6 +55,8 @@ export function detailOf(value: unknown): ContextTimelineDetail | null {
     archive: objectsOf(data.archive),
     ...(typeof data.surfaceFloor === 'number' ? { surfaceFloor: data.surfaceFloor } : {}),
     ...(typeof data.archiveFloor === 'number' ? { archiveFloor: data.archiveFloor } : {}),
+    ...(data.fileOps !== undefined ? { fileOps: objectsOf(data.fileOps) } : {}),
+    ...(typeof data.fileOpsFloor === 'number' ? { fileOpsFloor: data.fileOpsFloor } : {}),
   }
 }
 
@@ -308,6 +310,8 @@ export function useTimelineSource(ctx: ClientCtx, props: SessionStandardProps): 
         // Slim heads serve no floors; the detail's pair lands whole here.
         ...(detail.surfaceFloor !== undefined ? { surfaceFloor: detail.surfaceFloor } : {}),
         ...(detail.archiveFloor !== undefined ? { archiveFloor: detail.archiveFloor } : {}),
+        ...(detail.fileOps !== undefined ? { fileOps: detail.fileOps } : {}),
+        ...(detail.fileOpsFloor !== undefined ? { fileOpsFloor: detail.fileOpsFloor } : {}),
       }
     const detailState: DetailState = detail !== null ? 'ready' : snap.failed ? 'failed' : 'loading'
     return { data, detailState, retryDetail: store.retry }

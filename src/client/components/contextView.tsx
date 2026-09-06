@@ -16,7 +16,7 @@ import { makeContentFetcher, makeHeaderFetcher } from '../historyPage'
 import { useTimelineSource } from '../timelineSource'
 import { makeDetailNote } from './detailNote'
 import { canOpenPathsOf, openPathVia, workspaceOf } from '../services'
-import { activityOf, locateStepOf } from '../fileActivity'
+import { activityOf, activityOfOps, locateStepOf } from '../fileActivity'
 import type { FileOp } from '../fileActivity'
 import type { ContextSettings } from '../settings'
 import type { ViewKit } from '../viewkit'
@@ -252,12 +252,18 @@ export function makeContextView(
     )
     const convOf = React.useCallback((seq: number): ConversationNodeLike | undefined => bySeq.get(seq), [bySeq])
 
-    // File activity follows the same active bar: recomputed when the brief source, the conversation join, or the
-    // upper bound moves — hover/select elsewhere (composition chips, kind filters) leaves every input reference
-    // untouched, so the whole-fold activityOf walk is skipped on those renders.
+    // File activity follows the same active bar: the op-log generation reads the fold-derived records (full
+    // session-log coverage); older hosts keep the conversation-window derivation. Recomputed when the brief
+    // source, the conversation join, or the upper bound moves — hover/select elsewhere (composition chips,
+    // kind filters) leaves every input reference untouched, so the walk is skipped on those renders.
     const fileActivity = React.useMemo(
-      () => activityOf(briefList, convOf, filesBefore),
-      [briefList, convOf, filesBefore],
+      () => {
+        if (data !== null && data.fileOps !== undefined) {
+          return activityOfOps(data.fileOps, data.archive, filesBefore)
+        }
+        return activityOf(briefList, convOf, filesBefore)
+      },
+      [data, briefList, convOf, filesBefore],
     )
     // The session's workspace root — './'-relative row paths when known; read per
     // render (an observable snapshot), so the next projection push re-renders with it.

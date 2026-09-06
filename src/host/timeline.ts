@@ -78,6 +78,28 @@ const contextEventSchema = z.object({
   step: z.number().optional(),
 }).strict()
 
+/** The fold-derived file-operation record (shared/types.ts FileOpRecord). */
+const fileOpSchema = z.object({
+  seq: z.number().int().nonnegative(),
+  path: z.string(),
+  kind: z.enum(['read', 'write', 'search']),
+  tool: z.string(),
+  time: z.number().optional(),
+  err: z.boolean(),
+  added: z.number().int().nonnegative(),
+  removed: z.number().int().nonnegative(),
+  detail: z.string().optional(),
+  hits: z.number().int().positive().optional(),
+  read: z.union([
+    z.object({ start: z.number().int().positive(), count: z.number().int().nonnegative() }).strict(),
+    z.object({ count: z.number().int().positive(), est: z.literal(true) }).strict(),
+  ]).optional(),
+  parent: z.number().int().nonnegative().optional(),
+  program: z.string().optional(),
+  pattern: z.literal(true).optional(),
+  gone: z.number().int().nonnegative().optional(),
+}).strict()
+
 const currentSchema = z.object({
   system: z.number().int().nonnegative(),
   tools: z.number().int().nonnegative(),
@@ -166,6 +188,8 @@ export const contextTimelineSchema = z.object({
   archive: z.array(surfaceNodeSchema).optional(),
   surfaceFloor: z.number().int().nonnegative().optional(),
   archiveFloor: z.number().int().nonnegative().optional(),
+  fileOps: z.array(fileOpSchema).optional(),
+  fileOpsFloor: z.number().int().nonnegative().optional(),
 }).strict() as unknown as z.ZodType<ContextTimeline>
 
 /**
@@ -195,10 +219,13 @@ const timelineStateSchema = z.object({
   archiveFloor: z.number().optional(),
   timing: timingTotalsSchema.optional(),
   stepStart: z.object({ time: z.number(), firstToken: z.number().optional() }).strict().optional(),
-  callNames: z.record(z.string(), z.object({ name: z.string(), start: z.number() }).strict()),
+  callNames: z.record(z.string(), z.object({ name: z.string(), start: z.number(), argsRaw: z.string().optional() }).strict()),
   pendingShadowedSeqs: z.array(z.number()).optional(),
   pendingShadowEventSeq: z.number().optional(),
   detailRev: z.number().int().nonnegative().optional(),
+  fileOps: z.array(fileOpSchema),
+  fileOpsFloor: z.number().int().nonnegative().optional(),
+  pendingCodeOps: z.record(z.string(), z.array(fileOpSchema)).optional(),
 }) as unknown as z.ZodType<TimelineState>
 
 /**
@@ -275,7 +302,13 @@ export function createContextTimelineDefinition(config: Config, slim: () => bool
     // previously rode the state verbatim and failed the wire/state schemas'
     // integer gates on EVERY later delivery, permanently freezing the
     // session's projection feed (issue #44); cached rows refold clean.
-    stateVersion: 13,
+    // 14: the fold-derived file-operation log joined the state (`fileOps` +
+    // `fileOpsFloor` + the pending Code-Mode buffer; `callNames` entries grew
+    // the raw call arguments) — the File Activity card's full-log coverage,
+    // replacing the client-side conversation-window derivation. Cached rows
+    // refold from the log, which rebuilds the op log for sessions started
+    // under older plugin builds.
+    stateVersion: 14,
   }
   return definition
 }

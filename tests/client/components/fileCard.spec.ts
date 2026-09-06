@@ -19,7 +19,7 @@ const FileCard = makeFileCard(kit, settings)
 const T0 = 1700000000000
 
 function fileOp(seq: number, kind: FileOp['kind'], tool: string, over: Partial<FileOp> = {}): FileOp {
-  return { seq, kind, tool, time: T0 + seq, err: false, added: 0, removed: 0, ...over }
+  return { seq, kind, tool, time: T0 + seq, err: false, added: 0, removed: 0, path: '', ...over }
 }
 
 function entry(path: string, over: Partial<FileEntry>): FileEntry {

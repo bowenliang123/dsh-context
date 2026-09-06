@@ -98,6 +98,15 @@ describe('detailOf', () => {
     assert.equal(narrowed.archiveFloor, undefined, 'a wrong-typed floor stays absent')
     // A numeric archiveFloor rides through.
     assert.equal(detailOf(detail(1, { archiveFloor: 9 }))?.archiveFloor, 9)
+    // The op log and its floor ride through, per-item guarded.
+    const withOps = detailOf(detail(1, {
+      fileOps: [{ seq: 2, path: 'a.ts', kind: 'read', tool: 'read', err: false, added: 0, removed: 0 }, null],
+      fileOpsFloor: 4,
+    }))
+    assert.equal(withOps?.fileOps?.length, 1, 'junk entries drop')
+    assert.equal(withOps?.fileOpsFloor, 4)
+    // Absent stays absent (the legacy inline generation's marker).
+    assert.equal(detailOf(detail(1))?.fileOps, undefined)
   })
 })
 
@@ -389,6 +398,7 @@ function SourceProbe(props: { ctx: ClientCtx; sessionId: string; value: unknown 
     h('span', { 'data-k': 'turns' }, String(data?.counts?.turns ?? 'x')),
     h('span', { 'data-k': 'rev' }, String(data?.detailRev ?? 'x')),
     h('span', { 'data-k': 'floors' }, `${String(data?.surfaceFloor ?? 'x')}/${String(data?.archiveFloor ?? 'x')}`),
+    h('span', { 'data-k': 'ops' }, String(data?.fileOps?.length ?? 'x')),
     h('span', { 'data-k': 'model' }, data?.model ?? 'x'),
     h('button', { 'data-k': 'retry', onClick: source.retryDetail }, 'retry'))
 }
@@ -438,7 +448,15 @@ describe('useTimelineSource', () => {
     let calls = 0
     const ctx = ctxWithCall(async () => {
       calls++
-      return { ok: true, value: detail(3, { surfaceFloor: 2, archiveFloor: 5 }) }
+      return {
+        ok: true,
+        value: detail(3, {
+          surfaceFloor: 2,
+          archiveFloor: 5,
+          fileOps: [{ seq: 2, path: 'a.ts', kind: 'read', tool: 'read', err: false, added: 0, removed: 0 }],
+          fileOpsFloor: 4,
+        }),
+      }
     })
     const m = await mount(h(SourceProbe, { ctx, sessionId: 's1', value: slimHead(3) }))
     // The first paint: the head's counters with the detail still pending.
@@ -450,6 +468,7 @@ describe('useTimelineSource', () => {
     assert.equal(probeRead(m.container, 'steps'), '1', 'the merged requests serve')
     assert.equal(probeRead(m.container, 'rev'), '3')
     assert.equal(probeRead(m.container, 'floors'), '2/5', 'the detail floors merge')
+    assert.equal(probeRead(m.container, 'ops'), '1', 'the op log merges')
     assert.ok(calls >= 1)
     await m.unmount()
   })

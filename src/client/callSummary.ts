@@ -6,18 +6,11 @@
  */
 
 import type { ConversationNodeLike } from './services'
+// The argument parser lives in the shared layer (shared/fileOps.ts) since the
+// op-log generation — the host fold parses the same raw strings there.
+import { parseCallArgs } from '../shared/fileOps'
 
-export function parseCallArgs(raw: unknown): Record<string, unknown> | null {
-  if (typeof raw !== 'string' || raw === '') return null
-  try {
-    const parsed: unknown = JSON.parse(raw)
-    return parsed !== null && typeof parsed === 'object' && !Array.isArray(parsed)
-      ? parsed as Record<string, unknown>
-      : null
-  } catch {
-    return null
-  }
-}
+export { parseCallArgs }
 
 export function summaryInArgs(args: Record<string, unknown> | null): string | null {
   if (args === null) return null

@@ -273,6 +273,7 @@ export const SLOT_SEAMS = [
 export const FOLD_EVENT_TYPES = [
   'request/header', 'request/context', 'step/start', 'step/end',
   'user/message', 'tool/call', 'tool/result', 'assistant/message',
+  'tool/code-dispatch',
   'plan/mode', 'compaction/summary', 'compaction/prune',
 ] as const
 

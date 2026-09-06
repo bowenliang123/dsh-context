@@ -194,6 +194,14 @@ export interface Snapshot {
    * nodes (the browser shows the reconstruction as approximate).
    */
   archiveFloor?: number
+  /**
+   * The fold-derived file-operation log and its trim floor — present on the
+   * INLINE wire value (channel-less hosts) and on the detail payload
+   * (ContextTimelineDetail), absent from the slim head (they ride the detail
+   * channel there).
+   */
+  fileOps?: FileOpRecord[]
+  fileOpsFloor?: number
 }
 
 /**
@@ -214,6 +222,55 @@ export interface ContextTimelineDetail {
   archive: SurfaceNode[]
   surfaceFloor?: number
   archiveFloor?: number
+  /**
+   * The fold-derived file-operation log (shared/fileOps.ts): one record per
+   * executed file op, newest-retained, covering the full log (never
+   * window-bound like the client-side join derivation it replaces on this
+   * generation). Code-Mode nested dispatches book ops located on their
+   * parent run_code result (`parent`).
+   */
+  fileOps?: FileOpRecord[]
+  /** The newest dropped op's seq when the op log trimmed (coverage honesty, same family as archiveFloor). */
+  fileOpsFloor?: number
+}
+
+/**
+ * One executed file operation (a settled file-tool call with a resolved
+ * target), folded host-side from the durable tool lifecycle: the call's
+ * name+arguments (`tool/call`), the result's presentation meta and error
+ * (`tool/result`), or a nested Code-Mode settle (`tool/code-dispatch`,
+ * located on its parent run_code result via `parent` + `program`).
+ *
+ * `gone` is NOT host-stamped: the client joins it from the detail's archive
+ * at render time (the op's result node leaving the live surface marks where
+ * its content is still viewable). Line deltas are estimates read off the
+ * call ARGUMENTS (an edit's old/new strings, a write's content), never off
+ * result payloads.
+ */
+export interface FileOpRecord {
+  seq: number
+  /** The op's file; for a pathless search the searched PATTERN (`pattern: true`). */
+  path: string
+  kind: 'read' | 'write' | 'search'
+  tool: string
+  time?: number
+  err: boolean
+  added: number
+  removed: number
+  /** What was searched for, when a search named both a path and a pattern. */
+  detail?: string
+  /** Meta-attributed search op only: matched lines the result reported for this file. */
+  hits?: number
+  /** Read ops only: the exact 1-based window the result meta reported, else the `limit`-argument estimate (`est: true`). */
+  read?: { start: number; count: number } | { count: number; est: true }
+  /** Nested Code-Mode op only: the run_code result node the op ran under (the locate target). */
+  parent?: number
+  /** Nested Code-Mode op only: the run_code program's model-authored description. */
+  program?: string
+  /** The searched-pattern marker: `path` is a pattern, not a file — display must not relativize it. */
+  pattern?: true
+  /** Client-joined archive stamp (see the type note); absent on the wire. */
+  gone?: number
 }
 
 /**

@@ -19,7 +19,7 @@
  *   the request/event records are the raw material of `buildTimelineView`.
  */
 
-import type { Category, ContextEventRecord, ContextTimelineDetail, CostFamilyUsage, RequestRecord, SessionCostUsage, Snapshot, SurfaceNode, TimingTotals, ToolTimingTotals } from '../shared/types'
+import type { Category, ContextEventRecord, ContextTimelineDetail, CostFamilyUsage, FileOpRecord, RequestRecord, SessionCostUsage, Snapshot, SurfaceNode, TimingTotals, ToolTimingTotals } from '../shared/types'
 import { estimateSystemTokens } from '../shared/estimate'
 import type { FoldBounds } from './config'
 import {
@@ -33,6 +33,7 @@ import {
 } from './pricing'
 import type { ContentBlock, MessageSource } from './pricing'
 import { deriveEventMessage } from '@deepseek-ai/dsh-session'
+import { opsOfCall, parseCallArgs } from '../shared/fileOps'
 
 /**
  * The runtime event envelope this fold consumes. The core
@@ -129,14 +130,15 @@ export interface TimelineState {
    */
   stepStart?: { time: number; firstToken?: number }
   /**
-   * Tool callId → the call's name and start instant, armed by `tool/call` and
-   * DELETED when its `tool/result` folds in (one result per call, in log
-   * order) — the map stays at pending-call size instead of growing for the
-   * session's whole lifetime (it is persisted state, shallow-copied by every
-   * fold step). The start instant prices the call's duration into
-   * `timing.toolsMs` when the result arrives.
+   * Tool callId → the call's name, start instant, and raw arguments, armed by
+   * `tool/call` and DELETED when its `tool/result` folds in (one result per
+   * call, in log order) — the map stays at pending-call size instead of
+   * growing for the session's whole lifetime (it is persisted state,
+   * shallow-copied by every fold step). The start instant prices the call's
+   * duration into `timing.toolsMs` when the result arrives; the raw arguments
+   * feed the file-op derivation (shared/fileOps.ts) at that same moment.
    */
-  callNames: Record<string, { name: string; start: number }>
+  callNames: Record<string, { name: string; start: number; argsRaw?: string }>
   /**
    * Seq list of the surface nodes the next replacement will shadow, armed by
    * the metering event (`compaction/summary` | `compaction/prune`) and
@@ -156,6 +158,25 @@ export interface TimelineState {
    * arm/remove lifecycle as `pendingShadowedSeqs`.
    */
   pendingShadowEventSeq?: number
+  /**
+   * The fold-derived file-operation log (the File Activity card's raw
+   * material, shared/fileOps.ts): one record per executed file op, appended
+   * in log order — at `tool/result` (the armed call's arguments + the
+   * result's meta) and at a run_code result's flush of its nested
+   * dispatches. Bounded by `maxFileOps`; the trim stamps `fileOpsFloor`.
+   */
+  fileOps: FileOpRecord[]
+  /** The newest dropped op's seq (the card's coverage floor for the served op log). */
+  fileOpsFloor?: number
+  /**
+   * Nested Code-Mode ops buffered by their top run_code call id until the
+   * parent's result folds (the dispatch events land BEFORE it, and the ops'
+   * locate target is that result's seq). Flushed (and the key deleted) when
+   * the result with that callId folds; absent until the first dispatch books
+   * an op. Bounded by PENDING_CODE_OPS_MAX — a hostile log that never
+   * settles a run_code cannot grow it.
+   */
+  pendingCodeOps?: Record<string, FileOpRecord[]>
 }
 
 export function trimToLastTurns(requests: RequestRecord[], maxTurns: number): RequestRecord[] {
@@ -199,6 +220,13 @@ function trimState(st: TimelineState, bounds: FoldBounds): void {
     st.requests = st.requests.slice(-bounds.maxRequestSteps)
   }
   if (st.events.length > bounds.maxEvents) st.events = st.events.slice(-bounds.maxEvents)
+  // The file-op log: newest tail; the newest dropped op's seq rides
+  // `fileOpsFloor` (the same coverage-floor family as archiveFloor).
+  if (st.fileOps.length > bounds.maxFileOps) {
+    const drop = st.fileOps.length - bounds.maxFileOps
+    st.fileOpsFloor = Math.max(st.fileOpsFloor ?? 0, st.fileOps[drop - 1].seq)
+    st.fileOps = st.fileOps.slice(drop)
+  }
   // Archive retention (the Context browser's per-step reconstruction raw
   // material). Entries leave in removal order (oldest `gone` first), so the
   // newest dropped `gone` is the last dropped entry's — recorded as
@@ -233,6 +261,7 @@ export function createTimelineState(): TimelineState {
     events: [],
     archived: [],
     callNames: {},
+    fileOps: [],
   }
 }
 
@@ -252,6 +281,42 @@ function categoryOf(type: string, message: { source?: MessageSource } | undefine
  */
 function bumpDetailRev(st: TimelineState): void {
   st.detailRev = (st.detailRev ?? 0) + 1
+}
+
+/**
+ * Bound on the buffered nested Code-Mode ops (TimelineState.pendingCodeOps)
+ * — a hostile log that dispatches without settling the parent run_code
+ * cannot grow the persisted state past this.
+ */
+const PENDING_CODE_OPS_MAX = 200
+
+/** JSON-stringify an unknown argument payload; a hostile (cyclic) value yields no args. */
+function argsRawOf(value: unknown): string | undefined {
+  if (typeof value === 'string') return value
+  if (value === undefined || value === null) return undefined
+  try {
+    return JSON.stringify(value)
+  } catch {
+    return undefined
+  }
+}
+
+/** Append op records to the fold-derived log (the trim lives in trimState, with the other collections). */
+function pushFileOps(st: TimelineState, ops: FileOpRecord[]): void {
+  for (const op of ops) st.fileOps.push(op)
+}
+
+/**
+ * Buffer nested Code-Mode ops under their top run_code call id (they flush
+ * when the parent's result folds — the ops' locate target). A full buffer
+ * drops new arrivals wholesale (defensive logs only).
+ */
+function bufferCodeOps(st: TimelineState, rootCallId: string, ops: FileOpRecord[]): void {
+  const pending = st.pendingCodeOps ?? {}
+  let total = 0
+  for (const k in pending) total += pending[k].length
+  if (total + ops.length > PENDING_CODE_OPS_MAX) return
+  st.pendingCodeOps = { ...pending, [rootCallId]: [...(pending[rootCallId] ?? []), ...ops] }
 }
 
 /**
@@ -633,6 +698,12 @@ export function applyTimeline(state: TimelineState, event: TimelineEvent, bounds
     events: [...state.events],
     archived: [...state.archived],
     callNames: { ...state.callNames },
+    fileOps: [...state.fileOps],
+    // The pending-ops MAP is cloned here; each key's array is rebuilt on
+    // touch (bufferCodeOps/flush), never mutated in place — same rule.
+    ...(state.pendingCodeOps !== undefined
+      ? { pendingCodeOps: { ...state.pendingCodeOps } }
+      : {}),
     // The timing totals are shared with the persisted previous state —
     // private working copies for this event's accumulations (per-name rows
     // are replaced, never mutated, so a one-level copy suffices for them).
@@ -694,7 +765,37 @@ export function applyTimeline(state: TimelineState, event: TimelineEvent, bounds
       case 'tool/call': {
         if (data && typeof data.callId === 'string' && typeof data.name === 'string') {
           const s = ensure()
-          s.callNames[data.callId] = { name: data.name, start: event.time }
+          // The raw arguments ride along for the result-time file-op derivation (shared/fileOps.ts).
+          const argsRaw = argsRawOf(data.arguments)
+          s.callNames[data.callId] = {
+            name: data.name,
+            start: event.time,
+            ...(argsRaw !== undefined ? { argsRaw } : {}),
+          }
+        }
+        break
+      }
+      case 'tool/code-dispatch': {
+        // A nested Code-Mode call settling inside a run_code program: one
+        // settled sub-dispatch books its file ops exactly like a top-level
+        // call — minus meta (the dispatch event carries none, so read windows
+        // and per-file search attribution degrade to the argument-only
+        // forms). The ops buffer under the top run_code call id and flush
+        // when its result folds (their locate target is that result's row).
+        const rootCallId = data?.rootCallId
+        const name = data?.name
+        if (typeof rootCallId === 'string' && typeof name === 'string') {
+          const ops = opsOfCall({
+            seq: event.seq,
+            time: event.time,
+            tool: name,
+            argsRaw: argsRawOf(data?.arguments),
+            err: data?.isError === true,
+          })
+          if (ops.length > 0) {
+            const s = ensure()
+            bufferCodeOps(s, rootCallId, ops)
+          }
         }
         break
       }
@@ -765,9 +866,50 @@ export function applyTimeline(state: TimelineState, event: TimelineEvent, bounds
       // returns that directly (the envelope also carries callId/error; pricing
       // the envelope would miss all content).
         const toolMsg = deriveEventMessage(event as never) as MessageLike | null
+        // Read the pairing BEFORE applySurface consumes it (consume-once):
+        // the armed call's name/arguments pair this result into file ops, and
+        // the result's callId is the flush key for buffered Code-Mode ops.
+        const msgSource = toolMsg?.source as { callId?: unknown } | undefined
+        const srcId = msgSource?.callId
+        const firstBlock = toolMsg?.content?.[0] as { toolCallId?: unknown; isError?: unknown } | undefined
+        const blockId = firstBlock?.toolCallId
+        const pendingEntry = (typeof srcId === 'string' ? state.callNames[srcId] : undefined)
+          ?? (typeof blockId === 'string' ? state.callNames[blockId] : undefined)
+        const buffered = (typeof srcId === 'string' ? state.pendingCodeOps?.[srcId] : undefined)
+          ?? (typeof blockId === 'string' ? state.pendingCodeOps?.[blockId] : undefined)
         const s = ensure()
         bumpDetailRev(s)
         const node = applySurface(s, event, event.type, data, toolMsg)
+        // The file-op derivation (shared/fileOps.ts): the armed call's
+        // arguments + the result's presentation meta. Unpaired results book
+        // nothing (parity with the surface node's missing tool label).
+        if (pendingEntry !== undefined) {
+          const ops = opsOfCall({
+            seq: event.seq,
+            time: event.time,
+            tool: pendingEntry.name,
+            argsRaw: pendingEntry.argsRaw,
+            meta: data?.meta,
+            err: Boolean(data?.error) || firstBlock?.isError === true,
+          })
+          pushFileOps(s, ops)
+        }
+        if (buffered !== undefined && buffered.length > 0) {
+          // The run_code root settles: its nested ops land with `parent` = this
+          // result's row, plus the program description off its call arguments.
+          const program = parseCallArgs(pendingEntry?.argsRaw)?.description
+          pushFileOps(s, buffered.map(op => ({
+            ...op,
+            parent: event.seq,
+            ...(typeof program === 'string' && program !== '' ? { program } : {}),
+          })))
+          const kept: Record<string, FileOpRecord[]> = {}
+          for (const k in s.pendingCodeOps) {
+            if (k !== srcId && k !== blockId) kept[k] = s.pendingCodeOps[k]
+          }
+          if (Object.keys(kept).length > 0) s.pendingCodeOps = kept
+          else delete s.pendingCodeOps
+        }
         // A skill load via the `skill` tool returns the loaded skill's
         // instructions as a tool result — content the harness injected into the
         // model's context. Keep it a tool result (that is what it is), but make
@@ -989,6 +1131,10 @@ function detailCollectionsOf(state: TimelineState, bounds: FoldBounds): Omit<Con
     nodes: [],
     droppedNodes: 0,
     archive: state.archived.map(n => ({ ...n })),
+    // The fold-derived file-op log rides the collections (the inline view and
+    // the detail payload share this builder) — COPIES, never state aliases.
+    fileOps: state.fileOps.map(o => ({ ...o })),
+    ...(state.fileOpsFloor !== undefined ? { fileOpsFloor: state.fileOpsFloor } : {}),
   }
   // The served slice: the newest `maxNodes` tail PLUS every live inject node
   // older than the tail. Injections (AGENTS.md, session-start context, …)

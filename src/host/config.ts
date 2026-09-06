@@ -29,6 +29,8 @@ export interface Config {
   maxNodes?: number
   /** Removed (shadowed) surface nodes kept for per-step reconstruction. */
   maxArchiveNodes?: number
+  /** Fold-derived file-operation records kept (the File Activity card's raw material). */
+  maxFileOps?: number
 }
 
 export const DEFAULT_BOUNDS: Required<Config> = {
@@ -37,6 +39,7 @@ export const DEFAULT_BOUNDS: Required<Config> = {
   maxEvents: 400,
   maxNodes: 2000,
   maxArchiveNodes: 400,
+  maxFileOps: 400,
 }
 
 /**
@@ -51,6 +54,7 @@ export const Config = z.preprocess(
     maxEvents: z.number().int().min(1).default(DEFAULT_BOUNDS.maxEvents),
     maxNodes: z.number().int().min(1).default(DEFAULT_BOUNDS.maxNodes),
     maxArchiveNodes: z.number().int().min(1).default(DEFAULT_BOUNDS.maxArchiveNodes),
+    maxFileOps: z.number().int().min(1).default(DEFAULT_BOUNDS.maxFileOps),
   }).strict(),
 )
 

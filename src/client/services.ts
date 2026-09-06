@@ -312,6 +312,8 @@ export function timelineOf(value: unknown): ContextTimeline | null {
     ...(timing !== null ? { timing } : {}),
     ...(typeof data.surfaceFloor === 'number' ? { surfaceFloor: data.surfaceFloor } : {}),
     ...(typeof data.archiveFloor === 'number' ? { archiveFloor: data.archiveFloor } : {}),
+    ...(data.fileOps !== undefined ? { fileOps: objectsOf(data.fileOps) } : {}),
+    ...(typeof data.fileOpsFloor === 'number' ? { fileOpsFloor: data.fileOpsFloor } : {}),
   }
   return safe
 }
