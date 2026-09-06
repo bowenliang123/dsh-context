@@ -29,7 +29,7 @@
 import type { ContextTimeline, ContextTimelineDetail } from '../shared/types'
 import { React } from './react'
 import type { ClientCtx, SessionStandardProps } from './services'
-import { asRecord, numOf, objectsOf, projectionOf, timelineOf } from './services'
+import { asRecord, numOf, objectsOf, projectionOf, rpcCallOf, timelineOf } from './services'
 
 // The channel/endpoint pair of host/detail.ts — re-declared here: the client
 // bundle inlines every import, and the host module must never reach it.
@@ -62,10 +62,10 @@ export function detailOf(value: unknown): ContextTimelineDetail | null {
 
 /**
  * The detail reader over the harness's generic Connection RPC
- * (`ctx.connection.rpc.call`) — resolved through the inject-free reflect
- * read (the same seam openPathVia/workspaceOf use), so a hostile or absent
- * connection service degrades to `undefined` instead of throwing. The
- * returned thunk resolves the session's current detail, `null` when the
+ * (`ctx.connection.rpc.call`) — resolved through the shared `rpcCallOf`
+ * reflect read (the same seam openPathVia/canOpenPathsOf use), so a hostile
+ * or absent connection service degrades to `undefined` instead of throwing.
+ * The returned thunk resolves the session's current detail, `null` when the
  * session is not live anymore, and rejects on transport failure or a
  * malformed payload (the store turns the two into the retryable state).
  */
@@ -74,14 +74,7 @@ export function makeDetailFetcher(
   sessionId: string,
 ): (() => Promise<ContextTimelineDetail | null>) | undefined {
   if (sessionId === '') return undefined
-  let call: ((channel: string, endpoint: string, payload: unknown) => Promise<unknown>) | undefined
-  try {
-    const rpc = asRecord(asRecord(ctx.get('connection'))?.rpc)
-    const fn = rpc?.call
-    if (rpc !== null && typeof fn === 'function') {
-      call = (fn as (channel: string, endpoint: string, payload: unknown) => Promise<unknown>).bind(rpc)
-    }
-  } catch { /* a hostile service read — no fetcher, the cards keep their note */ }
+  const call = rpcCallOf(ctx)
   if (call === undefined) return undefined
   return async () => {
     const result = await call(DETAIL_CHANNEL, DETAIL_ENDPOINT, { sessionId })

@@ -573,12 +573,20 @@ describe('ContextView — file activity card', () => {
 
   test('the session workspace relativizes row paths; the host opener opens the resolved file', async () => {
     const opened: string[] = []
+    const calls: string[] = []
     const ctx = new TestClientCtx({
       services: {
         sessions: { list: { getSnapshot: () => ({ byId: { 'sv-files-open': { cwd: '/repo' } } }) } },
         connection: {
-          hostDescription: { getSnapshot: () => ({ canOpenPath: true }) },
-          api: { host: { openPath: (r: { path: string }) => { opened.push(r.path); return Promise.resolve({ opened: true }) } } },
+          isLoopback: true,
+          rpc: {
+            call: (_channel: string, endpoint: string, payload: unknown) => {
+              if (endpoint === 'session/canOpenWorkspacePath') return Promise.resolve({ ok: true, value: true })
+              calls.push(endpoint)
+              opened.push((payload as { args: { request: { path: string } } }).args.request.path)
+              return Promise.resolve({ ok: true, value: { opened: true } })
+            },
+          },
         },
       },
     })
@@ -593,17 +601,41 @@ describe('ContextView — file activity card', () => {
         sel({
           legacy: { nodes: conv } })) as UseChatLike,
     }))
+    // The capability probe is an RPC round-trip: the answer lands in state on the next flush.
+    await flush()
     const card = queryAll(m.container, '.lc-card').find(c => text(c).includes(DICT_EN['files.title']))
     assert.ok(card !== undefined)
     // The read inside the session cwd displays './'-relative…
     const row = query(card, '.lc-fa-row')
     assert.ok(row.querySelector('.lc-fa-path em')?.textContent === './src/')
-    // …and its name opens on the system through the host RPC.
+    // …and its name opens on the system through the session's open remote.
     const name = query(row, '.lc-fa-file')
     assert.equal(name.getAttribute('title'), DICT_EN['files.open'])
     await click(name)
     assert.deepEqual(opened, ['/repo/src/a.ts'])
+    assert.deepEqual(calls, ['session/openWorkspacePath'])
     await m.unmount()
+  })
+
+  test('a capability probe that settles after unmount drops its answer', async () => {
+    let resolveProbe!: (value: unknown) => void
+    const ctx = new TestClientCtx({
+      services: {
+        connection: {
+          isLoopback: true,
+          rpc: { call: () => new Promise(resolve => { resolveProbe = resolve }) },
+        },
+      },
+    })
+    const View = makeView(ctx)
+    const m = await mount(h(View, {
+      sessionId: 'sv-open-late',
+      useProjection: projectionsFor(fileTimeline()),
+    }))
+    await m.unmount()
+    // The late "yes" arrives on a dead view: the stale answer is dropped whole.
+    resolveProbe({ ok: true, value: true })
+    await new Promise(resolve => setTimeout(resolve, 0))
   })
 
   test('a ctx without service access degrades the card wiring, not the view', async () => {

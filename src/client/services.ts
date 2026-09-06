@@ -609,13 +609,37 @@ export interface SessionPageFace {
   }, signal?: AbortSignal): Promise<unknown>
 }
 
-/** The connection service face, as far as this plugin consumes it. */
+/**
+ * The connection service face, as far as this plugin consumes it: the
+ * generic Connection RPC caller (the harness's unary channel transport)
+ * plus the loopback fact the harness's own open affordances gate on.
+ */
 export interface ConnectionFace {
-  api?: {
-    host?: { openPath?(request: { path: string }): Promise<unknown> }
+  /** Whether the page reaches the Host on the operator's own machine. */
+  isLoopback?: boolean
+  rpc?: {
+    call?(channel: string, endpoint: string, payload: unknown, signal?: AbortSignal): Promise<unknown>
   }
-  /** Observable host description (dsh's HostDescriptionSource); `canOpenPath` gates the open affordance. */
-  hostDescription?: { getSnapshot(): unknown }
+}
+
+/** The session-namespace workspace-opener remotes, ridden through the generic '/api' channel. */
+const OPEN_CHANNEL = '/api'
+const CAN_OPEN_ENDPOINT = 'session/canOpenWorkspacePath'
+const OPEN_ENDPOINT = 'session/openWorkspacePath'
+
+/**
+ * The connection's bound generic-RPC caller, or undefined when the service
+ * is absent or hostile — every read is guarded, so this can never throw.
+ */
+export function rpcCallOf(ctx: ClientCtx): ((channel: string, endpoint: string, payload: unknown) => Promise<unknown>) | undefined {
+  try {
+    const rpc = asRecord((ctx.get('connection') as ConnectionFace | undefined)?.rpc)
+    const fn = rpc?.call
+    if (rpc !== null && typeof fn === 'function') {
+      return (fn as (channel: string, endpoint: string, payload: unknown) => Promise<unknown>).bind(rpc)
+    }
+  } catch { /* absent or hostile connection — the caller degrades off */ }
+  return undefined
 }
 
 /**
@@ -640,32 +664,43 @@ export function workspaceOf(ctx: ClientCtx, sessionId: string | undefined): stri
   }
 }
 
-/** Whether this deployment can hand a path to the user's native desktop (the
- * host description's `canOpenPath`); false when unknown. */
-export function canOpenPathsOf(ctx: ClientCtx): boolean {
+/**
+ * Whether this deployment can hand a path to the user's native desktop: the
+ * page must reach the Host on the operator's own machine (`isLoopback`, the
+ * harness's own gate) AND the session controller's opener capability remote
+ * must answer true. The capability is an RPC round-trip now (the synchronous
+ * host-description fact is gone), so the answer is asynchronous; every
+ * absence, hostility, or transport failure resolves false — never a rejection.
+ */
+export async function canOpenPathsOf(ctx: ClientCtx): Promise<boolean> {
+  const call = rpcCallOf(ctx)
+  if (call === undefined) return false
   try {
-    const source = (ctx.get('connection') as ConnectionFace | undefined)?.hostDescription
-    const snapshot = typeof source?.getSnapshot === 'function' ? source.getSnapshot() : undefined
-    const can = snapshot !== null && typeof snapshot === 'object' ? (snapshot as { canOpenPath?: unknown }).canOpenPath : undefined
-    return can === true
+    const connection = ctx.get('connection') as ConnectionFace | undefined
+    if (connection?.isLoopback !== true) return false
+    const result = await call(OPEN_CHANNEL, CAN_OPEN_ENDPOINT, { args: {} })
+    const r = asRecord(result)
+    return r !== null && r.ok === true && r.value === true
   } catch {
     return false
   }
 }
 
 /**
- * The system path opener, or undefined when the deployment lacks the RPC.
- * Fire-and-forget: rejections (unknown path, no desktop) swallow — the
- * affordance is best-effort by nature.
+ * The system path opener over the session controller's open remote, or
+ * undefined when the connection carries no RPC caller. Fire-and-forget:
+ * rejections (unknown path, no desktop, offline) swallow — the affordance
+ * is best-effort by nature.
  */
 export function openPathVia(ctx: ClientCtx): ((path: string) => void) | undefined {
-  const host = (ctx.get('connection') as ConnectionFace | undefined)?.api?.host
-  if (host === undefined || typeof host.openPath !== 'function') return undefined
-  // Bound up front: an implementation relying on `this` survives the hand-off.
-  const openPath = host.openPath.bind(host)
+  const call = rpcCallOf(ctx)
+  if (call === undefined) return undefined
   return (path: string): void => {
     try {
-      void openPath({ path }).catch(() => { /* the open is best-effort; a failure stays silent */ })
+      // `args` is a plain object keyed by the remote's declared parameter
+      // names (the gateway's wire contract — an array is rejected host-side).
+      void call(OPEN_CHANNEL, OPEN_ENDPOINT, { args: { request: { path } } })
+        .catch(() => { /* the open is best-effort; a failure stays silent */ })
     } catch { /* same contract, for a synchronously throwing transport */ }
   }
 }

@@ -269,9 +269,18 @@ export function makeContextView(
     // render (an observable snapshot), so the next projection push re-renders with it.
     const workspace = typeof ctx.get === 'function' ? workspaceOf(ctx, typeof sessionId === 'string' ? sessionId : undefined) : undefined
     // The system-opener affordance rides the same ctx; both resolve before the early return.
+    // The capability is an RPC answer now (the synchronous host-description fact is gone),
+    // so it lands in state once the probe settles — inert file names until then; the
+    // effect's cleanup drops an answer that arrives after the view unmounted.
+    const [canOpenPaths, setCanOpenPaths] = React.useState(false)
+    React.useEffect(() => {
+      let live = true
+      void canOpenPathsOf(ctx).then((can) => { if (live) setCanOpenPaths(can) })
+      return () => { live = false }
+    }, [ctx])
     const fileOpener = React.useMemo(
-      () => (typeof ctx.get === 'function' && canOpenPathsOf(ctx) ? openPathVia(ctx) : undefined),
-      [ctx],
+      () => (canOpenPaths ? openPathVia(ctx) : undefined),
+      [canOpenPaths, ctx],
     )
     const locateFileOp = React.useCallback((op: FileOp): void => {
       // A nested Code-Mode op has no surface row of its own — it reveals on

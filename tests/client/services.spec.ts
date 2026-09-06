@@ -577,39 +577,68 @@ describe('workspaceOf', () => {
     // A service lookup itself may throw; both readers degrade instead of blanking the view.
     const ctxThrows = { get: throwProp } as unknown as ClientCtx
     assert.equal(workspaceOf(ctxThrows, 'sv'), undefined)
-    assert.equal(canOpenPathsOf(ctxThrows), false)
-    // A host description that throws on call or on the capability read.
-    assert.equal(canOpenPathsOf(ctxWith({ connection: { hostDescription: { getSnapshot: throwProp } } })), false)
-    assert.equal(canOpenPathsOf(ctxWith({ connection: { hostDescription: { getSnapshot: () => Object.defineProperty({}, 'canOpenPath', { get: throwProp }) } } })), false)
   })
 })
 
 describe('canOpenPathsOf / openPathVia', () => {
   const ctxWith = (services: Record<string, unknown>): ClientCtx => ({ get: (name: string) => services[name] }) as unknown as ClientCtx
-  const connection = {
-    hostDescription: { getSnapshot: () => ({ canOpenPath: true }) },
-    api: { host: { openPath: () => Promise.resolve({ opened: true }) } },
-  }
+  /** A loopback connection whose generic RPC answers per endpoint. */
+  const rpcConn = (routes: Record<string, () => unknown>, over: Record<string, unknown> = {}): Record<string, unknown> => ({
+    isLoopback: true,
+    rpc: { call: (channel: string, endpoint: string) => Promise.resolve(routes[endpoint]?.()) },
+    ...over,
+  })
+  const openable = (): Record<string, unknown> =>
+    rpcConn({ 'session/canOpenWorkspacePath': () => ({ ok: true, value: true }) })
 
-  test('the capability bit gates the opener', () => {
-    assert.equal(canOpenPathsOf(ctxWith({ connection })), true)
-    assert.equal(canOpenPathsOf(ctxWith({ connection: { hostDescription: { getSnapshot: () => ({}) } } })), false)
-    assert.equal(canOpenPathsOf(ctxWith({})), false)
+  test('the capability remote gates the opener, behind the loopback fact', async () => {
+    assert.equal(await canOpenPathsOf(ctxWith({ connection: openable() })), true)
+    // The remote's answer is re-proved: non-true values and failed results are both "no".
+    assert.equal(await canOpenPathsOf(ctxWith({ connection: rpcConn({ 'session/canOpenWorkspacePath': () => ({ ok: true, value: false }) }) })), false)
+    assert.equal(await canOpenPathsOf(ctxWith({ connection: rpcConn({ 'session/canOpenWorkspacePath': () => ({ ok: false }) }) })), false)
+    assert.equal(await canOpenPathsOf(ctxWith({ connection: rpcConn({ 'session/canOpenWorkspacePath': () => 'garbage' }) })), false)
+    // The harness's own gate: a page not on the operator's machine never opens.
+    assert.equal(await canOpenPathsOf(ctxWith({ connection: { isLoopback: false, rpc: openable().rpc } })), false)
+    // No connection service at all.
+    assert.equal(await canOpenPathsOf(ctxWith({})), false)
+  })
+
+  test('hostile connections and failed transports resolve false, never reject', async () => {
+    const throwProp = (): never => { throw new Error('boom') }
+    // A service lookup itself may throw.
+    assert.equal(await canOpenPathsOf({ get: throwProp } as unknown as ClientCtx), false)
+    // An rpc face whose call read throws; a loopback fact that throws on read.
+    assert.equal(await canOpenPathsOf(ctxWith({ connection: { isLoopback: true, rpc: { get call(): unknown { return throwProp() } } } })), false)
+    assert.equal(await canOpenPathsOf(ctxWith({ connection: { get isLoopback(): boolean { return throwProp() }, rpc: openable().rpc } })), false)
+    // A call that is not a function, and one that rejects.
+    assert.equal(await canOpenPathsOf(ctxWith({ connection: { isLoopback: true, rpc: { call: 7 } } })), false)
+    assert.equal(await canOpenPathsOf(ctxWith({ connection: { isLoopback: true, rpc: { call: () => Promise.reject(new Error('offline')) } } })), false)
   })
 
   test('openPathVia returns a fire-and-forget caller that swallows failures', async () => {
-    const rejecting = { api: { host: { openPath: () => Promise.reject(new Error('no desktop')) } } }
-    const open = openPathVia(ctxWith({ connection: rejecting }))
+    const open = openPathVia(ctxWith({ connection: { rpc: { call: () => Promise.reject(new Error('no desktop')) } } }))
     assert.ok(open !== undefined)
     open('/repo/a.ts') // must not throw
+    // A synchronously throwing transport joins the same silence.
+    const syncThrow = openPathVia(ctxWith({ connection: { rpc: { call: () => { throw new Error('sync') } } } }))
+    syncThrow!('/repo/a.ts')
     assert.equal(openPathVia(ctxWith({})), undefined)
   })
 
-  test('the opener forwards the requested path', async () => {
-    const calls: string[] = []
-    const open = openPathVia(ctxWith({ connection: { api: { host: { openPath: (r: { path: string }) => { calls.push(r.path); return Promise.resolve({ opened: true }) } } } } }))
+  test('the opener forwards the requested path through the open remote', async () => {
+    const calls: { channel: string; endpoint: string; payload: unknown }[] = []
+    const open = openPathVia(ctxWith({
+      connection: {
+        rpc: {
+          call: (channel: string, endpoint: string, payload: unknown) => {
+            calls.push({ channel, endpoint, payload })
+            return Promise.resolve({ ok: true, value: { opened: true } })
+          },
+        },
+      },
+    }))
     open!('/repo/a.ts')
     await new Promise(resolve => setTimeout(resolve, 0))
-    assert.deepEqual(calls, ['/repo/a.ts'])
+    assert.deepEqual(calls, [{ channel: '/api', endpoint: 'session/openWorkspacePath', payload: { args: { request: { path: '/repo/a.ts' } } } }])
   })
 })
