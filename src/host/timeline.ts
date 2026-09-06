@@ -308,7 +308,10 @@ export function createContextTimelineDefinition(config: Config, slim: () => bool
     // replacing the client-side conversation-window derivation. Cached rows
     // refold from the log, which rebuilds the op log for sessions started
     // under older plugin builds.
-    stateVersion: 14,
+    // 15: a search with the complete matched-file meta now books its call
+    // TARGET (the searched path / the pattern) in addition to the per-file
+    // hit rows — the op log's fold semantics changed, so cached rows refold.
+    stateVersion: 15,
   }
   return definition
 }

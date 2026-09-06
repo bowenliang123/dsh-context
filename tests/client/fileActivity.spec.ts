@@ -507,16 +507,21 @@ describe('activityOf — search meta attribution', () => {
         meta: { shape: 'paths', truncated: false, total: 1, paths: ['/old.ts'] },
       }),
     ])
-    assert.deepEqual(a.entries.map(e => e.path), ['/old.ts', 'broad', '/src/a.ts', '/src/b.ts'])
-    const first = a.entries[2]
-    assert.equal(first.searches, 1)
-    assert.equal(first.ops[0].hits, 2)
-    assert.equal(first.ops[0].detail, 'needle')
-    assert.equal(a.entries[3].ops[0].hits, 1)
+    // The searched target rows too: '/src' (the narrowed path) and the two
+    // pathless patterns ride ahead of their hit files.
+    assert.deepEqual(a.entries.map(e => e.path), ['old', '/old.ts', 'broad', '/src', '/src/a.ts', '/src/b.ts'])
+    const byPath = new Map(a.entries.map(e => [e.path, e]))
+    const srcA = byPath.get('/src/a.ts')!
+    assert.equal(srcA.searches, 1)
+    assert.equal(srcA.ops[0].hits, 2)
+    assert.equal(srcA.ops[0].detail, 'needle')
+    assert.equal(byPath.get('/src/b.ts')!.ops[0].hits, 1)
+    // The searched directory's row carries the pattern detail.
+    assert.equal(byPath.get('/src')!.ops[0].detail, 'needle')
     // The archived, timeless meta row carries the node's stamp (and no time).
-    assert.equal(a.entries[0].ops[0].gone, 20)
-    assert.equal(a.entries[0].ops[0].time, undefined)
-    assert.deepEqual(a.totals.search, { files: 4, ops: 4 })
+    assert.equal(byPath.get('/old.ts')!.ops[0].gone, 20)
+    assert.equal(byPath.get('/old.ts')!.ops[0].time, undefined)
+    assert.deepEqual(a.totals.search, { files: 6, ops: 6 })
   })
 
   test('an include filter joins the detail; glob metas row without hit counts', () => {
@@ -528,10 +533,13 @@ describe('activityOf — search meta attribution', () => {
         meta: { shape: 'paths', truncated: false, total: 2, paths: ['/r.md', '/o.md'] },
       }),
     ])
-    assert.deepEqual(a.entries.map(e => e.path), ['/r.md', '/o.md', '/a.ts'])
-    assert.equal(a.entries[2].ops[0].detail, 'needle (*.ts)')
-    assert.equal(a.entries[1].ops[0].hits, undefined) // a listed path matched no lines
-    assert.equal(a.entries[1].ops[0].detail, '**/*.md')
+    // Each call rows its target (the pattern) plus the hit files.
+    assert.deepEqual(a.entries.map(e => e.path), ['**/*.md', '/r.md', '/o.md', 'needle', '/a.ts'])
+    const byPath = new Map(a.entries.map(e => [e.path, e]))
+    assert.equal(byPath.get('/a.ts')!.ops[0].detail, 'needle (*.ts)')
+    assert.equal(byPath.get('/o.md')!.ops[0].hits, undefined) // a listed path matched no lines
+    assert.equal(byPath.get('/o.md')!.ops[0].detail, '**/*.md')
+    assert.equal(byPath.get('needle')!.ops[0].pattern, true, 'the pathless target is a pattern row')
   })
 
   test('malformed or empty metas fall back to the pattern row', () => {
@@ -557,7 +565,8 @@ describe('activityOf — search meta attribution', () => {
     const a = run([op(10, 'grep', { pattern: 'needle', path: '/src' }, {}, {
       meta: { shape: 'paths', truncated: false, total: 2, paths: ['/a.ts', ''] },
     })])
-    assert.deepEqual(a.entries.map(e => e.path), ['/a.ts'])
+    // The valid sibling attributes; the searched path rows as the call's target.
+    assert.deepEqual(a.entries.map(e => e.path), ['/src', '/a.ts'])
   })
 
   test('a truncated flag is required — a missing one falls back', () => {

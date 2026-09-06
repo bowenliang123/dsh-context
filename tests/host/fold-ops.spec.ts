@@ -43,6 +43,8 @@ describe('the file-op log — call/result pairing', () => {
     ])
     assert.deepEqual(state.fileOps.map(o => [o.kind, o.path, o.added, o.removed, o.hits ?? 0]), [
       ['write', 'a.ts', 1, 2, 0],
+      // The searched target (the pathless pattern) rows too, then the hit file.
+      ['search', 'TODO', 0, 0, 0],
       ['search', 'a.ts', 0, 0, 2],
     ])
   })

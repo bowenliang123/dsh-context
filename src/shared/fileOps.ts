@@ -221,17 +221,34 @@ export function opsOfCall(input: {
   }
   // A search whose result meta carries the COMPLETE matched-file list rows
   // its ops per real file — even when the call's own arguments failed to
-  // parse (the detail line just drops out).
+  // parse (the detail line just drops out). The call's own target (the
+  // searched path, or the pattern for a workspace-wide search) rows TOO —
+  // "what was searched" and "what got hit" both count; only the degenerate
+  // single-file search (the target IS the sole matched file) skips the
+  // duplicate target row.
   if (kind === 'search') {
     const files = searchFilesOf(input.meta)
     if (files !== null) {
       const detail = searchDetailOf(args)
-      return files.map(f => ({
-        ...stamp,
-        path: f.path,
-        ...(detail !== undefined ? { detail } : {}),
-        ...(f.hits > 0 ? { hits: f.hits } : {}),
-      }))
+      const target = args !== null ? pathOfArgs(input.tool, args) : null
+      const narrowed = args !== null && typeof args.path === 'string' && args.path !== ''
+      const targetOps: FileOpRecord[] = target !== null && !files.some(f => f.path === target)
+        ? [{
+          ...stamp,
+          path: target,
+          ...(narrowed && detail !== undefined ? { detail } : {}),
+          ...(narrowed ? {} : { pattern: true as const }),
+        }]
+        : []
+      return [
+        ...targetOps,
+        ...files.map(f => ({
+          ...stamp,
+          path: f.path,
+          ...(detail !== undefined ? { detail } : {}),
+          ...(f.hits > 0 ? { hits: f.hits } : {}),
+        })),
+      ]
     }
   }
   if (args === null) return []

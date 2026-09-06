@@ -83,25 +83,51 @@ describe('opsOfCall — one op per settled call', () => {
     assert.deepEqual([op.path, op.pattern, op.detail], ['**/*.md', true, undefined])
   })
 
-  test('the complete matches meta attributes one op per file with hit counts', () => {
+  test('the complete matches meta attributes the searched target AND one op per hit file', () => {
     const ops = opsOfCall({
       seq: 5, tool: 'grep',
       argsRaw: JSON.stringify({ pattern: 'TODO' }),
       meta: grepMeta({ 'a.ts': 3, 'b.ts': 1 }),
     })
-    assert.deepEqual(ops.map(o => [o.path, o.hits]), [['a.ts', 3], ['b.ts', 1]])
-    assert.ok(ops.every(o => o.detail === 'TODO'), 'the pattern detail rides each attributed op')
-    assert.ok(ops.every(o => o.pattern === undefined))
+    // The searched path/pattern rows first (here the workspace-wide pattern),
+    // then each hit file with its count.
+    assert.deepEqual(ops.map(o => [o.path, o.hits]), [['TODO', undefined], ['a.ts', 3], ['b.ts', 1]])
+    assert.equal(ops[0].pattern, true, 'the pathless target rows as the pattern')
+    assert.ok(ops.slice(1).every(o => o.detail === 'TODO'), 'the pattern detail rides each hit op')
+    assert.ok(ops.slice(1).every(o => o.pattern === undefined))
   })
 
-  test('the complete paths meta attributes without hit counts', () => {
+  test('the complete paths meta attributes the target plus the hits without counts', () => {
     const ops = opsOfCall({
       seq: 1, tool: 'glob',
       argsRaw: JSON.stringify({ pattern: '*.ts' }),
       meta: { shape: 'paths', truncated: false, total: 2, paths: ['a.ts', 'b.ts'] },
     })
-    assert.deepEqual(ops.map(o => o.path), ['a.ts', 'b.ts'])
+    assert.deepEqual(ops.map(o => o.path), ['*.ts', 'a.ts', 'b.ts'])
     assert.ok(ops.every(o => o.hits === undefined))
+  })
+
+  test('a narrowed search rows the searched directory AND each hit file', () => {
+    const ops = opsOfCall({
+      seq: 1, tool: 'grep',
+      argsRaw: JSON.stringify({ pattern: 'TODO', path: 'src/', include: '*.ts' }),
+      meta: grepMeta({ 'src/a.ts': 2, 'src/b.ts': 1 }),
+    })
+    // The searched directory rows first with the pattern detail, then the hits.
+    assert.deepEqual(ops.map(o => [o.path, o.hits ?? 0]), [['src/', 0], ['src/a.ts', 2], ['src/b.ts', 1]])
+    assert.equal(ops[0].detail, 'TODO (*.ts)')
+    assert.equal(ops[0].pattern, undefined, 'a real path is not a pattern row')
+  })
+
+  test('a single-file search does not double-row the target (it IS the matched file)', () => {
+    const ops = opsOfCall({
+      seq: 1, tool: 'grep',
+      argsRaw: JSON.stringify({ pattern: 'TODO', path: 'src/a.ts' }),
+      meta: grepMeta({ 'src/a.ts': 2 }),
+    })
+    assert.deepEqual(ops.map(o => o.path), ['src/a.ts'], 'one row, with its hit count')
+    assert.equal(ops[0].hits, 2)
+    assert.equal(ops[0].detail, 'TODO')
   })
 
   test('a truncated or malformed meta falls back to the call target', () => {
