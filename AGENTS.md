@@ -116,3 +116,9 @@ The plugin lives off data it does not own: the durable session log (event shapes
 - Releases are cut by tagging: `git tag vX.Y.Z && gh release create vX.Y.Z`.
 - A [GitHub Actions workflow](.github/workflows/release.yml) then builds, tests, and publishes the package to npm automatically by github workflow. Agent don't have to do or check it manually.
 - Write the release notes from the [release template](.github/release_template.md)
+
+<!-- CODEGRAPH_START -->
+## CodeGraph
+In repositories indexed by CodeGraph (a `.codegraph/` directory exists at the repo root), reach for it BEFORE grep/find or reading files when you need to understand or locate code:
+- **Shell** (always works): `codegraph explore "<symbol names or question>"` prints the same output.
+<!-- CODEGRAPH_END -->
