@@ -65,6 +65,7 @@ The plugin lives off data it does not own: the durable session log (event shapes
 
 ## DSH web server
 - The dsh web server may be already running, and accessible at `http://127.0.0.1:3080/` by browser.
+- Run `pnpm run web` to restart the dsh web server (kills the running `dsh web` first, then starts `dsh web --no-open`).
 - If the auth token issue encounters with browser, kill the dsh process and restart it by running `dsh web --no-open`.
   - Example output: 
     - $ dsh web --no-open

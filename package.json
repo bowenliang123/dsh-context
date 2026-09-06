@@ -38,6 +38,7 @@
     "lint": "oxlint",
     "lint:fix": "oxlint --fix",
     "watch": "bash scripts/watch.sh",
+    "web": "bash scripts/web.sh",
     "register": "bash scripts/register.sh",
     "typecheck": "tsc --noEmit && tsc --noEmit -p tsconfig.tests.json",
     "test": "pnpm run typecheck && vitest run --coverage",
