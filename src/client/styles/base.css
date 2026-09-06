@@ -93,3 +93,15 @@
 .lc-error-retry:hover { border-color: var(--dsw-alias-label-primary); }
 .lc-foot { color: var(--dsw-alias-label-secondary); font-size: 12px; margin-top: 4px; }
 [data-conversation-scroll]:has(.lc-root) > [data-composer-seat]:not(:has([data-approval-key], [data-question-key], [data-plan-review-key])) { display: none; }
+/*
+ The shell's transcript-width drag handles are FOLLOWING SIBLINGS of the shared scroller (children of
+ the skeleton body, dsh ConversationRoot), not its descendants — a descendant combinator here silently
+ matches nothing (issue #50), hence the `~`. While a plugin surface owns the ring, the strips
+ (z-index 8, full-height col-resize) glow and drag straight through the Context tab's full-bleed pane,
+ and hover above the /context modal's mask (the modal rides the composer seat's z-index 7 stacking
+ context). Hide them while `.lc-root` (the tab) or `.lc-modal-backdrop` (the modal, on any tab) is
+ mounted; switching back to Chat or closing the modal unmounts both and restores the handles. The
+ harness's own opt-out, `data-conversation-composer-overlay`, would also re-home scrolling into the
+ pane, so the strips are neutralized here instead.
+ */
+[data-conversation-scroll]:has(.lc-root, .lc-modal-backdrop) ~ [data-width-handle] { display: none; }
