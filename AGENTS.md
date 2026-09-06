@@ -63,6 +63,13 @@ The plugin lives off data it does not own: the durable session log (event shapes
 - Run `pnpm run build` after code changes applied.
 - Run `pnpm run watch` to keep hot-reloaded on dsh with local plugin installed. It also helps developer to see the code changes in the browser.
 
+## DSH web server
+- The dsh web server may be already running, and accessible at `http://127.0.0.1:3080/` by browser.
+- If the auth token issue encounters with browser, kill the dsh process and restart it by running `dsh web --no-open`.
+  - Example output: 
+    - $ dsh web --no-open
+      > dsh web: http://127.0.0.1:3080/?token=XXXXXXXXX
+
 ## Dependency
 - Consider updating the dependencies to the latest version if possible, as the deepseek-harness is evolving rapidly.
 
