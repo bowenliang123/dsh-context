@@ -12,12 +12,15 @@
  * The channel is the harness's generic Connection RPC (`ctx.connection.rpc`),
  * the same transport the plugin used before the v0.9 projection migration —
  * verified present on every supported baseline (0.1.2-rc.1+). The handler
- * reads the unit's CURRENT fold state through the registry's `stateOf` (no
- * second fold, no private copy): the client only ever details a session it
- * is viewing, and a viewed session is attached by definition, so a live
- * Session always backs the read. A session that left the live set
- * mid-request (disposed) or a unit that never registered resolves to a
- * typed `null` — the client keeps its last detail and offers a retry,
+ * resolves the session through the harness's own ladder: a LIVE session's
+ * unit state comes straight off the registry's `stateOf` (no second fold);
+ * a session only ever VIEWED cold (prepared into the observation cache —
+ * `SessionStore.prepare` never enters it into the live store) is observed
+ * through `ctx.sessionQuery` and its immutable log folded from init (cheap:
+ * a cold session's log is static, and the client's per-session store reads
+ * it once per page view). A session that left the live set mid-request, a
+ * unit that never registered, or a session nothing can observe resolves to
+ * a typed `null` — the client keeps its last detail and offers a retry,
  * never an unhandled rejection.
  *
  * Load order is never assumed: `watchDetailChannel` nests a `ctx.inject` on
@@ -33,7 +36,7 @@
 
 import type { Context } from '@deepseek-ai/cordis'
 import type { FoldBounds } from './config'
-import { buildTimelineDetail } from './fold'
+import { applyTimeline, buildTimelineDetail, createTimelineState } from './fold'
 
 /** The plugin's generic Connection RPC channel (the pre-v0.9 name, kept). */
 export const DETAIL_CHANNEL = '/dsh-context'
@@ -48,8 +51,8 @@ export interface DetailChannelGate {
 /** The host `connection` service, as far as the channel consumes it. */
 interface ConnectionHostFace {
   rpc?: {
-    // The handler's result is awaited by the transport, so the synchronous
-    // handler below (a plain envelope read off the live fold state) is valid.
+    // The handler's result is awaited by the transport; the cold rung below
+    // awaits the observation read.
     handle?(
       channel: string,
       handler: (endpoint: string, payload: unknown) => unknown,
@@ -60,6 +63,17 @@ interface ConnectionHostFace {
 /** The host `sessions` service, as far as the channel consumes it (the strict-global-read idiom). */
 interface SessionsHostFace {
   get?(id: string): unknown
+}
+
+/**
+ * The host `sessionQuery` service, as far as the channel consumes it: the
+ * cold-session rung. A session that is only VIEWED is never entered into the
+ * live store (`SessionStore.prepare` with a persistence seed does not
+ * register it) — the observation reader carries it instead, with the full
+ * immutable log on `events`.
+ */
+interface SessionQueryFace {
+  observeSession?(id: string, options?: { projectionMode?: 'all' | 'none' }): Promise<unknown>
 }
 
 /** The RPC failure envelope the transport expects (ConnectionRpcFailure). */
@@ -86,7 +100,7 @@ export function watchDetailChannel(ctx: Context, bounds: FoldBounds): DetailChan
     if (handle === undefined || getSession === undefined) return
     const projections = ctx.sessionProjections
 
-    const handler = (endpoint: string, payload: unknown): unknown => {
+    const handler = async (endpoint: string, payload: unknown): Promise<unknown> => {
       if (endpoint !== DETAIL_ENDPOINT) {
         return failure('dsh-context/unknown-endpoint', `unknown endpoint: ${endpoint}`)
       }
@@ -98,16 +112,36 @@ export function watchDetailChannel(ctx: Context, bounds: FoldBounds): DetailChan
       }
       try {
         const session = getSession(sessionId)
-        // Only live (attached) sessions carry fold state; a viewed session is
-        // always attached, so a miss here means the session left the live set —
-        // typed null, not an error: the client keeps its last detail.
-        if (session === undefined || session === null) return { ok: true, value: null }
-        // `stateOf` materializes the cell at the session cursor (no-op when
-        // the drive is current) and returns the LIVE state — never mutate it.
-        const state = projections.stateOf(session as never, 'contextTimeline')
-        // The unit is absent only in the baseline-gated composition, which never
-        // installs this channel — a miss is defensive.
-        if (state === undefined) return { ok: true, value: null }
+        if (session !== undefined && session !== null) {
+          // Live (attached) session: read the registry's CURRENT fold state —
+          // no second fold. `stateOf` materializes the cell at the session
+          // cursor (no-op when the drive is current); never mutate the result.
+          const state = projections.stateOf(session as never, 'contextTimeline')
+          // The unit is absent only in the baseline-gated composition, which never
+          // installs this channel — a miss is defensive.
+          if (state === undefined) return { ok: true, value: null }
+          return { ok: true, value: buildTimelineDetail(state, bounds) }
+        }
+        // Cold session (viewed through a prepared observation, never entered
+        // into the live store): observe it and fold the detail from its
+        // immutable log. The lease disposes promptly; the query's prepared
+        // cache retains the session for reuse. A session nothing can observe
+        // resolves to the typed null — the client keeps its last detail.
+        const query = ctx.get('sessionQuery') as SessionQueryFace | undefined
+        const observe = typeof query?.observeSession === 'function'
+          ? query.observeSession.bind(query)
+          : undefined
+        if (observe === undefined) return { ok: true, value: null }
+        const observation = await observe(sessionId, { projectionMode: 'none' })
+        const events = (observation as { events?: unknown } | null)?.events
+        if (!Array.isArray(events)) return { ok: true, value: null }
+        let state = createTimelineState()
+        try {
+          for (const ev of events) state = applyTimeline(state, ev as never, bounds)
+        } finally {
+          const dispose = (observation as { [Symbol.dispose]?: unknown } | null)?.[Symbol.dispose]
+          if (typeof dispose === 'function') dispose.call(observation)
+        }
         return { ok: true, value: buildTimelineDetail(state, bounds) }
       } catch (err) {
         return failure('gateway/internal', err instanceof Error ? err.message : String(err))

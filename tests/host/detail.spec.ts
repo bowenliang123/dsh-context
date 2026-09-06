@@ -21,6 +21,7 @@ type Handler = (endpoint: string, payload: unknown) => unknown
 interface CtxSpec {
   connection?: unknown
   sessions?: unknown
+  sessionQuery?: unknown
   stateOf?: (session: unknown, key: string) => unknown
 }
 
@@ -35,6 +36,7 @@ function ctxOf(spec: CtxSpec): { ctx: Context; captured: { channel?: string; han
   const services = new Map<string, unknown>()
   if ('connection' in spec) services.set('connection', spec.connection)
   if ('sessions' in spec) services.set('sessions', spec.sessions)
+  if ('sessionQuery' in spec) services.set('sessionQuery', spec.sessionQuery)
   const ctx = {
     get: (name: string) => services.get(name),
     sessionProjections: { stateOf: spec.stateOf ?? (() => undefined) },
@@ -165,6 +167,83 @@ describe('the detail endpoint', () => {
     const { ctx, captured } = liveCtx(undefined)
     watchDetailChannel(ctx, BOUNDS)
     assert.deepEqual(await captured.handler!('detail', { sessionId: 's1' }), { ok: true, value: null })
+  })
+
+  test('a cold session (never entered into the live store) folds its detail off the observed log', async () => {
+    const events = [
+      header(1, { model: 'deepseek-v4-flash', provider: 'deepseek' }),
+      userMessage(2, [{ type: 'text', text: 'hi' }], { kind: 'user' }),
+      assistantMessage(3, { turn: 1, step: 0, usage: { inputTokens: 10, outputTokens: 5 } }),
+    ]
+    let disposed = 0
+    let observedOptions: unknown
+    const { ctx, captured } = ctxOf({
+      connection: { rpc: { handle: () => () => {} } },
+      sessions: sessionsWith(okSession()),
+      stateOf: () => undefined,
+      sessionQuery: {
+        observeSession: (id: string, opts: unknown) => {
+          observedOptions = opts
+          return Promise.resolve(id === 'cold1'
+            ? { events, [Symbol.dispose]: () => { disposed++ } }
+            : null)
+        },
+      },
+    })
+    watchDetailChannel(ctx, BOUNDS)
+    const result = await captured.handler!('detail', { sessionId: 'cold1' }) as {
+      ok: boolean
+      value: { rev: number; requests: unknown[]; nodes: unknown[] } | null
+    }
+    assert.equal(result.ok, true)
+    assert.ok(result.value !== null)
+    assert.equal(result.value.requests.length, 1, 'the observed log folded')
+    assert.equal(result.value.nodes.length, 2)
+    assert.deepEqual(observedOptions, { projectionMode: 'none' }, 'the observation skips projection work')
+    assert.equal(disposed, 1, 'the observation lease disposed after the fold')
+    // A session nothing can observe (the query resolves null) stays a typed null.
+    assert.deepEqual(await captured.handler!('detail', { sessionId: 'nobody' }), { ok: true, value: null })
+  })
+
+  test('an observation without a dispose face still serves (nothing to release)', async () => {
+    const events = [userMessage(1, [{ type: 'text', text: 'hi' }], { kind: 'user' })]
+    const { ctx, captured } = ctxOf({
+      connection: { rpc: { handle: () => () => {} } },
+      sessions: sessionsWith(okSession()),
+      stateOf: () => undefined,
+      sessionQuery: {
+        observeSession: () => Promise.resolve({ events }),
+      },
+    })
+    watchDetailChannel(ctx, BOUNDS)
+    const result = await captured.handler!('detail', { sessionId: 'cold1' }) as { ok: boolean; value: { nodes: unknown[] } | null }
+    assert.equal(result.ok, true)
+    assert.equal(result.value?.nodes.length, 1)
+  })
+
+  test('a sessionQuery without the observe face (or a rejecting read) degrades cleanly', async () => {
+    // Face present but the method missing.
+    const noFace = ctxOf({
+      connection: { rpc: { handle: () => () => {} } },
+      sessions: sessionsWith(okSession()),
+      sessionQuery: {},
+    })
+    watchDetailChannel(noFace.ctx, BOUNDS)
+    assert.deepEqual(await noFace.captured.handler!('detail', { sessionId: 'cold' }), { ok: true, value: null })
+
+    // The observation read rejects (persistence down).
+    const rejecting = ctxOf({
+      connection: { rpc: { handle: () => () => {} } },
+      sessions: sessionsWith(okSession()),
+      sessionQuery: {
+        observeSession: () => Promise.reject(new Error('persistence down')),
+      },
+    })
+    watchDetailChannel(rejecting.ctx, BOUNDS)
+    const result = await rejecting.captured.handler!('detail', { sessionId: 'cold' }) as { ok: boolean; error: { code: string; message: string } }
+    assert.equal(result.ok, false)
+    assert.equal(result.error.code, 'gateway/internal')
+    assert.equal(result.error.message, 'persistence down')
   })
 
   test('serves the fold state\'s detail payload with its revision', async () => {
