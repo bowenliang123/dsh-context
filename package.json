@@ -107,7 +107,7 @@
     "@stylistic/eslint-plugin": "^5.10.0",
     "@types/node": "^26.2.0",
     "@types/react": "^18.3.31",
-    "@types/react-dom": "^19.2.4",
+    "@types/react-dom": "^18.3.7",
     "@vitest/coverage-v8": "^4.1.11",
     "eslint-plugin-sonarjs": "^4.2.0",
     "husky": "^9.1.7",
