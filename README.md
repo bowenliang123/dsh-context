@@ -14,13 +14,13 @@
 
 ## Install / Update
 
-To Install from DeepSeek Harness with [NPM published package](https://www.npmjs.com/package/dsh-context):
+Install [`dsh-context`](https://www.npmjs.com/package/dsh-context) plugin from [DeepSeek Harness](https://www.npmjs.com/package/@deepseek-ai/dsh):
 
 ```sh
 dsh plugin --profile web add dsh-context
 ```
 
-Or to update the `dsh-context` plugin:
+Or update the `dsh-context` plugin:
 
 ```sh
 dsh plugin --profile web update dsh-context@latest
