@@ -12,7 +12,7 @@ import { headlineOf } from '../headline'
 import type { SessionStandardProps } from '../services'
 import { contextBreakdownOf, contextPressureOf, conversationNodesOf, headersOf, imageLoaderOf, numOf, projectionOf, tokenUsageOf, unsupportedOf } from '../services'
 import type { ClientCtx, ConversationNodeLike } from '../services'
-import { makeContentFetcher, makeHeaderFetcher } from '../historyPage'
+import { makeContentFetcher, makeHeaderFetcher, useHistoryFace } from '../historyPage'
 import { useTimelineSource } from '../timelineSource'
 import { makeDetailNote } from './detailNote'
 import { canOpenPathsOf, openPathVia, workspaceOf } from '../services'
@@ -126,17 +126,27 @@ export function makeContextView(
       [ctx, sessionId],
     )
 
+    // The gateway page face, as a React seat: the first render can race the
+    // declared inject (a watch rebuild remounts this view before the fiber
+    // re-fires), and both fetchers below must rebuild — not stick to the
+    // static degradation — when the face lands or is revoked.
+    const historyFace = useHistoryFace()
+
     // Targeted full-content fetch for browser nodes outside the conversation window (one seq-anchored history read per expanded row);
     // absent face/session degrades to the static hint — never an error.
     const fetchContent = useMemo(
-      () => (typeof sessionId === 'string' && sessionId !== '' ? makeContentFetcher(sessionId) : undefined),
-      [sessionId],
+      () => (typeof sessionId === 'string' && sessionId !== '' && historyFace !== undefined
+        ? makeContentFetcher(sessionId)
+        : undefined),
+      [sessionId, historyFace],
     )
     // On-demand header epoch content (system prompt text, tool schemas) for the Context browser — one seq-anchored history read per
     // opened epoch; the `contextHeaders` projection carries metadata only. Same degradation shape as fetchContent.
     const fetchHeader = useMemo(
-      () => (typeof sessionId === 'string' && sessionId !== '' ? makeHeaderFetcher(sessionId) : undefined),
-      [sessionId],
+      () => (typeof sessionId === 'string' && sessionId !== '' && historyFace !== undefined
+        ? makeHeaderFetcher(sessionId)
+        : undefined),
+      [sessionId, historyFace],
     )
 
     const rootRef = useRef<HTMLDivElement | null>(null)

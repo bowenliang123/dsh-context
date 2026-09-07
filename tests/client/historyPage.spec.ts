@@ -2,10 +2,16 @@
 // durable-log pages mapped into the browser's conversation-node shapes, plus
 // the per-session fetcher built over the shared api client.
 
+import { act, createElement as h } from 'react'
 import assert from 'node:assert/strict'
 import { describe, test } from 'vitest'
-import { makeContentFetcher, makeHeaderFetcher, pageNodesOf, watchHistoryFaces } from '../../src/client/historyPage'
+import {
+  historyFace, makeContentFetcher, makeHeaderFetcher, pageNodesOf,
+  subscribeHistoryFace, watchHistoryFaces, useHistoryFace,
+} from '../../src/client/historyPage'
+import type { ReactElement } from 'react'
 import { asClientCtx, TestClientCtx } from './helpers/harness'
+import { flush, mount } from './helpers/kit'
 
 /** One well-formed history row. */
 function row(type: string, seq: number, data: unknown): unknown {
@@ -394,5 +400,64 @@ describe('makeHeaderFetcher — the lazy epoch content read', () => {
     const broken = armHistoryFaces({ session: { page: async () => { throw new Error('transport down') } } })
     await assert.rejects(makeHeaderFetcher('s')!(1), /transport down/)
     broken.dispose()
+  })
+})
+
+describe('the declared-face store — resolution, revocation, and the mount race', () => {
+  test('the face resolves late (watch armed before the services) and clears on unload', () => {
+    // The RACE the reactive seat exists for: the plugin applies (and its slot
+    // components mount) before `remote` composes — the inject is pending, the
+    // fetchers degrade, and only the face landing later upgrades them.
+    const ctx = new TestClientCtx()
+    watchHistoryFaces(asClientCtx(ctx))
+    assert.equal(historyFace(), undefined)
+    assert.equal(makeContentFetcher('s'), undefined)
+    // Arming the two services replays the pending inject, like cordis; the
+    // face rides INSIDE the `remote` facade (the declared path), while the
+    // `remote.session` service key stays hostile, as on the real host.
+    ctx.setService('remote.session', { get page() { throw new Error('cannot get property "remote.session" without inject') } })
+    ctx.setService('remote', { session: pageFace([ev('user/message', 1, {})]) })
+    assert.ok(historyFace() !== undefined, 'the late-fired inject resolved the face')
+    assert.ok(makeContentFetcher('s') !== undefined, 'a fetcher built after the landing face exists')
+    ctx.dispose()
+    assert.equal(historyFace(), undefined, 'unload revokes the face')
+    assert.equal(makeContentFetcher('s'), undefined)
+  })
+
+  test('subscribers hear resolution and revocation; unsubscribing stops the channel', () => {
+    const seen: (undefined | ReturnType<typeof historyFace>)[] = [historyFace()]
+    const unsubscribe = subscribeHistoryFace(() => { seen.push(historyFace()) })
+    const ctx = armHistoryFaces({ session: pageFace([]) })
+    ctx.dispose()
+    unsubscribe()
+    const before = seen.length
+    armHistoryFaces({ session: pageFace([]) }).dispose()
+    assert.equal(seen.length, before, 'an unsubscribed listener hears nothing more')
+    assert.equal(seen[0], undefined, 'the channel starts from the current face')
+    assert.equal(seen[seen.length - 1], undefined)
+  })
+
+  test('useHistoryFace re-renders a mount that raced the inject (the auto-heal)', async () => {
+    function FaceProbe(): ReactElement {
+      const face = useHistoryFace()
+      return h('div', null, face === undefined ? 'no-face' : 'has-face')
+    }
+    const ctx = new TestClientCtx()
+    watchHistoryFaces(asClientCtx(ctx))
+    const m = await mount(h(FaceProbe))
+    assert.equal(m.container.textContent, 'no-face', 'a mount before the inject sees no face')
+    // The face lands mid-mount: the subscription re-renders the probe.
+    await act(async () => {
+      ctx.setService('remote.session', { get page() { throw new Error('cannot get property "remote.session" without inject') } })
+      ctx.setService('remote', { session: pageFace([ev('user/message', 1, {})]) })
+    })
+    await flush()
+    assert.equal(m.container.textContent, 'has-face', 'the landing face re-renders the racer')
+    // Revocation (plugin reload) flows through the same channel.
+    await act(async () => {
+      ctx.dispose()
+    })
+    assert.equal(m.container.textContent, 'no-face')
+    await m.unmount()
   })
 })

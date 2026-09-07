@@ -21,6 +21,7 @@
  * the slot unset instead of ever throwing.
  */
 
+import { useSyncExternalStore } from 'react'
 import type {
   ClientCtx, ContentFetcher, ConversationNodeLike, HeaderFetcher,
   HistoryEntryLike, SessionPageFace,
@@ -182,6 +183,41 @@ function readPageOf(face: unknown): SessionPageFace['page'] | undefined {
  */
 let declaredPage: SessionPageFace['page'] | undefined
 
+const faceListeners = new Set<() => void>()
+
+function setPageFace(page: SessionPageFace['page'] | undefined): void {
+  declaredPage = page
+  for (const listener of [...faceListeners]) listener()
+}
+
+/** The page face resolved so far, for non-React readers (the fetcher builders). */
+export function historyFace(): SessionPageFace['page'] | undefined {
+  return declaredPage
+}
+
+/** Subscribe to face resolution and revocation (plugin reload/HMR). */
+export function subscribeHistoryFace(listener: () => void): () => void {
+  faceListeners.add(listener)
+  return () => { faceListeners.delete(listener) }
+}
+
+/** The store snapshot both useSyncExternalStore seats read (client and hydration). */
+function faceSnapshot(): SessionPageFace['page'] | undefined {
+  return declaredPage
+}
+
+/**
+ * The React seat over the resolved page face. A mount can RACE the declared
+ * inject — a watch rebuild (patchReload) remounts the slot components before
+ * the injected fiber re-fires — so the first render may legitimately see no
+ * face. Subscribing keeps that transient state from sticking: the fetchers
+ * derived downstream rebuild when the face lands (or is revoked), instead of
+ * degrading to the static note for the mount's whole lifetime.
+ */
+export function useHistoryFace(): SessionPageFace['page'] | undefined {
+  return useSyncExternalStore(subscribeHistoryFace, faceSnapshot, faceSnapshot)
+}
+
 /**
  * Register the plugin's history face with the harness through the DECLARED
  * inject — both `remote` AND `remote.session` (the ui-chat idiom) must be in
@@ -196,13 +232,11 @@ export function watchHistoryFaces(ctx: ClientCtx): void {
   ctx.inject(['remote', 'remote.session'], (c) => {
     try {
       const session = (c as ClientCtx & { remote?: { session?: SessionPageFace } }).remote?.session
-      declaredPage = session !== undefined ? readPageOf(session) : undefined
+      setPageFace(session !== undefined ? readPageOf(session) : undefined)
     } catch {
-      declaredPage = undefined
+      setPageFace(undefined)
     }
-    return () => {
-      declaredPage = undefined
-    }
+    return () => { setPageFace(undefined) }
   })
 }
 

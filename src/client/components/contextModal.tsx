@@ -9,8 +9,8 @@ import { measureDock } from '../dockMeasure'
 import { headlineOf } from '../headline'
 import { modalStoreOf, takePendingConsume } from '../modalStore'
 import type { ClientCtx, SessionStandardProps, SessionsFace } from '../services'
-import { contextBreakdownOf, contextPressureOf, conversationNodesOf, headersOf, projectionOf } from '../services'
-import { makeContentFetcher, makeHeaderFetcher } from '../historyPage'
+import { contextBreakdownOf, contextPressureOf, conversationNodesOf, headersOf, imageLoaderOf, projectionOf } from '../services'
+import { makeContentFetcher, makeHeaderFetcher, useHistoryFace } from '../historyPage'
 import { useTimelineSource } from '../timelineSource'
 import type { ViewKit } from '../viewkit'
 import { makeContextBrowser } from './browser'
@@ -51,15 +51,26 @@ export function makeContextModal(ctx: ClientCtx, kit: ViewKit): (props: ContextM
     // (the layout effect below resolves it before first paint).
     const [dockLeft, setDockLeft] = useState(0)
     const backdropRef = useRef<HTMLDivElement | null>(null)
+    // Session-authorized durable-image loader for the browser's attachment cards, resolved through the harness `uiConversation` service
+    // (`imageUrl`); absent service/session degrades the cards to metadata-only, never an error. Same parity as the Context tab.
+    const loadImage = useMemo(
+      () => imageLoaderOf(ctx, sessionId !== '' ? sessionId : undefined),
+      [ctx, sessionId],
+    )
+
+    // The gateway page face, as a React seat: the first render can race the declared inject (a watch rebuild remounts this overlay before
+    // the fiber re-fires), and both fetchers below must rebuild — not stick to the static degradation — when the face lands or is revoked.
+    const historyFace = useHistoryFace()
+
     // Same targeted content fetch the Context tab wires (one seq-anchored history read per expanded row), plus the on-demand header
     // epoch content read for the browser's system/tools sections.
     const fetchContent = useMemo(
-      () => (sessionId !== '' ? makeContentFetcher(sessionId) : undefined),
-      [sessionId],
+      () => (sessionId !== '' && historyFace !== undefined ? makeContentFetcher(sessionId) : undefined),
+      [sessionId, historyFace],
     )
     const fetchHeader = useMemo(
-      () => (sessionId !== '' ? makeHeaderFetcher(sessionId) : undefined),
-      [sessionId],
+      () => (sessionId !== '' && historyFace !== undefined ? makeHeaderFetcher(sessionId) : undefined),
+      [sessionId, historyFace],
     )
 
     const close = useCallback(() => {
@@ -124,6 +135,7 @@ export function makeContextModal(ctx: ClientCtx, kit: ViewKit): (props: ContextM
                 convNodes={convNodes}
                 fetchContent={fetchContent}
                 fetchHeader={fetchHeader}
+                loadImage={loadImage}
                 hoverKey={hoverCat}
                 onHoverKey={setHoverCat}
                 detailState={source.detailState}
