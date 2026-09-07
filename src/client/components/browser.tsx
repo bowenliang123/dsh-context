@@ -51,6 +51,11 @@ export interface ContextBrowserProps {
   onNodeFocusHandled?: () => void
   hoverKey?: string | null
   onHoverKey?: (key: string | null) => void
+  /**
+   * Reports the open category (null once none opens): the Context tab focuses the trend chart's bars on it.
+   * Absent (the /context modal) — the accordion stays purely internal.
+   */
+  onOpenCat?: (cat: string | null) => void
   loadImage?: ImageLoader
   /**
    * The timeline source's detail state (split generation): while the first
@@ -584,6 +589,13 @@ export function makeContextBrowser(
     // compares epochs.
     const [rowQuery, setRowQuery] = useState('')
     const [toolSort, setToolSort] = useState<'size' | 'name'>('size')
+    // Every open-category change (toggle, step pick, pin, brief reveal) reports outward so the Context tab
+    // can focus the trend chart on the open category.
+    const onOpenCat = props.onOpenCat
+    const setCat = (c: string | null): void => {
+      setOpenCat(c)
+      if (onOpenCat !== undefined) onOpenCat(c)
+    }
 
     // Full message content: the conversation-window join first (zero cost),
     // plus nodes fetched on demand for seqs outside the window (node arrays
@@ -620,9 +632,9 @@ export function makeContextBrowser(
     const pinSeq = props.pinSeq
     useEffect(() => {
       setSel(pinSeq === null || pinSeq === undefined ? 'live' : pinSeq)
-      setOpenCat(null)
+      setCat(null)
       setOpenElem(null)
-    }, [pinSeq])
+    }, [pinSeq, onOpenCat])
     // Step-brief reveal: select the owning step, open the node's category + element (the pagination effect above already pulls older
     // history for a missing join), then arm a one-shot scroll consumed by the layout effect once the row renders.
     const rootRef = useRef<HTMLDivElement | null>(null)
@@ -631,11 +643,11 @@ export function makeContextBrowser(
     useEffect(() => {
       if (nodeFocus === null || nodeFocus === undefined) return
       setSel(nodeFocus.step)
-      setOpenCat(nodeFocus.cat)
+      setCat(nodeFocus.cat)
       setOpenElem('n' + String(nodeFocus.seq))
       focusScrollRef.current = true
       if (props.onNodeFocusHandled !== undefined) props.onNodeFocusHandled()
-    }, [nodeFocus, props.onNodeFocusHandled])
+    }, [nodeFocus, props.onNodeFocusHandled, onOpenCat])
     useLayoutEffect(() => {
       if (!focusScrollRef.current) return
       focusScrollRef.current = false
@@ -681,7 +693,7 @@ export function makeContextBrowser(
     const total = breakdown.total
     const pick = (v: string) => {
       setSel(v === 'live' ? 'live' : Number(v))
-      setOpenCat(null)
+      setCat(null)
       setOpenElem(null)
     }
 
@@ -718,11 +730,11 @@ export function makeContextBrowser(
         || ((c === 'system' || c === 'tools') && view.header === null)
       if (!openable) return
       if (openCat === c) {
-        setOpenCat(null)
+        setCat(null)
         setOpenElem(null)
         return
       }
-      setOpenCat(c)
+      setCat(c)
       // A different category opens unfiltered — the lens belongs to the open one.
       setRowQuery('')
       setOpenElem(singleKeyOf(c))

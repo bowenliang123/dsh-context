@@ -4,7 +4,7 @@
  */
 
 import { memo, useLayoutEffect, useMemo, useRef, type ReactElement, type UIEvent } from 'react'
-import type { ContextEventRecord, RequestRecord } from '../../shared/types'
+import type { Category, ContextEventRecord, RequestRecord } from '../../shared/types'
 import { CATS } from '../categories'
 import type { ViewKit } from '../viewkit'
 
@@ -19,6 +19,12 @@ export interface TrendChartProps {
   focusTurn: number | null
   /** Mirrored category hover (shared with the overview and the browser): lights that category's segment in every bar. */
   hoverCat: string | null
+  /**
+   * The browser's open category: every bar plots only that category (provider-anchored), with the axis rescaled
+   * to its own max. Null plots every category; an unrecognized key (a stale or hostile state) degrades to the
+   * unfocused chart.
+   */
+  focusCat?: string | null
   onSelect: (seq: number | null) => void
   onHover: (seq: number | null) => void
   onHoverTurn: (turn: number | null) => void
@@ -75,7 +81,7 @@ export function jumpTargetOf(requests: RequestRecord[], seq: number): RequestRec
 }
 
 export function makeTrendChart(kit: ViewKit): (props: TrendChartProps) => ReactElement {
-  const { t, fmt, eventLabel, eventAt } = kit
+  const { t, fmt, eventLabel, eventAt, catLabel } = kit
 
   const CHART_H = 112
   // Quarter-mark label tops for the axis (mirrored to .lc-axis-q1/.lc-axis-q3 in trendChart.css): chart top 18
@@ -111,6 +117,20 @@ export function makeTrendChart(kit: ViewKit): (props: TrendChartProps) => ReactE
     typeof req.prompt === 'number' && req.prompt > 0 && req.total > 0 ? req.prompt / req.total : 1
   const barTotalOf = (req: RequestRecord): number =>
     typeof req.prompt === 'number' && req.prompt > 0 ? req.prompt : req.total
+
+  /**
+   * Focus a bar on one category (the browser's open category): the kept bucket carries its provider-anchored
+   * value, the other buckets zero, and the provider prompt drops — the downstream stack/anchor/tooltip math
+   * reads the derived record unchanged (`total` IS the plotted figure; the anchor becomes a no-op).
+   */
+  const focusOf = (req: RequestRecord, cat: string): RequestRecord => {
+    const key = cat as Category | 'system' | 'tools'
+    const { prompt: _prompt, output: _output, ...out } = req
+    const v = Math.round((req[key] || 0) * anchorOf(req))
+    out.total = v
+    for (const c of CATS) out[c.key] = c.key === key ? v : 0
+    return out
+  }
 
   /**
    * Delta mode: each category keeps the SIGNED change vs the previous record so bars can diverge
@@ -212,9 +232,16 @@ export function makeTrendChart(kit: ViewKit): (props: TrendChartProps) => ReactE
 
   return function TrendChart(props: TrendChartProps): ReactElement {
     const delta = props.mode === 'delta'
+    // An unrecognized focus key degrades to the unfocused chart instead of plotting an empty axis.
+    const focus = props.focusCat !== null && props.focusCat !== undefined && CATS.some(c => c.key === props.focusCat)
+      ? props.focusCat
+      : null
     const requests = useMemo(
-      () => (delta ? props.requests.map((req, i) => deltaOf(req, i > 0 ? props.requests[i - 1] : null)) : props.requests),
-      [props.requests, delta],
+      () => {
+        const base = focus !== null ? props.requests.map(req => focusOf(req, focus)) : props.requests
+        return delta ? base.map((req, i) => deltaOf(req, i > 0 ? base[i - 1] : null)) : base
+      },
+      [props.requests, delta, focus],
     )
     const markers = props.markers
     let maxTotal = 1
@@ -400,7 +427,10 @@ export function makeTrendChart(kit: ViewKit): (props: TrendChartProps) => ReactE
         const n = req.net ?? 0
         return [head, t('tip.delta', { n: (n > 0 ? '+' : '') + fmt(n) })]
       }
-      return [head, t('tip.total', { n: fmt(barTotalOf(req)) })]
+      // Focused: the metric row IS the focused category's figure, so the tip names it instead of claiming a total.
+      return [head, focus !== null
+        ? t('tip.cat', { cat: catLabel(focus), n: fmt(barTotalOf(req)) })
+        : t('tip.total', { n: fmt(barTotalOf(req)) })]
     }
     const hoveredIdx = props.hoveredSeq !== null ? requests.findIndex(r => r.seq === props.hoveredSeq) : -1
     const hoveredReq = hoveredIdx >= 0 ? requests[hoveredIdx] : null

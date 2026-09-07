@@ -1504,3 +1504,45 @@ describe('ContextBrowser — the split generation detail states', () => {
     await m.unmount()
   })
 })
+
+describe('ContextBrowser open-category reporting', () => {
+  test('toggling categories and step picks report the open category outward', async () => {
+    const data = tl({
+      requests: [req({ seq: 10, turn: 1, step: 0 }), req({ seq: 20, turn: 2, step: 0 })],
+      nodes: [
+        node({ seq: 1, cat: 'user', text: 'hi' }),
+        node({ seq: 2, cat: 'user', text: 'again' }),
+        node({ seq: 3, cat: 'tool', tokens: 30, tool: 'bash', text: 'out' }),
+      ],
+    })
+    const opens: (string | null)[] = []
+    const onOpenCat = (c: string | null): void => { opens.push(c) }
+    const m = await mount(h(Browser, props({ data, onOpenCat })))
+    assert.deepEqual(opens, [null], 'the mount-time pin pass reports the closed accordion')
+    await click(catRow(m, 'user'))
+    assert.deepEqual(opens, [null, 'user'])
+    await click(catRow(m, 'user'))
+    assert.deepEqual(opens, [null, 'user', null])
+    await click(catRow(m, 'tool'))
+    assert.deepEqual(opens, [null, 'user', null, 'tool'])
+    await pickStep(m, '20')
+    assert.deepEqual(opens, [null, 'user', null, 'tool', null], 'a step pick closes the open category')
+    await m.unmount()
+  })
+
+  test('a pin change and a brief reveal report their reset / target category', async () => {
+    const data = tl({ requests: [req({ seq: 10, turn: 1, step: 0 })], nodes: [node({ seq: 1, cat: 'user', text: 'hi' })] })
+    const opens: (string | null)[] = []
+    const onOpenCat = (c: string | null): void => { opens.push(c) }
+    const m = await mount(h(Browser, props({ data, onOpenCat })))
+    await m.update(h(Browser, props({ data, onOpenCat, pinSeq: 10 })))
+    assert.deepEqual(opens, [null, null], 'pinning resets the accordion')
+    await m.update(h(Browser, props({
+      data, onOpenCat, pinSeq: 10,
+      nodeFocus: { step: 'live', seq: 1, cat: 'tool' },
+      onNodeFocusHandled: () => {},
+    })))
+    assert.deepEqual(opens, [null, null, 'tool'], 'the reveal opens the node category')
+    await m.unmount()
+  })
+})

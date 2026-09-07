@@ -385,6 +385,30 @@ describe('ContextView — interactions', () => {
     await m.unmount()
   })
 
+  test('expanding a browser category focuses the trend bars on it; collapsing restores all', async () => {
+    const m = await mountRich('sv-focus')
+    assert.equal(text(query(m.container, '.lc-axis-top')), '420', 'unfocused: the axis tops at the largest whole-bar total')
+    // Five segments on the bar: richTimeline carries no injects, so inject renders none.
+    assert.equal(queryAll(m.container, '.lc-bar[data-seq="4"] .lc-bar-stack > .lc-cat-seg').length, 5)
+
+    // Expanding the browser's assistant category focuses every bar on it — one segment per bar, the axis
+    // rescaled to the category's own max (20/60/80; the first rides its provider-prompt anchor to 21).
+    await click(queryAll(m.container, '.lc-br-cat-row')[4])
+    assert.equal(text(query(m.container, '.lc-axis-top')), '80')
+    const segs = queryAll(m.container, '.lc-bar .lc-bar-stack > .lc-cat-seg')
+    assert.equal(segs.length, 3)
+    for (const s of segs) assert.equal(s.getAttribute('data-cat'), 'assistant')
+    assert.ok(text(m.container).includes(DICT_EN['trend.focus'].replace('{cat}', DICT_EN['cat.assistant'])),
+      'the card subtitle names the focused category')
+
+    // Collapsing the category restores the whole composition and the usage hint.
+    await click(queryAll(m.container, '.lc-br-cat-row')[4])
+    assert.equal(text(query(m.container, '.lc-axis-top')), '420')
+    assert.equal(queryAll(m.container, '.lc-bar[data-seq="4"] .lc-bar-stack > .lc-cat-seg').length, 5)
+    assert.ok(text(m.container).includes(DICT_EN['trend.hint']))
+    await m.unmount()
+  })
+
   test('delta mode pairs the detail with the previous record; first bar has none', async () => {
     const m = await mountRich('sv-delta')
     const chart = query(m.container, '.lc-chart')

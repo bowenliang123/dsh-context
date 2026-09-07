@@ -466,6 +466,80 @@ describe('TrendChart category hover-link', () => {
   })
 })
 
+describe('TrendChart category focus (the browser open category)', () => {
+  const r1 = req(1, { turn: 1, step: 0 })
+  const r2 = req(2, { turn: 1, step: 1, system: 200, tools: 100, user: 60, inject: 40, assistant: 80, tool: 120, total: 600 })
+
+  test('total mode plots only the focused category, rescaled to its own max, and the tip names it', async () => {
+    const m = await mount(h(TrendChart, propsOf([r1, r2], { focusCat: 'tool' })))
+    // maxTotal follows the focused figure (60 / 120), not the bars' whole compositions (300 / 600).
+    assert.equal(query(m.container, '.lc-axis-top').textContent, '120')
+    const bs = bars(m.container)
+    const segs1 = queryAll(bs[0], '.lc-bar-stack > div')
+    assert.equal(segs1.length, 1)
+    assert.equal(segs1[0].getAttribute('data-cat'), 'tool')
+    assertColor(segs1[0].style.background, CATS[5].color)
+    assert.equal(segs1[0].style.height, `${Math.round(60 / 120 * CHART_H)}px`)
+    assert.equal(queryAll(bs[1], '.lc-bar-stack > div')[0].style.height, `${CHART_H}px`)
+
+    // The tooltip's metric row names the focused category and carries its own figure.
+    await m.update(h(TrendChart, propsOf([r1, r2], { focusCat: 'tool', hoveredSeq: 1 })))
+    assert.deepEqual(
+      queryAll(query(m.container, '.lc-chart-tip'), 'span').map(r => r.textContent),
+      [kit.t('tip.step', { t: 1, s: 0 }), kit.t('tip.cat', { cat: kit.catLabel('tool'), n: '60' })],
+    )
+    await m.unmount()
+  })
+
+  test('the provider anchor rides the focused figure; a category at zero everywhere keeps the unit axis', async () => {
+    // r1 anchors 600/300 = 2 → its focused tool value rides 120 (unanchored it would stay 60).
+    const r1a = req(1, { turn: 1, step: 0, prompt: 600 })
+    const m = await mount(h(TrendChart, propsOf([r1a, r2], { focusCat: 'tool' })))
+    assert.equal(query(m.container, '.lc-axis-top').textContent, '120')
+    assert.equal(queryAll(bars(m.container)[0], '.lc-bar-stack > div')[0].style.height, `${CHART_H}px`)
+    await m.unmount()
+
+    const zero = req(9, { turn: 1, step: 0, system: 0, tools: 0, user: 0, inject: 0, assistant: 0, tool: 0, total: 0 })
+    const mz = await mount(h(TrendChart, propsOf([zero], { focusCat: 'user' })))
+    assert.equal(query(mz.container, '.lc-axis-top').textContent, '1')
+    assert.equal(queryAll(bars(mz.container)[0], '.lc-bar-stack > div').length, 0)
+    await mz.unmount()
+  })
+
+  test('delta mode diffs the focused category only', async () => {
+    const base = req(1, { turn: 1, step: 0 })
+    const grown = req(2, { turn: 1, step: 1, system: 130, tools: 50, user: 30, inject: 20, assistant: 40, tool: 60, total: 330 })
+    const shrunk = req(3, { turn: 2, step: 0, system: 90, tools: 50, user: 30, inject: 20, assistant: 40, tool: 60, total: 290 })
+    const m = await mount(h(TrendChart, propsOf([base, grown, shrunk], { mode: 'delta', focusCat: 'system' })))
+    // Only the system deltas (+30 / -40) drive the scale: maxUp 30, maxDown 40.
+    assert.equal(query(m.container, '.lc-axis-top').textContent, '+30')
+    assert.equal(query(m.container, '.lc-axis-bot').textContent, '-40')
+    const bs = bars(m.container)
+    assert.equal(queryAll(bs[0], '.lc-bar-up > div').length, 0)
+    const up = queryAll(bs[1], '.lc-bar-up > div')
+    assert.equal(up.length, 1)
+    assert.equal(up[0].getAttribute('data-cat'), 'system')
+    assert.equal(up[0].style.height, `${Math.round(30 * CHART_H / 70)}px`)
+    const down = queryAll(bs[2], '.lc-bar-down > div')
+    assert.equal(down.length, 1)
+    assert.equal(down[0].style.height, `${Math.round(40 * CHART_H / 70)}px`)
+
+    // The delta tip reports the focused category's signed change.
+    await m.update(h(TrendChart, propsOf([base, grown, shrunk], { mode: 'delta', focusCat: 'system', hoveredSeq: 2 })))
+    assert.ok(query(m.container, '.lc-chart-tip').textContent!.includes(kit.t('tip.delta', { n: '+30' })))
+    await m.unmount()
+  })
+
+  test('an unknown focus key and an explicit null degrade to the unfocused chart', async () => {
+    for (const focusCat of ['nope', null]) {
+      const m = await mount(h(TrendChart, propsOf([r1, r2], { focusCat })))
+      assert.equal(queryAll(bars(m.container)[0], '.lc-bar-stack > div').length, 6)
+      assert.equal(query(m.container, '.lc-axis-top').textContent, '600')
+      await m.unmount()
+    }
+  })
+})
+
 describe('TrendChart markers', () => {
   test('compaction/prune markers render the ✂ glyph with a positioned or bare title', async () => {
     const reqs = [req(1, { turn: 1, step: 0 }), req(2, { turn: 1, step: 1 }), req(3, { turn: 2, step: 0 })]

@@ -105,6 +105,8 @@ export function makeContextView(
     // turn-level pin below (mirrors the strip-click's consume-once focus flow).
     const [jumpSeq, setJumpSeq] = useState<number | null>(null)
     const [hoverCat, setHoverCat] = useState<string | null>(null)
+    // The browser's open category: the trend card focuses its bars on it (collapsing the category restores all).
+    const [focusCat, setFocusCat] = useState<string | null>(null)
     const [pickedKinds, setPickedKinds] = useState<string[]>([...EVENT_KINDS])
     const toggleKind = (k: string) => {
       setPickedKinds((p) => {
@@ -368,7 +370,7 @@ export function makeContextView(
             <div className="lc-card">
               <div className="lc-card-title">
                 <span className="lc-card-title-text">{t('trend.title')}</span>
-                <span className="lc-card-sub">{t('trend.hint')}</span>
+                <span className="lc-card-sub">{focusCat !== null ? t('trend.focus', { cat: kit.catLabel(focusCat) }) : t('trend.hint')}</span>
                 <div className="lc-trend-ctl">
                   <div className="lc-gran">
                     <button
@@ -415,6 +417,7 @@ export function makeContextView(
                       mode={trendMode}
                       focusTurn={focusTurn}
                       hoverCat={trendHoverCat}
+                      focusCat={focusCat}
                       onSelect={setSelectedSeq}
                       onHover={setHoveredSeq}
                       onHoverTurn={setHoverTurn}
@@ -453,6 +456,7 @@ export function makeContextView(
               pinSeq={pinnedReq !== null ? pinnedReq.seq : null}
               hoverKey={hoverCat}
               onHoverKey={setHoverCat}
+              onOpenCat={setFocusCat}
               nodeFocus={nodeFocus}
               onNodeFocusHandled={clearNodeFocus}
               loadImage={loadImage}
