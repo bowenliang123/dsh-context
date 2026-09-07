@@ -20,7 +20,7 @@ export interface TrendChartProps {
   /** Mirrored category hover (shared with the overview and the browser): lights that category's segment in every bar. */
   hoverCat: string | null
   /**
-   * The browser's open category: every bar plots only that category (provider-anchored), with the axis rescaled
+   * The browser's open category: every bar plots only that category's fold figure, with the axis rescaled
    * to its own max. Null plots every category; an unrecognized key (a stale or hostile state) degrades to the
    * unfocused chart.
    */
@@ -111,22 +111,17 @@ export function makeTrendChart(kit: ViewKit): (props: TrendChartProps) => ReactE
   const LABEL_FONT_MIN = 6
   const estTurnLabel = (turn: number): number => 6.5 * String(turn).length
 
-  // Anchor bar HEIGHT to the provider-reported prompt when the request carried usage: categories keep their heuristic ratios but the height
-  // tracks the real billed tokens (matching the overview card and official chat ring), not the underpriced estimate.
-  const anchorOf = (req: RequestRecord): number =>
-    typeof req.prompt === 'number' && req.prompt > 0 && req.total > 0 ? req.prompt / req.total : 1
-  const barTotalOf = (req: RequestRecord): number =>
-    typeof req.prompt === 'number' && req.prompt > 0 ? req.prompt : req.total
-
   /**
-   * Focus a bar on one category (the browser's open category): the kept bucket carries its provider-anchored
-   * value, the other buckets zero, and the provider prompt drops — the downstream stack/anchor/tooltip math
-   * reads the derived record unchanged (`total` IS the plotted figure; the anchor becomes a no-op).
+   * Focus a bar on one category (the browser's open category): the kept bucket carries its fold figure, the other
+   * buckets zero, and `total` IS the plotted figure — the downstream stack/tooltip math reads the derived record
+   * unchanged. The raw fold figures are plotted as-is: a per-request rescale against the provider prompt would drift
+   * with the heuristic's ratio error and fake growth into constant categories (a never-changing system prompt must
+   * plot flat).
    */
   const focusOf = (req: RequestRecord, cat: string): RequestRecord => {
     const key = cat as Category | 'system' | 'tools'
-    const { prompt: _prompt, output: _output, ...out } = req
-    const v = Math.round((req[key] || 0) * anchorOf(req))
+    const out: RequestRecord = { ...req }
+    const v = req[key] || 0
     out.total = v
     for (const c of CATS) out[c.key] = c.key === key ? v : 0
     return out
@@ -219,7 +214,7 @@ export function makeTrendChart(kit: ViewKit): (props: TrendChartProps) => ReactE
         ) : (
           <div className="lc-bar-stack">
             {CATS.map((c) => {
-              const v = (req[c.key] || 0) * anchorOf(req)
+              const v = req[c.key] || 0
               if (!v) return null
               // px (not %) heights: the stack is content-driven, so percentage heights would collapse against an indefinite base.
               return <div key={c.key} data-cat={c.key} className="lc-cat-seg" style={{ height: `${Math.max(1, Math.round(v / props.maxTotal * CHART_H))}px`, background: c.color }} />
@@ -261,8 +256,7 @@ export function makeTrendChart(kit: ViewKit): (props: TrendChartProps) => ReactE
       }
     } else {
       for (const req of requests) {
-        const bt = barTotalOf(req)
-        if (bt > maxTotal) maxTotal = bt
+        if (req.total > maxTotal) maxTotal = req.total
       }
     }
     // The zero line splits the bar area PROPORTIONALLY to the larger side, so the px-per-token scale
@@ -412,8 +406,8 @@ export function makeTrendChart(kit: ViewKit): (props: TrendChartProps) => ReactE
     }, [props.granularity, props.focusTurn, requests])
 
     // Compact 2-row hover tooltip, shown instantly by the custom `.lc-chart-tip` (the native title is delayed):
-    // identity and the bar's anchor total — the SAME actual value the bar height and axis are scaled against
-    // (provider prompt when reported, heuristic total otherwise). Identity phrasing follows the granularity —
+    // identity and the bar's total — the SAME value the bar height and axis are scaled against (the fold's
+    // heuristic figure, matching every other card). Identity phrasing follows the granularity —
     // turn bars always speak TURN (the aggregate's step count, singular for a 1-step turn; a record missing
     // stepCount degrades to that too), step bars carry the step index. Delta swaps the metric row for the net.
     const tipRowsOf = (req: RequestRecord): [string, string] => {
@@ -429,8 +423,8 @@ export function makeTrendChart(kit: ViewKit): (props: TrendChartProps) => ReactE
       }
       // Focused: the metric row IS the focused category's figure, so the tip names it instead of claiming a total.
       return [head, focus !== null
-        ? t('tip.cat', { cat: catLabel(focus), n: fmt(barTotalOf(req)) })
-        : t('tip.total', { n: fmt(barTotalOf(req)) })]
+        ? t('tip.cat', { cat: catLabel(focus), n: fmt(req.total) })
+        : t('tip.total', { n: fmt(req.total) })]
     }
     const hoveredIdx = props.hoveredSeq !== null ? requests.findIndex(r => r.seq === props.hoveredSeq) : -1
     const hoveredReq = hoveredIdx >= 0 ? requests[hoveredIdx] : null
@@ -567,7 +561,7 @@ export function makeTrendChart(kit: ViewKit): (props: TrendChartProps) => ReactE
               })}
             </div>
           </div>
-          {/* Compact 2-row hover tooltip (identity / anchor total), shown instantly by the custom `.lc-chart-tip`
+          {/* Compact 2-row hover tooltip (identity / bar total), shown instantly by the custom `.lc-chart-tip`
               (the native title is delayed); the per-category breakdown lives in the detail panel below. It floats
               ABOVE the plot (CSS bottom anchoring) so it never covers the bars, is capped at the wrapper's width
               and wrapped, and is positioned imperatively over its bar's visible slice (syncTip) so scrolling keeps

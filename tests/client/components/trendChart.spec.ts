@@ -200,32 +200,37 @@ describe('TrendChart step granularity, total mode', () => {
     await m.unmount()
   })
 
-  test('provider prompt anchors bar height; zero/absent prompt and zero total fall back honestly', async () => {
-    const r1 = req(1, { turn: 1, step: 0 })
-    const r2 = req(2, { turn: 1, step: 1, system: 200, tools: 100, user: 60, inject: 40, assistant: 80, tool: 120, total: 600, prompt: 1200 })
-    const r3 = req(3, { turn: 2, step: 0, prompt: 0 }) // prompt 0 → not an anchor, total drives
-    const r4 = req(4, { turn: 3, step: 0, system: 0, tools: 0, user: 0, inject: 0, assistant: 0, tool: 0, total: 0, prompt: 500 })
-    const m = await mount(h(TrendChart, propsOf([r1, r2, r3, r4])))
+  test('plots raw fold figures: the provider prompt never rescales the stack, so constant categories stay flat', async () => {
+    const composition = { system: 200, tools: 100, user: 60, inject: 40, assistant: 80, tool: 120, total: 600 }
+    const r1 = req(1, { turn: 1, step: 0, ...composition })
+    const r2 = req(2, { turn: 1, step: 1, ...composition, prompt: 1200 })
+    const r3 = req(3, { turn: 2, step: 0, system: 0, tools: 0, user: 0, inject: 0, assistant: 0, tool: 0, total: 0, prompt: 500 })
+    const m = await mount(h(TrendChart, propsOf([r1, r2, r3])))
 
-    // maxTotal follows the provider prompt (1200), not the heuristic sum.
-    assert.equal(query(m.container, '.lc-axis-top').textContent, '1.2k')
+    // maxTotal follows the heuristic totals (600), not the provider prompt (1200).
+    assert.equal(query(m.container, '.lc-axis-top').textContent, '600')
     const bs = bars(m.container)
-    assert.equal(bs.length, 4)
-    // r2 anchor = 1200/600 = 2: the system segment rides 200*2 against the 1200 max.
+    assert.equal(bs.length, 3)
+    // Identical compositions plot IDENTICAL segment heights regardless of the reported prompt — a constant
+    // system prompt must not ride the provider/heuristic ratio (that per-request rescale faked growth into
+    // categories the fold never changed).
+    const segs1 = queryAll(bs[0], '.lc-bar-stack > div')
     const segs2 = queryAll(bs[1], '.lc-bar-stack > div')
-    assert.equal(segs2[0].style.height, `${Math.round(200 * 2 / 1200 * CHART_H)}px`)
-    // r4 anchors to prompt (500) but every category is zero → the stack renders no segments.
-    assert.equal(queryAll(bs[3], '.lc-bar-stack > div').length, 0)
+    assert.equal(segs1.length, 6)
+    assert.deepEqual(segs2.map(s => s.style.height), segs1.map(s => s.style.height))
+    assert.equal(segs1[0].style.height, `${Math.round(200 / 600 * CHART_H)}px`)
+    // A usage-only record (prompt without messages) still renders no segments.
+    assert.equal(queryAll(bs[2], '.lc-bar-stack > div').length, 0)
 
     // The tip is placed over its bar's visible slice imperatively (transform, not `left`), so it never
     // contributes to the scroller's overflow — see the overlay test below.
     const { spies, handlers } = makeSpies()
-    await m.update(h(TrendChart, { ...propsOf([r1, r2, r3, r4]), ...handlers, hoveredSeq: 2 }))
+    await m.update(h(TrendChart, { ...propsOf([r1, r2, r3]), ...handlers, hoveredSeq: 2 }))
     const tip = query(m.container, '.lc-chart-tip')
-    // Rows: identity, then the ACTUAL anchor total the bar is drawn against (provider prompt 1200 → '1.2k').
+    // Rows: identity, then the SAME total the bar is drawn against (the heuristic 600, not the prompt 1200).
     assert.deepEqual(
       queryAll(tip, 'span').map(r => r.textContent),
-      [kit.t('tip.step', { t: 1, s: 1 }), kit.t('tip.total', { n: '1.2k' })],
+      [kit.t('tip.step', { t: 1, s: 1 }), kit.t('tip.total', { n: '600' })],
     )
     assert.equal(tip.style.transform, 'translate(23px, 0)') // idx 1 * 16 + BAR_W/2, scrollLeft 0
     assert.ok(spies.hover.length === 0, 'hover callback only fires from real mouseover')
@@ -491,12 +496,12 @@ describe('TrendChart category focus (the browser open category)', () => {
     await m.unmount()
   })
 
-  test('the provider anchor rides the focused figure; a category at zero everywhere keeps the unit axis', async () => {
-    // r1 anchors 600/300 = 2 → its focused tool value rides 120 (unanchored it would stay 60).
+  test('the focused figure is the raw fold value; a category at zero everywhere keeps the unit axis', async () => {
+    // r1a carries usage: the focused tool value (60) still plots as-is — no provider rescale.
     const r1a = req(1, { turn: 1, step: 0, prompt: 600 })
     const m = await mount(h(TrendChart, propsOf([r1a, r2], { focusCat: 'tool' })))
     assert.equal(query(m.container, '.lc-axis-top').textContent, '120')
-    assert.equal(queryAll(bars(m.container)[0], '.lc-bar-stack > div')[0].style.height, `${CHART_H}px`)
+    assert.equal(queryAll(bars(m.container)[0], '.lc-bar-stack > div')[0].style.height, `${Math.round(60 / 120 * CHART_H)}px`)
     await m.unmount()
 
     const zero = req(9, { turn: 1, step: 0, system: 0, tools: 0, user: 0, inject: 0, assistant: 0, tool: 0, total: 0 })
@@ -567,7 +572,7 @@ describe('TrendChart tooltips', () => {
   const r1 = req(1, { turn: 1, step: 0 })
   const r4 = req(4, { turn: undefined, step: undefined })
 
-  test('hover floats a two-row tip (identity + anchor total) and clears on leave', async () => {
+  test('hover floats a two-row tip (identity + bar total) and clears on leave', async () => {
     const { spies, handlers } = makeSpies()
     const reqs = [r1, r4]
     const m = await mount(h(TrendChart, propsOf(reqs, handlers)))
