@@ -91,19 +91,19 @@ export function makeTrendChart(kit: ViewKit): (props: TrendChartProps) => ReactE
   // Neutral zebra, deliberately DISJOINT from the category palette — the strip must read as a partition layer, not a bottom segment of the
   // composition bars.
   const TURN_FILLS = ['rgba(128,128,128,0.12)', 'rgba(128,128,128,0.26)']
-  // Turn labels render at natural width (a 2-digit "T12" is wider than a 14px turn bar) and overflow their block.
+  // Turn labels render at natural width (a 2-digit "12" is wider than a 14px turn bar) and overflow their block.
   // Every label must stay on the single line, so the strip shrinks ALL labels to one font size — the largest at
   // which the tightest adjacent pair still clears the gap (analytic widths below, no measurement) — and the
   // measured chain in updateTurnLabels stays only as the last-resort guard past the floor. OVERHANG bounds how
-  // far a label can reach beyond its block (a generous read of "T999" at 10px) for the viewport-participation
+  // far a label can reach beyond its block (a generous read of "9999" at 10px) for the viewport-participation
   // test; GAP is the breathing room between adjacent labels' boxes.
   const LABEL_OVERHANG = 48
   const LABEL_GAP = 2
-  // Label font sizing (the 10px base mirrors .lc-turn in trendChart.css): conservative upper-bound glyph widths
-  // at the base size ('T' 7px, a digit 6.5px at 10px semibold), floored at 6px.
+  // Label font sizing (the 10px base mirrors .lc-turn in trendChart.css): conservative upper-bound glyph width
+  // at the base size (6.5px per digit at 10px semibold), floored at 6px.
   const LABEL_FONT = 10
   const LABEL_FONT_MIN = 6
-  const estTurnLabel = (turn: number): number => 7 + 6.5 * String(turn).length
+  const estTurnLabel = (turn: number): number => 6.5 * String(turn).length
 
   // Anchor bar HEIGHT to the provider-reported prompt when the request carried usage: categories keep their heuristic ratios but the height
   // tracks the real billed tokens (matching the overview card and official chat ring), not the underpriced estimate.
@@ -532,7 +532,7 @@ export function makeTrendChart(kit: ViewKit): (props: TrendChartProps) => ReactE
                     title={`T${grp.turn}`}
                     onMouseEnter={() => { props.onHoverTurn(grp.turn) }}
                     onClick={() => { props.onPickTurn(grp.turn) }}
-                  ><span className="lc-turn-label">{`T${grp.turn}`}</span></span>
+                  ><span className="lc-turn-label">{`${grp.turn}`}</span></span>
                 )
               })}
             </div>

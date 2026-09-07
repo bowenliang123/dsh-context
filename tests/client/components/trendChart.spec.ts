@@ -188,7 +188,7 @@ describe('TrendChart step granularity, total mode', () => {
     assert.equal(query(m.container, '.lc-axis-q1').textContent, '150')
     assert.equal(query(m.container, '.lc-axis-bot').textContent, '0')
 
-    // Turn strip: T1 spans two step columns (2*16-2 = 30px), the turnless request lands in group T0 (14px);
+    // Turn strip: turn 1 spans two step columns (2*16-2 = 30px), the turnless request lands in group 0 (14px);
     // zebra fills alternate and stay disjoint from the category palette.
     const turns = queryAll(m.container, '.lc-turn')
     assert.equal(turns.length, 2)
@@ -196,7 +196,7 @@ describe('TrendChart step granularity, total mode', () => {
     assert.equal(turns[1].style.width, '14px')
     assert.ok(turns[0].style.background.includes('0.12'))
     assert.ok(turns[1].style.background.includes('0.26'))
-    assert.deepEqual(turns.map(t => t.textContent), ['T1', 'T0'])
+    assert.deepEqual(turns.map(t => t.textContent), ['1', '0'])
     await m.unmount()
   })
 
@@ -355,7 +355,7 @@ describe('TrendChart turn granularity', () => {
     assert.equal(turns.length, 2)
     // Aggregated groups always occupy exactly one column.
     assert.deepEqual(turns.map(t => t.style.width), ['14px', '14px'])
-    assert.deepEqual(turns.map(t => t.textContent), ['T1', 'T2'])
+    assert.deepEqual(turns.map(t => t.textContent), ['1', '2'])
 
     // Multi-step aggregate → tip.turn; a single-step aggregate still speaks TURN ("共 1 步"), never the step index.
     await m.update(h(TrendChart, propsOf(agg, { granularity: 'turn', hoveredSeq: t1s1.seq })))
@@ -683,10 +683,10 @@ describe('TrendChart scroll anchoring', () => {
     const m = await mount(h(TrendChart, propsOf(agg, { granularity: 'turn' })))
     const scroll = query<LayoutEl>(m.container, '.lc-chart-scroll')
     const labels = queryAll(m.container, '.lc-turn-label')
-    assert.deepEqual(labels.map(l => l.textContent), ['T10', 'T11', 'T12'])
+    assert.deepEqual(labels.map(l => l.textContent), ['10', '11', '12'])
 
-    // 20px labels over 14px blocks (dx pinned at 0, natively centered): boxes [-3,17], [13,33], [29,49] — T11
-    // collides with the kept T10 and hides; T12 clears it (past box + gap) and stays visible.
+    // 20px labels over 14px blocks (dx pinned at 0, natively centered): boxes [-3,17], [13,33], [29,49] — 11
+    // collides with the kept 10 and hides; 12 clears it (past box + gap) and stays visible.
     for (const l of labels) Object.defineProperty(l, 'offsetWidth', { configurable: true, get: () => 20 })
     await scrollEvent(scroll)
     assert.equal(labels[0].style.visibility, '')
@@ -703,33 +703,33 @@ describe('TrendChart scroll anchoring', () => {
   })
 
   test('the strip shrinks every label to the largest size at which the tightest adjacent pair fits', async () => {
-    // Single-digit turns at the 16px column pitch fit the 10px base (est. 13.5px + 2px gap vs 16px) → no override.
+    // One/two-digit turns at the 16px column pitch fit the 10px base (est. 6.5px/digit + 2px gap vs 16px) → no override.
     const single = await mount(h(TrendChart, propsOf(
-      aggregateByTurn([req(1, { turn: 1 }), req(2, { turn: 2 }), req(3, { turn: 3 })]),
+      aggregateByTurn([req(1, { turn: 1 }), req(2, { turn: 2 }), req(3, { turn: 10 })]),
       { granularity: 'turn' },
     )))
     assert.equal(query<HTMLElement>(single.container, '.lc-turns').style.fontSize, '')
     await single.unmount()
 
-    // Two-digit labels over 14px blocks: est. need 22px vs 16px pitch → floor(10 * 16/22) = 7px for EVERY label.
-    const two = await mount(h(TrendChart, propsOf(
-      aggregateByTurn([req(1, { turn: 10 }), req(2, { turn: 11 }), req(3, { turn: 12 })]),
-      { granularity: 'turn' },
-    )))
-    assert.equal(query<HTMLElement>(two.container, '.lc-turns').style.fontSize, '7px')
-    await two.unmount()
-
-    // Three-digit pairs clamp at the 6px floor (the measured chain stays the last-resort guard below it).
+    // Three-digit labels over 14px blocks: est. need 21.5px vs 16px pitch → floor(10 * 16/21.5) = 7px for EVERY label.
     const three = await mount(h(TrendChart, propsOf(
       aggregateByTurn([req(1, { turn: 100 }), req(2, { turn: 101 })]),
       { granularity: 'turn' },
     )))
-    assert.equal(query<HTMLElement>(three.container, '.lc-turns').style.fontSize, '6px')
+    assert.equal(query<HTMLElement>(three.container, '.lc-turns').style.fontSize, '7px')
     await three.unmount()
 
-    // Wide step-mode blocks buy room: ten-step turns carry two-digit labels at the base size.
+    // Four-digit pairs clamp at the 6px floor (the measured chain stays the last-resort guard below it).
+    const four = await mount(h(TrendChart, propsOf(
+      aggregateByTurn([req(1, { turn: 1000 }), req(2, { turn: 1001 })]),
+      { granularity: 'turn' },
+    )))
+    assert.equal(query<HTMLElement>(four.container, '.lc-turns').style.fontSize, '6px')
+    await four.unmount()
+
+    // Wide step-mode blocks buy room: ten-step turns carry three-digit labels at the base size.
     const wide: RequestRecord[] = []
-    for (let i = 0; i < 20; i++) wide.push(req(i + 1, { turn: 10 + Math.floor(i / 10), step: i % 10 }))
+    for (let i = 0; i < 20; i++) wide.push(req(i + 1, { turn: 100 + Math.floor(i / 10), step: i % 10 }))
     const step = await mount(h(TrendChart, propsOf(wide)))
     assert.equal(query<HTMLElement>(step.container, '.lc-turns').style.fontSize, '')
     await step.unmount()
