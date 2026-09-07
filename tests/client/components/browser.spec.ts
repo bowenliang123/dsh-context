@@ -3,7 +3,7 @@
 // narrowing matrix), conversation join (block cascade, tail-status matrix),
 // targeted content fetch, hover linkage, and the focus bridges.
 
-import { act, createElement as h } from 'react'
+import { act, createElement as h, useState } from 'react'
 import assert from 'node:assert/strict'
 import { describe, test } from 'vitest'
 import { makeContextBrowser, type ContextBrowserProps } from '../../../src/client/components/browser'
@@ -1547,7 +1547,7 @@ describe('ContextBrowser open-category reporting', () => {
   })
 })
 
-describe('ContextBrowser DNA mode', () => {
+describe('ContextBrowser DNA mode and the open-category bar pin', () => {
   const dnaHeaders: ContextHeaders = {
     headers: [{
       seq: 1, time: 1000, systemTokens: 100,
@@ -1556,7 +1556,7 @@ describe('ContextBrowser DNA mode', () => {
   }
   const dnaData = tl({
     current: { system: 100, tools: 75, user: 20, inject: 10, assistant: 40, tool: 30, total: 275 },
-    requests: [req({ seq: 20, turn: 1, step: 0, total: 275 })],
+    requests: [req({ seq: 20, turn: 1, step: 0, system: 100, tools: 75, user: 20, inject: 0, assistant: 40, tool: 30, total: 265 })],
     nodes: [
       node({ seq: 2, tokens: 20, time: 2000, text: 'hi' }),
       node({ seq: 3, cat: 'tool', tokens: 30, time: 3000, tool: 'bash' }),
@@ -1704,6 +1704,67 @@ describe('ContextBrowser DNA mode', () => {
     // Category mode keeps exact widths (no floor outside DNA mode).
     await click(dnaButton(m))
     assert.deepEqual(bands(m).map(seg => seg.style.width), ['0.2%', '99.8%'])
+    await m.unmount()
+  })
+
+  test('category mode: the open category stays lit; a pointer hover overrides the pin and the pin resumes on leave', async () => {
+    // A parent really holding the shared hover key, so hovers round-trip like the overview link.
+    const Harness = (p2: Omit<ContextBrowserProps, 'hoverKey' | 'onHoverKey'>) => {
+      const [hoverKey, setHoverKey] = useState<string | null>(null)
+      return h(Browser, props({ ...p2, hoverKey, onHoverKey: setHoverKey }))
+    }
+    const m = await mount(h(Harness, { data: dnaData, headers: dnaHeaders }))
+    const stack = query(m.container, '.lc-stacked')
+    assert.ok(!stack.className.includes('lc-stacked-dim'), 'nothing pinned while no category is open')
+    // Opening a category pins its segment lit (category order: system, tools, user, inject, assistant, tool).
+    await click(catRow(m, 'assistant'))
+    assert.deepEqual(bands(m).map(seg => seg.className.includes('lc-stacked-seg-on')), [false, false, false, false, true, false])
+    assert.ok(stack.className.includes('lc-stacked-dim'))
+    assert.equal(queryAll(m.container, '.lc-bar-tip').length, 0, 'category mode mounts no tooltip slot — the pin floats nothing')
+    // A pointer hover overrides the pin; leaving resumes it.
+    await hover(bands(m)[0])
+    assert.deepEqual(bands(m).map(seg => seg.className.includes('lc-stacked-seg-on')), [true, false, false, false, false, false])
+    await unhover(stack)
+    assert.deepEqual(bands(m).map(seg => seg.className.includes('lc-stacked-seg-on')), [false, false, false, false, true, false])
+    // Closing the category clears the pin.
+    await click(catRow(m, 'assistant'))
+    assert.ok(!stack.className.includes('lc-stacked-dim'))
+    assert.ok(bands(m).every(seg => !seg.className.includes('lc-stacked-seg-on')))
+    await m.unmount()
+  })
+
+  test('DNA mode: the open category lights all its bands as a group (no tooltip); a band hover overrides, the pin resumes', async () => {
+    // No shared-hover wiring (the /context modal path): the pin works standalone.
+    const m = await mount(h(Browser, props({ data: dnaData, headers: dnaHeaders })))
+    await click(dnaButton(m))
+    await click(catRow(m, 'tools'))
+    const stack = query(m.container, '.lc-stacked')
+    // Band order: sys, bash, write, n2, n3, n4, n5 — the tools group is bands 1-2.
+    assert.deepEqual(bands(m).map(seg => seg.className.includes('lc-stacked-seg-on')), [false, true, true, false, false, false, false])
+    assert.ok(stack.className.includes('lc-stacked-dim'))
+    assert.ok(!query(m.container, '.lc-bar-tip').className.includes('lc-bar-tip-on'), 'the group pin exact-matches no band — no tooltip')
+    await hover(bands(m)[4])
+    assert.ok(query(m.container, '.lc-bar-tip').className.includes('lc-bar-tip-on'))
+    assert.deepEqual(bands(m).map(seg => seg.className.includes('lc-stacked-seg-on')), [false, false, false, false, true, false, false])
+    await unhover(stack)
+    assert.deepEqual(bands(m).map(seg => seg.className.includes('lc-stacked-seg-on')), [false, true, true, false, false, false, false])
+    await click(catRow(m, 'tools'))
+    assert.ok(bands(m).every(seg => !seg.className.includes('lc-stacked-seg-on')))
+    assert.ok(!stack.className.includes('lc-stacked-dim'))
+    await m.unmount()
+  })
+
+  test('the pin drops while the previewed step holds nothing for the open category', async () => {
+    const wired = (previewSeq: number | null) => h(Browser, props({ data: dnaData, headers: dnaHeaders, previewSeq, onHoverKey: () => {} }))
+    const m = await mount(wired(null))
+    await click(catRow(m, 'inject'))
+    assert.ok(bands(m)[3].className.includes('lc-stacked-seg-on'), 'inject pins lit on the live surface')
+    // The retained step carries no injections: the pin drops instead of dimming a bar with nothing lit.
+    await m.update(wired(20))
+    assert.ok(bands(m).every(seg => !seg.className.includes('lc-stacked-seg-on')))
+    assert.ok(!query(m.container, '.lc-stacked').className.includes('lc-stacked-dim'))
+    await m.update(wired(null))
+    assert.ok(bands(m)[3].className.includes('lc-stacked-seg-on'), 'back on the live surface the pin returns')
     await m.unmount()
   })
 })

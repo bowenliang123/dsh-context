@@ -702,6 +702,10 @@ export function makeContextBrowser(
     const breakdown = req !== null ? req : data.current
     const parts = partsOf(breakdown)
     const total = breakdown.total
+    // The open category stays lit in the composition bar (category mode: its segment; DNA mode: its bands' group) even
+    // without pointer hover — a pointer hover overrides the pin, the pin resumes on leave. Dropped when the shown
+    // step's composition holds nothing for the category, so the bar never reads all-dimmed with nothing lit.
+    const pinKey = openCat !== null && (breakdown[openCat as Category | 'system' | 'tools'] || 0) > 0 ? openCat : null
     const pick = (v: string) => {
       setSel(v === 'live' ? 'live' : Number(v))
       setCat(null)
@@ -1046,11 +1050,12 @@ export function makeContextBrowser(
           <StackedBar
             parts={dnaParts ?? parts}
             height={10}
-            // Mirrored hover link (see `linked` above): while the browser shows the live surface, its bar highlights the shared category
-            // key — in DNA mode an incoming category key lights that category's BANDS (the parts' `group`) — and reports hovers back to
-            // the overview; in DNA mode hovers stay local (per-item tooltip) instead. Tip stays off in category mode: a cross-card hover
-            // must not float a second tooltip over a bar the pointer does not rest on.
-            hoverKey={dna ? dnaKey ?? linkKey : linked ? linkKey : undefined}
+            // Highlight precedence: pointer hover (local in DNA mode, the shared link otherwise) over the open-category pin.
+            // The mirrored hover link (see `linked` above) works while the browser shows the live surface — in DNA mode an incoming
+            // category key lights that category's BANDS (the parts' `group`) — and reports hovers back to the overview. Tip stays off
+            // in category mode: a cross-card hover must not float a second tooltip over a bar the pointer does not rest on — and the
+            // group-keyed pin never exact-matches a DNA band, so the pinned highlight floats no tooltip either.
+            hoverKey={dna ? dnaKey ?? linkKey ?? pinKey : linkKey ?? pinKey}
             onHoverKey={dna ? setDnaKey : linked ? props.onHoverKey : undefined}
             tip={dna}
             onPickKey={dna ? pickDna : undefined}
