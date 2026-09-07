@@ -1754,6 +1754,32 @@ describe('ContextBrowser DNA mode and the open-category bar pin', () => {
     await m.unmount()
   })
 
+  test('a push dropping the hovered band does not dim the bar with nothing lit; the pin resumes underneath', async () => {
+    const m = await mount(h(Browser, props({ data: dnaData, headers: dnaHeaders })))
+    await click(dnaButton(m))
+    await hover(bands(m)[3])
+    assert.ok(bands(m)[3].className.includes('lc-stacked-seg-on'))
+    assert.ok(query(m.container, '.lc-stacked').className.includes('lc-stacked-dim'))
+    // The hovered node is compacted out of the live surface while the pointer rests on its band — a removed element
+    // fires no mouseleave, so the stale key must be dropped instead of dimming the whole bar with nothing lit.
+    const pushed = tl({
+      current: { ...dnaData.current, user: 0, total: 255 },
+      requests: dnaData.requests,
+      nodes: dnaData.nodes.filter(n => n.seq !== 2),
+    })
+    await m.update(h(Browser, props({ data: pushed, headers: dnaHeaders })))
+    assert.ok(!query(m.container, '.lc-stacked').className.includes('lc-stacked-dim'))
+    assert.ok(bands(m).every(seg => !seg.className.includes('lc-stacked-seg-on')))
+    assert.ok(!query(m.container, '.lc-bar-tip').className.includes('lc-bar-tip-on'), 'the dead key floats no tooltip either')
+    // Band order is now sys, bash, write, n3, n4, n5: the open-category pin still lights its group under the stale hover.
+    await click(catRow(m, 'assistant'))
+    assert.deepEqual(bands(m).map(seg => seg.className.includes('lc-stacked-seg-on')), [false, false, false, false, true, false])
+    // And a fresh hover on a rendered band still wins over the pin.
+    await hover(bands(m)[3])
+    assert.deepEqual(bands(m).map(seg => seg.className.includes('lc-stacked-seg-on')), [false, false, false, true, false, false])
+    await m.unmount()
+  })
+
   test('the pin drops while the previewed step holds nothing for the open category', async () => {
     const wired = (previewSeq: number | null) => h(Browser, props({ data: dnaData, headers: dnaHeaders, previewSeq, onHoverKey: () => {} }))
     const m = await mount(wired(null))

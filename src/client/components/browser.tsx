@@ -746,6 +746,10 @@ export function makeContextBrowser(
       label: dnaLabel(it),
       group: it.cat,
     })) ?? null
+    // A band hover is honored only while its key names a RENDERED band: a push can drop the band under a resting
+    // pointer (compaction, tail slide) without a mouseleave, and a dead key exact-matches nothing — the bar would
+    // sit all-dimmed with nothing lit (the same invariant the pin's `breakdown` gate keeps).
+    const liveDnaKey = dnaKey !== null && dnaByKey.has(dnaKey) ? dnaKey : null
     // A band click opens its category + element row below (the same reveal the step brief uses) and scrolls it into view.
     const pickDna = (key: string): void => {
       const it = dnaByKey.get(key)
@@ -1051,11 +1055,12 @@ export function makeContextBrowser(
             parts={dnaParts ?? parts}
             height={10}
             // Highlight precedence: pointer hover (local in DNA mode, the shared link otherwise) over the open-category pin.
-            // The mirrored hover link (see `linked` above) works while the browser shows the live surface — in DNA mode an incoming
-            // category key lights that category's BANDS (the parts' `group`) — and reports hovers back to the overview. Tip stays off
-            // in category mode: a cross-card hover must not float a second tooltip over a bar the pointer does not rest on — and the
-            // group-keyed pin never exact-matches a DNA band, so the pinned highlight floats no tooltip either.
-            hoverKey={dna ? dnaKey ?? linkKey ?? pinKey : linkKey ?? pinKey}
+            // The mirrored link (see `linked` above) works while the browser shows the live surface; it is ONE-WAY in DNA
+            // mode — an incoming category key lights that category's BANDS (the parts' `group`), while band hovers stay
+            // on the bar and never report upward (the overview keeps showing the live category composition). Tip stays
+            // off in category mode: a cross-card hover must not float a second tooltip over a bar the pointer does not
+            // rest on — and the group-keyed pin never exact-matches a DNA band, so the pinned highlight floats no tip.
+            hoverKey={dna ? liveDnaKey ?? linkKey ?? pinKey : linkKey ?? pinKey}
             onHoverKey={dna ? setDnaKey : linked ? props.onHoverKey : undefined}
             tip={dna}
             onPickKey={dna ? pickDna : undefined}
