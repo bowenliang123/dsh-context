@@ -20,6 +20,15 @@ export interface StackedBarProps {
   height?: number
   hoverKey?: string | null
   onHoverKey?: (key: string | null) => void
+  /** Segment click (the browser's DNA mode opens the band's accordion row): segments gain the pick cursor and report their key. */
+  onPickKey?: (key: string) => void
+  /**
+   * Minimum width each segment keeps, as a share of the OCCUPIED region (the browser's DNA bands: a tiny item must
+   * stay a hoverable filament instead of rendering sub-pixel). Bands below the floor pin to it and the rest rescale
+   * proportionally; the floor caps at the equal split (100/N), where the strip degrades to uniform bands. Tooltips
+   * keep reporting TRUE shares — only widths are floored.
+   */
+  minBand?: number
   /**
    * Render the hover tooltip (default true); a bar that only MIRRORS another card's hover turns it off, so the tooltip floats only over the
    * surface the pointer actually rests on.
@@ -46,6 +55,28 @@ export function makeStackedBar(kit: ViewKit): (props: StackedBarProps) => ReactE
     const usedPct = scale > 0 ? total / scale * 100 : 0
     const hovering = props.hoverKey !== null && props.hoverKey !== undefined
     const showBox = free > 0 && hovering
+    const pickKey = props.onPickKey
+    const minBand = props.minBand !== undefined && props.minBand > 0 ? props.minBand : 0
+
+    // The renderable segments (zero-value parts skip) with their BAR-unit widths, floored at `minBand` in occupied
+    // units: pinned bands take the floor, the rest rescale into the remaining room so the strip still sums to the
+    // occupied region exactly. At least one band always stays unpinned (the shares sum to 100, the floor ≤ 100/N),
+    // so restRaw never divides by zero.
+    const visible = total > 0 ? props.parts.filter(p => p.value > 0) : []
+    const widths = ((): number[] => {
+      if (minBand === 0 || visible.length < 2) return visible.map(p => p.value / scale * 100)
+      const shares = visible.map(p => p.value / total * 100)
+      const floor = Math.min(minBand, 100 / visible.length)
+      let pinned = 0
+      let pinnedRaw = 0
+      for (const s of shares) {
+        if (s < floor) { pinned += 1; pinnedRaw += s }
+      }
+      if (pinned === 0) return visible.map(p => p.value / scale * 100)
+      const restRoom = 100 - pinned * floor
+      const restRaw = 100 - pinnedRaw
+      return shares.map(s => (s < floor ? floor : s * restRoom / restRaw) * total / scale)
+    })()
 
     // The band lays out in WINDOW units (`ratio × max` → `max`) scaled onto whatever total the bar spans, so it stays the same physical
     // slice with or without a free track (once used exceeds the window, the stripes sit over the outermost segments).
@@ -74,21 +105,21 @@ export function makeStackedBar(kit: ViewKit): (props: StackedBarProps) => ReactE
       } else {
         let acc = 0
         // Counts come from the part's heuristic `raw` figure (the ring
-        // panel's rows); widths ride the anchored `value` (the ring's fill).
+        // panel's rows); widths ride the floored `widths` so the tooltip centers on the RENDERED segment.
         let rawTotal = 0
         for (const p of props.parts) rawTotal += p.raw ?? p.value
-        for (const p of props.parts) {
-          const pct = scale > 0 ? p.value / scale * 100 : 0
-          if (p.key === props.hoverKey && p.value > 0) {
+        for (let i = 0; i < visible.length; i++) {
+          const p = visible[i]
+          if (p.key === props.hoverKey) {
             const count = p.raw ?? p.value
             tip = {
-              text: `${catLabel(p.key)} ≈${fmt(count)} (${rawTotal > 0 ? Math.round(count / rawTotal * 100) : 0}%) `
+              text: `${p.label ?? catLabel(p.key)} ≈${fmt(count)} (${rawTotal > 0 ? Math.round(count / rawTotal * 100) : 0}%) `
                 + t('overview.ofUsed'),
-              leftPct: Math.max(12, Math.min(acc + pct / 2, 88)),
+              leftPct: Math.max(12, Math.min(acc + widths[i] / 2, 88)),
             }
             break
           }
-          acc += pct
+          acc += widths[i]
         }
       }
     }
@@ -103,20 +134,20 @@ export function makeStackedBar(kit: ViewKit): (props: StackedBarProps) => ReactE
             setReserveOn(false)
           }}
         >
-          {total > 0
-            ? props.parts.map((p) => {
-              if (!p.value) return null
-              const on = props.hoverKey !== undefined && props.hoverKey === p.key
-              return (
-                <div
-                  key={p.key}
-                  className={'lc-stacked-seg' + (on ? ' lc-stacked-seg-on' : '')}
-                  style={{ width: `${p.value / scale * 100}%`, background: p.color }}
-                  onMouseEnter={() => { if (props.onHoverKey !== undefined) props.onHoverKey(p.key) }}
-                />
-              )
-            })
-            : null}
+          {visible.map((p, i) => {
+            // Exact-key hover lights the one segment; a part's `group` answers a mirrored CATEGORY hover (DNA bands light per category).
+            const on = props.hoverKey !== undefined
+              && (props.hoverKey === p.key || (p.group !== undefined && props.hoverKey === p.group))
+            return (
+              <div
+                key={p.key}
+                className={'lc-stacked-seg' + (on ? ' lc-stacked-seg-on' : '') + (pickKey !== undefined ? ' lc-stacked-seg-pick' : '')}
+                style={{ width: `${widths[i]}%`, background: p.color }}
+                onMouseEnter={() => { if (props.onHoverKey !== undefined) props.onHoverKey(p.key) }}
+                onClick={pickKey !== undefined ? () => { pickKey(p.key) } : undefined}
+              />
+            )
+          })}
           {free > 0 ? (
             <div
               key="free"

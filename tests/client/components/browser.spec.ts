@@ -1546,3 +1546,164 @@ describe('ContextBrowser open-category reporting', () => {
     await m.unmount()
   })
 })
+
+describe('ContextBrowser DNA mode', () => {
+  const dnaHeaders: ContextHeaders = {
+    headers: [{
+      seq: 1, time: 1000, systemTokens: 100,
+      tools: [{ name: 'bash', tokens: 50 }, { name: 'write', tokens: 25 }],
+    }],
+  }
+  const dnaData = tl({
+    current: { system: 100, tools: 75, user: 20, inject: 10, assistant: 40, tool: 30, total: 275 },
+    requests: [req({ seq: 20, turn: 1, step: 0, total: 275 })],
+    nodes: [
+      node({ seq: 2, tokens: 20, time: 2000, text: 'hi' }),
+      node({ seq: 3, cat: 'tool', tokens: 30, time: 3000, tool: 'bash' }),
+      node({ seq: 4, cat: 'assistant', tokens: 40 }),
+      node({ seq: 5, cat: 'inject', tokens: 10, form: 'notice' }),
+    ],
+  })
+
+  function dnaButton(m: Mounted): HTMLElement {
+    return query(m.container, '.lc-br-dna-ctl .lc-gran-btn')
+  }
+
+  function bands(m: Mounted): HTMLElement[] {
+    return queryAll(m.container, '.lc-stacked-seg')
+  }
+
+  test('the toggle redraws the composition bar as one band per item, in prompt order', async () => {
+    const m = await mount(h(Browser, props({ data: dnaData, headers: dnaHeaders })))
+    // Category mode: one segment per category in CATS order, pick cursor off, tooltip slot unmounted.
+    assert.equal(bands(m).length, 6)
+    const normal = bands(m).map(seg => seg.style.width)
+    assert.deepEqual(normal, [100, 75, 20, 10, 40, 30].map(v => `${v / 275 * 100}%`))
+    assert.ok(!bands(m)[0].className.includes('lc-stacked-seg-pick'))
+    assert.ok(!query(m.container, '.lc-br-bar').className.includes('lc-br-bar-dna'))
+    assert.equal(queryAll(m.container, '.lc-bar-tip').length, 0)
+
+    const btn = dnaButton(m)
+    assert.equal(text(btn), 'DNA Mode')
+    assert.equal(query(m.container, '.lc-br-dna-ctl').getAttribute('title'), kit.t('browser.dnaTip'))
+    await click(btn)
+    // Prompt order: the system prompt, the two tool schemas in producer order, then the message flow by seq —
+    // NOT the fold's category order and NOT the header event's bookkeeping seq (see dna.ts).
+    const segs = bands(m)
+    assert.equal(segs.length, 7)
+    assert.deepEqual(segs.map(seg => seg.style.width), [100, 50, 25, 20, 30, 40, 10].map(v => `${v / 275 * 100}%`))
+    assert.ok(segs.every(seg => seg.className.includes('lc-stacked-seg-pick')))
+    assert.ok(query(m.container, '.lc-br-bar').className.includes('lc-br-bar-dna'))
+    assert.equal(queryAll(m.container, '.lc-bar-tip').length, 1, 'the per-item tooltip slot mounts')
+    assert.ok(btn.className.includes('lc-gran-on'))
+
+    await click(btn)
+    assert.equal(bands(m).length, 6, 'toggling off restores the category composition')
+    assert.ok(!btn.className.includes('lc-gran-on'))
+    await m.unmount()
+  })
+
+  test('band hover floats the per-item tooltip locally; a mirrored category key lights that category\'s bands', async () => {
+    const hovers: (string | null)[] = []
+    const wired = (hoverKey: string | null) => h(Browser, props({ data: dnaData, headers: dnaHeaders, hoverKey, onHoverKey: (k) => { hovers.push(k) } }))
+    const m = await mount(wired(null))
+    await click(dnaButton(m))
+
+    // A band hover is LOCAL: the tooltip names the item (category label + join time); nothing reports upward.
+    await hover(bands(m)[3])
+    const tip = query(m.container, '.lc-bar-tip')
+    assert.ok(tip.className.includes('lc-bar-tip-on'))
+    assert.equal(text(tip), `User Messages · ${kit.fmtTime(2000)} ≈20 (7%) of used context`)
+    assert.deepEqual(hovers, [], 'DNA hovers stay on the bar — the overview keeps showing the live category composition')
+    assert.ok(bands(m)[3].className.includes('lc-stacked-seg-on'))
+    assert.ok(query(m.container, '.lc-stacked').className.includes('lc-stacked-dim'))
+    // A node without a logged time shows the bare label.
+    await hover(bands(m)[5])
+    assert.equal(text(tip), 'Assistant Messages ≈40 (15%) of used context')
+    await unhover(query(m.container, '.lc-stacked'))
+    assert.ok(!tip.className.includes('lc-bar-tip-on'))
+
+    // The incoming category mirror still works: the open category's bands light as a group (no tooltip for a mirrored hover).
+    await m.update(wired('tool'))
+    assert.deepEqual(bands(m).map(seg => seg.className.includes('lc-stacked-seg-on')), [false, false, false, false, true, false, false])
+    assert.ok(!query(m.container, '.lc-bar-tip').className.includes('lc-bar-tip-on'))
+    await m.update(wired('free'))
+    assert.ok(bands(m).every(seg => !seg.className.includes('lc-stacked-seg-on')), "the overview's free key lights nothing here")
+    await m.unmount()
+  })
+
+  test('band labels: skill tag, nameless tool result, formless injection; a header-less surface shows message bands only', async () => {
+    const data = tl({
+      current: { system: 0, tools: 0, user: 0, inject: 40, assistant: 0, tool: 20, total: 60 },
+      nodes: [
+        node({ seq: 1, cat: 'inject', tokens: 10, skill: 'code' }),
+        node({ seq: 2, cat: 'tool', tokens: 20 }),
+        node({ seq: 3, cat: 'inject', tokens: 30 }),
+      ],
+    })
+    const m = await mount(h(Browser, props({ data, headers: null })))
+    await click(dnaButton(m))
+    assert.equal(bands(m).length, 3)
+    const tip = query(m.container, '.lc-bar-tip')
+    await hover(bands(m)[0])
+    assert.equal(text(tip), 'Skill · code ≈10 (17%) of used context')
+    await hover(bands(m)[1])
+    assert.equal(text(tip), '? ≈20 (33%) of used context')
+    await hover(bands(m)[2])
+    assert.equal(text(tip), 'Context Injection ≈30 (50%) of used context')
+    await m.unmount()
+  })
+
+  test('clicking a band opens its category + element row below and scrolls it into view; a stale row filter is cleared', async () => {
+    const scrolls: unknown[] = []
+    const orig = Element.prototype.scrollIntoView
+    Element.prototype.scrollIntoView = function (this: Element, arg?: unknown) { scrolls.push(arg) } as never
+    try {
+      const m = await mount(h(Browser, props({ data: dnaData, headers: dnaHeaders })))
+      await click(dnaButton(m))
+      // Band n3 (index 4) opens the tool-results category on that exact row.
+      await click(bands(m)[4])
+      assert.equal(queryAll(m.container, '.lc-br-body').length, 1)
+      const onRows = queryAll(m.container, '.lc-br-elem-on')
+      assert.equal(onRows.length, 1)
+      assert.ok(text(onRows[0]).includes('bash'))
+      assert.deepEqual(scrolls, [{ block: 'nearest' }])
+
+      // A stale row filter cannot hide the clicked band's row.
+      await click(catRow(m, 'user'))
+      await typeToolSearch(m, 'zzz')
+      assert.ok(text(query(m.container, '.lc-br-body')).includes('No rows match'))
+      await click(bands(m)[3])
+      assert.equal(query<HTMLInputElement>(m.container, '.lc-br-tool-search').value, '')
+      assert.equal(queryAll(m.container, '.lc-br-elem-on').length, 1)
+      assert.ok(text(query(m.container, '.lc-br-body')).includes('hi'))
+
+      // The system band opens the system section (metadata-only note without a header fetcher).
+      await click(bands(m)[0])
+      assert.ok(text(query(m.container, '.lc-br-body')).includes('token estimates only'))
+      await m.unmount()
+    } finally {
+      Element.prototype.scrollIntoView = orig
+    }
+  })
+
+  test('a tiny item stays a hoverable filament (the minBand floor) while the tooltip reports the true share', async () => {
+    const data = tl({
+      current: { system: 0, tools: 0, user: 2, inject: 0, assistant: 998, tool: 0, total: 1000 },
+      nodes: [node({ seq: 1, tokens: 2, text: 'ok' }), node({ seq: 2, cat: 'assistant', tokens: 998 })],
+    })
+    const m = await mount(h(Browser, props({ data, headers: null })))
+    await click(dnaButton(m))
+    const segs = bands(m)
+    assert.equal(segs.length, 2)
+    // 2/1000 ≈ 0.2% would render sub-pixel: the band pins to the 0.35% floor, the big band rescales.
+    assert.equal(segs[0].style.width, '0.35%')
+    assert.ok(Math.abs(parseFloat(segs[1].style.width) - 99.65) < 0.001)
+    await hover(segs[0])
+    assert.equal(text(query(m.container, '.lc-bar-tip')), 'User Messages ≈2 (0%) of used context')
+    // Category mode keeps exact widths (no floor outside DNA mode).
+    await click(dnaButton(m))
+    assert.deepEqual(bands(m).map(seg => seg.style.width), ['0.2%', '99.8%'])
+    await m.unmount()
+  })
+})

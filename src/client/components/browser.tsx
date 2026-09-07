@@ -2,7 +2,9 @@ import { useEffect, useLayoutEffect, useMemo, useRef, useState, type ChangeEvent
 import { UNKNOWN_TOOL_SOURCE, type Category, type ContextHeaders, type ContextTimeline, type HeaderTool, type RequestRecord, type SurfaceNode } from '../../shared/types'
 import { assemble } from '../assemble'
 import type { Assembled } from '../assemble'
-import { CATS, partsOf } from '../categories'
+import { CATS, CAT_COLOR, partsOf } from '../categories'
+import { dnaOf } from '../dna'
+import type { DnaItem } from '../dna'
 import type { ContentFetcher, ConversationNodeLike, HeaderFetcher } from '../services'
 import type { ViewKit } from '../viewkit'
 import { blockSummaryOf, callSummaryOf, parseCallArgs } from '../callSummary'
@@ -564,6 +566,12 @@ function lastOfTurn(requests: RequestRecord[], turn: number): RequestRecord | nu
   return null
 }
 
+/**
+ * DNA bands keep at least this share of the occupied region, so a tiny item (a 25-token user message in a 40k
+ * context) stays a hoverable/clickable filament instead of a sub-pixel sliver. Tooltips still report true shares.
+ */
+const DNA_MIN_BAND = 0.35
+
 export function makeContextBrowser(
   kit: ViewKit,
   StackedBar: (props: StackedBarProps) => ReactElement,
@@ -589,6 +597,9 @@ export function makeContextBrowser(
     // compares epochs.
     const [rowQuery, setRowQuery] = useState('')
     const [toolSort, setToolSort] = useState<'size' | 'name'>('size')
+    // DNA mode: the composition bar redraws as ONE band per context item in prompt order (dna.ts), hovered/clicked per item.
+    const [dna, setDna] = useState(false)
+    const [dnaKey, setDnaKey] = useState<string | null>(null)
     // Every open-category change (toggle, step pick, pin, brief reveal) reports outward so the Context tab
     // can focus the trend chart on the open category.
     const onOpenCat = props.onOpenCat
@@ -706,6 +717,41 @@ export function makeContextBrowser(
     const prevByCat = prevView !== null ? byCatOf(prevView) : null
 
     const byCat = byCatOf(view)
+
+    // DNA mode: per-item bands in prompt order (dna.ts). The band label names the item the way its accordion row would
+    // (skill name, tool name, injection form, else the category label), with the item's time appended.
+    const dnaLabel = (it: DnaItem): string => {
+      let base: string
+      if (!('node' in it)) {
+        base = it.cat === 'system' ? catLabel('system') : it.key.slice('tool:'.length)
+      } else {
+        const n = it.node
+        base = n.skill !== undefined ? t('node.skillTag', { name: n.skill })
+          : n.cat === 'tool' ? (n.tool ?? '?')
+            : n.cat === 'inject' ? t('form.' + (n.form || 'context'))
+              : catLabel(n.cat)
+      }
+      return it.time !== undefined ? base + ' · ' + fmtTime(it.time) : base
+    }
+    const dnaItems = dna ? dnaOf(view) : null
+    const dnaByKey = new Map(dnaItems?.map(it => [it.key, it] as const) ?? [])
+    const dnaParts = dnaItems?.map(it => ({
+      key: it.key,
+      color: CAT_COLOR[it.cat],
+      value: it.tokens,
+      label: dnaLabel(it),
+      group: it.cat,
+    })) ?? null
+    // A band click opens its category + element row below (the same reveal the step brief uses) and scrolls it into view.
+    const pickDna = (key: string): void => {
+      const it = dnaByKey.get(key)
+      /* v8 ignore next 1 -- the bar only reports keys of the parts it was handed; defensive. */
+      if (it === undefined) return
+      setCat(it.cat)
+      setRowQuery('')
+      setOpenElem(key)
+      focusScrollRef.current = true
+    }
 
     const toolCount = (c: string): number => countOf(view, byCat, c)
 
@@ -960,6 +1006,15 @@ export function makeContextBrowser(
       <div className="lc-card" ref={rootRef}>
         <div className="lc-card-title">
           <span className="lc-card-title-text">{t('browser.title')}</span>
+          <span className="lc-gran lc-br-dna-ctl" role="group" title={t('browser.dnaTip')}>
+            <button
+              type="button"
+              className={'lc-gran-btn' + (dna ? ' lc-gran-on' : '')}
+              onClick={() => { setDna(on => !on) }}
+            >
+              {t('browser.dna')}
+            </button>
+          </span>
           <span className="lc-br-hint">{t('browser.deltaHint')}</span>
           <select
             className="lc-br-pick"
@@ -987,16 +1042,19 @@ export function makeContextBrowser(
             : null}
         </div>
 
-        <div className="lc-br-bar">
+        <div className={'lc-br-bar' + (dna ? ' lc-br-bar-dna' : '')}>
           <StackedBar
-            parts={parts}
+            parts={dnaParts ?? parts}
             height={10}
             // Mirrored hover link (see `linked` above): while the browser shows the live surface, its bar highlights the shared category
-            // key and reports hovers back to the overview; tip stays off — a cross-card hover must not float a second tooltip over a bar
-            // the pointer does not rest on.
-            hoverKey={linked ? linkKey : undefined}
-            onHoverKey={linked ? props.onHoverKey : undefined}
-            tip={false}
+            // key — in DNA mode an incoming category key lights that category's BANDS (the parts' `group`) — and reports hovers back to
+            // the overview; in DNA mode hovers stay local (per-item tooltip) instead. Tip stays off in category mode: a cross-card hover
+            // must not float a second tooltip over a bar the pointer does not rest on.
+            hoverKey={dna ? dnaKey ?? linkKey : linked ? linkKey : undefined}
+            onHoverKey={dna ? setDnaKey : linked ? props.onHoverKey : undefined}
+            tip={dna}
+            onPickKey={dna ? pickDna : undefined}
+            minBand={dna ? DNA_MIN_BAND : undefined}
           />
         </div>
 

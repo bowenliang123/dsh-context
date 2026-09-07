@@ -10,6 +10,8 @@
 .lc-bar-tip { bottom: calc(100% + 6px); transform: translateX(-50%); z-index: 5; white-space: nowrap; padding: 3px 8px; }
 .lc-bar-tip-on { opacity: 1; }
 .lc-stacked > div { height: 100%; }
+/* Pickable segments (the browser's DNA bands open their accordion row on click). */
+.lc-stacked-seg-pick { cursor: pointer; }
 .lc-stacked-seg { transition: filter var(--ds-transition-duration, 0.2s) var(--ds-ease-in-out, ease-in-out), opacity var(--ds-transition-duration, 0.2s) var(--ds-ease-in-out, ease-in-out); }
 .lc-stacked-free { box-sizing: border-box; transition: box-shadow var(--ds-transition-duration, 0.2s) var(--ds-ease-in-out, ease-in-out), opacity var(--ds-transition-duration, 0.2s) var(--ds-ease-in-out, ease-in-out); }
 .lc-stacked-seg-on { filter: brightness(1.18); }

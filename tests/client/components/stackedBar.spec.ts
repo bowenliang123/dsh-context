@@ -7,7 +7,7 @@ import assert from 'node:assert/strict'
 import { describe, test } from 'vitest'
 import { makeLegend, makeStackedBar } from '../../../src/client/components/stackedBar'
 import type { PartsPart } from '../../../src/client/categories'
-import { hover, makeKit, mount, query, queryAll, unhover } from '../helpers/kit'
+import { click, hover, makeKit, mount, query, queryAll, unhover } from '../helpers/kit'
 
 const kit = makeKit()
 const StackedBar = makeStackedBar(kit)
@@ -18,9 +18,9 @@ function part(key: string, value: number, raw?: number): PartsPart {
 }
 
 /** A parent that really holds the hover key, so hovering re-renders the bar. */
-function HoverHarness(props: { parts: PartsPart[]; max?: number; reserve?: { ratio: number; label: string } }) {
+function HoverHarness(props: { parts: PartsPart[]; max?: number; minBand?: number; reserve?: { ratio: number; label: string } }) {
   const [hoverKey, setHoverKey] = useState<string | null>(null)
-  return h(StackedBar, { parts: props.parts, max: props.max, hoverKey, onHoverKey: setHoverKey, reserve: props.reserve })
+  return h(StackedBar, { parts: props.parts, max: props.max, minBand: props.minBand, hoverKey, onHoverKey: setHoverKey, reserve: props.reserve })
 }
 
 describe('StackedBar layout', () => {
@@ -241,5 +241,91 @@ describe('Legend', () => {
     await hover(chip)
     await unhover(chip)
     await m.unmount()
+  })
+})
+describe('StackedBar DNA bands', () => {
+  test('a part label overrides the category name in the tooltip', async () => {
+    const m = await mount(h(HoverHarness, {
+      parts: [{ key: 'n3', color: '#123456', value: 30, label: 'bash · 09:00:00' }, part('user', 70)],
+    }))
+    await hover(queryAll(m.container, '.lc-stacked-seg')[0])
+    const tip = query(m.container, '.lc-bar-tip')
+    assert.ok(tip.className.includes('lc-bar-tip-on'))
+    assert.equal(tip.textContent, 'bash · 09:00:00 ≈30 (30%) of used context')
+    await m.unmount()
+  })
+
+  test('group hover: a mirrored category key lights every band of that group but floats no tooltip', async () => {
+    const parts: PartsPart[] = [
+      { key: 'n1', color: '#123456', value: 10, group: 'tool' },
+      { key: 'n2', color: '#123456', value: 20, group: 'tool' },
+      { key: 'n3', color: '#654321', value: 70, group: 'user' },
+    ]
+    const m = await mount(h(StackedBar, { parts, hoverKey: 'tool' }))
+    const segs = queryAll(m.container, '.lc-stacked-seg')
+    assert.ok(segs[0].className.includes('lc-stacked-seg-on'))
+    assert.ok(segs[1].className.includes('lc-stacked-seg-on'))
+    assert.ok(!segs[2].className.includes('lc-stacked-seg-on'))
+    assert.ok(query(m.container, '.lc-stacked').className.includes('lc-stacked-dim'))
+    assert.equal(query(m.container, '.lc-bar-tip').className, 'lc-tip lc-bar-tip', 'no exact key — no tooltip')
+    // The exact key still lights just its own band.
+    await m.update(h(StackedBar, { parts, hoverKey: 'n3' }))
+    const segs2 = queryAll(m.container, '.lc-stacked-seg')
+    assert.ok(!segs2[0].className.includes('lc-stacked-seg-on'))
+    assert.ok(!segs2[1].className.includes('lc-stacked-seg-on'))
+    assert.ok(segs2[2].className.includes('lc-stacked-seg-on'))
+    await m.unmount()
+  })
+
+  test('onPickKey: segments gain the pick cursor and report their key on click', async () => {
+    const picks: string[] = []
+    const m = await mount(h(StackedBar, { parts: [part('a', 40), part('b', 60)], onPickKey: (k) => { picks.push(k) } }))
+    const segs = queryAll(m.container, '.lc-stacked-seg')
+    assert.ok(segs[0].className.includes('lc-stacked-seg-pick'))
+    assert.ok(segs[1].className.includes('lc-stacked-seg-pick'))
+    await click(segs[1])
+    assert.deepEqual(picks, ['b'])
+    await m.unmount()
+  })
+})
+describe('StackedBar minBand floor', () => {
+  test('a sub-pixel band pins to the floor and the rest rescale; the tooltip keeps the true share', async () => {
+    const m = await mount(h(HoverHarness, { parts: [part('assistant', 990), part('user', 10)], minBand: 5 }))
+    const segs = queryAll(m.container, '.lc-stacked-seg')
+    assert.equal(segs[0].style.width, '95%')
+    assert.equal(segs[1].style.width, '5%')
+    await hover(segs[1])
+    const tip = query(m.container, '.lc-bar-tip')
+    assert.equal(tip.textContent, 'User Messages ≈10 (1%) of used context')
+    assert.equal(tip.style.left, '88%', 'the tooltip clamps to the bar edge on a floored sliver')
+    await m.unmount()
+  })
+
+  test('the floor caps at the equal split when bands outnumber it', async () => {
+    const m = await mount(h(StackedBar, { parts: [part('assistant', 90), part('user', 5), part('tool', 5)], minBand: 50 }))
+    const floor = Math.min(50, 100 / 3)
+    const segs = queryAll(m.container, '.lc-stacked-seg')
+    assert.equal(segs[1].style.width, `${floor}%`)
+    assert.equal(segs[2].style.width, `${floor}%`)
+    // The unpinned band rescales into the remaining room (the same arithmetic the component runs).
+    assert.equal(segs[0].style.width, `${90 * (100 - 2 * floor) / 90}%`)
+    await m.unmount()
+  })
+
+  test('a single visible band spans the bar regardless of the floor; zero-value parts stay skipped', async () => {
+    const m = await mount(h(StackedBar, { parts: [part('user', 0), part('system', 100)], minBand: 10 }))
+    const segs = queryAll(m.container, '.lc-stacked-seg')
+    assert.equal(segs.length, 1)
+    assert.equal(segs[0].style.width, '100%')
+    await m.unmount()
+  })
+
+  test('minBand 0 or no band below the floor keeps exact widths', async () => {
+    const m = await mount(h(StackedBar, { parts: [part('assistant', 99), part('user', 1)], minBand: 0 }))
+    assert.deepEqual(queryAll(m.container, '.lc-stacked-seg').map(s => s.style.width), ['99%', '1%'])
+    await m.unmount()
+    const m2 = await mount(h(StackedBar, { parts: [part('assistant', 60), part('user', 40)], minBand: 1 }))
+    assert.deepEqual(queryAll(m2.container, '.lc-stacked-seg').map(s => s.style.width), ['60%', '40%'])
+    await m2.unmount()
   })
 })
