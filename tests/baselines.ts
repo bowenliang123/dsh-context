@@ -60,6 +60,17 @@ export interface Baseline {
    */
   session: string
   client: ClientSeam
+  /**
+   * The step-boundary identity guard's host seam (src/host/stepIdentity.ts):
+   * the agent-loop file that dispatches the `agent/pre-step` waterfall and
+   * appends its decision's messages, plus a shipped context plugin proving
+   * the `prepend` listener option this guard rides on that line.
+   */
+  stepGuard: {
+    loopFile: string
+    loopNeedles: readonly string[]
+    prependProofFile: string
+  }
 }
 
 export const BASELINES: readonly Baseline[] = [
@@ -86,6 +97,11 @@ export const BASELINES: readonly Baseline[] = [
         registryFile: 'packages/session/session-projection/src/index.ts',
         registryNeedle: 'stateOf<',
       },
+    },
+    stepGuard: {
+      loopFile: 'packages/core/agent-loop/src/agent.ts',
+      loopNeedles: ["'agent/pre-step'", "append('user/message'"],
+      prependProofFile: 'packages/context/time-context/src/index.ts',
     },
   },
 ]

@@ -27,6 +27,7 @@ import { watchDetailChannel } from './detail'
 import { createFallbackHeadersDefinition, createFallbackTimelineDefinition } from './fallback'
 import { createContextHeadersDefinition } from './headers'
 import { installSettings } from './settings'
+import { watchStepIdentity } from './stepIdentity'
 import { createContextTimelineDefinition } from './timeline'
 import { detectHarnessVersion } from './version'
 import { meetsBaseline } from '../shared/version'
@@ -62,6 +63,10 @@ export function apply(ctx: Context, config: Config): void {
   // third-party / agent-scoped / dynamic tools on top. Strictly additive — an
   // unsupported cordis or a missed read degrades to the static chain.
   const attribution = createToolAttribution(ctx)
+  // Step-boundary message identity guard (see stepIdentity.ts): mints an id
+  // for any pre-step message that would persist unidentified — the harness's
+  // load path refuses such events wholesale, permanently bricking the session.
+  watchStepIdentity(ctx)
   // The split wire generation (detail.ts): the detail channel arms whenever
   // the connection/sessions services compose (load order never assumed), and
   // the unit's view reads the gate per serve — slim while the channel is

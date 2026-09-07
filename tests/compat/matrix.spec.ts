@@ -134,6 +134,18 @@ describe.skipIf(reasons.length > 0)('compat matrix — real dsh sources per base
       assert.deepEqual(missing, [])
     })
 
+    test('host: the step-boundary identity guard seam (issue #51)', () => {
+      const sg = baseline.stepGuard
+      for (const needle of sg.loopNeedles) {
+        assert.equal(staging.dshHasString(baseline.tag, needle, sg.loopFile), true, `loop seam: ${needle}`)
+      }
+      assert.equal(
+        staging.dshHasString(baseline.tag, 'prepend: true', sg.prependProofFile),
+        true,
+        'the prepend listener option the guard rides',
+      )
+    })
+
     test('client: platform module table answers every bundle require', async () => {
       const table = await staging.platformModulesOf(baseline)
       const unanswerable = staging.bundleRequires().filter(spec => !table.includes(spec))
