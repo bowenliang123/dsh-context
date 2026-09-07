@@ -3,9 +3,9 @@
 // the pct-led slice rows with call counts and true durations — plus the empty
 // and hostile-timing degrades.
 
+import { createElement as h } from 'react'
 import assert from 'node:assert/strict'
 import { describe, test } from 'vitest'
-import { h } from '../../../src/client/react'
 import { makeDonut } from '../../../src/client/components/donut'
 import { makeStatsTiming } from '../../../src/client/components/statsTiming'
 import type { TimingTotals } from '../../../src/shared/types'

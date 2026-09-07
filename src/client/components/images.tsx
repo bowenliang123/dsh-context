@@ -4,16 +4,16 @@
  * handed down as `load`; absent loader or failed load degrades to the metadata row alone — the card never throws.
  */
 
-import type * as ReactNS from 'react'
+import { useCallback, useEffect, useRef, useState, type ReactElement } from 'react'
+import { createPortal } from 'react-dom'
 import { IconCloseOutline16 } from '@deepseek-ai/dsh-client-ui-primitives'
 import { fmtBytes } from '../format'
-import { React, ReactDOM } from '../react'
 import type { ImageLoader, ImageRefLike } from '../services'
 import { estimateImageTokens } from '../../shared/imageTokens'
 import type { ViewKit } from '../viewkit'
 
 export interface ImageKit {
-  Card: (props: { attachment: ImageRefLike; load?: ImageLoader }) => ReactNS.ReactElement
+  Card: (props: { attachment: ImageRefLike; load?: ImageLoader }) => ReactElement
   load?: ImageLoader
 }
 
@@ -58,12 +58,12 @@ function AttachmentLightbox(props: {
   alt: string
   labels: { dialog: string; close: string }
   onClose: () => void
-}): ReactNS.ReactElement {
+}): ReactElement {
   const { src, alt, labels, onClose } = props
-  const closeRef = React.useRef<HTMLButtonElement | null>(null)
-  const restoreRef = React.useRef<HTMLElement | null>(null)
+  const closeRef = useRef<HTMLButtonElement | null>(null)
+  const restoreRef = useRef<HTMLElement | null>(null)
 
-  React.useEffect(() => {
+  useEffect(() => {
     restoreRef.current = document.activeElement instanceof HTMLElement ? document.activeElement : null
     closeRef.current?.focus()
     const onKeyDown = (event: KeyboardEvent): void => {
@@ -76,7 +76,7 @@ function AttachmentLightbox(props: {
     }
   }, [onClose])
 
-  return ReactDOM.createPortal(
+  return createPortal(
     <div className="lc-att-lightbox" role="dialog" aria-modal="true" aria-label={labels.dialog}>
       <div className="lc-att-lightbox-mask" aria-hidden="true" onMouseDown={onClose} />
       <img className="lc-att-lightbox-img" src={src} alt={alt} />
@@ -95,15 +95,15 @@ function AttachmentLightbox(props: {
  */
 export function makeImageCard(kit: ViewKit): ImageKit['Card'] {
   const { t, fmt } = kit
-  return function ImageCard(props: { attachment: ImageRefLike; load?: ImageLoader }): ReactNS.ReactElement {
+  return function ImageCard(props: { attachment: ImageRefLike; load?: ImageLoader }): ReactElement {
     const { attachment, load } = props
-    const [src, setSrc] = React.useState<string | null>(null)
-    const [error, setError] = React.useState(false)
-    const [attempt, setAttempt] = React.useState(0)
-    const [preview, setPreview] = React.useState(false)
-    const closePreview = React.useCallback(() => { setPreview(false) }, [])
+    const [src, setSrc] = useState<string | null>(null)
+    const [error, setError] = useState(false)
+    const [attempt, setAttempt] = useState(0)
+    const [preview, setPreview] = useState(false)
+    const closePreview = useCallback(() => { setPreview(false) }, [])
 
-    React.useEffect(() => {
+    useEffect(() => {
       if (load === undefined) return
       let live = true
       setError(false)

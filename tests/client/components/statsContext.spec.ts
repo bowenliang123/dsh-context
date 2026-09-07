@@ -5,9 +5,9 @@
 // `countsOfRecords` is the inline generation's derivation, pinned here to the
 // same totals.
 
+import { createElement as h } from 'react'
 import assert from 'node:assert/strict'
 import { describe, test } from 'vitest'
-import { h } from '../../../src/client/react'
 import { countsOfRecords, makeStatsContext } from '../../../src/client/components/statsContext'
 import type { ContextEventRecord, RequestRecord, SessionCostUsage } from '../../../src/shared/types'
 import { makeKit, mount, query, queryAll, text } from '../helpers/kit'

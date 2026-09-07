@@ -2,9 +2,9 @@
 // React: the billed-bucket donut with the cache-hit center and the
 // pct-led bucket rows.
 
+import { createElement as h } from 'react'
 import assert from 'node:assert/strict'
 import { describe, test } from 'vitest'
-import { h } from '../../../src/client/react'
 import { makeDonut } from '../../../src/client/components/donut'
 import { makeStatsTokens } from '../../../src/client/components/statsTokens'
 import type { TokenUsage } from '../../../src/shared/types'

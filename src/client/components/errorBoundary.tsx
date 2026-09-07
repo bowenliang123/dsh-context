@@ -5,14 +5,12 @@
   * subtree's render errors (no hook-based boundary in React 18); Retry resets the boundary and a healthy value resumes.
  */
 
-import type * as ReactNS from 'react'
+import { Component, type ComponentType, type ReactNode } from 'react'
 import type { Translate } from '../i18n'
 
-import { React } from '../react'
-
-export function makeErrorBoundary(t: Translate): ReactNS.ComponentType<{ children?: ReactNS.ReactNode }> {
-  return class ErrorBoundary extends React.Component<{ children?: ReactNS.ReactNode }, { error: Error | null }> {
-    constructor(props: { children?: ReactNS.ReactNode }) {
+export function makeErrorBoundary(t: Translate): ComponentType<{ children?: ReactNode }> {
+  return class ErrorBoundary extends Component<{ children?: ReactNode }, { error: Error | null }> {
+    constructor(props: { children?: ReactNode }) {
       super(props)
       this.state = { error: null }
     }
@@ -21,7 +19,7 @@ export function makeErrorBoundary(t: Translate): ReactNS.ComponentType<{ childre
       return { error: error instanceof Error ? error : new Error(String(error)) }
     }
 
-    render(): ReactNS.ReactNode {
+    render(): ReactNode {
       const error = this.state.error
       if (error === null) return this.props.children
       return (

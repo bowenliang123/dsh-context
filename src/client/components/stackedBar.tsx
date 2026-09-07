@@ -3,11 +3,9 @@
  * styled through the shared `--dsw-alias-*` tokens.
  */
 
-import type * as ReactNS from 'react'
+import { useState, type ReactElement } from 'react'
 import type { PartsPart } from '../categories'
 import type { ViewKit } from '../viewkit'
-
-import { React } from '../react'
 
 /**
  * Mirror of dsh-compaction-basic's default `thresholdRatio` (0.8): it compacts at step boundaries once `floor(contextWindow × ratio)` is
@@ -34,11 +32,11 @@ export interface StackedBarProps {
   reserve?: { ratio: number; label: string }
 }
 
-export function makeStackedBar(kit: ViewKit): (props: StackedBarProps) => ReactNS.ReactElement {
+export function makeStackedBar(kit: ViewKit): (props: StackedBarProps) => ReactElement {
   const { t, fmt, catLabel } = kit
-  return function StackedBar(props: StackedBarProps): ReactNS.ReactElement {
+  return function StackedBar(props: StackedBarProps): ReactElement {
     // The reserve-hover flag lives here so the single tooltip slot serves both the segments and the band.
-    const [reserveOn, setReserveOn] = React.useState(false)
+    const [reserveOn, setReserveOn] = useState(false)
     let total = 0
     for (const p of props.parts) total += p.value
     const scale = props.max !== undefined && props.max > total ? props.max : total
@@ -169,13 +167,13 @@ export function makeLegend(kit: ViewKit): (props: {
   parts: PartsPart[]
   hoverKey?: string | null
   onHoverKey?: (key: string | null) => void
-}) => ReactNS.ReactElement {
+}) => ReactElement {
   const { t, fmt, catLabel } = kit
   return function Legend(props: {
     parts: PartsPart[]
     hoverKey?: string | null
     onHoverKey?: (key: string | null) => void
-  }): ReactNS.ReactElement {
+  }): ReactElement {
     let total = 0
     for (const p of props.parts) total += p.raw ?? p.value
     return (

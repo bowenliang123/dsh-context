@@ -12,10 +12,9 @@
  * empty frame here.
  */
 
+import { act, createElement as h } from 'react'
 import assert from 'node:assert/strict'
 import { afterAll, beforeAll, describe, test } from 'vitest'
-import { act } from 'react'
-import { h } from '../../../src/client/react'
 import { aggregateByTurn, attachMarkers, jumpTargetOf, makeTrendChart, type TrendChartProps } from '../../../src/client/components/trendChart'
 import { CATS } from '../../../src/client/categories'
 import type { ContextEventRecord, RequestRecord } from '../../../src/shared/types'

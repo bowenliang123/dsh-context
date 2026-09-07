@@ -3,12 +3,11 @@
 // /context trigger source, and the deferred settingsScope inject — plus real
 // renders of the registered components.
 
+import { createElement as h, type ReactElement } from 'react'
 import assert from 'node:assert/strict'
-import type { ReactElement } from 'react'
 import { describe, test } from 'vitest'
 import { DICT_EN, DICT_ZH } from '../../src/client/i18n'
 import { modalStoreOf, type ModalStore } from '../../src/client/modalStore'
-import { h } from '../../src/client/react'
 import type { SettingsField, SettingsScopeLike, SettingsState } from '../../src/client/settings'
 import { TestClientCtx, TestSessions, asClientCtx } from './helpers/harness'
 import { click, mount, query, queryAll } from './helpers/kit'

@@ -3,9 +3,9 @@
 // modules are re-imported fresh (vi.resetModules) so the baked-in version
 // define and the fetch TTL cache both start clean.
 
+import { createElement as h } from 'react'
 import assert from 'node:assert/strict'
 import { afterEach, describe, test, vi } from 'vitest'
-import { h } from '../../../src/client/react'
 import type { makePluginInfo as makePluginInfoFn } from '../../../src/client/components/pluginInfo'
 import { flush, makeKit, mount, query, queryAll, text } from '../helpers/kit'
 

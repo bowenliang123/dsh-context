@@ -1,10 +1,9 @@
 // images.tsx — imageRefOf narrowing (pure) plus ImageCard and the
 // AttachmentLightbox rendered with real React (portal to document.body).
 
+import { act, createElement as h } from 'react'
 import assert from 'node:assert/strict'
 import { describe, test, vi } from 'vitest'
-import { act } from 'react'
-import { h } from '../../../src/client/react'
 import { imageRefOf, makeImageCard } from '../../../src/client/components/images'
 import type { ImageRefLike } from '../../../src/client/services'
 import { estimateImageTokens } from '../../../src/shared/imageTokens'

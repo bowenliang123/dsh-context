@@ -4,11 +4,9 @@
 // the useTimelineSource hook merging both wire generations into the value
 // the cards render.
 
+import { act, createElement as h, type ReactElement } from 'react'
 import assert from 'node:assert/strict'
 import { describe, test, vi, afterEach } from 'vitest'
-import { act } from 'react'
-import type { ReactElement } from 'react'
-import { h } from '../../src/client/react'
 import type { ClientCtx } from '../../src/client/services'
 import {
   DetailStore,

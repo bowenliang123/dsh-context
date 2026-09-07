@@ -3,10 +3,9 @@
 // narrowing matrix), conversation join (block cascade, tail-status matrix),
 // targeted content fetch, hover linkage, and the focus bridges.
 
+import { act, createElement as h } from 'react'
 import assert from 'node:assert/strict'
-import { act } from 'react'
 import { describe, test } from 'vitest'
-import { h } from '../../../src/client/react'
 import { makeContextBrowser, type ContextBrowserProps } from '../../../src/client/components/browser'
 import { makeStackedBar } from '../../../src/client/components/stackedBar'
 import { DICT_EN } from '../../../src/client/i18n'

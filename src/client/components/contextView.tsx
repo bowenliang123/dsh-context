@@ -5,7 +5,7 @@
  * host's detail endpoint only while the tab (or modal) is open.
  */
 
-import type * as ReactNS from 'react'
+import { createElement as h, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactElement } from 'react'
 import type { ContextEventRecord, RequestRecord, SurfaceNode } from '../../shared/types'
 import { briefNodes, briefOf } from '../brief'
 import { headlineOf } from '../headline'
@@ -35,7 +35,6 @@ import { makeStatsTokens } from './statsTokens'
 import { makeLegend, makeStackedBar } from './stackedBar'
 import { aggregateByTurn, attachMarkers, jumpTargetOf, makeTrendChart } from './trendChart'
 
-import { React, h } from '../react'
 import { takeContextFocus } from '../viewFocus'
 import { makeErrorBoundary } from './errorBoundary'
 
@@ -50,7 +49,7 @@ export function makeContextView(
   ctx: ClientCtx,
   kit: ViewKit,
   settings: ContextSettings,
-): (props: SessionStandardProps) => ReactNS.ReactElement {
+): (props: SessionStandardProps) => ReactElement {
   const { t } = kit
   const StackedBar = makeStackedBar(kit)
   const Legend = makeLegend(kit)
@@ -72,7 +71,7 @@ export function makeContextView(
 
   // The body renders under the error boundary: a corrupt projection value (past the timelineOf shape guard) degrades to a styled error
   // card, not a white screen; the boundary itself has NO hooks, so the body's hook order and loading/data flow stay unchanged.
-  function ContextViewBody(props: SessionStandardProps): ReactNS.ReactElement {
+  function ContextViewBody(props: SessionStandardProps): ReactElement {
     const sessionId = props.sessionId
     // The timeline source (timelineSource.ts): the pushed value on the inline
     // generation, or the slim head merged with the on-demand detail on the
@@ -92,21 +91,21 @@ export function makeContextView(
     // `contextHeaders` companion projection (full system prompt + tool schemas) for the Context browser; absent key = older Host half →
     // those sections degrade to tokens-only with a note.
     const headers = projectionOf(props, 'contextHeaders', headersOf)
-    const [selectedSeq, setSelectedSeq] = React.useState<number | null>(null)
-    const [hoveredSeq, setHoveredSeq] = React.useState<number | null>(null)
-    const [hoverTurn, setHoverTurn] = React.useState<number | null>(null)
+    const [selectedSeq, setSelectedSeq] = useState<number | null>(null)
+    const [hoveredSeq, setHoveredSeq] = useState<number | null>(null)
+    const [hoverTurn, setHoverTurn] = useState<number | null>(null)
     // Mount-time default from the plugin settings card; in-chart toggling stays mount-local and never writes back.
-    const [granularity, setGranularity] = React.useState<'step' | 'turn'>(() => settings.defaultGranularity())
+    const [granularity, setGranularity] = useState<'step' | 'turn'>(() => settings.defaultGranularity())
     // 'total' plots each request's cumulative composition, 'delta' its incremental change vs the previous one;
     // like granularity, the default is read at mount and in-chart toggling never writes back.
-    const [trendMode, setTrendMode] = React.useState<'total' | 'delta'>(() => settings.defaultTrendMode())
+    const [trendMode, setTrendMode] = useState<'total' | 'delta'>(() => settings.defaultTrendMode())
     // Strip-clicked turn: chart switches to turn granularity and scroll-centers that turn's bar, then clears via onFocusTurnHandled.
-    const [focusTurn, setFocusTurn] = React.useState<number | null>(null)
+    const [focusTurn, setFocusTurn] = useState<number | null>(null)
     // Chat → Context jump: the assistant-action relay's one-shot request, held until the projection data is in, then resolved into a
     // turn-level pin below (mirrors the strip-click's consume-once focus flow).
-    const [jumpSeq, setJumpSeq] = React.useState<number | null>(null)
-    const [hoverCat, setHoverCat] = React.useState<string | null>(null)
-    const [pickedKinds, setPickedKinds] = React.useState<string[]>([...EVENT_KINDS])
+    const [jumpSeq, setJumpSeq] = useState<number | null>(null)
+    const [hoverCat, setHoverCat] = useState<string | null>(null)
+    const [pickedKinds, setPickedKinds] = useState<string[]>([...EVENT_KINDS])
     const toggleKind = (k: string) => {
       setPickedKinds((p) => {
         if (p.length === EVENT_KINDS.length) return [k]
@@ -115,37 +114,37 @@ export function makeContextView(
       })
     }
     // Step-brief → browser reveal bridge: one-shot focus request consumed by the Context browser.
-    const [nodeFocus, setNodeFocus] = React.useState<{ step: number | 'live'; seq: number; cat: SurfaceNode['cat'] } | null>(null)
-    const clearNodeFocus = React.useCallback(() => { setNodeFocus(null) }, [])
+    const [nodeFocus, setNodeFocus] = useState<{ step: number | 'live'; seq: number; cat: SurfaceNode['cat'] } | null>(null)
+    const clearNodeFocus = useCallback(() => { setNodeFocus(null) }, [])
 
     // Session-authorized durable-image loader for the browser's attachment cards, resolved through the harness `uiConversation` service
     // (`imageUrl`); absent service/session degrades the cards to metadata-only, never an error.
-    const loadImage = React.useMemo(
+    const loadImage = useMemo(
       () => imageLoaderOf(ctx, typeof sessionId === 'string' ? sessionId : undefined),
       [ctx, sessionId],
     )
 
     // Targeted full-content fetch for browser nodes outside the conversation window (one seq-anchored history read per expanded row);
     // absent face/session degrades to the static hint — never an error.
-    const fetchContent = React.useMemo(
+    const fetchContent = useMemo(
       () => (typeof sessionId === 'string' && sessionId !== '' ? makeContentFetcher(sessionId) : undefined),
       [sessionId],
     )
     // On-demand header epoch content (system prompt text, tool schemas) for the Context browser — one seq-anchored history read per
     // opened epoch; the `contextHeaders` projection carries metadata only. Same degradation shape as fetchContent.
-    const fetchHeader = React.useMemo(
+    const fetchHeader = useMemo(
       () => (typeof sessionId === 'string' && sessionId !== '' ? makeHeaderFetcher(sessionId) : undefined),
       [sessionId],
     )
 
-    const rootRef = React.useRef<HTMLDivElement | null>(null)
-    const scrollerRef = React.useRef<HTMLElement | null>(null)
+    const rootRef = useRef<HTMLDivElement | null>(null)
+    const scrollerRef = useRef<HTMLElement | null>(null)
     // The session whose position was already applied this mount — re-applying on re-renders would yank the reader's scroll.
-    const restoredRef = React.useRef<string | null>(null)
+    const restoredRef = useRef<string | null>(null)
 
     // Restore the saved position (or the top on first visit) in a layout effect, so the chat's bottom-anchored position never flashes in
     // first.
-    React.useLayoutEffect(() => {
+    useLayoutEffect(() => {
       if (typeof sessionId !== 'string' || sessionId === '' || data === null) return
       if (restoredRef.current === sessionId) return
       restoredRef.current = sessionId
@@ -161,7 +160,7 @@ export function makeContextView(
 
     // Save the position on unmount/session change — a layout-effect cleanup, so it fires before the incoming view's own layout effects
     // re-scroll the shared container.
-    React.useLayoutEffect(() => {
+    useLayoutEffect(() => {
       return () => {
         if (typeof sessionId !== 'string' || sessionId === '') return
         const scroller = scrollerRef.current
@@ -182,14 +181,14 @@ export function makeContextView(
     const shownEvents = pickedKinds.length === EVENT_KINDS.length ? events : events.filter(e => pickedKinds.includes(e.kind))
     // Per-step bars, or one per turn (each turn's LAST step's record); memoized so hover-driven re-renders keep bar props identity-stable —
     // the chart's memoized bars then skip reconciliation (turn-mode aggregation allocates).
-    const displayRequests = React.useMemo(
+    const displayRequests = useMemo(
       () => (granularity === 'turn' ? aggregateByTurn(requests) : requests),
       [requests, granularity],
     )
-    const markers = React.useMemo(() => attachMarkers(displayRequests, events), [displayRequests, events])
+    const markers = useMemo(() => attachMarkers(displayRequests, events), [displayRequests, events])
 
     // Chat → Context jump, leg 1: pick up the assistant-action relay's request for this session (once per mount).
-    React.useEffect(() => {
+    useEffect(() => {
       if (typeof sessionId !== 'string' || sessionId === '') return
       const seq = takeContextFocus(sessionId)
       if (seq !== null) setJumpSeq(seq)
@@ -201,7 +200,7 @@ export function makeContextView(
     // The split generation waits for the detail read first: the relayed seq resolves against the served request records, so the
     // one-shot request must not be consumed while the collections are still pending (it re-fires when they land).
     const detailReady = source.detailState === 'ready' || source.detailState === 'legacy'
-    React.useEffect(() => {
+    useEffect(() => {
       if (jumpSeq === null || data === null || !detailReady) return
       setJumpSeq(null)
       const target = jumpTargetOf(aggregateByTurn(requests), jumpSeq)
@@ -215,12 +214,12 @@ export function makeContextView(
 
     // Step-brief raw material: every served node seq-sorted (live tail + archive), and the conversation-snapshot
     // join the brief uses for call-argument enrichment (same join the Context browser builds).
-    const briefList = React.useMemo(() => (data ? briefNodes(data) : []), [data])
+    const briefList = useMemo(() => (data ? briefNodes(data) : []), [data])
     // The conversation-window join, from the `useChat` seat. The seat is a
     // real hook — invoked unconditionally per render (stable order);
     // undefined join = render without it, never an error.
     const convNodes = conversationNodesOf(props)
-    const bySeq = React.useMemo(() => {
+    const bySeq = useMemo(() => {
       const m = new Map<number, ConversationNodeLike>()
       for (const n of convNodes ?? []) m.set(n.seq, n)
       return m
@@ -246,17 +245,17 @@ export function makeContextView(
       filesBefore = ri + 1 < requests.length ? requests[ri + 1].seq : null
     }
     // The active bar's semantic identity ("what this step was about"); pure derivation over the served nodes, null when nothing is known.
-    const brief = React.useMemo(
+    const brief = useMemo(
       () => (activeReq !== null ? briefOf(briefList, displayRequests, activeIdx) : null),
       [activeReq, briefList, displayRequests, activeIdx],
     )
-    const convOf = React.useCallback((seq: number): ConversationNodeLike | undefined => bySeq.get(seq), [bySeq])
+    const convOf = useCallback((seq: number): ConversationNodeLike | undefined => bySeq.get(seq), [bySeq])
 
     // File activity follows the same active bar: the op-log generation reads the fold-derived records (full
     // session-log coverage); older hosts keep the conversation-window derivation. Recomputed when the brief
     // source, the conversation join, or the upper bound moves — hover/select elsewhere (composition chips,
     // kind filters) leaves every input reference untouched, so the walk is skipped on those renders.
-    const fileActivity = React.useMemo(
+    const fileActivity = useMemo(
       () => {
         if (data !== null && data.fileOps !== undefined) {
           return activityOfOps(data.fileOps, data.archive, filesBefore)
@@ -272,17 +271,17 @@ export function makeContextView(
     // The capability is an RPC answer now (the synchronous host-description fact is gone),
     // so it lands in state once the probe settles — inert file names until then; the
     // effect's cleanup drops an answer that arrives after the view unmounted.
-    const [canOpenPaths, setCanOpenPaths] = React.useState(false)
-    React.useEffect(() => {
+    const [canOpenPaths, setCanOpenPaths] = useState(false)
+    useEffect(() => {
       let live = true
       void canOpenPathsOf(ctx).then((can) => { if (live) setCanOpenPaths(can) })
       return () => { live = false }
     }, [ctx])
-    const fileOpener = React.useMemo(
+    const fileOpener = useMemo(
       () => (canOpenPaths ? openPathVia(ctx) : undefined),
       [canOpenPaths, ctx],
     )
-    const locateFileOp = React.useCallback((op: FileOp): void => {
+    const locateFileOp = useCallback((op: FileOp): void => {
       // A nested Code-Mode op has no surface row of its own — it reveals on
       // its parent run_code result (whose removal stamp the op carries).
       const seq = op.parent ?? op.seq
@@ -292,7 +291,7 @@ export function makeContextView(
     }, [requests])
     // A brief row's reveal target: inputs/opener live in the picked step's OWN assembled surface; the response node (seq === the
     // request's) first appears in the NEXT step's surface — or the live surface when the last bar is picked.
-    const locateNode = React.useCallback((node: SurfaceNode, isResponse: boolean): void => {
+    const locateNode = useCallback((node: SurfaceNode, isResponse: boolean): void => {
       /* v8 ignore next 1 -- locateNode is only wired to brief rows, and
          brief !== null guarantees activeReq !== null in the same closure. */
       if (activeReq === null) return
@@ -502,7 +501,7 @@ export function makeContextView(
     )
   }
 
-  return function ContextView(props: SessionStandardProps): ReactNS.ReactElement {
+  return function ContextView(props: SessionStandardProps): ReactElement {
     return h(ErrorBoundary, null, h(ContextViewBody, props))
   }
 }

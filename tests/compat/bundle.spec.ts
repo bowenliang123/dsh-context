@@ -17,6 +17,7 @@ import { beforeAll, describe, test } from 'vitest'
 import { JSDOM } from 'jsdom'
 import React from 'react'
 import ReactDOM from 'react-dom'
+import * as jsxRuntime from 'react/jsx-runtime'
 import * as staging from './staging'
 
 describe.skipIf(staging.artifactsMissing())('bundle smoke — the built lib/client.js', () => {
@@ -56,6 +57,7 @@ describe.skipIf(staging.artifactsMissing())('bundle smoke — the built lib/clie
     }
     const moduleTable = (spec: string): unknown => {
       if (spec === 'react') return React
+      if (spec === 'react/jsx-runtime') return jsxRuntime
       if (spec === 'react-dom') return ReactDOM
       if (spec === '@deepseek-ai/dsh-client-ui-primitives') {
         return new Proxy({}, { get: (_t, key) => (typeof key === 'string' ? inert(key) : undefined) })

@@ -1,9 +1,8 @@
-import type * as ReactNS from 'react'
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, type ChangeEvent, type ReactElement, type ReactNode } from 'react'
 import { UNKNOWN_TOOL_SOURCE, type Category, type ContextHeaders, type ContextTimeline, type HeaderTool, type RequestRecord, type SurfaceNode } from '../../shared/types'
 import { assemble } from '../assemble'
 import type { Assembled } from '../assemble'
 import { CATS, partsOf } from '../categories'
-import { React } from '../react'
 import type { ContentFetcher, ConversationNodeLike, HeaderFetcher } from '../services'
 import type { ViewKit } from '../viewkit'
 import { blockSummaryOf, callSummaryOf, parseCallArgs } from '../callSummary'
@@ -133,7 +132,7 @@ function ParamRow(props: {
   name: string
   schema: ParamSchema
   required: boolean
-}): ReactNS.ReactElement {
+}): ReactElement {
   const typeLabel = typeOf(props.schema)
   const desc = props.schema.description
   return (
@@ -158,10 +157,10 @@ function Section(props: {
   label: string
   labelClass?: string
   count?: number
-  actions?: ReactNS.ReactNode
-  meta?: ReactNS.ReactNode
-  children: ReactNS.ReactNode
-}): ReactNS.ReactElement {
+  actions?: ReactNode
+  meta?: ReactNode
+  children: ReactNode
+}): ReactElement {
   const right = props.actions !== undefined || props.meta !== undefined
   return (
     <div className="lc-ts-card">
@@ -186,10 +185,10 @@ function TextSection(props: {
   text: string
   rich: RichKit
   lines: (n: number) => string
-}): ReactNS.ReactElement {
+}): ReactElement {
   const { rich } = props
   const [mode, setMode] = rich.useRichMode()
-  const lineCount = React.useMemo(() => lineCountOf(props.text), [props.text])
+  const lineCount = useMemo(() => lineCountOf(props.text), [props.text])
   return (
     <Section
       label={props.label}
@@ -201,7 +200,7 @@ function TextSection(props: {
   )
 }
 
-function RawSection(props: { label: string; text: string }): ReactNS.ReactElement {
+function RawSection(props: { label: string; text: string }): ReactElement {
   return (
     <Section label={props.label}>
       <pre className="lc-ts-desc-body lc-br-dim">{props.text}</pre>
@@ -232,15 +231,15 @@ function RowToolbar(props: {
   placeholder: string
   tip?: string
   onChange: (v: string) => void
-  children?: ReactNS.ReactNode
-}): ReactNS.ReactElement {
+  children?: ReactNode
+}): ReactElement {
   return (
     <div className="lc-br-toolctl">
       <input
         className="lc-br-tool-search"
         value={props.value}
         placeholder={props.placeholder}
-        onChange={(ev: ReactNS.ChangeEvent<HTMLInputElement>) => { props.onChange(ev.target.value) }}
+        onChange={(ev: ChangeEvent<HTMLInputElement>) => { props.onChange(ev.target.value) }}
       />
       {props.children !== undefined
         ? <span className="lc-gran" role="group" title={props.tip}>{props.children}</span>
@@ -267,11 +266,11 @@ function ToolSchema(props: {
     show: string
     hide: string
   }
-}): ReactNS.ReactElement {
+}): ReactElement {
   const { rich } = props
-  const [jsonOpen, setJsonOpen] = React.useState(false)
-  const params = React.useMemo(() => paramsOf(props.schema), [props.schema])
-  const rows = React.useMemo<{ name: string; schema: ParamSchema; required: boolean }[]>(() => {
+  const [jsonOpen, setJsonOpen] = useState(false)
+  const params = useMemo(() => paramsOf(props.schema), [props.schema])
+  const rows = useMemo<{ name: string; schema: ParamSchema; required: boolean }[]>(() => {
     if (params === null) return []
     const props = (params as { properties?: unknown }).properties
     if (props === null || typeof props !== 'object') return []
@@ -290,7 +289,7 @@ function ToolSchema(props: {
   // Pretty-printed only while the row's JSON is open: a tools section lists
   // dozens of schemas, and eager stringification of every collapsed row
   // dominated the section's render cost.
-  const schemaJson = React.useMemo(
+  const schemaJson = useMemo(
     () => jsonOpen ? JSON.stringify(props.schema, null, 2) : '',
     [props.schema, jsonOpen],
   )
@@ -327,7 +326,7 @@ interface DetailLabels {
   images: string
   other: string
   lines: (n: number) => string
-  callState: (err: boolean, exit: number | null) => ReactNS.ReactNode
+  callState: (err: boolean, exit: number | null) => ReactNode
 }
 
 /**
@@ -342,9 +341,9 @@ function BlocksBody(props: {
   rich: RichKit
   img: ImageKit
   labels: DetailLabels
-}): ReactNS.ReactElement {
+}): ReactElement {
   const { rich, img, labels } = props
-  const out: ReactNS.ReactNode[] = []
+  const out: ReactNode[] = []
   let images: ImageRefLike[] = []
   const flushImages = (): void => {
     if (images.length === 0) return
@@ -456,9 +455,9 @@ function ToolCallCard(props: {
   name: string
   argsRaw: unknown
   arrow?: string
-  status?: ReactNS.ReactNode
-}): ReactNS.ReactElement {
-  const args = React.useMemo(() => parseCallArgs(props.argsRaw), [props.argsRaw])
+  status?: ReactNode
+}): ReactElement {
+  const args = useMemo(() => parseCallArgs(props.argsRaw), [props.argsRaw])
   return (
     <Section
       label={(props.arrow ?? '→') + ' ' + props.name}
@@ -474,7 +473,7 @@ function ToolCallCard(props: {
   )
 }
 
-function CallArgRow(props: { name: string; value: unknown }): ReactNS.ReactElement {
+function CallArgRow(props: { name: string; value: unknown }): ReactElement {
   const v = props.value
   /* v8 ignore next 2 -- the only caller maps Object.keys of a JSON.parse'd
      object, which never holds undefined values; defensive. */
@@ -492,11 +491,11 @@ function CallArgRow(props: { name: string; value: unknown }): ReactNS.ReactEleme
 function NodeContent(props: {
   node: SurfaceNode
   conv: ConversationNodeLike | undefined
-  hint: ReactNS.ReactNode
+  hint: ReactNode
   rich: RichKit
   img: ImageKit
   labels: DetailLabels
-}): ReactNS.ReactElement {
+}): ReactElement {
   const { node, conv, rich, img, labels } = props
   if (conv === undefined) {
     // The join missed (node outside the loaded window): the 80-char preview
@@ -562,8 +561,8 @@ function lastOfTurn(requests: RequestRecord[], turn: number): RequestRecord | nu
 
 export function makeContextBrowser(
   kit: ViewKit,
-  StackedBar: (props: StackedBarProps) => ReactNS.ReactElement,
-): (props: ContextBrowserProps) => ReactNS.ReactElement {
+  StackedBar: (props: StackedBarProps) => ReactElement,
+): (props: ContextBrowserProps) => ReactElement {
   const { t, fmt, fmtTime, catLabel } = kit
   const DetailNote = makeDetailNote(kit)
   const nodeText = makeNodeText(kit)
@@ -573,24 +572,24 @@ export function makeContextBrowser(
   // descriptions, system text, and message bodies stay in sync.
   const lineLabel = (n: number): string => t(n === 1 ? 'block.line' : 'block.lines', { n })
 
-  return function ContextBrowser(props: ContextBrowserProps): ReactNS.ReactElement {
+  return function ContextBrowser(props: ContextBrowserProps): ReactElement {
     const { data, headers } = props
     // 'live' = the current surface (the NEXT request's context); number = a retained step's seq.
-    const [sel, setSel] = React.useState<'live' | number>('live')
-    const [openCat, setOpenCat] = React.useState<string | null>(null)
-    const [openElem, setOpenElem] = React.useState<string | null>(null)
+    const [sel, setSel] = useState<'live' | number>('live')
+    const [openCat, setOpenCat] = useState<string | null>(null)
+    const [openElem, setOpenElem] = useState<string | null>(null)
     // The open category's row-filter text plus the tools' row order. The
     // filter is a lens on the OPEN category: opening a different one resets
     // it, while step picks (setOpenCat(null) below) keep it so the same lens
     // compares epochs.
-    const [rowQuery, setRowQuery] = React.useState('')
-    const [toolSort, setToolSort] = React.useState<'size' | 'name'>('size')
+    const [rowQuery, setRowQuery] = useState('')
+    const [toolSort, setToolSort] = useState<'size' | 'name'>('size')
 
     // Full message content: the conversation-window join first (zero cost),
     // plus nodes fetched on demand for seqs outside the window (node arrays
     // are stable references per snapshot; the map memoizes over them).
     const convNodes = props.convNodes
-    const convBySeq = React.useMemo(() => {
+    const convBySeq = useMemo(() => {
       const m = new Map<number, ConversationNodeLike>()
       for (const n of convNodes ?? []) m.set(n.seq, n)
       return m
@@ -610,7 +609,7 @@ export function makeContextBrowser(
       fetchContent,
       'dsh-context: targeted history read failed',
     )
-    const bySeq = React.useMemo(() => {
+    const bySeq = useMemo(() => {
       if (miss.values.size === 0) return convBySeq
       const m = new Map(convBySeq)
       for (const [seq, n] of miss.values) if (!m.has(seq)) m.set(seq, n)
@@ -619,17 +618,17 @@ export function makeContextBrowser(
     // Pin linkage: a pinned bar selects its step (same accordion reset as a manual pick); unpin returns to live — a manual pick here is
     // overridden only when a NEW pin lands.
     const pinSeq = props.pinSeq
-    React.useEffect(() => {
+    useEffect(() => {
       setSel(pinSeq === null || pinSeq === undefined ? 'live' : pinSeq)
       setOpenCat(null)
       setOpenElem(null)
     }, [pinSeq])
     // Step-brief reveal: select the owning step, open the node's category + element (the pagination effect above already pulls older
     // history for a missing join), then arm a one-shot scroll consumed by the layout effect once the row renders.
-    const rootRef = React.useRef<HTMLDivElement | null>(null)
-    const focusScrollRef = React.useRef(false)
+    const rootRef = useRef<HTMLDivElement | null>(null)
+    const focusScrollRef = useRef(false)
     const nodeFocus = props.nodeFocus
-    React.useEffect(() => {
+    useEffect(() => {
       if (nodeFocus === null || nodeFocus === undefined) return
       setSel(nodeFocus.step)
       setOpenCat(nodeFocus.cat)
@@ -637,7 +636,7 @@ export function makeContextBrowser(
       focusScrollRef.current = true
       if (props.onNodeFocusHandled !== undefined) props.onNodeFocusHandled()
     }, [nodeFocus, props.onNodeFocusHandled])
-    React.useLayoutEffect(() => {
+    useLayoutEffect(() => {
       if (!focusScrollRef.current) return
       focusScrollRef.current = false
       rootRef.current?.querySelector('.lc-br-elem-on')?.scrollIntoView({ block: 'nearest' })
@@ -735,9 +734,9 @@ export function makeContextBrowser(
      * result scans while collapsed.
      */
     const elemRow = (
-      key: string, tag: ReactNS.ReactNode | null, preview: string,
-      tokens: number, time: number | undefined, body: ReactNS.ReactNode,
-      err = false, trailing: ReactNS.ReactNode = null,
+      key: string, tag: ReactNode | null, preview: string,
+      tokens: number, time: number | undefined, body: ReactNode,
+      err = false, trailing: ReactNode = null,
     ) => {
       const open = openElem === key
       return (
@@ -756,7 +755,7 @@ export function makeContextBrowser(
       )
     }
 
-    const catBody = (c: string): ReactNS.ReactNode => {
+    const catBody = (c: string): ReactNode => {
       if (c === 'system') {
         if (view.header === null) return <div className="lc-br-note">{t(headers === null ? 'browser.noHeader' : 'browser.noEpoch')}</div>
         const content = headerContent.get(view.header.seq)
@@ -824,7 +823,7 @@ export function makeContextBrowser(
         }
         // The open row's body: the fetched content's description, parameter
         // table, and raw JSON — or the epoch's fetch-state note.
-        const toolBody = (tool: HeaderTool): ReactNS.ReactNode => {
+        const toolBody = (tool: HeaderTool): ReactNode => {
           if (content === undefined) return <div className="lc-br-note">{headerNote}</div>
           const row = contentByName.get(tool.name)
           return row === undefined

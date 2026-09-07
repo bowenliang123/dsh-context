@@ -4,9 +4,9 @@
 // "Open in Settings" jump path mounts the card pre-expanded (settingsJump.ts
 // expand request), with the scroll best-effort against stubbed prototypes.
 
+import { createElement as h } from 'react'
 import assert from 'node:assert/strict'
 import { describe, test } from 'vitest'
-import { h } from '../../../src/client/react'
 import { makeSettingsCard } from '../../../src/client/components/settingsCard'
 import type { SettingsState } from '../../../src/client/settings'
 import { DICT_EN } from '../../../src/client/i18n'

@@ -3,13 +3,13 @@
 // request seq resolved off the served node seat, the relay + tab activation
 // driven through the real viewFocus module.
 
+import { createElement as h } from 'react'
 import assert from 'node:assert/strict'
 import { describe, test } from 'vitest'
 import { makeContextJumpButton } from '../../../src/client/components/contextJump'
 import type { ConversationNodeLike, UseChatLike } from '../../../src/client/services'
 import { takeContextFocus } from '../../../src/client/viewFocus'
 import { DICT_EN } from '../../../src/client/i18n'
-import { h } from '../../../src/client/react'
 import { click, makeKit, mount, query, queryAll } from '../helpers/kit'
 
 const kit = makeKit()

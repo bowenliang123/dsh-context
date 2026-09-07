@@ -8,9 +8,8 @@
   * fresh expand request (settingsJump.ts), scrolling itself into view.
 */
 
-import type * as ReactNS from 'react'
+import { useEffect, useRef, useState, type ReactElement } from 'react'
 import { IconChevronDownOutline14, Menu } from '@deepseek-ai/dsh-client-ui-primitives'
-import { React } from '../react'
 import { consumeCardExpand } from '../settingsJump'
 import type { SettingsField, SettingsState } from '../settings'
 import type { ViewKit } from '../viewkit'
@@ -28,8 +27,8 @@ interface PrefRowProps {
   onPick: (id: string) => void
 }
 
-function PrefRow(props: PrefRowProps): ReactNS.ReactElement {
-  const [open, setOpen] = React.useState(false)
+function PrefRow(props: PrefRowProps): ReactElement {
+  const [open, setOpen] = useState(false)
   const active = props.options.find(o => o.id === props.value)?.label ?? props.value
   return (
     <div className="lc-settings-row">
@@ -60,14 +59,14 @@ function PrefRow(props: PrefRowProps): ReactNS.ReactElement {
   )
 }
 
-export function makeSettingsCard(kit: ViewKit): (props: SettingsCardProps) => ReactNS.ReactElement | null {
+export function makeSettingsCard(kit: ViewKit): (props: SettingsCardProps) => ReactElement | null {
   const { t } = kit
-  return function SettingsCard(props: SettingsCardProps): ReactNS.ReactElement | null {
-    const [open, setOpen] = React.useState(false)
-    const itemRef = React.useRef<HTMLLIElement | null>(null)
+  return function SettingsCard(props: SettingsCardProps): ReactElement | null {
+    const [open, setOpen] = useState(false)
+    const itemRef = useRef<HTMLLIElement | null>(null)
     // "Open in Settings" jump: consume its fresh expand request once on mount
     // and land open; every guard stays local so no host quirk can surface.
-    React.useEffect(() => {
+    useEffect(() => {
       if (!consumeCardExpand()) return
       setOpen(true)
       try {

@@ -3,12 +3,10 @@
  * aggregateByTurn/attachMarkers are shared with ContextView.
  */
 
-import type * as ReactNS from 'react'
+import { memo, useLayoutEffect, useMemo, useRef, type ReactElement, type UIEvent } from 'react'
 import type { ContextEventRecord, RequestRecord } from '../../shared/types'
 import { CATS } from '../categories'
 import type { ViewKit } from '../viewkit'
-
-import { React } from '../react'
 
 export interface TrendChartProps {
   requests: RequestRecord[]
@@ -76,7 +74,7 @@ export function jumpTargetOf(requests: RequestRecord[], seq: number): RequestRec
   return requests.length > 0 ? requests[0] : null
 }
 
-export function makeTrendChart(kit: ViewKit): (props: TrendChartProps) => ReactNS.ReactElement {
+export function makeTrendChart(kit: ViewKit): (props: TrendChartProps) => ReactElement {
   const { t, fmt, eventLabel, eventAt } = kit
 
   const CHART_H = 112
@@ -151,7 +149,7 @@ export function makeTrendChart(kit: ViewKit): (props: TrendChartProps) => ReactN
   // Memoized so a hover/selection change re-renders only the bars whose flags flipped — the retained log renders in full (thousands of
   // nodes on long sessions); `req`/`marker` keep stable identities because the parent memoizes its aggregation, so the default shallow
   // compare suffices.
-  const ChartBar = React.memo(function ChartBar(props: ChartBarProps): ReactNS.ReactElement {
+  const ChartBar = memo(function ChartBar(props: ChartBarProps): ReactElement {
     const { req, marker } = props
     const markerAt = marker !== undefined ? eventAt(marker) : null
     // Delta mode: diverging stacks — positive category deltas pile UP from the zero line, negative ones
@@ -205,9 +203,9 @@ export function makeTrendChart(kit: ViewKit): (props: TrendChartProps) => ReactN
     )
   })
 
-  return function TrendChart(props: TrendChartProps): ReactNS.ReactElement {
+  return function TrendChart(props: TrendChartProps): ReactElement {
     const delta = props.mode === 'delta'
-    const requests = React.useMemo(
+    const requests = useMemo(
       () => (delta ? props.requests.map((req, i) => deltaOf(req, i > 0 ? props.requests[i - 1] : null)) : props.requests),
       [props.requests, delta],
     )
@@ -275,17 +273,17 @@ export function makeTrendChart(kit: ViewKit): (props: TrendChartProps) => ReactN
     // Default anchor: newest bars at the RIGHT edge; the first layout after mount scrolls unconditionally, a GRANULARITY SWITCH re-anchors
     // the same way (step mode must not inherit the turn chart's stale left edge), otherwise stick to the end only while already near it;
     // useLayoutEffect avoids a first-paint flash.
-    const scrollRef = React.useRef<HTMLDivElement | null>(null)
-    const scrolledOnce = React.useRef(false)
-    const lastGranRef = React.useRef(props.granularity)
+    const scrollRef = useRef<HTMLDivElement | null>(null)
+    const scrolledOnce = useRef(false)
+    const lastGranRef = useRef(props.granularity)
     // The newest bar's seq (or 0 when the log is empty): the layout effect only re-runs when the right edge genuinely
     // moves (new bar appended, granularity switched, focus turn set) — hover/select changes keep their scroll position
     // so the chart does not flash with every keystroke.
-    const lastSeqRef = React.useRef(0)
+    const lastSeqRef = useRef(0)
     // The scrollWidth measured during the PREVIOUS effect pass. The "was the reader near the right edge?" check
     // has to compare against the width as it was BEFORE the new bar landed — by the time the layout effect runs,
     // `el.scrollWidth` is already the new (wider) value, so a near-edge check against it would miss the auto-follow.
-    const prevScrollWidthRef = React.useRef(0)
+    const prevScrollWidthRef = useRef(0)
     /**
      * Keep each turn label centered within its block's VISIBLE slice, then thin colliding labels: a label wider
      * than its block overflows it, so consecutive narrow turns (14px bars, 2-digit "T12"s) would smear into each
@@ -327,7 +325,7 @@ export function makeTrendChart(kit: ViewKit): (props: TrendChartProps) => ReactN
         label.style.visibility = vis
       }
     }
-    React.useLayoutEffect(() => {
+    useLayoutEffect(() => {
       const el = scrollRef.current
       /* v8 ignore next 1 -- the scroll div renders unconditionally and React
          attaches refs before layout effects run; el is never null here. */
@@ -385,7 +383,7 @@ export function makeTrendChart(kit: ViewKit): (props: TrendChartProps) => ReactN
     const hoveredReq = hoveredIdx >= 0 ? requests[hoveredIdx] : null
 
     // Column center (content px) of the currently hovered bar, for syncTip reads outside the render pass.
-    const tipColRef = React.useRef(0)
+    const tipColRef = useRef(0)
 
     /**
      * Glue the hover tip to its bar's VISIBLE slice. The tip deliberately does NOT live inside the scrolling
@@ -411,7 +409,7 @@ export function makeTrendChart(kit: ViewKit): (props: TrendChartProps) => ReactN
 
     // Position (and re-position after EVERY commit — the tip mounts on hover changes, which touch no other
     // effect dependency here) from the committed hovered column before paint.
-    React.useLayoutEffect(() => {
+    useLayoutEffect(() => {
       /* v8 ignore next 1 -- the scroll div renders unconditionally and React attaches refs before
          layout effects run; el is never null here. */
       if (scrollRef.current === null) return
@@ -455,7 +453,7 @@ export function makeTrendChart(kit: ViewKit): (props: TrendChartProps) => ReactN
           <div
             className={'lc-chart-scroll' + (props.activeTurn !== null ? ' lc-chart-dim' : '')}
             ref={scrollRef}
-            onScroll={(e: ReactNS.UIEvent<HTMLDivElement>) => {
+            onScroll={(e: UIEvent<HTMLDivElement>) => {
               updateTurnLabels(e.currentTarget)
               syncTip(e.currentTarget)
             }}

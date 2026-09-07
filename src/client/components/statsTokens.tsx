@@ -8,26 +8,24 @@
  * the empty state keeps all four rows.
  */
 
-import type * as ReactNS from 'react'
+import { useState, type ReactElement } from 'react'
 import type { TokenUsage } from '../../shared/types'
 import { cacheHitPercent as cacheHitPercentOf } from '../format'
 import { numOf } from '../services'
 import type { ViewKit } from '../viewkit'
 
-import { React } from '../react'
-
 import { makeSliceList } from './sliceList'
 import type { SliceRow } from './sliceList'
 import type { DonutProps } from './donut'
 
-export function makeStatsTokens(kit: ViewKit, Donut: (props: DonutProps) => ReactNS.ReactElement): (props: {
+export function makeStatsTokens(kit: ViewKit, Donut: (props: DonutProps) => ReactElement): (props: {
   usage: TokenUsage | null
-}) => ReactNS.ReactElement {
+}) => ReactElement {
   const { t, fmt, fmtShare } = kit
   const SliceList = makeSliceList(kit)
-  return function StatsTokens(props: { usage: TokenUsage | null }): ReactNS.ReactElement {
+  return function StatsTokens(props: { usage: TokenUsage | null }): ReactElement {
     // The legend row ↔ donut segment hover link (shared key, set from either side).
-    const [hoverKey, setHoverKey] = React.useState<string | null>(null)
+    const [hoverKey, setHoverKey] = useState<string | null>(null)
     const reads = props.usage !== null ? numOf(props.usage.cacheReadTokens) : 0
     const writes = props.usage !== null ? numOf(props.usage.cacheWriteTokens) : 0
     const uncached = props.usage !== null ? numOf(props.usage.uncachedInputTokens) : 0

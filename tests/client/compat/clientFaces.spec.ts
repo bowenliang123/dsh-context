@@ -9,6 +9,7 @@
 // The real-code complement — the ACTUAL dsh sources per tag — runs in the
 // `compat` vitest project (tests/compat/matrix.spec.ts).
 
+import { createElement as h } from 'react'
 import assert from 'node:assert/strict'
 import { describe, test, vi } from 'vitest'
 import { BASELINES } from '../../baselines'
@@ -20,7 +21,6 @@ import { makeContextView } from '../../../src/client/components/contextView'
 import { createContextSettings } from '../../../src/client/settings'
 import { DICT_EN } from '../../../src/client/i18n'
 import type { ContextTimeline } from '../../../src/shared/types'
-import { h } from '../../../src/client/react'
 import { asClientCtx, TestClientCtx } from '../helpers/harness'
 import { click, makeKit, mount, queryAll, text } from '../helpers/kit'
 import { baselineCtx, chatSeat, convNodes } from './baselineFaces'

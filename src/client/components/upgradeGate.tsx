@@ -10,11 +10,9 @@
  * until the harness is actually updated.
  */
 
-import type * as ReactNS from 'react'
+import { useCallback, useState, type ReactElement } from 'react'
 import type { ViewKit } from '../viewkit'
 import { useEscapeClose } from './escapeClose'
-
-import { React } from '../react'
 
 /** Sessions whose gate the user already dismissed this browser session. */
 const dismissed = new Set<string>()
@@ -27,15 +25,15 @@ export interface UpgradeGateProps {
   minimum: string
 }
 
-export function makeUpgradeGate(kit: ViewKit): (props: UpgradeGateProps) => ReactNS.ReactElement | null {
+export function makeUpgradeGate(kit: ViewKit): (props: UpgradeGateProps) => ReactElement | null {
   const { t } = kit
-  return function UpgradeGate(props: UpgradeGateProps): ReactNS.ReactElement | null {
+  return function UpgradeGate(props: UpgradeGateProps): ReactElement | null {
     const sessionId = typeof props.sessionId === 'string' ? props.sessionId : ''
     // `closedFor` re-renders on dismiss within one mount; the ledger covers
     // remounts and in-place session switches.
-    const [closedFor, setClosedFor] = React.useState<string | null>(null)
+    const [closedFor, setClosedFor] = useState<string | null>(null)
     const closed = closedFor === sessionId || dismissed.has(sessionId)
-    const close = React.useCallback(() => {
+    const close = useCallback(() => {
       dismissed.add(sessionId)
       setClosedFor(sessionId)
     }, [sessionId])

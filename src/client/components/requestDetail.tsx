@@ -1,4 +1,4 @@
-import type * as ReactNS from 'react'
+import { memo, type ComponentType, type MouseEvent, type ReactElement, type ReactNode } from 'react'
 import type { ContextEventRecord, RequestRecord, SurfaceNode } from '../../shared/types'
 import { partsOf, CATS } from '../categories'
 import { cacheHitPercent } from '../format'
@@ -7,8 +7,6 @@ import { blockSummaryOf, callNamesOf, callSummaryOf } from '../callSummary'
 import type { ConversationNodeLike } from '../services'
 import type { StackedBarProps } from './stackedBar'
 import type { ViewKit } from '../viewkit'
-
-import { React } from '../react'
 
 export interface RequestDetailProps {
   request: RequestRecord | null
@@ -35,8 +33,8 @@ export interface RequestDetailProps {
 
 export function makeRequestDetail(
   kit: ViewKit,
-  StackedBar: (props: StackedBarProps) => ReactNS.ReactElement,
-): ReactNS.ComponentType<RequestDetailProps> {
+  StackedBar: (props: StackedBarProps) => ReactElement,
+): ComponentType<RequestDetailProps> {
   const { t, fmt, fmtTime, catLabel, eventLabel, eventAt } = kit
 
   /**
@@ -51,8 +49,8 @@ export function makeRequestDetail(
     node?: SurfaceNode
     isResponse: boolean
     onLocate?: (node: SurfaceNode, isResponse: boolean) => void
-    children: ReactNS.ReactNode
-  }): ReactNS.ReactElement {
+    children: ReactNode
+  }): ReactElement {
     const inner = (
       <>
         <span className="lc-brief-tag">
@@ -143,21 +141,21 @@ export function makeRequestDetail(
     brief: StepBrief | null | undefined
     convOf?: (seq: number) => ConversationNodeLike | undefined
     onLocate?: (node: SurfaceNode, isResponse: boolean) => void
-  }): ReactNS.ReactElement {
+  }): ReactElement {
     const { opener, inputs, response } = props.brief ?? { inputs: [] }
     const convOf = props.convOf ?? (() => undefined)
     // The content span's native title: full preview, plus the locate hint when the row is clickable.
     const hint = props.onLocate !== undefined ? ' — ' + t('brief.locate') : ''
     // Chip click: locate THIS chip's node; stopPropagation keeps it from also firing the row's own locate.
     const locateChip = props.onLocate === undefined ? undefined : (n: SurfaceNode) =>
-      (e?: ReactNS.MouseEvent) => { e?.stopPropagation(); props.onLocate?.(n, false) }
+      (e?: MouseEvent) => { e?.stopPropagation(); props.onLocate?.(n, false) }
     const MAX_CHIPS = 3
     /**
      * The ONE content unit of the brief — inputs and the reply share the same chip anatomy (error dot, fact tag,
      * preview text). Input chips are compact and individually clickable (each locates its own node); the reply is a
      * single chip grown to the row's width, left inert because the row button already locates it.
      */
-    const nodeChip = (n: SurfaceNode, onClick?: (e?: ReactNS.MouseEvent) => void, grow = false): ReactNS.ReactElement => {
+    const nodeChip = (n: SurfaceNode, onClick?: (e?: MouseEvent) => void, grow = false): ReactElement => {
       const { tag, text } = chipParts(n, convOf(n.seq))
       return (
         <span
@@ -208,7 +206,7 @@ export function makeRequestDetail(
 
   // Memoized at the factory level: the parent hands reference-stable request/prev/marker/brief/convOf/onLocate
   // across hover/select renders (see contextView), so the panel skips reconciliation when the active bar did not move.
-  return React.memo(function RequestDetail(props: RequestDetailProps): ReactNS.ReactElement | null {
+  return memo(function RequestDetail(props: RequestDetailProps): ReactElement | null {
     const req = props.request
     if (!req) return null
     const isTurn = req.stepCount !== undefined && req.stepCount > 1

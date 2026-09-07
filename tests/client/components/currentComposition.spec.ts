@@ -1,9 +1,9 @@
 // CurrentComposition (src/client/components/currentComposition.tsx) rendered
 // with real React over the real StackedBar/Legend pair.
 
+import { createElement as h } from 'react'
 import assert from 'node:assert/strict'
 import { describe, test } from 'vitest'
-import { h } from '../../../src/client/react'
 import { makeCurrentComposition } from '../../../src/client/components/currentComposition'
 import { makeLegend, makeStackedBar } from '../../../src/client/components/stackedBar'
 import type { Headline } from '../../../src/client/headline'

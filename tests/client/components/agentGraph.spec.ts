@@ -4,10 +4,9 @@
 // navigation, catalog refresh, live snapshot updates, and every degrade arm
 // (no service, no anchor, no stats).
 
+import { act, createElement as h } from 'react'
 import assert from 'node:assert/strict'
-import { act } from 'react'
 import { describe, test } from 'vitest'
-import { h } from '../../../src/client/react'
 import { makeAgentGraph, ringColorOf } from '../../../src/client/components/agentGraph'
 import type { AgentSelfStats } from '../../../src/client/agentTree'
 import { TestClientCtx, asClientCtx } from '../helpers/harness'

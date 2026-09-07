@@ -4,7 +4,7 @@
  * through the per-session modal store, so the trigger flips it and no message ever enters session history.
  */
 
-import type * as ReactNS from 'react'
+import { createElement as h, useCallback, useLayoutEffect, useMemo, useRef, useState, type ReactElement } from 'react'
 import { measureDock } from '../dockMeasure'
 import { headlineOf } from '../headline'
 import { modalStoreOf, takePendingConsume } from '../modalStore'
@@ -19,14 +19,12 @@ import { makeErrorBoundary } from './errorBoundary'
 import { useEscapeClose } from './escapeClose'
 import { makeLegend, makeStackedBar } from './stackedBar'
 
-import { React, h } from '../react'
-
 export interface ContextModalProps extends SessionStandardProps {
   /** Bound selector hook over the per-session open flag (hooks compartment). */
   useContextModal?: (sel: (open: boolean) => boolean) => boolean
 }
 
-export function makeContextModal(ctx: ClientCtx, kit: ViewKit): (props: ContextModalProps) => ReactNS.ReactElement | null {
+export function makeContextModal(ctx: ClientCtx, kit: ViewKit): (props: ContextModalProps) => ReactElement | null {
   const { t } = kit
   const StackedBar = makeStackedBar(kit)
   const Legend = makeLegend(kit)
@@ -34,7 +32,7 @@ export function makeContextModal(ctx: ClientCtx, kit: ViewKit): (props: ContextM
   const ContextBrowser = makeContextBrowser(kit, StackedBar)
   const ErrorBoundary = makeErrorBoundary(t)
 
-  function ContextModalBody(props: ContextModalProps): ReactNS.ReactElement | null {
+  function ContextModalBody(props: ContextModalProps): ReactElement | null {
     const sessionId = typeof props.sessionId === 'string' ? props.sessionId : ''
     const open = typeof props.useContextModal === 'function' ? props.useContextModal(s => s) : false
     // The timeline source (timelineSource.ts) — shares the tab's per-session
@@ -48,23 +46,23 @@ export function makeContextModal(ctx: ClientCtx, kit: ViewKit): (props: ContextM
     // read unconditionally here, before the closed early return, so the hook
     // order stays stable across open/close).
     const convNodes = conversationNodesOf(props)
-    const [hoverCat, setHoverCat] = React.useState<string | null>(null)
+    const [hoverCat, setHoverCat] = useState<string | null>(null)
     // Dock the mask beside the shell sidebar: 0 until the frame measure lands
     // (the layout effect below resolves it before first paint).
-    const [dockLeft, setDockLeft] = React.useState(0)
-    const backdropRef = React.useRef<HTMLDivElement | null>(null)
+    const [dockLeft, setDockLeft] = useState(0)
+    const backdropRef = useRef<HTMLDivElement | null>(null)
     // Same targeted content fetch the Context tab wires (one seq-anchored history read per expanded row), plus the on-demand header
     // epoch content read for the browser's system/tools sections.
-    const fetchContent = React.useMemo(
+    const fetchContent = useMemo(
       () => (sessionId !== '' ? makeContentFetcher(sessionId) : undefined),
       [sessionId],
     )
-    const fetchHeader = React.useMemo(
+    const fetchHeader = useMemo(
       () => (sessionId !== '' ? makeHeaderFetcher(sessionId) : undefined),
       [sessionId],
     )
 
-    const close = React.useCallback(() => {
+    const close = useCallback(() => {
       if (sessionId === '') return
       modalStoreOf(sessionId).set(false)
       // Consume the `/context` token now (it stayed in the composer while the modal was open) via the scoped input event — a stale guard
@@ -85,7 +83,7 @@ export function makeContextModal(ctx: ClientCtx, kit: ViewKit): (props: ContextM
     // first paint, then follow the frame's inline template while open (sidebar
     // drags, collapse toggles and narrow-viewport re-solves all rewrite it).
     // An unresolved frame keeps the full-viewport mask.
-    React.useLayoutEffect(() => {
+    useLayoutEffect(() => {
       if (!open) return undefined
       const dock = measureDock(backdropRef.current)
       setDockLeft(dock.left)
@@ -138,7 +136,7 @@ export function makeContextModal(ctx: ClientCtx, kit: ViewKit): (props: ContextM
     )
   }
 
-  return function ContextModal(props: ContextModalProps): ReactNS.ReactElement | null {
+  return function ContextModal(props: ContextModalProps): ReactElement | null {
     return h(ErrorBoundary, null, h(ContextModalBody, props))
   }
 }

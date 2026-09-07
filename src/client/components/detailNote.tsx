@@ -8,10 +8,8 @@
  * the plain text).
  */
 
-import type * as ReactNS from 'react'
+import { type ReactElement } from 'react'
 import type { ViewKit } from '../viewkit'
-
-import { React } from '../react'
 
 export function makeDetailNote(kit: ViewKit): (props: {
   /** The pending kind: the first read in flight, or settled without data. */
@@ -20,13 +18,13 @@ export function makeDetailNote(kit: ViewKit): (props: {
   onRetry?: () => void
   /** The container's style class: cards use the shared empty well, the browser its inline note strip. */
   className?: string
-}) => ReactNS.ReactElement {
+}) => ReactElement {
   const { t } = kit
   return function DetailNote(props: {
     state: 'loading' | 'failed'
     onRetry?: () => void
     className?: string
-  }): ReactNS.ReactElement {
+  }): ReactElement {
     const cls = props.className ?? 'lc-empty'
     if (props.state === 'loading') return <div className={cls}>{t('detail.loading')}</div>
     return (

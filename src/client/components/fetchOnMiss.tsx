@@ -8,10 +8,8 @@
  * history is immutable, so a resolved key never refetches.
  */
 
-import type * as ReactNS from 'react'
+import { useEffect, useState, type ReactNode } from 'react'
 import type { Translate } from '../i18n'
-
-import { React } from '../react'
 
 export type FetchMissState = 'idle' | 'loading' | 'absent' | 'failed'
 
@@ -33,10 +31,10 @@ export function useFetchOnMiss<T>(
   fetcher: ((key: number) => Promise<T | null>) | undefined,
   warn: string,
 ): FetchOnMiss<T> {
-  const [values, setValues] = React.useState<Map<number, T>>(() => new Map())
-  const [state, setState] = React.useState<FetchMissState>('idle')
-  const [attempt, setAttempt] = React.useState(0)
-  React.useEffect(() => {
+  const [values, setValues] = useState<Map<number, T>>(() => new Map())
+  const [state, setState] = useState<FetchMissState>('idle')
+  const [attempt, setAttempt] = useState(0)
+  useEffect(() => {
     if (key === null || fetcher === undefined || values.has(key)) return
     let live = true
     setState('loading')
@@ -74,7 +72,7 @@ export function fetchMissNote(
   state: FetchMissState,
   onRetry: () => void,
   emptyKey: 'browser.noContent' | 'browser.headerMetaOnly',
-): ReactNS.ReactNode {
+): ReactNode {
   if (fetcher === undefined) return t(emptyKey)
   if (state === 'absent') return t('browser.notInLog')
   if (state === 'failed') {

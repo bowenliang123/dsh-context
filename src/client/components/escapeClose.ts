@@ -6,11 +6,11 @@
  * that element left the document).
  */
 
-import { React } from '../react'
+import { useEffect } from 'react'
 
 /** Close on Escape while `active`; restores the pre-open focus on cleanup. */
 export function useEscapeClose(active: boolean, onClose: () => void): void {
-  React.useEffect(() => {
+  useEffect(() => {
     if (!active) return undefined
     const previous = document.activeElement instanceof HTMLElement ? document.activeElement : null
     const onKey = (ev: KeyboardEvent): void => {

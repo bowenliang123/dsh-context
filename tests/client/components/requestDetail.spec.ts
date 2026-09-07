@@ -2,9 +2,9 @@
 // React in jsdom: header chips, delta mode, per-category rows, and the step
 // brief (chipParts/nodeLine cascades, locate linkage).
 
+import { createElement as h } from 'react'
 import assert from 'node:assert/strict'
 import { describe, test } from 'vitest'
-import { h } from '../../../src/client/react'
 import { makeRequestDetail } from '../../../src/client/components/requestDetail'
 import { makeStackedBar } from '../../../src/client/components/stackedBar'
 import type { RequestRecord, ContextEventRecord, SurfaceNode } from '../../../src/shared/types'

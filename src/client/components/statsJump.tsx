@@ -16,8 +16,7 @@
  * page down.
  */
 
-import type * as ReactNS from 'react'
-import { React, h } from '../react'
+import { createElement as h, useEffect, useRef, type ReactElement } from 'react'
 import { activateContextTab } from '../viewFocus'
 import type { ViewKit } from '../viewkit'
 
@@ -116,12 +115,12 @@ export function wireDock(anchor: Element | null, label: string, activate: () => 
 }
 
 /** The dock entry component: the invisible anchor plus the wiring around it. */
-export function makeStatsJump(kit: ViewKit): () => ReactNS.ReactElement {
+export function makeStatsJump(kit: ViewKit): () => ReactElement {
   const { t } = kit
-  return function StatsJump(): ReactNS.ReactElement {
-    const anchorRef = React.useRef<Element | null>(null)
+  return function StatsJump(): ReactElement {
+    const anchorRef = useRef<Element | null>(null)
     const label = t('jump.statsLine')
-    React.useEffect(() => wireDock(anchorRef.current, label, () => { activateContextTab(t('tab')) }), [label])
+    useEffect(() => wireDock(anchorRef.current, label, () => { activateContextTab(t('tab')) }), [label])
     return h('span', { ref: anchorRef, className: ANCHOR_CLASS, hidden: true, 'aria-hidden': 'true' })
   }
 }

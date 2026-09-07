@@ -4,9 +4,9 @@
 // fake DOM event — silenced with a window-error preventer and a spy, never
 // mocked.
 
+import { createElement as h } from 'react'
 import assert from 'node:assert/strict'
 import { afterEach, describe, test, vi } from 'vitest'
-import { h } from '../../../src/client/react'
 import { makeErrorBoundary } from '../../../src/client/components/errorBoundary'
 import { click, makeKit, mount, query, silenceWindowErrors, text } from '../helpers/kit'
 

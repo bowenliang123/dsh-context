@@ -26,8 +26,8 @@
  * empty chart.
  */
 
+import { useEffect, useMemo, useSyncExternalStore } from 'react'
 import type { ContextTimeline, ContextTimelineDetail } from '../shared/types'
-import { React } from './react'
 import type { ClientCtx, SessionStandardProps } from './services'
 import { asRecord, numOf, objectsOf, projectionOf, rpcCallOf, timelineOf } from './services'
 
@@ -275,19 +275,19 @@ export function useTimelineSource(ctx: ClientCtx, props: SessionStandardProps): 
   // inline generation — `headRev` null means no detail channel work at all.
   const headRev = head !== null && typeof head.detailRev === 'number' ? head.detailRev : null
   const slim = headRev !== null
-  const store = React.useMemo(
+  const store = useMemo(
     () => (slim ? detailStoreOf(ctx, sessionId) : null),
     [ctx, sessionId, slim],
   )
-  const snap = React.useSyncExternalStore(
+  const snap = useSyncExternalStore(
     store !== null ? store.subscribe : noopSubscribe,
     store !== null ? store.getSnapshot : () => EMPTY_SNAP,
   )
-  React.useEffect(() => {
+  useEffect(() => {
     if (store !== null && headRev !== null) store.request(headRev)
   }, [store, headRev])
 
-  return React.useMemo<TimelineSource>(() => {
+  return useMemo<TimelineSource>(() => {
     if (head === null) return { data: null, detailState: 'loading', retryDetail: noopRetry }
     if (!slim || store === null) return { data: head, detailState: 'legacy', retryDetail: noopRetry }
     const detail = snap.detail

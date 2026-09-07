@@ -1,17 +1,15 @@
-import type * as ReactNS from 'react'
+import { type ReactElement } from 'react'
 import type { PartsPart } from '../categories'
 import type { Headline } from '../headline'
 import type { ViewKit } from '../viewkit'
 import { AUTO_COMPACT_RATIO } from './stackedBar'
 import type { StackedBarProps } from './stackedBar'
 
-import { React } from '../react'
-
 type LegendFn = (props: {
   parts: PartsPart[]
   hoverKey?: string | null
   onHoverKey?: (key: string | null) => void
-}) => ReactNS.ReactElement
+}) => ReactElement
 
 export interface CurrentCompositionProps {
   head: Headline
@@ -22,11 +20,11 @@ export interface CurrentCompositionProps {
 
 export function makeCurrentComposition(
   kit: ViewKit,
-  StackedBar: (props: StackedBarProps) => ReactNS.ReactElement,
+  StackedBar: (props: StackedBarProps) => ReactElement,
   Legend: LegendFn,
-): (props: CurrentCompositionProps) => ReactNS.ReactElement {
+): (props: CurrentCompositionProps) => ReactElement {
   const { t, fmt } = kit
-  return function CurrentComposition(props: CurrentCompositionProps): ReactNS.ReactElement {
+  return function CurrentComposition(props: CurrentCompositionProps): ReactElement {
     const head = props.head
     const reserve = head.window != null && head.window > 0
       ? { ratio: AUTO_COMPACT_RATIO, label: t('overview.compactReserve', { pct: Math.round(AUTO_COMPACT_RATIO * 100) }) }

@@ -11,26 +11,24 @@
  * into the post-model window while the row numbers stay true.
  */
 
-import type * as ReactNS from 'react'
+import { useState, type ReactElement } from 'react'
 import type { TimingTotals } from '../../shared/types'
 import type { ViewKit } from '../viewkit'
-
-import { React } from '../react'
 
 import { makeSliceList } from './sliceList'
 import type { SliceRow } from './sliceList'
 import type { DonutProps, DonutSegment } from './donut'
 
-export function makeStatsTiming(kit: ViewKit, Donut: (props: DonutProps) => ReactNS.ReactElement): (props: {
+export function makeStatsTiming(kit: ViewKit, Donut: (props: DonutProps) => ReactElement): (props: {
   timing: TimingTotals | null
   locale: string
-}) => ReactNS.ReactElement {
+}) => ReactElement {
   const { t, fmt, fmtDuration, fmtShare } = kit
   const SliceList = makeSliceList(kit)
-  return function StatsTiming(props: { timing: TimingTotals | null; locale: string }): ReactNS.ReactElement {
+  return function StatsTiming(props: { timing: TimingTotals | null; locale: string }): ReactElement {
     const lang: 'zh' | 'en' = props.locale === 'zh' ? 'zh' : 'en'
     // The legend row ↔ donut segment hover link (shared key, set from either side).
-    const [hoverKey, setHoverKey] = React.useState<string | null>(null)
+    const [hoverKey, setHoverKey] = useState<string | null>(null)
     const timing = props.timing
     const wall = timing !== null && Number.isFinite(timing.wallMs) && timing.wallMs > 0 ? timing.wallMs : 0
     let segments: DonutSegment[] = []

@@ -2,9 +2,9 @@
 // the donut legend rows — the primary line (color dot, label, bold share)
 // over the secondary quantity line.
 
+import { createElement as h, useState } from 'react'
 import assert from 'node:assert/strict'
 import { describe, test } from 'vitest'
-import { h, React } from '../../../src/client/react'
 import { makeSliceList } from '../../../src/client/components/sliceList'
 import type { SliceRow } from '../../../src/client/components/sliceList'
 import { hover, makeKit, mount, query, queryAll, text, unhover } from '../helpers/kit'
@@ -14,7 +14,7 @@ const SliceList = makeSliceList(kit)
 
 /** A parent that really holds the hover key, so hovering re-renders the rows. */
 function HoverHarness(props: { rows: SliceRow[] }) {
-  const [hoverKey, setHoverKey] = React.useState<string | null>(null)
+  const [hoverKey, setHoverKey] = useState<string | null>(null)
   return h(SliceList, { rows: props.rows, hoverKey, onHoverKey: setHoverKey })
 }
 

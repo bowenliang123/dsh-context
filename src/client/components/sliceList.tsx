@@ -9,10 +9,8 @@
  * dumb markup out.
  */
 
-import type * as ReactNS from 'react'
+import { type ReactElement } from 'react'
 import type { ViewKit } from '../viewkit'
-
-import { React } from '../react'
 
 export interface SliceRow {
   key: string
@@ -32,13 +30,13 @@ export function makeSliceList(kit: ViewKit): (props: {
   hoverKey?: string | null
   /** Hover relay; absent renders the rows inert. */
   onHoverKey?: (key: string | null) => void
-}) => ReactNS.ReactElement {
+}) => ReactElement {
   void kit
   return function SliceList(props: {
     rows: SliceRow[]
     hoverKey?: string | null
     onHoverKey?: (key: string | null) => void
-  }): ReactNS.ReactElement {
+  }): ReactElement {
     return (
       <div className="lc-sl" onMouseLeave={() => { if (props.onHoverKey !== undefined) props.onHoverKey(null) }}>
         {props.rows.map(r => (

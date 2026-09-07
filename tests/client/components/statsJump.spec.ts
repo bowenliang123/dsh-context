@@ -4,14 +4,12 @@
 // and every hostile or absent dock shape degrades to a silent feature-off.
 // jsdom supplies the real dock DOM and its live MutationObserver.
 
+import { act, createElement as h, type ReactNode } from 'react'
 import assert from 'node:assert/strict'
-import { act } from 'react'
-import type { ReactNode } from 'react'
 import { createRoot } from 'react-dom/client'
 import { afterEach, describe, test } from 'vitest'
 import { makeStatsJump, statsRowOf, wireDock } from '../../../src/client/components/statsJump'
 import { DICT_EN } from '../../../src/client/i18n'
-import { h } from '../../../src/client/react'
 import { makeKit } from '../helpers/kit'
 
 const StatsJump = makeStatsJump(makeKit())

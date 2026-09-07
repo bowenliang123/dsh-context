@@ -2,9 +2,9 @@
 // proportional SVG segments around the center label, with the empty ring
 // fallback and hostile-value skips.
 
+import { createElement as h, useState } from 'react'
 import assert from 'node:assert/strict'
 import { describe, test } from 'vitest'
-import { h, React } from '../../../src/client/react'
 import { makeDonut } from '../../../src/client/components/donut'
 import type { DonutSegment } from '../../../src/client/components/donut'
 import { hover, makeKit, mount, query, queryAll, text, unhover } from '../helpers/kit'
@@ -14,7 +14,7 @@ const Donut = makeDonut(kit)
 
 /** A parent that really holds the hover key, so hovering re-renders the ring. */
 function HoverHarness(props: { segments: DonutSegment[] }) {
-  const [hoverKey, setHoverKey] = React.useState<string | null>(null)
+  const [hoverKey, setHoverKey] = useState<string | null>(null)
   return h(Donut, { segments: props.segments, centerTop: 'x', hoverKey, onHoverKey: setHoverKey })
 }
 

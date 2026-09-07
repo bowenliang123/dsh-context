@@ -2,10 +2,9 @@
 // React (real shared icon components), including the truncation layout effect
 // and the empty→non-empty hook-count regression (issue #12).
 
+import { act, createElement as h } from 'react'
 import assert from 'node:assert/strict'
 import { describe, test } from 'vitest'
-import { act } from 'react'
-import { h } from '../../../src/client/react'
 import { makeEventList, makeEventText } from '../../../src/client/components/events'
 import { fmtTime } from '../../../src/client/format'
 import type { ContextEventRecord } from '../../../src/shared/types'

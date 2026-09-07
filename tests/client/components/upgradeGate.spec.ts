@@ -3,9 +3,9 @@
 // dismissal, and the per-session dismissal ledger across remounts and
 // in-place session switches.
 
+import { createElement as h } from 'react'
 import assert from 'node:assert/strict'
 import { describe, test } from 'vitest'
-import { h } from '../../../src/client/react'
 import { makeUpgradeGate } from '../../../src/client/components/upgradeGate'
 import { click, keydown, makeKit, mount, query, text } from '../helpers/kit'
 

@@ -5,11 +5,10 @@
 // garbage / well-formed, granularity/trend-mode state, brief→browser
 // locate bridge, kind filter, scroll ledger, locale arms, error boundary).
 
+import { act, createElement as h, type ReactElement } from 'react'
 import assert from 'node:assert/strict'
-import { act } from 'react'
 import { createRoot } from 'react-dom/client'
 import { afterEach, describe, test, vi } from 'vitest'
-import { h } from '../../../src/client/react'
 import { makeContextView } from '../../../src/client/components/contextView'
 import { watchHistoryFaces } from '../../../src/client/historyPage'
 import { requestContextFocus, takeContextFocus } from '../../../src/client/viewFocus'
@@ -93,7 +92,7 @@ function buttonByText(container: ParentNode, label: string): HTMLElement {
 }
 
 /** Mount inside a `[data-conversation-scroll]` scroller so the view's shared-scrollport probes find it. */
-async function mountInScroller(el: React.ReactElement, scroller: HTMLElement) {
+async function mountInScroller(el: ReactElement, scroller: HTMLElement) {
   const inner = document.createElement('div')
   scroller.appendChild(inner)
   document.body.appendChild(scroller)
@@ -103,7 +102,7 @@ async function mountInScroller(el: React.ReactElement, scroller: HTMLElement) {
   })
   return {
     container: inner,
-    async update(next: React.ReactElement) {
+    async update(next: ReactElement) {
       await act(async () => {
         root.render(next)
       })

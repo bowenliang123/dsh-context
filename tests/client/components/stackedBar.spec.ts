@@ -2,9 +2,9 @@
 // real React through a state-holding hover harness, plus direct mounts for
 // the scale/free/reserve/tooltip branch matrix.
 
+import { createElement as h, useState } from 'react'
 import assert from 'node:assert/strict'
 import { describe, test } from 'vitest'
-import { h, React } from '../../../src/client/react'
 import { makeLegend, makeStackedBar } from '../../../src/client/components/stackedBar'
 import type { PartsPart } from '../../../src/client/categories'
 import { hover, makeKit, mount, query, queryAll, unhover } from '../helpers/kit'
@@ -19,7 +19,7 @@ function part(key: string, value: number, raw?: number): PartsPart {
 
 /** A parent that really holds the hover key, so hovering re-renders the bar. */
 function HoverHarness(props: { parts: PartsPart[]; max?: number; reserve?: { ratio: number; label: string } }) {
-  const [hoverKey, setHoverKey] = React.useState<string | null>(null)
+  const [hoverKey, setHoverKey] = useState<string | null>(null)
   return h(StackedBar, { parts: props.parts, max: props.max, hoverKey, onHoverKey: setHoverKey, reserve: props.reserve })
 }
 

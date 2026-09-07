@@ -22,6 +22,7 @@
  * beyond the bundled source.
  */
 
+import { createElement as h } from 'react'
 import { DICT_EN, DICT_ZH } from './i18n'
 import { registerContextCommand } from './command'
 import { makeContextModal } from './components/contextModal'
@@ -54,8 +55,6 @@ import './styles/browser.css'
 import './styles/detailSections.css'
 import './styles/attachments.css'
 import './styles/agentGraph.css'
-
-import { h } from './react'
 
 const NS = 'dsh-context'
 

@@ -3,10 +3,9 @@
 // and line deltas, expandable operation logs, the op-level locate hook,
 // workspace-relative path display, and the system-open affordance.
 
+import { act, createElement as h } from 'react'
 import assert from 'node:assert/strict'
-import { act } from 'react'
 import { describe, test } from 'vitest'
-import { h } from '../../../src/client/react'
 import { makeFileCard } from '../../../src/client/components/fileCard'
 import type { FileActivity, FileEntry, FileOp } from '../../../src/client/fileActivity'
 import { createContextSettings } from '../../../src/client/settings'

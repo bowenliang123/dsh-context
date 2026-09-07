@@ -7,10 +7,8 @@
  * size, so the label always fits inside the hole the thin stroke leaves.
  */
 
-import type * as ReactNS from 'react'
+import { type ReactElement, type ReactNode } from 'react'
 import type { ViewKit } from '../viewkit'
-
-import { React } from '../react'
 
 export interface DonutSegment {
   key: string
@@ -21,9 +19,9 @@ export interface DonutSegment {
 export interface DonutProps {
   segments: DonutSegment[]
   /** The big center figure (a duration, a token count, a percentage). */
-  centerTop: ReactNS.ReactNode
+  centerTop: ReactNode
   /** The small caption under the center figure. */
-  centerSub?: ReactNS.ReactNode
+  centerSub?: ReactNode
   /** Outer size in px (default 118). */
   size?: number
   /** The hovered slice key — the legend row ↔ segment hover link. */
@@ -32,9 +30,9 @@ export interface DonutProps {
   onHoverKey?: (key: string | null) => void
 }
 
-export function makeDonut(kit: ViewKit): (props: DonutProps) => ReactNS.ReactElement {
+export function makeDonut(kit: ViewKit): (props: DonutProps) => ReactElement {
   void kit
-  return function Donut(props: DonutProps): ReactNS.ReactElement {
+  return function Donut(props: DonutProps): ReactElement {
     const size = props.size ?? 118
     let total = 0
     for (const s of props.segments) {

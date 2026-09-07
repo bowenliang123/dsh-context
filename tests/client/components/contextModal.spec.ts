@@ -3,10 +3,9 @@
 // a TestClientCtx), with the per-session modal store driving open/close,
 // real sessions faces for the consume-token bail, and real projections.
 
+import { act, createElement as h, useSyncExternalStore } from 'react'
 import assert from 'node:assert/strict'
-import { act } from 'react'
 import { afterEach, describe, test, vi } from 'vitest'
-import { React, h } from '../../../src/client/react'
 import { makeContextModal } from '../../../src/client/components/contextModal'
 import { modalStoreOf, setPendingConsume, takePendingConsume } from '../../../src/client/modalStore'
 import type { ContextTimeline } from '../../../src/shared/types'
@@ -34,7 +33,7 @@ function timeline(over: Record<string, unknown> = {}): ContextTimeline {
 function boundModalHook(sessionId: string) {
   const store = modalStoreOf(sessionId)
   return (sel: (open: boolean) => boolean): boolean =>
-    React.useSyncExternalStore(store.subscribe, () => sel(store.getSnapshot()))
+    useSyncExternalStore(store.subscribe, () => sel(store.getSnapshot()))
 }
 
 const OPEN = (): boolean => true

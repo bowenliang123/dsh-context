@@ -3,15 +3,13 @@
   * compaction/prune keep the ✂ marker — no shared glyph exists for it.
  */
 
-import type * as ReactNS from 'react'
+import { useEffect, useLayoutEffect, useRef, type ReactElement } from 'react'
 import type { ContextEventRecord } from '../../shared/types'
 import { IconBranchOutline16, IconPlusOutline16 } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { Translate } from '../i18n'
 import type { DetailState } from '../timelineSource'
 import type { ViewKit } from '../viewkit'
 import { makeDetailNote } from './detailNote'
-
-import { React } from '../react'
 
 const EVENT_ICONS: Record<string, string> = { compaction: '✂', prune: '✂', inject: '＋', model: '⇄', mode: '⇄' }
 
@@ -79,23 +77,23 @@ function syncTitles(root: HTMLElement): void {
   }
 }
 
-export function makeEventList(kit: ViewKit): (props: EventListProps) => ReactNS.ReactElement {
+export function makeEventList(kit: ViewKit): (props: EventListProps) => ReactElement {
   const { t, fmt, fmtTime, eventLabel, eventAt } = kit
   const DetailNote = makeDetailNote(kit)
-  return function EventList(props: EventListProps): ReactNS.ReactElement {
+  return function EventList(props: EventListProps): ReactElement {
     // Hooks stay unconditional (Rules of Hooks): events going empty ->
     // non-empty in one mounted instance must not grow the hook count — an
     // early return above these hooks is a React #310 class bug (issue #12).
-    const rootRef = React.useRef<HTMLDivElement | null>(null)
+    const rootRef = useRef<HTMLDivElement | null>(null)
     // Truncation titles ride a resize-only listener plus an events-driven resync: the effect MUST NOT run
     // on every render — a plain re-render (hover/select elsewhere in the view) would re-read scrollWidth /
     // clientWidth for every label, one forced synchronous layout per row, and rebind the listener.
-    React.useLayoutEffect(() => {
+    useLayoutEffect(() => {
       const root = rootRef.current
       if (!root) return
       syncTitles(root)
     }, [props.events])
-    React.useEffect(() => {
+    useEffect(() => {
       const onResize = (): void => {
         const root = rootRef.current
         if (root !== null) syncTitles(root)

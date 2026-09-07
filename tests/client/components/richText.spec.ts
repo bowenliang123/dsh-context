@@ -2,9 +2,9 @@
 // markdown mode renders through the REAL shared MarkdownText; raw mode is an
 // exact-text line-numbered <pre>; the switch drives the mode hook.
 
+import { createElement as h } from 'react'
 import assert from 'node:assert/strict'
 import { describe, test } from 'vitest'
-import { h } from '../../../src/client/react'
 import { makeRichText } from '../../../src/client/components/richText'
 import type { RichMode } from '../../../src/client/components/richText'
 import { click, makeKit, mount, query, queryAll } from '../helpers/kit'

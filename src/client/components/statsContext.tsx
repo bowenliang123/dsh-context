@@ -17,13 +17,11 @@
  * (`countsOfRecords`). The card itself never touches the collections.
  */
 
-import type * as ReactNS from 'react'
+import { type ReactElement, type ReactNode } from 'react'
 import type { ContextEventRecord, RequestRecord, SessionCostUsage, TimelineCounts } from '../../shared/types'
 import { estimateSessionCost, formatCost, formatPriceRate, sessionPrices } from '../cost'
 import type { CostCurrency } from '../cost'
 import type { ViewKit } from '../viewkit'
-
-import { React } from '../react'
 
 /**
  * The inline generation's counter derivation — the exact tally the card ran
@@ -54,7 +52,7 @@ export function makeStatsContext(kit: ViewKit): (props: {
   images?: number
   cost?: SessionCostUsage
   locale: string
-}) => ReactNS.ReactElement {
+}) => ReactElement {
   const { t, fmt } = kit
   return function StatsContext(props: {
     counts: TimelineCounts
@@ -62,11 +60,11 @@ export function makeStatsContext(kit: ViewKit): (props: {
     images?: number
     cost?: SessionCostUsage
     locale: string
-  }): ReactNS.ReactElement {
+  }): ReactElement {
     const currency: CostCurrency = props.locale === 'zh' ? 'cny' : 'usd'
     const cost = estimateSessionCost(props.cost, currency)
     const fmtRate = (n: number): string => formatPriceRate(n, currency)
-    const costTip: ReactNS.ReactNode = [
+    const costTip: ReactNode = [
       t('stats.costTip'),
       <span key="prices" className="lc-stat-tip-prices">
         <span className="lc-stat-tip-head">{t('stats.costPriceHead')}</span>
@@ -80,7 +78,7 @@ export function makeStatsContext(kit: ViewKit): (props: {
         ))}
       </span>,
     ]
-    const cell = (label: string, value: string | number, tip?: ReactNS.ReactNode): ReactNS.ReactElement => (
+    const cell = (label: string, value: string | number, tip?: ReactNode): ReactElement => (
       <div className={'lc-stat' + (tip === undefined ? '' : ' lc-stat-tipped')}>
         <span className="lc-stat-label">
           {label}

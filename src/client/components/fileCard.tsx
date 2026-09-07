@@ -11,15 +11,13 @@
  * target that jumps to (and reveals) the exact tool result in the browser.
  */
 
-import type * as ReactNS from 'react'
+import { memo, useState, type ChangeEvent, type ComponentType, type MouseEvent, type ReactElement } from 'react'
 import { absPathOf, displayPathOf, glyphOf } from '../fileActivity'
 import type { FileActivity, FileEntry, FileOp, FileOpKind } from '../fileActivity'
 import type { ContextSettings, DefaultFileSort } from '../settings'
 import type { DetailState } from '../timelineSource'
 import type { ViewKit } from '../viewkit'
 import { makeDetailNote } from './detailNote'
-
-import { React } from '../react'
 
 export type FileFilter = 'all' | FileOpKind | 'image'
 
@@ -42,7 +40,7 @@ export interface FileCardProps {
   onRetry?: () => void
 }
 
-export function makeFileCard(kit: ViewKit, settings: ContextSettings): ReactNS.ComponentType<FileCardProps> {
+export function makeFileCard(kit: ViewKit, settings: ContextSettings): ComponentType<FileCardProps> {
   const { t, fmt, fmtTime } = kit
   const DetailNote = makeDetailNote(kit)
 
@@ -55,7 +53,7 @@ export function makeFileCard(kit: ViewKit, settings: ContextSettings): ReactNS.C
   }
 
   /** Signed line pair, harness diff semantics: growth on the success token, shrinkage on the error token. */
-  function DeltaPair(props: { added: number; removed: number }): ReactNS.ReactElement {
+  function DeltaPair(props: { added: number; removed: number }): ReactElement {
     return (
       <span className="lc-fa-delta">
         {props.added > 0 ? <span className="lc-fa-up">{'+' + fmt(props.added)}</span> : null}
@@ -66,13 +64,13 @@ export function makeFileCard(kit: ViewKit, settings: ContextSettings): ReactNS.C
 
   // Memoized at the factory level: the parent's activity/scope/onLocate props are all reference-stable across
   // hover/select renders (see contextView), so this card skips reconciliation whenever its own inputs did not move.
-  return React.memo(function FileCard(props: FileCardProps): ReactNS.ReactElement {
+  return memo(function FileCard(props: FileCardProps): ReactElement {
     const { activity } = props
-    const [filter, setFilter] = React.useState<FileFilter>('all')
+    const [filter, setFilter] = useState<FileFilter>('all')
     // Mount-time default from the plugin settings card; in-card toggling stays mount-local and never writes back.
-    const [sort, setSort] = React.useState<DefaultFileSort>(() => settings.defaultFileSort())
-    const [query, setQuery] = React.useState('')
-    const [openPath, setOpenPath] = React.useState<string | null>(null)
+    const [sort, setSort] = useState<DefaultFileSort>(() => settings.defaultFileSort())
+    const [query, setQuery] = useState('')
+    const [openPath, setOpenPath] = useState<string | null>(null)
 
     const q = query.trim().toLowerCase()
     // Display form of an entry's path: './'-relative inside the workspace, verbatim outside —
@@ -105,7 +103,7 @@ export function makeFileCard(kit: ViewKit, settings: ContextSettings): ReactNS.C
       { key: 'image', files: activity.totals.image.files, ops: activity.totals.image.ops },
     ]
 
-    const opLine = (op: FileOp): ReactNS.ReactElement => (
+    const opLine = (op: FileOp): ReactElement => (
       <>
         <span className="lc-fa-op-tool" title={op.tool}>{op.tool}</span>
         {/* A read's line footprint: the exact `>>n` window off the result meta, or the ≈ limit estimate. */}
@@ -169,7 +167,7 @@ export function makeFileCard(kit: ViewKit, settings: ContextSettings): ReactNS.C
                 className="lc-fa-search"
                 value={query}
                 placeholder={t('files.search')}
-                onChange={(ev: ReactNS.ChangeEvent<HTMLInputElement>) => { setQuery(ev.target.value) }}
+                onChange={(ev: ChangeEvent<HTMLInputElement>) => { setQuery(ev.target.value) }}
               />
             </div>
             <div className="lc-fa-meta">
@@ -234,7 +232,7 @@ export function makeFileCard(kit: ViewKit, settings: ContextSettings): ReactNS.C
                               <b
                                 className="lc-fa-file"
                                 title={t('files.open')}
-                                onClick={(ev: ReactNS.MouseEvent) => { ev.stopPropagation(); props.onOpen?.(abs) }}
+                                onClick={(ev: MouseEvent) => { ev.stopPropagation(); props.onOpen?.(abs) }}
                               >
                                 {base}
                               </b>
