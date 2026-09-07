@@ -80,5 +80,7 @@
 .lc-turn { flex: none; box-sizing: border-box; text-align: center; font-size: 10px; line-height: 14px; font-weight: 600; color: var(--dsw-alias-label-secondary); border-radius: 3px; height: 14px; white-space: nowrap; cursor: pointer; transition: filter var(--ds-transition-duration, 0.2s) var(--ds-ease-in-out, ease-in-out), opacity var(--ds-transition-duration, 0.2s) var(--ds-ease-in-out, ease-in-out); }
 .lc-turn-on { filter: brightness(1.35); color: var(--dsw-alias-label-primary); }
 /* Labels render at natural width, centered over their block — a 2-digit "T12" over a 14px turn bar overflows the
-   block instead of ellipsizing away; updateTurnLabels thins labels that would collide. */
+   block instead of ellipsizing away. The render pass sets one shrunk font size on .lc-turns when the tightest
+   adjacent label pair would collide at this 10px base (mirrored as LABEL_FONT in trendChart.tsx);
+   updateTurnLabels' thinning chain stays only as the measured last resort past the 6px floor. */
 .lc-turn-label { display: inline-block; }

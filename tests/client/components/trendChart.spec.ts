@@ -701,6 +701,39 @@ describe('TrendChart scroll anchoring', () => {
     assert.equal(labels[1].style.visibility, '', 'repeat scroll with unchanged geometry writes nothing')
     await m.unmount()
   })
+
+  test('the strip shrinks every label to the largest size at which the tightest adjacent pair fits', async () => {
+    // Single-digit turns at the 16px column pitch fit the 10px base (est. 13.5px + 2px gap vs 16px) → no override.
+    const single = await mount(h(TrendChart, propsOf(
+      aggregateByTurn([req(1, { turn: 1 }), req(2, { turn: 2 }), req(3, { turn: 3 })]),
+      { granularity: 'turn' },
+    )))
+    assert.equal(query<HTMLElement>(single.container, '.lc-turns').style.fontSize, '')
+    await single.unmount()
+
+    // Two-digit labels over 14px blocks: est. need 22px vs 16px pitch → floor(10 * 16/22) = 7px for EVERY label.
+    const two = await mount(h(TrendChart, propsOf(
+      aggregateByTurn([req(1, { turn: 10 }), req(2, { turn: 11 }), req(3, { turn: 12 })]),
+      { granularity: 'turn' },
+    )))
+    assert.equal(query<HTMLElement>(two.container, '.lc-turns').style.fontSize, '7px')
+    await two.unmount()
+
+    // Three-digit pairs clamp at the 6px floor (the measured chain stays the last-resort guard below it).
+    const three = await mount(h(TrendChart, propsOf(
+      aggregateByTurn([req(1, { turn: 100 }), req(2, { turn: 101 })]),
+      { granularity: 'turn' },
+    )))
+    assert.equal(query<HTMLElement>(three.container, '.lc-turns').style.fontSize, '6px')
+    await three.unmount()
+
+    // Wide step-mode blocks buy room: ten-step turns carry two-digit labels at the base size.
+    const wide: RequestRecord[] = []
+    for (let i = 0; i < 20; i++) wide.push(req(i + 1, { turn: 10 + Math.floor(i / 10), step: i % 10 }))
+    const step = await mount(h(TrendChart, propsOf(wide)))
+    assert.equal(query<HTMLElement>(step.container, '.lc-turns').style.fontSize, '')
+    await step.unmount()
+  })
 })
 
 describe('TrendChart hover tip overlay', () => {

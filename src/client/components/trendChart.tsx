@@ -91,12 +91,19 @@ export function makeTrendChart(kit: ViewKit): (props: TrendChartProps) => ReactE
   // Neutral zebra, deliberately DISJOINT from the category palette — the strip must read as a partition layer, not a bottom segment of the
   // composition bars.
   const TURN_FILLS = ['rgba(128,128,128,0.12)', 'rgba(128,128,128,0.26)']
-  // Turn labels render at natural width (a 2-digit "T12" is wider than a 14px turn bar) and overflow their block, so
-  // near-viewport labels are thinned when they would collide. OVERHANG bounds how far such a label can reach beyond
-  // its block (a generous read of "T999" at 10px) for the viewport-participation test; GAP is the breathing room
-  // between kept labels' boxes.
+  // Turn labels render at natural width (a 2-digit "T12" is wider than a 14px turn bar) and overflow their block.
+  // Every label must stay on the single line, so the strip shrinks ALL labels to one font size — the largest at
+  // which the tightest adjacent pair still clears the gap (analytic widths below, no measurement) — and the
+  // measured chain in updateTurnLabels stays only as the last-resort guard past the floor. OVERHANG bounds how
+  // far a label can reach beyond its block (a generous read of "T999" at 10px) for the viewport-participation
+  // test; GAP is the breathing room between adjacent labels' boxes.
   const LABEL_OVERHANG = 48
-  const LABEL_GAP = 4
+  const LABEL_GAP = 2
+  // Label font sizing (the 10px base mirrors .lc-turn in trendChart.css): conservative upper-bound glyph widths
+  // at the base size ('T' 7px, a digit 6.5px at 10px semibold), floored at 6px.
+  const LABEL_FONT = 10
+  const LABEL_FONT_MIN = 6
+  const estTurnLabel = (turn: number): number => 7 + 6.5 * String(turn).length
 
   // Anchor bar HEIGHT to the provider-reported prompt when the request carried usage: categories keep their heuristic ratios but the height
   // tracks the real billed tokens (matching the overview card and official chat ring), not the underpriced estimate.
@@ -270,6 +277,21 @@ export function makeTrendChart(kit: ViewKit): (props: TrendChartProps) => ReactE
       }
     }
 
+    // One font size for the whole strip: the largest at which the TIGHTEST adjacent pair of labels still clears
+    // the gap between their block centers (center distance = half each block + the gap between blocks), so every
+    // turn label stays shown on the single line instead of thinning out. Uniform (not per-label) so sizes never
+    // mix, and computed from the groups alone so it is stable while scrolling.
+    let labelFont = ''
+    {
+      let scale = 1
+      for (let i = 0; i + 1 < groups.length; i++) {
+        const avail = (turnWidths[i] + turnWidths[i + 1]) / 2 + BAR_GAP
+        const need = (estTurnLabel(groups[i].turn) + estTurnLabel(groups[i + 1].turn)) / 2 + LABEL_GAP
+        if (need > avail) scale = Math.min(scale, avail / need)
+      }
+      if (scale < 1) labelFont = `${Math.max(LABEL_FONT_MIN, Math.floor(LABEL_FONT * scale))}px`
+    }
+
     // Default anchor: newest bars at the RIGHT edge; the first layout after mount scrolls unconditionally, a GRANULARITY SWITCH re-anchors
     // the same way (step mode must not inherit the turn chart's stale left edge), otherwise stick to the end only while already near it;
     // useLayoutEffect avoids a first-paint flash.
@@ -286,11 +308,12 @@ export function makeTrendChart(kit: ViewKit): (props: TrendChartProps) => ReactE
     const prevScrollWidthRef = useRef(0)
     /**
      * Keep each turn label centered within its block's VISIBLE slice, then thin colliding labels: a label wider
-     * than its block overflows it, so consecutive narrow turns (14px bars, 2-digit "T12"s) would smear into each
-     * other — walking left→right in content coordinates, a label whose box reaches the previous KEPT one drops to
-     * visibility:hidden. Blocks that cannot reach the viewport even overhung by a label skip their reads/writes
-     * entirely (their transform/visibility just reset); reads (offsetWidth) batch before the writes to avoid layout
-     * thrash, and unchanged styles write nothing.
+     * than its block overflows it, so consecutive narrow turns would smear into each other — walking left→right
+     * in content coordinates, a label whose box reaches the previous KEPT one drops to visibility:hidden. The
+     * render-time font shrink (labelFont) already sizes every label to clear its tightest neighbour, so this
+     * chain only fires past the 6px floor or on viewport-edge shifts. Blocks that cannot reach the viewport even
+     * overhung by a label skip their reads/writes entirely (their transform/visibility just reset); reads
+     * (offsetWidth) batch before the writes to avoid layout thrash, and unchanged styles write nothing.
      */
     const updateTurnLabels = (el: HTMLDivElement): void => {
       const labels = el.querySelectorAll<HTMLElement>('.lc-turn-label')
@@ -495,7 +518,7 @@ export function makeTrendChart(kit: ViewKit): (props: TrendChartProps) => ReactE
             {/* Turn strip: one COLOR BLOCK per turn spanning exactly its bars' columns, so the partition reads at a glance and lines
                 up with the steps; hovering a block highlights that turn's bars and vice versa — one shared hover-only state.
                 */}
-            <div className="lc-turns" onMouseLeave={() => { props.onHoverTurn(null) }}>
+            <div className="lc-turns" style={labelFont !== '' ? { fontSize: labelFont } : undefined} onMouseLeave={() => { props.onHoverTurn(null) }}>
               {groups.map((grp, gi) => {
                 const on = props.activeTurn === grp.turn
                 return (
