@@ -8,13 +8,13 @@
 
 **The best [DeepSeek Harness plugin](https://www.deepseek.com/harness/) for Agent's context insights and management.**
 
-`dsh-context` provides full context lifecycle management features.
+[`dsh-context`](https://www.npmjs.com/package/dsh-context) provides full context lifecycle management features.
 - **Context tab** — an UI context dashboard for DeepSeek Harness's context stats, composition, trend, events, and messages.
 - **`/context` command** — the slash command shows the context model for current context composition and recent context evolution.
 
 ## Install / Update
 
-To Install from any DeepSeek Harness installation:
+To Install from DeepSeek Harness with [NPM published package](https://www.npmjs.com/package/dsh-context):
 
 ```sh
 dsh plugin --profile web add dsh-context
