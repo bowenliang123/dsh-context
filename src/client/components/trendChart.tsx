@@ -3,7 +3,7 @@
  * aggregateByTurn/attachMarkers are shared with ContextView.
  */
 
-import { memo, useLayoutEffect, useMemo, useRef, type ReactElement, type UIEvent } from 'react'
+import { memo, useLayoutEffect, useMemo, useRef, useState, type ReactElement, type UIEvent } from 'react'
 import type { Category, ContextEventRecord, RequestRecord } from '../../shared/types'
 import { CATS } from '../categories'
 import type { ViewKit } from '../viewkit'
@@ -25,6 +25,12 @@ export interface TrendChartProps {
    * unfocused chart.
    */
   focusCat?: string | null
+  /**
+   * Adaptive scale (the trend card's title-adjacent toggle): the axis is recomputed from the bars currently
+   * VISIBLE in the scroller and follows the scroll, so a spike far outside the window cannot flatten the bars
+   * on screen. Off = the whole retained log scales the axis, the historical behavior.
+   */
+  adaptive?: boolean
   onSelect: (seq: number | null) => void
   onHover: (seq: number | null) => void
   onHoverTurn: (turn: number | null) => void
@@ -148,6 +154,13 @@ export function makeTrendChart(kit: ViewKit): (props: TrendChartProps) => ReactE
     return out
   }
 
+  /** The visible window's own maxima (adaptive scale): the total-mode peak, and the delta arms' up/down sums. */
+  interface VisibleMax {
+    total: number
+    up: number
+    down: number
+  }
+
   interface ChartBarProps {
     req: RequestRecord
     marker: ContextEventRecord | undefined
@@ -239,6 +252,52 @@ export function makeTrendChart(kit: ViewKit): (props: TrendChartProps) => ReactE
       [props.requests, delta, focus],
     )
     const markers = props.markers
+    // Adaptive scale: the maxima over the bars currently on screen. Null until the first measure, which falls
+    // back to the whole-log scale, so the first paint never draws an empty axis; the field-wise comparison means
+    // scrolling inside a window whose maxima do not move re-renders nothing.
+    const adaptive = props.adaptive === true
+    const [visMax, setVisMax] = useState<VisibleMax | null>(null)
+    const measureVisible = (el: HTMLDivElement): void => {
+      if (!adaptive) return
+      const n = requests.length
+      // Nothing measurable: an empty history, or a zero-width viewport (a hidden pane, an unlaid-out test DOM).
+      // Keeping the previous scale degrades the chart to the whole-log axis instead of flattening every bar.
+      if (n === 0 || el.clientWidth <= 0) return
+      const pitch = BAR_W + BAR_GAP
+      const sl = el.scrollLeft
+      const vr = sl + el.clientWidth
+      let total = 0
+      let up = 0
+      let down = 0
+      // The column holding the left edge through the one holding the right edge; the per-column test then drops
+      // the neighbour whose column falls in the 2px gap just outside the viewport.
+      const from = Math.max(0, Math.floor(sl / pitch))
+      const to = Math.min(n - 1, Math.max(from, Math.floor((vr - 1) / pitch)))
+      for (let i = from; i <= to; i++) {
+        const col = i * pitch
+        if (col >= vr || col + BAR_W <= sl) continue
+        const req = requests[i]
+        if (delta) {
+          // Per-bar arms, then the window maximum — the same figures the whole-log loop takes.
+          let bu = 0
+          let bd = 0
+          for (const c of CATS) {
+            const d = req[c.key] || 0
+            if (d > 0) bu += d
+            else bd -= d
+          }
+          if (bu > up) up = bu
+          if (bd > down) down = bd
+        } else if (req.total > total) {
+          total = req.total
+        }
+      }
+      setVisMax(prev => prev !== null && prev.total === total && prev.up === up && prev.down === down
+        ? prev
+        : { total, up, down })
+    }
+    // Whole-log maxima: the axis when adaptive is off, and the fallback for a delta window with no change at all
+    // (it carries no scale of its own).
     let maxTotal = 1
     let maxUp = 0
     let maxDown = 0
@@ -257,6 +316,16 @@ export function makeTrendChart(kit: ViewKit): (props: TrendChartProps) => ReactE
     } else {
       for (const req of requests) {
         if (req.total > maxTotal) maxTotal = req.total
+      }
+    }
+    if (adaptive && visMax !== null) {
+      if (delta) {
+        if (visMax.up + visMax.down > 0) {
+          maxUp = visMax.up
+          maxDown = visMax.down
+        }
+      } else {
+        maxTotal = Math.max(1, visMax.total)
       }
     }
     // The zero line splits the bar area PROPORTIONALLY to the larger side, so the px-per-token scale
@@ -403,7 +472,25 @@ export function makeTrendChart(kit: ViewKit): (props: TrendChartProps) => ReactE
       prevScrollWidthRef.current = el.scrollWidth
       updateTurnLabels(el)
       syncTip(el)
-    }, [props.granularity, props.focusTurn, requests])
+      measureVisible(el)
+    }, [props.granularity, props.focusTurn, requests, adaptive])
+
+    // The observer callback needs the LATEST measure closure (it captures `requests`/`delta`); a ref keeps it fresh
+    // without tearing the observer down on every commit.
+    const measureRef = useRef(measureVisible)
+    useLayoutEffect(() => { measureRef.current = measureVisible })
+    // A pane resize (sidebar collapse/drag, window resize) changes the visible window without any render, so the
+    // observer re-measures. jsdom exposes no ResizeObserver — the commit/scroll measures cover those paths.
+    useLayoutEffect(() => {
+      const el = scrollRef.current
+      /* v8 ignore next 1 -- the scroll div renders unconditionally and React
+         attaches refs before layout effects run; el is never null here. */
+      if (el === null) return
+      if (typeof ResizeObserver !== 'function') return
+      const observer = new ResizeObserver(() => { measureRef.current(el) })
+      observer.observe(el)
+      return () => { observer.disconnect() }
+    }, [])
 
     // Compact 2-row hover tooltip, shown instantly by the custom `.lc-chart-tip` (the native title is delayed):
     // identity and the bar's total — the SAME value the bar height and axis are scaled against (the fold's
@@ -503,6 +590,7 @@ export function makeTrendChart(kit: ViewKit): (props: TrendChartProps) => ReactE
             onScroll={(e: UIEvent<HTMLDivElement>) => {
               updateTurnLabels(e.currentTarget)
               syncTip(e.currentTarget)
+              measureVisible(e.currentTarget)
             }}
           >
             <div

@@ -545,6 +545,131 @@ describe('TrendChart category focus (the browser open category)', () => {
   })
 })
 
+describe('TrendChart adaptive scale (the title-adjacent toggle)', () => {
+  /** 30 steps of one category: bar 0 carries the spike, the rest a flat 100 — 25 columns fit the test viewport. */
+  function spikedSteps(): RequestRecord[] {
+    const out: RequestRecord[] = []
+    for (let i = 0; i < 30; i++) {
+      const total = i === 0 ? 900 : 100
+      out.push(req(i + 1, { turn: 1, step: i, system: total, tools: 0, user: 0, inject: 0, assistant: 0, tool: 0, total }))
+    }
+    return out
+  }
+
+  test('rescales to the visible window, follows the scroll, and yields to the whole-log scale when switched off', async () => {
+    const reqs = spikedSteps()
+    const m = await mount(h(TrendChart, propsOf(reqs, { adaptive: true })))
+    await flush()
+    const scroll = query<LayoutEl>(m.container, '.lc-chart-scroll')
+    // Mount anchors at the newest bars (scrollLeft 80 over scrollWidth 480 / clientWidth 400): the 900 spike at
+    // bar 0 is off screen, so the visible 100s scale the axis and the bars fill the chart.
+    assert.equal(scroll.scrollLeft, 80)
+    assert.equal(query(m.container, '.lc-axis-top').textContent, '100')
+    assert.equal(queryAll(bars(m.container)[29], '.lc-bar-stack > div')[0].style.height, `${CHART_H}px`)
+
+    // Back to the left edge: the spike is on screen and takes the scale back.
+    await scrollTo(scroll, 0)
+    assert.equal(query(m.container, '.lc-axis-top').textContent, '900')
+    assert.equal(queryAll(bars(m.container)[29], '.lc-bar-stack > div')[0].style.height, `${Math.round(100 / 900 * CHART_H)}px`)
+
+    // A scroll inside a window whose maxima do not move keeps the same scale (bars 4..28 are all 100).
+    await scrollTo(scroll, 64)
+    assert.equal(query(m.container, '.lc-axis-top').textContent, '100')
+
+    // Switched off: the whole-log scale returns even though a visible window is still measured.
+    await m.update(h(TrendChart, propsOf(reqs, { adaptive: false })))
+    assert.equal(query(m.container, '.lc-axis-top').textContent, '900')
+    await m.unmount()
+  })
+
+  test('a column wholly in the 2px gap outside the viewport does not join the window', async () => {
+    const m = await mount(h(TrendChart, propsOf(spikedSteps(), { adaptive: true })))
+    await flush()
+    const scroll = query<LayoutEl>(m.container, '.lc-chart-scroll')
+    // scrollLeft 15 lands in the gap after bar 0's 14px column: the spike is off screen and must not scale the axis.
+    await scrollTo(scroll, 15)
+    assert.equal(query(m.container, '.lc-axis-top').textContent, '100')
+    // One pixel earlier its column is still (partly) on screen and takes the scale back.
+    await scrollTo(scroll, 13)
+    assert.equal(query(m.container, '.lc-axis-top').textContent, '900')
+    await m.unmount()
+  })
+
+  test('an empty history or a zero-width viewport keeps the previous scale', async () => {
+    const empty = await mount(h(TrendChart, propsOf([], { adaptive: true })))
+    assert.equal(query(empty.container, '.lc-axis-top').textContent, '1')
+    await empty.unmount()
+
+    // A hidden pane (zero width) has nothing visible to scale to: the measured scale stands instead of collapsing
+    // every bar onto a unit axis.
+    const m = await mount(h(TrendChart, propsOf(spikedSteps(), { adaptive: true })))
+    await flush()
+    const scroll = query<LayoutEl>(m.container, '.lc-chart-scroll')
+    scroll.__clientW = 0
+    await scrollEvent(scroll)
+    assert.equal(query(m.container, '.lc-axis-top').textContent, '100')
+    await m.unmount()
+  })
+
+  test('delta mode rescales the diverging arms; an all-zero window keeps the whole-log zero line', async () => {
+    const step = (i: number, system: number): RequestRecord =>
+      req(i + 1, { turn: 1, step: i, system, tools: 0, user: 0, inject: 0, assistant: 0, tool: 0, total: system })
+    // Deltas: bar 1 jumps +500, bars 2..29 grow +10 each, with a -30 dip carried from bar 20 on.
+    const reqs = [step(0, 100), step(1, 600)]
+    for (let i = 2; i < 30; i++) reqs.push(step(i, 600 + (i - 1) * 10 - (i >= 20 ? 40 : 0)))
+    const m = await mount(h(TrendChart, propsOf(reqs, { mode: 'delta', adaptive: true })))
+    await flush()
+    // Mount anchors right (scrollLeft 80): the visible +10/-30 deltas scale both arms (maxUp 10, maxDown 30),
+    // lifting the zero line to 28px off the floor and stretching the +10 segment to 28px.
+    assert.equal(query(m.container, '.lc-axis-top').textContent, '+10')
+    assert.equal(query(m.container, '.lc-axis-bot').textContent, '-30')
+    assert.equal(query(m.container, '.lc-axis-mid').style.top, `${13 + 28}px`)
+    assert.equal(queryAll(bars(m.container)[29], '.lc-bar-up > div')[0].style.height, `${Math.round(10 * CHART_H / 40)}px`)
+    assert.equal(queryAll(bars(m.container)[20], '.lc-bar-down > div')[0].style.height, `${Math.round(30 * CHART_H / 40)}px`)
+    await m.unmount()
+
+    // Bars 0..24 carry no change at all and the +500 sits at bar 25: the all-zero window has no scale of its own,
+    // so the whole-log zero line stands instead of collapsing onto the chart top.
+    const flat = [step(0, 100)]
+    for (let i = 1; i < 25; i++) flat.push(step(i, 100))
+    flat.push(step(25, 600))
+    const m2 = await mount(h(TrendChart, propsOf(flat, { mode: 'delta', adaptive: true })))
+    await flush()
+    await scrollTo(query<LayoutEl>(m2.container, '.lc-chart-scroll'), 0)
+    assert.equal(query(m2.container, '.lc-axis-top').textContent, '+500')
+    assert.equal(query(m2.container, '.lc-axis-mid').style.top, `${13 + CHART_H}px`)
+    await m2.unmount()
+  })
+
+  test('a container resize re-measures the visible window through the observer', async () => {
+    const callbacks: (() => void)[] = []
+    class FakeResizeObserver {
+      constructor(cb: () => void) { callbacks.push(cb) }
+      observe(): void {}
+      disconnect(): void {}
+    }
+    const holder = globalThis as { ResizeObserver?: unknown }
+    const saved = holder.ResizeObserver
+    holder.ResizeObserver = FakeResizeObserver
+    try {
+      const m = await mount(h(TrendChart, propsOf(spikedSteps(), { adaptive: true })))
+      await flush()
+      const scroll = query<LayoutEl>(m.container, '.lc-chart-scroll')
+      assert.equal(query(m.container, '.lc-axis-top').textContent, '100')
+      assert.equal(callbacks.length, 1)
+      // The pane widens back to the whole log while the reader sits at the left edge — a resize renders nothing,
+      // so only the observer's callback re-measures.
+      scroll.__clientW = 480
+      scroll.__scrollL = 0
+      await act(async () => { callbacks[0]() })
+      assert.equal(query(m.container, '.lc-axis-top').textContent, '900')
+      await m.unmount()
+    } finally {
+      holder.ResizeObserver = saved
+    }
+  })
+})
+
 describe('TrendChart markers', () => {
   test('compaction/prune markers render the ✂ glyph with a positioned or bare title', async () => {
     const reqs = [req(1, { turn: 1, step: 0 }), req(2, { turn: 1, step: 1 }), req(3, { turn: 2, step: 0 })]

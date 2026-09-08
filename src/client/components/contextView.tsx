@@ -99,6 +99,9 @@ export function makeContextView(
     // 'total' plots each request's cumulative composition, 'delta' its incremental change vs the previous one;
     // like granularity, the default is read at mount and in-chart toggling never writes back.
     const [trendMode, setTrendMode] = useState<'total' | 'delta'>(() => settings.defaultTrendMode())
+    // Adaptive scale (the title-adjacent toggle): the trend bars rescale to the visible window; like the two
+    // toggles above, mount-local and never written back.
+    const [adaptive, setAdaptive] = useState(false)
     // Strip-clicked turn: chart switches to turn granularity and scroll-centers that turn's bar, then clears via onFocusTurnHandled.
     const [focusTurn, setFocusTurn] = useState<number | null>(null)
     // Chat → Context jump: the assistant-action relay's one-shot request, held until the projection data is in, then resolved into a
@@ -380,6 +383,15 @@ export function makeContextView(
             <div className="lc-card">
               <div className="lc-card-title">
                 <span className="lc-card-title-text">{t('trend.title')}</span>
+                {/* The adaptive switch rides the title's right (the browser card's DNA toggle idiom): bars rescale
+                    to the bars currently on screen instead of the whole retained log. */}
+                <span className="lc-gran lc-trend-adaptive" role="group" title={t('trend.adaptiveHint')}>
+                  <button
+                    type="button"
+                    className={'lc-gran-btn' + (adaptive ? ' lc-gran-on' : '')}
+                    onClick={() => { setAdaptive(on => !on) }}
+                  >{t('trend.adaptive')}</button>
+                </span>
                 {focusCat !== null
                   ? <span className="lc-card-sub">{t('trend.focus', { cat: kit.catLabel(focusCat) })}</span>
                   : null}
@@ -430,6 +442,7 @@ export function makeContextView(
                       focusTurn={focusTurn}
                       hoverCat={trendHoverCat}
                       focusCat={focusCat}
+                      adaptive={adaptive}
                       onSelect={setSelectedSeq}
                       onHover={setHoveredSeq}
                       onHoverTurn={setHoverTurn}

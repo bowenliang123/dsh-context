@@ -410,6 +410,30 @@ describe('ContextView — interactions', () => {
     await m.unmount()
   })
 
+  test('the adaptive switch rides the trend title and toggles mount-locally', async () => {
+    const m = await mountRich('sv-adaptive')
+    const card = queryAll(m.container, '.lc-card').find(c => text(c).includes(DICT_EN['trend.title']))
+    assert.ok(card !== undefined)
+    const titleText = query(card, '.lc-card-title-text')
+    assert.equal(text(titleText), DICT_EN['trend.title'])
+
+    // The switch is the title text's NEXT sibling — left of the card's right-hand control cluster.
+    const toggleOf = () => buttonByText(m.container, DICT_EN['trend.adaptive'])
+    assert.equal(toggleOf().parentElement?.previousElementSibling, titleText)
+    assert.equal(toggleOf().parentElement?.getAttribute('title'), DICT_EN['trend.adaptiveHint'])
+    assert.ok(!toggleOf().className.includes('lc-gran-on'), 'off at mount')
+
+    // Toggling is mount-local: the chart keeps rendering (jsdom has no layout, so the zero-width viewport falls
+    // back to the whole-log axis instead of flattening the bars) and nothing is written back to settings.
+    await click(toggleOf())
+    assert.ok(toggleOf().className.includes('lc-gran-on'))
+    assert.equal(text(query(m.container, '.lc-axis-top')), '420')
+    await click(toggleOf())
+    assert.ok(!toggleOf().className.includes('lc-gran-on'))
+    assert.equal(text(query(m.container, '.lc-axis-top')), '420')
+    await m.unmount()
+  })
+
   test('delta mode pairs the detail with the previous record; first bar has none', async () => {
     const m = await mountRich('sv-delta')
     const chart = query(m.container, '.lc-chart')

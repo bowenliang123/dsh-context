@@ -40,6 +40,9 @@
 /* A title carrying TWO toggle groups wraps them so the auto-margin push happens once — two bare .lc-gran siblings would split the free space and drift apart. */
 .lc-trend-ctl { margin-left: auto; display: flex; gap: 6px; align-items: center; }
 .lc-trend-ctl .lc-gran { margin-left: 0; }
+/* The trend card's adaptive switch rides the title text's right — a single-button group whose auto margin is
+   neutralized so it stays adjacent (the browser card's DNA toggle idiom). */
+.lc-trend-adaptive { margin-left: 0; flex: none; }
 .lc-gran-btn { border: 0; background: transparent; color: var(--dsw-alias-label-secondary); font-size: 11px; line-height: 1; padding: 3px 8px; border-radius: 5px; cursor: pointer; font-family: inherit; transition: color var(--ds-transition-duration, 0.2s) var(--ds-ease-in-out, ease-in-out); }
 .lc-gran-btn:hover { color: var(--dsw-alias-label-primary); }
 .lc-gran-on, .lc-gran-on:hover { background: var(--dsw-alias-button-primary-fill); color: var(--dsw-alias-label-primary-foreground); }
