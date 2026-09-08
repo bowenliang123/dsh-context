@@ -150,11 +150,12 @@ describe('V3 system/message — the system prompt as a surface node', () => {
 
 describe('V0/V2 envelope system prompt (regression: the header path stays intact)', () => {
   test('a header carrying a prompt seeds the list; a later system-less header clears it', () => {
-    const { state } = driveTimeline([
+    const { state, states } = driveTimeline([
       header(1, { system: 'You are an agent.', tools: [] }),
       header(2, { tools: [] }),
     ])
-    assert.deepEqual(state.systems, [])
+    assert.equal(states[1].systems?.length, 1, 'the envelope seeded the list')
+    assert.deepEqual(state.systems, [], 'the system-less header cleared it (the V0 envelope meaning)')
     assert.equal(state.systemTokens, 0)
   })
 
