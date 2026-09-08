@@ -198,6 +198,27 @@ describe('ContextView — the sidebar host', () => {
     assert.equal(queryAll(panel.container, '.lc-head > .lc-col-donut').length, 2, 'token usage and timing')
     await panel.unmount()
   })
+
+  test('the panel orders the main row composition, browser, trend; the tab keeps composition+trend beside it', async () => {
+    const View = makeView(new TestClientCtx())
+    const projections = projectionsFor(richTimeline())
+
+    const tab = await mount(h(View, { useProjection: projections }))
+    const tabCols = queryAll(tab.container, '.lc-cols-main > .lc-col')
+    assert.equal(tabCols.length, 2, 'the tab keeps the two-column split')
+    assert.ok(tabCols[0].querySelector('.lc-overview-num') !== null, 'composition leads the left column')
+    assert.ok(tabCols[0].querySelector('.lc-trend-ctl') !== null, 'the trend follows in the same column')
+    assert.ok(tabCols[1].querySelector('.lc-br-dna-ctl') !== null, 'the browser owns the right column')
+    await tab.unmount()
+
+    const panel = await mount(h(View, { host: 'sidebar', useProjection: projections }))
+    const panelCols = queryAll(panel.container, '.lc-cols-main > .lc-col')
+    assert.equal(panelCols.length, 3, 'the panel stacks the three main cards')
+    assert.ok(panelCols[0].querySelector('.lc-overview-num') !== null, 'composition first')
+    assert.ok(panelCols[1].querySelector('.lc-br-dna-ctl') !== null, 'the browser second')
+    assert.ok(panelCols[2].querySelector('.lc-trend-ctl') !== null, 'the trend last')
+    await panel.unmount()
+  })
 })
 
 describe('ContextView — baseline gate', () => {
