@@ -305,6 +305,32 @@ describe('makeContentFetcher — the per-session targeted read', () => {
     broken.dispose()
   })
 
+  test('a V3 system/message event maps its prompt text (the epoch fetch reads both shapes)', async () => {
+    const ctx = armHistoryFaces({ session: pageFace([
+      ev('system/message', 7, { message: { content: [{ type: 'text', text: 'V3 prompt' }, { type: 'text', text: ' line two' }] } }),
+    ]) })
+    const content = await makeHeaderFetcher('s')!(7)
+    assert.deepEqual(content, { system: 'V3 prompt line two', tools: [] })
+    ctx.dispose()
+  })
+
+  test('a whitespace-only system prompt renders (never reads as absent), and no text block maps to null', async () => {
+    const ctx = armHistoryFaces({ session: pageFace([
+      ev('system/message', 7, { message: { content: [{ type: 'text', text: '   ' }] } }),
+      ev('system/message', 8, { message: { content: [{ type: 'image', attachment: {} }] } }),
+      ev('system/message', 9, { message: {} }),
+      ev('system/message', 10, {}),
+      ev('system/message', 11, { message: { content: [7, null] } }),
+    ]) })
+    const fetch = makeHeaderFetcher('s')!
+    assert.deepEqual(await fetch(7), { system: '   ', tools: [] })
+    assert.equal(await fetch(8), null, 'no text block: nothing to render')
+    assert.equal(await fetch(9), null)
+    assert.equal(await fetch(10), null)
+    assert.equal(await fetch(11), null, 'primitive elements carry no text')
+    ctx.dispose()
+  })
+
   test('malformed rpc envelopes reject so the caller can offer a retry', async () => {
     const nullResponse = armHistoryFaces({ session: { page: async () => null } })
     await assert.rejects(makeContentFetcher('s')!(1))

@@ -7,15 +7,16 @@
  * The order is PROMPT order, which is also the order items joined the
  * context: the system prompt and tool schemas prefix every request, so they
  * lead the strip; the message flow follows in seq (chronological) order.
- * The header epoch's own seq is NOT usable as an ordering key: dsh appends
- * `request/header` at dispatch time of the first request that uses a header
- * (agent.ts — 'initial'/'resume'/'change'/'series'), a bookkeeping snapshot
- * that lands AFTER every message already in context. A mid-session refresh
- * would otherwise park the system/tools bands in the middle of the strip,
- * behind the very tool results those schemas describe. A refreshed epoch
- * REPLACES the prefix in place — the strip reflects that by keeping the
- * current epoch's bands at the front (the band's tooltip carries the
- * epoch's time).
+ * The system band rides the timeline's own `systems` nodes (the prompt's real
+ * surface positions), the tool bands their header epoch. The header epoch's
+ * own seq is NOT usable as an ordering key: dsh appends `request/header` at
+ * dispatch time of the first request that uses a header (agent.ts —
+ * 'initial'/'resume'/'change'/'series'), a bookkeeping snapshot that lands
+ * AFTER every message already in context. A mid-session refresh would
+ * otherwise park the tools bands in the middle of the strip, behind the very
+ * tool results those schemas describe. A refreshed epoch REPLACES the prefix
+ * in place — the strip reflects that by keeping the current epoch's bands at
+ * the front (the band's tooltip carries the epoch's time).
  */
 
 import type { Category, SurfaceNode } from '../shared/types'
@@ -32,10 +33,10 @@ export type DnaItem =
 
 export function dnaOf(view: Assembled): DnaItem[] {
   const items: DnaItem[] = []
+  if (view.system !== null) {
+    items.push({ key: 'sys', cat: 'system', tokens: view.system.tokens, time: view.system.time })
+  }
   if (view.header !== null) {
-    if (view.header.systemTokens !== undefined) {
-      items.push({ key: 'sys', cat: 'system', tokens: view.header.systemTokens, time: view.header.time })
-    }
     for (const tool of view.header.tools) {
       items.push({ key: 'tool:' + tool.name, cat: 'tools', tokens: tool.tokens })
     }

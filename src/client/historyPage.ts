@@ -56,6 +56,26 @@ function textOf(blocks: unknown): string | null {
 }
 
 /**
+ * The system prompt's exact rendered text — every text block joined with NO
+ * normalization: a whitespace-only prompt is still the prompt the model
+ * received (the host prices it as text), so it must render rather than read
+ * as absent. Null when the content carries no text block at all.
+ */
+function systemTextOf(blocks: unknown): string | null {
+  if (!Array.isArray(blocks)) return null
+  let out = ''
+  let seen = false
+  for (const b of blocks) {
+    const text = b !== null && typeof b === 'object' ? (b as { type?: unknown; text?: unknown }).text : undefined
+    if (typeof text === 'string') {
+      out += text
+      seen = true
+    }
+  }
+  return seen ? out : null
+}
+
+/**
  * One assistant content block → the snapshot block vocabulary the browser
  * already renders (`kind`: text/reasoning/image/tool-call); unmappable
  * blocks pass through raw and degrade to the generic JSON section.
@@ -309,13 +329,23 @@ export function makeContentFetcher(sessionId: string): ContentFetcher | undefine
 }
 
 /**
- * Map one raw `request/header` event into the epoch content the browser
- * renders — the full system prompt text plus each tool's producer
- * description and raw schema, mirroring the host fold's per-entry guards
- * (a null or primitive tool entry degrades to an unnamed row instead of
- * throwing the read). Null when the envelope carries no usable header.
+ * Map one raw durable event into the epoch content the browser renders. A
+ * `request/header` yields the full system prompt text (V0/V2 envelope) plus
+ * each tool's producer description and raw schema; a V3 `system/message`
+ * yields the prompt text alone (its tools live in the request header). Both
+ * mirror the host fold's per-entry guards — a null or primitive tool entry
+ * degrades to an unnamed row instead of throwing the read. Null when the
+ * envelope carries neither.
  */
-function headerContentOf(data: Record<string, unknown>): HeaderEpochContent | null {
+function headerContentOf(event: { type: string; data: Record<string, unknown> }): HeaderEpochContent | null {
+  const { type, data } = event
+  if (type === 'system/message') {
+    const message = data.message !== null && typeof data.message === 'object'
+      ? data.message as Record<string, unknown>
+      : null
+    const system = systemTextOf(message?.content)
+    return system === null ? null : { system, tools: [] }
+  }
   const rawHeader = data.header !== null && typeof data.header === 'object'
     ? data.header as Record<string, unknown>
     : null
@@ -339,15 +369,15 @@ function headerContentOf(data: Record<string, unknown>): HeaderEpochContent | nu
 }
 
 /**
- * The on-demand CONTENT fetch for `contextHeaders` epochs — the lazy
- * counterpart of the node fetcher above. One seq-anchored history read off
- * the epoch's `seq` returns the page holding that epoch's `request/header`
- * event (non-message events ride the page verbatim); the raw header is
- * mapped client-side into the renderable content. Epochs cache per session
- * (history is immutable), and OLDER epochs sharing the page cache for free —
- * stepping back through epochs walks the same pages. Undefined when no
- * history face exists — the browser keeps a metadata-only degradation
- * instead.
+ * The on-demand CONTENT fetch for the browser's System and Tools sections —
+ * the lazy counterpart of the node fetcher above. One seq-anchored history
+ * read off the requested seq returns the page holding that event (non-message
+ * events ride the page verbatim); a `request/header` maps to the epoch's
+ * tools (and its V0/V2 system text), a `system/message` to a V3 prompt's
+ * text. Landed content caches per seq (history is immutable), and OLDER
+ * epochs sharing the page cache for free — stepping back through epochs walks
+ * the same pages. Undefined when no history face exists — the browser keeps a
+ * metadata-only degradation instead.
  */
 export function makeHeaderFetcher(sessionId: string): HeaderFetcher | undefined {
   const read = pageReaderOf(sessionId)
@@ -362,11 +392,11 @@ export function makeHeaderFetcher(sessionId: string): HeaderFetcher | undefined 
     let picked: HeaderEpochContent | null = null
     for (const entry of rows) {
       const ev = eventOf(entry)
-      if (ev === null || ev.type !== 'request/header') continue
-      const content = headerContentOf(ev.data)
+      if (ev === null || (ev.type !== 'request/header' && ev.type !== 'system/message')) continue
+      const content = headerContentOf(ev)
       if (content === null) continue
-      // The page's exclusive bound is seq + 1, so every header event on it
-      // is the picked epoch or an OLDER one — cache them all.
+      // The page's exclusive bound is seq + 1, so every content event on it
+      // is the picked one or an OLDER one — cache them all.
       cache.set(ev.seq, content)
       if (ev.seq === seq) picked = content
     }

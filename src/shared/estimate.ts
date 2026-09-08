@@ -14,3 +14,32 @@ export function estimateSystemTokens(text: unknown): number {
   if (typeof text !== 'string' || text.length === 0) return 0
   return Math.ceil(text.length / CHARS_PER_TOKEN) + ROLE_OVERHEAD
 }
+
+/**
+ * Price a `system/message` payload's content exactly like the harness's
+ * token-meter (`estimateSystemMessage`): text density over EVERY text block
+ * plus role framing, with no per-block overhead — an adapter serializes the
+ * prompt as plain text, so a text block costs its characters alone. Any other
+ * block (or a hostile element) falls back to its JSON length. 0 for empty
+ * content, which the harness reads as "no system prompt".
+ */
+export function estimateSystemContent(blocks: unknown): number {
+  if (!Array.isArray(blocks) || blocks.length === 0) return 0
+  let characters = 0
+  for (const block of blocks) {
+    const text = block !== null && typeof block === 'object' && (block as { type?: unknown }).type === 'text'
+      ? (block as { text?: unknown }).text
+      : undefined
+    if (typeof text === 'string') {
+      characters += text.length
+      continue
+    }
+    try {
+      const json: unknown = JSON.stringify(block)
+      if (typeof json === 'string') characters += json.length
+    } catch {
+      // A cyclic/hostile block contributes no characters instead of throwing the fold.
+    }
+  }
+  return Math.ceil(characters / CHARS_PER_TOKEN) + ROLE_OVERHEAD
+}

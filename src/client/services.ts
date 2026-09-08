@@ -16,7 +16,7 @@
 
 import type { Context } from '@deepseek-ai/cordis'
 import { estimateSystemTokens } from '../shared/estimate'
-import type { ContextBreakdown, ContextHeaders, ContextPressure, ContextTimeline, HeaderEpochContent, TimingTotals, TokenUsage, ToolTimingTotals } from '../shared/types'
+import type { ContextBreakdown, ContextHeaders, ContextPressure, ContextTimeline, HeaderEpochContent, SystemPromptNode, TimingTotals, TokenUsage, ToolTimingTotals } from '../shared/types'
 
 export interface LocaleService {
   register(ns: string, dicts: Record<string, Record<string, string>>): () => void
@@ -268,6 +268,7 @@ export function timelineOf(value: unknown): ContextTimeline | null {
     && recordsOnly(data.events)
     && recordsOnly(data.nodes)
     && recordsOnly(data.archive)
+    && (data.systems === undefined || recordsOnly(data.systems))
     && timingFastOk(data.timing)) {
     // Well-formed: pass the delivered value through untouched (cheap, and reference-stable so plain re-renders stay zero-copy).
     return data as unknown as ContextTimeline
@@ -310,12 +311,32 @@ export function timelineOf(value: unknown): ContextTimeline | null {
     ...(typeof data.detailRev === 'number' && Number.isFinite(data.detailRev) ? { detailRev: data.detailRev } : {}),
     ...(cost !== undefined ? { cost } : {}),
     ...(timing !== null ? { timing } : {}),
+    ...(data.systems !== undefined ? { systems: systemsOf(data.systems) } : {}),
     ...(typeof data.surfaceFloor === 'number' ? { surfaceFloor: data.surfaceFloor } : {}),
     ...(typeof data.archiveFloor === 'number' ? { archiveFloor: data.archiveFloor } : {}),
     ...(data.fileOps !== undefined ? { fileOps: objectsOf(data.fileOps) } : {}),
     ...(typeof data.fileOpsFloor === 'number' ? { fileOpsFloor: data.fileOpsFloor } : {}),
   }
   return safe
+}
+
+/**
+ * The live system-prompt nodes, re-proved per entry and sorted by seq: an
+ * entry missing a finite seq/time/tokens drops out (the browser then falls
+ * back to the header epoch), so a hostile collection can never produce a NaN
+ * prompt figure or an unfetchable seq. Absent or empty stays absent.
+ */
+function systemsOf(value: unknown): ContextTimeline['systems'] {
+  const list = objectsOf<Record<string, unknown>>(value)
+  const out: SystemPromptNode[] = []
+  for (const entry of list) {
+    const { seq, time, tokens } = entry
+    if (typeof seq !== 'number' || !Number.isFinite(seq)) continue
+    if (typeof time !== 'number' || !Number.isFinite(time)) continue
+    if (typeof tokens !== 'number' || !Number.isFinite(tokens)) continue
+    out.push({ seq, time, tokens })
+  }
+  return out.sort((a, b) => a.seq - b.seq)
 }
 
 /**

@@ -556,7 +556,7 @@ function byCatOf(asm: Assembled): Partial<Record<Category, SurfaceNode[]>> {
 }
 
 function countOf(asm: Assembled, byCat: Partial<Record<Category, SurfaceNode[]>>, c: string): number {
-  if (c === 'system') return asm.header !== null && asm.header.systemTokens !== undefined ? 1 : 0
+  if (c === 'system') return asm.system !== null ? 1 : 0
   if (c === 'tools') return asm.header !== null ? asm.header.tools.length : 0
   return byCat[c as Category]?.length ?? 0
 }
@@ -683,15 +683,19 @@ export function makeContextBrowser(
       : null
     const view = assemble(data, headers, seq)
 
-    // Header epoch CONTENT (system prompt text, tool descriptions/schemas):
-    // the projection carries metadata only, so the selected step's epoch is
-    // fetched on demand — one seq-anchored history read when its system or
-    // tools section first opens. The same fetch-on-miss machine as the row
-    // read above (content caches per epoch — history is immutable).
+    // Header/tool epoch CONTENT (tool descriptions/schemas) and the system
+    // prompt TEXT: the projections carry metadata only, so the selected step's
+    // sources are fetched on demand — one seq-anchored history read per open
+    // section. The system prompt rides the timeline's own `systems` nodes (a
+    // V3 `system/message`, or the V0/V2 epoch that carried `header.system`),
+    // the tools the header epoch; both map through the same fetcher. Content
+    // caches per seq — history is immutable.
     const fetchHeader = props.fetchHeader
     const headerSeq = view.header !== null ? view.header.seq : null
+    const systemSeq = view.system !== null ? view.system.seq : null
+    const contentSeq = openCat === 'system' ? systemSeq : openCat === 'tools' ? headerSeq : null
     const epoch = useFetchOnMiss(
-      headerSeq !== null && (openCat === 'system' || openCat === 'tools') ? headerSeq : null,
+      contentSeq,
       fetchHeader,
       'dsh-context: header content fetch failed',
     )
@@ -767,7 +771,7 @@ export function makeContextBrowser(
     // one click lands on the content directly (the lone prompt / tool schema /
     // surface node).
     const singleKeyOf = (c: string): string | null => {
-      if (c === 'system') return view.header?.systemTokens !== undefined ? 'sys' : null
+      if (c === 'system') return view.system !== null ? 'sys' : null
       if (c === 'tools') {
         const tools = view.header?.tools
         return tools !== undefined && tools.length === 1 ? 'tool:' + tools[0].name : null
@@ -823,9 +827,16 @@ export function makeContextBrowser(
 
     const catBody = (c: string): ReactNode => {
       if (c === 'system') {
-        if (view.header === null) return <div className="lc-br-note">{t(headers === null ? 'browser.noHeader' : 'browser.noEpoch')}</div>
-        const content = headerContent.get(view.header.seq)
-        // Metadata-only until the epoch's content resolves (fetched when the
+        // No prompt in force at this step. The category only opens without one
+        // when there is no header epoch at all (the openable guard above), so
+        // the note names the missing PROJECTION — no headers service versus
+        // headers that carried no epoch yet.
+        const sys = view.system
+        if (sys === null) {
+          return <div className="lc-br-note">{t(headers === null ? 'browser.noHeader' : 'browser.noEpoch')}</div>
+        }
+        const content = headerContent.get(sys.seq)
+        // Metadata-only until the prompt's event resolves (fetched when the
         // section opens; the note names the state).
         if (content === undefined) return <div className="lc-br-note">{headerNote}</div>
         if (content.system === undefined) return <div className="lc-br-note">{t('browser.noSystem')}</div>

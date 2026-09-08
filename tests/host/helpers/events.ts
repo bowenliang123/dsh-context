@@ -91,12 +91,15 @@ export function toolResult(seq: number, opts: {
   return { type: 'tool/result', seq, time: at(opts.time), data, surfaceOp: 'append' }
 }
 
+/** assistant/message: the durable payload nests the message under `data.message`. */
 export function assistantMessage(seq: number, opts: {
   turn?: number
   step?: number
   content?: ContentBlock[]
   /** Widened: hostile fixtures ride the same field (the fold re-proves every bucket). */
   usage?: Record<string, unknown>
+  /** The V2+ embedded provider stream (raw `chunk` records and packed runs). */
+  stream?: unknown
   time?: number
   surfaceOp?: TimelineEvent['surfaceOp']
 }): TimelineEvent {
@@ -104,7 +107,48 @@ export function assistantMessage(seq: number, opts: {
   if (opts.turn !== undefined) data.turn = opts.turn
   if (opts.step !== undefined) data.step = opts.step
   if (opts.usage !== undefined) data.usage = opts.usage
+  if (opts.stream !== undefined) data.stream = opts.stream
   return { type: 'assistant/message', seq, time: at(opts.time), data, surfaceOp: opts.surfaceOp ?? 'append' }
+}
+
+/** assistant/attempt: a settled model attempt that committed no surface message (V2+). */
+export function assistantAttempt(seq: number, opts: {
+  turn?: number
+  step?: number
+  stream?: unknown
+  time?: number
+}): TimelineEvent {
+  return {
+    type: 'assistant/attempt',
+    seq,
+    time: at(opts.time),
+    data: { turn: opts.turn, step: opts.step, stream: opts.stream },
+  }
+}
+
+/** system/message: the V3 system prompt as a surface node. */
+export function systemMessage(seq: number, opts: {
+  turn?: number
+  step?: number
+  content?: unknown
+  time?: number
+  surfaceOp?: TimelineEvent['surfaceOp']
+}): TimelineEvent {
+  return {
+    type: 'system/message',
+    seq,
+    time: at(opts.time),
+    data: {
+      turn: opts.turn,
+      step: opts.step,
+      message: {
+        role: 'system',
+        source: { kind: 'plugin', plugin: '@deepseek-ai/dsh-system-prompt' },
+        content: opts.content ?? [{ type: 'text', text: 'You are an agent.' }],
+      },
+    },
+    surfaceOp: opts.surfaceOp ?? 'append',
+  }
 }
 
 export function compaction(seq: number, kind: 'summary' | 'prune', data?: Record<string, unknown>): TimelineEvent {
@@ -120,7 +164,7 @@ export function foreign(seq: number, type = 'assistant/chunk'): TimelineEvent {
   return { type, seq, time: at(), data: {} }
 }
 
-/** tool/code-dispatch: one nested Code-Mode call settling inside a run_code program (PTC). */
+/** A nested PTC (Code Mode) dispatch settling inside a run_code program — both vocabulary generations. */
 export function codeDispatch(seq: number, opts: {
   rootCallId?: unknown
   parentCallId?: unknown
@@ -129,9 +173,11 @@ export function codeDispatch(seq: number, opts: {
   arguments?: unknown
   isError?: unknown
   time?: number
+  /** The V3 vocabulary tag (`tool/ptc-dispatch`); defaults to the V0/V2 `tool/code-dispatch`. */
+  type?: string
 }): TimelineEvent {
   return {
-    type: 'tool/code-dispatch',
+    type: opts.type ?? 'tool/code-dispatch',
     seq,
     time: at(opts.time),
     data: {

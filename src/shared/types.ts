@@ -49,6 +49,20 @@ declare module '@deepseek-ai/dsh-session-projection/types' {
 export type Category = 'user' | 'inject' | 'assistant' | 'tool'
 
 /**
+ * One live system-prompt node (Snapshot.systems) — the harness models the
+ * system prompt as a surface node, so its TEXT is fetched on demand from the
+ * event at `seq`: a V3 `system/message` event, or the V0/V2 `request/header`
+ * whose envelope carried `header.system`. `tokens` is the node's heuristic
+ * price (0 for a dormant empty node, which the harness reads as "no system
+ * prompt"); the effective figure is the LAST node with `tokens > 0`.
+ */
+export interface SystemPromptNode {
+  seq: number
+  time: number
+  tokens: number
+}
+
+/**
  * The stats board's count figures, precomputed host-side over the RETAINED
  * request/event records (the same set the detail payload serves). Carried by
  * the split-generation wire head so the board — and the Agent card's
@@ -168,6 +182,13 @@ export interface Snapshot {
    * one — clients treat absence as an empty timing card).
    */
   timing?: TimingTotals
+  /**
+   * The live system-prompt nodes, oldest first — the browser's per-step source
+   * for the System section. Absent when the log carried no system prompt, and
+   * on older plugin builds (the client then falls back to the header epoch's
+   * own `systemTokens`, the pre-V3 shape).
+   */
+  systems?: SystemPromptNode[]
   /**
      * The served live surface: the newest `maxNodes` tail PLUS every live inject node older than the tail (injections land first and are
      * few,
@@ -358,9 +379,13 @@ export interface ToolTimingTotals {
 
 /**
  * Whole-session timing totals, host-folded from the durable `step/start` /
- `step/end` / `assistant/chunk` / `tool/call` / `tool/result` lifecycle
- * (running totals over the COMPLETE session log — the same never-trimmed
- * framing as `cost`). Durations are wall-clock milliseconds: `wallMs` sums
+ * `step/end` / `tool/call` / `tool/result` lifecycle plus the model call's
+ * first token (running totals over the COMPLETE session log — the same
+ * never-trimmed framing as `cost`). The first token comes from a V0
+ * `assistant/chunk` delta or from the call's own embedded stream
+ * (`assistant/message.data.stream` / `assistant/attempt.data.stream`, the
+ * V2+ settlement) — whichever the log carries, matching the harness's own
+ * session-stats fold. Durations are wall-clock milliseconds: `wallMs` sums
  * whole steps, `ttftMs` the step-start → first-token slice (the model wait)
  * and `genMs` the first-token → assistant-message slice (the generation) —
  * both only over calls whose stream carried a token delta, `toolsMs` the sum

@@ -516,6 +516,58 @@ describe('ContextBrowser header epochs', () => {
     assert.ok(text(query(m.container, '.lc-br-body')).includes('carried no system prompt'))
     await m.unmount()
   })
+
+  test('a V3 system prompt rides the timeline systems list, fetched from its own event seq', async () => {
+    // The V3 generation: the header epoch carries NO system price (the prompt
+    // is a `system/message` surface node), so the section resolves the prompt
+    // from `data.systems` and reads its text off that node's seq.
+    const headers: ContextHeaders = { headers: [{ seq: 15, time: 1500, tools: [{ name: 'x', tokens: 1 }] }] }
+    const data = tl({
+      current: { system: 30, tools: 1, user: 0, inject: 0, assistant: 0, tool: 0, total: 31 },
+      systems: [{ seq: 7, time: 700, tokens: 30 }],
+    })
+    const asked: number[] = []
+    const fetchHeader = (seq: number): Promise<HeaderEpochContent> => {
+      asked.push(seq)
+      return Promise.resolve(seq === 7 ? { system: 'V3 PROMPT', tools: [] } : { tools: [] })
+    }
+    const m = await mount(h(Browser, props({ data, headers, fetchHeader })))
+    assert.ok(text(catRow(m, 'system')).includes(kit.t('browser.items', { n: 1 })))
+    await click(catRow(m, 'system'))
+    await flush()
+    assert.deepEqual(asked, [7], 'the prompt is fetched from the system node, not the header epoch')
+    assert.ok(text(query(m.container, '.lc-br-body')).includes('V3 PROMPT'))
+    await m.unmount()
+  })
+
+  test('a resolved prompt whose event carries no text explains its absence', async () => {
+    // The node exists (so the category opens) but the fetched event maps to
+    // no prompt text — a foreign or truncated envelope.
+    const data = tl({
+      current: { system: 30, tools: 0, user: 0, inject: 0, assistant: 0, tool: 0, total: 30 },
+      systems: [{ seq: 7, time: 700, tokens: 30 }],
+    })
+    const m = await mount(h(Browser, props({ data, fetchHeader: () => Promise.resolve({ tools: [] }) })))
+    await click(catRow(m, 'system'))
+    await flush()
+    assert.ok(text(query(m.container, '.lc-br-body')).includes('carried no system prompt'))
+    await m.unmount()
+  })
+
+  test('a step before the system node shows no prompt (the list is step-scoped)', async () => {
+    const headers: ContextHeaders = { headers: [{ seq: 3, time: 300, tools: [] }] }
+    const data = tl({
+      current: { system: 30, tools: 0, user: 0, inject: 0, assistant: 0, tool: 0, total: 30 },
+      requests: [req({ seq: 5, turn: 1, step: 0, system: 0, tools: 0, user: 5, total: 5 })],
+      systems: [{ seq: 7, time: 700, tokens: 30 }],
+    })
+    const m = await mount(h(Browser, props({ data, headers })))
+    await pickStep(m, '5')
+    assert.ok(text(catRow(m, 'system')).includes('0 Items'))
+    await click(catRow(m, 'system'))
+    assert.equal(queryAll(m.container, '.lc-br-body').length, 0, 'no prompt yet at this step')
+    await m.unmount()
+  })
 })
 
 describe('ContextBrowser tool schemas', () => {

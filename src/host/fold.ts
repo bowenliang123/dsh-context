@@ -19,8 +19,8 @@
  *   the request/event records are the raw material of `buildTimelineView`.
  */
 
-import type { Category, ContextEventRecord, ContextTimelineDetail, CostFamilyUsage, FileOpRecord, RequestRecord, SessionCostUsage, Snapshot, SurfaceNode, TimingTotals, ToolTimingTotals } from '../shared/types'
-import { estimateSystemTokens } from '../shared/estimate'
+import type { Category, ContextEventRecord, ContextTimelineDetail, CostFamilyUsage, FileOpRecord, RequestRecord, SessionCostUsage, Snapshot, SurfaceNode, SystemPromptNode, TimingTotals, ToolTimingTotals } from '../shared/types'
+import { estimateSystemContent, estimateSystemTokens } from '../shared/estimate'
 import type { FoldBounds } from './config'
 import {
   estimateMessage,
@@ -33,6 +33,7 @@ import {
 } from './pricing'
 import type { ContentBlock, MessageSource } from './pricing'
 import { deriveEventMessage } from '@deepseek-ai/dsh-session'
+import { firstTokenTimeOfStream, isTokenChunk, replaceRangeOf } from './logShapes'
 import { opsOfCall, parseCallArgs } from '../shared/fileOps'
 
 /**
@@ -67,6 +68,27 @@ export interface TimelineState {
   surface: SurfaceNode[]
   sums: Record<Category, number>
   systemTokens: number
+  /**
+   * The live system-prompt nodes, oldest first — a V3 log's `system/message`
+   * surface nodes, or the single entry a V0/V2 `request/header.header.system`
+   * envelope defines. `systemTokens` is the LAST entry with tokens > 0 (the
+   * harness's own "last nonempty surviving system" rule), so an empty dormant
+   * node keeps its position without clearing the prompt. Bounded by
+   * SYSTEM_NODES_MAX. ABSENT on rows folded before this field existed — the
+   * wire then serves no `systems` and the client falls back to the header
+   * epoch's own envelope figure.
+   */
+  systems?: SystemPromptNode[]
+  /**
+   * Whether `systems` was built from the V0/V2 request ENVELOPE
+   * (`header.system`) rather than from V3 `system/message` events. Only then
+   * may a system-less header CLEAR the list: its canonical V0 meaning is
+   * "this request has no system prompt", while a V3 header never carries one
+   * (its prompt lives in the message history). Absent = log-sourced, and
+   * never materialized as an `undefined`-valued property (plain-JSON
+   * precondition — see the note above `model`).
+   */
+  systemsFromHeader?: true
   toolsTokens: number
   /**
    * The projection-cache precondition is plain JSON: a property whose value
@@ -284,6 +306,29 @@ function bumpDetailRev(st: TimelineState): void {
 }
 
 /**
+ * Bound on the live system-prompt nodes (TimelineState.systems). The
+ * effective figure is the LAST nonempty node, so dropping the oldest can only
+ * under-report a pathological log whose newest SYSTEM_NODES_MAX nodes are all
+ * empty while an older one still carried text.
+ */
+const SYSTEM_NODES_MAX = 8
+
+/** The effective system-prompt price: the last nonempty node, else 0 (the harness's own rule). */
+function systemTokensOf(systems: readonly SystemPromptNode[]): number {
+  for (let i = systems.length - 1; i >= 0; i--) {
+    if (systems[i].tokens > 0) return systems[i].tokens
+  }
+  return 0
+}
+
+/** Append one system-prompt node, bounding the list (see SYSTEM_NODES_MAX). */
+function pushSystem(st: TimelineState, node: SystemPromptNode): void {
+  const systems = [...(st.systems ?? []), node]
+  st.systems = systems.length > SYSTEM_NODES_MAX ? systems.slice(-SYSTEM_NODES_MAX) : systems
+  st.systemTokens = systemTokensOf(st.systems)
+}
+
+/**
  * Bound on the buffered nested Code-Mode ops (TimelineState.pendingCodeOps)
  * — a hostile log that dispatches without settling the parent run_code
  * cannot grow the persisted state past this.
@@ -328,6 +373,30 @@ function archiveRemoved(st: TimelineState, removed: SurfaceNode[], goneSeq: numb
   for (const n of removed) st.archived.push({ ...n, gone: goneSeq })
 }
 
+/**
+ * Remove every live surface node whose seq the replacement claims, keeping the
+ * per-category sums equal to the surviving nodes and archiving the removals.
+ * Removal follows the SEQ list, not the declared range: pruned replacement
+ * nodes keep their own seqs beyond the range end, so a range-based removal
+ * would leave them behind and overcount. Returns the removed nodes.
+ */
+function removeSurfaceSeqs(st: TimelineState, claimed: ReadonlySet<number>, goneSeq: number): SurfaceNode[] {
+  if (claimed.size === 0) return []
+  const kept: SurfaceNode[] = []
+  const removed: SurfaceNode[] = []
+  for (const n of st.surface) {
+    if (claimed.has(n.seq)) {
+      st.sums[n.cat] -= n.tokens
+      removed.push(n)
+    } else {
+      kept.push(n)
+    }
+  }
+  archiveRemoved(st, removed, goneSeq)
+  st.surface = kept
+  return removed
+}
+
 interface SurfaceEventLike {
   seq: number
   time: number
@@ -338,6 +407,17 @@ interface MessageLike {
   content?: ContentBlock[]
   source?: MessageSource
   error?: boolean
+}
+
+/**
+ * The message nested under an event payload's `message` field
+ * (`system/message`, `assistant/message`, `tool/result`) — read structurally
+ * rather than through `deriveEventMessage`, whose 0.1.2-rc.1 generation knows
+ * nothing of the V3 `system/message` variant. A malformed payload reads null.
+ */
+function messageOf(data: Record<string, unknown> | undefined): MessageLike | null {
+  const message = data?.message
+  return message !== null && typeof message === 'object' ? message : null
 }
 
 /**
@@ -464,23 +544,15 @@ function applySurface(
   delete st.pendingShadowedSeqs
   delete st.pendingShadowEventSeq
 
-  const op = ev.surfaceOp as { op?: string; start?: number; end?: number } | null | undefined
-  if (op !== null && typeof op === 'object' && op.op === 'replace') {
+  const op = replaceRangeOf(ev.surfaceOp)
+  if (op !== null) {
     if (Array.isArray(shadowedSeqs) && shadowedSeqs.length > 0) {
       // The producer's shadow price covers exactly these node seqs, which can
       // include replacement nodes BEYOND the declared range end (their own
       // seqs postdate the range). Removing by seqs keeps our per-category
       // bookkeeping equal to the producer's total — a range-based removal
       // would leave those nodes behind and overcount.
-      const shadowed = new Set(shadowedSeqs)
-      const kept: SurfaceNode[] = []
-      const removed: SurfaceNode[] = []
-      for (const n of st.surface) {
-        if (shadowed.has(n.seq)) { st.sums[n.cat] -= n.tokens; removed.push(n) }
-        else kept.push(n)
-      }
-      archiveRemoved(st, removed, ev.seq)
-      st.surface = kept
+      const removed = removeSurfaceSeqs(st, new Set(shadowedSeqs), ev.seq)
       st.sums[cat] += node.tokens
       st.surface.push(node)
       // Rewrite the metering event's row from its gross shadow price to the
@@ -494,6 +566,12 @@ function applySurface(
       }
       return node
     }
+    // No shadow claim: the replacement names its span directly, read off BOTH
+    // endpoint spellings (logShapes.replaceRangeOf) and spliced IN PLACE — the
+    // harness's own surface semantics (the replacing node takes the span's
+    // position). BOTH endpoints must name live nodes, exactly as the harness's
+    // registry validates; a malformed span degrades to an append, which keeps
+    // the nodes rather than silently dropping context.
     let si = -1
     let ei = -1
     for (let i = 0; i < st.surface.length; i++) {
@@ -624,25 +702,6 @@ function durOf(from: number, to: number): number {
 }
 
 /**
- * Whether a stream chunk carries a non-empty token delta — the first-token
- * marker the TTFT fold waits for (the same rule as the harness's own
- * session-stats fold). Shape-guarded: a malformed chunk is just not a token.
- */
-function isTokenDelta(chunk: unknown): boolean {
-  if (chunk === null || typeof chunk !== 'object') return false
-  const c = chunk as { type?: unknown; text?: unknown; argumentsDelta?: unknown; name?: unknown }
-  switch (c.type) {
-    case 'text-delta':
-    case 'reasoning-delta':
-      return typeof c.text === 'string' && c.text !== ''
-    case 'tool-call-delta':
-      return (typeof c.argumentsDelta === 'string' && c.argumentsDelta !== '') || c.name !== undefined
-    default:
-      return false
-  }
-}
-
-/**
  * The fold's private timing accumulator: created on first use, and CLONED on
  * every later ensure() (see `applyTimeline`) — the object left in the
  * persisted previous state is never written into in place.
@@ -731,7 +790,23 @@ export function applyTimeline(state: TimelineState, event: TimelineEvent, bounds
         const s = ensure()
         // Tools TOTAL = dsh's whole-array price (one JSON string of every schema).
         s.toolsTokens = estimateToolsTotal(tools)
-        s.systemTokens = estimateSystemTokens(header.system)
+        // The V0/V2 system prompt rides this ENVELOPE; V3 rejects it outright
+        // (surface.ts: "must omit header.system; use system/message") and
+        // carries the prompt as a surface node instead. A present string is
+        // the envelope's own prompt for every request in its series; an
+        // absent one means "this request has no system prompt" ONLY when the
+        // list was envelope-sourced — otherwise the header is a V3 snapshot
+        // and the log's system nodes stay untouched.
+        const systemText = header.system
+        if (typeof systemText === 'string' && systemText !== '') {
+          s.systems = [{ seq: event.seq, time: event.time, tokens: estimateSystemTokens(systemText) }]
+          s.systemsFromHeader = true
+          s.systemTokens = systemTokensOf(s.systems)
+        } else if (s.systemsFromHeader === true) {
+          s.systems = []
+          delete s.systemsFromHeader
+          s.systemTokens = 0
+        }
         // Current route/model: the durable request envelope is the source of
         // truth (request/context is only route/capacity metadata, appended
         // AFTER request/header per request — see agent-loop `buildRequest`).
@@ -751,6 +826,34 @@ export function applyTimeline(state: TimelineState, event: TimelineEvent, bounds
           bumpDetailRev(s)
         }
         if (s.model) s.lastModel = s.model
+        break
+      }
+      case 'system/message': {
+        // The V3 system prompt: a SURFACE node (position 0 of the harness's
+        // ordered surface) that the plugin tracks outside its message
+        // categories — it is the envelope figure's source, never a
+        // user/inject/assistant/tool node, so it must not enter `surface` or
+        // `sums` (that would double-count it against `systemTokens`).
+        const s = ensure()
+        // Consume the armed shadow claim (the shadow-price protocol expires it
+        // on the next surface event) — a system node never carries one.
+        delete s.pendingShadowedSeqs
+        delete s.pendingShadowEventSeq
+        const op = replaceRangeOf(event.surfaceOp)
+        if (op !== null) {
+          const systems = s.systems ?? []
+          s.systems = systems.filter(n => n.seq < op.start || n.seq > op.end)
+          // Defensive: a replacement claiming ordinary surface nodes (never
+          // produced by dsh's system-prompt projection) removes them too, so
+          // the surface and its sums stay consistent with the claim.
+          const claimed = new Set<number>()
+          for (const n of s.surface) {
+            if (n.seq >= op.start && n.seq <= op.end) claimed.add(n.seq)
+          }
+          if (removeSurfaceSeqs(s, claimed, event.seq).length > 0) bumpDetailRev(s)
+        }
+        delete s.systemsFromHeader
+        pushSystem(s, { seq: event.seq, time: event.time, tokens: estimateSystemContent(messageOf(data)?.content) })
         break
       }
       case 'request/context': {
@@ -775,13 +878,16 @@ export function applyTimeline(state: TimelineState, event: TimelineEvent, bounds
         }
         break
       }
-      case 'tool/code-dispatch': {
-        // A nested Code-Mode call settling inside a run_code program: one
-        // settled sub-dispatch books its file ops exactly like a top-level
+      case 'tool/code-dispatch':
+      case 'tool/ptc-dispatch': {
+        // A nested PTC (Code Mode) call settling inside a run_code program:
+        // one settled sub-dispatch books its file ops exactly like a top-level
         // call — minus meta (the dispatch event carries none, so read windows
         // and per-file search attribution degrade to the argument-only
         // forms). The ops buffer under the top run_code call id and flush
         // when its result folds (their locate target is that result's row).
+        // BOTH vocabulary generations land here: `tool/code-dispatch` on
+        // V0/V2 logs, `tool/ptc-dispatch` on V3 (the rename keeps the payload).
         const rootCallId = data?.rootCallId
         const name = data?.name
         if (typeof rootCallId === 'string' && typeof name === 'string') {
@@ -800,15 +906,30 @@ export function applyTimeline(state: TimelineState, event: TimelineEvent, bounds
         break
       }
       case 'assistant/chunk': {
-      // The token flood: every stream chunk is one event, so this case stays
-      // cheap and mostly reference-stable — only the open step's FIRST token
-      // delta stamps the slot (later deltas and steps without a slot return
-      // the same state). A malformed chunk just is not a token.
+      // V0 stream events: the token flood, one event per chunk, so this case
+      // stays cheap and mostly reference-stable — only the open step's FIRST
+      // token delta stamps the slot (later deltas and steps without a slot
+      // return the same state). V2+ logs carry no such events; their timed
+      // stream rides `assistant/message` / `assistant/attempt` (see below).
         const start = state.stepStart
         if (start === undefined || start.firstToken !== undefined) return state
-        if (!isTokenDelta(data?.chunk)) return state
+        if (!isTokenChunk(data?.chunk)) return state
         const s = ensure()
         s.stepStart = { time: start.time, firstToken: event.time }
+        break
+      }
+      case 'assistant/attempt': {
+      // V2+: one model attempt that committed no surface message. Its embedded
+      // stream still carries the attempt's first token, which the harness's own
+      // sessionStats fold stamps on the open step the same way — an in-step
+      // retry therefore keeps its real TTFT instead of falling into the card's
+      // residue.
+        const start = state.stepStart
+        if (start === undefined || start.firstToken !== undefined) return state
+        const first = firstTokenTimeOfStream(data?.stream)
+        if (first === undefined) return state
+        const s = ensure()
+        s.stepStart = { time: start.time, firstToken: first }
         break
       }
       case 'step/start': {
@@ -983,16 +1104,22 @@ export function applyTimeline(state: TimelineState, event: TimelineEvent, bounds
         }
         s.requests.push(record)
         // Timing: one completed model call; its wait/generation split prices
-        // off the slot's first-token stamp when the stream carried one (a
-        // chunk-less call — legacy log, aborted step — stays unattributed and
-        // lands in the card's residue). The pending slot stays armed —
-        // the step's tool calls and `step/end` still follow.
+        // off the slot's first-token stamp. That stamp comes from a V0
+        // `assistant/chunk` delta or, when the log carries none, from the
+        // message's own EMBEDDED stream (V2+ settlements) — the same fallback
+        // the harness's sessionStats fold applies. A call whose stream carried
+        // no token (legacy log, aborted step) stays unattributed and lands in
+        // the card's residue. The pending slot stays armed — the step's tool
+        // calls and `step/end` still follow.
         const timing = ensureTiming(s)
         timing.calls += 1
         const stepStart = state.stepStart
-        if (stepStart !== undefined && stepStart.firstToken !== undefined) {
-          timing.ttftMs += durOf(stepStart.time, stepStart.firstToken)
-          timing.genMs += durOf(stepStart.firstToken, event.time)
+        if (stepStart !== undefined) {
+          const firstToken = stepStart.firstToken ?? firstTokenTimeOfStream(data?.stream)
+          if (firstToken !== undefined) {
+            timing.ttftMs += durOf(stepStart.time, firstToken)
+            timing.genMs += durOf(firstToken, event.time)
+          }
         }
         // `deriveEventMessage` returns `data.message` for assistant/message, or
         // null when the content array is empty (usage-only events project to no
@@ -1113,6 +1240,14 @@ function headFieldsOf(state: TimelineState): Snapshot {
     const tools: Record<string, ToolTimingTotals> = {}
     for (const k in state.timing.tools) tools[k] = { ...state.timing.tools[k] }
     result.timing = { ...state.timing, tools }
+  }
+  // The live system-prompt nodes ride the wire as COPIES: the browser resolves
+  // the prompt in force at any step from them and fetches its TEXT on demand
+  // from `seq` — a `system/message` event on V3, the epoch's `request/header`
+  // on V0/V2. Absent when the log carried none, which is exactly the legacy
+  // shape older clients already degrade on (they fall back to the epoch).
+  if (state.systems !== undefined && state.systems.length > 0) {
+    result.systems = state.systems.map(n => ({ ...n }))
   }
   return result
 }

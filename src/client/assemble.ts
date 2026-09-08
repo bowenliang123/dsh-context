@@ -15,13 +15,19 @@
  * retention), the result carries the flags the UI turns into notices.
  */
 
-import type { ContextHeaders, ContextTimeline, HeaderRecord, SurfaceNode } from '../shared/types'
+import type { ContextHeaders, ContextTimeline, HeaderRecord, SurfaceNode, SystemPromptNode } from '../shared/types'
 
 export interface Assembled {
   /** True when browsing the live surface (the next request's context). */
   live: boolean
   /** The header epoch in force (null = headers projection absent or none yet). */
   header: HeaderRecord | null
+  /**
+   * The system prompt in force at the shown step (null = none), resolved from
+   * the timeline's live `systems` nodes; on rows folded before that field
+   * existed the header epoch's own envelope figure stands in.
+   */
+  system: SystemPromptNode | null
   /** The assembled surface messages, in seq order. */
   nodes: SurfaceNode[]
   /** Live nodes outside the served window that are also part of the context. */
@@ -38,6 +44,33 @@ export function headerAt(headers: ContextHeaders | null, seq: number | null): He
     if (headers.headers[i].seq < seq) return headers.headers[i]
   }
   return null
+}
+
+/**
+ * The system prompt in force at `seq` (null = none) — the LAST live system
+ * node at or before it carrying tokens, which is exactly the host fold's
+ * "last nonempty surviving system" rule and therefore agrees with the
+ * per-step `system` figure the fold recorded. Rows folded before `systems`
+ * existed carry none; the header epoch's envelope figure stands in for them
+ * (the pre-V3 wire shape).
+ */
+export function systemAt(
+  data: ContextTimeline,
+  header: HeaderRecord | null,
+  seq: number | null,
+): SystemPromptNode | null {
+  const systems = data.systems
+  if (systems !== undefined && systems.length > 0) {
+    for (let i = systems.length - 1; i >= 0; i--) {
+      const node = systems[i]
+      if (node.tokens <= 0) continue
+      if (seq === null || node.seq < seq) return node
+    }
+    return null
+  }
+  return header !== null && header.systemTokens !== undefined
+    ? { seq: header.seq, time: header.time, tokens: header.systemTokens }
+    : null
 }
 
 export function assemble(data: ContextTimeline, headers: ContextHeaders | null, seq: number | null): Assembled {
@@ -71,5 +104,6 @@ export function assemble(data: ContextTimeline, headers: ContextHeaders | null, 
     && data.archiveFloor !== undefined
     && seq < data.archiveFloor
 
-  return { live, header: headerAt(headers, seq), nodes, missingLive, approximate }
+  const header = headerAt(headers, seq)
+  return { live, header, system: systemAt(data, header, seq), nodes, missingLive, approximate }
 }

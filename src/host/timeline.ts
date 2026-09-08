@@ -42,6 +42,13 @@ const surfaceNodeSchema = z.object({
   calls: z.array(z.string()).optional(),
 }).strict()
 
+/** One live system-prompt node (shared/types.ts SystemPromptNode). */
+const systemPromptNodeSchema = z.object({
+  seq: z.number().int().nonnegative(),
+  time: z.number(),
+  tokens: z.number().int().nonnegative(),
+}).strict()
+
 const requestRecordSchema = z.object({
   turn: z.number().optional(),
   step: z.number().optional(),
@@ -183,6 +190,7 @@ export const contextTimelineSchema = z.object({
   events: z.array(contextEventSchema).optional(),
   cost: z.object({ flash: costFamilySchema.optional(), pro: costFamilySchema.optional() }).strict().optional(),
   timing: timingTotalsSchema.optional(),
+  systems: z.array(systemPromptNodeSchema).optional(),
   nodes: z.array(surfaceNodeSchema).optional(),
   droppedNodes: z.number().int().nonnegative().optional(),
   archive: z.array(surfaceNodeSchema).optional(),
@@ -207,6 +215,8 @@ const timelineStateSchema = z.object({
     tool: z.number().int().nonnegative(),
   }).strict(),
   systemTokens: z.number().int().nonnegative(),
+  systems: z.array(systemPromptNodeSchema).optional(),
+  systemsFromHeader: z.literal(true).optional(),
   toolsTokens: z.number().int().nonnegative(),
   model: z.string().optional(),
   provider: z.string().optional(),
@@ -311,6 +321,16 @@ export function createContextTimelineDefinition(config: Config, slim: () => bool
     // 15: a search with the complete matched-file meta now books its call
     // TARGET (the searched path / the pattern) in addition to the per-file
     // hit rows — the op log's fold semantics changed, so cached rows refold.
+    //
+    // 15 since 0.47: the fold reads BOTH supported log generations (see
+    // host/logShapes.ts) — V3 `system/message` nodes, embedded assistant
+    // streams, `startSeq`/`endSeq` replacements, `tool/ptc-dispatch`. The new
+    // state fields (`systems`, `systemsFromHeader`) are additive-OPTIONAL, so
+    // cached rows keep parsing and stay USABLE: a bump would invalidate every
+    // row and orphan the key for idle sessions, which have no refresh channel
+    // until they go live again (the #37 regression) — strictly worse than a
+    // pre-fix session showing its corrected figures from the next folded
+    // event onward.
     stateVersion: 15,
   }
   return definition

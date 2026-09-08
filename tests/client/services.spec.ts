@@ -428,6 +428,44 @@ describe('timingOf', () => {
   })
 })
 
+describe('timelineOf — the live system-prompt nodes', () => {
+  const current = { system: 1, tools: 2, user: 3, inject: 4, assistant: 5, tool: 6, total: 7 }
+  const base = { ok: true, current, requests: [], events: [], nodes: [], archive: [], droppedNodes: 0 }
+
+  test('a well-formed systems list passes through by reference (fast path)', () => {
+    const wire = { ...base, systems: [{ seq: 3, time: 300, tokens: 42 }] }
+    assert.equal(timelineOf(wire), wire)
+  })
+
+  test('a malformed list takes the sanitizing slow path: entries re-proved and seq-ordered', () => {
+    const wire = {
+      ...base,
+      systems: [
+        { seq: 9, time: 900, tokens: 5 },
+        null,
+        7,
+        { seq: 'x', time: 1, tokens: 1 },
+        { seq: 2, time: Number.NaN, tokens: 1 },
+        { seq: 2, time: 200, tokens: 'nope' },
+        { seq: 2, time: 200, tokens: 8 },
+        { seq: 5, time: 500, tokens: 3 },
+      ],
+    }
+    const out = timelineOf(wire)
+    assert.ok(out !== (wire as unknown))
+    assert.deepEqual(out?.systems, [
+      { seq: 2, time: 200, tokens: 8 },
+      { seq: 5, time: 500, tokens: 3 },
+      { seq: 9, time: 900, tokens: 5 },
+    ])
+  })
+
+  test('an absent systems key stays absent; a non-list becomes empty', () => {
+    assert.equal('systems' in (timelineOf(base) ?? {}), false)
+    assert.deepEqual(timelineOf({ ...base, systems: 'nope' })?.systems, [])
+  })
+})
+
 describe('timelineOf — timing integration', () => {
   const current = { system: 1, tools: 2, user: 3, inject: 4, assistant: 5, tool: 6, total: 7 }
   const base = { ok: true, current, requests: [], events: [], nodes: [], archive: [], droppedNodes: 0 }
