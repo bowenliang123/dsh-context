@@ -300,7 +300,7 @@ export function timelineOf(value: unknown): ContextTimeline | null {
     && recordsOnly(data.events)
     && recordsOnly(data.nodes)
     && recordsOnly(data.archive)
-    && (data.systems === undefined || recordsOnly(data.systems))
+    && systemsFastOk(data.systems)
     && timingFastOk(data.timing)) {
     // Well-formed: pass the delivered value through untouched (cheap, and reference-stable so plain re-renders stay zero-copy).
     return data as unknown as ContextTimeline
@@ -369,6 +369,26 @@ function systemsOf(value: unknown): ContextTimeline['systems'] {
     out.push({ seq, time, tokens })
   }
   return out.sort((a, b) => a.seq - b.seq)
+}
+
+/**
+ * The fast path's check for the live system-prompt nodes: every entry must
+ * carry the three finite numbers the browser reads — `seq` for the per-step
+ * resolution, `time` for the DNA band, `tokens` for its width. A primitive
+ * entry, or one whose fields are not numbers, sends the payload down the
+ * sanitizing slow path (`systemsOf` drops it) instead of leaking `undefined`
+ * into the bar math. An absent list is fine.
+ */
+function systemsFastOk(value: unknown): boolean {
+  if (value === undefined) return true
+  if (!Array.isArray(value)) return false
+  return value.every((entry) => {
+    if (entry === null || typeof entry !== 'object') return false
+    const { seq, time, tokens } = entry as Record<string, unknown>
+    return typeof seq === 'number' && Number.isFinite(seq)
+      && typeof time === 'number' && Number.isFinite(time)
+      && typeof tokens === 'number' && Number.isFinite(tokens)
+  })
 }
 
 /**

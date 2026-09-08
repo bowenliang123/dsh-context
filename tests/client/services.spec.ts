@@ -460,6 +460,23 @@ describe('timelineOf — the live system-prompt nodes', () => {
     ])
   })
 
+  test('an all-record list with a non-numeric field takes the slow path: no partially numeric pass-through', () => {
+    // Every entry is a real object, so the collection guard alone would wave the
+    // list through; the fast path must still refuse it — a missing/non-finite
+    // field would otherwise reach the browser's bar math as undefined/NaN.
+    const wire = {
+      ...base,
+      systems: [
+        { seq: 2, time: 200 },
+        { seq: 4, time: Number.NaN, tokens: 7 },
+        { seq: 6, time: 600, tokens: 9 },
+      ],
+    }
+    const out = timelineOf(wire)
+    assert.ok(out !== (wire as unknown))
+    assert.deepEqual(out?.systems, [{ seq: 6, time: 600, tokens: 9 }])
+  })
+
   test('an absent systems key stays absent; a non-list becomes empty', () => {
     assert.equal('systems' in (timelineOf(base) ?? {}), false)
     assert.deepEqual(timelineOf({ ...base, systems: 'nope' })?.systems, [])
