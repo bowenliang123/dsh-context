@@ -71,6 +71,9 @@
 .lc-cols { display: flex; gap: 14px; flex-wrap: wrap; margin-bottom: 14px; }
 /* min() caps the column floor at the row's own width: on a sub-280px pane (phone rail + padding) the column narrows instead of overflowing. */
 .lc-col { flex: 1; min-width: min(280px, 100%); }
+/* The main row (Current Context + Trend | Context browser) folds earlier than the shared floor: both columns read
+   cramped at 280px, so the row needs 2 x 360px + the 7px gap before it stays side by side. */
+.lc-cols-main > .lc-col { min-width: min(360px, 100%); }
 .lc-cols > .lc-card { margin-bottom: 0; }
 .lc-col > .lc-card:last-child { margin-bottom: 0; }
 .lc-col-browser { display: flex; flex-direction: column; }

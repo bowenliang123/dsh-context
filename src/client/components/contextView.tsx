@@ -371,7 +371,7 @@ export function makeContextView(
           <PluginInfo />
         </div>
 
-        <div className="lc-cols">
+        <div className="lc-cols lc-cols-main">
           <div className="lc-col">
             <CurrentComposition
               head={head}
