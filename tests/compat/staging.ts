@@ -268,12 +268,21 @@ export const SLOT_SEAMS = [
   'settings.plugin.item',
 ] as const
 
-/** The event families the host fold switches on (src/host/fold.ts). */
+/**
+ * The event families the host fold switches on (src/host/fold.ts) — the UNION
+ * over every supported generation. No single harness line carries them all
+ * (`assistant/chunk` and `tool/code-dispatch` are V0/V2-only; `system/message`
+ * and `tool/ptc-dispatch` are V3-only), so the per-baseline probe asserts the
+ * baseline's own `foldEventTypes` subset, and a matrix test asserts this union
+ * equals the baselines' union — a fold case added without a baseline list
+ * fails loudly instead of going unprobed.
+ */
 export const FOLD_EVENT_TYPES = [
   'request/header', 'request/context', 'step/start', 'step/end',
   'user/message', 'tool/call', 'tool/result', 'assistant/message',
-  'tool/code-dispatch',
-  'plan/mode', 'compaction/summary', 'compaction/prune',
+  'assistant/chunk', 'assistant/attempt',
+  'tool/code-dispatch', 'tool/ptc-dispatch',
+  'plan/mode', 'compaction/summary', 'compaction/prune', 'system/message',
 ] as const
 
 /** The tag's durable-event vocabulary (packages/core/session/src/known-event-types.ts). */

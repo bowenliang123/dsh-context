@@ -16,7 +16,7 @@
  */
 
 /** The supported dsh tags, in lockstep with the BASELINES entries below. */
-export type BaselineId = 'v0.1.2-rc.1'
+export type BaselineId = 'v0.1.2-rc.1' | 'v0.1.3-alpha.2' | 'v0.1.5-alpha.1'
 
 /** The harness web half's client faces, as far as the compat probes consume them. */
 export interface ClientSeam {
@@ -59,6 +59,16 @@ export interface Baseline {
    * own generation.
    */
   session: string
+  /**
+   * The durable-event families THIS line's log carries that the host fold
+   * switches on — the probe asserts every one exists in the tag's
+   * `KNOWN_SESSION_EVENT_TYPES`. The fold reads a UNION of generations
+   * (V0 `assistant/chunk` + `tool/code-dispatch`; V2 `assistant/attempt`; V3
+   * `system/message` + `tool/ptc-dispatch`), and no single line carries them
+   * all, so the list is per baseline by construction; the matrix also asserts
+   * the union covers the fold's whole vocabulary.
+   */
+  foldEventTypes: readonly string[]
   client: ClientSeam
   /**
    * The step-boundary identity guard's host seam (src/host/stepIdentity.ts):
@@ -75,11 +85,17 @@ export interface Baseline {
 
 export const BASELINES: readonly Baseline[] = [
   {
-    // The `next`-channel release candidate — the newest declared dsh release.
+    // Session format V0 — the oldest supported line (the plugin's original target).
     id: 'v0.1.2-rc.1',
     tag: 'dsh-v0.1.2-rc.1',
     cordis: '4.0.2',
     session: '0.1.2-rc.1',
+    foldEventTypes: [
+      'request/header', 'request/context', 'step/start', 'step/end',
+      'user/message', 'tool/call', 'tool/result', 'assistant/message', 'assistant/chunk',
+      'tool/code-dispatch',
+      'plan/mode', 'compaction/summary', 'compaction/prune',
+    ],
     client: {
       imageFaceMethod: 'imageUrl',
       markdownChrome: 'labels',
@@ -88,6 +104,85 @@ export const BASELINES: readonly Baseline[] = [
         '@deepseek-ai/dsh-client-store',
         '@deepseek-ai/dsh-client-ui-slots',
         '@deepseek-ai/dsh-client-ui-primitives',
+      ],
+      detailChannel: {
+        hostRpcFile: 'packages/client/connection/src/rpc.ts',
+        hostRpcNeedle: 'HostConnectionRpc',
+        clientRpcFile: 'packages/client/connection/src/client/rpc.ts',
+        clientRpcNeedle: 'call(channel, endpoint, payload',
+        registryFile: 'packages/session/session-projection/src/index.ts',
+        registryNeedle: 'stateOf<',
+      },
+    },
+    stepGuard: {
+      loopFile: 'packages/core/agent-loop/src/agent.ts',
+      loopNeedles: ["'agent/pre-step'", "append('user/message'"],
+      prependProofFile: 'packages/context/time-context/src/index.ts',
+    },
+  },
+  {
+    // Session format V2: the assistant stream moved INTO the settlement
+    // (`assistant/message.data.stream` / `assistant/attempt.data.stream`), so
+    // `assistant/chunk` no longer exists and the fold's first-token source
+    // changes while every other V0 seam stays.
+    id: 'v0.1.3-alpha.2',
+    tag: 'dsh-v0.1.3-alpha.2',
+    cordis: '4.0.2',
+    session: '0.1.3-alpha.2',
+    foldEventTypes: [
+      'request/header', 'request/context', 'step/start', 'step/end',
+      'user/message', 'tool/call', 'tool/result', 'assistant/message', 'assistant/attempt',
+      'tool/code-dispatch',
+      'plan/mode', 'compaction/summary', 'compaction/prune',
+    ],
+    client: {
+      imageFaceMethod: 'imageUrl',
+      markdownChrome: 'labels',
+      platformModules: [
+        'react', 'react/jsx-runtime', 'react-dom', 'react-dom/client', '@deepseek-ai/cordis',
+        '@deepseek-ai/dsh-client-store',
+        '@deepseek-ai/dsh-client-ui-slots',
+        '@deepseek-ai/dsh-client-ui-primitives',
+      ],
+      detailChannel: {
+        hostRpcFile: 'packages/client/connection/src/rpc.ts',
+        hostRpcNeedle: 'HostConnectionRpc',
+        clientRpcFile: 'packages/client/connection/src/client/rpc.ts',
+        clientRpcNeedle: 'call(channel, endpoint, payload',
+        registryFile: 'packages/session/session-projection/src/index.ts',
+        registryNeedle: 'stateOf<',
+      },
+    },
+    stepGuard: {
+      loopFile: 'packages/core/agent-loop/src/agent.ts',
+      loopNeedles: ["'agent/pre-step'", "append('user/message'"],
+      prependProofFile: 'packages/context/time-context/src/index.ts',
+    },
+  },
+  {
+    // Session format V3: the system prompt became a surface node
+    // (`system/message`) and left `request/header.header.system`; replacement
+    // endpoints renamed to `startSeq`/`endSeq`; the PTC vocabulary renamed to
+    // `tool/ptc-dispatch`; the shell seeds one more platform module.
+    id: 'v0.1.5-alpha.1',
+    tag: 'dsh-v0.1.5-alpha.1',
+    cordis: '4.0.2',
+    session: '0.1.5-alpha.1',
+    foldEventTypes: [
+      'request/header', 'request/context', 'step/start', 'step/end',
+      'user/message', 'tool/call', 'tool/result', 'assistant/message', 'assistant/attempt',
+      'tool/ptc-dispatch',
+      'plan/mode', 'compaction/summary', 'compaction/prune', 'system/message',
+    ],
+    client: {
+      imageFaceMethod: 'imageUrl',
+      markdownChrome: 'labels',
+      platformModules: [
+        'react', 'react/jsx-runtime', 'react-dom', 'react-dom/client', '@deepseek-ai/cordis',
+        '@deepseek-ai/dsh-client-store',
+        '@deepseek-ai/dsh-client-ui-slots',
+        '@deepseek-ai/dsh-client-ui-primitives',
+        '@deepseek-ai/dsh-client-ui-dockkit',
       ],
       detailChannel: {
         hostRpcFile: 'packages/client/connection/src/rpc.ts',

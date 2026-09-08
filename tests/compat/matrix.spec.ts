@@ -30,6 +30,17 @@ if (reasons.length > 0) {
 // bundle requires at runtime must be seeded by EACH baseline's platform
 // module table — a require the shell cannot answer is a guaranteed boot
 // crash on that generation.
+describe('compat matrix — the per-baseline fold vocabularies', () => {
+  test('their union covers every event family the fold switches on', () => {
+    const union = new Set(BASELINES.flatMap(baseline => baseline.foldEventTypes))
+    assert.deepEqual(
+      staging.FOLD_EVENT_TYPES.filter(type => !union.has(type)),
+      [],
+      'a fold case no baseline declares would go unprobed',
+    )
+  })
+})
+
 describe.skipIf(staging.artifactsMissing())('compat matrix — bundle requires vs baseline module tables', () => {
   test.each(BASELINES)('$id: the platform module table answers every bundle require', (baseline) => {
     assert.deepEqual(
@@ -128,9 +139,9 @@ describe.skipIf(reasons.length > 0)('compat matrix — real dsh sources per base
       assert.equal(staging.dshHasString(baseline.tag, baseline.client.markdownChrome, 'packages/client/ui-primitives/src/markdown/MarkdownText.tsx'), true)
     })
 
-    test('host: the fold\'s event vocabulary exists in the durable log', async () => {
+    test('host: the fold\'s event vocabulary for this generation exists in the durable log', async () => {
       const known = await staging.knownEventTypesOf(baseline)
-      const missing = staging.FOLD_EVENT_TYPES.filter(type => !known.has(type))
+      const missing = baseline.foldEventTypes.filter(type => !known.has(type))
       assert.deepEqual(missing, [])
     })
 
