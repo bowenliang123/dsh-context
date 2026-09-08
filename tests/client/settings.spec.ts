@@ -50,6 +50,8 @@ describe('createContextSettings defaults', () => {
       granularity: 'step',
       mode: 'total',
       fileSort: 'count',
+      threshold: null,
+      retain: null,
       writable: false,
     })
     assert.equal(s.defaultGranularity(), 'step')
@@ -144,6 +146,8 @@ describe('attach', () => {
       granularity: 'turn',
       mode: 'delta',
       fileSort: 'path',
+      threshold: null,
+      retain: null,
       writable: true,
     })
   })
@@ -171,6 +175,8 @@ describe('attach', () => {
         granularity: 'step',
         mode: 'total',
         fileSort: 'count',
+        threshold: null,
+        retain: null,
         writable: false,
       })
     }
@@ -240,6 +246,62 @@ describe('attach', () => {
     s.store.subscribe(() => { calls++ })
     scope.emit({ status: 'ready', value: { defaultGranularity: 'turn', defaultFileSort: 'latest' }, writable: true })
     assert.equal(calls, 0)
+  })
+
+  test('a served section parses the compaction ratios; absent keys mean unset', () => {
+    const s = createContextSettings()
+    s.attach(new TestSettingsScope({
+      status: 'ready',
+      value: { compactionThresholdRatio: 0.5, compactionRetainRatio: 0.2 },
+      writable: true,
+    }))
+    assert.equal(s.store.getSnapshot().threshold, 0.5)
+    assert.equal(s.store.getSnapshot().retain, 0.2)
+  })
+
+  test('unusable persisted ratios degrade to unset, not to a broken section', () => {
+    for (const bad of [0, -0.5, 1.5, Number.NaN, Number.POSITIVE_INFINITY, '0.5', null]) {
+      const s = createContextSettings()
+      s.attach(new TestSettingsScope({ status: 'ready', value: { compactionThresholdRatio: bad }, writable: true }))
+      assert.equal(s.store.getSnapshot().threshold, null, String(bad))
+    }
+    // 1.0 is the legal cap (pressure effectively off).
+    const cap = createContextSettings()
+    cap.attach(new TestSettingsScope({ status: 'ready', value: { compactionThresholdRatio: 1 }, writable: true }))
+    assert.equal(cap.store.getSnapshot().threshold, 1)
+  })
+
+  test('set with a number or null echoes locally and writes the scope', async () => {
+    const s = createContextSettings()
+    const scope = new TestSettingsScope({ status: 'ready', value: {}, writable: true })
+    s.attach(scope)
+    let calls = 0
+    s.store.subscribe(() => { calls++ })
+    s.set('compactionThresholdRatio', 0.4)
+    assert.equal(s.store.getSnapshot().threshold, 0.4, 'the optimistic echo lands')
+    await new Promise(resolve => setTimeout(resolve, 0))
+    assert.deepEqual(scope.sets, [{ field: 'compactionThresholdRatio', value: 0.4 }])
+    s.set('compactionRetainRatio', 0.25)
+    assert.equal(s.store.getSnapshot().retain, 0.25)
+    await new Promise(resolve => setTimeout(resolve, 0))
+    assert.deepEqual(scope.sets[1], { field: 'compactionRetainRatio', value: 0.25 })
+    assert.equal(calls, 2, 'each real state change notifies once')
+    // Writing null over 0.25 is a real change; repeating it is a no-op echo.
+    s.set('compactionRetainRatio', null)
+    assert.equal(s.store.getSnapshot().retain, null)
+    assert.equal(calls, 3)
+    s.set('compactionRetainRatio', null)
+    assert.equal(calls, 3, 'a no-op echo is deduped')
+  })
+
+  test('an identical ratio write does not re-notify listeners', () => {
+    const s = createContextSettings()
+    const scope = new TestSettingsScope({ status: 'ready', value: { compactionThresholdRatio: 0.5 }, writable: true })
+    s.attach(scope)
+    let calls = 0
+    s.store.subscribe(() => { calls++ })
+    s.set('compactionThresholdRatio', 0.5)
+    assert.equal(calls, 0, 'same-value echo is deduped')
   })
 
   test('the returned disposer detaches the scope subscription', () => {

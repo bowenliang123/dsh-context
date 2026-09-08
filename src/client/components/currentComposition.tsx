@@ -1,5 +1,6 @@
-import { type ReactElement } from 'react'
+import { type ReactElement, useSyncExternalStore } from 'react'
 import type { PartsPart } from '../categories'
+import type { ContextSettings, SettingsState } from '../settings'
 import type { Headline } from '../headline'
 import type { ViewKit } from '../viewkit'
 import { AUTO_COMPACT_RATIO } from './stackedBar'
@@ -18,16 +19,29 @@ export interface CurrentCompositionProps {
   onHoverKey?: (key: string | null) => void
 }
 
+/** Store fallbacks for callers without the settings binding (tests, older hosts). */
+const noSubscribe = (): (() => void) => () => {}
+const nullSnapshot = (): SettingsState | null => null
+
 export function makeCurrentComposition(
   kit: ViewKit,
   StackedBar: (props: StackedBarProps) => ReactElement,
   Legend: LegendFn,
+  settings?: Pick<ContextSettings, 'store'>,
 ): (props: CurrentCompositionProps) => ReactElement {
   const { t, fmt } = kit
   return function CurrentComposition(props: CurrentCompositionProps): ReactElement {
     const head = props.head
+    // The reserve line tracks the tune bar's threshold: the tuned ratio while
+    // set, the harness default (the constant above) while unset — the same
+    // value the tuning pass overlays onto the engines.
+    const tuned = useSyncExternalStore(
+      settings?.store.subscribe ?? noSubscribe,
+      settings !== undefined ? settings.store.getSnapshot : nullSnapshot,
+    )
+    const ratio = tuned?.threshold ?? AUTO_COMPACT_RATIO
     const reserve = head.window != null && head.window > 0
-      ? { ratio: AUTO_COMPACT_RATIO, label: t('overview.compactReserve', { pct: Math.round(AUTO_COMPACT_RATIO * 100) }) }
+      ? { ratio, label: t('overview.compactReserve', { pct: Math.round(ratio * 100) }) }
       : undefined
     return (
       <div className="lc-card">

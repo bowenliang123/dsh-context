@@ -1,0 +1,106 @@
+/*
+ TuneBar — the flat auto-compact strip at the very top of the Context tab
+ (above the stats head row). Deliberately LIGHTER chrome than the cards below
+ (hairline l1 edge, tighter padding, radius 8): it reads as a control strip,
+ not another card. One row with two slider groups and a reset, folding under
+ width pressure rather than crushing.
+
+ The strip is its own query container (the harness idiom — the pane tracks
+ the shell's sidebar, not the viewport). Inline-size containment is safe
+ here: the strip's width comes from the column flex, never its contents, and
+ nothing inside needs a fixed-position containing block.
+*/
+.lc-tune {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 4px 14px;
+  background: var(--dsw-alias-bg-layer-1);
+  border: 1px solid var(--dsw-alias-border-l1);
+  border-radius: 8px;
+  padding: 5px 10px;
+  margin-bottom: 7px;
+  font-size: 12px;
+  container: lc-tune / inline-size;
+}
+
+.lc-tune-name { font-weight: 600; flex: none; white-space: nowrap; }
+
+.lc-tune-ctl { display: flex; align-items: center; gap: 6px; flex: 1 1 210px; min-width: 190px; }
+.lc-tune-tag { color: var(--dsw-alias-label-secondary); white-space: nowrap; }
+.lc-tune-ctl input[type="range"] { flex: 1 1 80px; min-width: 64px; margin: 0; accent-color: var(--dsw-alias-brand-primary); }
+
+.lc-tune-val {
+  flex: none;
+  min-width: 56px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 4px;
+  font-variant-numeric: tabular-nums;
+  color: var(--dsw-alias-label-primary);
+}
+/* While unset the value rests at the engine default and reads as a hint, not a setting. */
+.lc-tune-val-default { color: var(--dsw-alias-label-secondary); }
+/* A drafted (not-yet-applied) value reads active but quiet: the brand accent as
+   TEXT (the plugin's chip idiom), never a loud fill. */
+.lc-tune-val-dirty { color: var(--dsw-alias-brand-primary); font-weight: 600; }
+.lc-tune-chip {
+  font-style: normal;
+  font-size: 10px;
+  line-height: 1;
+  padding: 2px 5px;
+  border-radius: 4px;
+  background: var(--dsw-alias-bg-layer-2);
+  border: 1px solid var(--dsw-alias-border-l1);
+  color: var(--dsw-alias-label-secondary);
+  white-space: nowrap;
+}
+
+/* The Apply/Discard pair renders only while a drag is pending. Quiet pills in
+   the plugin's soft brand tint (the file-card chip idiom) — no solid primary
+   button in a strip this small; Discard is a bare text affordance. */
+.lc-tune-actions { display: flex; align-items: center; gap: 4px; flex: none; }
+.lc-tune-apply, .lc-tune-discard {
+  border: 1px solid transparent;
+  background: transparent;
+  font-size: 11px;
+  line-height: 1;
+  padding: 3px 9px;
+  border-radius: 5px;
+  cursor: pointer;
+  font-family: inherit;
+  color: var(--dsw-alias-label-secondary);
+  transition: color var(--ds-transition-duration, 0.2s) var(--ds-ease-in-out, ease-in-out), background var(--ds-transition-duration, 0.2s) var(--ds-ease-in-out, ease-in-out);
+}
+.lc-tune-apply {
+  color: var(--dsw-alias-brand-primary);
+  background: color-mix(in srgb, var(--dsw-alias-brand-primary) 14%, transparent);
+  border-color: color-mix(in srgb, var(--dsw-alias-brand-primary) 30%, transparent);
+}
+.lc-tune-apply:hover { background: color-mix(in srgb, var(--dsw-alias-brand-primary) 22%, transparent); }
+.lc-tune-discard:hover { color: var(--dsw-alias-label-primary); }
+
+.lc-tune-reset {
+  flex: none;
+  border: 1px solid var(--dsw-alias-border-l2);
+  background: transparent;
+  color: var(--dsw-alias-label-secondary);
+  font-size: 11px;
+  line-height: 1;
+  padding: 4px 9px;
+  border-radius: 6px;
+  cursor: pointer;
+  font-family: inherit;
+  transition: color var(--ds-transition-duration, 0.2s) var(--ds-ease-in-out, ease-in-out);
+}
+.lc-tune-reset:hover:not(:disabled) { color: var(--dsw-alias-label-primary); }
+.lc-tune-reset:disabled, .lc-tune-ctl input[type="range"]:disabled { cursor: default; opacity: 0.55; }
+
+.lc-tune-note { flex: none; color: var(--dsw-alias-label-secondary); }
+
+/* Under width pressure each slider group takes a full line; the reset and
+   note follow. Fold, never crush — no overflow, every control reachable. */
+@container lc-tune (max-width: 640px) {
+  .lc-tune-ctl { flex-basis: 100%; }
+}

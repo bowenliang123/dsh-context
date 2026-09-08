@@ -89,10 +89,23 @@ export type DefaultTrendMode = 'total' | 'delta'
 /** File Activity row order: most operations first, most-recently-touched first, or path ascending. */
 export type DefaultFileSort = 'count' | 'latest' | 'path'
 
+/**
+ * The auto-compact tuning overrides, as fractions of the routed model's
+ * context window. Absent (`undefined`) keeps the harness engine's own
+ * configured value; present values are swapped onto every live `compaction`
+ * engine at runtime (host/compactionTune.ts) — the built-in `agent/pre-step`
+ * pressure check then triggers at the tuned ratio.
+ */
+export type CompactionRatio = number
+
 export interface PluginSettings {
   defaultGranularity: DefaultGranularity
   defaultTrendMode: DefaultTrendMode
   defaultFileSort: DefaultFileSort
+  /** Pressure-trigger point: compact once estimated tokens reach this fraction of the window. */
+  compactionThresholdRatio?: CompactionRatio
+  /** Verbatim tail kept by a compaction, as a fraction of the window (ignored when the engine pins retainTokens). */
+  compactionRetainRatio?: CompactionRatio
 }
 
 /** The section fields the settings card edits, as the Host schema names them. */
