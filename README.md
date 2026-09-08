@@ -140,7 +140,7 @@ In **Settings → Plugins → Plugin configuration**, the **Context** card holds
 ## Good to know
 
 - **Estimates vs actuals** — category figures use dsh's own fixed-density heuristic (the same one as its built-in token meter); the pinned trend details and Token/Timing rings show provider-reported actuals next to them.
-- **Compatibility** — works on `@deepseek-ai/dsh` **0.1.2-rc1+**. The per-release matrix and how it is verified: [docs/compatibility.md](docs/compatibility.md).
+- **Compatibility** — works on `@deepseek-ai/dsh` **0.1.2-rc1+**, across the V0 (0.1.2-rc.x), V2 (0.1.3-alpha.x), and V3 (0.1.5-alpha.x+) session-log generations. The per-release matrix and how it is verified: [docs/compatibility.md](docs/compatibility.md).
 - **I18n** — UI in English and 简体中文.
 
 ## Like it?
