@@ -44,6 +44,20 @@ export interface ClientSeam {
     registryFile: string
     registryNeedle: string
   }
+  /**
+   * The right Sidebar's tab seam, present only from the generation that ships
+   * it (0.1.5-alpha.1). The plugin's registration is OPTIONAL: a line without
+   * this seam must simply never register the tab, and the matrix asserts the
+   * absence explicitly so a probe can tell "not supported here" from "moved".
+   */
+  sidebar?: {
+    /** The tab-type registry service's providing source. */
+    serviceFile: string
+    serviceNeedle: string
+    /** The keyed body seat's declaring source. */
+    slotFile: string
+    slotNeedle: string
+  }
 }
 
 export interface Baseline {
@@ -191,6 +205,12 @@ export const BASELINES: readonly Baseline[] = [
         clientRpcNeedle: 'call(channel, endpoint, payload',
         registryFile: 'packages/session/session-projection/src/index.ts',
         registryNeedle: 'stateOf<',
+      },
+      sidebar: {
+        serviceFile: 'packages/client/ui-sidebar-right/src/client/index.ts',
+        serviceNeedle: 'sidebarRightTabs',
+        slotFile: 'packages/client/ui-sidebar-right/src/client/contract/slots.ts',
+        slotNeedle: 'sidebar.right.pane.tab',
       },
     },
     stepGuard: {

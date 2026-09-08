@@ -232,6 +232,35 @@ describe('client entry: settingsScope inject', () => {
   })
 })
 
+describe('client entry: right Sidebar Context tab', () => {
+  test('absent sidebar registry at apply time: no tab, no body seat, no throw', () => {
+    const ctx = new TestClientCtx()
+    applyTo(ctx)
+    assert.deepEqual(ctx.slots.of('sidebar.right.pane.tab'), [])
+    ctx.dispose()
+  })
+
+  test('armed later: the pending inject registers the Context tab type and body', () => {
+    const ctx = new TestClientCtx()
+    applyTo(ctx)
+    const definitions: { id?: string; kind?: string; title?: () => string }[] = []
+    ctx.setService('sidebarRightTabs', {
+      register: (definition: { id?: string; kind?: string; title?: () => string }) => {
+        definitions.push(definition)
+        return () => {}
+      },
+    })
+    assert.equal(definitions.length, 1)
+    assert.equal(definitions[0].id, 'dsh-context')
+    assert.equal(definitions[0].kind, 'dsh-context')
+    assert.equal(definitions[0].title?.(), 'Context')
+    const bodies = ctx.slots.of('sidebar.right.pane.tab')
+    assert.equal(bodies.length, 1)
+    assert.equal(bodies[0].registration.key, 'dsh-context')
+    ctx.dispose()
+  })
+})
+
 describe('client entry: settings card slot', () => {
   function setup(): {
     ctx: TestClientCtx

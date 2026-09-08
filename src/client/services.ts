@@ -15,6 +15,7 @@
  */
 
 import type { Context } from '@deepseek-ai/cordis'
+import type { ComponentType } from 'react'
 import { estimateSystemTokens } from '../shared/estimate'
 import type { ContextBreakdown, ContextHeaders, ContextPressure, ContextTimeline, HeaderEpochContent, SystemPromptNode, TimingTotals, TokenUsage, ToolTimingTotals } from '../shared/types'
 
@@ -44,6 +45,37 @@ export interface SlotsService {
     registration: SlotRegistration,
     component: (props: { sessionId?: string } & Record<string, unknown>) => unknown,
   ): unknown
+}
+
+/** One guide-page entry box a right-Sidebar tab type contributes (dsh 0.1.5+). */
+export interface SidebarGuideEntryLike {
+  /** Ascending position among every registered type's entries. */
+  order: number
+  title: () => string
+  description: () => string
+  icon?: ComponentType<{ size?: number }>
+}
+
+/** One right-Sidebar tab type registration (the fields this plugin uses). */
+export interface SidebarTabDefinitionLike {
+  /** This implementation's identity, unique across every registration. */
+  id: string
+  /** What `openTab` names; also the page address's discriminator. */
+  kind: string
+  /** The tab chip's text, captured when the tab opens. */
+  title: () => string
+  /** Entry boxes for the guide page (omitted = the type stays off it). */
+  guide?: readonly SidebarGuideEntryLike[]
+}
+
+/**
+ * The right Sidebar's tab-type registry (`ctx.sidebarRightTabs`), as far as
+ * this plugin consumes it. OPTIONAL by contract: the service exists only on
+ * dsh 0.1.5-alpha.1+, so the plugin reaches it through a deferred inject and
+ * stays fully functional (no pending fiber, no throw) without it.
+ */
+export interface SidebarTabsFace {
+  register(definition: SidebarTabDefinitionLike): () => void
 }
 
 /**

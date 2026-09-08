@@ -19,6 +19,7 @@ import { makeContentFetcher, watchHistoryFaces } from '../../../src/client/histo
 import { makeRichText } from '../../../src/client/components/richText'
 import { makeContextView } from '../../../src/client/components/contextView'
 import { createContextSettings } from '../../../src/client/settings'
+import { watchSidebarContextTab } from '../../../src/client/sidebar'
 import { DICT_EN } from '../../../src/client/i18n'
 import type { ContextTimeline } from '../../../src/shared/types'
 import { asClientCtx, TestClientCtx } from '../helpers/harness'
@@ -38,6 +39,9 @@ vi.mock('@deepseek-ai/dsh-client-ui-primitives', async () => {
       captured.markdownProps = props
       return React.createElement('div', null, String(props.text ?? ''))
     },
+    // The sidebar guide glyph: present as a stub so the optional registration
+    // path sees the same shape the real primitives module serves.
+    IconContextInjectionOutline16: () => React.createElement('span', null),
   }
 })
 
@@ -127,6 +131,30 @@ for (const baseline of BASELINES) {
       await click(queryAll(m.container, '.lc-br-cat-row')[2])
       assert.ok(text(m.container).includes('window node hello'), 'the conversation-window join surfaced the seat node')
       await m.unmount()
+    })
+
+    test('the right Sidebar Context tab is optional: absent seam = inert, present seam = registered', () => {
+      const { ctx } = baselineCtx()
+      const settings = createContextSettings()
+      const View = makeContextView(asClientCtx(ctx), kit, settings)
+      // Without the registry (every line older than the right Sidebar), the
+      // deferred inject never fires: no tab, no body seat, no throw.
+      assert.doesNotThrow(() => {
+        watchSidebarContextTab(asClientCtx(ctx), View, kit.t, 'dsh-context')
+      })
+      assert.deepEqual(ctx.slots.of('sidebar.right.pane.tab'), [])
+      if (baseline.client.sidebar !== undefined) {
+        const definitions: unknown[] = []
+        ctx.setService('sidebarRightTabs', {
+          register: (definition: unknown) => {
+            definitions.push(definition)
+            return () => {}
+          },
+        })
+        assert.equal(definitions.length, 1, 'the generation with the seam gets the tab')
+        assert.equal(ctx.slots.of('sidebar.right.pane.tab').length, 1)
+      }
+      ctx.dispose()
     })
 
     test('a throwing history-service proxy degrades the tab, never crashes it', async () => {

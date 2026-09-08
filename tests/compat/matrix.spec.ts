@@ -135,6 +135,19 @@ describe.skipIf(reasons.length > 0)('compat matrix — real dsh sources per base
       assert.equal(staging.dshHasString(baseline.tag, dc.registryNeedle, dc.registryFile), true, 'registry stateOf face')
     })
 
+    test('client: the right Sidebar tab seam (optional per generation)', () => {
+      const sidebar = baseline.client.sidebar
+      if (sidebar === undefined) {
+        // No right Sidebar on this line: the plugin's deferred registration
+        // must never fire, which the always-on client lane pins. Assert the
+        // absence itself so a moved seam cannot read as "unsupported here".
+        assert.equal(staging.dshHasString(baseline.tag, 'sidebarRightTabs', 'packages/client/*/src/**'), false)
+        return
+      }
+      assert.equal(staging.dshHasString(baseline.tag, sidebar.serviceNeedle, sidebar.serviceFile), true, 'tab-type registry service')
+      assert.equal(staging.dshHasString(baseline.tag, sidebar.slotNeedle, sidebar.slotFile), true, 'keyed body seat')
+    })
+
     test('client: MarkdownText chrome prop', () => {
       assert.equal(staging.dshHasString(baseline.tag, baseline.client.markdownChrome, 'packages/client/ui-primitives/src/markdown/MarkdownText.tsx'), true)
     })

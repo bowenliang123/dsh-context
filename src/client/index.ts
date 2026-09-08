@@ -33,6 +33,7 @@ import { createContextSettings, type SettingsField, type SettingsScopeBinderFace
 import { makeContextView } from './components/contextView'
 import { makeContextJumpButton } from './components/contextJump'
 import { watchHistoryFaces } from './historyPage'
+import { watchSidebarContextTab } from './sidebar'
 import { makeViewKit } from './viewkit'
 
 // Theme-native styles: the bundle's global-CSS channel injects each sheet as
@@ -86,6 +87,11 @@ function apply(ctx: ClientCtx): void {
       props => h(ContextView, props),
     )
   })
+
+  // Right Sidebar (dsh 0.1.5-alpha.1+): the same view as a panel tab, offered
+  // from the sidebar's guide page. Optional by contract — a harness without
+  // the sidebar services simply never gets the tab (see sidebar.ts).
+  watchSidebarContextTab(ctx, ContextView, t, NS)
 
   // Chat → Context jump: an icon in each finalized reply's action row that
   // opens this tab pinned to that reply's turn (see contextJump.tsx; the
