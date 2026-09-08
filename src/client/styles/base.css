@@ -69,12 +69,13 @@
  The row owns the 14px vertical rhythm (lc-cols gap); cards drop their own bottom margin (incl. the last in a column) so every section boundary measures exactly one 14px whichever way the flex wraps.
  */
 .lc-cols { display: flex; gap: 14px; flex-wrap: wrap; margin-bottom: 14px; }
-/* min() caps the column floor at the row's own width: on a sub-280px pane (phone rail + padding) the column narrows instead of overflowing. */
-.lc-col { flex: 1; min-width: min(280px, 100%); }
-/* The main row folds earlier than the shared floor: both columns read cramped at 280px, so the tab's pair (Current
-   Context + Trend | Context browser) needs 2 x 360px + the 7px gap to stay side by side, and the sidebar panel's
-   three stacked cards (composition | browser | trend) need 3 x 360px + two gaps. */
-.lc-cols-main > .lc-col { min-width: min(360px, 100%); }
+/* Columns fold at 360px: the cards that pair up — the main row's composition/trend
+   against the browser, and the events card against file activity — read cramped at a
+   quarter-share of a narrow pane. The tab's main row needs 2 x 360px + the 7px gap,
+   the sidebar panel's three stacked cards 3 x 360px + two gaps. min() caps the floor
+   at the row's own width: on a sub-360px pane the column narrows instead of
+   overflowing. */
+.lc-col { flex: 1; min-width: min(360px, 100%); }
 .lc-cols > .lc-card { margin-bottom: 0; }
 .lc-col > .lc-card:last-child { margin-bottom: 0; }
 .lc-col-browser { display: flex; flex-direction: column; }
