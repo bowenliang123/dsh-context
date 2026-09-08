@@ -3,7 +3,9 @@
 .lc-agents-chips { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 10px; }
 .lc-agents-chip { font-size: 11px; padding: 2px 8px; border-radius: 999px; background: var(--dsw-alias-bg-layer-2); border: 1px solid var(--dsw-alias-border-l1); color: var(--dsw-alias-label-secondary); font-variant-numeric: tabular-nums; }
 .lc-agents-chip-on { color: var(--dsw-alias-state-success-primary); border-color: color-mix(in srgb, var(--dsw-alias-state-success-primary) 40%, transparent); }
-.lc-agents-stage { overflow-x: auto; margin: 0 -4px; padding: 0 4px; }
+/* `overscroll-behavior-x: contain` plus overscroll.ts: a swipe past the stage's edge must not chain into the
+   browser's history navigation (the trend chart's scroller carries the same guard). */
+.lc-agents-stage { overflow-x: auto; overscroll-behavior-x: contain; margin: 0 -4px; padding: 0 4px; }
 .lc-agents-svg { display: block; margin: 0 auto; max-width: none; }
 /* Direct segment per link, family-colored (the stroke comes from the link);
    a running child brightens its channel and layers a traveling pulse of the

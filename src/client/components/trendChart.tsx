@@ -6,6 +6,7 @@
 import { memo, useLayoutEffect, useMemo, useRef, useState, type ReactElement, type UIEvent } from 'react'
 import type { Category, ContextEventRecord, RequestRecord } from '../../shared/types'
 import { CATS } from '../categories'
+import { containHorizontalOverscroll } from '../overscroll'
 import type { ViewKit } from '../viewkit'
 
 export interface TrendChartProps {
@@ -490,6 +491,15 @@ export function makeTrendChart(kit: ViewKit): (props: TrendChartProps) => ReactE
       const observer = new ResizeObserver(() => { measureRef.current(el) })
       observer.observe(el)
       return () => { observer.disconnect() }
+    }, [])
+    // A horizontal swipe running off the chart's edge must not chain into the browser's history navigation
+    // (overscroll.ts): the sheet's overscroll-behavior-x covers Chromium/Firefox, this covers WebKit.
+    useLayoutEffect(() => {
+      const el = scrollRef.current
+      /* v8 ignore next 1 -- the scroll div renders unconditionally and React
+         attaches refs before layout effects run; el is never null here. */
+      if (el === null) return
+      return containHorizontalOverscroll(el)
     }, [])
 
     // Compact 2-row hover tooltip, shown instantly by the custom `.lc-chart-tip` (the native title is delayed):

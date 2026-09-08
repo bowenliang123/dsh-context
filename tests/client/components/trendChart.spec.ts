@@ -18,7 +18,7 @@ import { afterAll, beforeAll, describe, test } from 'vitest'
 import { aggregateByTurn, attachMarkers, jumpTargetOf, makeTrendChart, type TrendChartProps } from '../../../src/client/components/trendChart'
 import { CATS } from '../../../src/client/categories'
 import type { ContextEventRecord, RequestRecord } from '../../../src/shared/types'
-import { click, flush, hover, makeKit, mount, query, queryAll, unhover } from '../helpers/kit'
+import { click, flush, hover, makeKit, mount, query, queryAll, unhover, wheel } from '../helpers/kit'
 
 const kit = makeKit()
 const TrendChart = makeTrendChart(kit)
@@ -667,6 +667,25 @@ describe('TrendChart adaptive scale (the title-adjacent toggle)', () => {
     } finally {
       holder.ResizeObserver = saved
     }
+  })
+
+  test('the chart scroller cancels a horizontal swipe at either edge (browser history guard)', async () => {
+    const reqs: RequestRecord[] = []
+    for (let i = 0; i < 40; i++) reqs.push(req(i + 1, { turn: 1, step: i }))
+    const m = await mount(h(TrendChart, propsOf(reqs)))
+    await flush()
+    const scroll = query<LayoutEl>(m.container, '.lc-chart-scroll')
+    // Mount anchors at the newest bars: a further rightward swipe is the browser's forward gesture, leftward
+    // still scrolls the chart, and a vertical-dominant gesture belongs to the page.
+    assert.equal(scroll.scrollLeft, 240)
+    assert.equal(wheel(scroll, 30, 0), true, 'right edge cancels the forward swipe')
+    assert.equal(wheel(scroll, -30, 0), false, 'leftward still scrolls the chart')
+    assert.equal(wheel(scroll, 30, 120), false, 'vertical-dominant gestures stay with the page')
+    await scrollTo(scroll, 0)
+    assert.equal(wheel(scroll, -30, 0), true, 'left edge cancels the back swipe')
+    await scrollTo(scroll, 100)
+    assert.equal(wheel(scroll, -30, 0), false, 'mid-chart leftward still scrolls')
+    await m.unmount()
   })
 })
 

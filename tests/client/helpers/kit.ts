@@ -123,4 +123,11 @@ export async function keydown(key: string, target: HTMLElement | Window = window
   })
 }
 
+/** Dispatch a real wheel gesture on an element and report whether a listener canceled it. */
+export function wheel(el: Element, deltaX: number, deltaY: number): boolean {
+  const event = new WheelEvent('wheel', { bubbles: true, cancelable: true, deltaX, deltaY })
+  el.dispatchEvent(event)
+  return event.defaultPrevented
+}
+
 export type { ReactElement, ReactNode }

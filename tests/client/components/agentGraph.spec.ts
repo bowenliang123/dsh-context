@@ -10,7 +10,7 @@ import { describe, test } from 'vitest'
 import { makeAgentGraph, ringColorOf } from '../../../src/client/components/agentGraph'
 import type { AgentSelfStats } from '../../../src/client/agentTree'
 import { TestClientCtx, asClientCtx } from '../helpers/harness'
-import { flush, hover, makeKit, mount, query, queryAll, text, unhover } from '../helpers/kit'
+import { flush, hover, makeKit, mount, query, queryAll, text, unhover, wheel } from '../helpers/kit'
 
 const kit = makeKit()
 
@@ -199,6 +199,12 @@ describe('AgentGraph — the family tree', () => {
 
     // The legend lists all six categories plus the free-window and running-edge keys.
     assert.equal(queryAll(m.container, '.lc-agents-legend-item').length, 8)
+
+    // The stage cancels a horizontal swipe it cannot consume, so the browser never reads it as a history swipe
+    // (jsdom reports zero scroll metrics, so a horizontal-dominant gesture always sits at the edge).
+    const stage = query(m.container, '.lc-agents-stage')
+    assert.equal(wheel(stage, 30, 0), true, 'horizontal swipe canceled at the stage edge')
+    assert.equal(wheel(stage, 30, 120), false, 'vertical-dominant gestures stay with the page')
 
     await m.unmount()
   })

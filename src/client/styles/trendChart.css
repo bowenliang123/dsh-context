@@ -16,8 +16,11 @@
 .lc-chart-wrap { position: relative; flex: 1; min-width: 0; }
 /* No `scrollbar-width`/`scrollbar-color` here: either would make Chromium/Safari drop every
    ::-webkit-scrollbar* rule (see dsh ui-theme scrollbar.css), falling back to the OS overlay
-   bar that auto-hides — dsh's global 8px skin below stays visible instead. */
-.lc-chart-scroll { overflow-x: auto; overflow-y: hidden; scrollbar-gutter: stable; padding-bottom: var(--dsh-scrollbar-width, 8px); }
+   bar that auto-hides — dsh's global 8px skin below stays visible instead.
+   `overscroll-behavior-x: contain` stops a swipe past either edge from chaining into the browser's history
+   navigation (back at the left edge, forward at the right) — the same guard dsh's own horizontal scrollers
+   carry (WebKit ignores it for history, so overscroll.ts cancels the wheel there too). */
+.lc-chart-scroll { overflow-x: auto; overflow-y: hidden; overscroll-behavior-x: contain; scrollbar-gutter: stable; padding-bottom: var(--dsh-scrollbar-width, 8px); }
 .lc-chart { position: relative; display: flex; align-items: flex-end; gap: 2px; height: 130px; padding-top: 18px; box-sizing: border-box; width: max-content; min-width: 100%; }
 .lc-grid { position: absolute; left: 0; right: 0; border-top: 1px dashed var(--dsw-alias-border-l2); pointer-events: none; }
 .lc-grid-top { top: 18px; }

@@ -13,6 +13,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore, type KeyboardEvent, type ReactElement } from 'react'
 import { CATS } from '../categories'
+import { containHorizontalOverscroll } from '../overscroll'
 import type { ClientCtx } from '../services'
 import type { ViewKit } from '../viewkit'
 import type { AgentNode, AgentSelfStats } from '../agentTree'
@@ -84,6 +85,15 @@ export function makeAgentGraph(
       observer.observe(el)
       return () => { observer.disconnect() }
       /* v8 ignore stop */
+    }, [])
+    // A horizontal swipe running off the stage's edge must not chain into the browser's history navigation
+    // (overscroll.ts): the sheet's overscroll-behavior-x covers Chromium/Firefox, this covers WebKit.
+    useEffect(() => {
+      const el = stageRef.current
+      /* v8 ignore next 1 -- the stage renders whenever the card does, and React
+         attaches refs before effects run; el is never null here. */
+      if (el === null) return
+      return containHorizontalOverscroll(el)
     }, [])
 
     // Discover the current session's direct-child catalog once per session:
