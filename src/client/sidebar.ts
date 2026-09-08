@@ -22,7 +22,7 @@
  */
 
 import { IconContextInjectionOutline16 } from '@deepseek-ai/dsh-client-ui-primitives'
-import type { ClientCtx, SessionStandardProps, SidebarGuideEntryLike, SidebarTabsFace } from './services'
+import type { ClientCtx, ContextViewProps, SidebarGuideEntryLike, SidebarTabsFace } from './services'
 import type { Translate } from './i18n'
 
 /** The tab type's identity in the sidebar's tab system (also its body-seat key). */
@@ -66,7 +66,7 @@ function guideIcon(): SidebarGuideEntryLike['icon'] {
  */
 export function watchSidebarContextTab(
   ctx: ClientCtx,
-  view: (props: SessionStandardProps) => unknown,
+  view: (props: ContextViewProps) => unknown,
   t: Translate,
   ns: string,
 ): void {
@@ -90,7 +90,7 @@ export function watchSidebarContextTab(
       })
       const disposeBody = injected.slots.inject('sidebar.right.pane.tab', () => injected.slots.register(
         { name: 'sidebar.right.pane.tab', key: SIDEBAR_CONTEXT_ID, locale: ns },
-        (props: { sessionId?: string } & Record<string, unknown>) => view(props),
+        (props: { sessionId?: string } & Record<string, unknown>) => view({ ...props, host: 'sidebar' }),
       ))
       // The inject callback's own disposer owns both registrations: cordis
       // unloads them with the injected fiber (plugin stop, HMR reload).

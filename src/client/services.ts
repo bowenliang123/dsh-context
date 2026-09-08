@@ -206,6 +206,16 @@ export interface SessionStandardProps {
 }
 
 /**
+ * The Context view's props: the framework standard kit plus this plugin's own
+ * host marker. The right Sidebar's panel registration sets `host`, so the SAME
+ * view drops the head cards a narrow column cannot serve.
+ */
+export interface ContextViewProps extends SessionStandardProps {
+  /** Set only by the right-Sidebar registration; absent in the conversation tab and the /context modal. */
+  host?: 'sidebar'
+}
+
+/**
  * Read one projection key through the standard seat, narrowed at the
  * boundary: null when the seat is absent (a harness without the projection
  * pipeline) or the delivered value fails the narrow. The seat is a real

@@ -86,7 +86,9 @@
  cards (issue #48): below 1045px (a quarter under ~256px — where the donut
  cards would leave their side-by-side anatomy) the row wraps to 2×2, and
  below 480px (phone panes) it stacks single-column. Engines without
- container queries keep the wide four-across layout.
+ container queries keep the wide four-across layout. The right Sidebar's panel
+ renders TWO of the four (it drops the context stats and plugin info cards —
+ see contextView.tsx); the same rules then split the pair into halves.
  */
 .lc-head { container: lc-head-row / inline-size; }
 .lc-head > .lc-card { flex: 1 1 0; min-width: 0; }

@@ -181,6 +181,25 @@ describe('ContextView — projection guards', () => {
   })
 })
 
+describe('ContextView — the sidebar host', () => {
+  test('the panel drops the context-stats and plugin-info head cards, keeping the two donut cards', async () => {
+    const View = makeView(new TestClientCtx())
+    const projections = projectionsFor(richTimeline())
+
+    const tab = await mount(h(View, { useProjection: projections }))
+    assert.equal(queryAll(tab.container, '.lc-stats').length, 1, 'the tab keeps the context stats')
+    assert.equal(queryAll(tab.container, '.lc-pi-grid').length, 1, 'the tab keeps the plugin info')
+    await tab.unmount()
+
+    const panel = await mount(h(View, { host: 'sidebar', useProjection: projections }))
+    assert.equal(queryAll(panel.container, '.lc-stats').length, 0, 'the panel drops the context stats')
+    assert.equal(queryAll(panel.container, '.lc-pi-grid').length, 0, 'the panel drops the plugin info')
+    assert.equal(queryAll(panel.container, '.lc-head > .lc-card').length, 2, 'the head row keeps its two donut cards')
+    assert.equal(queryAll(panel.container, '.lc-head > .lc-col-donut').length, 2, 'token usage and timing')
+    await panel.unmount()
+  })
+})
+
 describe('ContextView — baseline gate', () => {
   test('a gated host renders the zeroed cards under the upgrade modal', async () => {
     const View = makeView(new TestClientCtx())

@@ -9,7 +9,7 @@ import { createElement as h, useCallback, useEffect, useLayoutEffect, useMemo, u
 import type { ContextEventRecord, RequestRecord, SurfaceNode } from '../../shared/types'
 import { briefNodes, briefOf } from '../brief'
 import { headlineOf } from '../headline'
-import type { SessionStandardProps } from '../services'
+import type { ContextViewProps } from '../services'
 import { contextBreakdownOf, contextPressureOf, conversationNodesOf, headersOf, imageLoaderOf, numOf, projectionOf, tokenUsageOf, unsupportedOf } from '../services'
 import type { ClientCtx, ConversationNodeLike } from '../services'
 import { makeContentFetcher, makeHeaderFetcher, useHistoryFace } from '../historyPage'
@@ -49,7 +49,7 @@ export function makeContextView(
   ctx: ClientCtx,
   kit: ViewKit,
   settings: ContextSettings,
-): (props: SessionStandardProps) => ReactElement {
+): (props: ContextViewProps) => ReactElement {
   const { t } = kit
   const StackedBar = makeStackedBar(kit)
   const Legend = makeLegend(kit)
@@ -71,8 +71,11 @@ export function makeContextView(
 
   // The body renders under the error boundary: a corrupt projection value (past the timelineOf shape guard) degrades to a styled error
   // card, not a white screen; the boundary itself has NO hooks, so the body's hook order and loading/data flow stay unchanged.
-  function ContextViewBody(props: SessionStandardProps): ReactElement {
+  function ContextViewBody(props: ContextViewProps): ReactElement {
     const sessionId = props.sessionId
+    // The right Sidebar's panel is a narrow column: it drops the two head cards
+    // that only pay off on the full-width tab (context stats, plugin info).
+    const inSidebar = props.host === 'sidebar'
     // The timeline source (timelineSource.ts): the pushed value on the inline
     // generation, or the slim head merged with the on-demand detail on the
     // split generation. `detailState`/`retryDetail` drive the detail cards'
@@ -364,11 +367,13 @@ export function makeContextView(
       <div className="lc-root" ref={rootRef}>
 
         <div className="lc-cols lc-head">
-          <StatsContext counts={data.counts ?? countsOfRecords(requests, events)} toolCalls={data.toolCalls} images={data.images}
-            cost={data.cost} locale={activeLocale} />
+          {inSidebar ? null : (
+            <StatsContext counts={data.counts ?? countsOfRecords(requests, events)} toolCalls={data.toolCalls} images={data.images}
+              cost={data.cost} locale={activeLocale} />
+          )}
           <StatsTokens usage={usage} />
           <StatsTiming timing={data.timing ?? null} locale={activeLocale} />
-          <PluginInfo />
+          {inSidebar ? null : <PluginInfo />}
         </div>
 
         <div className="lc-cols lc-cols-main">
@@ -530,7 +535,7 @@ export function makeContextView(
     )
   }
 
-  return function ContextView(props: SessionStandardProps): ReactElement {
+  return function ContextView(props: ContextViewProps): ReactElement {
     return h(ErrorBoundary, null, h(ContextViewBody, props))
   }
 }

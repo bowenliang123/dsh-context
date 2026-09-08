@@ -11,7 +11,7 @@ import {
   SIDEBAR_CONTEXT_KIND,
   watchSidebarContextTab,
 } from '../../src/client/sidebar'
-import type { SessionStandardProps, SidebarTabDefinitionLike } from '../../src/client/services'
+import type { ContextViewProps, SidebarTabDefinitionLike } from '../../src/client/services'
 import { TestClientCtx, asClientCtx } from './helpers/harness'
 
 const NS = 'dsh-context'
@@ -29,7 +29,7 @@ function registry(): { definitions: SidebarTabDefinitionLike[]; disposed: number
   return rec
 }
 
-function wire(ctx: TestClientCtx, view: (props: SessionStandardProps) => unknown = props => props): void {
+function wire(ctx: TestClientCtx, view: (props: ContextViewProps) => unknown = props => props): void {
   const t = ctx.locale.bind(NS)
   watchSidebarContextTab(asClientCtx(ctx), view, t, NS)
 }
@@ -87,10 +87,10 @@ describe('watchSidebarContextTab — the optional registration', () => {
     ctx.dispose()
   })
 
-  test('the body renders the injected view with the seat props', () => {
+  test('the body renders the injected view with the seat props and the sidebar host marker', () => {
     const ctx = new TestClientCtx()
-    const seen: unknown[] = []
-    const view = (props: SessionStandardProps): string => {
+    const seen: ContextViewProps[] = []
+    const view = (props: ContextViewProps): string => {
       seen.push(props)
       return 'context-view'
     }
@@ -100,7 +100,10 @@ describe('watchSidebarContextTab — the optional registration', () => {
     const props = { sessionId: 's-1', useProjection: () => undefined }
     assert.equal(component(props), 'context-view')
     assert.equal(seen.length, 1)
-    assert.equal(seen[0], props, 'the seat props reach the view by reference')
+    assert.notEqual(seen[0], props, 'the marker rides a copy, never the seat object')
+    assert.equal(seen[0].sessionId, 's-1')
+    assert.equal(seen[0].useProjection, props.useProjection, 'the standard kit survives the spread')
+    assert.equal(seen[0].host, 'sidebar', 'the panel host marker')
     ctx.dispose()
   })
 
