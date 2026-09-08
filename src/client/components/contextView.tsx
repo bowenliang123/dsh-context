@@ -380,7 +380,9 @@ export function makeContextView(
             <div className="lc-card">
               <div className="lc-card-title">
                 <span className="lc-card-title-text">{t('trend.title')}</span>
-                <span className="lc-card-sub">{focusCat !== null ? t('trend.focus', { cat: kit.catLabel(focusCat) }) : t('trend.hint')}</span>
+                {focusCat !== null
+                  ? <span className="lc-card-sub">{t('trend.focus', { cat: kit.catLabel(focusCat) })}</span>
+                  : null}
                 <div className="lc-trend-ctl">
                   <div className="lc-gran">
                     <button
