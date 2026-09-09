@@ -30,29 +30,6 @@ body:
       placeholder: e.g. 0.47.0
     validations:
       required: true
-  - type: input
-    id: environment
-    attributes:
-      label: Environment / 运行环境
-      description: OS, browser, and how the plugin is installed (e.g. `dsh plugin --profile web add`). / 操作系统、浏览器，以及插件的安装方式（例如 `dsh plugin --profile web add`）。
-      placeholder: e.g. macOS 15.4, Chrome 139, dsh web
-    validations:
-      required: false
-  - type: dropdown
-    id: surface
-    attributes:
-      label: Affected surface / 受影响的功能面
-      description: Where the problem shows up. / 问题出现的界面。
-      multiple: true
-      options:
-        - Context tab / 上下文标签页
-        - Context panel (sidebar) / 上下文侧边栏面板
-        - /context command / /context 命令
-        - Settings / 设置
-        - Host or session log / 宿主或会话日志
-        - Other / 其他
-    validations:
-      required: true
   - type: textarea
     id: description
     attributes:
