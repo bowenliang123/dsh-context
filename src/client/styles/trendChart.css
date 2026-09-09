@@ -56,11 +56,21 @@
 .lc-bar-in-turn { background: rgba(128,128,128,0.14); }
 .lc-bar-stack { display: flex; flex-direction: column-reverse; width: 100%; }
 .lc-bar-stack > div { width: 100%; }
-/* Delta mode: diverging stacks anchored at the zero line — growth piles up from it, shrinkage hangs down. */
+/* Rounded ends on each bar's outer corners only (the idiom radius, .lc-bar's 2px): the topmost segment
+   carries the two top corners, the bottommost the two bottom, and an only segment all four — inner
+   boundaries stay square so stacked segments never show background gaps between colors. */
+.lc-bar-stack > div:first-child { border-radius: 0 0 2px 2px; }
+.lc-bar-stack > div:last-child { border-radius: 2px 2px 0 0; }
+.lc-bar-stack > div:only-child { border-radius: 2px; }
+/* Delta mode: diverging stacks anchored at the zero line — growth piles up from it, shrinkage hangs down.
+   Only each arm's OUTER end rounds (an arm's last segment, top corners on the up-arm / bottom on the
+   down-arm; :last-child also covers a single-segment arm) — the zero-line joins stay square and crisp. */
 .lc-bar-up, .lc-bar-down { position: absolute; left: 0; width: 100%; display: flex; }
 .lc-bar-up { flex-direction: column-reverse; }
 .lc-bar-down { flex-direction: column; }
 .lc-bar-up > div, .lc-bar-down > div { width: 100%; }
+.lc-bar-up > div:last-child { border-radius: 2px 2px 0 0; }
+.lc-bar-down > div:last-child { border-radius: 0 0 2px 2px; }
 /*
  Category hover-link (overview/browser → trend card): the chart container carries the hovered
  category key (`data-catdim`), so CSS alone lights that key's segment in EVERY bar and recedes
