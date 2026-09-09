@@ -1,46 +1,102 @@
-name: Bug Report
-description: Report a problem with the dsh-context plugin on DeepSeek Harness.
+name: Bug Report / 缺陷报告
+description: Report a problem with the dsh-context plugin on DeepSeek Harness. / 反馈 dsh-context 插件在 DeepSeek Harness 上的问题。
+title: "[Bug] "
+labels: ["bug"]
 body:
   - type: markdown
     attributes:
       value: |
-        Thanks for taking the time to report an issue! Please fill in all the required
-        fields below so the problem can be reproduced and fixed quickly.
+        Thanks for taking the time to report a problem! Please fill in every required
+        field so it can be reproduced and fixed quickly.
+        感谢你抽出时间反馈问题！请填写所有必填字段，以便问题能被快速复现和修复。
+
+        Before you file / 提交前请先确认:
+        - Search existing issues first / 先搜索是否已有相同 issue。
+        - Harness-level problems belong upstream / 与 Harness 本身有关的问题请提交到上游:
+          https://github.com/deepseek-ai/deepseek-harness/issues
   - type: input
     id: dsh-version
     attributes:
-      label: DeepSeek Harness version
-      description: The version of `@deepseek-ai/dsh` in use (e.g. from `dsh --version`).
-      placeholder: e.g. 0.1.2-rc.1
+      label: DeepSeek Harness version / DeepSeek Harness 版本
+      description: The `@deepseek-ai/dsh` version in use, from `dsh --version`. Supported range is 0.1.2-rc.1+. / 正在使用的 `@deepseek-ai/dsh` 版本（`dsh --version`）。支持范围为 0.1.2-rc.1+。
+      placeholder: e.g. 0.1.5-alpha.1
     validations:
       required: true
   - type: input
     id: plugin-version
     attributes:
-      label: dsh-context version
-      description: The installed dsh-context plugin version that you're using
-      placeholder: e.g. v0.41.3
+      label: dsh-context version / dsh-context 版本
+      description: The installed dsh-context plugin version. / 已安装的 dsh-context 插件版本。
+      placeholder: e.g. 0.47.0
+    validations:
+      required: true
+  - type: input
+    id: environment
+    attributes:
+      label: Environment / 运行环境
+      description: OS, browser, and how the plugin is installed (e.g. `dsh plugin --profile web add`). / 操作系统、浏览器，以及插件的安装方式（例如 `dsh plugin --profile web add`）。
+      placeholder: e.g. macOS 15.4, Chrome 139, dsh web
+    validations:
+      required: false
+  - type: dropdown
+    id: surface
+    attributes:
+      label: Affected surface / 受影响的功能面
+      description: Where the problem shows up. / 问题出现的界面。
+      multiple: true
+      options:
+        - Context tab / 上下文标签页
+        - Context panel (sidebar) / 上下文侧边栏面板
+        - /context command / /context 命令
+        - Settings / 设置
+        - Host or session log / 宿主或会话日志
+        - Other / 其他
     validations:
       required: true
   - type: textarea
     id: description
     attributes:
-      label: Problem description
-      description: A clear and concise statement of the problem — what you did, what you expected to happen, and what actually happened.
+      label: Problem summary / 问题概述
+      description: A clear and concise statement of the problem. / 清晰、简洁地说明问题。
     validations:
       required: true
   - type: textarea
-    id: screenshots
+    id: reproduction
     attributes:
-      label: Screenshots
-      description: Drag & drop screenshots or screen recordings here.
+      label: Steps to reproduce / 复现步骤
+      description: Minimal, deterministic steps that trigger the problem. / 能够稳定触发问题的最小步骤。
+      placeholder: |
+        1. Open ... / 打开 ...
+        2. Click ... / 点击 ...
+        3. Observe ... / 观察到 ...
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior / 期望行为
+      description: What you expected to happen. / 你期望发生什么。
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual behavior / 实际行为
+      description: What actually happened instead. / 实际发生了什么。
     validations:
       required: true
   - type: textarea
     id: error-stack
     attributes:
-      label: Error stack
-      description: The full error message and stack trace, from the DeepSeek Harness logs or the browser console, if any.
+      label: Error logs / 错误日志
+      description: The full error message and stack trace from the dsh logs or the browser console, if any. / 来自 dsh 日志或浏览器控制台的完整错误信息与堆栈（如有）。
       render: shell
+    validations:
+      required: false
+  - type: textarea
+    id: screenshots
+    attributes:
+      label: Screenshots / 截图或录屏
+      description: Drag & drop screenshots or screen recordings here, if any. / 如有截图或录屏，请拖拽到此处。
     validations:
       required: false
