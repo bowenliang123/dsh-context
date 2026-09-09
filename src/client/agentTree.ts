@@ -564,9 +564,9 @@ export function sessionsFaceOf(ctx: { get(name: string): unknown }): SessionsFac
 
 /**
  * Compact duration: `42s`, `3m05s`, `1h07m` (shared by both locales).
- * Deliberately distinct from format.ts's locale-aware `fmtDuration` (the
- * timing card's `12.3s` / `4分0秒`): the inspector's caption column needs
- * whole-second, fixed-width, locale-free text.
+ * Deliberately distinct from format.ts's `fmtDuration` (the timing card's
+ * `12.3s` / `3m25s`): the inspector's caption column needs whole-second,
+ * fixed-width text.
  */
 export function fmtDurationCompact(ms: number): string {
   if (!Number.isFinite(ms) || ms < 0) return '—'

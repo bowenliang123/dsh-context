@@ -21,12 +21,10 @@ import type { DonutProps, DonutSegment } from './donut'
 
 export function makeStatsTiming(kit: ViewKit, Donut: (props: DonutProps) => ReactElement): (props: {
   timing: TimingTotals | null
-  locale: string
 }) => ReactElement {
   const { t, fmt, fmtDuration, fmtShare } = kit
   const SliceList = makeSliceList(kit)
-  return function StatsTiming(props: { timing: TimingTotals | null; locale: string }): ReactElement {
-    const lang: 'zh' | 'en' = props.locale === 'zh' ? 'zh' : 'en'
+  return function StatsTiming(props: { timing: TimingTotals | null }): ReactElement {
     // The legend row ↔ donut segment hover link (shared key, set from either side).
     const [hoverKey, setHoverKey] = useState<string | null>(null)
     const timing = props.timing
@@ -49,7 +47,7 @@ export function makeStatsTiming(kit: ViewKit, Donut: (props: DonutProps) => Reac
       // call count; a zero-duration slice keeps just the count (its dash has
       // nothing to qualify).
       const countOf = (ms: number, times?: string): string => {
-        const dur = fmtDuration(ms, lang)
+        const dur = fmtDuration(ms)
         if (times === undefined) return dur
         return ms > 0 ? `${dur} · ${times}` : times
       }
@@ -94,7 +92,7 @@ export function makeStatsTiming(kit: ViewKit, Donut: (props: DonutProps) => Reac
               <Donut
                 segments={segments}
                 size={96}
-                centerTop={wall > 0 ? fmtDuration(wall, lang) : '—'}
+                centerTop={wall > 0 ? fmtDuration(wall) : '—'}
                 centerSub={t('timing.total')}
                 hoverKey={hoverKey}
                 onHoverKey={setHoverKey}

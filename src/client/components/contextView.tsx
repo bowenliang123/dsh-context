@@ -488,7 +488,7 @@ export function makeContextView(
               cost={data.cost} locale={activeLocale} />
           )}
           <StatsTokens usage={usage} />
-          <StatsTiming timing={data.timing ?? null} locale={activeLocale} />
+          <StatsTiming timing={data.timing ?? null} />
           {inSidebar ? null : <PluginInfo />}
         </div>
 

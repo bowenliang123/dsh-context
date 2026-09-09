@@ -34,7 +34,7 @@ function rowOf(container: HTMLElement, i: number): { pct: string; label: string;
 describe('StatsTiming', () => {
   test('absent and all-zero timings render the empty state', async () => {
     for (const timing of [null, { wallMs: 0, ttftMs: 0, genMs: 0, calls: 0, toolsMs: 0, toolCalls: 0, tools: {} }] as const) {
-      const m = await mount(h(StatsTiming, { timing, locale: 'en' }))
+      const m = await mount(h(StatsTiming, { timing }))
       assert.ok(text(m.container).includes('No timing data yet'))
       assert.equal(queryAll(m.container, '.lc-sl-row').length, 0)
       assert.equal(queryAll(m.container, '.lc-donut').length, 0)
@@ -43,34 +43,34 @@ describe('StatsTiming', () => {
   })
 
   test('the donut center shows the wall total; rows lead with shares', async () => {
-    const m = await mount(h(StatsTiming, { timing: TIMING, locale: 'en' }))
+    const m = await mount(h(StatsTiming, { timing: TIMING }))
     assert.ok(text(m.container).includes('Timing Stats'))
-    assert.equal(query(m.container, '.lc-donut-center b').textContent, '10m 0s')
+    assert.equal(query(m.container, '.lc-donut-center b').textContent, '10m0s')
     assert.equal(query(m.container, '.lc-donut-center span').textContent, 'Active Time')
-    assert.deepEqual(rowOf(m.container, 0), { pct: '16.7%', label: 'TTFT', count: '1m 40s · 10 calls', dim: false })
-    assert.deepEqual(rowOf(m.container, 1), { pct: '23.3%', label: 'LLM Gen', count: '2m 20s · 10 calls', dim: false })
+    assert.deepEqual(rowOf(m.container, 0), { pct: '16.7%', label: 'TTFT', count: '1m40s · 10 calls', dim: false })
+    assert.deepEqual(rowOf(m.container, 1), { pct: '23.3%', label: 'LLM Gen', count: '2m20s · 10 calls', dim: false })
     // The tools row keeps the true 5m sum even though the ring clamps it.
-    assert.deepEqual(rowOf(m.container, 2), { pct: '50.0%', label: 'Tool runs', count: '5m 0s · 25 runs', dim: false })
-    assert.deepEqual(rowOf(m.container, 3), { pct: '10.0%', label: 'Overhead', count: '1m 0s', dim: false })
+    assert.deepEqual(rowOf(m.container, 2), { pct: '50.0%', label: 'Tool runs', count: '5m0s · 25 runs', dim: false })
+    assert.deepEqual(rowOf(m.container, 3), { pct: '10.0%', label: 'Overhead', count: '1m0s', dim: false })
     // Four ring segments painted (ttft + gen + tools + overhead); four rows.
     assert.equal(queryAll(m.container, '.lc-donut circle').length, 4)
     assert.equal(queryAll(m.container, '.lc-sl-row').length, 4)
     await m.unmount()
   })
 
-  test('the zh locale formats durations and counts in Chinese units', async () => {
-    const m = await mount(h(StatsTimingZh, { timing: TIMING, locale: 'zh' }))
-    assert.equal(query(m.container, '.lc-donut-center b').textContent, '10分0秒')
-    assert.deepEqual(rowOf(m.container, 0), { pct: '16.7%', label: '模型等待', count: '1分40秒 · 10次', dim: false })
-    assert.deepEqual(rowOf(m.container, 1), { pct: '23.3%', label: '模型生成', count: '2分20秒 · 10次', dim: false })
+  test('labels localize while durations stay locale-free', async () => {
+    const m = await mount(h(StatsTimingZh, { timing: TIMING }))
+    assert.equal(query(m.container, '.lc-donut-center b').textContent, '10m0s')
+    assert.deepEqual(rowOf(m.container, 0), { pct: '16.7%', label: '模型等待', count: '1m40s · 10次', dim: false })
+    assert.deepEqual(rowOf(m.container, 1), { pct: '23.3%', label: '模型生成', count: '2m20s · 10次', dim: false })
     await m.unmount()
   })
 
   test('parallel tool overlap: the count keeps the true sum, the share caps at 100%', async () => {
     // 9 parallel 22s calls inside a 100s wall: tools sum 200s > wall.
     const timing: TimingTotals = { wallMs: 100_000, ttftMs: 25_000, genMs: 35_000, calls: 2, toolsMs: 200_000, toolCalls: 9, tools: { bash: { calls: 9, ms: 200_000 } } }
-    const m = await mount(h(StatsTiming, { timing, locale: 'en' }))
-    assert.deepEqual(rowOf(m.container, 2), { pct: '100.0%', label: 'Tool runs', count: '3m 20s · 9 runs', dim: false })
+    const m = await mount(h(StatsTiming, { timing }))
+    assert.deepEqual(rowOf(m.container, 2), { pct: '100.0%', label: 'Tool runs', count: '3m20s · 9 runs', dim: false })
     // The ring clamps tools into the 40s post-model window; the zero
     // overhead segment is skipped: 3 circles, not 4.
     assert.equal(queryAll(m.container, '.lc-donut circle').length, 3)
@@ -90,7 +90,7 @@ describe('StatsTiming', () => {
 
   test('a hostile no-wall timing renders rows with dash shares and bare counts', async () => {
     const timing: TimingTotals = { wallMs: 0, ttftMs: 5_000, genMs: 0, calls: 3, toolsMs: 0, toolCalls: 1, tools: { bash: { calls: 1, ms: 0 } } }
-    const m = await mount(h(StatsTiming, { timing, locale: 'en' }))
+    const m = await mount(h(StatsTiming, { timing }))
     assert.equal(query(m.container, '.lc-donut-center b').textContent, '—')
     assert.equal(queryAll(m.container, '.lc-sl-row').length, 4)
     assert.deepEqual(rowOf(m.container, 0), { pct: '—', label: 'TTFT', count: '5.0s · 3 calls', dim: false })

@@ -97,31 +97,28 @@ describe('fmtShare', () => {
 
 describe('fmtDuration', () => {
   test('non-finite and non-positive input shows the dash', () => {
-    assert.equal(fmtDuration(0, 'en'), '—')
-    assert.equal(fmtDuration(-5, 'zh'), '—')
-    assert.equal(fmtDuration(NaN, 'en'), '—')
-    assert.equal(fmtDuration(Infinity, 'en'), '—')
+    assert.equal(fmtDuration(0), '—')
+    assert.equal(fmtDuration(-5), '—')
+    assert.equal(fmtDuration(NaN), '—')
+    assert.equal(fmtDuration(Infinity), '—')
   })
 
   test('sub-second stays in raw ms', () => {
-    assert.equal(fmtDuration(740, 'en'), '740ms')
-    assert.equal(fmtDuration(999.6, 'zh'), '1000ms')
+    assert.equal(fmtDuration(740), '740ms')
+    assert.equal(fmtDuration(999.6), '1000ms')
   })
 
   test('under a minute: one-decimal seconds', () => {
-    assert.equal(fmtDuration(12_300, 'en'), '12.3s')
-    assert.equal(fmtDuration(12_300, 'zh'), '12.3秒')
+    assert.equal(fmtDuration(12_300), '12.3s')
   })
 
   test('under an hour: minutes and seconds', () => {
-    assert.equal(fmtDuration(205_000, 'en'), '3m 25s')
-    assert.equal(fmtDuration(205_000, 'zh'), '3分25秒')
-    assert.equal(fmtDuration(600_000, 'en'), '10m 0s')
+    assert.equal(fmtDuration(205_000), '3m25s')
+    assert.equal(fmtDuration(600_000), '10m0s')
   })
 
   test('an hour and beyond: hours and minutes', () => {
-    assert.equal(fmtDuration(4_440_000, 'en'), '1h 14m')
-    assert.equal(fmtDuration(4_440_000, 'zh'), '1时14分')
-    assert.equal(fmtDuration(7_320_000, 'en'), '2h 2m')
+    assert.equal(fmtDuration(4_440_000), '1h14m')
+    assert.equal(fmtDuration(7_320_000), '2h2m')
   })
 })

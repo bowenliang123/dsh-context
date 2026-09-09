@@ -52,20 +52,18 @@ export function fmtShare(part: number, total: number): string {
 }
 
 /**
- * Whole-session durations for the timing card, in the locale's units: raw ms
- * under a second, one-decimal seconds under a minute, then m/s and h/m.
+ * Whole-session durations for the timing card, locale-free compact units: raw
+ * ms under a second, one-decimal seconds under a minute, then m/s and h/m.
  * Non-finite or non-positive input shows the dash (callers render their empty
  * state anyway).
  */
-export function fmtDuration(ms: number, lang: 'zh' | 'en'): string {
+export function fmtDuration(ms: number): string {
   if (!Number.isFinite(ms) || ms <= 0) return '—'
   if (ms < 1000) return `${Math.round(ms)}ms`
-  const zh = lang === 'zh'
-  if (ms < 60_000) return `${(ms / 1000).toFixed(1)}${zh ? '秒' : 's'}`
+  if (ms < 60_000) return `${(ms / 1000).toFixed(1)}s`
   const totalSec = Math.floor(ms / 1000)
   const m = Math.floor(totalSec / 60)
   const s = totalSec % 60
-  if (ms < 3_600_000) return zh ? `${m}分${s}秒` : `${m}m ${s}s`
-  const h = Math.floor(m / 60)
-  return zh ? `${h}时${m % 60}分` : `${h}h ${m % 60}m`
+  if (ms < 3_600_000) return `${m}m${s}s`
+  return `${Math.floor(m / 60)}h${m % 60}m`
 }
