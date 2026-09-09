@@ -1,0 +1,40 @@
+name: Feature Request / 功能建议
+description: Suggest a new feature or an improvement for the dsh-context plugin. / 为 dsh-context 插件提出新功能或改进建议。
+title: "[Feature] "
+labels: ["enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for helping improve dsh-context! Please describe the need behind the
+        request, not only the solution.
+        感谢你帮助改进 dsh-context！请重点描述需求本身，而不只是实现方案。
+  - type: textarea
+    id: motivation
+    attributes:
+      label: Motivation / 使用场景
+      description: The problem or gap, who it affects, and why it matters. / 当前的问题或缺口、受影响的用户，以及为什么需要这项变化。
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed behavior / 期望行为
+      description: The user- or system-visible behavior you would like to see. / 你希望看到的用户或系统可观察行为。
+    validations:
+      required: true
+  - type: input
+    id: dsh-version
+    attributes:
+      label: DeepSeek Harness version / DeepSeek Harness 版本
+      description: The `@deepseek-ai/dsh` version in use, if relevant. / 如相关，请填写正在使用的 `@deepseek-ai/dsh` 版本。
+      placeholder: e.g. 0.1.5-alpha.1
+    validations:
+      required: false
+  - type: textarea
+    id: additional-context
+    attributes:
+      label: Additional context / 补充信息
+      description: Mockups, screenshots, links, or anything else that helps. / 原型图、截图、链接或其他有助于理解的信息。
+    validations:
+      required: false
