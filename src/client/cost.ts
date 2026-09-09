@@ -1,7 +1,7 @@
 /**
  * Session-cost estimate — prices the host-folded cumulative billed-token
- * totals (SessionCostUsage) with DeepSeek's V4 list prices, HARDCODED for
- * now (per request; revisit when DeepSeek adjusts prices). Source:
+ * totals (SessionCostUsage) with DeepSeek's list prices, HARDCODED for now
+ * (per request; revisit when DeepSeek adjusts prices). Source:
  * https://api-docs.deepseek.com/quick_start/pricing/ (USD) and
  * https://api-docs.deepseek.com/zh-cn/quick_start/pricing/ (CNY).
  *
@@ -18,15 +18,20 @@ import { numOf } from './services'
 /** Per-1M-token rates: cache-hit input, cache-miss input, output. */
 export interface PriceTriple { hit: number; miss: number; out: number }
 
+/** The Flash-series rates (peak = 2× off-peak), per currency. */
+const FLASH_RATES = {
+  usd: { peak: { hit: 0.006, miss: 0.3, out: 1.2 }, off: { hit: 0.003, miss: 0.15, out: 0.6 } },
+  cny: { peak: { hit: 0.04, miss: 2, out: 8 }, off: { hit: 0.02, miss: 1, out: 4 } },
+} as const
+
+/**
+ * Pro rides the Flash triple: between the V4.1 Flash launch and the V4.1 Pro
+ * release, DeepSeek routes every Pro request to V4.1 Flash and bills it at
+ * the Flash rates — point `pro` at the new table once V4.1 Pro is priced.
+ */
 const PRICES = {
-  usd: {
-    flash: { peak: { hit: 0.014, miss: 0.44, out: 1.32 }, off: { hit: 0.007, miss: 0.22, out: 0.66 } },
-    pro: { peak: { hit: 0.044, miss: 1.32, out: 3.96 }, off: { hit: 0.022, miss: 0.66, out: 1.98 } },
-  },
-  cny: {
-    flash: { peak: { hit: 0.10, miss: 3.0, out: 9.0 }, off: { hit: 0.05, miss: 1.5, out: 4.5 } },
-    pro: { peak: { hit: 0.30, miss: 9.0, out: 27.0 }, off: { hit: 0.15, miss: 4.5, out: 13.5 } },
-  },
+  usd: { flash: FLASH_RATES.usd, pro: FLASH_RATES.usd },
+  cny: { flash: FLASH_RATES.cny, pro: FLASH_RATES.cny },
 } as const
 
 export type CostCurrency = keyof typeof PRICES
@@ -69,7 +74,7 @@ export function formatCost(amount: number, currency: CostCurrency): string {
  */
 export function sessionPrices(currency: CostCurrency): { family: string; peak: PriceTriple; off: PriceTriple }[] {
   return (['flash', 'pro'] as const).map(id => ({
-    family: id === 'flash' ? 'deepseek-v4-flash' : 'deepseek-v4-pro',
+    family: id === 'flash' ? 'deepseek-v4.1-flash' : 'deepseek-v4-pro',
     peak: PRICES[currency][id].peak,
     off: PRICES[currency][id].off,
   }))

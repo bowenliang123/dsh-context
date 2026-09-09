@@ -70,7 +70,7 @@ describe('StatsContext', () => {
       'Turns', 'Steps', 'Tool Calls', 'Images',
       'Cost?', 'Injections', 'Compactions', 'Prunes',
     ])
-    assert.deepEqual(values, ['3', '4', '3', '2', '$0.44', '3', '2', '1'])
+    assert.deepEqual(values, ['3', '4', '3', '2', '$0.30', '3', '2', '1'])
     await m.unmount()
   })
 
@@ -93,10 +93,10 @@ describe('StatsContext', () => {
     assert.equal(queryAll(m.container, '.lc-stat-q').length, 1)
     const tip = text(query(m.container, '.lc-stat-tip'))
     assert.ok(tip.includes('Per-1M-token rates'))
-    assert.ok(tip.includes('deepseek-v4-flash'))
+    assert.ok(tip.includes('deepseek-v4.1-flash'))
     assert.ok(tip.includes('deepseek-v4-pro'))
-    assert.ok(tip.includes('miss $0.44/$0.22'))
-    assert.ok(tip.includes('output $3.96/$1.98'))
+    assert.ok(tip.includes('miss $0.3/$0.15'))
+    assert.ok(tip.includes('output $1.2/$0.6'))
     await m.unmount()
   })
 
@@ -109,7 +109,7 @@ describe('StatsContext', () => {
     assert.ok(text(m.container).includes('上下文统计'))
     const { labels, values } = cells(m.container)
     assert.deepEqual(labels, ['轮次', '步数', '工具调用', '图片', '预估费用?', '注入', '压缩', '剪枝'])
-    assert.deepEqual(values, ['1', '1', '0', '0', '¥3.00', '0', '1', '0'])
+    assert.deepEqual(values, ['1', '1', '0', '0', '¥2.00', '0', '1', '0'])
     await m.unmount()
   })
 })

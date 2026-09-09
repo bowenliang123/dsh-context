@@ -632,7 +632,7 @@ function tokenCountOf(value: unknown): number | null {
 /**
  * The DeepSeek V4 model family a model name prices as — matched on the NAME
  * alone (provider-agnostic: official API, proxies, OpenRouter spellings like
- * `deepseek/deepseek-v4-flash` all land here). Null for any other model:
+ * `deepseek/deepseek-v4.1-flash` all land here). Null for any other model:
  * non-V4 usage is simply not priced.
  */
 function costFamilyOf(model: string | undefined): 'flash' | 'pro' | null {

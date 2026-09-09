@@ -32,24 +32,24 @@ describe('estimateSessionCost', () => {
       flash: { peak: bucket(M, M, M, M), off: bucket(M, M, M, M) },
       pro: { peak: bucket(M, M, M, M), off: bucket(M, M, M, M) },
     }
-    // flash peak 0.014 + 2×0.44 + 1.32, flash off 0.007 + 2×0.22 + 0.66,
-    // pro peak 0.044 + 2×1.32 + 3.96, pro off 0.022 + 2×0.66 + 1.98.
-    close(estimateSessionCost(usage, 'usd'), 2.214 + 1.107 + 6.644 + 3.322)
+    // Flash peak 0.006 + 2×0.3 + 1.2, Flash off 0.003 + 2×0.15 + 0.6; Pro
+    // bills at the same Flash rates while the routing window lasts.
+    close(estimateSessionCost(usage, 'usd'), 2 * (1.806 + 0.903))
   })
 
   test('prices with the CNY table', () => {
     const usage = { flash: { peak: bucket(M, M, M, M) } }
-    close(estimateSessionCost(usage, 'cny'), 0.10 + 2 * 3.0 + 9.0)
+    close(estimateSessionCost(usage, 'cny'), 0.04 + 2 * 2 + 8)
   })
 
   test('a missing model family is skipped', () => {
     const usage = { pro: { peak: bucket(0, M, 0, 0) } }
-    close(estimateSessionCost(usage, 'usd'), 1.32)
+    close(estimateSessionCost(usage, 'usd'), 0.3)
   })
 
   test('a missing pricing period is skipped', () => {
     const usage = { flash: { off: bucket(0, 0, 0, M) } }
-    close(estimateSessionCost(usage, 'usd'), 0.66)
+    close(estimateSessionCost(usage, 'usd'), 0.6)
   })
 
   test('non-number bucket fields are coerced to zero by numOf', () => {
@@ -59,7 +59,7 @@ describe('estimateSessionCost', () => {
 
   test('garbage fields degrade while real fields still price', () => {
     const mixed = { cacheRead: M, uncached: NaN, cacheWrite: M / 2, output: 'junk' } as unknown as CostBucketTotals
-    close(estimateSessionCost({ flash: { peak: mixed } }, 'usd'), 0.014 + 0.5 * 0.44)
+    close(estimateSessionCost({ flash: { peak: mixed } }, 'usd'), 0.006 + 0.5 * 0.3)
   })
 })
 
@@ -83,15 +83,15 @@ describe('formatCost', () => {
 describe('sessionPrices', () => {
   test('lists flash before pro with their peak and off-peak triples (USD)', () => {
     assert.deepEqual(sessionPrices('usd'), [
-      { family: 'deepseek-v4-flash', peak: { hit: 0.014, miss: 0.44, out: 1.32 }, off: { hit: 0.007, miss: 0.22, out: 0.66 } },
-      { family: 'deepseek-v4-pro', peak: { hit: 0.044, miss: 1.32, out: 3.96 }, off: { hit: 0.022, miss: 0.66, out: 1.98 } },
+      { family: 'deepseek-v4.1-flash', peak: { hit: 0.006, miss: 0.3, out: 1.2 }, off: { hit: 0.003, miss: 0.15, out: 0.6 } },
+      { family: 'deepseek-v4-pro', peak: { hit: 0.006, miss: 0.3, out: 1.2 }, off: { hit: 0.003, miss: 0.15, out: 0.6 } },
     ])
   })
 
   test('lists the CNY table for the CNY currency', () => {
     assert.deepEqual(sessionPrices('cny'), [
-      { family: 'deepseek-v4-flash', peak: { hit: 0.10, miss: 3.0, out: 9.0 }, off: { hit: 0.05, miss: 1.5, out: 4.5 } },
-      { family: 'deepseek-v4-pro', peak: { hit: 0.30, miss: 9.0, out: 27.0 }, off: { hit: 0.15, miss: 4.5, out: 13.5 } },
+      { family: 'deepseek-v4.1-flash', peak: { hit: 0.04, miss: 2, out: 8 }, off: { hit: 0.02, miss: 1, out: 4 } },
+      { family: 'deepseek-v4-pro', peak: { hit: 0.04, miss: 2, out: 8 }, off: { hit: 0.02, miss: 1, out: 4 } },
     ])
   })
 })

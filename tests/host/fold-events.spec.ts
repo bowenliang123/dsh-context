@@ -543,6 +543,15 @@ describe('session-cost accumulation', () => {
     assert.equal(pro?.flash, undefined)
   })
 
+  test('v4.1 spellings land in the same families', () => {
+    const flash = driveTimeline([header(1, { model: 'deepseek-v4.1-flash' }), assistantMessage(2, { usage })]).state.cost
+    assert.equal(flash?.flash?.off?.uncached, 100)
+    assert.equal(flash?.pro, undefined)
+    const pro = driveTimeline([header(1, { model: 'deepseek-v4.1-pro' }), assistantMessage(2, { usage })]).state.cost
+    assert.equal(pro?.pro?.off?.uncached, 100)
+    assert.equal(pro?.flash, undefined)
+  })
+
   test('peak-window boundaries and weekends split the periods', () => {
     const at100 = (seq: number, time: number) => assistantMessage(seq, { usage, time })
     const { state } = driveTimeline([
