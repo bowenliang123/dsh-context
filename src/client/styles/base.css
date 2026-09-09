@@ -72,10 +72,9 @@
 .lc-cols { display: flex; gap: 14px; flex-wrap: wrap; margin-bottom: 14px; }
 /* Columns fold at 360px: the cards that pair up — the main row's composition/trend
    against the browser, and the events card against file activity — read cramped at a
-   quarter-share of a narrow pane. The tab's main row needs 2 x 360px + the 7px gap,
-   the sidebar panel's three stacked cards 3 x 360px + two gaps. min() caps the floor
-   at the row's own width: on a sub-360px pane the column narrows instead of
-   overflowing. */
+   quarter-share of a narrow pane, so the main row needs 2 x 360px + the 7px gap to stay
+   side by side. min() caps the floor at the row's own width: on a sub-360px pane the
+   column narrows instead of overflowing. */
 .lc-col { flex: 1; min-width: min(360px, 100%); }
 .lc-cols > .lc-card { margin-bottom: 0; }
 .lc-col > .lc-card:last-child { margin-bottom: 0; }

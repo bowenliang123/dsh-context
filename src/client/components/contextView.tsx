@@ -363,7 +363,8 @@ export function makeContextView(
     // urges the upgrade. Absent record = a supported harness, no gate.
     const gate = unsupportedOf(data.unsupported)
 
-    // The three main-row cards, built once and arranged per host below.
+    // The three main-row cards, built once and laid out by the shared
+    // arrangement below (every host uses the same row).
     const compositionCard = (
       <CurrentComposition
         head={head}
@@ -492,26 +493,16 @@ export function makeContextView(
           {inSidebar ? null : <PluginInfo />}
         </div>
 
-        {/* Arranged per host: the tab keeps the two-column split (composition
-            + trend beside the browser); the sidebar panel is a narrow column,
-            so it stacks the three and puts the browser right after the
-            composition card, before the trend. */}
+        {/* One arrangement for every host: composition over trend in the left
+            column, the browser beside them and stretched to the pair's height.
+            The sidebar panel's column simply folds to one at the shared 360px
+            floor instead of splitting the three cards across two ragged rows. */}
         <div className="lc-cols lc-cols-main">
-          {inSidebar ? (
-            <>
-              <div className="lc-col">{compositionCard}</div>
-              <div className="lc-col lc-col-browser">{browserCard}</div>
-              <div className="lc-col">{trendCard}</div>
-            </>
-          ) : (
-            <>
-              <div className="lc-col">{compositionCard}{trendCard}</div>
-              {/* `lc-col-browser` stretches the browser card to the left column's height — Context tab only; the /context modal must stay
-                  content-sized.
-                  */}
-              <div className="lc-col lc-col-browser">{browserCard}</div>
-            </>
-          )}
+          <div className="lc-col">{compositionCard}{trendCard}</div>
+          {/* `lc-col-browser` stretches the browser card to the left column's
+              height; the /context modal, which draws its own stack, must stay
+              content-sized. */}
+          <div className="lc-col lc-col-browser">{browserCard}</div>
         </div>
 
         <div className="lc-cols">
