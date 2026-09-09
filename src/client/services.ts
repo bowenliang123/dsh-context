@@ -502,6 +502,15 @@ function msNumOf(value: unknown): number {
 }
 
 /**
+ * The OPTIONAL timing scalars (the generation split): a real non-negative
+ * number passes, anything else — including absence — reads as undefined so the
+ * field stays absent on the narrowed value (see `timingOf`).
+ */
+function optMsNumOf(value: unknown): number | undefined {
+  return typeof value === 'number' && Number.isFinite(value) && value >= 0 ? value : undefined
+}
+
+/**
  * Cheap whole-value check for the pass-through path of `timelineOf`: absent
  * timing passes; present timing must already be well-formed (every scalar
  * numeric, every per-name row shaped) — anything else sends the payload down
@@ -513,6 +522,13 @@ function timingFastOk(value: unknown): boolean {
   const t = value as Record<string, unknown>
   for (const k of ['wallMs', 'ttftMs', 'genMs', 'calls', 'toolsMs', 'toolCalls']) {
     if (typeof t[k] !== 'number') return false
+  }
+  // The generation split is optional but, when present, must be a finite
+  // non-negative number — the same gate the slow path applies, so a hostile
+  // bucket cannot slip through the fast path (see `timingOf`).
+  for (const k of ['reasoningMs', 'textMs', 'toolArgMs']) {
+    const v = t[k]
+    if (v !== undefined && (typeof v !== 'number' || !Number.isFinite(v) || v < 0)) return false
   }
   const tools = t.tools
   if (tools === null || typeof tools !== 'object' || Array.isArray(tools)) return false
@@ -550,7 +566,7 @@ export function timingOf(value: unknown): TimingTotals | null {
       tools[k] = { calls, ms }
     }
   }
-  return {
+  const totals: TimingTotals = {
     wallMs: msNumOf(data.wallMs),
     ttftMs: msNumOf(data.ttftMs),
     genMs: msNumOf(data.genMs),
@@ -559,6 +575,16 @@ export function timingOf(value: unknown): TimingTotals | null {
     toolCalls: msNumOf(data.toolCalls),
     tools,
   }
+  // The generation split stays ABSENT when the host did not serve it (a row
+  // cached before the split) or served a non-number: the card then renders the
+  // un-split shape instead of three meaningless zero rows.
+  const reasoning = optMsNumOf(data.reasoningMs)
+  if (reasoning !== undefined) totals.reasoningMs = reasoning
+  const textMs = optMsNumOf(data.textMs)
+  if (textMs !== undefined) totals.textMs = textMs
+  const toolArgMs = optMsNumOf(data.toolArgMs)
+  if (toolArgMs !== undefined) totals.toolArgMs = toolArgMs
+  return totals
 }
 
 /**

@@ -48,7 +48,7 @@ describe('StatsTiming', () => {
     assert.equal(query(m.container, '.lc-donut-center b').textContent, '10m0s')
     assert.equal(query(m.container, '.lc-donut-center span').textContent, 'Active Time')
     assert.deepEqual(rowOf(m.container, 0), { pct: '16.7%', label: 'TTFT', count: '1m40s · 10 calls', dim: false })
-    assert.deepEqual(rowOf(m.container, 1), { pct: '23.3%', label: 'LLM Gen', count: '2m20s · 10 calls', dim: false })
+    assert.deepEqual(rowOf(m.container, 1), { pct: '23.3%', label: 'LLM Gen', count: '2m20s', dim: false })
     // The tools row keeps the true 5m sum even though the ring clamps it.
     assert.deepEqual(rowOf(m.container, 2), { pct: '50.0%', label: 'Tool runs', count: '5m0s · 25 runs', dim: false })
     assert.deepEqual(rowOf(m.container, 3), { pct: '10.0%', label: 'Overhead', count: '1m0s', dim: false })
@@ -62,7 +62,7 @@ describe('StatsTiming', () => {
     const m = await mount(h(StatsTimingZh, { timing: TIMING }))
     assert.equal(query(m.container, '.lc-donut-center b').textContent, '10m0s')
     assert.deepEqual(rowOf(m.container, 0), { pct: '16.7%', label: '模型等待', count: '1m40s · 10次', dim: false })
-    assert.deepEqual(rowOf(m.container, 1), { pct: '23.3%', label: '模型生成', count: '2m20s · 10次', dim: false })
+    assert.deepEqual(rowOf(m.container, 1), { pct: '23.3%', label: '模型生成', count: '2m20s', dim: false })
     await m.unmount()
   })
 
@@ -96,7 +96,78 @@ describe('StatsTiming', () => {
     assert.deepEqual(rowOf(m.container, 0), { pct: '—', label: 'TTFT', count: '5.0s · 3 calls', dim: false })
     // A zero-duration slice dims and its secondary line keeps just the call
     // count — the dash has nothing to qualify.
-    assert.deepEqual(rowOf(m.container, 1), { pct: '—', label: 'LLM Gen', count: '3 calls', dim: true })
+    assert.deepEqual(rowOf(m.container, 1), { pct: '—', label: 'LLM Gen', count: '—', dim: true })
+    await m.unmount()
+  })
+})
+
+describe('StatsTiming — the generation split', () => {
+  // genMs 140s splits into thinking 90s, answer 30s, tool args 20s.
+  const SPLIT: TimingTotals = {
+    wallMs: 600_000, ttftMs: 100_000, genMs: 140_000, reasoningMs: 90_000, textMs: 30_000, toolArgMs: 20_000,
+    calls: 10, toolsMs: 300_000, toolCalls: 25, tools: { bash: { calls: 15, ms: 200_000 } },
+  }
+
+  test('the model slice expands into thinking / answer / tool args', async () => {
+    const m = await mount(h(StatsTiming, { timing: SPLIT }))
+    assert.equal(queryAll(m.container, '.lc-sl-row').length, 6)
+    assert.deepEqual(rowOf(m.container, 0), { pct: '16.7%', label: 'TTFT', count: '1m40s · 10 calls', dim: false })
+    assert.deepEqual(rowOf(m.container, 1), { pct: '15.0%', label: 'Thinking', count: '1m30s', dim: false })
+    assert.deepEqual(rowOf(m.container, 2), { pct: '5.0%', label: 'Answer', count: '30.0s', dim: false })
+    assert.deepEqual(rowOf(m.container, 3), { pct: '3.3%', label: 'Tool args', count: '20.0s', dim: false })
+    assert.deepEqual(rowOf(m.container, 4), { pct: '50.0%', label: 'Tool runs', count: '5m0s · 25 runs', dim: false })
+    assert.deepEqual(rowOf(m.container, 5), { pct: '10.0%', label: 'Overhead', count: '1m0s', dim: false })
+    // Six ring segments: the three decode buckets replace the single gen arc.
+    assert.equal(queryAll(m.container, '.lc-donut circle').length, 6)
+    await m.unmount()
+  })
+
+  test('the decode slices carry NO call count — they count blocks, not calls', async () => {
+    // One model call can emit several tool-call blocks and often emits no
+    // reasoning at all, so a borrowed per-call count would be a false tally.
+    const timing: TimingTotals = { ...SPLIT, calls: 236, toolCalls: 302 }
+    const m = await mount(h(StatsTiming, { timing }))
+    const sub = (i: number): string => queryAll(m.container, '.lc-sl-sub')[i]?.textContent ?? ''
+    assert.equal(sub(0), '1m40s · 236 calls', 'TTFT keeps its per-call count')
+    for (const i of [1, 2, 3]) {
+      assert.ok(!sub(i).includes('236 calls'), `decode row ${i} must not borrow the call count: ${sub(i)}`)
+      assert.ok(!sub(i).includes('302'), `decode row ${i} must not borrow the tool count: ${sub(i)}`)
+    }
+    assert.equal(sub(4), '5m0s · 302 runs', 'tools keep their own per-run count')
+    await m.unmount()
+  })
+
+  test('the split labels localize', async () => {
+    const m = await mount(h(StatsTimingZh, { timing: SPLIT }))
+    assert.equal(rowOf(m.container, 1).label, '模型思考')
+    assert.equal(rowOf(m.container, 2).label, '正文输出')
+    assert.equal(rowOf(m.container, 3).label, '工具参数')
+    await m.unmount()
+  })
+
+  test('an absent split keeps the single LLM Gen row', async () => {
+    const m = await mount(h(StatsTiming, { timing: TIMING }))
+    assert.equal(queryAll(m.container, '.lc-sl-row').length, 4)
+    assert.equal(rowOf(m.container, 1).label, 'LLM Gen')
+    await m.unmount()
+  })
+
+  test('all-zero buckets keep the un-split shape instead of three dead rows', async () => {
+    const m = await mount(h(StatsTiming, { timing: { ...TIMING, reasoningMs: 0, textMs: 0, toolArgMs: 0 } }))
+    assert.equal(queryAll(m.container, '.lc-sl-row').length, 4)
+    assert.equal(rowOf(m.container, 1).label, 'LLM Gen')
+    await m.unmount()
+  })
+
+  test('a hostile bucket total exceeding the generation window clamps the ring, rows stay true', async () => {
+    // The buckets claim 500s inside a 140s generation window: the ring caps
+    // them to the window while every row keeps its own figure.
+    const timing: TimingTotals = { ...SPLIT, reasoningMs: 400_000, textMs: 100_000, toolArgMs: 0 }
+    const m = await mount(h(StatsTiming, { timing }))
+    assert.deepEqual(rowOf(m.container, 1), { pct: '66.7%', label: 'Thinking', count: '6m40s', dim: false })
+    assert.deepEqual(rowOf(m.container, 2), { pct: '16.7%', label: 'Answer', count: '1m40s', dim: false })
+    // The zero tool-args bucket dims whole.
+    assert.equal(rowOf(m.container, 3).dim, true)
     await m.unmount()
   })
 })

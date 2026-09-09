@@ -426,6 +426,33 @@ describe('timingOf', () => {
     assert.deepEqual(out?.tools, {})
     assert.equal(Object.getPrototypeOf(out?.tools ?? {}), Object.prototype)
   })
+
+  test('the generation split passes through when well-formed', () => {
+    const out = timingOf({ ...wellFormed, reasoningMs: 5_000, textMs: 2_000, toolArgMs: 3_000 })
+    assert.deepEqual(out, { ...wellFormed, reasoningMs: 5_000, textMs: 2_000, toolArgMs: 3_000 })
+  })
+
+  test('absent split fields stay ABSENT — the card keeps the un-split shape', () => {
+    const out = timingOf(wellFormed)
+    assert.ok(out !== null)
+    assert.equal(Object.hasOwn(out, 'reasoningMs'), false)
+    assert.equal(Object.hasOwn(out, 'textMs'), false)
+    assert.equal(Object.hasOwn(out, 'toolArgMs'), false)
+  })
+
+  test('a wrong-typed or negative split field drops alone, keeping the rest', () => {
+    const out = timingOf({ ...wellFormed, reasoningMs: 'x', textMs: -5, toolArgMs: 1_000 })
+    assert.equal(out?.reasoningMs, undefined)
+    assert.equal(out?.textMs, undefined)
+    assert.equal(out?.toolArgMs, 1_000)
+  })
+
+  test('the fast path rejects a non-finite split field (routed to the slow path)', () => {
+    // timelineOf's fast path must not pass a payload through with a NaN bucket.
+    const out = timingOf({ ...wellFormed, reasoningMs: Number.NaN })
+    assert.equal(out?.reasoningMs, undefined)
+    assert.equal(out?.wallMs, wellFormed.wallMs)
+  })
 })
 
 describe('timelineOf — the live system-prompt nodes', () => {
@@ -523,6 +550,10 @@ describe('timelineOf — timing integration', () => {
     assert.deepEqual(sanitized({ ...timing, tools: { bash: 5 } }), { ...timing, tools: {} })
     assert.deepEqual(sanitized({ ...timing, tools: { bash: { calls: 'x', ms: 1 } } }), { ...timing, tools: {} })
     assert.deepEqual(sanitized({ ...timing, tools: { bash: { calls: 1, ms: 'x' } } }), { ...timing, tools: {} })
+    // A bad generation-split bucket routes down too and drops alone.
+    assert.deepEqual(sanitized({ ...timing, reasoningMs: 'x' }), timing)
+    assert.deepEqual(sanitized({ ...timing, textMs: Number.NaN }), timing)
+    assert.deepEqual(sanitized({ ...timing, toolArgMs: -1 }), timing)
   })
 })
 
