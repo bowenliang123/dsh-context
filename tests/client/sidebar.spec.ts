@@ -66,8 +66,12 @@ describe('watchSidebarContextTab — the optional registration', () => {
     assert.equal(def.guide?.length, 1)
     assert.equal(def.guide?.[0].order, 20, 'after the shipped Files entry (order 10)')
     assert.equal(def.guide?.[0].title(), 'Context')
-    assert.equal(def.guide?.[0].description(), DICT_EN['sidebar.guideDescription'])
-    assert.equal(typeof def.guide?.[0].icon, 'function', 'the guide box carries a glyph')
+    assert.deepEqual(
+      Object.keys(def.guide?.[0] ?? {}).sort(),
+      ['icon', 'order', 'title'],
+      'the capsule carries exactly the alpha.2 guide-entry fields',
+    )
+    assert.equal(typeof def.guide?.[0].icon, 'function', 'the guide capsule carries a glyph')
 
     const body = ctx.slots.of('sidebar.right.pane.tab')
     assert.equal(body.length, 1)
@@ -83,7 +87,7 @@ describe('watchSidebarContextTab — the optional registration', () => {
     ctx.setService('sidebarRightTabs', tabs)
     wire(ctx)
     assert.equal(tabs.definitions[0].title(), '上下文')
-    assert.equal(tabs.definitions[0].guide?.[0].description(), DICT_ZH['sidebar.guideDescription'])
+    assert.equal(tabs.definitions[0].guide?.[0].title(), '上下文')
     ctx.dispose()
   })
 

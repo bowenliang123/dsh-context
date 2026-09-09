@@ -7,7 +7,6 @@ export type Translate = (key: string, params?: Record<string, string | number>) 
 
 export const DICT_ZH: Record<string, string> = {
   'tab': '上下文',
-  'sidebar.guideDescription': '查看这个会话的上下文构成、每步变化与消息列表。',
   'cat.system': '系统提示词', 'cat.tools': '工具定义', 'cat.user': '用户消息',
   'cat.inject': '注入内容', 'cat.assistant': '助手消息', 'cat.tool': '工具结果',
   'overview.title': '当前上下文',
@@ -233,7 +232,6 @@ export const DICT_ZH: Record<string, string> = {
 
 export const DICT_EN: Record<string, string> = {
   'tab': 'Context',
-  'sidebar.guideDescription': 'Inspect this session\'s context composition, per-step history, and messages.',
   'cat.system': 'System Prompt', 'cat.tools': 'Tool Schemas', 'cat.user': 'User Messages',
   'cat.inject': 'Injected Context', 'cat.assistant': 'Assistant Messages', 'cat.tool': 'Tool Results',
   'overview.title': 'Current Context',

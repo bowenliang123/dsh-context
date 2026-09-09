@@ -1,5 +1,5 @@
 /**
- * The right Sidebar's Context tab (dsh 0.1.5-alpha.1+).
+ * The right Sidebar's Context tab (dsh 0.1.5-alpha.2+).
  *
  * The tab reuses the Context conversation-view component VERBATIM: the
  * `sidebar.right.pane.tab` seat is session-scoped and delivers the same
@@ -7,14 +7,15 @@
  * `t` seat) the `conversation.view` seat does, so the panel and the tab are
  * one component with one data path. The tab type contributes a guide entry, so
  * the sidebar's guide page offers "Context" and picking it opens the panel —
- * the product's own path, exactly as the shipped Files type does.
+ * the product's own path, exactly as the shipped Files type does: a capsule of
+ * glyph + title.
  *
- * OPTIONAL BY CONTRACT. `ctx.sidebarRightTabs` and the seat exist only from
- * dsh 0.1.5-alpha.1; the registration therefore rides a DEFERRED inject (the
- * plugin's hard injects stay `slots` + `locale`), so on every older supported
- * line the callback never fires, the plugin fiber never pends, and nothing is
- * registered. The registry is re-proved structurally and the whole
- * registration is guarded: a foreign or hostile registry (a throwing
+ * OPTIONAL BY CONTRACT. `ctx.sidebarRightTabs` and the seat ship only on the
+ * 0.1.5 line (0.1.5-alpha.2+ supported); the registration therefore rides a
+ * DEFERRED inject (the plugin's hard injects stay `slots` + `locale`), so on
+ * every older supported line the callback never fires, the plugin fiber never
+ * pends, and nothing is registered. The registry is re-proved structurally and
+ * the whole registration is guarded: a foreign or hostile registry (a throwing
  * `register`, a taken id/kind) leaves the sidebar without the tab instead of
  * taking the browser down.
  *
@@ -35,14 +36,14 @@ export const SIDEBAR_CONTEXT_ID = 'dsh-context'
  */
 export const SIDEBAR_CONTEXT_KIND = 'dsh-context'
 
-/** The guide box's position: after the shipped Files entry (order 10). */
+/** The guide capsule's position: after the shipped Files entry (order 10). */
 const GUIDE_ORDER = 20
 
 /**
- * The guide box's glyph, read defensively: the icon is OPTIONAL in the entry,
- * and a primitives module that does not serve it — or whose namespace THROWS
- * on the read (an interop/mock shape does exactly that) — must cost the glyph,
- * never the whole tab.
+ * The guide capsule's glyph, read defensively: the icon is OPTIONAL in the
+ * entry, and a primitives module that does not serve it — or whose namespace
+ * THROWS on the read (an interop/mock shape does exactly that) — must cost the
+ * glyph, never the whole tab.
  * @returns the icon component, or undefined to register the tab without one.
  */
 function guideIcon(): SidebarGuideEntryLike['icon'] {
@@ -84,7 +85,6 @@ export function watchSidebarContextTab(
         guide: [{
           order: GUIDE_ORDER,
           title: () => t('tab'),
-          description: () => t('sidebar.guideDescription'),
           icon: guideIcon(),
         }],
       })
