@@ -8,16 +8,17 @@
  */
 .lc-root { padding: 16px 20px 32px; overflow-y: auto; height: 100%; box-sizing: border-box; color: var(--dsw-alias-label-primary); font-size: 13px; }
 /*
- Right Sidebar panel (dsh 0.1.5-alpha.2+): the dockkit pane body already pads (12px)
- and scrolls, and its `.pane` clips overflow — so the tab root drops its own
- scroller and inset and lets the pane own both. One scroller per panel, no
- double padding on a narrow pane. Scoped by the panel's own markers, which
- exist only inside the right column (the open panel and the float host that
- carries a tab dragged out of it); the conversation tab and the /context modal
- are unaffected.
+ Right Sidebar panel (dsh 0.1.5-alpha.2+): the dockkit pane body scrolls and
+ its `.pane` clips overflow — so the tab root drops its own scroller and lets
+ the pane own both. The body draws NO padding of its own (dockkit leaves each
+ tab its own insets), so the root keeps a 12px frame on all four sides — the
+ harness's own body inset — instead of the wide shared chrome. Scoped by the
+ panel's own markers, which exist only inside the right column (the open panel
+ and the float host that carries a tab dragged out of it); the conversation tab
+ and the /context modal are unaffected.
  */
 [data-sidebar-right-open] .lc-root,
-[data-sidebar-right-float-host] .lc-root { height: auto; overflow: visible; padding: 0; }
+[data-sidebar-right-float-host] .lc-root { height: auto; overflow: visible; padding: 12px; }
 /*
  Border roles: l2 (0.1 black ≈ #E5E5E5 on white) draws the VISIBLE edges —
  cards and controls, matching dsh's own Button/Input chrome; l1 stays for
