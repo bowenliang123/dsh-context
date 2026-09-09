@@ -148,6 +148,18 @@ describe.skipIf(reasons.length > 0)('compat matrix — real dsh sources per base
       assert.equal(staging.dshHasString(baseline.tag, sidebar.slotNeedle, sidebar.slotFile), true, 'keyed body seat')
     })
 
+    test('client: the right Sidebar guide-entry contract (the contribution\'s shape)', () => {
+      const sidebar = baseline.client.sidebar
+      // No right Sidebar on this line: the entry is never contributed there.
+      if (sidebar === undefined) return
+      for (const field of sidebar.guideEntry.fields) {
+        assert.equal(staging.dshHasString(baseline.tag, field, sidebar.guideEntry.file), true, `guide-entry field: ${field}`)
+      }
+      for (const absent of sidebar.guideEntry.absent) {
+        assert.equal(staging.dshHasString(baseline.tag, absent, sidebar.guideEntry.file), false, `guide-entry field must not return: ${absent}`)
+      }
+    })
+
     test('client: MarkdownText chrome prop', () => {
       assert.equal(staging.dshHasString(baseline.tag, baseline.client.markdownChrome, 'packages/client/ui-primitives/src/markdown/MarkdownText.tsx'), true)
     })

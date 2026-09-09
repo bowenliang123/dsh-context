@@ -10,7 +10,7 @@
 
 [`dsh-context`](https://www.npmjs.com/package/dsh-context) provides full context lifecycle management features.
 - **Context tab** — an UI context dashboard for DeepSeek Harness's context stats, composition, trend, events, and messages.
-- **Context panel** — the same dashboard as a right-sidebar tab (dsh 0.1.5+): pick **Context** on the sidebar's guide page and the panel opens beside the chat.
+- **Context panel** — the same dashboard as a right-sidebar tab (dsh 0.1.5-alpha.2+): pick **Context** on the sidebar's guide page and the panel opens beside the chat.
 - **`/context` command** — the slash command shows the context model for current context composition and recent context evolution.
 
 ## Install / Update

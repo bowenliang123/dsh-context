@@ -8,7 +8,7 @@ body:
     attributes:
       label: DeepSeek Harness version / DeepSeek Harness 版本
       description: The `@deepseek-ai/dsh` version in use, from `dsh --version`. Supported range is 0.1.2-rc.1+. / 正在使用的 `@deepseek-ai/dsh` 版本（`dsh --version`）。支持范围为 0.1.2-rc.1+。
-      placeholder: e.g. 0.1.5-alpha.1
+      placeholder: e.g. 0.1.5-alpha.2
     validations:
       required: true
   - type: input

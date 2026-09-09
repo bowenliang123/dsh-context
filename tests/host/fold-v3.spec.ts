@@ -1,4 +1,4 @@
-// The V3 log generation (dsh 0.1.5-alpha.1+): `system/message` surface nodes,
+// The V3 log generation (dsh 0.1.5-alpha.x+): `system/message` surface nodes,
 // the embedded assistant stream that replaced `assistant/chunk`, the
 // `startSeq`/`endSeq` replacement endpoints, `tool/ptc-dispatch`, and
 // `assistant/attempt`. Each case is the generation seam the fold must read

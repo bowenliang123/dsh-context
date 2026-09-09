@@ -4,7 +4,7 @@
  *
  *   - V0 (dsh 0.1.2-rc.1): `request/header.header.system`, `assistant/chunk`
  *     stream events, `SurfaceOp { start, end }`, `tool/code-dispatch`.
- *   - V3 (dsh 0.1.5-alpha.1+): `system/message` surface nodes,
+ *   - V3 (dsh 0.1.5-alpha.x+): `system/message` surface nodes,
  *     `assistant/message.data.stream` / `assistant/attempt.data.stream`,
  *     `SurfaceOp { startSeq, endSeq }`, `tool/ptc-dispatch`.
  *
