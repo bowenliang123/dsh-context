@@ -142,7 +142,7 @@ export function makeStackedBar(kit: ViewKit): (props: StackedBarProps) => ReactE
               <div
                 key={p.key}
                 className={'lc-stacked-seg' + (on ? ' lc-stacked-seg-on' : '') + (pickKey !== undefined ? ' lc-stacked-seg-pick' : '')}
-                style={{ width: `${widths[i]}%`, background: p.color }}
+                style={{ width: `${widths[i]}%`, backgroundColor: p.color }}
                 onMouseEnter={() => { if (props.onHoverKey !== undefined) props.onHoverKey(p.key) }}
                 onClick={pickKey !== undefined ? () => { pickKey(p.key) } : undefined}
               />

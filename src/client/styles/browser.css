@@ -2,8 +2,11 @@
 /* The DNA toggle rides the card title next to the title text; the hint's own auto margin keeps pushing the hint+picker right
    (a bare .lc-gran would add a second auto margin and split the free space). */
 .lc-br-dna-ctl { margin-left: 0; flex: none; }
-/* DNA mode: per-item bands read as one gel strip — a 1px card-colored divider keeps adjacent same-category bands distinguishable. */
-.lc-br-bar-dna .lc-stacked-seg { box-shadow: inset -1px 0 0 var(--dsw-alias-bg-layer-1); }
+/* DNA mode: per-item bands read as one gel strip — a card-colored divider keeps adjacent same-category bands
+   distinguishable. The divider scales with the band (`min(1px, 25%)` of its own width): long sessions pin hundreds
+   of bands at ≤1px, where a fixed 1px divider would cover the whole band and blank the strip. A gradient layer over
+   the segment's inline `backgroundColor` — a fixed inset box-shadow cannot scale. */
+.lc-br-bar-dna .lc-stacked-seg { background-image: linear-gradient(to right, transparent calc(100% - min(1px, 25%)), var(--dsw-alias-bg-layer-1) 0); }
 .lc-br-hint { margin-left: auto; color: var(--dsw-alias-label-secondary); font-size: 11px; font-weight: 400; white-space: nowrap; }
 .lc-br-pick { font: inherit; font-size: 12px; color: var(--dsw-alias-label-primary); background: var(--dsw-alias-bg-layer-2); border: 1px solid var(--dsw-alias-border-l2); border-radius: 6px; padding: 3px 6px; max-width: 240px; }
 .lc-br-meta { display: flex; flex-wrap: wrap; gap: 6px 16px; margin-bottom: 8px; color: var(--dsw-alias-label-secondary); }
