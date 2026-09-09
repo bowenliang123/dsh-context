@@ -27,7 +27,7 @@ export const DICT_ZH: Record<string, string> = {
   'stats.costPriceHead': '每百万 tokens 价格（高峰 | 空闲半价）：',
   'stats.costHit': '命中', 'stats.costMiss': '未命中', 'stats.costOut': '输出',
   'timing.title': '耗时统计',
-  'timing.total': '总活跃时长',
+  'timing.total': '活跃时长',
   'timing.ttft': '模型等待',
   'timing.gen': '模型生成',
   'timing.tools': '工具执行',
