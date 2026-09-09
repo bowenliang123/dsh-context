@@ -138,6 +138,11 @@ const timingTotalsSchema = z.object({
   wallMs: z.number().nonnegative(),
   ttftMs: z.number().nonnegative(),
   genMs: z.number().nonnegative(),
+  // Additive-optional (see TimingTotals): rows cached before the generation
+  // split carry `genMs` without these, and must keep parsing.
+  reasoningMs: z.number().nonnegative().optional(),
+  textMs: z.number().nonnegative().optional(),
+  toolArgMs: z.number().nonnegative().optional(),
   calls: z.number().int().nonnegative(),
   toolsMs: z.number().nonnegative(),
   toolCalls: z.number().int().nonnegative(),
@@ -228,7 +233,13 @@ const timelineStateSchema = z.object({
   cost: z.object({ flash: costFamilySchema.optional(), pro: costFamilySchema.optional() }).strict().optional(),
   archiveFloor: z.number().optional(),
   timing: timingTotalsSchema.optional(),
-  stepStart: z.object({ time: z.number(), firstToken: z.number().optional() }).strict().optional(),
+  stepStart: z.object({
+    time: z.number(),
+    firstToken: z.number().optional(),
+    // The generation split's in-flight accumulator (see TimelineState.stepStart).
+    decode: z.object({ reasoning: z.number(), text: z.number(), toolarg: z.number() }).strict().optional(),
+    block: z.object({ kind: z.enum(['reasoning', 'text', 'toolarg']), since: z.number() }).strict().optional(),
+  }).strict().optional(),
   callNames: z.record(z.string(), z.object({ name: z.string(), start: z.number(), argsRaw: z.string().optional() }).strict()),
   pendingShadowedSeqs: z.array(z.number()).optional(),
   pendingShadowEventSeq: z.number().optional(),

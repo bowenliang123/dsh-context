@@ -391,6 +391,18 @@ export interface ToolTimingTotals {
  * both only over calls whose stream carried a token delta, `toolsMs` the sum
  * of per-call tool durations (parallel calls each count, so it can overlap).
  * Absent until the first step lifecycle completes in the log.
+ *
+ * The generation window itself splits by WHAT was being decoded, off the
+ * stream's `block-start` framing (`blockType`): `reasoningMs` (the model's
+ * thinking), `textMs` (the answer text), and `toolArgMs` (the tool-call
+ * arguments). Each marker owns the interval up to the next one (the last one
+ * up to the assistant message), so the three tile the marker span and together
+ * account for essentially all of `genMs` — the span opens at the first marker,
+ * which can sit marginally before the first token, so it is not an exact
+ * partition. They are ADDITIVE-OPTIONAL: cached projection rows written before
+ * the split carry `genMs` without them, so the card falls back to the
+ * un-split shape instead of the cache row being discarded (the
+ * stateVersion-15 rationale in host/timeline.ts).
  */
 export interface TimingTotals {
   /** Summed wall time of completed steps (the session's active time). */
@@ -399,6 +411,12 @@ export interface TimingTotals {
   ttftMs: number
   /** Summed first-token → assistant-message time (the generation). */
   genMs: number
+  /** Reasoning-decode slice of `genMs` (the model's thinking). */
+  reasoningMs?: number
+  /** Answer-text decode slice of `genMs`. */
+  textMs?: number
+  /** Tool-call-argument decode slice of `genMs`. */
+  toolArgMs?: number
   /** Completed model calls (assistant messages folded). */
   calls: number
   /** Summed per-call durations of completed tool calls. */

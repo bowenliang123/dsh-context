@@ -33,7 +33,8 @@ import {
 } from './pricing'
 import type { ContentBlock, MessageSource } from './pricing'
 import { deriveEventMessage } from '@deepseek-ai/dsh-session'
-import { firstTokenTimeOfStream, isTokenChunk, replaceRangeOf } from './logShapes'
+import { decodeKindOfBlock, decodeSpansOfStream, firstTokenTimeOfStream, isTokenChunk, replaceRangeOf } from './logShapes'
+import type { DecodeKind } from './logShapes'
 import { opsOfCall, parseCallArgs } from '../shared/fileOps'
 
 /**
@@ -149,8 +150,14 @@ export interface TimelineState {
    * one those events close — a hostile interleaved log degrades to skipped
    * durations, never to unbounded state. Same arm/remove lifecycle as
    * `pendingShadowedSeqs`.
+   *
+   * `decode` and `block` carry the generation split (reasoning / answer text /
+   * tool arguments — see TimingTotals): a V0 log's `assistant/chunk`
+   * `block-start` markers open `block` and close the previous one into
+   * `decode`; a V2+ log carries no such events, so `decode` stays absent and
+   * `assistant/message` reads the spans off its embedded stream instead.
    */
-  stepStart?: { time: number; firstToken?: number }
+  stepStart?: { time: number; firstToken?: number; decode?: Record<DecodeKind, number>; block?: { kind: DecodeKind; since: number } }
   /**
    * Tool callId → the call's name, start instant, and raw arguments, armed by
    * `tool/call` and DELETED when its `tool/result` folds in (one result per
@@ -695,6 +702,9 @@ function accumulateCost(st: TimelineState, time: number, usage: BilledUsage): vo
 /** The timing card's per-tool ranking cap: the busiest 16 names are kept. */
 const TOOL_TIMING_CAP = 16
 
+/** The decode buckets of the generation split, in card order (see TimingTotals). */
+const DECODE_KINDS: readonly DecodeKind[] = ['reasoning', 'text', 'toolarg']
+
 /** Non-negative, NaN-proof duration between two instants (hostile times degrade to 0). */
 function durOf(from: number, to: number): number {
   if (!Number.isFinite(from) || !Number.isFinite(to)) return 0
@@ -711,6 +721,19 @@ function ensureTiming(st: TimelineState): TimingTotals {
     st.timing = { wallMs: 0, ttftMs: 0, genMs: 0, calls: 0, toolsMs: 0, toolCalls: 0, tools: {} }
   }
   return st.timing
+}
+
+/**
+ * Fold one block's decode span into the totals' generation split (see
+ * TimingTotals). A zero span stays ABSENT — the field then carries the
+ * "no time was decoded in this bucket" fact without adding dead properties to
+ * every pre-split-shaped state, and the card reads absence as 0.
+ */
+function addDecode(timing: TimingTotals, kind: DecodeKind, ms: number): void {
+  if (!(ms > 0)) return
+  if (kind === 'reasoning') timing.reasoningMs = (timing.reasoningMs ?? 0) + ms
+  else if (kind === 'text') timing.textMs = (timing.textMs ?? 0) + ms
+  else timing.toolArgMs = (timing.toolArgMs ?? 0) + ms
 }
 
 /**
@@ -911,11 +934,35 @@ export function applyTimeline(state: TimelineState, event: TimelineEvent, bounds
       // token delta stamps the slot (later deltas and steps without a slot
       // return the same state). V2+ logs carry no such events; their timed
       // stream rides `assistant/message` / `assistant/attempt` (see below).
+      //
+      // A `block-start` marker opens a decode block (reasoning / answer text /
+      // tool arguments) and closes the previous one into the slot's decode
+      // spans, so the generation window splits by what was being decoded.
         const start = state.stepStart
-        if (start === undefined || start.firstToken !== undefined) return state
+        if (start === undefined) return state
+        const chunk = data?.chunk as { type?: unknown; blockType?: unknown } | null | undefined
+        if (chunk !== null && typeof chunk === 'object' && chunk.type === 'block-start') {
+          const kind = decodeKindOfBlock(chunk.blockType)
+          // An unknown marker still CLOSES the open block (its end is real);
+          // only the interval it would open stays unattributed.
+          if (start.block === undefined && kind === undefined) return state
+          const s = ensure()
+          const decode = { ...(start.decode ?? { reasoning: 0, text: 0, toolarg: 0 }) }
+          if (start.block !== undefined) decode[start.block.kind] += durOf(start.block.since, event.time)
+          // The next block is ABSENT (not undefined-valued) when unknown — the
+          // plain-JSON persisted-state precondition (see TimelineState).
+          s.stepStart = {
+            time: start.time,
+            ...(start.firstToken !== undefined ? { firstToken: start.firstToken } : {}),
+            decode,
+            ...(kind !== undefined ? { block: { kind, since: event.time } } : {}),
+          }
+          break
+        }
+        if (start.firstToken !== undefined) return state
         if (!isTokenChunk(data?.chunk)) return state
         const s = ensure()
-        s.stepStart = { time: start.time, firstToken: event.time }
+        s.stepStart = { ...start, firstToken: event.time }
         break
       }
       case 'assistant/attempt': {
@@ -1119,6 +1166,24 @@ export function applyTimeline(state: TimelineState, event: TimelineEvent, bounds
           if (firstToken !== undefined) {
             timing.ttftMs += durOf(stepStart.time, firstToken)
             timing.genMs += durOf(firstToken, event.time)
+            // Generation split: a V0 log's chunk stream accumulated the block
+            // spans in the slot (its last block closes HERE, at the message);
+            // a V2+ log has no chunk events, so the spans come off the embedded
+            // stream. Either way the three buckets tile the generation window
+            // and only the settlement tail stays unattributed. The split is
+            // priced ONLY when the window was: an unstamped call's model time
+            // is unattributed wholesale, so its spans must not reappear as
+            // generation time the caller never charged.
+            if (stepStart.decode !== undefined) {
+              const decode = { ...stepStart.decode }
+              if (stepStart.block !== undefined) {
+                decode[stepStart.block.kind] += durOf(stepStart.block.since, event.time)
+              }
+              for (const kind of DECODE_KINDS) addDecode(timing, kind, decode[kind])
+            } else {
+              const spans = decodeSpansOfStream(data?.stream, event.time)
+              for (const kind of DECODE_KINDS) addDecode(timing, kind, spans[kind])
+            }
           }
         }
         // `deriveEventMessage` returns `data.message` for assistant/message, or
