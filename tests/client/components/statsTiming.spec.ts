@@ -71,32 +71,50 @@ describe('StatsTiming', () => {
     const timing: TimingTotals = { wallMs: 100_000, ttftMs: 25_000, genMs: 35_000, calls: 2, toolsMs: 200_000, toolCalls: 9, tools: { bash: { calls: 9, ms: 200_000 } } }
     const m = await mount(h(StatsTiming, { timing }))
     assert.deepEqual(rowOf(m.container, 2), { pct: '100.0%', label: 'Tool runs', count: '3m20s · 9 runs', dim: false })
-    // The ring clamps tools into the 40s post-model window; the zero
-    // overhead segment is skipped: 3 circles, not 4.
+    // The ring clamps tools into the 40s post-model window; the zero overhead
+    // slice paints no arc AND its legend row is omitted: 3 circles, 3 rows.
     assert.equal(queryAll(m.container, '.lc-donut circle').length, 3)
-    // The zero overhead row dims whole.
-    assert.deepEqual(rowOf(m.container, 3), { pct: '0.0%', label: 'Overhead', count: '—', dim: true })
-    // The hover link: the zero-overhead row tints itself but leaves the ring
-    // at rest (no painted arc to light); a painted row dims the ring.
+    assert.equal(queryAll(m.container, '.lc-sl-row').length, 3)
+    // The hover link: a painted row dims the ring and lights its own arc.
     const rows = queryAll(m.container, '.lc-sl-row')
-    await hover(rows[3])
-    assert.ok(rows[3].className.includes('lc-sl-row-on'))
-    assert.ok(!query(m.container, '.lc-donut').className.includes('lc-donut-dim'))
     await hover(rows[2])
+    assert.ok(rows[2].className.includes('lc-sl-row-on'))
     assert.ok(query(m.container, '.lc-donut').className.includes('lc-donut-dim'))
     assert.ok((queryAll(m.container, '.lc-donut-seg')[2]?.getAttribute('class') ?? '').includes('lc-donut-seg-on'))
     await m.unmount()
   })
 
-  test('a hostile no-wall timing renders rows with dash shares and bare counts', async () => {
+  test('a hostile no-wall timing keeps only the non-zero slices', async () => {
     const timing: TimingTotals = { wallMs: 0, ttftMs: 5_000, genMs: 0, calls: 3, toolsMs: 0, toolCalls: 1, tools: { bash: { calls: 1, ms: 0 } } }
     const m = await mount(h(StatsTiming, { timing }))
     assert.equal(query(m.container, '.lc-donut-center b').textContent, '—')
-    assert.equal(queryAll(m.container, '.lc-sl-row').length, 4)
+    // Only TTFT carries time; the zero slices are omitted whole (their dash
+    // has nothing to qualify, and their borrowed call count would mislead).
+    assert.equal(queryAll(m.container, '.lc-sl-row').length, 1)
     assert.deepEqual(rowOf(m.container, 0), { pct: '—', label: 'TTFT', count: '5.0s · 3 calls', dim: false })
-    // A zero-duration slice dims and its secondary line keeps just the call
-    // count — the dash has nothing to qualify.
-    assert.deepEqual(rowOf(m.container, 1), { pct: '—', label: 'LLM Gen', count: '—', dim: true })
+    await m.unmount()
+  })
+
+  test('a slice that never happened is omitted, not rendered as a zero row', async () => {
+    // The screenshot case: no reasoning output, no tool calls — the rows that
+    // would borrow the session's call count ("0.0% · 3 calls") are dropped.
+    const timing: TimingTotals = {
+      wallMs: 532, ttftMs: 480, genMs: 52, reasoningMs: 0, textMs: 52, toolArgMs: 0,
+      calls: 1, toolsMs: 0, toolCalls: 0, tools: {},
+    }
+    const m = await mount(h(StatsTiming, { timing }))
+    const labels = queryAll(m.container, '.lc-sl-label').map(n => n.textContent)
+    assert.deepEqual(labels, ['TTFT', 'Answer'], 'zero buckets and zero tools are gone')
+    assert.equal(queryAll(m.container, '.lc-sl-row').length, queryAll(m.container, '.lc-donut-seg').length)
+    await m.unmount()
+  })
+
+  test('every slice zero with a live call count still renders the empty state', async () => {
+    // calls > 0 opens the card, but nothing was priced: no rows survive.
+    const timing: TimingTotals = { wallMs: 0, ttftMs: 0, genMs: 0, calls: 2, toolsMs: 0, toolCalls: 0, tools: {} }
+    const m = await mount(h(StatsTiming, { timing }))
+    assert.ok(text(m.container).includes('No timing data yet'))
+    assert.equal(queryAll(m.container, '.lc-sl-row').length, 0)
     await m.unmount()
   })
 })
@@ -166,8 +184,8 @@ describe('StatsTiming — the generation split', () => {
     const m = await mount(h(StatsTiming, { timing }))
     assert.deepEqual(rowOf(m.container, 1), { pct: '66.7%', label: 'Thinking', count: '6m40s', dim: false })
     assert.deepEqual(rowOf(m.container, 2), { pct: '16.7%', label: 'Answer', count: '1m40s', dim: false })
-    // The zero tool-args bucket dims whole.
-    assert.equal(rowOf(m.container, 3).dim, true)
+    // The zero tool-args bucket is omitted whole, so Tools follows Answer.
+    assert.equal(rowOf(m.container, 3).label, 'Tool runs')
     await m.unmount()
   })
 })

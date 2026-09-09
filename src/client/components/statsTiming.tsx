@@ -9,10 +9,13 @@
  * thinking, answer text, and tool-call arguments. The slice rows lead with
  * the true duration and qualify it with the call count on the secondary line —
  * except the decode slices, which count BLOCKS (zero to many per call, so a
- * call count would be a false tally) and therefore carry no qualifier. The
- * donut and the rows sit side by side so the head row stays half-height.
- * Parallel tool calls each count, so the tools figure can overlap — the ring
- * clamps it into the post-model window while the row numbers stay true.
+ * call count would be a false tally) and therefore carry no qualifier. A slice
+ * that never happened (zero time) is omitted entirely — the ring already skips
+ * its arc, and a zero row would otherwise borrow the session's call count and
+ * read as "no time, many calls". The donut and the rows sit side by side so
+ * the head row stays half-height. Parallel tool calls each count, so the tools
+ * figure can overlap — the ring clamps it into the post-model window while the
+ * row numbers stay true.
  */
 
 import { useState, type ReactElement } from 'react'
@@ -132,11 +135,17 @@ export function makeStatsTiming(kit: ViewKit, Donut: (props: DonutProps) => Reac
         pct: fmtShare(slice.ms, wall),
         count: countOf(slice.ms, slice.times),
       })
+      // A slice that never happened is HIDDEN rather than shown as a zero row:
+      // a "0.0%" row still carrying a count ("— · 323 calls") reads as "this
+      // ran 323 times in no time" when in truth nothing ever ran or decoded
+      // there. The ring already skips zero arcs, so the legend now matches it.
+      // Every slice is a share of the wall total, so dropping rows never
+      // distorts the remaining percentages.
       rows = [
         ...modelSlices.map(toRow),
         toRow(toolSlice),
         toRow(otherSlice),
-      ]
+      ].filter(row => !row.dim)
     }
     return (
       <div className="lc-card lc-col-stats lc-col-donut">
