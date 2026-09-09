@@ -3,17 +3,6 @@ description: Report a problem with the dsh-context plugin on DeepSeek Harness. /
 title: "[Bug] "
 labels: ["bug"]
 body:
-  - type: markdown
-    attributes:
-      value: |
-        Thanks for taking the time to report a problem! Please fill in every required
-        field so it can be reproduced and fixed quickly.
-        感谢你抽出时间反馈问题！请填写所有必填字段，以便问题能被快速复现和修复。
-
-        Before you file / 提交前请先确认:
-        - Search existing issues first / 先搜索是否已有相同 issue。
-        - Harness-level problems belong upstream / 与 Harness 本身有关的问题请提交到上游:
-          https://github.com/deepseek-ai/deepseek-harness/issues
   - type: input
     id: dsh-version
     attributes:
