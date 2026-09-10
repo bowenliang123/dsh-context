@@ -49,13 +49,19 @@ export interface SlotsService {
 
 /**
  * One guide-page capsule a right-Sidebar tab type contributes (dsh
- * 0.1.5-alpha.2+): the glyph and the title, exactly the fields
- * `SidebarRightGuideEntry` carries.
+ * 0.1.5-rc.1+): the glyph, the title, and the optional one-line description,
+ * exactly the fields `SidebarRightGuideEntry` carries.
  */
 export interface SidebarGuideEntryLike {
   /** Ascending position among every registered type's entries. */
   order: number
   title: () => string
+  /**
+   * One line under the title on what picking the capsule opens; the guide
+   * renders it only while it lists few enough entries. Optional, so a line
+   * whose guide body ignores it simply goes without.
+   */
+  description?: () => string
   icon?: ComponentType<{ size?: number }>
 }
 
@@ -74,7 +80,7 @@ export interface SidebarTabDefinitionLike {
 /**
  * The right Sidebar's tab-type registry (`ctx.sidebarRightTabs`), as far as
  * this plugin consumes it. OPTIONAL by contract: the service ships only on the
- * 0.1.5 line (0.1.5-alpha.2+ supported), so the plugin reaches it through a
+ * 0.1.5 line (0.1.5-rc.1+ supported), so the plugin reaches it through a
  * deferred inject and stays fully functional (no pending fiber, no throw)
  * without it.
  */

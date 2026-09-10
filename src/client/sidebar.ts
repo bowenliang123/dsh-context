@@ -1,5 +1,5 @@
 /**
- * The right Sidebar's Context tab (dsh 0.1.5-alpha.2+).
+ * The right Sidebar's Context tab (dsh 0.1.5-rc.1+).
  *
  * The tab reuses the Context conversation-view component VERBATIM: the
  * `sidebar.right.pane.tab` seat is session-scoped and delivers the same
@@ -8,10 +8,10 @@
  * one component with one data path. The tab type contributes a guide entry, so
  * the sidebar's guide page offers "Context" and picking it opens the panel —
  * the product's own path, exactly as the shipped Files type does: a capsule of
- * glyph + title.
+ * glyph, title, and description line.
  *
  * OPTIONAL BY CONTRACT. `ctx.sidebarRightTabs` and the seat ship only on the
- * 0.1.5 line (0.1.5-alpha.2+ supported); the registration therefore rides a
+ * 0.1.5 line (0.1.5-rc.1+ supported); the registration therefore rides a
  * DEFERRED inject (the plugin's hard injects stay `slots` + `locale`), so on
  * every older supported line the callback never fires, the plugin fiber never
  * pends, and nothing is registered. The registry is re-proved structurally and
@@ -85,6 +85,7 @@ export function watchSidebarContextTab(
         guide: [{
           order: GUIDE_ORDER,
           title: () => t('tab'),
+          description: () => t('sidebar.guideDescription'),
           icon: guideIcon(),
         }],
       })
