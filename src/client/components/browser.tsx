@@ -1060,7 +1060,6 @@ export function makeContextBrowser(
             ? t('detail.step', { t: req.turn ?? 0, s: req.step ?? 0 })
             : t('browser.liveNow')}</b>
           {req !== null ? <span>{fmtTime(req.time)}</span> : null}
-          {hoverReq !== null ? <span className="lc-card-sub">{t('browser.preview')}</span> : null}
           <span>{t('detail.estTotal', { n: fmt(total) })}</span>
           {req !== null && req.prompt !== undefined
             ? <span className="lc-actual">{t('detail.actual', { n: fmt(req.prompt) })}</span>

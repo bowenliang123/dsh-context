@@ -288,8 +288,6 @@ describe('ContextView — interactions', () => {
     const bar2 = query(m.container, '.lc-bar[data-seq="2"]')
     await hover(bar2)
     assert.ok(bar2.className.includes('lc-bar-hovered'))
-    // The browser mirrors the hover as a transient preview of that step.
-    assert.ok(text(m.container).includes(DICT_EN['browser.preview']))
     // The hovered bar's turn lights the strip even without strip hover.
     assert.ok(query(m.container, '.lc-chart-scroll').className.includes('lc-chart-dim'))
 

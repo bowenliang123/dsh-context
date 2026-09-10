@@ -273,7 +273,6 @@ describe('ContextBrowser live surface', () => {
     const m = await mount(h(Browser, props({ data, previewSeq: 10 })))
     const meta = text(query(m.container, '.lc-br-meta'))
     assert.ok(meta.includes('Turn 1 · Step 0'))
-    assert.ok(meta.includes('Preview'))
     assert.ok(meta.includes('Actual Prompt 700'))
     // Unknown preview seq: no request matches → live surface.
     await m.update(h(Browser, props({ data, previewSeq: 999 })))
