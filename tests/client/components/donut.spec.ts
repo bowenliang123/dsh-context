@@ -32,10 +32,10 @@ describe('Donut', () => {
     assert.equal(circles.length, 2)
     const dash = (el: Element): string => el.getAttribute('stroke-dasharray') ?? ''
     const offset = (el: Element): number => Number(el.getAttribute('stroke-dashoffset'))
-    assert.equal(dash(circles[0]), '30 70')
-    assert.equal(offset(circles[0]), 125)
-    assert.equal(dash(circles[1]), '70 30')
-    assert.equal(offset(circles[1]), 95)
+    assert.equal(dash(circles[0]), '29.5 70.5')
+    assert.equal(offset(circles[0]), 124.75)
+    assert.equal(dash(circles[1]), '69.5 30.5')
+    assert.equal(offset(circles[1]), 94.75)
     assert.equal(query(m.container, '.lc-donut-center b').textContent, '2h 14m')
     assert.equal(query(m.container, '.lc-donut-center span').textContent, 'active time')
     await m.unmount()
@@ -74,6 +74,56 @@ describe('Donut', () => {
     const m = await mount(h(Donut, { segments: [], centerTop: '—' }))
     assert.ok(query(m.container, '.lc-donut-track'))
     assert.ok(text(m.container).includes('—'))
+    await m.unmount()
+  })
+})
+
+describe('Donut slice divider', () => {
+  /** An arc's painted length, in dasharray units (1 unit ≈ 1% of the ring). */
+  const lenOf = (el: Element): number => Number((el.getAttribute('stroke-dasharray') ?? '').split(' ')[0])
+  /** The arc's start position along the ring: dashoffset counts backwards, so 0 units = 3 o'clock. */
+  const startOf = (el: Element): number => (100 - Number(el.getAttribute('stroke-dashoffset')) + 100) % 100
+
+  test('every seam between neighbouring slices opens by the same hairline', async () => {
+    const m = await mount(h(Donut, {
+      segments: [
+        { key: 'a', color: '#ff0000', value: 30 },
+        { key: 'b', color: '#00ff00', value: 70 },
+      ],
+      centerTop: 'x',
+    }))
+    const arcs = queryAll(m.container, '.lc-donut-seg')
+    // Half a gap off each end of both arcs, and both cuts land on the SAME
+    // seam: the ring shows one 0.5-unit opening there, not two.
+    assert.ok(Math.abs(lenOf(arcs[0]) - 29.5) < 1e-9)
+    for (let i = 0; i < arcs.length; i++) {
+      const end = startOf(arcs[i]) + lenOf(arcs[i])
+      const gap = (startOf(arcs[(i + 1) % arcs.length]) - end + 100) % 100
+      assert.ok(Math.abs(gap - 0.5) < 1e-9, `seam ${i} opened ${gap}`)
+    }
+    await m.unmount()
+  })
+
+  test('a lone slice keeps a full ring, with no divider nick', async () => {
+    const m = await mount(h(Donut, {
+      segments: [{ key: 'a', color: '#ff0000', value: 42 }],
+      centerTop: 'x',
+    }))
+    assert.equal(lenOf(query(m.container, '.lc-donut-seg')), 100)
+    await m.unmount()
+  })
+
+  test('a sliver thinner than the gap is cut by a quarter per end, never swallowed', async () => {
+    const m = await mount(h(Donut, {
+      segments: [
+        { key: 'tiny', color: '#ff0000', value: 0.2 },
+        { key: 'rest', color: '#00ff00', value: 99.8 },
+      ],
+      centerTop: 'x',
+    }))
+    const [tiny, rest] = queryAll(m.container, '.lc-donut-seg')
+    assert.ok(Math.abs(lenOf(tiny) - 0.1) < 1e-9)
+    assert.ok(Math.abs(lenOf(rest) - 99.3) < 1e-9)
     await m.unmount()
   })
 })
