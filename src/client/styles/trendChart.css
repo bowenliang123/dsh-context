@@ -43,6 +43,8 @@
    card's chart viewport) and wrapped, so a long row can never hang past the card into neighbouring panes or
    off-screen. */
 .lc-chart-tip { position: absolute; bottom: calc(100% + 4px); left: 0; z-index: 5; display: flex; flex-direction: column; gap: 2px; max-width: 100%; box-sizing: border-box; overflow-wrap: break-word; background: var(--dsw-alias-bg-layer-2); border: 1px solid var(--dsw-alias-border-l1); border-radius: 6px; padding: 3px 8px; font-size: 12px; color: var(--dsw-alias-label-primary); box-shadow: 0 2px 8px rgba(0,0,0,0.18); pointer-events: none; }
+/* The metric row reads secondary to the identity row. */
+.lc-chart-tip span + span { color: var(--dsw-alias-label-secondary); }
 .lc-bar:hover { background: var(--dsw-alias-bg-layer-2); }
 /*
  Hovering previews a bar with a thin dashed frame; a CLICKED (locked)
