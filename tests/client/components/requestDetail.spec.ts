@@ -45,7 +45,7 @@ describe('RequestDetail header', () => {
     assert.ok(head.includes('Turn 1 · Step 1'))
     assert.ok(!head.includes('Last Step'), 'single-step request carries no last-step tag')
     assert.ok(!head.includes('Delta'), 'cumulative mode carries no delta tag')
-    assert.ok(head.includes('Actual Prompt 1.0k'))
+    assert.ok(head.includes('Actual 1.0k'))
     assert.ok(head.includes('Output 120'))
     assert.ok(head.includes('Cache 50.00%'), 'real cacheHitPercent: 500/1000 truncated to two decimals')
     const rows = queryAll(m.container, '.lc-detail-row')
@@ -63,7 +63,7 @@ describe('RequestDetail header', () => {
   test('usage chips drop out when the figures are absent; cache falls back to a dash when nothing was billed', async () => {
     const m = await mount(h(RequestDetail, { request: req({}) }))
     const head = text(query(m.container, '.lc-detail-head'))
-    assert.ok(!head.includes('Actual Prompt'))
+    assert.ok(!head.includes('Actual'))
     assert.ok(!head.includes('Output'))
     assert.ok(!head.includes('Cache'))
     await m.unmount()
@@ -149,7 +149,7 @@ describe('RequestDetail delta mode', () => {
     const m = await mount(h(RequestDetail, { request, prev }))
     const head = text(query(m.container, '.lc-detail-head'))
     assert.ok(head.includes('Delta'), 'delta tag shown')
-    assert.ok(!head.includes('Actual Prompt'), 'usage chips drop out in delta mode')
+    assert.ok(!head.includes('Actual'), 'usage chips drop out in delta mode')
     const metric = query(m.container, '.lc-detail-metric')
     // +50 -50 -100 +100 → net 0 → neutral chip.
     assert.ok(text(metric).includes('Δ 0'))
