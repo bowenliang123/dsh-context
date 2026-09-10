@@ -74,7 +74,7 @@ export function formatCost(amount: number, currency: CostCurrency): string {
  */
 export function sessionPrices(currency: CostCurrency): { family: string; peak: PriceTriple; off: PriceTriple }[] {
   return (['flash', 'pro'] as const).map(id => ({
-    family: id === 'flash' ? 'deepseek-v4.1-flash' : 'deepseek-v4-pro',
+    family: id === 'flash' ? 'deepseek-v4.1-flash / deepseek-flash' : 'deepseek-v4-pro',
     peak: PRICES[currency][id].peak,
     off: PRICES[currency][id].off,
   }))

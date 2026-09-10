@@ -83,14 +83,14 @@ describe('formatCost', () => {
 describe('sessionPrices', () => {
   test('lists flash before pro with their peak and off-peak triples (USD)', () => {
     assert.deepEqual(sessionPrices('usd'), [
-      { family: 'deepseek-v4.1-flash', peak: { hit: 0.006, miss: 0.3, out: 1.2 }, off: { hit: 0.003, miss: 0.15, out: 0.6 } },
+      { family: 'deepseek-v4.1-flash / deepseek-flash', peak: { hit: 0.006, miss: 0.3, out: 1.2 }, off: { hit: 0.003, miss: 0.15, out: 0.6 } },
       { family: 'deepseek-v4-pro', peak: { hit: 0.006, miss: 0.3, out: 1.2 }, off: { hit: 0.003, miss: 0.15, out: 0.6 } },
     ])
   })
 
   test('lists the CNY table for the CNY currency', () => {
     assert.deepEqual(sessionPrices('cny'), [
-      { family: 'deepseek-v4.1-flash', peak: { hit: 0.04, miss: 2, out: 8 }, off: { hit: 0.02, miss: 1, out: 4 } },
+      { family: 'deepseek-v4.1-flash / deepseek-flash', peak: { hit: 0.04, miss: 2, out: 8 }, off: { hit: 0.02, miss: 1, out: 4 } },
       { family: 'deepseek-v4-pro', peak: { hit: 0.04, miss: 2, out: 8 }, off: { hit: 0.02, miss: 1, out: 4 } },
     ])
   })

@@ -117,10 +117,10 @@ export interface TimelineState {
   archived: SurfaceNode[]
   /**
    * Session-cost raw material: cumulative billed-token totals per DeepSeek
-   * V4 model family and pricing period (see SessionCostUsage). Running
+   * model family and pricing period (see SessionCostUsage). Running
    * totals — never trimmed, so the estimate always covers the COMPLETE
    * session log even after the request/event retention bounds cut in.
-   * Absent until a v4-flash / v4-pro request reports usage.
+   * Absent until a DeepSeek flash/pro request reports usage.
    */
   cost?: SessionCostUsage
   archiveFloor?: number
@@ -637,15 +637,16 @@ function tokenCountOf(value: unknown): number | null {
 }
 
 /**
- * The DeepSeek V4 model family a model name prices as — matched on the NAME
+ * The DeepSeek model family a model name prices as — matched on the NAME
  * alone (provider-agnostic: official API, proxies, OpenRouter spellings like
- * `deepseek/deepseek-v4.1-flash` all land here). Null for any other model:
- * non-V4 usage is simply not priced.
+ * `deepseek/deepseek-v4.1-flash` and `deepseek/deepseek-flash` all land
+ * here). The name must carry a DeepSeek marker (`v4` or `deepseek`) so a
+ * foreign flash/pro-named model (gemini-2.0-flash) is never priced.
  */
 function costFamilyOf(model: string | undefined): 'flash' | 'pro' | null {
   if (model === undefined) return null
   const m = model.toLowerCase()
-  if (!m.includes('v4')) return null
+  if (!m.includes('v4') && !m.includes('deepseek')) return null
   if (m.includes('flash')) return 'flash'
   if (m.includes('pro')) return 'pro'
   return null

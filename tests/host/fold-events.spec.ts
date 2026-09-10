@@ -552,6 +552,19 @@ describe('session-cost accumulation', () => {
     assert.equal(pro?.flash, undefined)
   })
 
+  test('deepseek-flash (no v4 marker) rides the flash family; foreign flash names never price', () => {
+    const flash = driveTimeline([header(1, { model: 'deepseek-flash' }), assistantMessage(2, { usage })]).state.cost
+    assert.equal(flash?.flash?.off?.uncached, 100)
+    assert.equal(flash?.pro, undefined)
+    const proxy = driveTimeline([header(1, { model: 'deepseek/deepseek-flash' }), assistantMessage(2, { usage })]).state.cost
+    assert.equal(proxy?.flash?.off?.uncached, 100, 'provider-prefixed spellings land too')
+    assert.equal(
+      driveTimeline([header(1, { model: 'gemini-2.0-flash' }), assistantMessage(2, { usage })]).state.cost,
+      undefined,
+      'a foreign flash-named model carries no DeepSeek marker and matches no family',
+    )
+  })
+
   test('peak-window boundaries and weekends split the periods', () => {
     const at100 = (seq: number, time: number) => assistantMessage(seq, { usage, time })
     const { state } = driveTimeline([
