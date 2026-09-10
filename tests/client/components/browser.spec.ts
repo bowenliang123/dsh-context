@@ -105,7 +105,7 @@ describe('ContextBrowser live surface', () => {
     const meta = text(query(m.container, '.lc-br-meta'))
     assert.ok(meta.includes('Live · Next Request'))
     assert.ok(meta.includes('Estimated ≈ 350'))
-    assert.ok(!meta.includes('Actual Prompt'), 'no actual figure on the live surface')
+    assert.ok(meta.includes('Actual Prompt 800'), 'live pairs the estimate with the freshest actual')
     assert.equal(queryAll(m.container, '.lc-br-cat-row').length, 6)
     assert.ok(text(catRow(m, 'user')).includes('1 Items'))
     assert.ok(queryAll(m.container, '.lc-br-cat')[ROW.inject].className.includes('lc-br-cat-empty'), 'empty category is marked')
@@ -113,6 +113,7 @@ describe('ContextBrowser live surface', () => {
     await pickStep(m, '7')
     const meta2 = text(query(m.container, '.lc-br-meta'))
     assert.ok(meta2.includes('Turn 0 · Step 0'))
+    assert.ok(!meta2.includes('Actual Prompt'), 'this freshest request reported no usage')
     assert.equal(queryAll(m.container, '.lc-br-delta').length, 0, 'no previous turn to compare against')
     await pickStep(m, 'live')
     await click(catRow(m, 'inject'))
@@ -126,7 +127,9 @@ describe('ContextBrowser live surface', () => {
     assert.ok(queryAll(m.container, '.lc-br-pct').every(el => text(el) === ''))
     assert.equal(queryAll(m.container, '.lc-br-delta').length, 0)
     assert.equal(queryAll(m.container, '.lc-br-tdelta').length, 0)
-    assert.ok(text(query(m.container, '.lc-br-meta')).includes('Estimated ≈ 0'))
+    const meta = text(query(m.container, '.lc-br-meta'))
+    assert.ok(meta.includes('Estimated ≈ 0'))
+    assert.ok(!meta.includes('Actual Prompt'), 'no requests, no actual figure')
     await m.unmount()
   })
 
@@ -274,9 +277,11 @@ describe('ContextBrowser live surface', () => {
     const meta = text(query(m.container, '.lc-br-meta'))
     assert.ok(meta.includes('Turn 1 · Step 0'))
     assert.ok(meta.includes('Actual Prompt 700'))
-    // Unknown preview seq: no request matches → live surface.
+    // Unknown preview seq: no request matches → live surface, estimate paired with the freshest actual.
     await m.update(h(Browser, props({ data, previewSeq: 999 })))
-    assert.ok(text(query(m.container, '.lc-br-meta')).includes('Live · Next Request'))
+    const liveMeta = text(query(m.container, '.lc-br-meta'))
+    assert.ok(liveMeta.includes('Live · Next Request'))
+    assert.ok(liveMeta.includes('Actual Prompt 700'))
     // A pinned step trimmed out of retention falls back to live too.
     await m.update(h(Browser, props({ data, previewSeq: null, pinSeq: 999 })))
     assert.ok(text(query(m.container, '.lc-br-meta')).includes('Live · Next Request'))

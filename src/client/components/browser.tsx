@@ -678,6 +678,9 @@ export function makeContextBrowser(
       ? requests.find(r => r.seq === props.previewSeq) ?? null
       : null
     const req = hoverReq ?? (sel === 'live' ? null : requests.find(r => r.seq === sel) ?? null)
+    // The actual-prompt figure follows the shown step; the live surface pairs its next-request
+    // estimate with the freshest actual the log holds (highest seq — wire order is not trusted).
+    const actual = req ?? requests.reduce<RequestRecord | null>((a, r) => (a === null || r.seq > a.seq ? r : a), null)
     // A pinned step trimmed out of retention falls back to live.
     const seq = req !== null ? req.seq : null
     // The browser joins the shared composition hover ONLY while it shows the LIVE step — a pinned/previewed step has a different
@@ -1061,8 +1064,8 @@ export function makeContextBrowser(
             : t('browser.liveNow')}</b>
           {req !== null ? <span>{fmtTime(req.time)}</span> : null}
           <span>{t('detail.estTotal', { n: fmt(total) })}</span>
-          {req !== null && req.prompt !== undefined
-            ? <span className="lc-actual">{t('detail.actual', { n: fmt(req.prompt) })}</span>
+          {actual !== null && actual.prompt !== undefined
+            ? <span className="lc-actual">{t('detail.actual', { n: fmt(actual.prompt) })}</span>
             : null}
         </div>
 
