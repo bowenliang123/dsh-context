@@ -8,7 +8,8 @@
  * one component with one data path. The tab type contributes a guide entry, so
  * the sidebar's guide page offers "Context" and picking it opens the panel —
  * the product's own path, exactly as the shipped Files type does: a capsule of
- * glyph, title, and description line.
+ * glyph, title, and description line, plus the chip-title seat that puts the
+ * same glyph beside the label once the tab is open (`icon.tsx`).
  *
  * OPTIONAL BY CONTRACT. `ctx.sidebarRightTabs` and the seat ship only on the
  * 0.1.5 line (0.1.5-rc.1+ supported); the registration therefore rides a
@@ -22,8 +23,8 @@
  * @module dsh-context/client/sidebar
  */
 
-import { IconContextInjectionOutline16 } from '@deepseek-ai/dsh-client-ui-primitives'
-import type { ClientCtx, ContextViewProps, SidebarGuideEntryLike, SidebarTabsFace } from './services'
+import { ContextIcon, makeContextTabTitle } from './icon'
+import type { ClientCtx, ContextViewProps, SidebarTabsFace } from './services'
 import type { Translate } from './i18n'
 
 /** The tab type's identity in the sidebar's tab system (also its body-seat key). */
@@ -40,23 +41,8 @@ export const SIDEBAR_CONTEXT_KIND = 'dsh-context'
 const GUIDE_ORDER = 20
 
 /**
- * The guide capsule's glyph, read defensively: the icon is OPTIONAL in the
- * entry, and a primitives module that does not serve it — or whose namespace
- * THROWS on the read (an interop/mock shape does exactly that) — must cost the
- * glyph, never the whole tab.
- * @returns the icon component, or undefined to register the tab without one.
- */
-function guideIcon(): SidebarGuideEntryLike['icon'] {
-  try {
-    return IconContextInjectionOutline16
-  } catch {
-    return undefined
-  }
-}
-
-/**
- * Register the Context tab type and its body on the right Sidebar, if — and
- * only if — this harness serves the sidebar tab registry.
+ * Register the Context tab type, its body, and its chip title on the right
+ * Sidebar, if — and only if — this harness serves the sidebar tab registry.
  * @param ctx - client root context carrying `slots` and the locale service.
  * @param view - the Context view component factory result (the same one the
  *   conversation tab mounts).
@@ -75,10 +61,16 @@ export function watchSidebarContextTab(
   // plugin is simply a conversation tab there — no pending fiber, no error.
   ctx.inject(['sidebarRightTabs'], (raw) => {
     const injected = raw as unknown as ClientCtx & { sidebarRightTabs?: SidebarTabsFace }
+    // Every registration that already landed, so a partial failure below
+    // unwinds exactly what this callback owns.
+    const disposers: (() => void)[] = []
+    const own = (result: unknown): void => {
+      if (typeof result === 'function') disposers.push(result as () => void)
+    }
     try {
       const tabs = injected.sidebarRightTabs
       if (tabs === undefined || typeof tabs.register !== 'function') return
-      const disposeType = tabs.register({
+      own(tabs.register({
         id: SIDEBAR_CONTEXT_ID,
         kind: SIDEBAR_CONTEXT_KIND,
         title: () => t('tab'),
@@ -86,23 +78,30 @@ export function watchSidebarContextTab(
           order: GUIDE_ORDER,
           title: () => t('tab'),
           description: () => t('sidebar.guideDescription'),
-          icon: guideIcon(),
+          icon: ContextIcon,
         }],
-      })
-      const disposeBody = injected.slots.inject('sidebar.right.pane.tab', () => injected.slots.register(
+      }))
+      own(injected.slots.inject('sidebar.right.pane.tab', () => injected.slots.register(
         { name: 'sidebar.right.pane.tab', key: SIDEBAR_CONTEXT_ID, locale: ns },
         (props: { sessionId?: string } & Record<string, unknown>) => view({ ...props, host: 'sidebar' }),
-      ))
-      // The inject callback's own disposer owns both registrations: cordis
-      // unloads them with the injected fiber (plugin stop, HMR reload).
-      return () => {
-        disposeType()
-        if (typeof disposeBody === 'function') (disposeBody as () => void)()
-      }
+      )))
+      // The chip title seat (0.1.5-rc.1+): the emblem beside the label, the
+      // files type's own idiom. Registered under the type id so the kit
+      // dispatches it for this type's tabs only.
+      own(injected.slots.inject('sidebar.right.pane.tab.title', () => injected.slots.register(
+        { name: 'sidebar.right.pane.tab.title', key: SIDEBAR_CONTEXT_ID },
+        makeContextTabTitle(t),
+      )))
     } catch {
       // A foreign registry that throws on register leaves the sidebar without
       // this tab; the conversation tab and every other seat keep working.
+      for (const dispose of disposers) dispose()
       return undefined
+    }
+    // The inject callback's own disposer owns every registration: cordis
+    // unloads them with the injected fiber (plugin stop, HMR reload).
+    return () => {
+      for (const dispose of disposers) dispose()
     }
   })
 }

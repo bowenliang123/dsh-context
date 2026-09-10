@@ -19,6 +19,19 @@
  */
 [data-sidebar-right-open] .lc-root,
 [data-sidebar-right-float-host] .lc-root { height: auto; overflow: visible; padding: 12px; }
+/* The Context tab chip's emblem: held at its drawn size in the title's flex
+   line (dockkit's `.tabTitle`; the files chip's own titleIcon idiom). */
+.lc-title-icon { flex: none; }
+/*
+ The chip's close control is OUT of flow over the title's last 14px, and an
+ active/hovered chip fades the 16px before it (dockkit `.tabTitle`'s mask) so
+ the text dies away under the close. The shipped files chip stays readable
+ only because its short label ends before that zone; our icon plus a longer
+ label runs into it. This gutter makes the fade land past the text: 30px is
+ the mask's own lead-in (`calc(100% - 30px)`), the one dockkit chrome
+ constant this touches — re-check it if that mask ever moves.
+ */
+.lc-title-label { padding-right: 30px; }
 /*
  Border roles: l2 (0.1 black ≈ #E5E5E5 on white) draws the VISIBLE edges —
  cards and controls, matching dsh's own Button/Input chrome; l1 stays for

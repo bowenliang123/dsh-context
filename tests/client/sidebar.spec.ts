@@ -1,8 +1,10 @@
 // The right Sidebar's Context tab (src/client/sidebar.ts): the OPTIONAL
-// two-stage registration — tab type into `sidebarRightTabs`, body into the
-// keyed `sidebar.right.pane.tab` seat — and its silent degrade on every
-// harness that serves no right Sidebar (the older supported lines).
+// three-stage registration — tab type into `sidebarRightTabs`, body into the
+// keyed `sidebar.right.pane.tab` seat, chip title into
+// `sidebar.right.pane.tab.title` — and its silent degrade on every harness
+// that serves no right Sidebar (the older supported lines).
 
+import { createElement as h, type ReactElement } from 'react'
 import assert from 'node:assert/strict'
 import { describe, test } from 'vitest'
 import { DICT_EN, DICT_ZH } from '../../src/client/i18n'
@@ -13,6 +15,7 @@ import {
 } from '../../src/client/sidebar'
 import type { ContextViewProps, SidebarTabDefinitionLike } from '../../src/client/services'
 import { TestClientCtx, asClientCtx } from './helpers/harness'
+import { mount, query, text } from './helpers/kit'
 
 const NS = 'dsh-context'
 
@@ -72,12 +75,29 @@ describe('watchSidebarContextTab — the optional registration', () => {
       ['description', 'icon', 'order', 'title'],
       'the capsule carries exactly the rc.1 guide-entry fields',
     )
-    assert.equal(typeof def.guide?.[0].icon, 'function', 'the guide capsule carries a glyph')
+    assert.equal(typeof def.guide?.[0].icon, 'function', 'the guide capsule carries the bundled emblem')
 
     const body = ctx.slots.of('sidebar.right.pane.tab')
     assert.equal(body.length, 1)
     assert.equal(body[0].registration.key, SIDEBAR_CONTEXT_ID, 'the keyed seat dispatches on the type id')
     assert.equal(body[0].registration.locale, NS, 'the framework synthesizes the t seat for the panel')
+
+    const title = ctx.slots.of('sidebar.right.pane.tab.title')
+    assert.equal(title.length, 1, 'the chip-title seat is registered for the type')
+    assert.equal(title[0].registration.key, SIDEBAR_CONTEXT_ID)
+    ctx.dispose()
+  })
+
+  test('the chip title renders the emblem and the label', async () => {
+    const ctx = new TestClientCtx()
+    const tabs = registry()
+    ctx.setService('sidebarRightTabs', tabs)
+    wire(ctx)
+    const Title = ctx.slots.of('sidebar.right.pane.tab.title')[0].component
+    const m = await mount(h(Title as () => ReactElement))
+    assert.equal(query<SVGSVGElement>(m.container, 'svg').getAttribute('width'), '16')
+    assert.equal(text(m.container), 'Context')
+    await m.unmount()
     ctx.dispose()
   })
 
@@ -123,6 +143,26 @@ describe('watchSidebarContextTab — the optional registration', () => {
     ctx.dispose()
   })
 
+  test('a failure mid-registration unwinds the seats that already landed', () => {
+    const ctx = new TestClientCtx()
+    const tabs = registry()
+    ctx.setService('sidebarRightTabs', tabs)
+    // The slots face accepts the body seat then throws on the title seat: the
+    // type and body must be rolled back, never half-registered.
+    let calls = 0
+    ;(ctx as unknown as { slots: unknown }).slots = {
+      inject: (_name: string, callback: () => unknown) => {
+        calls += 1
+        if (calls === 2) throw new Error('title seat unavailable')
+        return callback()
+      },
+      register: () => () => {},
+    }
+    assert.doesNotThrow(() => { wire(ctx) })
+    assert.equal(tabs.disposed, 1, 'the type registration was rolled back')
+    ctx.dispose()
+  })
+
   test('a shapeless service (no register, a primitive) registers nothing', () => {
     for (const service of [{}, 'registry', 7, null]) {
       const ctx = new TestClientCtx()
@@ -146,14 +186,16 @@ describe('watchSidebarContextTab — the optional registration', () => {
     assert.doesNotThrow(() => { ctx.dispose() })
   })
 
-  test('unload disposes both registrations', () => {
+  test('unload disposes every registration', () => {
     const ctx = new TestClientCtx()
     const tabs = registry()
     ctx.setService('sidebarRightTabs', tabs)
     wire(ctx)
     assert.equal(ctx.slots.of('sidebar.right.pane.tab').length, 1)
+    assert.equal(ctx.slots.of('sidebar.right.pane.tab.title').length, 1)
     ctx.dispose()
     assert.equal(tabs.disposed, 1, 'the type registration was disposed')
     assert.deepEqual(ctx.slots.of('sidebar.right.pane.tab'), [], 'the body seat was disposed')
+    assert.deepEqual(ctx.slots.of('sidebar.right.pane.tab.title'), [], 'the chip-title seat was disposed')
   })
 })

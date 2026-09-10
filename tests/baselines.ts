@@ -58,6 +58,12 @@ export interface ClientSeam {
     slotFile: string
     slotNeedle: string
     /**
+     * The keyed chip-title seat the plugin's tab type also registers into
+     * (the emblem-beside-label idiom the shipped files type uses). Present
+     * wherever the body seat is; probed separately so a rename names the seam.
+     */
+    titleSlotNeedle: string
+    /**
      * The guide-entry contract the plugin's contribution must satisfy: one
      * needle per field `SidebarRightGuideEntry` carries on this generation.
      */
@@ -224,6 +230,7 @@ export const BASELINES: readonly Baseline[] = [
         serviceNeedle: 'sidebarRightTabs',
         slotFile: 'packages/client/ui-sidebar-right/src/client/contract/slots.ts',
         slotNeedle: 'sidebar.right.pane.tab',
+        titleSlotNeedle: 'sidebar.right.pane.tab.title',
         guideEntry: {
           file: 'packages/client/ui-sidebar-right/src/client/tab-registry.ts',
           fields: [

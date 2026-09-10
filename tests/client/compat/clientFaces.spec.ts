@@ -39,9 +39,6 @@ vi.mock('@deepseek-ai/dsh-client-ui-primitives', async () => {
       captured.markdownProps = props
       return React.createElement('div', null, String(props.text ?? ''))
     },
-    // The sidebar guide glyph: present as a stub so the optional registration
-    // path sees the same shape the real primitives module serves.
-    IconContextInjectionOutline16: () => React.createElement('span', null),
     // The rich-text copy control's glyphs and clipboard writer.
     IconCopyOutline16: () => React.createElement('span', null),
     IconCheckOutline16: () => React.createElement('span', null),
@@ -157,6 +154,7 @@ for (const baseline of BASELINES) {
         })
         assert.equal(definitions.length, 1, 'the generation with the seam gets the tab')
         assert.equal(ctx.slots.of('sidebar.right.pane.tab').length, 1)
+        assert.equal(ctx.slots.of('sidebar.right.pane.tab.title').length, 1, 'the chip-title seat is registered on this generation')
       }
       ctx.dispose()
     })
