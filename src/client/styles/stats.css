@@ -63,7 +63,7 @@
  small print. The name takes the whole primary line and only ellipsizes as
  a last resort; a zero-figure row dims — the ring already carries the share.
  */
-.lc-sl { display: flex; flex-direction: column; gap: 6px; min-width: 0; overflow: hidden; }
+.lc-sl { display: flex; flex-direction: column; gap: 4px; min-width: 0; overflow: hidden; }
 /* The pill tint spreads 6px past the text column (negative margins) so the
    hovered row reads as one lit surface without shifting the columns. */
 .lc-sl-row { display: flex; flex-direction: column; gap: 1px; font-size: 12px; min-width: 0; border-radius: 6px; padding: 1px 6px; margin: 0 -6px; transition: background-color var(--ds-transition-duration, 0.2s) var(--ds-ease-in-out, ease-in-out); }
