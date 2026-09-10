@@ -16,7 +16,7 @@
  */
 
 /** The supported dsh tags, in lockstep with the BASELINES entries below. */
-export type BaselineId = 'v0.1.2-rc.1' | 'v0.1.3-alpha.2' | 'v0.1.5-alpha.2'
+export type BaselineId = 'v0.1.2-rc.1' | 'v0.1.3-alpha.2' | 'v0.1.5-rc.1'
 
 /** The harness web half's client faces, as far as the compat probes consume them. */
 export interface ClientSeam {
@@ -46,7 +46,7 @@ export interface ClientSeam {
   }
   /**
    * The right Sidebar's tab seam, present only from the generation that ships
-   * it (0.1.5-alpha.2+). The plugin's registration is OPTIONAL: a line without
+   * it (0.1.5-rc.1+). The plugin's registration is OPTIONAL: a line without
    * this seam must simply never register the tab, and the matrix asserts the
    * absence explicitly so a probe can tell "not supported here" from "moved".
    */
@@ -58,17 +58,14 @@ export interface ClientSeam {
     slotFile: string
     slotNeedle: string
     /**
-     * The guide-entry contract the plugin's contribution must satisfy: the
-     * fields `SidebarRightGuideEntry` carries, and the copy field it dropped
-     * (asserted ABSENT so a re-added seam cannot pass unnoticed).
+     * The guide-entry contract the plugin's contribution must satisfy: one
+     * needle per field `SidebarRightGuideEntry` carries on this generation.
      */
     guideEntry: {
       /** The declaring source. */
       file: string
       /** One needle per field the guide entry carries. */
       fields: readonly string[]
-      /** One needle per field this generation does not carry. */
-      absent: readonly string[]
     }
   }
 }
@@ -192,11 +189,12 @@ export const BASELINES: readonly Baseline[] = [
     // endpoints renamed to `startSeq`/`endSeq`; the PTC vocabulary renamed to
     // `tool/ptc-dispatch`; the shell seeds one more platform module. From
     // 0.1.5-alpha.2 the conversation surface moved under the keyed `main` panel
-    // (`main.conversation`) and the guide entry lost its copy line.
-    id: 'v0.1.5-alpha.2',
-    tag: 'dsh-v0.1.5-alpha.2',
+    // (`main.conversation`); at 0.1.5-rc.1 the guide entry regained its
+    // optional description line.
+    id: 'v0.1.5-rc.1',
+    tag: 'dsh-v0.1.5-rc.1',
     cordis: '4.0.2',
-    session: '0.1.5-alpha.2',
+    session: '0.1.5-rc.1',
     foldEventTypes: [
       'request/header', 'request/context', 'step/start', 'step/end',
       'user/message', 'tool/call', 'tool/result', 'assistant/message', 'assistant/attempt',
@@ -231,9 +229,9 @@ export const BASELINES: readonly Baseline[] = [
           fields: [
             'readonly order: number',
             'readonly title: () => string',
+            'readonly description?: () => string',
             'readonly icon?: ComponentType<IconProps>',
           ],
-          absent: ['readonly description: () => string'],
         },
       },
     },

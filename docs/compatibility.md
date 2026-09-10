@@ -2,17 +2,17 @@
 
 dsh-context declares per-release compatibility with `@deepseek-ai/dsh` in its package manifest (`dsh.compatibility.dshReleases`). This page records what is actually verified for each declared release, and how.
 
-Last verified: **2026-09-09** (plugin `dsh-context@0.47.0` source tree).
+Last verified: **2026-09-10** (plugin `dsh-context@0.48.0` source tree).
 
 ## Supported dsh releases
 
 | dsh release | Session log | Declared | Automated seam matrix | Disposable-profile install / uninstall |
 | --- | --- | --- | --- | --- |
 | `0.1.2-rc.1` | V0 | compatible | ✅ baseline `v0.1.2-rc.1` | ✅ install OK → 1 composed row → uninstall OK → 0 rows (verified 2026-09-05) |
-| `0.1.3-alpha.2` | V2 | compatible | ✅ baseline `v0.1.3-alpha.2` | ✅ install OK → 1 composed row → uninstall OK → 0 rows |
-| `0.1.5-alpha.2` | V3 | compatible | ✅ baseline `v0.1.5-alpha.2` | ⏳ pending — `@deepseek-ai/dsh@0.1.5-alpha.2` is not on npm yet (the `alpha` dist-tag lags); the previous V3 release's result is carried forward |
+| `0.1.3-alpha.2` | V2 | compatible | ✅ baseline `v0.1.3-alpha.2` | ✅ install OK → 1 composed row → uninstall OK → 0 rows (verified 2026-09-09) |
+| `0.1.5-rc.1` | V3 | compatible | ✅ baseline `v0.1.5-rc.1` | ✅ install OK → 1 composed row → uninstall OK → 0 rows (verified 2026-09-10) |
 
-The automated seam matrix runs for every row on every `pnpm test`. The disposable-profile column is a manual, per-release check: `0.1.2-rc.1` was verified on 2026-09-05 and carried forward; `0.1.3-alpha.2` and the previous V3 release were verified on 2026-09-09 against the official npm registry (a stale mirror can 404 the harness's own dependency closure before the plugin is even considered). `0.1.5-alpha.2` changed no install-path seam — the manifest, the patch layer, and the composed row are byte-identical to the previous V3 release apart from the version — so its install row waits only on the CLI's npm publication.
+The automated seam matrix runs for every row on every `pnpm test`. The disposable-profile column is a manual, per-release check: each release's CLI was installed from npm into a temporary `DSH_HOME` (the real `~/.dsh` is never touched) — `0.1.2-rc.1` on 2026-09-05, `0.1.3-alpha.2` on 2026-09-09, and `0.1.5-rc.1` on 2026-09-10, against the official npm registry (a stale mirror can 404 the harness's own dependency closure before the plugin is even considered).
 
 Releases older than `0.1.2-rc.1` — the `0.1.1` line and the `0.1.2-alpha.*` previews — were supported and verified through `dsh-context@0.41.x` and are no longer in the support matrix.
 
@@ -31,12 +31,14 @@ The fold never branches on a detected harness version: a log carries exactly one
 
 ## Web client seams
 
-The browser half rides generation-specific seats, each reached through an optional seam so an older line simply goes without the capability. One V3 boundary moved them:
+The browser half rides generation-specific seats, each reached through an optional seam so an older line simply goes without the capability. The V3 line moved two of them, and the newest release moved one back:
 
-| Seam | Before `0.1.5-alpha.2` | `0.1.5-alpha.2+` |
-| --- | --- | --- |
-| Conversation panel root | flat `conversation` slot | keyed `main` panel's `main.conversation` (the plugin's `conversation.view` seat is unchanged and hangs under it) |
-| Right Sidebar guide entry | glyph + title + description line | glyph + title (the description line was dropped) |
+| Seam | V3 before `0.1.5-alpha.2` | `0.1.5-alpha.2` | `0.1.5-rc.1+` |
+| --- | --- | --- | --- |
+| Conversation panel root | flat `conversation` slot | keyed `main` panel's `main.conversation` (the plugin's `conversation.view` seat is unchanged and hangs under it) | same as `0.1.5-alpha.2` |
+| Right Sidebar guide entry | glyph + title + required description line | glyph + title (the description line was dropped) | glyph + title + optional description line (restored; the plugin contributes it) |
+
+The plugin contributes to whichever face the running line serves: the guide capsule carries `order`, `title`, and `icon` on every generation and adds the `description` thunk, which `0.1.5-alpha.1` required, `0.1.5-alpha.2` ignored, and `0.1.5-rc.1+` renders. The `guideEntry` probe in `tests/baselines.ts` pins the fields of the newest supported generation.
 
 ## What each check means
 

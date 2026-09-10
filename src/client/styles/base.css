@@ -8,7 +8,7 @@
  */
 .lc-root { padding: 16px 20px 32px; overflow-y: auto; height: 100%; box-sizing: border-box; color: var(--dsw-alias-label-primary); font-size: 13px; }
 /*
- Right Sidebar panel (dsh 0.1.5-alpha.2+): the dockkit pane body scrolls and
+ Right Sidebar panel (dsh 0.1.5-rc.1+): the dockkit pane body scrolls and
  its `.pane` clips overflow — so the tab root drops its own scroller and lets
  the pane own both. The body draws NO padding of its own (dockkit leaves each
  tab its own insets), so the root keeps a 12px frame on all four sides — the

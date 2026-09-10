@@ -88,7 +88,7 @@ function apply(ctx: ClientCtx): void {
     )
   })
 
-  // Right Sidebar (dsh 0.1.5-alpha.2+): the same view as a panel tab, offered
+  // Right Sidebar (dsh 0.1.5-rc.1+): the same view as a panel tab, offered
   // from the sidebar's guide page. Optional by contract — a harness without
   // the sidebar services simply never gets the tab (see sidebar.ts).
   watchSidebarContextTab(ctx, ContextView, t, NS)

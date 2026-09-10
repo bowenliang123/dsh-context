@@ -28,7 +28,7 @@ body:
     attributes:
       label: DeepSeek Harness version / DeepSeek Harness 版本
       description: The `@deepseek-ai/dsh` version in use, if relevant. / 如相关，请填写正在使用的 `@deepseek-ai/dsh` 版本。
-      placeholder: e.g. 0.1.5-alpha.2
+      placeholder: e.g. 0.1.5-rc.1
     validations:
       required: false
   - type: textarea

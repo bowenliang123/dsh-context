@@ -155,9 +155,6 @@ describe.skipIf(reasons.length > 0)('compat matrix — real dsh sources per base
       for (const field of sidebar.guideEntry.fields) {
         assert.equal(staging.dshHasString(baseline.tag, field, sidebar.guideEntry.file), true, `guide-entry field: ${field}`)
       }
-      for (const absent of sidebar.guideEntry.absent) {
-        assert.equal(staging.dshHasString(baseline.tag, absent, sidebar.guideEntry.file), false, `guide-entry field must not return: ${absent}`)
-      }
     })
 
     test('client: MarkdownText chrome prop', () => {
