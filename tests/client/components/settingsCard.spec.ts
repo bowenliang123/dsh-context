@@ -21,7 +21,7 @@ function hookFor(state: SettingsState) {
 }
 
 function stateOf(partial: Partial<SettingsState> = {}): SettingsState {
-  return { status: 'ready', granularity: 'step', mode: 'total', fileSort: 'count', writable: true, ...partial }
+  return { status: 'ready', granularity: 'step', mode: 'total', fileSort: 'count', threshold: null, retain: null, writable: true, ...partial }
 }
 
 /** Menu items portaled into document.body while a select is open. */

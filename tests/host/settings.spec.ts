@@ -8,7 +8,7 @@ import { describe, test } from 'vitest'
 import { Context } from '@deepseek-ai/cordis'
 import { SettingsProvider } from '@deepseek-ai/dsh-settings'
 import type { SettingsNamespace } from '@deepseek-ai/dsh-settings'
-import { installSettings, SETTINGS_NAMESPACE } from '../../src/host/settings'
+import { installSettings, prefsOf, SETTINGS_NAMESPACE } from '../../src/host/settings'
 import type { PluginSettings } from '../../src/host/settings'
 
 /** A provider implementing only the two storage primitives; the Service Definition owns the rest. */
@@ -115,5 +115,76 @@ describe('installSettings', () => {
     const ctx = new Context()
     assert.doesNotThrow(() => installSettings(ctx))
     assert.equal(ctx.get('settings'), undefined, 'no provider composed, nothing registered')
+    // The read face yields undefined before any provider composes: the tuning
+    // pass treats that as "keep the engines' own configuration".
+    const face = installSettings(new Context())
+    assert.equal(face.read(), undefined)
+  })
+
+  test('the read face serves the re-proved section once the provider composes', async () => {
+    const ctx = new Context()
+    await ctx.plugin(MemorySettings, { doc: { 'dsh-context': { compactionThresholdRatio: 0.5, compactionRetainRatio: 0.2 } } })
+    const face = installSettings(ctx)
+    // The inject resolves async even over an available provider; until then
+    // the face reads undefined (and the tuning pass keeps engine configs).
+    assert.equal(face.read(), undefined)
+    for (let i = 0; i < 200 && face.read() === undefined; i++) {
+      await new Promise(resolve => setTimeout(resolve, 1))
+    }
+    assert.deepEqual(face.read(), {
+      defaultGranularity: 'step',
+      defaultTrendMode: 'total',
+      defaultFileSort: 'count',
+      compactionThresholdRatio: 0.5,
+      compactionRetainRatio: 0.2,
+    })
+  })
+
+  test('a hostile section read degrades the face to undefined', () => {
+    // A fake inject that resolves a provider whose register hands back a
+    // section throwing on read.
+    const ctx = {
+      inject(_names: string[], cb: (sctx: unknown) => void): void {
+        cb({ settings: { register: () => ({ get() { throw new Error('boom') } }) } })
+      },
+    }
+    const face = installSettings(ctx as never)
+    assert.equal(face.read(), undefined)
+  })
+})
+
+describe('prefsOf', () => {
+  test('rejects non-object sections whole', () => {
+    for (const bad of [undefined, null, 42, 'section', () => {}]) {
+      assert.equal(prefsOf(bad as never), undefined)
+    }
+  })
+
+  test('keeps valid ratios and fills display defaults', () => {
+    assert.deepEqual(prefsOf({ compactionThresholdRatio: 0.5, compactionRetainRatio: 0.2 }), {
+      defaultGranularity: 'step',
+      defaultTrendMode: 'total',
+      defaultFileSort: 'count',
+      compactionThresholdRatio: 0.5,
+      compactionRetainRatio: 0.2,
+    })
+  })
+
+  test('degrades unusable ratios to absent fields', () => {
+    for (const bad of [0, -1, 1.5, Number.NaN, Number.POSITIVE_INFINITY, '0.5', null]) {
+      const section = prefsOf({ compactionThresholdRatio: bad, compactionRetainRatio: bad })
+      assert.equal('compactionThresholdRatio' in (section as object), false, String(bad))
+      assert.equal('compactionRetainRatio' in (section as object), false, String(bad))
+    }
+    // The boundary is inclusive at 1 for both (the engine's own assertRatio).
+    assert.deepEqual(prefsOf({ compactionThresholdRatio: 1 })?.compactionThresholdRatio, 1)
+  })
+
+  test('degrades unknown display values to schema defaults', () => {
+    assert.deepEqual(prefsOf({ defaultGranularity: 'week', defaultTrendMode: 7, defaultFileSort: true }), {
+      defaultGranularity: 'step',
+      defaultTrendMode: 'total',
+      defaultFileSort: 'count',
+    })
   })
 })

@@ -8,6 +8,7 @@ import { createElement as h, useCallback, useLayoutEffect, useMemo, useRef, useS
 import { measureDock } from '../dockMeasure'
 import { headlineOf } from '../headline'
 import { modalStoreOf, takePendingConsume } from '../modalStore'
+import type { ContextSettings } from '../settings'
 import type { ClientCtx, SessionStandardProps, SessionsFace } from '../services'
 import { contextBreakdownOf, contextPressureOf, conversationNodesOf, headersOf, imageLoaderOf, projectionOf } from '../services'
 import { makeContentFetcher, makeHeaderFetcher, useHistoryFace } from '../historyPage'
@@ -24,11 +25,12 @@ export interface ContextModalProps extends SessionStandardProps {
   useContextModal?: (sel: (open: boolean) => boolean) => boolean
 }
 
-export function makeContextModal(ctx: ClientCtx, kit: ViewKit): (props: ContextModalProps) => ReactElement | null {
+export function makeContextModal(ctx: ClientCtx, kit: ViewKit, settings?: Pick<ContextSettings, 'store'>): (props: ContextModalProps) => ReactElement | null {
   const { t } = kit
   const StackedBar = makeStackedBar(kit)
   const Legend = makeLegend(kit)
-  const CurrentComposition = makeCurrentComposition(kit, StackedBar, Legend)
+  // The /context dialog's reserve line follows the tune bar's threshold too.
+  const CurrentComposition = makeCurrentComposition(kit, StackedBar, Legend, settings)
   const ContextBrowser = makeContextBrowser(kit, StackedBar)
   const ErrorBoundary = makeErrorBoundary(t)
 

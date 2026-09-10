@@ -32,6 +32,7 @@ import { makeRequestDetail } from './requestDetail'
 import { countsOfRecords, makeStatsContext } from './statsContext'
 import { makeStatsTiming } from './statsTiming'
 import { makeStatsTokens } from './statsTokens'
+import { makeTuneBar } from './tuneBar'
 import { makeLegend, makeStackedBar } from './stackedBar'
 import { aggregateByTurn, attachMarkers, jumpTargetOf, makeTrendChart } from './trendChart'
 
@@ -53,7 +54,8 @@ export function makeContextView(
   const { t } = kit
   const StackedBar = makeStackedBar(kit)
   const Legend = makeLegend(kit)
-  const CurrentComposition = makeCurrentComposition(kit, StackedBar, Legend)
+  // The reserve line in the overview tracks the tune bar's threshold, live.
+  const CurrentComposition = makeCurrentComposition(kit, StackedBar, Legend, settings)
   const TrendChart = makeTrendChart(kit)
   const RequestDetail = makeRequestDetail(kit, StackedBar)
   const EventList = makeEventList(kit)
@@ -67,6 +69,7 @@ export function makeContextView(
   const DetailNote = makeDetailNote(kit)
   const ContextBrowser = makeContextBrowser(kit, StackedBar)
   const AgentGraph = makeAgentGraph(ctx, kit)
+  const TuneBar = makeTuneBar(kit, settings)
   const ErrorBoundary = makeErrorBoundary(t)
 
   // The body renders under the error boundary: a corrupt projection value (past the timelineOf shape guard) degrades to a styled error
@@ -482,6 +485,8 @@ export function makeContextView(
 
     return (
       <div className="lc-root" ref={rootRef}>
+
+        <TuneBar />
 
         <div className="lc-cols lc-head">
           {inSidebar ? null : (

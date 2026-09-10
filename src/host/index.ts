@@ -23,6 +23,7 @@
 import type { Context } from '@deepseek-ai/cordis'
 import { createToolAttribution } from './attribution'
 import { Config, resolveBounds } from './config'
+import { installCompactionTune } from './compactionTune'
 import { watchDetailChannel } from './detail'
 import { createFallbackHeadersDefinition, createFallbackTimelineDefinition } from './fallback'
 import { createContextHeadersDefinition } from './headers'
@@ -74,7 +75,11 @@ export function apply(ctx: Context, config: Config): void {
   const gate = watchDetailChannel(ctx, resolveBounds(config))
   ctx.sessionProjections.register(createContextTimelineDefinition(config, () => gate.live))
   ctx.sessionProjections.register(createContextHeadersDefinition(name => attribution.ownerOf(name)))
-  installSettings(ctx)
+  // Auto-compact tuning: the per-user compaction ratios from the settings
+  // namespace overlay every live harness compaction engine's own resolved
+  // config (compactionTune.ts), so the built-in pressure check triggers at the
+  // tuned threshold. Absent fields keep the engines untouched.
+  installCompactionTune(ctx, installSettings(ctx))
 }
 
 // ---- public type surface (stable for downstream consumers) -------------------

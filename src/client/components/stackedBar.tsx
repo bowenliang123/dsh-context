@@ -9,8 +9,8 @@ import type { ViewKit } from '../viewkit'
 
 /**
  * Mirror of dsh-compaction-basic's default `thresholdRatio` (0.8): it compacts at step boundaries once `floor(contextWindow × ratio)` is
- * reached; DSH does not publish the configured ratio to plugins/clients, so the reserve band mirrors the default — deployments tuning
- * `thresholdRatio`/`modelPolicies` should adjust it to match.
+ * reached. DSH does not publish the configured ratio to plugins/clients; the overview's reserve band no longer mirrors this constant
+ * blindly — currentComposition feeds it the tune bar's live threshold and keeps this constant as the unset fallback only.
  */
 export const AUTO_COMPACT_RATIO = 0.8
 
