@@ -42,6 +42,10 @@ vi.mock('@deepseek-ai/dsh-client-ui-primitives', async () => {
     // The sidebar guide glyph: present as a stub so the optional registration
     // path sees the same shape the real primitives module serves.
     IconContextInjectionOutline16: () => React.createElement('span', null),
+    // The rich-text copy control's glyphs and clipboard writer.
+    IconCopyOutline16: () => React.createElement('span', null),
+    IconCheckOutline16: () => React.createElement('span', null),
+    writeClipboard: async () => true,
   }
 })
 

@@ -1,10 +1,11 @@
-// RichText/RichSwitch/useRichMode (src/client/components/richText.tsx):
+// RichText/RichSwitch/RichCopy/useRichMode (src/client/components/richText.tsx):
 // markdown mode renders through the REAL shared MarkdownText; raw mode is an
-// exact-text line-numbered <pre>; the switch drives the mode hook.
+// exact-text line-numbered <pre>; the switch drives the mode hook; the copy
+// control writes the exact source through the harness clipboard primitive.
 
-import { createElement as h } from 'react'
+import { act, createElement as h } from 'react'
 import assert from 'node:assert/strict'
-import { describe, test } from 'vitest'
+import { afterEach, describe, test, vi } from 'vitest'
 import { makeRichText } from '../../../src/client/components/richText'
 import type { RichMode } from '../../../src/client/components/richText'
 import { click, makeKit, mount, query, queryAll } from '../helpers/kit'
@@ -92,6 +93,49 @@ describe('useRichMode', () => {
     assert.equal(rawText(m.container), SAMPLE)
     await click(queryAll(m.container, '.lc-rich-seg-btn')[1]) // back to Markdown
     assert.equal(query(m.container, '.lc-ts-desc-md h1').textContent, 'Title')
+    await m.unmount()
+  })
+})
+
+describe('RichCopy', () => {
+  const { RichCopy } = makeRichText(kit)
+
+  /** jsdom ships no clipboard API; stub the async one for the accepted path. */
+  function stubClipboard(writeText: (text: string) => Promise<void>): void {
+    Object.defineProperty(window.navigator, 'clipboard', { configurable: true, value: { writeText } })
+  }
+
+  afterEach(() => {
+    vi.useRealTimers()
+    Reflect.deleteProperty(window.navigator, 'clipboard')
+  })
+
+  test('an accepted write flips to the check glyph, ignores a repeat click, then resets', async () => {
+    vi.useFakeTimers()
+    const writes: string[] = []
+    stubClipboard(async (text) => { writes.push(text) })
+    const m = await mount(h(RichCopy, { text: SAMPLE }))
+    const button = query(m.container, '.lc-rich-copy')
+    assert.ok(!button.className.includes('lc-rich-copy-on'))
+    assert.equal(button.getAttribute('title'), 'Copy Raw Text')
+    await click(button)
+    assert.deepEqual(writes, [SAMPLE], 'the exact source text reached the clipboard host')
+    assert.ok(button.className.includes('lc-rich-copy-on'))
+    assert.equal(button.getAttribute('title'), 'Copied')
+    await click(button) // inside the confirmation window: no second write
+    assert.deepEqual(writes, [SAMPLE])
+    await act(async () => { await vi.advanceTimersByTimeAsync(1200) })
+    assert.ok(!button.className.includes('lc-rich-copy-on'))
+    assert.equal(button.getAttribute('title'), 'Copy Raw Text')
+    await m.unmount()
+  })
+
+  test('a rejected host write claims no success (no clipboard in jsdom)', async () => {
+    const m = await mount(h(RichCopy, { text: SAMPLE }))
+    const button = query(m.container, '.lc-rich-copy')
+    await click(button)
+    assert.ok(!button.className.includes('lc-rich-copy-on'))
+    assert.equal(button.getAttribute('title'), 'Copy Raw Text')
     await m.unmount()
   })
 })

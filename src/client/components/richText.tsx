@@ -1,11 +1,11 @@
 /**
   * RichText — the raw/markdown body for the Context browser's detail sections. Markdown renders via the harness's shared MarkdownText (GFM,
   * sanitized, resolved from the platform module table — zero plugin-side markdown dependency); raw is a line-numbered `<pre>`. The Raw/MD
-  * switch sits at a section head's right edge (RichSwitch; per-card mode via useRichMode).
+  * switch sits at a section head's right edge (RichSwitch; per-card mode via useRichMode), with the copy-raw control (RichCopy) beside it.
  */
 
-import { useMemo, useState, type ReactElement } from 'react'
-import { MarkdownText } from '@deepseek-ai/dsh-client-ui-primitives'
+import { useCallback, useMemo, useState, type ReactElement } from 'react'
+import { IconCheckOutline16, IconCopyOutline16, MarkdownText, writeClipboard } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { ViewKit } from '../viewkit'
 
 export type RichMode = 'raw' | 'md'
@@ -25,6 +25,7 @@ const Markdown = MarkdownText as (props: { text: string; labels?: MarkdownChrome
 export interface RichKit {
   RichText: (props: { text: string; mode: RichMode }) => ReactElement
   RichSwitch: (props: { mode: RichMode; onPick: (mode: RichMode) => void }) => ReactElement
+  RichCopy: (props: { text: string }) => ReactElement
   useRichMode: () => [RichMode, (mode: RichMode) => void]
 }
 
@@ -73,6 +74,35 @@ export function makeRichText(kit: ViewKit): RichKit {
     )
   }
 
+  // Icon-only copy of the section's exact source (always the raw text, never
+  // the rendered markdown). The write and its transient confirmation follow
+  // the harness's own code-block control: a rejected host write claims no
+  // success, a second click during the window is a no-op, and the glyph
+  // resets after a beat.
+  function RichCopy(props: { text: string }): ReactElement {
+    const [copied, setCopied] = useState(false)
+    const onCopy = useCallback(() => {
+      if (copied) return
+      void writeClipboard(props.text).then((ok) => {
+        if (!ok) return
+        setCopied(true)
+        window.setTimeout(() => { setCopied(false) }, 1200)
+      })
+    }, [copied, props.text])
+    const label = copied ? t('rich.copied') : t('rich.copy')
+    return (
+      <button
+        type="button"
+        className={'lc-rich-copy' + (copied ? ' lc-rich-copy-on' : '')}
+        title={label}
+        aria-label={label}
+        onClick={onCopy}
+      >
+        {copied ? <IconCheckOutline16 size={13} /> : <IconCopyOutline16 size={13} />}
+      </button>
+    )
+  }
+
   function RichText(props: { text: string; mode: RichMode }): ReactElement {
     // Reference-stable per locale: a fresh object identity would discard the
     // renderer's cached elements on every render (0.1.2+ faces).
@@ -86,5 +116,5 @@ export function makeRichText(kit: ViewKit): RichKit {
     return <RawText text={props.text} />
   }
 
-  return { RichText, RichSwitch, useRichMode }
+  return { RichText, RichSwitch, RichCopy, useRichMode }
 }

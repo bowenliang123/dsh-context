@@ -163,6 +163,8 @@ function ParamRow(props: {
 function Section(props: {
   label: string
   labelClass?: string
+  /** Fold the head's trailing group onto a second line under width pressure (rich-text heads; the call-name head must stay one-line). */
+  foldHead?: boolean
   count?: number
   actions?: ReactNode
   meta?: ReactNode
@@ -171,7 +173,7 @@ function Section(props: {
   const right = props.actions !== undefined || props.meta !== undefined
   return (
     <div className="lc-ts-card">
-      <div className="lc-ts-card-head">
+      <div className={'lc-ts-card-head' + (props.foldHead === true ? ' lc-ts-card-head-wrap' : '')}>
         {/* The title recovers an ellipsized label: long mono call names truncate under width pressure. */}
         <b className={props.labelClass} title={props.label}>{props.label}</b>
         {right ? <span className="lc-ts-card-right">{props.meta}{props.actions}</span> : null}
@@ -199,7 +201,11 @@ function TextSection(props: {
   return (
     <Section
       label={props.label}
-      actions={<rich.RichSwitch mode={mode} onPick={setMode} />}
+      foldHead
+      actions={<>
+        <rich.RichSwitch mode={mode} onPick={setMode} />
+        <rich.RichCopy text={props.text} />
+      </>}
       meta={<span className="lc-ts-card-meta">{props.lines(lineCount)}</span>}
     >
       <rich.RichText text={props.text} mode={mode} />

@@ -7,6 +7,8 @@
  */
 .lc-ts-card { background: var(--dsw-alias-bg-layer-2); border: 1px solid var(--dsw-alias-border-l2); border-radius: 6px; overflow: hidden; min-width: 0; }
 .lc-ts-card-head { display: flex; align-items: center; gap: 8px; padding: 6px 10px; font-size: 11px; font-weight: 600; color: var(--dsw-alias-label-secondary); border-bottom: 1px solid var(--dsw-alias-border-l1); }
+/* Rich-text heads fold their trailing group (meta + Raw/MD switch + copy) onto a second line under width pressure; the call-name head must stay one-line (it ellipsizes instead), so the wrap is scoped here rather than on the shared rule. */
+.lc-ts-card-head-wrap { flex-wrap: wrap; }
 .lc-ts-card-head b { color: var(--dsw-alias-label-primary); }
 /*
  Shrinkable under width pressure: a long mono call name (MCP tool names have
@@ -51,6 +53,9 @@
 .lc-rich-seg-btn { border: 0; background: transparent; color: var(--dsw-alias-label-secondary); font-size: 11px; line-height: 1; padding: 3px 8px; border-radius: 5px; cursor: pointer; font-family: inherit; transition: color var(--ds-transition-duration, 0.2s) var(--ds-ease-in-out, ease-in-out); }
 .lc-rich-seg-btn:hover { color: var(--dsw-alias-label-primary); }
 .lc-rich-seg-on, .lc-rich-seg-on:hover { background: var(--dsw-alias-button-primary-fill); color: var(--dsw-alias-label-primary-foreground); }
+.lc-rich-copy { display: inline-flex; align-items: center; border: 0; background: transparent; color: var(--dsw-alias-label-secondary); padding: 2px; border-radius: 5px; cursor: pointer; transition: color var(--ds-transition-duration, 0.2s) var(--ds-ease-in-out, ease-in-out); }
+.lc-rich-copy:hover { color: var(--dsw-alias-label-primary); }
+.lc-rich-copy-on, .lc-rich-copy-on:hover { color: var(--dsw-alias-state-success-primary); }
 .lc-ts-desc-md { padding: 4px 10px; color: var(--dsw-alias-label-primary); font-size: 12px; line-height: 1.55; word-break: break-word; overflow-wrap: anywhere; min-width: 0; max-height: 320px; overflow-y: auto; overflow-x: hidden; scrollbar-width: thin; }
 /*
  The shared markdown renderer sizes its root/headings for chat bubbles;
