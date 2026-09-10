@@ -98,16 +98,19 @@
  panes keep them on one line — `flex-basis: 0` + equal grow quarters the row
  exactly, and `min-width: 0` lets the split ignore content. The row is the
  `lc-head-row` query container, so the split folds instead of crushing the
- cards (issue #48): below 1045px (a quarter under ~256px — where the donut
- cards would leave their side-by-side anatomy) the row wraps to 2×2, and
- below 480px (phone panes) it stacks single-column. Engines without
+ cards (issue #48): below 940px (a quarter of ~230px — a 1280px viewport with
+ the shell's sidebar open still leaves ~946px here) the row wraps to 2×2, and
+ below 480px (phone panes) it stacks single-column. Cards at this end of the
+ band sit under the donut cards' own lc-card reflows (stats.css: the ring
+ stacks over its legend, the 8-cell grid folds), so the four sections on one
+ line is the trade this threshold buys. Engines without
  container queries keep the wide four-across layout. The right Sidebar's panel
  renders TWO of the four (it drops the context stats and plugin info cards —
  see contextView.tsx); the same rules then split the pair into halves.
  */
 .lc-head { container: lc-head-row / inline-size; }
 .lc-head > .lc-card { flex: 1 1 0; min-width: 0; }
-@container lc-head-row (max-width: 1045px) {
+@container lc-head-row (max-width: 940px) {
   /* 40% keeps three cards from ever fitting one line; grow evens the pair
      to halves. Plain percentage only — a calc(% - gap) basis mis-resolves
      against a size-container row (each card balloons to full width). */
