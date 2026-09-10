@@ -1065,7 +1065,7 @@ export function makeContextBrowser(
           {req !== null ? <span>{fmtTime(req.time)}</span> : null}
           <span className="lc-est">{t('detail.estTotal', { n: fmt(total) })}</span>
           {actual !== null && actual.prompt !== undefined
-            ? <span className="lc-actual">{t('detail.actual', { n: fmt(actual.prompt) })}</span>
+            ? <span>{t('detail.actual', { n: fmt(actual.prompt) })}</span>
             : null}
         </div>
 

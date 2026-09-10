@@ -12,7 +12,6 @@
 .lc-br-meta { display: flex; flex-wrap: wrap; gap: 6px 16px; margin-bottom: 8px; color: var(--dsw-alias-label-secondary); }
 .lc-br-meta b { color: var(--dsw-alias-label-primary); }
 .lc-br-meta .lc-est { margin-left: auto; }
-.lc-br-meta .lc-actual { color: var(--dsw-alias-state-success-primary); }
 .lc-br-note { margin-top: 8px; color: var(--dsw-alias-label-secondary); font-size: 12px; }
 .lc-br-retry { border: 0; background: transparent; padding: 0; color: var(--dsw-alias-brand-primary); font: inherit; font-size: 12px; cursor: pointer; text-decoration: underline; text-underline-offset: 2px; transition: filter var(--ds-transition-duration, 0.2s) var(--ds-ease-in-out, ease-in-out); }
 .lc-br-retry:hover { filter: brightness(1.15); }
