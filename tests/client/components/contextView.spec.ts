@@ -697,6 +697,130 @@ describe('ContextView — file activity card', () => {
     await m.unmount()
   })
 
+  test('the Sidebar preview leads the name click; a refusal falls through to the system opener', async () => {
+    const previewed: string[] = []
+    const opened: string[] = []
+    const ctx = new TestClientCtx({
+      services: {
+        sessions: { list: { getSnapshot: () => ({ byId: { 'sv-preview': { cwd: '/repo' } } }) } },
+        connection: {
+          isLoopback: true,
+          rpc: {
+            call: (_channel: string, endpoint: string, payload: unknown) => {
+              if (endpoint === 'session/canOpenWorkspacePath') return Promise.resolve({ ok: true, value: true })
+              opened.push((payload as { args: { request: { path: string } } }).args.request.path)
+              return Promise.resolve({ ok: true, value: { opened: true } })
+            },
+          },
+        },
+        sidebarRight: { openResource: (address: string) => { previewed.push(address) } },
+      },
+    })
+    const conv = [
+      { kind: 'tool', seq: 3, call: { name: 'read', argsRaw: JSON.stringify({ file_path: '/repo/src/a.ts' }) } },
+    ]
+    const View = makeView(ctx)
+    const m = await mount(h(View, {
+      sessionId: 'sv-preview',
+      useProjection: projectionsFor(fileTimeline()),
+      useChat: (sel =>
+        sel({
+          legacy: { nodes: conv } })) as UseChatLike,
+    }))
+    await flush()
+    const card = queryAll(m.container, '.lc-card').find(c => text(c).includes(DICT_EN['files.title']))
+    assert.ok(card !== undefined)
+    const name = query(query(card, '.lc-fa-row'), '.lc-fa-file')
+    // The preview affordance leads where the column exists; the system open
+    // stays unreached.
+    assert.equal(name.getAttribute('title'), DICT_EN['files.preview'])
+    await click(name)
+    assert.deepEqual(previewed, ['dsh-resource://file/session/sv-preview/src/a.ts'])
+    assert.deepEqual(opened, [])
+    await m.unmount()
+  })
+
+  test('a Sidebar that refuses the address falls back to the system opener', async () => {
+    const opened: string[] = []
+    const ctx = new TestClientCtx({
+      services: {
+        sessions: { list: { getSnapshot: () => ({ byId: { 'sv-preview-no': { cwd: '/repo' } } }) } },
+        connection: {
+          isLoopback: true,
+          rpc: {
+            call: (_channel: string, endpoint: string, payload: unknown) => {
+              if (endpoint === 'session/canOpenWorkspacePath') return Promise.resolve({ ok: true, value: true })
+              opened.push((payload as { args: { request: { path: string } } }).args.request.path)
+              return Promise.resolve({ ok: true, value: { opened: true } })
+            },
+          },
+        },
+        // No preview type claims the address (or no surface is mounted): the throw
+        // is the face's own wiring-error report, and the card must fall back.
+        sidebarRight: { openResource: () => { throw new Error('no registered tab type claims it') } },
+      },
+    })
+    const conv = [
+      { kind: 'tool', seq: 3, call: { name: 'read', argsRaw: JSON.stringify({ file_path: '/repo/src/a.ts' }) } },
+    ]
+    const View = makeView(ctx)
+    const m = await mount(h(View, {
+      sessionId: 'sv-preview-no',
+      useProjection: projectionsFor(fileTimeline()),
+      useChat: (sel =>
+        sel({
+          legacy: { nodes: conv } })) as UseChatLike,
+    }))
+    await flush()
+    const card = queryAll(m.container, '.lc-card').find(c => text(c).includes(DICT_EN['files.title']))
+    assert.ok(card !== undefined)
+    await click(query(query(card, '.lc-fa-row'), '.lc-fa-file'))
+    assert.deepEqual(opened, ['/repo/src/a.ts'])
+    await m.unmount()
+  })
+
+  test('an unencodable path skips the preview and still opens on the system', async () => {
+    // Parsing resilience: a lone surrogate in a log path is unrepresentable in a
+    // resource address (the encoder throws), so the preview opener is never
+    // asked for one address and the system opener still takes the resolved path.
+    const opened: string[] = []
+    const previewed: string[] = []
+    const ctx = new TestClientCtx({
+      services: {
+        sessions: { list: { getSnapshot: () => ({ byId: { 'sv-preview-bad': { cwd: '/repo' } } }) } },
+        connection: {
+          isLoopback: true,
+          rpc: {
+            call: (_channel: string, endpoint: string, payload: unknown) => {
+              if (endpoint === 'session/canOpenWorkspacePath') return Promise.resolve({ ok: true, value: true })
+              opened.push((payload as { args: { request: { path: string } } }).args.request.path)
+              return Promise.resolve({ ok: true, value: { opened: true } })
+            },
+          },
+        },
+        sidebarRight: { openResource: (address: string) => { previewed.push(address) } },
+      },
+    })
+    const conv = [
+      { kind: 'tool', seq: 3, call: { name: 'read', argsRaw: JSON.stringify({ file_path: '\uD800' }) } },
+    ]
+    const View = makeView(ctx)
+    const m = await mount(h(View, {
+      sessionId: 'sv-preview-bad',
+      useProjection: projectionsFor(fileTimeline()),
+      useChat: (sel =>
+        sel({
+          legacy: { nodes: conv } })) as UseChatLike,
+    }))
+    await flush()
+    const card = queryAll(m.container, '.lc-card').find(c => text(c).includes(DICT_EN['files.title']))
+    assert.ok(card !== undefined)
+    await click(query(query(card, '.lc-fa-row'), '.lc-fa-file'))
+    assert.deepEqual(previewed, [])
+    assert.deepEqual(opened, ['/repo/\uD800'])
+    await m.unmount()
+  })
+
   test('a capability probe that settles after unmount drops its answer', async () => {
     let resolveProbe!: (value: unknown) => void
     const ctx = new TestClientCtx({

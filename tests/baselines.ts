@@ -64,6 +64,19 @@ export interface ClientSeam {
      */
     titleSlotNeedle: string
     /**
+     * The navigation face the plugin's file-open affordance rides
+     * (`ctx.sidebarRight.openResource`): the controller's providing source and
+     * the needle in it. Same package as the registry, so present wherever the
+     * tab seam is; probed so a rename names the preview seam instead of
+     * silently degrading the affordance.
+     */
+    nav: {
+      /** The controller source (the public navigation face's implementation). */
+      file: string
+      /** The `openResource` verb's declaration/comments marker. */
+      needle: string
+    }
+    /**
      * The guide-entry contract the plugin's contribution must satisfy: one
      * needle per field `SidebarRightGuideEntry` carries on this generation.
      */
@@ -231,6 +244,10 @@ export const BASELINES: readonly Baseline[] = [
         slotFile: 'packages/client/ui-sidebar-right/src/client/contract/slots.ts',
         slotNeedle: 'sidebar.right.pane.tab',
         titleSlotNeedle: 'sidebar.right.pane.tab.title',
+        nav: {
+          file: 'packages/client/ui-sidebar-right/src/client/service.ts',
+          needle: 'openResource(address',
+        },
         guideEntry: {
           file: 'packages/client/ui-sidebar-right/src/client/tab-registry.ts',
           fields: [

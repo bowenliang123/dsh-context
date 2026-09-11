@@ -14,6 +14,7 @@ import {
   imageLoaderOf,
   numOf,
   openPathVia,
+  openResourceVia,
   timelineOf,
   timingOf,
   tokenUsageOf,
@@ -726,5 +727,40 @@ describe('canOpenPathsOf / openPathVia', () => {
     open!('/repo/a.ts')
     await new Promise(resolve => setTimeout(resolve, 0))
     assert.deepEqual(calls, [{ channel: '/api', endpoint: 'session/openWorkspacePath', payload: { args: { request: { path: '/repo/a.ts' } } } }])
+  })
+})
+
+describe('openResourceVia', () => {
+  const ctxWith = (services: Record<string, unknown>): ClientCtx => ({ get: (name: string) => services[name] }) as unknown as ClientCtx
+
+  test('forwards the address to the Sidebar face and reports the open', () => {
+    const opened: string[] = []
+    const open = openResourceVia(ctxWith({ sidebarRight: { openResource: (address: string) => { opened.push(address) } } }))
+    assert.ok(open !== undefined)
+    assert.equal(open('dsh-resource://file/session/s1/a.ts'), true)
+    assert.deepEqual(opened, ['dsh-resource://file/session/s1/a.ts'])
+  })
+
+  test('an absent or hostile face yields no opener at all', () => {
+    assert.equal(openResourceVia(ctxWith({})), undefined)
+    assert.equal(openResourceVia(ctxWith({ sidebarRight: null })), undefined)
+    assert.equal(openResourceVia(ctxWith({ sidebarRight: {} })), undefined)
+    assert.equal(openResourceVia(ctxWith({ sidebarRight: { openResource: 7 } })), undefined)
+    // A service lookup itself may throw.
+    assert.equal(openResourceVia({ get: () => { throw new Error('boom') } } as unknown as ClientCtx), undefined)
+  })
+
+  test('a refusal reports false instead of throwing, so the caller can fall back', () => {
+    const open = openResourceVia(ctxWith({ sidebarRight: { openResource: () => { throw new Error('no type claims it') } } }))
+    assert.equal(open!('dsh-resource://file/session/s1/a.ts'), false)
+  })
+
+  test('the face is re-proved per call: a revoked service refuses after the opener was built', () => {
+    const services: Record<string, unknown> = { sidebarRight: { openResource: () => {} } }
+    const open = openResourceVia(ctxWith(services))
+    assert.ok(open !== undefined)
+    // The plugin unloaded (HMR): the written face is gone.
+    services.sidebarRight = undefined
+    assert.equal(open('dsh-resource://file/session/s1/a.ts'), false)
   })
 })

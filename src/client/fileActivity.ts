@@ -24,6 +24,11 @@
 
 import type { FileOpRecord, RequestRecord, SurfaceNode } from '../shared/types'
 import { opsOfCall, parseCallArgs } from '../shared/fileOps'
+// The harness's browser-safe file-address layer, inlined by the client bundle
+// (the purity gate's INLINE_SAFE list, as the right Sidebar's own file types
+// do): a produced address is the exact `dsh-resource://file/…` spelling the
+// preview type claims and the Host resolves.
+import { fileAddressFor } from '@deepseek-ai/dsh-util-workspace-path'
 import type { ConversationNodeLike } from './services'
 
 export type FileOp = FileOpRecord
@@ -199,6 +204,32 @@ export function absPathOf(path: string, workspace: string | undefined): string |
   if (path.startsWith('/') || DRIVE_PATH.test(path)) return path
   if (workspace === undefined || workspace === '' || path.startsWith('.')) return undefined
   return workspace.replace(/\/+$/, '') + '/' + path.replace(/^\/+/, '')
+}
+
+/**
+ * The right-Sidebar preview address of a real file — the session-scoped
+ * `dsh-resource://file/…` address the shipped preview type claims, built by
+ * the harness's own `fileAddressFor` (the files sidebar's idiom: a path under
+ * the workspace collapses to its session-relative spelling, so every route to
+ * one file settles on one tab). Undefined for a pathless search's PATTERN, a
+ * directory target, a missing session, and any path the encoder rejects — the
+ * caller falls back to the system opener or renders the name inert.
+ */
+export function previewAddressOf(
+  path: string,
+  form: FileForm,
+  pattern: boolean | undefined,
+  sessionId: string | undefined,
+  workspace: string | undefined,
+): string | undefined {
+  if (pattern === true || form === 'dir' || sessionId === undefined || sessionId === '') return undefined
+  try {
+    return fileAddressFor(sessionId, workspace, path)
+  } catch {
+    // A lone surrogate in an untrusted log path fails URI encoding; it is
+    // simply not previewable, never a thrown render.
+    return undefined
+  }
 }
 
 /**

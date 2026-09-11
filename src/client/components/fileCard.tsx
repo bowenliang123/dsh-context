@@ -9,6 +9,9 @@
  * Interaction mirrors the Context browser's element rows: a row click
  * expands the file's own operation log; each operation is itself the click
  * target that jumps to (and reveals) the exact tool result in the browser.
+ * The file name opens the file's right-Sidebar preview where that column
+ * exists (dsh 0.1.5-rc.1+, the shipped files-sidebar idiom), and the system
+ * opener where it does not.
  */
 
 import { memo, useState, type ChangeEvent, type ComponentType, type MouseEvent, type ReactElement } from 'react'
@@ -27,6 +30,12 @@ export interface FileCardProps {
   scope: string
   /** The host workspace root: workspace paths display './'-relative when known. */
   workspace?: string
+  /**
+   * Open a file's right-Sidebar preview; returns whether the column took it, so
+   * a refusal falls through to the system opener. Absent = this harness has no
+   * preview column (the system-open path stays the only affordance).
+   */
+  onPreview?: (entry: FileEntry) => boolean
   /** Open a file on the user's system; absent = the file name renders inert. */
   onOpen?: (absPath: string) => void
   /** Reveal one operation's result node in the Context browser; absent = op lines render inert. */
@@ -207,6 +216,11 @@ export function makeFileCard(kit: ViewKit, settings: ContextSettings): Component
                   const glyph = glyphOf(e.path, e.form)
                   // The system-open affordance: real paths resolve to absolute; pattern rows are not files.
                   const abs = e.pattern === true ? undefined : absPathOf(e.path, props.workspace)
+                  // The preview affordance leads where the column exists: a real
+                  // file (never a search pattern or directory target) opens its
+                  // Sidebar tab, and a refusal falls through to the system opener.
+                  const previewable = props.onPreview !== undefined && e.pattern !== true && e.form !== 'dir'
+                  const openable = previewable || (abs !== undefined && props.onOpen !== undefined)
                   return (
                     <div key={e.path} className={'lc-fa-item' + (open ? ' lc-fa-item-on' : '')}>
                       <button
@@ -227,12 +241,16 @@ export function makeFileCard(kit: ViewKit, settings: ContextSettings): Component
                         </span>
                         <span className="lc-fa-path">
                           {dir !== '' ? <em>{dir}</em> : null}
-                          {abs !== undefined && props.onOpen !== undefined
+                          {openable
                             ? (
                               <b
                                 className="lc-fa-file"
-                                title={t('files.open')}
-                                onClick={(ev: MouseEvent) => { ev.stopPropagation(); props.onOpen?.(abs) }}
+                                title={t(previewable ? 'files.preview' : 'files.open')}
+                                onClick={(ev: MouseEvent) => {
+                                  ev.stopPropagation()
+                                  if (previewable && props.onPreview?.(e) === true) return
+                                  if (abs !== undefined) props.onOpen?.(abs)
+                                }}
                               >
                                 {base}
                               </b>

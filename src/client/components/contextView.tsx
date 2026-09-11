@@ -15,9 +15,9 @@ import type { ClientCtx, ConversationNodeLike } from '../services'
 import { makeContentFetcher, makeHeaderFetcher, useHistoryFace } from '../historyPage'
 import { useTimelineSource } from '../timelineSource'
 import { makeDetailNote } from './detailNote'
-import { canOpenPathsOf, openPathVia, workspaceOf } from '../services'
-import { activityOf, activityOfOps, locateStepOf } from '../fileActivity'
-import type { FileOp } from '../fileActivity'
+import { canOpenPathsOf, openPathVia, openResourceVia, workspaceOf } from '../services'
+import { activityOf, activityOfOps, locateStepOf, previewAddressOf } from '../fileActivity'
+import type { FileEntry, FileOp } from '../fileActivity'
 import type { ContextSettings } from '../settings'
 import type { ViewKit } from '../viewkit'
 import { makeContextBrowser } from './browser'
@@ -299,6 +299,22 @@ export function makeContextView(
       () => (canOpenPaths ? openPathVia(ctx) : undefined),
       [canOpenPaths, ctx],
     )
+    // The right-Sidebar preview opener (the same optional column the Context
+    // tab itself registers into): resolved off `ctx` at mount, the face
+    // re-proved per call, so an HMR reload's revocation never leaves a stale
+    // opener. Absent face = no `onPreview` at all, and the card keeps its
+    // system-open affordance untouched.
+    const previewOpener = useMemo(() => openResourceVia(ctx), [ctx])
+    const sessionKey = typeof sessionId === 'string' ? sessionId : undefined
+    const previewFile = useMemo(
+      () => previewOpener === undefined
+        ? undefined
+        : (entry: FileEntry): boolean => {
+          const address = previewAddressOf(entry.path, entry.form, entry.pattern, sessionKey, workspace)
+          return address !== undefined && previewOpener(address)
+        },
+      [previewOpener, sessionKey, workspace],
+    )
     const locateFileOp = useCallback((op: FileOp): void => {
       // A nested Code-Mode op has no surface row of its own — it reveals on
       // its parent run_code result (whose removal stamp the op carries).
@@ -521,7 +537,8 @@ export function makeContextView(
             </div>
             <EventList events={shownEvents} state={source.detailState} onRetry={source.retryDetail} />
           </div>
-          <FileCard activity={fileActivity} scope={fileScope} workspace={workspace} onOpen={fileOpener} onLocate={locateFileOp}
+          <FileCard activity={fileActivity} scope={fileScope} workspace={workspace}
+            onPreview={previewFile} onOpen={fileOpener} onLocate={locateFileOp}
             state={source.detailState} onRetry={source.retryDetail} />
         </div>
 

@@ -5,7 +5,7 @@
 
 import assert from 'node:assert/strict'
 import { describe, test } from 'vitest'
-import { absPathOf, activityOf, activityOfOps, displayPathOf, formOf, glyphOf, locateStepOf } from '../../src/client/fileActivity'
+import { absPathOf, activityOf, activityOfOps, displayPathOf, formOf, glyphOf, locateStepOf, previewAddressOf } from '../../src/client/fileActivity'
 import { kindOfCall, kindOfTool, linesOf, pathOfArgs } from '../../src/shared/fileOps'
 import type { FileActivity, FileOp } from '../../src/client/fileActivity'
 import type { ConversationNodeLike } from '../../src/client/services'
@@ -753,6 +753,49 @@ describe('absPathOf', () => {
     assert.equal(absPathOf('src/a.ts', undefined), undefined)
     assert.equal(absPathOf('./src/a.ts', ws), undefined)
     assert.equal(absPathOf('C:\\repo\\a.ts', ws), 'C:\\repo\\a.ts')
+  })
+})
+
+describe('previewAddressOf', () => {
+  test('a real file becomes its session-scoped resource address, workspace-relative inside the root', () => {
+    const ws = '/repo'
+    assert.equal(
+      previewAddressOf('src/a.ts', 'text', undefined, 's1', ws),
+      'dsh-resource://file/session/s1/src/a.ts',
+    )
+    // An absolute path inside the workspace collapses to the same address as
+    // its workspace-relative spelling (one file, one tab).
+    assert.equal(
+      previewAddressOf('/repo/src/a.ts', 'text', undefined, 's1', ws),
+      'dsh-resource://file/session/s1/src/a.ts',
+    )
+    // Outside the root the absolute path rides through unchanged.
+    assert.equal(
+      previewAddressOf('/etc/hosts', 'text', undefined, 's1', ws),
+      'dsh-resource://file/session/s1//etc/hosts',
+    )
+    // A missing workspace still names a session-scoped address.
+    assert.equal(
+      previewAddressOf('rel/b.md', 'text', undefined, 's1', undefined),
+      'dsh-resource://file/session/s1/rel/b.md',
+    )
+    // An image is a real file like any other.
+    assert.equal(
+      previewAddressOf('/shots/ui.png', 'image', undefined, 's1', ws),
+      'dsh-resource://file/session/s1//shots/ui.png',
+    )
+  })
+
+  test('pattern rows, directory targets, and a missing session have no address', () => {
+    assert.equal(previewAddressOf('needle', 'text', true, 's1', '/repo'), undefined)
+    assert.equal(previewAddressOf('/src/', 'dir', undefined, 's1', '/repo'), undefined)
+    assert.equal(previewAddressOf('src/a.ts', 'text', undefined, undefined, '/repo'), undefined)
+    assert.equal(previewAddressOf('src/a.ts', 'text', undefined, '', '/repo'), undefined)
+  })
+
+  test('a path the encoder rejects degrades to no address, never a throw', () => {
+    // A lone surrogate is unrepresentable in URI encoding.
+    assert.equal(previewAddressOf('\uD800', 'text', undefined, 's1', '/repo'), undefined)
   })
 })
 

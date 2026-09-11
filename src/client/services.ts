@@ -89,6 +89,18 @@ export interface SidebarTabsFace {
 }
 
 /**
+ * The right Sidebar's navigation face (`ctx.sidebarRight`), as far as this
+ * plugin consumes it: `openResource` claims a `dsh-resource://file/…` address
+ * through the shipped preview type and reveals the column in the same step.
+ * The same optional generation as {@link SidebarTabsFace}; the caller re-proves
+ * the verb at runtime and falls back to the system opener when it is absent or
+ * refuses the address.
+ */
+export interface SidebarResourceFace {
+  openResource(address: string): void
+}
+
+/**
  * The conversation node, as far as the Context browser consumes it: the
  * framework's finalized chat nodes carry the source surface event's `seq`
  * plus the full content — the browser joins its surface nodes on `seq` to
@@ -821,6 +833,44 @@ export function openPathVia(ctx: ClientCtx): ((path: string) => void) | undefine
       void call(OPEN_CHANNEL, OPEN_ENDPOINT, { args: { request: { path } } })
         .catch(() => { /* the open is best-effort; a failure stays silent */ })
     } catch { /* same contract, for a synchronously throwing transport */ }
+  }
+}
+
+/**
+ * The right Sidebar's resource opener over `ctx.sidebarRight`, or undefined
+ * when this harness serves no such column (every line older than 0.1.5-rc.1) or
+ * the face is hostile — the caller then keeps its system-open degradation.
+ * Synchronous, and it reports whether the column took the address: `openResource`
+ * throws for a no-type-claims address or with no session surface mounted, and an
+ * unwired preview must fall back rather than become an inert click. The face is
+ * re-proved at call time (the service can land or be revoked across an HMR
+ * reload), so the returned closure reads it per open.
+ */
+export function openResourceVia(ctx: ClientCtx): ((address: string) => boolean) | undefined {
+  // The face is untrusted at the boundary, so the raw service is re-proved as a
+  // record with a callable `openResource` (never trusted off the cast).
+  const faceOf = (): SidebarResourceFace | undefined => {
+    try {
+      const face = asRecord(ctx.get('sidebarRight'))
+      return face !== null && typeof face.openResource === 'function'
+        ? face as unknown as SidebarResourceFace
+        : undefined
+    } catch {
+      return undefined
+    }
+  }
+  if (faceOf() === undefined) return undefined
+  return (address: string): boolean => {
+    const face = faceOf()
+    if (face === undefined) return false
+    try {
+      face.openResource(address)
+      return true
+    } catch {
+      // No preview type claims it, or no session surface is mounted: the caller
+      // falls back instead of showing an inert affordance.
+      return false
+    }
   }
 }
 

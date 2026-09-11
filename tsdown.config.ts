@@ -25,8 +25,10 @@ const PLATFORM_MODULES = [
 // Mirrors the purity-gate allowances in packages/client/tsdown.client.ts:
 // wire/type layers with no shared runtime identity may inline; every other
 // @deepseek-ai/* value import is a build error (cross-plugin collaboration
-// goes through cordis services).
-const INLINE_SAFE = /^@deepseek-ai\/dsh-(host-apiproxy|file-reference|session|llm|tools|brand)(\/|$)/
+// goes through cordis services). `util-workspace-path` is the browser-safe
+// file-address layer (`fileAddressFor`) the right Sidebar's own file types
+// inline too, so the preview addresses this plugin builds are the harness's.
+const INLINE_SAFE = /^@deepseek-ai\/dsh-(host-apiproxy|file-reference|session|llm|tools|brand|util-workspace-path)(\/|$)/
 const VENDORED_LIBRARY = /^@deepseek-ai\/(cosmokit|schemastery)(\/|$)/
 const GENERATED_REMOTE = /^@deepseek-ai\/dsh-[a-z0-9]+(?:-[a-z0-9]+)*\/remote$/
 

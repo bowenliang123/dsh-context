@@ -115,6 +115,7 @@ One row per touched file — read, written, or searched — aggregated up to whi
 - **Every mode counts** — native tools, the Minimal preset's `str_replace_editor`, and the nested calls inside PTC `run_code` programs are all folded into per-tool rows.
 - **Searches land on real files** — matched files get their own ops rows with hit counts.
 - **Click a row** to expand its full operation log — every op jumps straight to the exact tool result in the Context browser.
+- **Click a file name** to open its preview in the right Sidebar (dsh 0.1.5-rc.1+), exactly as the built-in Files sidebar does — the same viewer, the same tab-per-file behavior. On a harness without that column the name opens on your system as before.
 
 ### 🕸 Agent Network — the family portrait
 

@@ -521,6 +521,71 @@ describe('FileCard — workspace display and system open', () => {
     assert.deepEqual(opened, [])
     await m2.unmount()
   })
+
+  test('with the Sidebar preview available the name previews, and a refusal falls through to the system opener', async () => {
+    const previewed: FileEntry[] = []
+    const opened: string[] = []
+    const m = await mount(h(FileCard, {
+      activity: workspaceActivity(),
+      scope: 'live',
+      workspace: '/repo',
+      onPreview: e => { previewed.push(e); return true },
+      onOpen: p => { opened.push(p) },
+    }))
+    // The preview affordance leads: the title says so, and the click never
+    // reaches the system opener.
+    const a = baseOf(rowOf(m.container, '/repo/src/a.ts'))
+    assert.equal(a.getAttribute('title'), 'Preview in the sidebar')
+    await click(a)
+    assert.deepEqual(previewed.map(e => e.path), ['/repo/src/a.ts'])
+    assert.equal(opened.length, 0)
+    // A refusal (no preview type claims it, no surface mounted) still opens on
+    // the system rather than becoming an inert click.
+    await m.unmount()
+    const m2 = await mount(h(FileCard, {
+      activity: workspaceActivity(),
+      scope: 'live',
+      workspace: '/repo',
+      onPreview: () => false,
+      onOpen: p => { opened.push(p) },
+    }))
+    await click(baseOf(rowOf(m2.container, '/repo/src/a.ts')))
+    assert.deepEqual(opened, ['/repo/src/a.ts'])
+    await m2.unmount()
+  })
+
+  test('the preview opener never claims pattern or directory rows', async () => {
+    const dirActivity = workspaceActivity()
+    dirActivity.entries.push(entry('/repo/src/', { form: 'dir', searches: 1, ops: [fileOp(0, 'search', 'grep')] }))
+    const previewed: FileEntry[] = []
+    const m = await mount(h(FileCard, {
+      activity: dirActivity,
+      scope: 'live',
+      workspace: '/repo',
+      onPreview: e => { previewed.push(e); return true },
+    }))
+    // Neither is a file a preview type can claim: both render inert.
+    assert.equal(baseOf(rowOf(m.container, 'needle')).className.includes('lc-fa-file'), false)
+    assert.equal(baseOf(rowOf(m.container, '/repo/src/')).className.includes('lc-fa-file'), false)
+    // The real file beside them still previews.
+    await click(baseOf(rowOf(m.container, '/repo/src/a.ts')))
+    assert.deepEqual(previewed.map(e => e.path), ['/repo/src/a.ts'])
+    await m.unmount()
+  })
+
+  test('a refused preview with no resolvable absolute path is a silent no-op', async () => {
+    // Relative row with no workspace and no system opener: the preview is the
+    // only affordance, so a refusal leaves nothing to fall through to.
+    const m = await mount(h(FileCard, {
+      activity: workspaceActivity(),
+      scope: 'live',
+      onPreview: () => false,
+    }))
+    const name = baseOf(rowOf(m.container, 'rel/b.md'))
+    assert.equal(name.getAttribute('title'), 'Preview in the sidebar')
+    await click(name)
+    await m.unmount()
+  })
 })
 
 describe('FileCard — the split generation detail states', () => {

@@ -13,7 +13,7 @@ import { createElement as h } from 'react'
 import assert from 'node:assert/strict'
 import { describe, test, vi } from 'vitest'
 import { BASELINES } from '../../baselines'
-import { conversationNodesOf, imageLoaderOf } from '../../../src/client/services'
+import { conversationNodesOf, imageLoaderOf, openResourceVia } from '../../../src/client/services'
 import type { SessionStandardProps } from '../../../src/client/services'
 import { makeContentFetcher, watchHistoryFaces } from '../../../src/client/historyPage'
 import { makeRichText } from '../../../src/client/components/richText'
@@ -155,6 +155,21 @@ for (const baseline of BASELINES) {
         assert.equal(definitions.length, 1, 'the generation with the seam gets the tab')
         assert.equal(ctx.slots.of('sidebar.right.pane.tab').length, 1)
         assert.equal(ctx.slots.of('sidebar.right.pane.tab.title').length, 1, 'the chip-title seat is registered on this generation')
+      }
+      ctx.dispose()
+    })
+
+    test('the Sidebar preview opener is optional: absent face = no opener, present face = wired', () => {
+      const { ctx } = baselineCtx()
+      // No column on this generation: the file names keep their system-open only.
+      assert.equal(openResourceVia(asClientCtx(ctx)), undefined, 'no navigation face = no preview opener')
+      if (baseline.client.sidebar !== undefined) {
+        const opened: string[] = []
+        ctx.setService('sidebarRight', { openResource: (address: string) => { opened.push(address) } })
+        const open = openResourceVia(asClientCtx(ctx))
+        assert.ok(open !== undefined, 'the generation with the column serves the opener')
+        assert.equal(open('dsh-resource://file/session/s/a.ts'), true)
+        assert.deepEqual(opened, ['dsh-resource://file/session/s/a.ts'])
       }
       ctx.dispose()
     })
