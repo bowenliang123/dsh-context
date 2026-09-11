@@ -126,6 +126,5 @@
     "typescript": "^7.0.2",
     "vitest": "^4.1.11",
     "zod": "^4.4.3"
-  },
-  "packageManager": "pnpm@11.9.0"
+  }
 }
