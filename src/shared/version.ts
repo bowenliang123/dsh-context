@@ -4,7 +4,7 @@
  * host probes and gates; the client displays what the wire record carries),
  * so this module must stay dependency-free.
  *
- * The baseline mirrors the support matrix (AGENTS.md "Compatibility" and the
+ * The baseline mirrors the support matrix (docs/compatibility.md and the
  * package's `dsh.compatibility.dshReleases` declaration): the oldest dsh
  * release this plugin works on. A harness BELOW it gets the fallback units
  * (host/fallback.ts) instead of the real folds.

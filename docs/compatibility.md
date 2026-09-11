@@ -16,6 +16,16 @@ The automated seam matrix runs for every row on every `pnpm test`. The disposabl
 
 Releases older than `0.1.2-rc.1` — the `0.1.1` line and the `0.1.2-alpha.*` previews — were supported and verified through `dsh-context@0.41.x` and are no longer in the support matrix.
 
+## Baseline gate
+
+The declared floor is enforced at runtime, not only documented. At startup the host resolves the running harness's version — first from the module tree the plugin is bound to, then from the `$DSH_HOME/profiles/node_modules` mirror — and compares it against `0.1.2-rc.1` (channel order: release > rc > beta > alpha):
+
+- **Below the floor** — fallback projection units that fold nothing and serve zeroed data: the Context tab keeps its (empty) cards while a modal names both versions and urges the update.
+- **At or above the floor** — the real projection units.
+- **Undetectable or unparseable** — **fails open** into the real units, so a probe misfire never blanks a working deployment.
+
+The mirror reflects whichever installation last booted a CLI profile, which need not be the running one (a packaged desktop client never refreshes it), so it never outranks the running module tree. Implementation: `src/host/version.ts`, `src/host/fallback.ts`, `src/shared/version.ts`.
+
 ## Session-log generations
 
 The supported range spans three durable-log generations, and the plugin folds all of them from one shape-driven code path (`src/host/logShapes.ts`):
@@ -23,11 +33,11 @@ The supported range spans three durable-log generations, and the plugin folds al
 | Seam | V0 (`0.1.2-rc.x`) | V2 (`0.1.3-alpha.x`) | V3 (`0.1.5-alpha.x+`) |
 | --- | --- | --- | --- |
 | System prompt | `request/header.header.system` | same as V0 | `system/message` surface node |
-| First token | `assistant/chunk` events | embedded `data.stream` (also `assistant/attempt`) | same as V2 |
+| First token | `assistant/chunk` events | embedded `assistant/message.data.stream` (also `assistant/attempt.data.stream`) | same as V2 |
 | Replacement endpoints | `{ start, end }` | same as V0 | `{ startSeq, endSeq }` |
 | Nested PTC dispatch | `tool/code-dispatch` | same as V0 | `tool/ptc-dispatch` |
 
-The fold never branches on a detected harness version: a log carries exactly one generation, and the spellings are mutually exclusive. This matters because a deployment's version probe can be wrong — a healed profile mirror may name a different release than the running harness.
+The fold never branches on a detected harness version: a log carries exactly one generation, and the spellings are mutually exclusive. The version probe is best-effort — it reports the module tree the embedding shell resolves plugin imports to, which a packaged client may redirect — so it decides which units register and nothing more.
 
 ## Web client seams
 
