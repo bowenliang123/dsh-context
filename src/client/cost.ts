@@ -12,7 +12,7 @@
  * picks which one the stats board shows.
  */
 
-import type { CostBucketTotals, SessionCostUsage } from '../shared/types'
+import type { CostBucketTotals, CostFamilyUsage, SessionCostUsage } from '../shared/types'
 import { numOf } from './services'
 
 /** Per-1M-token rates: cache-hit input, cache-miss input, output. */
@@ -58,6 +58,41 @@ export function estimateSessionCost(usage: SessionCostUsage | null | undefined, 
     }
   }
   return any ? total : null
+}
+
+/**
+ * Sum two sessions' cumulative billed-token totals, bucket by bucket (model
+ * family × pricing period). Folding a session together with its subagents
+ * needs this: each side keeps its OWN family split, so a subagent that ran on
+ * a different model than its parent still prices at its own family's rates.
+ *
+ * Either side may be absent — a session with no priced usage yet, or a family
+ * only one side used — and two absences stay absent, so nothing materialises a
+ * zero-filled bucket that would price to ¥0 instead of the dash.
+ */
+export function addCostUsage(a: SessionCostUsage | undefined, b: SessionCostUsage | undefined): SessionCostUsage | undefined {
+  if (a === undefined) return b
+  if (b === undefined) return a
+  const sum: SessionCostUsage = {}
+  for (const family of ['flash', 'pro'] as const) {
+    const one = a[family]
+    const other = b[family]
+    if (one === undefined && other === undefined) continue
+    const merged: CostFamilyUsage = {}
+    for (const period of ['peak', 'off'] as const) {
+      const x = one?.[period]
+      const y = other?.[period]
+      if (x === undefined && y === undefined) continue
+      merged[period] = {
+        uncached: numOf(x?.uncached) + numOf(y?.uncached),
+        cacheRead: numOf(x?.cacheRead) + numOf(y?.cacheRead),
+        cacheWrite: numOf(x?.cacheWrite) + numOf(y?.cacheWrite),
+        output: numOf(x?.output) + numOf(y?.output),
+      }
+    }
+    sum[family] = merged
+  }
+  return sum
 }
 
 export function formatCost(amount: number, currency: CostCurrency): string {

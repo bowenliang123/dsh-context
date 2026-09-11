@@ -4,7 +4,7 @@
 
 import assert from 'node:assert/strict'
 import { describe, test } from 'vitest'
-import { estimateSessionCost, formatCost, formatPriceRate, sessionPrices } from '../../src/client/cost'
+import { addCostUsage, estimateSessionCost, formatCost, formatPriceRate, sessionPrices } from '../../src/client/cost'
 import type { CostBucketTotals } from '../../src/shared/types'
 
 const M = 1_000_000
@@ -60,6 +60,49 @@ describe('estimateSessionCost', () => {
   test('garbage fields degrade while real fields still price', () => {
     const mixed = { cacheRead: M, uncached: NaN, cacheWrite: M / 2, output: 'junk' } as unknown as CostBucketTotals
     close(estimateSessionCost({ flash: { peak: mixed } }, 'usd'), 0.006 + 0.5 * 0.3)
+  })
+})
+
+describe('addCostUsage', () => {
+  test('an absent side passes the other through untouched', () => {
+    const usage = { flash: { peak: bucket(1, 2, 3, 4) } }
+    assert.equal(addCostUsage(undefined, usage), usage)
+    assert.equal(addCostUsage(usage, undefined), usage)
+    assert.equal(addCostUsage(undefined, undefined), undefined)
+  })
+
+  test('sums each family × period bucket pairwise', () => {
+    const a = { flash: { peak: bucket(1, 2, 3, 4), off: bucket(5, 6, 7, 8) }, pro: { peak: bucket(9, 10, 11, 12) } }
+    const b = { flash: { peak: bucket(10, 20, 30, 40), off: bucket(1, 1, 1, 1) } }
+    assert.deepEqual(addCostUsage(a, b), {
+      flash: { peak: bucket(11, 22, 33, 44), off: bucket(6, 7, 8, 9) },
+      pro: { peak: bucket(9, 10, 11, 12) },
+    })
+  })
+
+  // A subagent on a different model than its parent is exactly this shape:
+  // the family and the period each side used need not overlap.
+  test('a family or period only one side used survives the fold', () => {
+    const a = { flash: { peak: bucket(1, 1, 1, 1) } }
+    const b = { flash: { off: bucket(2, 2, 2, 2) } }
+    assert.deepEqual(addCostUsage(a, b), { flash: { peak: bucket(1, 1, 1, 1), off: bucket(2, 2, 2, 2) } })
+  })
+
+  test('a family neither side priced never materialises', () => {
+    const a = { flash: { peak: bucket(1, 1, 1, 1) } }
+    const b = { flash: { peak: bucket(2, 2, 2, 2) } }
+    assert.deepEqual(addCostUsage(a, b), { flash: { peak: bucket(3, 3, 3, 3) } })
+  })
+
+  test('garbage bucket fields coerce to zero rather than poisoning the sum', () => {
+    const junk = { uncached: NaN, cacheRead: 'x', cacheWrite: undefined, output: 4 } as unknown as CostBucketTotals
+    assert.deepEqual(addCostUsage({ flash: { peak: junk } }, { flash: { peak: bucket(1, 2, 3, 4) } }), { flash: { peak: bucket(1, 2, 3, 8) } })
+  })
+
+  test('two empty usages fold to an empty total that still prices to the dash', () => {
+    const sum = addCostUsage({}, {})
+    assert.deepEqual(sum, {})
+    assert.equal(estimateSessionCost(sum, 'usd'), null)
   })
 })
 

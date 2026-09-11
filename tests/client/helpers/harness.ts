@@ -174,3 +174,47 @@ export class TestSessions {
     }
   }
 }
+
+/**
+ * A faithful in-memory `ctx.sessions` list double: the snapshot feed plus the
+ * navigation and direct-child catalog the agent card drives. The plugin reads
+ * the list through the outward face (agentTree.ts `sessionsFaceOf`), so this
+ * stands in for the real service in component tests — the agent graph and the
+ * cost cell's subagent fold subscribe to the same feed.
+ */
+export class TestSessionList {
+  opened: string[] = []
+  refreshed: string[] = []
+  rejectRefresh = false
+  private listeners = new Set<() => void>()
+  state: unknown
+
+  constructor(byId: Record<string, unknown>) {
+    this.state = { byId }
+  }
+
+  readonly list = {
+    getSnapshot: (): unknown => this.state,
+    subscribe: (fn: () => void): () => void => {
+      this.listeners.add(fn)
+      return () => {
+        this.listeners.delete(fn)
+      }
+    },
+  }
+
+  open(id: string): void {
+    this.opened.push(id)
+  }
+
+  refreshSubagents(parentSessionId: string): Promise<void> {
+    this.refreshed.push(parentSessionId)
+    return this.rejectRefresh ? Promise.reject(new Error('catalog unavailable')) : Promise.resolve()
+  }
+
+  /** Swap the snapshot and notify (act-wrapped by the caller via flush). */
+  setState(byId: Record<string, unknown>): void {
+    this.state = { byId }
+    for (const fn of this.listeners) fn()
+  }
+}

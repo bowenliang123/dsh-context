@@ -2,12 +2,16 @@
  * The Context card: what the session's context IS and how it evolved — an
  * eight-cell 2×4 grid pairing the session's shape (turns / steps / live tool
  * calls / images) with the context-event tally (injections / compactions /
- * prunes) and the whole-session cost estimate. Count figures only: nothing
+ * prunes) and the conversation cost estimate. Count figures only: nothing
  * here is part of a spendable whole, so no pie — proportions live in the
  * composition card. The cost cell prices the host-folded cumulative billed
  * totals (complete session log, never trimmed) at the hardcoded DeepSeek V4
- * list prices (cost.ts) in the locale's currency; its hover bubble (a '?'
- * marker + styled DOM tip) explains the whole-session estimate and lists the
+ * list prices (cost.ts) in the locale's currency, PLUS every subagent
+ * session's own totals (agentTree.ts walks the lineage the list snapshot
+ * carries): a subagent's spend lands in its own session log and never in this
+ * one's, so pricing the log alone reports a fraction of what the conversation
+ * cost. Its hover bubble (a '?' marker + styled DOM tip) explains the
+ * estimate, splits this session's share from the subagents', and lists the
  * per-1M-token table straight from cost.ts, so printed rates can never drift
  * from the math.
  *
@@ -51,6 +55,10 @@ export function makeStatsContext(kit: ViewKit): (props: {
   /** Image blocks live in the current context (absent on older hosts). */
   images?: number
   cost?: SessionCostUsage
+  /** Billed-token totals of every subagent session under this one (absent when none priced). */
+  subagentCost?: SessionCostUsage
+  /** Subagent sessions behind `subagentCost`; 0 or absent hides the split line. */
+  subagentCount?: number
   locale: string
 }) => ReactElement {
   const { t, fmt } = kit
@@ -59,13 +67,27 @@ export function makeStatsContext(kit: ViewKit): (props: {
     toolCalls?: number
     images?: number
     cost?: SessionCostUsage
+    subagentCost?: SessionCostUsage
+    subagentCount?: number
     locale: string
   }): ReactElement {
     const currency: CostCurrency = props.locale === 'zh' ? 'cny' : 'usd'
-    const cost = estimateSessionCost(props.cost, currency)
+    const own = estimateSessionCost(props.cost, currency)
+    const subagents = estimateSessionCost(props.subagentCost, currency)
+    // The cell prices the conversation, not just the session: a subagent runs
+    // on its own session and its spend never lands in this one's log, so the
+    // two estimates add up (each already priced at its own family's rates).
+    const cost = own === null ? subagents : subagents === null ? own : own + subagents
     const fmtRate = (n: number): string => formatPriceRate(n, currency)
     const costTip: ReactNode = [
       t('stats.costTip'),
+      props.subagentCount !== undefined && props.subagentCount > 0 && subagents !== null
+        ? (
+          <span key="split" className="lc-stat-tip-split">
+            {t('stats.costSplit', { main: own === null ? '—' : formatCost(own, currency), sub: formatCost(subagents, currency), n: props.subagentCount })}
+          </span>
+        )
+        : null,
       <span key="prices" className="lc-stat-tip-prices">
         <span className="lc-stat-tip-head">{t('stats.costPriceHead')}</span>
         {sessionPrices(currency).map(r => (

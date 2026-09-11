@@ -11,7 +11,7 @@
  * session. A harness without the outward sessions service hides the card.
  */
 
-import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore, type KeyboardEvent, type ReactElement } from 'react'
+import { useEffect, useMemo, useRef, useState, useSyncExternalStore, type KeyboardEvent, type ReactElement } from 'react'
 import { CATS } from '../categories'
 import { containHorizontalOverscroll } from '../overscroll'
 import type { ClientCtx } from '../services'
@@ -26,6 +26,7 @@ import {
   openAgentSession,
   ringSegments,
   sessionsFaceOf,
+  sessionsListStore,
 } from '../agentTree'
 
 export interface AgentGraphProps {
@@ -56,19 +57,8 @@ export function makeAgentGraph(
     // belongs to the client runtime's composition, and a deployment without
     // it simply keeps the card hidden.
     const face = useMemo(() => sessionsFaceOf(ctx), [])
-    const subscribe = useCallback((fn: () => void) => {
-      if (face === null) return () => {}
-      /* v8 ignore next 2 -- sessionsFaceOf returns a face only after proving list.subscribe. */
-      if (face.list === undefined) return () => {}
-      return face.list.subscribe(fn)
-    }, [face])
-    const getSnapshot = useCallback(() => {
-      if (face === null) return null
-      /* v8 ignore next 2 -- sessionsFaceOf proves list before returning the face. */
-      if (face.list === undefined) return null
-      return face.list.getSnapshot()
-    }, [face])
-    const snapshot = useSyncExternalStore(subscribe, getSnapshot)
+    const store = useMemo(() => sessionsListStore(face), [face])
+    const snapshot = useSyncExternalStore(store.subscribe, store.getSnapshot)
     const sessionId = props.sessionId
     const [hoverId, setHoverId] = useState<string | null>(null)
 

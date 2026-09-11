@@ -21,6 +21,8 @@ import {
   layoutForest,
   openAgentSession,
   sessionsFaceOf,
+  sessionsListStore,
+  subagentCostUsage,
   type AgentForest,
   type SessionsFaceLike,
 } from '../../src/client/agentTree'
@@ -49,6 +51,14 @@ function row(over: Record<string, unknown> = {}): Record<string, unknown> {
 
 function snap(byId: Record<string, unknown>): unknown {
   return { byId }
+}
+
+/** A timeline carrying the host-folded cost buckets the stats cell prices. */
+function costed(uncached: number, output = 0): ContextTimeline {
+  return {
+    ...timeline(uncached + output),
+    cost: { flash: { peak: { uncached, cacheRead: 0, cacheWrite: 0, output } } },
+  }
 }
 
 describe('agentRowOf', () => {
@@ -285,6 +295,107 @@ describe('agentForestOf', () => {
     assert.equal(forest.nodes.length, AGENT_TREE_LIMIT)
     // root + LIMIT+5 kids = LIMIT+6 members; the cap shows LIMIT.
     assert.equal(forest.overflow, 6)
+  })
+})
+
+describe('subagentCostUsage', () => {
+  test('folds every descendant at every depth, excluding the anchor itself', () => {
+    const snapshot = snap({
+      root: row({ projectionValues: { contextTimeline: costed(1000) } }),
+      child: row({ parentId: 'root', origin: 'subagent', projectionValues: { contextTimeline: costed(10) } }),
+      grand: row({ parentId: 'child', origin: 'subagent', projectionValues: { contextTimeline: costed(1) } }),
+    })
+    assert.deepEqual(subagentCostUsage(snapshot, 'root'), {
+      usage: { flash: { peak: { uncached: 11, cacheRead: 0, cacheWrite: 0, output: 0 } } },
+      count: 2,
+    })
+  })
+
+  test('a parent and a sibling are not the anchor\'s family', () => {
+    const snapshot = snap({
+      top: row({ projectionValues: { contextTimeline: costed(1000) } }),
+      mid: row({ parentId: 'top', origin: 'subagent', projectionValues: { contextTimeline: costed(500) } }),
+      sibling: row({ parentId: 'top', origin: 'subagent', projectionValues: { contextTimeline: costed(700) } }),
+      kid: row({ parentId: 'mid', origin: 'subagent', projectionValues: { contextTimeline: costed(5) } }),
+    })
+    assert.deepEqual(subagentCostUsage(snapshot, 'mid'), {
+      usage: { flash: { peak: { uncached: 5, cacheRead: 0, cacheWrite: 0, output: 0 } } },
+      count: 1,
+    })
+  })
+
+  test('no snapshot, no anchor, or no byId table folds to nothing', () => {
+    assert.deepEqual(subagentCostUsage(null, 'root'), { count: 0 })
+    assert.deepEqual(subagentCostUsage(undefined, 'root'), { count: 0 })
+    assert.deepEqual(subagentCostUsage({}, 'root'), { count: 0 })
+    assert.deepEqual(subagentCostUsage(snap({}), undefined), { count: 0 })
+    assert.deepEqual(subagentCostUsage(snap({}), ''), { count: 0 })
+  })
+
+  test('a session with no subagents reports no usage and no count', () => {
+    assert.deepEqual(subagentCostUsage(snap({ root: row({ projectionValues: { contextTimeline: costed(9) } }) }), 'root'), { count: 0 })
+  })
+
+  test('descendants without priced usage are not counted', () => {
+    // A subagent on a non-DeepSeek model reports tokens but no priced buckets
+    // (the same arm that leaves the cell on its dash for a whole session).
+    const snapshot = snap({
+      root: row({}),
+      priced: row({ parentId: 'root', origin: 'subagent', projectionValues: { contextTimeline: costed(3) } }),
+      unpriced: row({ parentId: 'root', origin: 'subagent', projectionValues: { contextTimeline: timeline(50) } }),
+      foreign: row({ parentId: 'root', origin: 'subagent', projectionValues: { contextTimeline: { ok: true } } }),
+      broken: row({ parentId: 'root', origin: 'subagent', projectionValues: { contextTimeline: 7 } }),
+    })
+    assert.deepEqual(subagentCostUsage(snapshot, 'root'), {
+      usage: { flash: { peak: { uncached: 3, cacheRead: 0, cacheWrite: 0, output: 0 } } },
+      count: 1,
+    })
+  })
+
+  test('blank placeholder rows and malformed rows are not agents', () => {
+    const snapshot = snap({
+      root: row({}),
+      blank: { blank: true, parentId: 'root' },
+      junk: 'not-a-row',
+      real: row({ parentId: 'root', origin: 'subagent', projectionValues: { contextTimeline: costed(2) } }),
+    })
+    assert.deepEqual(subagentCostUsage(snapshot, 'root'), {
+      usage: { flash: { peak: { uncached: 2, cacheRead: 0, cacheWrite: 0, output: 0 } } },
+      count: 1,
+    })
+  })
+
+  test('a lineage cycle folds each member once instead of looping', () => {
+    const snapshot = snap({
+      a: row({ parentId: 'b', origin: 'subagent', projectionValues: { contextTimeline: costed(1) } }),
+      b: row({ parentId: 'a', origin: 'subagent', projectionValues: { contextTimeline: costed(2) } }),
+    })
+    assert.deepEqual(subagentCostUsage(snapshot, 'a'), {
+      usage: { flash: { peak: { uncached: 2, cacheRead: 0, cacheWrite: 0, output: 0 } } },
+      count: 1,
+    })
+  })
+
+  test('a fan-out past AGENT_TREE_LIMIT still folds every member', () => {
+    // The graph caps its SVG at AGENT_TREE_LIMIT nodes; the money figure must
+    // not inherit that cap, or a wide delegation silently under-reports.
+    const byId: Record<string, unknown> = { root: row({}) }
+    for (let i = 0; i < AGENT_TREE_LIMIT + 5; i++) {
+      byId['kid' + String(i)] = row({ parentId: 'root', origin: 'subagent', projectionValues: { contextTimeline: costed(1) } })
+    }
+    const fold = subagentCostUsage(snap(byId), 'root')
+    assert.equal(fold.count, AGENT_TREE_LIMIT + 5)
+    assert.deepEqual(fold.usage, { flash: { peak: { uncached: AGENT_TREE_LIMIT + 5, cacheRead: 0, cacheWrite: 0, output: 0 } } })
+  })
+
+  test('descendants of an anchor missing from the list are still found', () => {
+    const snapshot = snap({
+      kid: row({ parentId: 'root', origin: 'subagent', projectionValues: { contextTimeline: costed(4) } }),
+    })
+    assert.deepEqual(subagentCostUsage(snapshot, 'root'), {
+      usage: { flash: { peak: { uncached: 4, cacheRead: 0, cacheWrite: 0, output: 0 } } },
+      count: 1,
+    })
   })
 })
 
@@ -594,6 +705,47 @@ describe('sessionsFaceOf', () => {
     })
     assert.ok(face !== null)
     assert.equal(typeof face.open, 'function')
+  })
+
+  test('a ctx with no service lookup at all degrades instead of throwing', () => {
+    assert.equal(sessionsFaceOf({}), null)
+  })
+})
+
+describe('sessionsListStore', () => {
+  test('an absent service yields an inert pair that never notifies', () => {
+    for (const face of [null, {} as SessionsFaceLike]) {
+      const store = sessionsListStore(face)
+      assert.equal(store.getSnapshot(), null)
+      const stop = store.subscribe(() => {})
+      assert.equal(typeof stop, 'function')
+      stop()
+    }
+  })
+
+  test('a real face passes the list feed through unchanged', () => {
+    const state = { byId: {} }
+    const listeners: (() => void)[] = []
+    const face: SessionsFaceLike = {
+      list: {
+        getSnapshot: () => state,
+        subscribe: (fn: () => void) => {
+          listeners.push(fn)
+          return () => {
+            listeners.splice(listeners.indexOf(fn), 1)
+          }
+        },
+      },
+    }
+    const store = sessionsListStore(face)
+    assert.equal(store.getSnapshot(), state)
+    let notified = 0
+    const stop = store.subscribe(() => { notified++ })
+    assert.equal(listeners.length, 1)
+    listeners[0]()
+    assert.equal(notified, 1)
+    stop()
+    assert.equal(listeners.length, 0)
   })
 })
 

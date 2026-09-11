@@ -9,7 +9,7 @@ import assert from 'node:assert/strict'
 import { describe, test } from 'vitest'
 import { makeAgentGraph, ringColorOf } from '../../../src/client/components/agentGraph'
 import type { AgentSelfStats } from '../../../src/client/agentTree'
-import { TestClientCtx, asClientCtx } from '../helpers/harness'
+import { TestClientCtx, TestSessionList, asClientCtx } from '../helpers/harness'
 import { flush, hover, makeKit, mount, query, queryAll, text, unhover, wheel } from '../helpers/kit'
 
 const kit = makeKit()
@@ -34,42 +34,6 @@ async function clickEl(el: Element): Promise<void> {
   await act(async () => {
     el.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }))
   })
-}
-
-/** A faithful in-memory `ctx.sessions` double: snapshot feed + navigation + catalog refresh. */
-class FakeSessions {
-  opened: string[] = []
-  refreshed: string[] = []
-  rejectRefresh = false
-  private listeners = new Set<() => void>()
-  state: unknown
-
-  constructor(byId: Record<string, unknown>) {
-    this.state = { byId }
-  }
-
-  readonly list = {
-    getSnapshot: (): unknown => this.state,
-    subscribe: (fn: () => void): () => void => {
-      this.listeners.add(fn)
-      return () => this.listeners.delete(fn)
-    },
-  }
-
-  open(id: string): void {
-    this.opened.push(id)
-  }
-
-  refreshSubagents(parentSessionId: string): Promise<void> {
-    this.refreshed.push(parentSessionId)
-    return this.rejectRefresh ? Promise.reject(new Error('catalog unavailable')) : Promise.resolve()
-  }
-
-  /** Swap the snapshot and notify (act-wrapped by the caller via flush). */
-  setState(byId: Record<string, unknown>): void {
-    this.state = { byId }
-    for (const fn of this.listeners) fn()
-  }
 }
 
 function makeView(sessions: unknown, options: { locale?: 'en' | 'zh' } = {}) {
@@ -128,7 +92,7 @@ describe('AgentGraph — degrade arms', () => {
   })
 
   test('missing or empty session id anchors nothing', async () => {
-    const face = new FakeSessions(family())
+    const face = new TestSessionList(family())
     const View = makeView(face)
     const m1 = await mount(h(View, { self: selfStats() }))
     assert.equal(text(m1.container), '')
@@ -143,7 +107,7 @@ describe('AgentGraph — degrade arms', () => {
 
 describe('AgentGraph — the family tree', () => {
   test('renders nodes, chips, links, inspector, and the legend', async () => {
-    const face = new FakeSessions(family())
+    const face = new TestSessionList(family())
     const View = makeView(face)
     const m = await mount(h(View, { sessionId: 'root', self: selfStats() }))
 
@@ -210,7 +174,7 @@ describe('AgentGraph — the family tree', () => {
   })
 
   test('hover moves the inspector, click/Enter opens the session', async () => {
-    const face = new FakeSessions(family())
+    const face = new TestSessionList(family())
     const View = makeView(face)
     const m = await mount(h(View, { sessionId: 'root', self: selfStats() }))
 
@@ -256,7 +220,7 @@ describe('AgentGraph — the family tree', () => {
   })
 
   test('list updates re-render the tree live', async () => {
-    const face = new FakeSessions({ root: { displayTitle: 'Main', running: false, updatedAt: 1 } })
+    const face = new TestSessionList({ root: { displayTitle: 'Main', running: false, updatedAt: 1 } })
     const View = makeView(face)
     const m = await mount(h(View, { sessionId: 'root', self: selfStats() }))
     assert.ok(text(m.container).includes('No subagents yet'))
@@ -277,7 +241,7 @@ describe('AgentGraph — the family tree', () => {
   })
 
   test('a family with no token data at all hides the totals chip', async () => {
-    const View = makeView(new FakeSessions({ root: { displayTitle: 'Main', running: false, updatedAt: 1 } }))
+    const View = makeView(new TestSessionList({ root: { displayTitle: 'Main', running: false, updatedAt: 1 } }))
     const m = await mount(h(View, { sessionId: 'root', self: { head: null, billed: null, requests: 0 } }))
     assert.ok(text(m.container).includes('1 agents'))
     assert.ok(!text(m.container).includes('tokens in context'))
@@ -287,7 +251,7 @@ describe('AgentGraph — the family tree', () => {
   test('overflow chip when the family exceeds the cap', async () => {
     const byId: Record<string, unknown> = { root: { displayTitle: 'Main', running: false, updatedAt: 1 } }
     for (let i = 0; i < 30; i++) byId['kid' + i] = { parentId: 'root', updatedAt: i }
-    const View = makeView(new FakeSessions(byId))
+    const View = makeView(new TestSessionList(byId))
     const m = await mount(h(View, { sessionId: 'root', self: selfStats() }))
     assert.ok(text(m.container).includes('6 more not shown'))
     assert.ok(text(m.container).includes('31 agents'))
@@ -295,7 +259,7 @@ describe('AgentGraph — the family tree', () => {
   })
 
   test('a rejected catalog refresh is swallowed', async () => {
-    const face = new FakeSessions(family())
+    const face = new TestSessionList(family())
     face.rejectRefresh = true
     const View = makeView(face)
     const m = await mount(h(View, { sessionId: 'root', self: selfStats() }))
@@ -306,7 +270,7 @@ describe('AgentGraph — the family tree', () => {
   })
 
   test('a face without refreshSubagents still renders', async () => {
-    const face = new FakeSessions(family())
+    const face = new TestSessionList(family())
     const bare: unknown = { list: face.list, open: (id: string) => face.open(id) }
     const View = makeView(bare)
     const m = await mount(h(View, { sessionId: 'root' }))
@@ -318,7 +282,7 @@ describe('AgentGraph — the family tree', () => {
   })
 
   test('stat-less nodes render dashes; zero occupancy draws no ring', async () => {
-    const View = makeView(new FakeSessions({
+    const View = makeView(new TestSessionList({
       root: { displayTitle: 'Main', running: false, updatedAt: 1 },
       bare: { parentId: 'root', origin: 'subagent', updatedAt: 2 },
       zero: {
@@ -377,7 +341,7 @@ describe('AgentGraph — the family tree', () => {
   })
 
   test('zh locale renders translated chrome', async () => {
-    const View = makeView(new FakeSessions(family()), { locale: 'zh' })
+    const View = makeView(new TestSessionList(family()), { locale: 'zh' })
     const m = await mount(h(View, { sessionId: 'root', self: selfStats() }))
     const rendered = text(m.container)
     assert.ok(rendered.includes('Agent 网络'))

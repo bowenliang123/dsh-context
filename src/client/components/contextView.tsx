@@ -5,8 +5,9 @@
  * host's detail endpoint only while the tab (or modal) is open.
  */
 
-import { createElement as h, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactElement } from 'react'
+import { createElement as h, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore, type ReactElement } from 'react'
 import type { ContextEventRecord, RequestRecord, SurfaceNode } from '../../shared/types'
+import { sessionsFaceOf, sessionsListStore, subagentCostUsage } from '../agentTree'
 import { briefNodes, briefOf } from '../brief'
 import { headlineOf } from '../headline'
 import type { ContextViewProps } from '../services'
@@ -334,6 +335,18 @@ export function makeContextView(
       setNodeFocus({ step, seq: node.seq, cat: node.cat })
     }, [activeReq, activeIdx, displayRequests])
 
+    // The session list's lineage (ctx.sessions.list). Every subagent runs as a
+    // session of its own and its spend stays in that session's log, so the cost
+    // cell folds the whole subtree's billed totals into this session's. Absent
+    // service (an older harness) leaves the cell pricing this session alone.
+    const sessionsFace = useMemo(() => sessionsFaceOf(ctx), [])
+    const sessionsStore = useMemo(() => sessionsListStore(sessionsFace), [sessionsFace])
+    const sessionsSnapshot = useSyncExternalStore(sessionsStore.subscribe, sessionsStore.getSnapshot)
+    const subagentCost = useMemo(
+      () => subagentCostUsage(sessionsSnapshot, typeof sessionId === 'string' ? sessionId : undefined),
+      [sessionsSnapshot, sessionId],
+    )
+
     if (!data) {
       return <div className="lc-root" ref={rootRef}><div className="lc-empty">{t('loading')}</div></div>
     }
@@ -502,7 +515,7 @@ export function makeContextView(
         <div className="lc-cols lc-head">
           {inSidebar ? null : (
             <StatsContext counts={data.counts ?? countsOfRecords(requests, events)} toolCalls={data.toolCalls} images={data.images}
-              cost={data.cost} locale={activeLocale} />
+              cost={data.cost} subagentCost={subagentCost.usage} subagentCount={subagentCost.count} locale={activeLocale} />
           )}
           <StatsTokens usage={usage} />
           <StatsTiming timing={data.timing ?? null} />

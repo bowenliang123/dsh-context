@@ -18,7 +18,9 @@
  * error.
  */
 
+import type { SessionCostUsage } from '../shared/types'
 import type { PartsPart } from './categories'
+import { addCostUsage } from './cost'
 import { headlineOf, type Headline } from './headline'
 import { asRecord, contextBreakdownOf, contextPressureOf, numOf, timelineOf, tokenUsageOf } from './services'
 
@@ -317,6 +319,69 @@ export function agentForestOf(snapshot: unknown, currentId: string | undefined, 
   return { nodes, edges, overflow: Math.max(0, total - nodes.length), solo: nodes.length === 1 }
 }
 
+/** The current session's whole subagent subtree as one money figure. */
+export interface SubagentCost {
+  /** Descendants' cumulative billed-token totals, summed over the subtree; absent when none reported priced usage. */
+  usage?: SessionCostUsage
+  /** Descendant sessions that fed `usage` — the figure's own population. */
+  count: number
+}
+
+/**
+ * Fold the current session's whole subagent subtree — every descendant at
+ * every depth — into one billed-token total, plus how many sessions fed it.
+ * A subagent is a session of its own (its model calls never enter the parent's
+ * log), so the list snapshot's `parentId` links are the only place the family
+ * is written down.
+ *
+ * Walks those links directly rather than reusing the agent forest: the graph
+ * caps its nodes for the SVG stage (AGENT_TREE_LIMIT), and a money figure must
+ * not drop agents the layout could not draw.
+ *
+ * Empty when there is no snapshot, no anchor id, or no `byId` table (an older
+ * harness) — the caller then prices the session alone, as before.
+ */
+export function subagentCostUsage(snapshot: unknown, currentId: string | undefined): SubagentCost {
+  const byId = asRecord(asRecord(snapshot)?.byId)
+  if (byId === null || currentId === undefined || currentId === '') return { count: 0 }
+
+  // Parse every row once at the boundary and index the durable parent links;
+  // blank placeholder sessions are not agents (the forest skips them too).
+  const rows = new Map<string, AgentRow>()
+  for (const key of Object.keys(byId)) {
+    const row = agentRowOf(byId[key])
+    if (row === null || row.blank) continue
+    rows.set(key, row)
+  }
+  const childrenOf = new Map<string, string[]>()
+  for (const [id, row] of rows) {
+    if (row.parentId === undefined) continue
+    const kids = childrenOf.get(row.parentId) ?? []
+    kids.push(id)
+    childrenOf.set(row.parentId, kids)
+  }
+
+  // Breadth-first over the subtree. The anchor seeds the seen-set, so a
+  // lineage cycle costs one revisit check per member instead of a hang.
+  let usage: SessionCostUsage | undefined
+  let count = 0
+  const seen = new Set<string>([currentId])
+  const queue: string[] = [currentId]
+  for (let i = 0; i < queue.length; i++) {
+    for (const kid of childrenOf.get(queue[i]) ?? []) {
+      if (seen.has(kid)) continue
+      seen.add(kid)
+      queue.push(kid)
+      const cost = timelineOf(rows.get(kid)?.projections?.contextTimeline)?.cost
+      if (cost !== undefined) {
+        usage = addCostUsage(usage, cost)
+        count += 1
+      }
+    }
+  }
+  return usage === undefined ? { count: 0 } : { usage, count }
+}
+
 export interface AgentPoint {
   id: string
   x: number
@@ -553,13 +618,41 @@ export function openAgentSession(face: SessionsFaceLike | null, id: string): voi
   }
 }
 
-/** Narrow `ctx.get('sessions')` to the card's face (null = harness without the outward sessions service). */
-export function sessionsFaceOf(ctx: { get(name: string): unknown }): SessionsFaceLike | null {
-  const rec = asRecord(ctx.get('sessions'))
+/**
+ * Narrow `ctx.get('sessions')` to the card's face — null for a harness without
+ * the outward sessions service, and for a ctx that exposes no service lookup at
+ * all (the view's own no-service degrade arm).
+ */
+export function sessionsFaceOf(ctx: { get?(name: string): unknown }): SessionsFaceLike | null {
+  const service = typeof ctx.get === 'function' ? ctx.get('sessions') : undefined
+  const rec = asRecord(service)
   if (rec === null) return null
   const list = asRecord(rec.list)
   if (list === null || typeof list.getSnapshot !== 'function' || typeof list.subscribe !== 'function') return null
   return rec
+}
+
+/**
+ * The `useSyncExternalStore` pair for the outward sessions list, shared by
+ * every snapshot consumer (the agent graph and the cost cell's subagent fold,
+ * which must agree on the same feed).
+ *
+ * Both callbacks stay inert when the harness exposes no sessions service, so
+ * the store never notifies and each caller renders from its own data alone.
+ * Memoize the result — React keeps one subscription per stable pair.
+ */
+export function sessionsListStore(face: SessionsFaceLike | null): {
+  subscribe: (notify: () => void) => () => void
+  getSnapshot: () => unknown
+} {
+  const list = face?.list
+  if (list === undefined) return { subscribe: () => () => {}, getSnapshot: () => null }
+  // Wrapped rather than referenced bare: the service's methods must keep their
+  // own `this`, and the pair still hands React one stable subscription.
+  return {
+    subscribe: notify => list.subscribe(notify),
+    getSnapshot: () => list.getSnapshot(),
+  }
 }
 
 /**

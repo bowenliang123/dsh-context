@@ -113,3 +113,73 @@ describe('StatsContext', () => {
     await m.unmount()
   })
 })
+
+// The subagent fold: a subagent's spend lives in its own session log, so the
+// cell adds the subtree's estimate to this session's and splits them in the
+// bubble. COST prices to $0.30 / ¥2.00 per copy.
+describe('StatsContext — subagent cost', () => {
+  const noCounts = { turns: 0, steps: 0, injects: 0, compactions: 0, prunes: 0 }
+
+  test('the cell prices the session plus its subagents, and the bubble splits them', async () => {
+    const m = await mount(h(StatsContext, {
+      counts: noCounts,
+      cost: COST,
+      subagentCost: COST,
+      subagentCount: 3,
+      locale: 'en',
+    }))
+    assert.equal(cells(m.container).values[4], '$0.60')
+    assert.equal(queryAll(m.container, '.lc-stat-tip').length, 1)
+    assert.equal(text(query(m.container, '.lc-stat-tip-split')), 'This session $0.30 · Subagents $0.30 (3)')
+    await m.unmount()
+  })
+
+  test('a zero count leaves the cell and the bubble exactly as before', async () => {
+    const m = await mount(h(StatsContext, {
+      counts: noCounts,
+      cost: COST,
+      subagentCount: 0,
+      locale: 'en',
+    }))
+    assert.equal(cells(m.container).values[4], '$0.30')
+    assert.equal(queryAll(m.container, '.lc-stat-tip-split').length, 0)
+    await m.unmount()
+  })
+
+  test('a count with no priced subagent usage leaves the bubble unsplit', async () => {
+    const m = await mount(h(StatsContext, {
+      counts: noCounts,
+      cost: COST,
+      subagentCount: 2,
+      locale: 'en',
+    }))
+    assert.equal(cells(m.container).values[4], '$0.30')
+    assert.equal(queryAll(m.container, '.lc-stat-tip-split').length, 0)
+    await m.unmount()
+  })
+
+  test('a session with no priced usage of its own still shows what the subagents spent', async () => {
+    const m = await mount(h(StatsContext, {
+      counts: noCounts,
+      subagentCost: COST,
+      subagentCount: 2,
+      locale: 'en',
+    }))
+    assert.equal(cells(m.container).values[4], '$0.30')
+    assert.equal(text(query(m.container, '.lc-stat-tip-split')), 'This session — · Subagents $0.30 (2)')
+    await m.unmount()
+  })
+
+  test('the zh locale renders the split in CNY', async () => {
+    const m = await mount(h(StatsContextZh, {
+      counts: noCounts,
+      cost: COST,
+      subagentCost: COST,
+      subagentCount: 1,
+      locale: 'zh',
+    }))
+    assert.equal(cells(m.container).values[4], '¥4.00')
+    assert.equal(text(query(m.container, '.lc-stat-tip-split')), '本会话 ¥2.00 · 子代理 ¥2.00（1 个）')
+    await m.unmount()
+  })
+})
