@@ -369,6 +369,7 @@ export function timelineOf(value: unknown): ContextTimeline | null {
     droppedNodes: numOf(data.droppedNodes),
     ...(typeof data.images === 'number' ? { images: data.images } : {}),
     ...(typeof data.toolCalls === 'number' ? { toolCalls: data.toolCalls } : {}),
+    ...(typeof data.humanInputs === 'number' ? { humanInputs: data.humanInputs } : {}),
     archive: objectsOf(data.archive),
     ...(counts !== undefined ? { counts } : {}),
     ...(last !== undefined ? { last } : {}),

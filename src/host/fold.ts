@@ -123,6 +123,13 @@ export interface TimelineState {
    * Absent until a DeepSeek flash/pro request reports usage.
    */
   cost?: SessionCostUsage
+  /**
+   * Whole-session human-input tally (see Snapshot.humanInputs): every
+   * non-injection `user/message` plus every answered `ask_user_question`
+   * result. Running total — never trimmed, like `cost`/`timing`. Absent until
+   * the first human input folds.
+   */
+  humanInputs?: number
   archiveFloor?: number
   /**
    * The detail collections' revision marker (see ContextTimelineDetail):
@@ -703,6 +710,14 @@ function accumulateCost(st: TimelineState, time: number, usage: BilledUsage): vo
 /** The timing card's per-tool ranking cap: the busiest 16 names are kept. */
 const TOOL_TIMING_CAP = 16
 
+/**
+ * The interactive Q&A tool (`dsh-tool-ask-user`): its settled result IS the
+ * user's answer, so it folds into the human-input tally alongside the user's
+ * own messages. One result = one answer submission, however many questions
+ * the prompt carried.
+ */
+const ASK_USER_TOOL = 'ask_user_question'
+
 /** The decode buckets of the generation split, in card order (see TimingTotals). */
 const DECODE_KINDS: readonly DecodeKind[] = ['reasoning', 'text', 'toolarg']
 
@@ -1027,6 +1042,10 @@ export function applyTimeline(state: TimelineState, event: TimelineEvent, bounds
             }
           }
           s.events.push(rec)
+        } else {
+          // The user's own message (the exact set the surface's `user`
+          // category holds): one human input, whole-session tally.
+          s.humanInputs = (s.humanInputs ?? 0) + 1
         }
         break
       }
@@ -1049,6 +1068,10 @@ export function applyTimeline(state: TimelineState, event: TimelineEvent, bounds
         const s = ensure()
         bumpDetailRev(s)
         const node = applySurface(s, event, event.type, data, toolMsg)
+        // An answered question prompt is a human input too (whole-session
+        // tally): the result only carries its tool name when it pairs with
+        // the armed call, so an unpaired/foreign one counts nothing.
+        if (node.tool === ASK_USER_TOOL) s.humanInputs = (s.humanInputs ?? 0) + 1
         // The file-op derivation (shared/fileOps.ts): the armed call's
         // arguments + the result's presentation meta. Unpaired results book
         // nothing (parity with the surface node's missing tool label).
@@ -1278,6 +1301,9 @@ function headFieldsOf(state: TimelineState): Snapshot {
     // count. Calls still in flight (no result yet) and results compacted or
     // pruned out of the surface are both excluded.
     toolCalls: state.surface.reduce((n, node) => node.cat === 'tool' ? n + 1 : n, 0),
+    // The whole-session human-input tally (see TimelineState.humanInputs) —
+    // a running total, so unlike turns/steps it covers the COMPLETE log.
+    humanInputs: state.humanInputs ?? 0,
     requests: [],
     events: [],
     nodes: [],

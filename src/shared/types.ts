@@ -156,6 +156,14 @@ export interface Snapshot {
    */
   toolCalls?: number
   /**
+   * Whole-session human-input tally: every non-injection `user/message`
+   * (the user's own messages) plus every answered `ask_user_question`
+   * result (one per answer submission). A running total over the COMPLETE
+   * log — turns the retained window no longer holds still count. Absent
+   * from older hosts; clients treat absence as zero.
+   */
+  humanInputs?: number
+  /**
    * Split-generation head fields — present exactly when the host serves the
    * SLIM head (the heavy collections moved to the on-demand detail channel,
    * host/detail.ts) and absent on the inline generation (older or

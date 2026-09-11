@@ -182,17 +182,19 @@ describe('timelineOf', () => {
     assert.ok(!('contextWindow' in dropped))
   })
 
-  test('images/toolCalls/surfaceFloor/archiveFloor are kept only when numbers', () => {
-    const kept = timelineOf({ current: 1, images: 3, toolCalls: 2, surfaceFloor: 10, archiveFloor: 4 })
+  test('images/toolCalls/humanInputs/surfaceFloor/archiveFloor are kept only when numbers', () => {
+    const kept = timelineOf({ current: 1, images: 3, toolCalls: 2, humanInputs: 5, surfaceFloor: 10, archiveFloor: 4 })
     assert.ok(kept !== null)
     assert.equal(kept.images, 3)
     assert.equal(kept.toolCalls, 2)
+    assert.equal(kept.humanInputs, 5)
     assert.equal(kept.surfaceFloor, 10)
     assert.equal(kept.archiveFloor, 4)
-    const dropped = timelineOf({ current: 1, images: 'n', toolCalls: {}, surfaceFloor: null, archiveFloor: true })
+    const dropped = timelineOf({ current: 1, images: 'n', toolCalls: {}, humanInputs: 'x', surfaceFloor: null, archiveFloor: true })
     assert.ok(dropped !== null)
     assert.ok(!('images' in dropped))
     assert.ok(!('toolCalls' in dropped))
+    assert.ok(!('humanInputs' in dropped))
     assert.ok(!('surfaceFloor' in dropped))
     assert.ok(!('archiveFloor' in dropped))
   })

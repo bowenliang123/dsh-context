@@ -1,7 +1,8 @@
 /**
  * The Context card: what the session's context IS and how it evolved — a
- * five-cell grid of the session's shape (turns / steps / live tool calls),
- * the whole-session cache-hit rate, and the whole-session cost estimate.
+ * six-cell grid of the session's shape (turns / steps / human inputs / live
+ * tool calls), the whole-session cache-hit rate, and the whole-session cost
+ * estimate.
  * Count figures only: nothing here is part of a spendable whole, so no pie —
  * proportions live in the composition card, and the context-event tallies
  * live on the events card's kind filters (contextView.tsx). The cache-hit
@@ -51,6 +52,8 @@ export function countsOfRecords(requests: readonly RequestRecord[], events: read
 export function makeStatsContext(kit: ViewKit): (props: {
   /** The session-shape tally (host-precomputed on the split generation). */
   counts: TimelineCounts
+  /** The whole-session human-input tally (the user's messages + question answers; absent on older hosts). */
+  humanInputs?: number
   /** Tool calls with a result live in the current context (absent on older hosts). */
   toolCalls?: number
   /** The official tokenUsage projection — the cache-hit cell's source (null until a provider reports). */
@@ -61,6 +64,7 @@ export function makeStatsContext(kit: ViewKit): (props: {
   const { t, fmt } = kit
   return function StatsContext(props: {
     counts: TimelineCounts
+    humanInputs?: number
     toolCalls?: number
     usage: TokenUsage | null
     cost?: SessionCostUsage
@@ -109,6 +113,7 @@ export function makeStatsContext(kit: ViewKit): (props: {
         <div className="lc-stats">
           {cell(t('stats.turns'), props.counts.turns)}
           {cell(t('stats.steps'), props.counts.steps)}
+          {cell(t('stats.humanInputs'), props.humanInputs ?? 0, t('stats.humanInputsTip'))}
           {cell(t('stats.toolCalls'), props.toolCalls ?? 0)}
           {cell(t('stats.cacheHit'), hit === null ? '—' : `${hit}%`)}
           {cell(t('stats.cost'), cost === null ? '—' : formatCost(cost, currency), costTip)}

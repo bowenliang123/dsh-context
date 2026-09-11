@@ -513,7 +513,7 @@ export function makeContextView(
             stacks the pair in the narrow pane. */}
         {inSidebar ? null : (
           <div className="lc-cols lc-head">
-            <StatsContext counts={counts} toolCalls={data.toolCalls} usage={usage}
+            <StatsContext counts={counts} humanInputs={data.humanInputs} toolCalls={data.toolCalls} usage={usage}
               cost={data.cost} locale={activeLocale} />
             <PluginInfo />
           </div>

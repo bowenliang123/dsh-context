@@ -49,7 +49,7 @@ describe('createContextTimelineDefinition', () => {
   test('carries the supported projection contract on one unit', () => {
     const def = createContextTimelineDefinition({}, () => false)
     assert.equal(def.key, 'contextTimeline')
-    assert.equal(def.stateVersion, 15)
+    assert.equal(def.stateVersion, 16)
     assert.equal(typeof def.init, 'function')
     assert.equal(typeof def.apply, 'function')
     // The supported registry contract: stateSchema + a REQUIRED wire block.
@@ -69,6 +69,7 @@ describe('createContextTimelineDefinition', () => {
     assert.equal(view.model, 'deepseek-v4-flash')
     assert.equal(view.provider, 'deepseek')
     assert.equal(view.contextWindow, 128000)
+    assert.equal(view.humanInputs, 1, 'the canonical log\'s one user message')
     assert.ok(view.nodes.length > 0)
     assert.ok(view.requests.length > 0)
     assert.ok(view.events.length > 0)

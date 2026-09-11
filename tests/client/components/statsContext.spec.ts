@@ -1,16 +1,16 @@
 // StatsContext (src/client/components/statsContext.tsx) rendered with real
-// React: the five-cell grid — session shape, the chat-line cache-hit cell,
-// and the priced cost cell with its rate tooltip — in both locales. The
-// context-event tallies live on the events card's kind filters
-// (contextView.spec.ts); `countsOfRecords` still derives every count the
-// split generation's wire head carries, pinned here.
+// React: the six-cell grid — session shape with the whole-session human-input
+// tally, the chat-line cache-hit cell, and the priced cost cell with its rate
+// tooltip — in both locales. The context-event tallies live on the events
+// card's kind filters (contextView.spec.ts); `countsOfRecords` still derives
+// every count the split generation's wire head carries, pinned here.
 
 import { createElement as h } from 'react'
 import assert from 'node:assert/strict'
 import { describe, test } from 'vitest'
 import { countsOfRecords, makeStatsContext } from '../../../src/client/components/statsContext'
 import type { ContextEventRecord, RequestRecord, SessionCostUsage, TokenUsage } from '../../../src/shared/types'
-import { makeKit, mount, query, queryAll, text } from '../helpers/kit'
+import { makeKit, mount, queryAll, text } from '../helpers/kit'
 
 const kit = makeKit()
 const kitZh = makeKit('zh')
@@ -57,9 +57,10 @@ describe('countsOfRecords (the inline generation derivation)', () => {
 })
 
 describe('StatsContext', () => {
-  test('folds the five-cell grid: shape stats, the cache-hit cell, and cost', async () => {
+  test('folds the six-cell grid: shape stats, the cache-hit cell, and cost', async () => {
     const m = await mount(h(StatsContext, {
       counts: { turns: 3, steps: 4, injects: 3, compactions: 2, prunes: 1 },
+      humanInputs: 7,
       toolCalls: 3,
       usage: USAGE,
       cost: COST,
@@ -67,9 +68,9 @@ describe('StatsContext', () => {
     }))
     assert.ok(text(m.container).includes('Context Stats'))
     const { labels, values } = cells(m.container)
-    assert.equal(labels.length, 5)
-    assert.deepEqual(labels, ['Turns', 'Steps', 'Tool Calls', 'Cache Hit', 'Cost?'])
-    assert.deepEqual(values, ['3', '4', '3', '66.6%', '$0.30'])
+    assert.equal(labels.length, 6)
+    assert.deepEqual(labels, ['Turns', 'Steps', 'Human Inputs?', 'Tool Calls', 'Cache Hit', 'Cost?'])
+    assert.deepEqual(values, ['3', '4', '7', '3', '66.6%', '$0.30'])
     await m.unmount()
   })
 
@@ -79,7 +80,7 @@ describe('StatsContext', () => {
       usage: null,
       locale: 'en',
     }))
-    assert.deepEqual(cells(m.container).values, ['0', '0', '0', '—', '—'])
+    assert.deepEqual(cells(m.container).values, ['0', '0', '0', '0', '—', '—'])
     await m.unmount()
     // A usage report with nothing billed prompt-side dashes the hit too.
     const zero: TokenUsage = { uncachedInputTokens: 0, outputTokens: 0, cacheReadTokens: 0, cacheWriteTokens: 0 }
@@ -88,25 +89,27 @@ describe('StatsContext', () => {
       usage: zero,
       locale: 'en',
     }))
-    assert.deepEqual(cells(m2.container).values, ['0', '0', '0', '—', '—'])
+    assert.deepEqual(cells(m2.container).values, ['0', '0', '0', '0', '—', '—'])
     await m2.unmount()
   })
 
-  test('only the cost cell is tipped; the bubble lists both families with peak/off rates', async () => {
+  test('the human-inputs and cost cells are tipped; the cost bubble lists both families with peak/off rates', async () => {
     const m = await mount(h(StatsContext, {
       counts: { turns: 0, steps: 0, injects: 0, compactions: 0, prunes: 0 },
       usage: null,
       cost: COST,
       locale: 'en',
     }))
-    assert.equal(queryAll(m.container, '.lc-stat-tip').length, 1)
-    assert.equal(queryAll(m.container, '.lc-stat-q').length, 1)
-    const tip = text(query(m.container, '.lc-stat-tip'))
-    assert.ok(tip.includes('Per-1M-token rates'))
-    assert.ok(tip.includes('deepseek-flash / deepseek-v4-flash'))
-    assert.ok(tip.includes('deepseek-v4-pro'))
-    assert.ok(tip.includes('miss $0.3/$0.15'))
-    assert.ok(tip.includes('output $1.2/$0.6'))
+    assert.equal(queryAll(m.container, '.lc-stat-tip').length, 2)
+    assert.equal(queryAll(m.container, '.lc-stat-q').length, 2)
+    const tips = queryAll(m.container, '.lc-stat-tip').map(el => text(el))
+    assert.ok(tips[0].includes('question answerings'), 'the human-inputs tip explains its tally')
+    const costTip = tips[1]
+    assert.ok(costTip.includes('Per-1M-token rates'))
+    assert.ok(costTip.includes('deepseek-flash / deepseek-v4-flash'))
+    assert.ok(costTip.includes('deepseek-v4-pro'))
+    assert.ok(costTip.includes('miss $0.3/$0.15'))
+    assert.ok(costTip.includes('output $1.2/$0.6'))
     await m.unmount()
   })
 
@@ -119,8 +122,8 @@ describe('StatsContext', () => {
     }))
     assert.ok(text(m.container).includes('上下文统计'))
     const { labels, values } = cells(m.container)
-    assert.deepEqual(labels, ['轮次', '步数', '工具调用', '缓存命中', '预估费用?'])
-    assert.deepEqual(values, ['1', '1', '0', '66.6%', '¥2.00'])
+    assert.deepEqual(labels, ['轮次', '步数', '用户输入?', '工具调用', '缓存命中', '预估费用?'])
+    assert.deepEqual(values, ['1', '1', '0', '0', '66.6%', '¥2.00'])
     await m.unmount()
   })
 })

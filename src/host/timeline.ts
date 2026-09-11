@@ -188,6 +188,7 @@ export const contextTimelineSchema = z.object({
   current: currentSchema,
   images: z.number().int().nonnegative().optional(),
   toolCalls: z.number().int().nonnegative().optional(),
+  humanInputs: z.number().int().nonnegative().optional(),
   counts: countsSchema.optional(),
   last: lastSchema.optional(),
   detailRev: z.number().int().nonnegative().optional(),
@@ -233,6 +234,7 @@ const timelineStateSchema = z.object({
   cost: z.object({ flash: costFamilySchema.optional(), pro: costFamilySchema.optional() }).strict().optional(),
   archiveFloor: z.number().optional(),
   timing: timingTotalsSchema.optional(),
+  humanInputs: z.number().int().nonnegative().optional(),
   stepStart: z.object({
     time: z.number(),
     firstToken: z.number().optional(),
@@ -342,7 +344,13 @@ export function createContextTimelineDefinition(config: Config, slim: () => bool
     // until they go live again (the #37 regression) — strictly worse than a
     // pre-fix session showing its corrected figures from the next folded
     // event onward.
-    stateVersion: 15,
+    //
+    // 16: the whole-session human-input tally (`humanInputs`) joined the
+    // state — a running total that later events cannot backfill, so unlike
+    // the 0.47 additive fields a pre-tally cached row would undercount
+    // forever; cached rows refold from the log, which rebuilds the tally
+    // (the `timing`/`fileOps` precedent).
+    stateVersion: 16,
   }
   return definition
 }

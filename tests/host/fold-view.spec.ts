@@ -61,6 +61,57 @@ describe('buildTimelineView counters', () => {
     ])
     assert.equal(view.toolCalls, 1)
   })
+
+  test('humanInputs tallies the user\'s own messages, injections excluded', () => {
+    const { view } = driveTimeline([
+      userMessage(1, [{ type: 'text', text: 'hello' }], { kind: 'user' }),
+      userMessage(2, [{ type: 'text', text: 'again' }]),
+      userMessage(3, [{ type: 'text', text: 'AGENTS.md' }], { kind: 'plugin', form: 'context', plugin: 'dsh-test' }),
+      userMessage(4, [{ type: 'text', text: '/skill' }], { kind: 'skill-invocation', name: 's' }),
+      userMessage(5, [{ type: 'image', attachment: { width: 8, height: 8 } }], { kind: 'user' }),
+    ])
+    assert.equal(view.humanInputs, 3)
+  })
+
+  test('an answered ask_user_question result is a human input; other tool results are not', () => {
+    const { view } = driveTimeline([
+      userMessage(1, [{ type: 'text', text: 'go' }], { kind: 'user' }),
+      toolCall(2, { callId: 'q1', name: 'ask_user_question' }),
+      toolResult(3, { callId: 'q1', content: [{ type: 'text', text: '{"answers":[{"id":"a","selected":["x"]}]}' }] }),
+      toolCall(4, { callId: 'b1', name: 'bash' }),
+      toolResult(5, { callId: 'b1', content: [{ type: 'text', text: 'ok' }] }),
+      toolCall(6, { callId: 'q2', name: 'ask_user_question' }),
+      toolResult(7, { callId: 'q2', content: [{ type: 'text', text: '{"answers":[{"id":"b","selected":["y"]}]}' }] }),
+    ])
+    assert.equal(view.humanInputs, 3)
+  })
+
+  test('an unpaired or ask-user result without its call event counts nothing', () => {
+    const { view } = driveTimeline([
+      toolResult(1, { callId: 'ghost', content: [{ type: 'text', text: 'lost my call event' }] }),
+      userMessage(2, [{ type: 'text', text: 'hi' }], { kind: 'user' }),
+    ])
+    assert.equal(view.humanInputs, 1)
+  })
+
+  test('an answered question starts the tally without a preceding user message', () => {
+    const { view } = driveTimeline([
+      toolCall(1, { callId: 'q1', name: 'ask_user_question' }),
+      toolResult(2, { callId: 'q1', content: [{ type: 'text', text: '{"answers":[{"id":"a","selected":["y"]}]}' }] }),
+    ])
+    assert.equal(view.humanInputs, 1)
+  })
+
+  test('humanInputs stays ABSENT until the first human input — never undefined-valued', () => {
+    const { state, view } = driveTimeline([
+      toolCall(1, { callId: 'b1', name: 'bash' }),
+      toolResult(2, { callId: 'b1', content: [{ type: 'text', text: 'ok' }] }),
+      planMode(3, { active: true }),
+    ])
+    assert.equal(view.humanInputs, 0)
+    assert.ok(!('humanInputs' in state), 'no own key on the persisted state')
+    assertPlainJson(state)
+  })
 })
 
 describe('buildTimelineView copies', () => {
