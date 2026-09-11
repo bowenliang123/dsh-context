@@ -24,14 +24,15 @@ const FLASH_RATES = {
   cny: { peak: { hit: 0.04, miss: 2, out: 8 }, off: { hit: 0.02, miss: 1, out: 4 } },
 } as const
 
-/**
- * Pro rides the Flash triple: between the V4.1 Flash launch and the V4.1 Pro
- * release, DeepSeek routes every Pro request to V4.1 Flash and bills it at
- * the Flash rates — point `pro` at the new table once V4.1 Pro is priced.
- */
+/** The Pro-series rates (deepseek-v4-pro; peak = 2× off-peak), per currency. */
+const PRO_RATES = {
+  usd: { peak: { hit: 0.044, miss: 1.32, out: 3.96 }, off: { hit: 0.022, miss: 0.66, out: 1.98 } },
+  cny: { peak: { hit: 0.3, miss: 9, out: 27 }, off: { hit: 0.15, miss: 4.5, out: 13.5 } },
+} as const
+
 const PRICES = {
-  usd: { flash: FLASH_RATES.usd, pro: FLASH_RATES.usd },
-  cny: { flash: FLASH_RATES.cny, pro: FLASH_RATES.cny },
+  usd: { flash: FLASH_RATES.usd, pro: PRO_RATES.usd },
+  cny: { flash: FLASH_RATES.cny, pro: PRO_RATES.cny },
 } as const
 
 export type CostCurrency = keyof typeof PRICES
