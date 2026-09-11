@@ -196,6 +196,13 @@ export function makeContextView(
     // below the last hook.
     const requests = data ? data.requests : []
     const events = data ? data.events : []
+    // The stats board's count figures — the split head's precomputed tallies, or
+    // the collections' own derivation on the inline generation. Shared by the
+    // stats card's shape cells and the events card's kind-filter counts.
+    const counts = data?.counts ?? countsOfRecords(requests, events)
+    // The per-kind tallies that ride the filter buttons: only the three priced
+    // kinds the host counts (model/mode switches carry no tally, hence undefined).
+    const kindCounts: Record<string, number | undefined> = { inject: counts.injects, compaction: counts.compactions, prune: counts.prunes }
     const shownEvents = pickedKinds.length === EVENT_KINDS.length ? events : events.filter(e => pickedKinds.includes(e.kind))
     // Per-step bars, or one per turn (each turn's LAST step's record); memoized so hover-driven re-renders keep bar props identity-stable —
     // the chart's memoized bars then skip reconciliation (turn-mode aggregation allocates).
@@ -506,7 +513,7 @@ export function makeContextView(
             stacks the pair in the narrow pane. */}
         {inSidebar ? null : (
           <div className="lc-cols lc-head">
-            <StatsContext counts={data.counts ?? countsOfRecords(requests, events)} toolCalls={data.toolCalls} usage={usage}
+            <StatsContext counts={counts} toolCalls={data.toolCalls} usage={usage}
               cost={data.cost} locale={activeLocale} />
             <PluginInfo />
           </div>
@@ -533,13 +540,20 @@ export function makeContextView(
             <div className="lc-card-title">
               <span className="lc-card-title-text">{t('events.title')}</span>
               <div className="lc-kinds">
-                {EVENT_KINDS.map(k => (
-                  <button
-                    key={k}
-                    className={'lc-gran-btn' + (pickedKinds.includes(k) ? ' lc-gran-on lc-kind-' + k : '')}
-                    onClick={() => { toggleKind(k) }}
-                  >{t('kind.' + k)}</button>
-                ))}
+                {EVENT_KINDS.map((k) => {
+                  const n = kindCounts[k]
+                  return (
+                    <button
+                      key={k}
+                      data-kind={k}
+                      className={'lc-gran-btn' + (pickedKinds.includes(k) ? ' lc-gran-on lc-kind-' + k : '')}
+                      onClick={() => { toggleKind(k) }}
+                    >
+                      {t('kind.' + k)}
+                      {n !== undefined ? <span className="lc-kind-n">{kit.fmt(n)}</span> : null}
+                    </button>
+                  )
+                })}
               </div>
             </div>
             <EventList events={shownEvents} state={source.detailState} onRetry={source.retryDetail} />

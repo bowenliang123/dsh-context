@@ -1,9 +1,9 @@
 // StatsContext (src/client/components/statsContext.tsx) rendered with real
-// React: the eight-cell 2×4 grid — session shape, the chat-line cache-hit
-// cell, the priced cost cell with its rate tooltip, and the context-event
-// tally — in both locales. The count figures arrive precomputed (the split
-// generation's wire head carries them); `countsOfRecords` is the inline
-// generation's derivation, pinned here to the same totals.
+// React: the five-cell grid — session shape, the chat-line cache-hit cell,
+// and the priced cost cell with its rate tooltip — in both locales. The
+// context-event tallies live on the events card's kind filters
+// (contextView.spec.ts); `countsOfRecords` still derives every count the
+// split generation's wire head carries, pinned here.
 
 import { createElement as h } from 'react'
 import assert from 'node:assert/strict'
@@ -57,7 +57,7 @@ describe('countsOfRecords (the inline generation derivation)', () => {
 })
 
 describe('StatsContext', () => {
-  test('folds the eight-cell grid: shape stats, the cache-hit cell, cost, and the event tally', async () => {
+  test('folds the five-cell grid: shape stats, the cache-hit cell, and cost', async () => {
     const m = await mount(h(StatsContext, {
       counts: { turns: 3, steps: 4, injects: 3, compactions: 2, prunes: 1 },
       toolCalls: 3,
@@ -67,12 +67,9 @@ describe('StatsContext', () => {
     }))
     assert.ok(text(m.container).includes('Context Stats'))
     const { labels, values } = cells(m.container)
-    assert.equal(labels.length, 8)
-    assert.deepEqual(labels, [
-      'Turns', 'Steps', 'Tool Calls', 'Cache Hit',
-      'Cost?', 'Injections', 'Compactions', 'Prunes',
-    ])
-    assert.deepEqual(values, ['3', '4', '3', '66.6%', '$0.30', '3', '2', '1'])
+    assert.equal(labels.length, 5)
+    assert.deepEqual(labels, ['Turns', 'Steps', 'Tool Calls', 'Cache Hit', 'Cost?'])
+    assert.deepEqual(values, ['3', '4', '3', '66.6%', '$0.30'])
     await m.unmount()
   })
 
@@ -82,7 +79,7 @@ describe('StatsContext', () => {
       usage: null,
       locale: 'en',
     }))
-    assert.deepEqual(cells(m.container).values, ['0', '0', '0', '—', '—', '0', '0', '0'])
+    assert.deepEqual(cells(m.container).values, ['0', '0', '0', '—', '—'])
     await m.unmount()
     // A usage report with nothing billed prompt-side dashes the hit too.
     const zero: TokenUsage = { uncachedInputTokens: 0, outputTokens: 0, cacheReadTokens: 0, cacheWriteTokens: 0 }
@@ -91,7 +88,7 @@ describe('StatsContext', () => {
       usage: zero,
       locale: 'en',
     }))
-    assert.deepEqual(cells(m2.container).values, ['0', '0', '0', '—', '—', '0', '0', '0'])
+    assert.deepEqual(cells(m2.container).values, ['0', '0', '0', '—', '—'])
     await m2.unmount()
   })
 
@@ -122,8 +119,8 @@ describe('StatsContext', () => {
     }))
     assert.ok(text(m.container).includes('上下文统计'))
     const { labels, values } = cells(m.container)
-    assert.deepEqual(labels, ['轮次', '步数', '工具调用', '缓存命中', '预估费用?', '注入', '压缩', '剪枝'])
-    assert.deepEqual(values, ['1', '1', '0', '66.6%', '¥2.00', '0', '1', '0'])
+    assert.deepEqual(labels, ['轮次', '步数', '工具调用', '缓存命中', '预估费用?'])
+    assert.deepEqual(values, ['1', '1', '0', '66.6%', '¥2.00'])
     await m.unmount()
   })
 })

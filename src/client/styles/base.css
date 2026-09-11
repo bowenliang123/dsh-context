@@ -71,6 +71,11 @@
 .lc-gran-btn { border: 0; background: transparent; color: var(--dsw-alias-label-secondary); font-size: 11px; line-height: 1; padding: 3px 8px; border-radius: 5px; cursor: pointer; font-family: inherit; transition: color var(--ds-transition-duration, 0.2s) var(--ds-ease-in-out, ease-in-out); }
 .lc-gran-btn:hover { color: var(--dsw-alias-label-primary); }
 .lc-gran-on, .lc-gran-on:hover { background: var(--dsw-alias-button-primary-fill); color: var(--dsw-alias-label-primary-foreground); }
+/* The events card's kind filters carry their per-kind event tally: a tabular
+   count set off from the label, dimmed while the chip is off and inherited
+   (slightly translucent) on the lit chip. */
+.lc-kind-n { margin-left: 4px; font-variant-numeric: tabular-nums; opacity: 0.65; }
+.lc-gran-on .lc-kind-n { opacity: 0.85; }
 /*
  Shared tooltip-bubble chrome: pair `.lc-tip` with the owner's own tip class,
  then position locally (top/bottom anchor, width cap, whitespace, reveal rule).
@@ -100,7 +105,7 @@
  `min-width: 0` lets the split ignore content. Each row is its own
  `lc-head-row` query container, so the split folds instead of crushing the
  cards (issue #48): below 720px of row width (a half under ~350px — where the
- donut cards' ring+legend single-line and the context card's 4-column cell
+ donut cards' ring+legend single-line and the context card's 3-column cell
  grid both start to cramp) the pair stacks single-column. Cards under that
  end of the band sit under their own lc-card reflows (stats.css: the ring
  stacks over its legend, the cell grid folds), so the two-card line is the

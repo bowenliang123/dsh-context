@@ -1,15 +1,15 @@
 /*
  * The head band's stat cards — the context/plugin row and the token/timing
- * donut row: the context card's eight-cell grid with the cost cell's styled
- * tip, the composition overview's big number, and the cards' shared anatomy
+ * donut row: the context card's count grid with the cost cell's styled tip,
+ * the composition overview's big number, and the cards' shared anatomy
  * — section heading, donut, slice list, plugin-info rows.
  */
-/* The context card's eight count cells: shape stats over event tallies,
-   4×2 by default — wide-enough cards lay all eight out in ONE row (the
-   min-width tier below), narrow cards fold to two columns. */
-.lc-stats { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 6px; }
+/* The context card's five count cells: the session's shape, the cache-hit
+   rate, and the cost — 3×2 by default (the cells stay wide enough for the
+   longest English label), folding to a single row on wide cards. */
+.lc-stats { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; }
 .lc-stat { background: var(--dsw-alias-bg-layer-2); border: 1px solid var(--dsw-alias-border-l2); border-radius: 8px; padding: 6px 6px; display: flex; flex-direction: column; gap: 2px; min-width: 0; }
-/* The 8-cell stats grid quarters an equal head-row card, so its cells are narrow: tighter padding plus a corner-pinned '?' (out of the label's line) keep the longest label (预估费用) on one line. */
+/* The 5-cell stats grid shares a half-width head-row card with a sibling, so its cells are moderate: tighter padding plus a corner-pinned '?' (out of the label's line) keep the longest labels on one line. */
 .lc-stats .lc-stat { padding: 6px 3px; }
 .lc-stats .lc-stat-q { position: absolute; top: 3px; right: 4px; margin: 0; }
 .lc-stat-label { color: var(--dsw-alias-label-secondary); font-size: 11px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
@@ -104,20 +104,20 @@
 .lc-pi-value { min-width: 0; color: var(--dsw-alias-label-primary); font-size: 13px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; text-align: right; }
 .lc-pi-row-btn .lc-pi-value { font-weight: 400; }
 /*
- Wide head cards: on roomy panes the context card's eight cells fit ONE
- line (~82px each at the 700px mark). Degrades silently on engines without
+ Wide head cards: on roomy panes the context card's five cells fit ONE line
+ (~130px each at the 700px mark). Degrades silently on engines without
  container queries.
  */
 @container lc-card (min-width: 700px) {
-  .lc-stats { grid-template-columns: repeat(8, minmax(0, 1fr)); }
+  .lc-stats { grid-template-columns: repeat(5, minmax(0, 1fr)); }
 }
 /*
  Narrow head cards: the side-by-side ring + legend reads single-line only
  above ~320px of card content width. The two-tier rows already absorb the
  squeeze — the name gives ground before the fixed share column — so the
- compact block only tightens the ring gap. The context card's 8-cell grid
- folds to 2 columns instead: four ~65px cells would ellipsize the longer
- English labels (Compactions, Injections). Below 240px even the ring stops
+ compact block only tightens the ring gap. The context card's 5-cell grid
+ folds to 2 columns instead: three ~65px cells would ellipsize the longer
+ English labels (Tool Calls). Below 240px even the ring stops
  fitting, so the card stacks: the ring centers over the full-width legend
  rows. Cards resolve these queries against themselves (the shared `lc-card`
  container in base.css) at every split of the head band — two-across or

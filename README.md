@@ -47,7 +47,7 @@ Open any session and click the **Context / 上下文** tab:
 
 | Card | The question it answers |
 | --- | --- |
-| **Context Stats** | Turns, steps, live tool calls & images, context-event tallies — plus a list-price cost estimate (hover the `?` for per-1M rates). |
+| **Context Stats** | Turns, steps, live tool calls, the session's cache-hit rate — plus a list-price cost estimate (hover the `?` for per-1M rates). |
 | **Token Stats** | Where the billed tokens went: cache read/write, uncached input, output — around the cache-hit ring. |
 | **Timing Stats** | How active time split across model calls, tool runs, and overhead. |
 | **Current Context** | What's in the window *right now*. |
@@ -102,7 +102,7 @@ Pick **Live (next request)** or any retained step, and browse what that request 
 
 ![Context Events with a compaction](https://raw.githubusercontent.com/bowenliang123/dsh-context/main/docs/context-events.png)
 
-Every injection, compaction, prune, model switch, and plan-mode toggle — labeled with its producer (instruction file, plugin id, skill name), its net token delta (compactions show what they reclaimed), turn/step, and time. The **Inject / Compact / Prune / Switch / Mode** chips filter the log by kind.
+Every injection, compaction, prune, model switch, and plan-mode toggle — labeled with its producer (instruction file, plugin id, skill name), its net token delta (compactions show what they reclaimed), turn/step, and time. The **Inject / Compact / Prune / Switch / Mode** chips filter the log by kind, each carrying its whole-session event tally.
 
 ### 📁 File Activity — what the agent did to your files
 

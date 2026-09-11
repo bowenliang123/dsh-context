@@ -1,15 +1,15 @@
 /**
- * The Context card: what the session's context IS and how it evolved — an
- * eight-cell 2×4 grid pairing the session's shape (turns / steps / live tool
- * calls / the whole-session cache-hit rate) with the context-event tally
- * (injections / compactions / prunes) and the whole-session cost estimate.
+ * The Context card: what the session's context IS and how it evolved — a
+ * five-cell grid of the session's shape (turns / steps / live tool calls),
+ * the whole-session cache-hit rate, and the whole-session cost estimate.
  * Count figures only: nothing here is part of a spendable whole, so no pie —
- * proportions live in the composition card. The cache-hit cell reads the
- * official `tokenUsage` projection — the same source and formula as the
- * harness chat stats line under the composer, shown with one decimal — and
- * dashes until a provider reports usage. The cost cell prices the
- * host-folded cumulative billed totals (complete session log, never trimmed)
- * at the hardcoded DeepSeek V4 list prices (cost.ts) in the locale's
+ * proportions live in the composition card, and the context-event tallies
+ * live on the events card's kind filters (contextView.tsx). The cache-hit
+ * cell reads the official `tokenUsage` projection — the same source and
+ * formula as the harness chat stats line under the composer, shown with one
+ * decimal — and dashes until a provider reports usage. The cost cell prices
+ * the host-folded cumulative billed totals (complete session log, never
+ * trimmed) at the hardcoded DeepSeek V4 list prices (cost.ts) in the locale's
  * currency; its hover bubble (a '?' marker + styled DOM tip) explains the
  * whole-session estimate and lists the per-1M-token table straight from
  * cost.ts, so printed rates can never drift from the math.
@@ -49,7 +49,7 @@ export function countsOfRecords(requests: readonly RequestRecord[], events: read
 }
 
 export function makeStatsContext(kit: ViewKit): (props: {
-  /** The session-shape and event tallies (host-precomputed on the split generation). */
+  /** The session-shape tally (host-precomputed on the split generation). */
   counts: TimelineCounts
   /** Tool calls with a result live in the current context (absent on older hosts). */
   toolCalls?: number
@@ -112,9 +112,6 @@ export function makeStatsContext(kit: ViewKit): (props: {
           {cell(t('stats.toolCalls'), props.toolCalls ?? 0)}
           {cell(t('stats.cacheHit'), hit === null ? '—' : `${hit}%`)}
           {cell(t('stats.cost'), cost === null ? '—' : formatCost(cost, currency), costTip)}
-          {cell(t('stats.injects'), props.counts.injects)}
-          {cell(t('stats.compactions'), props.counts.compactions)}
-          {cell(t('stats.prunes'), props.counts.prunes)}
         </div>
       </div>
     )
