@@ -25,13 +25,23 @@ const FLASH_RATES = {
 } as const
 
 /**
- * Pro rides the Flash triple: between the V4.1 Flash launch and the V4.1 Pro
- * release, DeepSeek routes every Pro request to V4.1 Flash and bills it at
- * the Flash rates — point `pro` at the new table once V4.1 Pro is priced.
+ * The Pro-series rates, per currency — its own table, which the 2026-09-10
+ * Flash reprice left untouched. The announced plan to route every Pro request
+ * to V4.1 Flash (from 2026-09-14 04:00 UTC until V4.1 Pro ships) was withdrawn
+ * before it took effect: the pricing page now states V4 Pro keeps serving at
+ * the unchanged billing method. A Pro request therefore prices at these rates
+ * and never at the Flash ones — point `pro` at a new table the day DeepSeek
+ * reprices it for real.
  */
+const PRO_RATES = {
+  usd: { peak: { hit: 0.044, miss: 1.32, out: 3.96 }, off: { hit: 0.022, miss: 0.66, out: 1.98 } },
+  cny: { peak: { hit: 0.3, miss: 9, out: 27 }, off: { hit: 0.15, miss: 4.5, out: 13.5 } },
+} as const
+
+/** Both families' tables per currency — the key space `CostCurrency` is named from it. */
 const PRICES = {
-  usd: { flash: FLASH_RATES.usd, pro: FLASH_RATES.usd },
-  cny: { flash: FLASH_RATES.cny, pro: FLASH_RATES.cny },
+  usd: { flash: FLASH_RATES.usd, pro: PRO_RATES.usd },
+  cny: { flash: FLASH_RATES.cny, pro: PRO_RATES.cny },
 } as const
 
 export type CostCurrency = keyof typeof PRICES

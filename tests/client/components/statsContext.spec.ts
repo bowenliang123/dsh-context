@@ -97,6 +97,12 @@ describe('StatsContext', () => {
     assert.ok(tip.includes('deepseek-v4-pro'))
     assert.ok(tip.includes('miss $0.3/$0.15'))
     assert.ok(tip.includes('output $1.2/$0.6'))
+    // The Pro row prints the Pro rates: the row and the pricing walk share one
+    // table, so a Pro bucket is never quoted (or billed) at the Flash figures
+    // above — the pair the cell showed while Pro rode the withdrawn reroute.
+    assert.ok(tip.includes('hit $0.044/$0.022'))
+    assert.ok(tip.includes('miss $1.32/$0.66'))
+    assert.ok(tip.includes('output $3.96/$1.98'))
     await m.unmount()
   })
 

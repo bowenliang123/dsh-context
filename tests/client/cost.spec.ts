@@ -32,9 +32,11 @@ describe('estimateSessionCost', () => {
       flash: { peak: bucket(M, M, M, M), off: bucket(M, M, M, M) },
       pro: { peak: bucket(M, M, M, M), off: bucket(M, M, M, M) },
     }
-    // Flash peak 0.006 + 2×0.3 + 1.2, Flash off 0.003 + 2×0.15 + 0.6; Pro
-    // bills at the same Flash rates while the routing window lasts.
-    close(estimateSessionCost(usage, 'usd'), 2 * (1.806 + 0.903))
+    // Per 1M tokens: Flash peak 0.006 + 2×0.3 + 1.2, Flash off 0.003 +
+    // 2×0.15 + 0.6; Pro prices its OWN table (0.044 + 2×1.32 + 3.96 peak,
+    // 0.022 + 2×0.66 + 1.98 off) — a Pro bucket is never re-priced at the
+    // Flash rates it would have ridden under the withdrawn reroute.
+    close(estimateSessionCost(usage, 'usd'), 1.806 + 0.903 + 6.644 + 3.322)
   })
 
   test('prices with the CNY table', () => {
@@ -44,7 +46,9 @@ describe('estimateSessionCost', () => {
 
   test('a missing model family is skipped', () => {
     const usage = { pro: { peak: bucket(0, M, 0, 0) } }
-    close(estimateSessionCost(usage, 'usd'), 0.3)
+    // The Pro cache-miss rate, not the Flash one (0.3): the row the tooltip
+    // prints for Pro is the table the walk prices with.
+    close(estimateSessionCost(usage, 'usd'), 1.32)
   })
 
   test('a missing pricing period is skipped', () => {
@@ -84,14 +88,14 @@ describe('sessionPrices', () => {
   test('lists flash before pro with their peak and off-peak triples (USD)', () => {
     assert.deepEqual(sessionPrices('usd'), [
       { family: 'deepseek-v4.1-flash / deepseek-flash', peak: { hit: 0.006, miss: 0.3, out: 1.2 }, off: { hit: 0.003, miss: 0.15, out: 0.6 } },
-      { family: 'deepseek-v4-pro', peak: { hit: 0.006, miss: 0.3, out: 1.2 }, off: { hit: 0.003, miss: 0.15, out: 0.6 } },
+      { family: 'deepseek-v4-pro', peak: { hit: 0.044, miss: 1.32, out: 3.96 }, off: { hit: 0.022, miss: 0.66, out: 1.98 } },
     ])
   })
 
   test('lists the CNY table for the CNY currency', () => {
     assert.deepEqual(sessionPrices('cny'), [
       { family: 'deepseek-v4.1-flash / deepseek-flash', peak: { hit: 0.04, miss: 2, out: 8 }, off: { hit: 0.02, miss: 1, out: 4 } },
-      { family: 'deepseek-v4-pro', peak: { hit: 0.04, miss: 2, out: 8 }, off: { hit: 0.02, miss: 1, out: 4 } },
+      { family: 'deepseek-v4-pro', peak: { hit: 0.3, miss: 9, out: 27 }, off: { hit: 0.15, miss: 4.5, out: 13.5 } },
     ])
   })
 })
