@@ -132,6 +132,32 @@ describe('set', () => {
     await new Promise(resolve => setTimeout(resolve, 0))
     assert.equal(s.defaultFileSort(), 'path')
   })
+
+  test('a rejected placement write degrades to all when the scope carries no valid value', async () => {
+    // Fail open: the unpersisted echo must not keep hiding an entry until
+    // the next reload — with nothing valid in the scope's truth, fall back
+    // to `all`.
+    const s = createContextSettings()
+    const scope = new TestSettingsScope({ status: 'ready', value: {}, writable: true })
+    s.attach(scope)
+    scope.failSet = true
+    s.set('defaultPlacement', 'sidebar')
+    assert.equal(s.defaultPlacement(), 'sidebar', 'the optimistic echo lands first')
+    await new Promise(resolve => setTimeout(resolve, 0))
+    assert.equal(s.defaultPlacement(), 'all', 'the echo degrades instead of staying unpersisted')
+  })
+
+  test('a rejected placement write rolls back to the scope\'s valid truth', async () => {
+    // The scope truth itself is a valid placement: the rollback restores it,
+    // no forced degrade.
+    const s = createContextSettings()
+    const scope = new TestSettingsScope({ status: 'ready', value: { defaultPlacement: 'sidebar' }, writable: true })
+    s.attach(scope)
+    scope.failSet = true
+    s.set('defaultPlacement', 'tab')
+    await new Promise(resolve => setTimeout(resolve, 0))
+    assert.equal(s.defaultPlacement(), 'sidebar')
+  })
 })
 
 describe('attach', () => {
@@ -198,6 +224,17 @@ describe('attach', () => {
     assert.equal(s.defaultGranularity(), 'step')
     assert.equal(s.defaultTrendMode(), 'total')
     assert.equal(s.defaultFileSort(), 'count')
+  })
+
+  test('an invalid scope placement degrades to all instead of keeping the current one', () => {
+    // Fail open on the read path too: a value the plugin cannot understand
+    // must not strand a previously chosen placement.
+    const s = createContextSettings()
+    s.set('defaultPlacement', 'tab')
+    assert.equal(s.defaultPlacement(), 'tab')
+    const scope = new TestSettingsScope({ status: 'ready', value: { defaultPlacement: 42 }, writable: false })
+    s.attach(scope)
+    assert.equal(s.defaultPlacement(), 'all')
   })
 
   test('explicit schema-default values are accepted', () => {
