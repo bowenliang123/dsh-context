@@ -11,6 +11,7 @@ import { createRoot } from 'react-dom/client'
 import { afterEach, describe, test, vi } from 'vitest'
 import { makeContextView } from '../../../src/client/components/contextView'
 import { watchHistoryFaces } from '../../../src/client/historyPage'
+import { watchSessionsFace } from '../../../src/client/sessionsFace'
 import { requestContextFocus, takeContextFocus } from '../../../src/client/viewFocus'
 import { createContextSettings } from '../../../src/client/settings'
 import type { SettingsScopeLike } from '../../../src/client/settings'
@@ -1450,6 +1451,31 @@ describe('ContextView — subagent cost in the stats cell', () => {
     await flush()
     assert.equal(costValue(m.container), '$0.90')
     assert.deepEqual(costParts(m.container), ['own $0.30', 'sub $0.60'])
+    await m.unmount()
+  })
+
+  // The service can be composed AFTER this mount — cordis arms services as
+  // their providing plugin loads — and the degrade while it is missing (this
+  // session alone, with no signal) must not be frozen for the mount's lifetime.
+  test('a sessions service composed after the mount still folds in', async () => {
+    const sessions = new TestSessionList({
+      root: { displayTitle: 'Main', running: true, updatedAt: 2 },
+      helper: {
+        parentId: 'root', origin: 'subagent', running: false, updatedAt: 1,
+        projectionValues: { contextTimeline: timeline({ cost: flash(M) }) },
+      },
+    })
+    const ctx = new TestClientCtx()
+    watchSessionsFace(asClientCtx(ctx))
+    const m = await mount(h(makeView(ctx), {
+      sessionId: 'root',
+      useProjection: projectionsFor(timeline({ cost: flash(M) })),
+    }))
+    assert.equal(costValue(m.container), '$0.30', 'no service yet: this session alone')
+    await act(async () => { ctx.setService('sessions', sessions) })
+    await flush()
+    assert.equal(costValue(m.container), '$0.60')
+    assert.deepEqual(costParts(m.container), ['own $0.30', 'sub $0.30'])
     await m.unmount()
   })
 })

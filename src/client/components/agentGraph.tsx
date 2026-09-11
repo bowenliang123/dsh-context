@@ -25,9 +25,9 @@ import {
   layoutForest,
   openAgentSession,
   ringSegments,
-  sessionsFaceOf,
   sessionsListStore,
 } from '../agentTree'
+import { useSessionsFace } from '../sessionsFace'
 
 export interface AgentGraphProps {
   sessionId?: string
@@ -53,10 +53,12 @@ export function makeAgentGraph(
   const { t, fmt, catLabel } = kit
 
   function AgentGraph(props: AgentGraphProps): ReactElement | null {
-    // Resolved lazily at mount (not at apply): the outward sessions service
-    // belongs to the client runtime's composition, and a deployment without
-    // it simply keeps the card hidden.
-    const face = useMemo(() => sessionsFaceOf(ctx), [])
+    // The live face (sessionsFace.ts): the outward sessions service belongs to
+    // the client runtime's composition, so it can be composed after this mount
+    // (or withdrawn under it) — a deployment that never composes it simply
+    // keeps the card hidden. Shared with the cost cell, which must read the
+    // same feed.
+    const face = useSessionsFace(ctx)
     const store = useMemo(() => sessionsListStore(face), [face])
     const snapshot = useSyncExternalStore(store.subscribe, store.getSnapshot)
     const sessionId = props.sessionId

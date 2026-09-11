@@ -222,7 +222,10 @@ interface AgentChild {
  * not delivered it yet) plus the parentId → children index over them. A row
  * whose parent is not in the index contributes no edge.
  */
-function lineageOf(byId: Record<string, unknown>, currentId: string): { rows: Map<string, AgentRow>; childrenOf: Map<string, AgentChild[]> } {
+function lineageOf(
+  byId: Record<string, unknown>,
+  currentId: string,
+): { rows: Map<string, AgentRow>; childrenOf: Map<string, AgentChild[]> } {
   const rows = new Map<string, AgentRow>()
   for (const key of Object.keys(byId)) {
     const row = agentRowOf(byId[key])

@@ -33,6 +33,7 @@ import { createContextSettings, type SettingsField, type SettingsScopeBinderFace
 import { makeContextView } from './components/contextView'
 import { makeContextJumpButton } from './components/contextJump'
 import { watchHistoryFaces } from './historyPage'
+import { watchSessionsFace } from './sessionsFace'
 import { watchPlacement } from './placement'
 import { watchSidebarContextTab } from './sidebar'
 import { makeViewKit } from './viewkit'
@@ -77,6 +78,12 @@ function apply(ctx: ClientCtx): void {
   // harness that never composes the namespace never fires the callback and
   // the targeted fetches simply stay absent.
   watchHistoryFaces(ctx)
+  // The outward sessions service the agent card and the cost cell read. Bound
+  // through the DECLARED inject for the same reason: cordis arms services as
+  // their providing plugin loads, so a mount can come up before `sessions`
+  // exists and has to hear about it landing rather than price the session
+  // alone for the rest of its life.
+  watchSessionsFace(ctx)
   const settings = createContextSettings()
   const ContextView = makeContextView(ctx, kit, settings)
 
