@@ -81,6 +81,38 @@ describe('StackedBar layout', () => {
   })
 })
 
+describe('StackedBar entrance grow', () => {
+  test('segments and the free track carry the grow-in stagger slots in layout order; the reserve band stays unanimated', async () => {
+    const m = await mount(h(StackedBar, {
+      parts: [part('system', 700), part('user', 300)],
+      max: 2000,
+      reserve: { ratio: 0.8, label: 'headroom' },
+    }))
+    const slot = (el: Element): string => (el as HTMLElement).style.getPropertyValue('--lc-i')
+    const segs = queryAll(m.container, '.lc-stacked-seg')
+    assert.equal(slot(segs[0]), '0')
+    assert.equal(slot(segs[1]), '1')
+    // The free track opens right after the last occupied segment; the reserve band carries no slot.
+    assert.equal(slot(query(m.container, '.lc-stacked-free')), '2')
+    assert.equal(slot(query(m.container, '.lc-reserve')), '')
+    await m.unmount()
+  })
+
+  test('the stagger caps so a long DNA band list settles fast', async () => {
+    // Twelve occupied bands: past the cap every late band joins at the same slot, the free track one after.
+    const parts = Array.from({ length: 12 }, (_, i) => part(`band-${i}`, i + 1))
+    const m = await mount(h(StackedBar, { parts, max: 200 }))
+    const slot = (el: Element): string => (el as HTMLElement).style.getPropertyValue('--lc-i')
+    const segs = queryAll(m.container, '.lc-stacked-seg')
+    assert.equal(segs.length, 12)
+    assert.equal(slot(segs[0]), '0')
+    assert.equal(slot(segs[8]), '8')
+    assert.equal(slot(segs[11]), '8')
+    assert.equal(slot(query(m.container, '.lc-stacked-free')), '9')
+    await m.unmount()
+  })
+})
+
 describe('StackedBar hover link', () => {
   test('hovering a segment lights it, dims the stack, frames the occupied box, and floats the tooltip', async () => {
     const m = await mount(h(HoverHarness, { parts: [part('system', 100, 120), part('user', 900)], max: 2000 }))

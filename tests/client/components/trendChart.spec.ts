@@ -1080,6 +1080,38 @@ describe('jumpTargetOf', () => {
   })
 })
 
+describe('TrendChart entrance rise', () => {
+  const slot = (el: Element): string => (el as HTMLElement).style.getPropertyValue('--lc-i')
+
+  test('each bar carries its rise stagger slot, capped so a long log settles quickly', async () => {
+    const reqs = Array.from({ length: 25 }, (_, i) => req(i + 1))
+    const m = await mount(h(TrendChart, propsOf(reqs)))
+    const stacks = queryAll(m.container, '.lc-bar-stack')
+    assert.equal(stacks.length, 25)
+    assert.equal(slot(stacks[0]), '0')
+    assert.equal(slot(stacks[1]), '1')
+    assert.equal(slot(stacks[19]), '19')
+    // Past the cap every late bar joins at the same slot.
+    assert.equal(slot(stacks[20]), '20')
+    assert.equal(slot(stacks[24]), '20')
+    await m.unmount()
+  })
+
+  test('delta arms share their bar rise stagger slot', async () => {
+    const r1 = req(1, { turn: 1, step: 0 })
+    const r2 = req(2, { turn: 1, step: 1, system: 50, user: 60 })
+    const m = await mount(h(TrendChart, propsOf([r1, r2], { mode: 'delta' })))
+    const ups = queryAll(m.container, '.lc-bar-up')
+    const downs = queryAll(m.container, '.lc-bar-down')
+    assert.equal(slot(ups[0]), '0')
+    assert.equal(slot(ups[1]), '1')
+    assert.equal(slot(downs[1]), '1')
+    // The first bar diffs against nothing, so it grows no down arm.
+    assert.equal(queryAll(downs[0], 'div').length, 0)
+    await m.unmount()
+  })
+})
+
 describe('attachMarkers', () => {
   test('attaches each boundary event to the first request logged after it', () => {
     const reqs = [req(5), req(10)]

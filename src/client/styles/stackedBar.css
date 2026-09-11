@@ -14,6 +14,16 @@
 .lc-stacked-seg-pick { cursor: pointer; }
 .lc-stacked-seg { transition: filter var(--ds-transition-duration, 0.2s) var(--ds-ease-in-out, ease-in-out), opacity var(--ds-transition-duration, 0.2s) var(--ds-ease-in-out, ease-in-out); }
 .lc-stacked-free { box-sizing: border-box; transition: box-shadow var(--ds-transition-duration, 0.2s) var(--ds-ease-in-out, ease-in-out), opacity var(--ds-transition-duration, 0.2s) var(--ds-ease-in-out, ease-in-out); }
+/*
+ Entrance grow: the occupied segments and the free track scaleX-open from their own left edge (transform,
+ not width, so the layout never thrashes), staggered in layout order so the strip builds left to right;
+ the 100% keyframe is omitted — CSS lands on the elements' natural transform. `backwards` keeps each piece
+ collapsed until its turn; runs once on mount, so live hover/width updates never replay it. The component
+ caps `--lc-i`, so a long DNA band list still settles in about a second. The reserve band stays
+ unanimated — as an overlay its growth would smear the stripes, and it reads as chrome, not data.
+ */
+.lc-stacked-seg, .lc-stacked-free { transform-origin: 0 50%; animation: lc-stacked-in 0.4s cubic-bezier(0.4, 0, 0.2, 1) backwards; animation-delay: calc(var(--lc-i, 0) * 40ms); }
+@keyframes lc-stacked-in { from { transform: scaleX(0); } }
 .lc-stacked-seg-on { filter: brightness(1.18); }
 /*
  Free track mirrors the occupied frame as a 2px DASHED box — border, not the old inset shadow, so the dash pattern renders (box-shadow can't dash); the base box-sizing keeps the width from shifting. Reserve band: rightmost (1−ratio) of the window, striped 'headroom' above the track/segments, owning the pointer so its own hover explanation shows.
@@ -33,3 +43,7 @@
 .lc-chip em { font-style: normal; color: var(--dsw-alias-label-secondary); }
 .lc-chip-on { font-weight: 600; background: var(--dsw-alias-interactive-bg-hover); }
 .lc-chip-on i { box-shadow: 0 0 0 1px var(--dsw-alias-brand-primary); }
+/* Reduced motion (the harness's own idiom): the strip shows its final layout immediately. */
+@media (prefers-reduced-motion: reduce) {
+  .lc-stacked-seg, .lc-stacked-free { animation: none; }
+}

@@ -128,6 +128,22 @@ describe('Donut slice divider', () => {
   })
 })
 
+describe('Donut entrance sweep', () => {
+  test('segments carry the sweep-in stagger slot in paint order', async () => {
+    const m = await mount(h(Donut, {
+      segments: [
+        { key: 'a', color: '#ff0000', value: 30 },
+        { key: 'b', color: '#00ff00', value: 70 },
+      ],
+      centerTop: 'x',
+    }))
+    const arcs = queryAll(m.container, '.lc-donut-seg')
+    assert.equal((arcs[0] as HTMLElement).style.getPropertyValue('--lc-i'), '0')
+    assert.equal((arcs[1] as HTMLElement).style.getPropertyValue('--lc-i'), '1')
+    await m.unmount()
+  })
+})
+
 describe('Donut hover link', () => {
   const SEGS: DonutSegment[] = [
     { key: 'a', color: '#ff0000', value: 30 },

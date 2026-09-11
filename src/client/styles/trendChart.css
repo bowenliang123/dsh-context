@@ -58,6 +58,16 @@
 .lc-bar-in-turn { background: rgba(128,128,128,0.14); }
 .lc-bar-stack { display: flex; flex-direction: column-reverse; width: 100%; }
 .lc-bar-stack > div { width: 100%; }
+/*
+ Entrance rise: each bar's stack scaleY-opens from the baseline (total mode: the chart floor; delta arms:
+ the zero line — the down-arm's origin is its top edge), staggered left to right with the cascade capped in
+ the component so a long log still settles in about a second. The 100% keyframe is omitted — CSS lands on
+ the elements' natural transform; `backwards` keeps a bar collapsed until its turn. Runs once on the node's
+ insertion, so hover/selection re-renders never replay it.
+ */
+.lc-bar-stack, .lc-bar-up, .lc-bar-down { transform-origin: 50% 100%; animation: lc-bar-in 0.35s cubic-bezier(0.4, 0, 0.2, 1) backwards; animation-delay: calc(var(--lc-i, 0) * 15ms); }
+.lc-bar-down { transform-origin: 50% 0; }
+@keyframes lc-bar-in { from { transform: scaleY(0); } }
 /* Rounded ends on each bar's outer corners only (the idiom radius, .lc-bar's 2px): the topmost segment
    carries the two top corners, the bottommost the two bottom, and an only segment all four — inner
    boundaries stay square so stacked segments never show background gaps between colors. */
@@ -102,3 +112,7 @@
    adjacent label pair would collide at this 10px base (mirrored as LABEL_FONT in trendChart.tsx);
    updateTurnLabels' thinning chain stays only as the measured last resort past the 6px floor. */
 .lc-turn-label { display: inline-block; }
+/* Reduced motion (the harness's own idiom): the bars show their final heights immediately. */
+@media (prefers-reduced-motion: reduce) {
+  .lc-bar-stack, .lc-bar-up, .lc-bar-down { animation: none; }
+}

@@ -6,10 +6,12 @@
  * with no value are skipped; an all-zero ring renders as one neutral track so
  * the card never draws a misleading "100% of nothing" pie. The center type
  * scales with the ring's size, so the label always fits inside the hole the
- * thin stroke leaves.
+ * thin stroke leaves. On mount the slices sweep in one after another, growing
+ * their dasharcs clockwise from 12 o'clock (stats.css, staggered by the
+ * per-slice `--lc-i` slot below).
  */
 
-import { type ReactElement, type ReactNode } from 'react'
+import { type CSSProperties, type ReactElement, type ReactNode } from 'react'
 import type { ViewKit } from '../viewkit'
 
 /**
@@ -85,7 +87,7 @@ export function makeDonut(kit: ViewKit): (props: DonutProps) => ReactElement {
         <svg viewBox="0 0 42 42" width={size} height={size} aria-hidden="true">
           {arcs.length === 0
             ? <circle className="lc-donut-track" cx="21" cy="21" r="15.9155" fill="none" strokeWidth="4" />
-            : arcs.map(a => (
+            : arcs.map((a, i) => (
               <circle
                 key={a.key}
                 className={'lc-donut-seg' + (props.hoverKey === a.key ? ' lc-donut-seg-on' : '')}
@@ -97,6 +99,9 @@ export function makeDonut(kit: ViewKit): (props: DonutProps) => ReactElement {
                 strokeWidth="4"
                 strokeDasharray={`${a.len} ${100 - a.len}`}
                 strokeDashoffset={a.offset}
+                // Sweep-in stagger slot (stats.css animates stroke-dasharray from 0 100 up to these attribute
+                // values, so the slices build clockwise from 12 o'clock, one after another).
+                style={{ '--lc-i': i } as CSSProperties}
                 onMouseEnter={() => { if (props.onHoverKey !== undefined) props.onHoverKey(a.key) }}
               />
             ))}

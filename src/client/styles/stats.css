@@ -50,6 +50,15 @@
    other slices to 0.35 (the stacked bars' idiom) while the active one stays
    solid; the center figures stay at rest. */
 .lc-donut-seg { transition: opacity var(--ds-transition-duration, 0.2s) var(--ds-ease-in-out, ease-in-out); }
+/*
+ Entrance sweep: each slice grows its dasharc from 0 100 up to the attribute value (the 100% keyframe is
+ omitted on purpose — CSS takes the element's own stroke-dasharray, so no per-slice value is duplicated
+ here), staggered by the slice index so the ring builds clockwise from 12 o'clock; `backwards` keeps a
+ slice hidden until its turn. Runs once on mount — hover-driven re-renders reuse the nodes and never
+ restart it.
+ */
+.lc-donut-seg { animation: lc-donut-in 0.45s cubic-bezier(0.4, 0, 0.2, 1) backwards; animation-delay: calc(var(--lc-i, 0) * 50ms); }
+@keyframes lc-donut-in { from { stroke-dasharray: 0 100; } }
 .lc-donut-dim .lc-donut-seg { opacity: 0.35; }
 .lc-donut-dim .lc-donut-seg-on { opacity: 1; }
 .lc-donut-center { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 1px; pointer-events: none; text-align: center; padding: 0 7px; box-sizing: border-box; }
@@ -111,4 +120,8 @@
   .lc-donut-row { flex-wrap: wrap; }
   .lc-donut { margin: 0 auto; }
   .lc-donut-row .lc-sl { flex-basis: 100%; }
+}
+/* Reduced motion (the harness's own idiom): the ring shows its final arcs immediately. */
+@media (prefers-reduced-motion: reduce) {
+  .lc-donut-seg { animation: none; }
 }

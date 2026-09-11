@@ -1,9 +1,10 @@
 /**
  * Bespoke per-request history chart — no shared data-viz primitive — styled through the shared `--dsw-alias-*` tokens; helpers
- * aggregateByTurn/attachMarkers are shared with ContextView.
+ * aggregateByTurn/attachMarkers are shared with ContextView. On mount each bar rises from its baseline,
+ * staggered left to right with the cascade capped for long logs (trendChart.css, `--lc-i` slots below).
  */
 
-import { memo, useLayoutEffect, useMemo, useRef, useState, type ReactElement, type UIEvent } from 'react'
+import { memo, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type ReactElement, type UIEvent } from 'react'
 import type { Category, ContextEventRecord, RequestRecord } from '../../shared/types'
 import { CATS } from '../categories'
 import { containHorizontalOverscroll } from '../overscroll'
@@ -101,6 +102,9 @@ export function makeTrendChart(kit: ViewKit): (props: TrendChartProps) => ReactE
   // same column grid.
   const BAR_W = 14
   const BAR_GAP = 2
+  // Entrance stagger cap: long logs render thousands of bars, so the grow-in cascade stops widening after
+  // this many columns and late bars simply join within the cap (trendChart.css delays by `--lc-i`).
+  const STAGGER_CAP = 20
   // Neutral zebra, deliberately DISJOINT from the category palette — the strip must read as a partition layer, not a bottom segment of the
   // composition bars.
   const TURN_FILLS = ['rgba(128,128,128,0.12)', 'rgba(128,128,128,0.26)']
@@ -178,6 +182,8 @@ export function makeTrendChart(kit: ViewKit): (props: TrendChartProps) => ReactE
     upPx?: number
     downPx?: number
     deltaScale?: number
+    /** Bar index in the render order: the entrance grow-in stagger slot (capped inside, so a long log's cascade stays snappy). */
+    enterIndex: number
     onSelect: (seq: number | null) => void
     onHover: (seq: number | null) => void
   }
@@ -191,6 +197,8 @@ export function makeTrendChart(kit: ViewKit): (props: TrendChartProps) => ReactE
     // Delta mode: diverging stacks — positive category deltas pile UP from the zero line, negative ones
     // hang DOWN from it, both in category colors (direction carries the sign, color the category).
     const diverge = props.upPx !== undefined && props.downPx !== undefined && props.deltaScale !== undefined
+    // Rise stagger slot, shared by the total stack and both delta arms (trendChart.css scaleY-opens them).
+    const enterStyle = { '--lc-i': Math.min(props.enterIndex, STAGGER_CAP) } as CSSProperties
     return (
       <div
         className={'lc-bar'
@@ -210,14 +218,14 @@ export function makeTrendChart(kit: ViewKit): (props: TrendChartProps) => ReactE
         ) : null}
         {diverge ? (
           <>
-            <div className="lc-bar-up" style={{ bottom: `${props.downPx}px` }}>
+            <div className="lc-bar-up" style={{ bottom: `${props.downPx}px`, ...enterStyle }}>
               {CATS.map((c) => {
                 const d = req[c.key] || 0
                 if (d <= 0) return null
                 return <div key={c.key} data-cat={c.key} className="lc-cat-seg" style={{ height: `${Math.max(1, Math.round(d * (props.deltaScale as number)))}px`, background: c.color }} />
               })}
             </div>
-            <div className="lc-bar-down" style={{ top: `${props.upPx}px` }}>
+            <div className="lc-bar-down" style={{ top: `${props.upPx}px`, ...enterStyle }}>
               {CATS.map((c) => {
                 const d = req[c.key] || 0
                 if (d >= 0) return null
@@ -226,7 +234,7 @@ export function makeTrendChart(kit: ViewKit): (props: TrendChartProps) => ReactE
             </div>
           </>
         ) : (
-          <div className="lc-bar-stack">
+          <div className="lc-bar-stack" style={enterStyle}>
             {CATS.map((c) => {
               const v = req[c.key] || 0
               if (!v) return null
@@ -632,6 +640,7 @@ export function makeTrendChart(kit: ViewKit): (props: TrendChartProps) => ReactE
                   upPx={delta ? upPx : undefined}
                   downPx={delta ? downPx : undefined}
                   deltaScale={delta ? deltaScale : undefined}
+                  enterIndex={i}
                   onSelect={props.onSelect}
                   onHover={props.onHover}
                 />
