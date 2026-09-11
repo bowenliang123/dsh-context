@@ -1,11 +1,12 @@
 // Category parts (src/client/categories.ts): the six-bucket parts builder,
 // the official contextBreakdown split (rounding residue on the largest
-// category, clamped), and the provider-anchored reproportioning.
+// category, clamped), the provider-anchored reproportioning, and the Token
+// card's billed-usage split.
 
 import assert from 'node:assert/strict'
 import { describe, test } from 'vitest'
-import { anchoredParts, officialParts, partsOf, type PartsPart } from '../../src/client/categories'
-import type { ContextBreakdown, Snapshot } from '../../src/shared/types'
+import { anchoredParts, billedParts, officialParts, partsOf, type PartsPart } from '../../src/client/categories'
+import type { ContextBreakdown, Snapshot, TokenUsage } from '../../src/shared/types'
 
 function current(over: Partial<Snapshot['current']> = {}): Snapshot['current'] {
   return { system: 0, tools: 0, user: 0, inject: 0, assistant: 0, tool: 0, total: 0, ...over }
@@ -118,5 +119,58 @@ describe('anchoredParts', () => {
   test('scaling rounds each part to the nearest integer', () => {
     const out = anchoredParts([part(0, 20), part(0, 50)], 40)
     assert.deepEqual(out.map(p => p.value), [11, 29])
+  })
+})
+
+describe('billedParts', () => {
+  const USAGE: TokenUsage = { uncachedInputTokens: 300, outputTokens: 60, cacheReadTokens: 100, cacheWriteTokens: 0 }
+
+  test('the billed input splits by the estimated ratios and output closes exact', () => {
+    const cur = current({ system: 50, tools: 50, user: 100, inject: 0, assistant: 100, tool: 100, total: 400 })
+    const parts = billedParts(cur, null, USAGE)
+    // Input 400 equals the estimated total, so the ratios carry over as-is;
+    // the seven parts sum to the chat line's 460 by construction.
+    assert.deepEqual(parts.map(p => [p.key, p.color, p.value]), [
+      ['system', '#6366f1', 50],
+      ['tools', '#f59e0b', 50],
+      ['user', '#22c55e', 100],
+      ['inject', '#a855f7', 0],
+      ['assistant', '#3b82f6', 100],
+      ['tool', '#14b8a6', 100],
+      ['output', '#ec4899', 60],
+    ])
+  })
+
+  test('the split scales when the billed input differs from the estimated total', () => {
+    const cur = current({ system: 100, user: 100, total: 200 })
+    const usage: TokenUsage = { ...USAGE, uncachedInputTokens: 400, cacheReadTokens: 0, outputTokens: 0 }
+    const parts = billedParts(cur, null, usage)
+    assert.deepEqual(values(parts), { system: 200, tools: 0, user: 200, inject: 0, assistant: 0, tool: 0, output: 0 })
+  })
+
+  test('a delivered breakdown supplies the split ratios', () => {
+    const cur = current({ user: 150, assistant: 150, total: 300 })
+    const bd: ContextBreakdown = { systemTokens: 100, toolsTokens: 100, messageTokens: 200 }
+    const usage: TokenUsage = { ...USAGE, uncachedInputTokens: 800, cacheReadTokens: 0 }
+    const parts = billedParts(cur, bd, usage)
+    assert.deepEqual(values(parts), { system: 200, tools: 200, user: 200, inject: 0, assistant: 200, tool: 0, output: 60 })
+  })
+
+  test('a zero billed input zeroes the prompt split but keeps the exact output', () => {
+    const cur = current({ system: 100, user: 100, total: 200 })
+    const usage: TokenUsage = { uncachedInputTokens: 0, outputTokens: 25, cacheReadTokens: 0, cacheWriteTokens: 0 }
+    const parts = billedParts(cur, null, usage)
+    assert.deepEqual(values(parts), { system: 0, tools: 0, user: 0, inject: 0, assistant: 0, tool: 0, output: 25 })
+  })
+
+  test('an all-zero composition leaves the billed input unattributed', () => {
+    const parts = billedParts(current(), null, USAGE)
+    assert.deepEqual(values(parts), { system: 0, tools: 0, user: 0, inject: 0, assistant: 0, tool: 0, output: 60 })
+  })
+
+  test('hostile negative buckets never yield negative parts', () => {
+    const usage: TokenUsage = { uncachedInputTokens: -10, outputTokens: -5, cacheReadTokens: 0, cacheWriteTokens: 0 }
+    const parts = billedParts(current({ system: 100, total: 100 }), null, usage)
+    assert.deepEqual(values(parts), { system: 0, tools: 0, user: 0, inject: 0, assistant: 0, tool: 0, output: 0 })
   })
 })

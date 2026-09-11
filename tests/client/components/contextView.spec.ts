@@ -174,8 +174,10 @@ describe('ContextView — projection guards', () => {
     }))
     // Anchored headline: projected 100 of a 128k window.
     assert.ok(text(m.container).includes(DICT_EN['overview.used']))
-    // Cache-hit cell from the official tokenUsage projection (200 / 300).
-    assert.ok(text(m.container).includes('66.66%'))
+    // The Token card's center is the chat stats line's whole-session billed
+    // total off the official tokenUsage projection (100 + 200 + 0 + 50).
+    const tokensCard = queryAll(m.container, '.lc-head > .lc-col-donut')[0]
+    assert.equal(query(tokensCard, '.lc-donut-center b').textContent, '350')
     assert.ok(text(m.container).includes('m-only'))
     await m.unmount()
   })

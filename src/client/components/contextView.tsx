@@ -504,7 +504,7 @@ export function makeContextView(
             <StatsContext counts={data.counts ?? countsOfRecords(requests, events)} toolCalls={data.toolCalls} images={data.images}
               cost={data.cost} locale={activeLocale} />
           )}
-          <StatsTokens usage={usage} />
+          <StatsTokens usage={usage} current={data.current} breakdown={breakdown} />
           <StatsTiming timing={data.timing ?? null} />
           {inSidebar ? null : <PluginInfo />}
         </div>
