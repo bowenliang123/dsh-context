@@ -34,7 +34,7 @@
 
 import { readFileSync } from 'node:fs'
 import { createRequire } from 'node:module'
-import { dirname, join, relative } from 'node:path'
+import { dirname, isAbsolute, join, relative } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import type { Context } from '@deepseek-ai/cordis'
 
@@ -146,7 +146,14 @@ function probeAnchor(resolve: Resolve, packageNames: readonly string[]): string 
  * would degrade to the home anchor, which is the safe direction.
  */
 function isInside(root: string, candidate: string): boolean {
-  return !relative(root, candidate).startsWith('..')
+  const rel = relative(root, candidate)
+  // `relative` answers with an ABSOLUTE path when the two sides share no root
+  // — on Windows that is any two drives, e.g. a probe home under C: and the
+  // plugin under E:. Such a path is no child of `root`, and reading it as one
+  // would discard every witness and drop the gate to the home anchor.
+  /* v8 ignore next -- Windows-only: a POSIX run cannot make `relative` cross a root. */
+  if (isAbsolute(rel)) return false
+  return !rel.startsWith('..')
 }
 
 /**
