@@ -352,6 +352,35 @@ describe('subagentCostUsage', () => {
     })
   })
 
+  // The delivery bound is a JSON value, and the timeline's cheap pass-through
+  // arm hands `cost` on untouched: an explicit null or an empty record reaches
+  // this walk exactly as the payload spelled it.
+  test('a descendant whose cost is an explicit null folds to nothing instead of crashing', () => {
+    const snapshot = snap({
+      root: row({}),
+      nulled: row({ parentId: 'root', origin: 'subagent', projectionValues: { contextTimeline: { ...timeline(0), cost: null } } }),
+      priced: row({ parentId: 'root', origin: 'subagent', projectionValues: { contextTimeline: costed(7) } }),
+    })
+    // The null must never become the accumulator: the sibling after it still
+    // has to merge cleanly.
+    assert.deepEqual(subagentCostUsage(snapshot, 'root'), {
+      usage: { flash: { peak: { uncached: 7, cacheRead: 0, cacheWrite: 0, output: 0 } } },
+      count: 1,
+    })
+  })
+
+  test('a descendant whose cost carries no bucket is not counted', () => {
+    // A `cost` member with no family × period bucket — a JSON `{}`, or a family
+    // spelled as null — prices to nothing, so it is not part of the figure's
+    // population and must not leave an empty total behind either.
+    const snapshot = snap({
+      root: row({}),
+      empty: row({ parentId: 'root', origin: 'subagent', projectionValues: { contextTimeline: { ...timeline(0), cost: {} } } }),
+      nulled: row({ parentId: 'root', origin: 'subagent', projectionValues: { contextTimeline: { ...timeline(0), cost: { flash: null } } } }),
+    })
+    assert.deepEqual(subagentCostUsage(snapshot, 'root'), { count: 0 })
+  })
+
   test('blank placeholder rows and malformed rows are not agents', () => {
     const snapshot = snap({
       root: row({}),
@@ -716,6 +745,19 @@ describe('sessionsListStore', () => {
   test('an absent service yields an inert pair that never notifies', () => {
     for (const face of [null, {} as SessionsFaceLike]) {
       const store = sessionsListStore(face)
+      assert.equal(store.getSnapshot(), null)
+      const stop = store.subscribe(() => {})
+      assert.equal(typeof stop, 'function')
+      stop()
+    }
+  })
+
+  // The face type is a declaration over an untyped service value: `list` can
+  // be null or half-built at runtime, and React calls subscribe on whatever
+  // pair it is handed.
+  test('a null or half-built list member degrades to the inert pair', () => {
+    for (const list of [null, {}, { getSnapshot: () => ({}) }, { subscribe: () => () => {} }]) {
+      const store = sessionsListStore({ list } as unknown as SessionsFaceLike)
       assert.equal(store.getSnapshot(), null)
       const stop = store.subscribe(() => {})
       assert.equal(typeof stop, 'function')

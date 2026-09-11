@@ -4,8 +4,8 @@
 
 import assert from 'node:assert/strict'
 import { describe, test } from 'vitest'
-import { addCostUsage, estimateSessionCost, formatCost, formatPriceRate, sessionPrices } from '../../src/client/cost'
-import type { CostBucketTotals } from '../../src/shared/types'
+import { addCostUsage, estimateSessionCost, formatCost, formatPriceRate, hasCostBuckets, sessionPrices } from '../../src/client/cost'
+import type { CostBucketTotals, SessionCostUsage } from '../../src/shared/types'
 
 const M = 1_000_000
 
@@ -57,6 +57,16 @@ describe('estimateSessionCost', () => {
     assert.equal(estimateSessionCost({ flash: { peak: garbage } }, 'usd'), 0)
   })
 
+  // The delivery bound is a JSON value, not this module's optional-member
+  // type: a payload can spell "nothing here" as an explicit null.
+  test('a null model family prices as absent rather than throwing', () => {
+    assert.equal(estimateSessionCost({ flash: null } as unknown as SessionCostUsage, 'usd'), null)
+  })
+
+  test('a null pricing period prices as absent rather than throwing', () => {
+    assert.equal(estimateSessionCost({ flash: { peak: null } } as unknown as SessionCostUsage, 'usd'), null)
+  })
+
   test('garbage fields degrade while real fields still price', () => {
     const mixed = { cacheRead: M, uncached: NaN, cacheWrite: M / 2, output: 'junk' } as unknown as CostBucketTotals
     close(estimateSessionCost({ flash: { peak: mixed } }, 'usd'), 0.006 + 0.5 * 0.3)
@@ -69,6 +79,27 @@ describe('addCostUsage', () => {
     assert.equal(addCostUsage(undefined, usage), usage)
     assert.equal(addCostUsage(usage, undefined), usage)
     assert.equal(addCostUsage(undefined, undefined), undefined)
+  })
+
+  // A null side reads as absent, and never comes back OUT as the fold's
+  // result: the caller merges that result into the next subagent's totals.
+  test('a null side reads as absent and never surfaces as the total', () => {
+    const usage = { flash: { peak: bucket(1, 2, 3, 4) } }
+    assert.equal(addCostUsage(null, null), undefined)
+    assert.equal(addCostUsage(null, usage), usage)
+    assert.equal(addCostUsage(usage, null), usage)
+    // The fold-then-merge the null accumulator used to throw on.
+    assert.equal(addCostUsage(addCostUsage(undefined, null), usage), usage)
+  })
+
+  test('a null family on both sides materialises nothing', () => {
+    const nulled = { flash: null } as unknown as SessionCostUsage
+    assert.deepEqual(addCostUsage(nulled, nulled), {})
+  })
+
+  test('a null family on one side leaves the other side\'s buckets intact', () => {
+    const nulled = { flash: null } as unknown as SessionCostUsage
+    assert.deepEqual(addCostUsage(nulled, { flash: { peak: bucket(1, 2, 3, 4) } }), { flash: { peak: bucket(1, 2, 3, 4) } })
   })
 
   test('sums each family × period bucket pairwise', () => {
@@ -103,6 +134,23 @@ describe('addCostUsage', () => {
     const sum = addCostUsage({}, {})
     assert.deepEqual(sum, {})
     assert.equal(estimateSessionCost(sum, 'usd'), null)
+  })
+})
+
+describe('hasCostBuckets', () => {
+  test('an absent or empty usage carries nothing to price', () => {
+    assert.equal(hasCostBuckets(null), false)
+    assert.equal(hasCostBuckets(undefined), false)
+    assert.equal(hasCostBuckets({}), false)
+  })
+
+  test('a family whose buckets are all null carries nothing', () => {
+    assert.equal(hasCostBuckets({ flash: null } as unknown as SessionCostUsage), false)
+    assert.equal(hasCostBuckets({ flash: { peak: null } } as unknown as SessionCostUsage), false)
+  })
+
+  test('one bucket anywhere is enough, even one that prices to zero', () => {
+    assert.equal(hasCostBuckets({ pro: { off: bucket(0, 0, 0, 0) } }), true)
   })
 })
 

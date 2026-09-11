@@ -34,6 +34,14 @@ const PRICES = {
   cny: { flash: FLASH_RATES.cny, pro: FLASH_RATES.cny },
 } as const
 
+/**
+ * The key space every bucket walk shares — model family × pricing period, in
+ * display order. `PRICES` is indexed by it, so pricing, the subagent fold and
+ * the tooltip's rate table all have to agree on it.
+ */
+const FAMILIES = ['flash', 'pro'] as const
+const PERIODS = ['peak', 'off'] as const
+
 export type CostCurrency = keyof typeof PRICES
 
 /**
@@ -41,16 +49,20 @@ export type CostCurrency = keyof typeof PRICES
  * the hit rate; uncached input AND cache writes bill at the miss rate;
  * output (reasoning included) bills at the out rate. Null when nothing was
  * priced (no DeepSeek V4 usage folded yet), so the cell can show a dash.
+ *
+ * A bucket the payload spells as an explicit null prices as absent, exactly
+ * as a missing key does: the delivery bound is a JSON value, not this
+ * module's optional-member type (services.ts `timelineOf`).
  */
 export function estimateSessionCost(usage: SessionCostUsage | null | undefined, currency: CostCurrency): number | null {
   if (usage === null || usage === undefined) return null
   let total = 0
   let any = false
-  for (const family of ['flash', 'pro'] as const) {
-    const fam = usage[family]
+  for (const family of FAMILIES) {
+    const fam = usage[family] ?? undefined
     if (fam === undefined) continue
-    for (const period of ['peak', 'off'] as const) {
-      const b: CostBucketTotals | undefined = fam[period]
+    for (const period of PERIODS) {
+      const b: CostBucketTotals | undefined = fam[period] ?? undefined
       if (b === undefined) continue
       const p: PriceTriple = PRICES[currency][family][period]
       total += (numOf(b.cacheRead) * p.hit + (numOf(b.uncached) + numOf(b.cacheWrite)) * p.miss + numOf(b.output) * p.out) / 1e6
@@ -68,18 +80,21 @@ export function estimateSessionCost(usage: SessionCostUsage | null | undefined, 
  *
  * Either side may be absent — a session with no priced usage yet, or a family
  * only one side used — and two absences stay absent, so nothing materialises a
- * zero-filled bucket that would price to ¥0 instead of the dash.
+ * zero-filled bucket that would price to ¥0 instead of the dash. A side the
+ * payload spells as an explicit null reads as absent too, and never reaches the
+ * caller as the fold's result: the caller merges the result into the NEXT
+ * subagent's totals, and a null accumulator throws on that read.
  */
-export function addCostUsage(a: SessionCostUsage | undefined, b: SessionCostUsage | undefined): SessionCostUsage | undefined {
-  if (a === undefined) return b
-  if (b === undefined) return a
+export function addCostUsage(a: SessionCostUsage | null | undefined, b: SessionCostUsage | null | undefined): SessionCostUsage | undefined {
+  if (a === null || a === undefined) return b ?? undefined
+  if (b === null || b === undefined) return a
   const sum: SessionCostUsage = {}
-  for (const family of ['flash', 'pro'] as const) {
-    const one = a[family]
-    const other = b[family]
+  for (const family of FAMILIES) {
+    const one = a[family] ?? undefined
+    const other = b[family] ?? undefined
     if (one === undefined && other === undefined) continue
     const merged: CostFamilyUsage = {}
-    for (const period of ['peak', 'off'] as const) {
+    for (const period of PERIODS) {
       const x = one?.[period]
       const y = other?.[period]
       if (x === undefined && y === undefined) continue
@@ -95,6 +110,24 @@ export function addCostUsage(a: SessionCostUsage | undefined, b: SessionCostUsag
   return sum
 }
 
+/**
+ * True when the usage carries at least one family × period bucket to price —
+ * the same structural walk `estimateSessionCost` folds over, for callers that
+ * have to ask "is this anything?" without a currency. A null member reads as
+ * absent, as everywhere else in this module.
+ */
+export function hasCostBuckets(usage: SessionCostUsage | null | undefined): boolean {
+  if (usage === null || usage === undefined) return false
+  for (const family of FAMILIES) {
+    const fam = usage[family] ?? undefined
+    if (fam === undefined) continue
+    for (const period of PERIODS) {
+      if ((fam[period] ?? undefined) !== undefined) return true
+    }
+  }
+  return false
+}
+
 export function formatCost(amount: number, currency: CostCurrency): string {
   const symbol = currency === 'cny' ? '¥' : '$'
   return symbol + (amount >= 1 ? amount.toFixed(2) : amount.toPrecision(2))
@@ -108,7 +141,7 @@ export function formatCost(amount: number, currency: CostCurrency): string {
  * from the math that prices the session.
  */
 export function sessionPrices(currency: CostCurrency): { family: string; peak: PriceTriple; off: PriceTriple }[] {
-  return (['flash', 'pro'] as const).map(id => ({
+  return FAMILIES.map(id => ({
     family: id === 'flash' ? 'deepseek-v4.1-flash / deepseek-flash' : 'deepseek-v4-pro',
     peak: PRICES[currency][id].peak,
     off: PRICES[currency][id].off,

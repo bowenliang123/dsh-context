@@ -20,7 +20,7 @@
 
 import type { SessionCostUsage } from '../shared/types'
 import type { PartsPart } from './categories'
-import { addCostUsage } from './cost'
+import { addCostUsage, hasCostBuckets } from './cost'
 import { headlineOf, type Headline } from './headline'
 import { asRecord, contextBreakdownOf, contextPressureOf, numOf, timelineOf, tokenUsageOf } from './services'
 
@@ -216,17 +216,13 @@ interface AgentChild {
 }
 
 /**
- * Build the current session's agent family from a session-list snapshot:
- * walk up `parentId` to the topmost known ancestor, then DFS its whole
- * subtree (blank placeholder rows excluded). Null when there is no anchor —
- * no current session, or a snapshot without a `byId` table (older harness).
- * The current session synthesizes a row when the list has not delivered it
- * yet, so the card can still show its live self stats.
+ * The lineage index both the family forest and the cost fold walk: the
+ * snapshot's rows parsed once (blank placeholder sessions — never engaged —
+ * excluded, the current session always kept and synthesized when the list has
+ * not delivered it yet) plus the parentId → children index over them. A row
+ * whose parent is not in the index contributes no edge.
  */
-export function agentForestOf(snapshot: unknown, currentId: string | undefined, self?: AgentSelfStats): AgentForest | null {
-  const byId = asRecord(asRecord(snapshot)?.byId)
-  if (byId === null || currentId === undefined || currentId === '') return null
-
+function lineageOf(byId: Record<string, unknown>, currentId: string): { rows: Map<string, AgentRow>; childrenOf: Map<string, AgentChild[]> } {
   const rows = new Map<string, AgentRow>()
   for (const key of Object.keys(byId)) {
     const row = agentRowOf(byId[key])
@@ -237,6 +233,27 @@ export function agentForestOf(snapshot: unknown, currentId: string | undefined, 
   if (!rows.has(currentId)) {
     rows.set(currentId, { running: false, completed: false, blank: false, updatedAt: 0 })
   }
+  const childrenOf = new Map<string, AgentChild[]>()
+  for (const [id, row] of rows) {
+    if (row.parentId === undefined || !rows.has(row.parentId)) continue
+    const list = childrenOf.get(row.parentId) ?? []
+    list.push({ id, row })
+    childrenOf.set(row.parentId, list)
+  }
+  return { rows, childrenOf }
+}
+
+/**
+ * Build the current session's agent family from a session-list snapshot:
+ * walk up `parentId` to the topmost known ancestor, then DFS its whole
+ * subtree (blank placeholder rows excluded). Null when there is no anchor —
+ * no current session, or a snapshot without a `byId` table (older harness).
+ */
+export function agentForestOf(snapshot: unknown, currentId: string | undefined, self?: AgentSelfStats): AgentForest | null {
+  const byId = asRecord(asRecord(snapshot)?.byId)
+  if (byId === null || currentId === undefined || currentId === '') return null
+
+  const { rows, childrenOf } = lineageOf(byId, currentId)
 
   // Topmost known ancestor (chain guard: a lineage cycle anchors at the
   // first repeated id instead of looping).
@@ -253,13 +270,6 @@ export function agentForestOf(snapshot: unknown, currentId: string | undefined, 
      verified with rows.has, so its row always exists. */
   if (rootRow === undefined) return null
 
-  const childrenOf = new Map<string, AgentChild[]>()
-  for (const [id, row] of rows) {
-    if (row.parentId === undefined || !rows.has(row.parentId)) continue
-    const list = childrenOf.get(row.parentId) ?? []
-    list.push({ id, row })
-    childrenOf.set(row.parentId, list)
-  }
   // Sibling order: running agents first, then freshest activity, id as the stable tiebreak.
   for (const kids of childrenOf.values()) {
     kids.sort((a, b) => {
@@ -336,7 +346,11 @@ export interface SubagentCost {
  *
  * Walks those links directly rather than reusing the agent forest: the graph
  * caps its nodes for the SVG stage (AGENT_TREE_LIMIT), and a money figure must
- * not drop agents the layout could not draw.
+ * not drop agents the layout could not draw — so only the lineage index is
+ * shared with the forest, never its capped walk.
+ *
+ * `count` is the figure's own population, not the subtree's size: a descendant
+ * with no bucket to price adds nothing to the total and is not counted.
  *
  * Empty when there is no snapshot, no anchor id, or no `byId` table (an older
  * harness) — the caller then prices the session alone, as before.
@@ -345,21 +359,7 @@ export function subagentCostUsage(snapshot: unknown, currentId: string | undefin
   const byId = asRecord(asRecord(snapshot)?.byId)
   if (byId === null || currentId === undefined || currentId === '') return { count: 0 }
 
-  // Parse every row once at the boundary and index the durable parent links;
-  // blank placeholder sessions are not agents (the forest skips them too).
-  const rows = new Map<string, AgentRow>()
-  for (const key of Object.keys(byId)) {
-    const row = agentRowOf(byId[key])
-    if (row === null || row.blank) continue
-    rows.set(key, row)
-  }
-  const childrenOf = new Map<string, string[]>()
-  for (const [id, row] of rows) {
-    if (row.parentId === undefined) continue
-    const kids = childrenOf.get(row.parentId) ?? []
-    kids.push(id)
-    childrenOf.set(row.parentId, kids)
-  }
+  const { rows, childrenOf } = lineageOf(byId, currentId)
 
   // Breadth-first over the subtree. The anchor seeds the seen-set, so a
   // lineage cycle costs one revisit check per member instead of a hang.
@@ -369,11 +369,11 @@ export function subagentCostUsage(snapshot: unknown, currentId: string | undefin
   const queue: string[] = [currentId]
   for (let i = 0; i < queue.length; i++) {
     for (const kid of childrenOf.get(queue[i]) ?? []) {
-      if (seen.has(kid)) continue
-      seen.add(kid)
-      queue.push(kid)
-      const cost = timelineOf(rows.get(kid)?.projections?.contextTimeline)?.cost
-      if (cost !== undefined) {
+      if (seen.has(kid.id)) continue
+      seen.add(kid.id)
+      queue.push(kid.id)
+      const cost = timelineOf(rows.get(kid.id)?.projections?.contextTimeline)?.cost
+      if (hasCostBuckets(cost)) {
         usage = addCostUsage(usage, cost)
         count += 1
       }
@@ -619,6 +619,21 @@ export function openAgentSession(face: SessionsFaceLike | null, id: string): voi
 }
 
 /**
+ * The face's list half, re-proven at the boundary: the outward service arrives
+ * as an untyped value (the record `sessionsFaceOf` narrows), so the declared
+ * member type proves nothing at runtime — a null or half-built member has to
+ * degrade to "no sessions service" instead of throwing inside React's
+ * subscribe.
+ */
+function listOf(face: SessionsFaceLike | null): NonNullable<SessionsFaceLike['list']> | null {
+  const list = asRecord(face?.list)
+  if (list === null || typeof list.getSnapshot !== 'function' || typeof list.subscribe !== 'function') return null
+  // Both members are proven above; this only re-states the narrowed record as
+  // the member type it was checked against.
+  return list as unknown as NonNullable<SessionsFaceLike['list']>
+}
+
+/**
  * Narrow `ctx.get('sessions')` to the card's face — null for a harness without
  * the outward sessions service, and for a ctx that exposes no service lookup at
  * all (the view's own no-service degrade arm).
@@ -626,9 +641,7 @@ export function openAgentSession(face: SessionsFaceLike | null, id: string): voi
 export function sessionsFaceOf(ctx: { get?(name: string): unknown }): SessionsFaceLike | null {
   const service = typeof ctx.get === 'function' ? ctx.get('sessions') : undefined
   const rec = asRecord(service)
-  if (rec === null) return null
-  const list = asRecord(rec.list)
-  if (list === null || typeof list.getSnapshot !== 'function' || typeof list.subscribe !== 'function') return null
+  if (rec === null || listOf(rec) === null) return null
   return rec
 }
 
@@ -645,8 +658,8 @@ export function sessionsListStore(face: SessionsFaceLike | null): {
   subscribe: (notify: () => void) => () => void
   getSnapshot: () => unknown
 } {
-  const list = face?.list
-  if (list === undefined) return { subscribe: () => () => {}, getSnapshot: () => null }
+  const list = listOf(face)
+  if (list === null) return { subscribe: () => () => {}, getSnapshot: () => null }
   // Wrapped rather than referenced bare: the service's methods must keep their
   // own `this`, and the pair still hands React one stable subscription.
   return {
