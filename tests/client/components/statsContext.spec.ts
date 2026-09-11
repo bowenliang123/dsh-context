@@ -106,7 +106,7 @@ describe('StatsContext', () => {
     assert.equal(queryAll(m.container, '.lc-stat-q').length, 1)
     const tip = text(query(m.container, '.lc-stat-tip'))
     assert.ok(tip.includes('Per-1M-token rates'))
-    assert.ok(tip.includes('deepseek-v4.1-flash'))
+    assert.ok(tip.includes('deepseek-flash / deepseek-v4-flash'))
     assert.ok(tip.includes('deepseek-v4-pro'))
     assert.ok(tip.includes('miss $0.3/$0.15'))
     assert.ok(tip.includes('output $1.2/$0.6'))

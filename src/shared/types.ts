@@ -442,7 +442,7 @@ export interface CostFamilyUsage {
  * token totals per DeepSeek model family (matched on the model NAME,
  * provider-agnostic) and pricing period. The Client prices these with its
  * hardcoded list-price table in the locale's currency. Absent until a
- * deepseek-flash / deepseek-v4.1-flash / deepseek-v4-pro request reports
+ * deepseek-flash / deepseek-v4-flash / deepseek-v4-pro request reports
  * usage.
  */
 export interface SessionCostUsage {
