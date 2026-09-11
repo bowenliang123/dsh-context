@@ -23,6 +23,8 @@ jobs:
 
       # Reads the pinned pnpm version from `packageManager` in package.json.
       - uses: pnpm/action-setup@v6
+        with:
+          version: latest
 
       - uses: actions/setup-node@v7
         with:
