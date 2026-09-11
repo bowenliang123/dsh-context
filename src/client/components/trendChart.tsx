@@ -630,7 +630,10 @@ export function makeTrendChart(kit: ViewKit): (props: TrendChartProps) => ReactE
               <div className="lc-grid lc-grid-zero" style={delta ? { top: `${18 + upPx}px` } : undefined} />
               {requests.map((req, i) => (
                 <ChartBar
-                  key={req.seq}
+                  // Granularity belongs in the key: a turn aggregate IS its last step's record (the same
+                  // seq), so a step ↔ turn switch would otherwise REUSE that bar's DOM node and its finished
+                  // entrance rise would not replay — every turn's last step bar would pop in unanimated.
+                  key={`${req.seq}:${props.granularity}`}
                   req={req}
                   marker={markers[i]}
                   selected={props.selectedSeq === req.seq}

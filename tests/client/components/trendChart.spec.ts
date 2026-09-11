@@ -12,7 +12,7 @@
  * empty frame here.
  */
 
-import { act, createElement as h } from 'react'
+import { act, createElement as h, useState } from 'react'
 import assert from 'node:assert/strict'
 import { afterAll, beforeAll, describe, test } from 'vitest'
 import { aggregateByTurn, attachMarkers, jumpTargetOf, makeTrendChart, type TrendChartProps } from '../../../src/client/components/trendChart'
@@ -1108,6 +1108,29 @@ describe('TrendChart entrance rise', () => {
     assert.equal(slot(downs[1]), '1')
     // The first bar diffs against nothing, so it grows no down arm.
     assert.equal(queryAll(downs[0], 'div').length, 0)
+    await m.unmount()
+  })
+
+  test('switching granularity remounts every bar so the entrance rise replays', async () => {
+    // A turn aggregate IS its last step's record (the same seq): without the granularity-keyed remount,
+    // a turn → step switch would reuse that bar's DOM node and its turn-final step bars would not rise.
+    function GranularityHarness(props: { requests: RequestRecord[] }) {
+      const [granularity, setGranularity] = useState<'step' | 'turn'>('turn')
+      // The parent (ContextView) aggregates for turn granularity; TrendChart renders what it is given.
+      const display = granularity === 'turn' ? aggregateByTurn(props.requests) : props.requests
+      return h('div', null,
+        h('button', { onClick: () => { setGranularity('step') } }, 'to-step'),
+        h(TrendChart, { ...propsOf(display), granularity }))
+    }
+    const reqs = [req(1, { turn: 1, step: 0 }), req(2, { turn: 1, step: 1 }), req(3, { turn: 2, step: 0 })]
+    const m = await mount(h(GranularityHarness, { requests: reqs }))
+    // Turn mode: one aggregate per turn, each keyed by its LAST step's seq.
+    assert.deepEqual(bars(m.container).map(b => b.getAttribute('data-seq')), ['2', '3'])
+    const reusedSeq = query(m.container, '.lc-bar[data-seq="2"]')
+    await click(query(m.container, 'button'))
+    // Step mode renders every step; even the seq the aggregate reused must be a FRESH node.
+    assert.deepEqual(bars(m.container).map(b => b.getAttribute('data-seq')), ['1', '2', '3'])
+    assert.notEqual(query(m.container, '.lc-bar[data-seq="2"]'), reusedSeq)
     await m.unmount()
   })
 })
