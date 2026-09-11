@@ -1,12 +1,12 @@
 /*
- * The four head-row stat cards (context / timing / tokens / plugin): the
- * 2x4 cell grid with the cost cell's styled tip, the composition overview's
- * big number, and the cards' shared anatomy — section heading, donut,
- * slice list, plugin-info rows.
+ * The head band's stat cards — the context/plugin row and the token/timing
+ * donut row: the context card's eight-cell grid with the cost cell's styled
+ * tip, the composition overview's big number, and the cards' shared anatomy
+ * — section heading, donut, slice list, plugin-info rows.
  */
-/* The context card's eight count cells: a fixed 2×4 grid (shape stats over
-   event tallies), so the head row stays at donut-card height — a 4-cell grid
-   would double the card's height for the same information. */
+/* The context card's eight count cells: shape stats over event tallies,
+   4×2 by default — wide-enough cards lay all eight out in ONE row (the
+   min-width tier below), narrow cards fold to two columns. */
 .lc-stats { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 6px; }
 .lc-stat { background: var(--dsw-alias-bg-layer-2); border: 1px solid var(--dsw-alias-border-l2); border-radius: 8px; padding: 6px 6px; display: flex; flex-direction: column; gap: 2px; min-width: 0; }
 /* The 8-cell stats grid quarters an equal head-row card, so its cells are narrow: tighter padding plus a corner-pinned '?' (out of the label's line) keep the longest label (预估费用) on one line. */
@@ -71,8 +71,13 @@
  quantity (plus a qualifier like the call count) under the name in muted
  small print. The name takes the whole primary line and only ellipsizes as
  a last resort; a zero-figure row dims — the ring already carries the share.
+ The rows flow into as many ≥160px columns as the card offers (the
+ composition legend's own auto-fill idiom): one in a narrow pane, two on a
+ classic 1280px viewport where the row halves are ~456px, more on ultrawide
+ — so the classic size reads in the same paired order as the composition
+ card below.
  */
-.lc-sl { display: flex; flex-direction: column; gap: 4px; min-width: 0; overflow: hidden; }
+.lc-sl { display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: 4px 20px; min-width: 0; overflow: hidden; }
 /* The pill tint spreads 6px past the text column (negative margins) so the
    hovered row reads as one lit surface without shifting the columns. */
 .lc-sl-row { display: flex; flex-direction: column; gap: 1px; font-size: 12px; min-width: 0; border-radius: 6px; padding: 1px 6px; margin: 0 -6px; transition: background-color var(--ds-transition-duration, 0.2s) var(--ds-ease-in-out, ease-in-out); }
@@ -99,6 +104,14 @@
 .lc-pi-value { min-width: 0; color: var(--dsw-alias-label-primary); font-size: 13px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; text-align: right; }
 .lc-pi-row-btn .lc-pi-value { font-weight: 400; }
 /*
+ Wide head cards: on roomy panes the context card's eight cells fit ONE
+ line (~82px each at the 700px mark). Degrades silently on engines without
+ container queries.
+ */
+@container lc-card (min-width: 700px) {
+  .lc-stats { grid-template-columns: repeat(8, minmax(0, 1fr)); }
+}
+/*
  Narrow head cards: the side-by-side ring + legend reads single-line only
  above ~320px of card content width. The two-tier rows already absorb the
  squeeze — the name gives ground before the fixed share column — so the
@@ -107,8 +120,8 @@
  English labels (Compactions, Injections). Below 240px even the ring stops
  fitting, so the card stacks: the ring centers over the full-width legend
  rows. Cards resolve these queries against themselves (the shared `lc-card`
- container in base.css) at every split of the head row — 4-across, 2×2 or
- single-column. Engines without container queries drop both blocks and keep
+ container in base.css) at every split of the head band — two-across or
+ stacked. Engines without container queries drop both blocks and keep
  the wide layout. The 240px block must stay AFTER the 320px one — at that
  width both match and the stack rules win by order.
  */

@@ -499,14 +499,21 @@ export function makeContextView(
     return (
       <div className="lc-root" ref={rootRef}>
 
-        <div className="lc-cols lc-head">
-          {inSidebar ? null : (
+        {/* The head band splits into two rows: the session's shape beside the
+            plugin card, then the two donut cards together. The sidebar panel
+            drops the first row (context stats / plugin info pay off only on
+            the full-width tab) and keeps the donut row, whose container query
+            stacks the pair in the narrow pane. */}
+        {inSidebar ? null : (
+          <div className="lc-cols lc-head">
             <StatsContext counts={data.counts ?? countsOfRecords(requests, events)} toolCalls={data.toolCalls} images={data.images}
               cost={data.cost} locale={activeLocale} />
-          )}
+            <PluginInfo />
+          </div>
+        )}
+        <div className="lc-cols lc-head">
           <StatsTokens usage={usage} current={data.current} breakdown={breakdown} />
           <StatsTiming timing={data.timing ?? null} />
-          {inSidebar ? null : <PluginInfo />}
         </div>
 
         {/* One arrangement for every host: composition over trend in the left
