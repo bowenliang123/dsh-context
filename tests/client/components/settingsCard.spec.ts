@@ -95,11 +95,11 @@ describe('SettingsCard', () => {
     const placementItems = menuItems()
     assert.equal(placementItems.length, 3)
     assert.deepEqual(placementItems.map(i => text(i)), [
+      DICT_EN['placement.all'],
       DICT_EN['placement.tab'],
       DICT_EN['placement.sidebar'],
-      DICT_EN['placement.all'],
     ])
-    await click(placementItems[1]) // 'Sidebar'
+    await click(placementItems[2]) // 'Sidebar'
     assert.deepEqual(calls, [['defaultPlacement', 'sidebar']])
     assert.equal(selects[0].getAttribute('aria-expanded'), 'false')
     assert.equal(document.body.querySelector('[role="menu"]'), null)

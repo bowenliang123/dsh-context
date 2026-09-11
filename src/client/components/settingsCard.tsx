@@ -102,9 +102,9 @@ export function makeSettingsCard(kit: ViewKit): (props: SettingsCardProps) => Re
                 value={state.placement}
                 disabled={disabled}
                 options={[
+                  { id: 'all', label: t('placement.all') },
                   { id: 'tab', label: t('placement.tab') },
                   { id: 'sidebar', label: t('placement.sidebar') },
-                  { id: 'all', label: t('placement.all') },
                 ]}
                 onPick={(id) => { props.set?.('defaultPlacement', id) }}
               />
