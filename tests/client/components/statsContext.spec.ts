@@ -152,6 +152,9 @@ describe('StatsContext — subagent split', () => {
     assert.equal(cells(m.container).values[4], '$1.20')
     assert.deepEqual(parts(m.container), ['own $0.30', 'sub $0.90'])
     assert.equal(barPct(m.container), 25)
+    // The cell carries the share and the two figures; the population behind the
+    // subagent side is the bubble's line.
+    assert.equal(text(query(m.container, '.lc-stat-tip-subs')), 'across 4 subagent sessions')
     await m.unmount()
   })
 
@@ -165,6 +168,7 @@ describe('StatsContext — subagent split', () => {
     assert.equal(cells(m.container).values[4], '$0.30')
     assert.equal(queryAll(m.container, '.lc-stat-bar').length, 0)
     assert.equal(queryAll(m.container, '.lc-stat-split').length, 0)
+    assert.equal(queryAll(m.container, '.lc-stat-tip-subs').length, 0)
     await m.unmount()
   })
 
@@ -193,7 +197,7 @@ describe('StatsContext — subagent split', () => {
     await m.unmount()
   })
 
-  test('a priced-but-zero pair keeps the bar at zero rather than dividing by it', async () => {
+  test('a priced-but-zero pair draws no bar rather than a full one', async () => {
     const m = await mount(h(StatsContext, {
       counts: noCounts,
       cost: nearer(0),
@@ -202,7 +206,11 @@ describe('StatsContext — subagent split', () => {
       locale: 'en',
     }))
     assert.equal(cells(m.container).values[4], '$0.0')
-    assert.equal(barPct(m.container), 0)
+    // With nothing priced on either side there is no share to draw, and the
+    // leftover-width bar would read as "all of it went to subagents" — the
+    // opposite of what the two figures say.
+    assert.equal(queryAll(m.container, '.lc-stat-bar').length, 0)
+    assert.deepEqual(parts(m.container), ['own $0.0', 'sub $0.0'])
     await m.unmount()
   })
 

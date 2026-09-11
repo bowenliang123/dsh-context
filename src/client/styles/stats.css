@@ -6,7 +6,9 @@
  */
 /* The context card's eight count cells: a fixed 2×4 grid (shape stats over
    event tallies), so the head row stays at donut-card height — a 4-cell grid
-   would double the card's height for the same information. */
+   would double the card's height for the same information. The cost cell is
+   the one cell that runs a line taller (its own/subagents split); the whole
+   head row follows that, deliberately. */
 .lc-stats { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 6px; }
 .lc-stat { background: var(--dsw-alias-bg-layer-2); border: 1px solid var(--dsw-alias-border-l2); border-radius: 8px; padding: 6px 6px; display: flex; flex-direction: column; gap: 2px; min-width: 0; }
 /* The 8-cell stats grid quarters an equal head-row card, so its cells are narrow: tighter padding plus a corner-pinned '?' (out of the label's line) keep the longest label (预估费用) on one line. */
@@ -25,13 +27,19 @@
 .lc-stat-tipped:hover .lc-stat-tip { opacity: 1; }
 /* The cost cell's own/subagents split: a proportion bar over two compact
    figures. A subagent's spend is written only in that subagent's own log, so
-   the share has to read without hovering. The bar divides the priced total —
-   a side that priced nothing keeps no width. */
+   the share has to read without hovering. The bar is drawn only over a priced
+   total (the caller drops it entirely when both sides priced nothing), and it
+   divides in the theme's own colors — the neutral label tint for this session,
+   the success token for the subagents. */
 .lc-stat-bar { display: flex; height: 4px; margin: 1px 0; border-radius: 2px; overflow: hidden; background: var(--dsw-alias-bg-layer-1); }
-.lc-stat-bar-own { background: #94a3b8; }
-.lc-stat-bar-sub { flex: 1; background: #22c55e; }
+.lc-stat-bar-own { background: var(--dsw-alias-label-secondary); }
+.lc-stat-bar-sub { flex: 1; background: var(--dsw-alias-state-success-primary); }
 .lc-stat-split { display: flex; flex-wrap: wrap; justify-content: center; gap: 0 6px; font-size: 10px; line-height: 1.35; color: var(--dsw-alias-label-secondary); font-variant-numeric: tabular-nums; }
 .lc-stat-split b { color: var(--dsw-alias-label-primary); font-weight: 600; }
+/* How many sessions stand behind the subagent side: the bubble's own line, above
+   the dashed rate table — the cell carries the share and the two figures, not
+   the population. */
+.lc-stat-tip-subs { display: block; margin-top: 6px; font-weight: 600; color: var(--dsw-alias-label-primary); }
 .lc-stat-tip-prices { display: block; margin-top: 5px; border-top: 1px dashed var(--dsw-alias-border-l1); padding-top: 5px; }
 .lc-stat-tip-head { display: block; font-weight: 600; }
 .lc-stat-tip-row { display: block; margin-top: 2px; }

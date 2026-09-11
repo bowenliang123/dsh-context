@@ -2,20 +2,22 @@
  * The Context card: what the session's context IS and how it evolved — an
  * eight-cell 2×4 grid pairing the session's shape (turns / steps / live tool
  * calls / images) with the context-event tally (injections / compactions /
- * prunes) and the conversation cost estimate. Count figures only: nothing
- * here is part of a spendable whole, so no pie — proportions live in the
- * composition card. The cost cell prices the host-folded cumulative billed
- * totals (complete session log, never trimmed) at the hardcoded DeepSeek V4
- * list prices (cost.ts) in the locale's currency, PLUS every subagent
- * session's own totals (agentTree.ts walks the lineage the list snapshot
- * carries): a subagent's spend lands in its own session log and never in this
- * one's, so pricing the log alone reports a fraction of what the conversation
- * cost. The cell also carries the own/subagents split — a proportion bar over
- * two compact figures — because a subagent's spend is written only in that
- * subagent's own log and therefore has to read without hovering. Its hover
- * bubble (a '?' marker + styled DOM tip) explains the estimate and lists the
- * per-1M-token table straight from cost.ts, so printed rates can never drift
- * from the math.
+ * prunes) and the conversation cost estimate. Every other figure counts its own
+ * thing rather than slicing one whole, so there is no pie — proportions of the
+ * context live in the composition card. The cost cell's own/subagents bar is
+ * the one proportion here, and it is not a share of the context either: it
+ * divides a priced total between this session and its subagents, a split the
+ * composition card cannot express, because a subagent's spend is written in a
+ * different session's log entirely. It rides the cell — a bar over two compact
+ * figures, which is what makes this cell a line taller than the other seven —
+ * while the bubble carries the count behind the split and the per-1M-token
+ * table straight from cost.ts, so the printed rates can never drift from the
+ * math. The cost cell prices the host-folded cumulative billed totals (complete
+ * session log, never trimmed) at the hardcoded DeepSeek V4 list prices
+ * (cost.ts) in the locale's currency, PLUS every subagent session's own totals
+ * (agentTree.ts walks the lineage the list snapshot carries): a subagent's
+ * spend lands in its own session log and never in this one's, so pricing the
+ * log alone reports a fraction of what the conversation cost.
  *
  * The counts arrive precomputed: the split-generation wire head carries them
  * (shared/types.ts `TimelineCounts` — computed over the retained records),
@@ -83,16 +85,29 @@ export function makeStatsContext(kit: ViewKit): (props: {
     // Non-null exactly when the split is worth showing: at least one subagent
     // reported priced usage. Absent subagents (or a harness that cannot reach
     // them) leave the cell byte-for-byte as it was.
-    const subTotal = props.subagentCount !== undefined && props.subagentCount > 0 ? subagents : null
+    const subCount = props.subagentCount !== undefined && props.subagentCount > 0 ? props.subagentCount : null
+    const subTotal = subCount === null ? null : subagents
     // The split rides the CELL rather than the bubble — the subagent share is
     // invisible in this session's own log, so it has to read without hovering.
-    // The bar divides the priced total; an unpriced side takes no width.
+    // The bar divides the priced total, so it needs one to divide: a pair that
+    // priced nothing has no share to draw (null), and a full-width bar would
+    // claim the whole figure went to subagents.
     const ownCost = own ?? 0
     const priced = ownCost + (subTotal ?? 0)
-    const ownShare = subTotal !== null && priced > 0 ? ownCost / priced : 0
+    const ownShare = subTotal !== null && priced > 0 ? ownCost / priced : null
     const fmtRate = (n: number): string => formatPriceRate(n, currency)
     const costTip: ReactNode = [
       t('stats.costTip'),
+      // The cell carries the share and the two figures; how many sessions stand
+      // behind the subagent side is the bubble's fact (it used to be the cell's
+      // own, until the bar took that room).
+      subCount === null
+        ? null
+        : (
+          <span key="subs" className="lc-stat-tip-subs">
+            {t('stats.costSubCount', { n: subCount })}
+          </span>
+        ),
       <span key="prices" className="lc-stat-tip-prices">
         <span className="lc-stat-tip-head">{t('stats.costPriceHead')}</span>
         {sessionPrices(currency).map(r => (
@@ -109,10 +124,14 @@ export function makeStatsContext(kit: ViewKit): (props: {
       ? null
       : (
         <>
-          <span className="lc-stat-bar" aria-hidden="true">
-            <span className="lc-stat-bar-own" style={{ width: `${(ownShare * 100).toFixed(1)}%` }} />
-            <span className="lc-stat-bar-sub" />
-          </span>
+          {ownShare === null
+            ? null
+            : (
+              <span className="lc-stat-bar" aria-hidden="true">
+                <span className="lc-stat-bar-own" style={{ width: `${(ownShare * 100).toFixed(1)}%` }} />
+                <span className="lc-stat-bar-sub" />
+              </span>
+            )}
           <span className="lc-stat-split">
             <span>{t('stats.costOwn')} <b>{own === null ? '—' : formatCost(own, currency)}</b></span>
             <span>{t('stats.costSub')} <b>{formatCost(subTotal, currency)}</b></span>
