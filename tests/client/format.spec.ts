@@ -57,6 +57,13 @@ describe('cacheHitPercent', () => {
     assert.equal(cacheHitPercent(82499, 83000), '99.39')
     assert.equal(cacheHitPercent(83000, 83000), '100.00')
   })
+
+  test('the stats board cell truncates to one decimal by the same formula', () => {
+    assert.equal(cacheHitPercent(2, 3, 1), '66.6')
+    assert.equal(cacheHitPercent(1, 3, 1), '33.3')
+    assert.equal(cacheHitPercent(82499, 83000, 1), '99.3')
+    assert.equal(cacheHitPercent(83000, 83000, 1), '100.0')
+  })
 })
 
 describe('fmtTime', () => {
