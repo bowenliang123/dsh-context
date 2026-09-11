@@ -10,8 +10,10 @@
  * session's own totals (agentTree.ts walks the lineage the list snapshot
  * carries): a subagent's spend lands in its own session log and never in this
  * one's, so pricing the log alone reports a fraction of what the conversation
- * cost. Its hover bubble (a '?' marker + styled DOM tip) explains the
- * estimate, splits this session's share from the subagents', and lists the
+ * cost. The cell also carries the own/subagents split — a proportion bar over
+ * two compact figures — because a subagent's spend is written only in that
+ * subagent's own log and therefore has to read without hovering. Its hover
+ * bubble (a '?' marker + styled DOM tip) explains the estimate and lists the
  * per-1M-token table straight from cost.ts, so printed rates can never drift
  * from the math.
  *
@@ -55,9 +57,9 @@ export function makeStatsContext(kit: ViewKit): (props: {
   /** Image blocks live in the current context (absent on older hosts). */
   images?: number
   cost?: SessionCostUsage
-  /** Billed-token totals of every subagent session under this one (absent when none priced). */
+  /** Billed-token totals of every session under this one, at any depth (absent when none priced). */
   subagentCost?: SessionCostUsage
-  /** Subagent sessions behind `subagentCost`; 0 or absent hides the split line. */
+  /** Sessions behind `subagentCost`; 0 or absent leaves the cell unsplit. */
   subagentCount?: number
   locale: string
 }) => ReactElement {
@@ -78,16 +80,19 @@ export function makeStatsContext(kit: ViewKit): (props: {
     // on its own session and its spend never lands in this one's log, so the
     // two estimates add up (each already priced at its own family's rates).
     const cost = own === null ? subagents : subagents === null ? own : own + subagents
+    // Non-null exactly when the split is worth showing: at least one subagent
+    // reported priced usage. Absent subagents (or a harness that cannot reach
+    // them) leave the cell byte-for-byte as it was.
+    const subTotal = props.subagentCount !== undefined && props.subagentCount > 0 ? subagents : null
+    // The split rides the CELL rather than the bubble — the subagent share is
+    // invisible in this session's own log, so it has to read without hovering.
+    // The bar divides the priced total; an unpriced side takes no width.
+    const ownCost = own ?? 0
+    const priced = ownCost + (subTotal ?? 0)
+    const ownShare = subTotal !== null && priced > 0 ? ownCost / priced : 0
     const fmtRate = (n: number): string => formatPriceRate(n, currency)
     const costTip: ReactNode = [
       t('stats.costTip'),
-      props.subagentCount !== undefined && props.subagentCount > 0 && subagents !== null
-        ? (
-          <span key="split" className="lc-stat-tip-split">
-            {t('stats.costSplit', { main: own === null ? '—' : formatCost(own, currency), sub: formatCost(subagents, currency), n: props.subagentCount })}
-          </span>
-        )
-        : null,
       <span key="prices" className="lc-stat-tip-prices">
         <span className="lc-stat-tip-head">{t('stats.costPriceHead')}</span>
         {sessionPrices(currency).map(r => (
@@ -100,13 +105,28 @@ export function makeStatsContext(kit: ViewKit): (props: {
         ))}
       </span>,
     ]
-    const cell = (label: string, value: string | number, tip?: ReactNode): ReactElement => (
+    const costSplit: ReactNode = subTotal === null
+      ? null
+      : (
+        <>
+          <span className="lc-stat-bar" aria-hidden="true">
+            <span className="lc-stat-bar-own" style={{ width: `${(ownShare * 100).toFixed(1)}%` }} />
+            <span className="lc-stat-bar-sub" />
+          </span>
+          <span className="lc-stat-split">
+            <span>{t('stats.costOwn')} <b>{own === null ? '—' : formatCost(own, currency)}</b></span>
+            <span>{t('stats.costSub')} <b>{formatCost(subTotal, currency)}</b></span>
+          </span>
+        </>
+      )
+    const cell = (label: string, value: string | number, tip?: ReactNode, extra?: ReactNode): ReactElement => (
       <div className={'lc-stat' + (tip === undefined ? '' : ' lc-stat-tipped')}>
         <span className="lc-stat-label">
           {label}
           {tip !== undefined && <i className="lc-stat-q" aria-hidden="true">?</i>}
         </span>
         <b className="lc-stat-value">{typeof value === 'number' ? fmt(value) : value}</b>
+        {extra}
         {tip !== undefined && <span className="lc-tip lc-stat-tip" role="tooltip">{tip}</span>}
       </div>
     )
@@ -120,7 +140,7 @@ export function makeStatsContext(kit: ViewKit): (props: {
           {cell(t('stats.steps'), props.counts.steps)}
           {cell(t('stats.toolCalls'), props.toolCalls ?? 0)}
           {cell(t('stats.images'), props.images ?? 0)}
-          {cell(t('stats.cost'), cost === null ? '—' : formatCost(cost, currency), costTip)}
+          {cell(t('stats.cost'), cost === null ? '—' : formatCost(cost, currency), costTip, costSplit)}
           {cell(t('stats.injects'), props.counts.injects)}
           {cell(t('stats.compactions'), props.counts.compactions)}
           {cell(t('stats.prunes'), props.counts.prunes)}

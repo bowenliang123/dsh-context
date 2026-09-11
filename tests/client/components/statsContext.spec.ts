@@ -114,13 +114,20 @@ describe('StatsContext', () => {
   })
 })
 
-// The subagent fold: a subagent's spend lives in its own session log, so the
-// cell adds the subtree's estimate to this session's and splits them in the
-// bubble. COST prices to $0.30 / ¥2.00 per copy.
-describe('StatsContext — subagent cost', () => {
+// The subagent split: a subagent's spend is written only in that subagent's
+// own log, so the cell carries the proportion bar and both figures itself.
+// COST prices to $0.30 / ¥2.00 per copy.
+describe('StatsContext — subagent split', () => {
   const noCounts = { turns: 0, steps: 0, injects: 0, compactions: 0, prunes: 0 }
+  const nearer = (n: number) => ({ flash: { peak: { uncached: n, cacheRead: 0, cacheWrite: 0, output: 0 } } })
+  const parts = (c: HTMLElement): string[] => queryAll(c, '.lc-stat-split > span').map(el => text(el))
+  /** The own-side share of the bar, as a percentage (React normalizes the CSS text). */
+  const barPct = (c: HTMLElement): number => {
+    const width = /width:\s*([\d.]+)%/.exec(query(c, '.lc-stat-bar-own').getAttribute('style') ?? '')
+    return width === null ? NaN : Number(width[1])
+  }
 
-  test('the cell prices the session plus its subagents, and the bubble splits them', async () => {
+  test('the cell prices the session plus its subagents and splits them on a bar', async () => {
     const m = await mount(h(StatsContext, {
       counts: noCounts,
       cost: COST,
@@ -129,12 +136,26 @@ describe('StatsContext — subagent cost', () => {
       locale: 'en',
     }))
     assert.equal(cells(m.container).values[4], '$0.60')
-    assert.equal(queryAll(m.container, '.lc-stat-tip').length, 1)
-    assert.equal(text(query(m.container, '.lc-stat-tip-split')), 'This session $0.30 · Subagents $0.30 (3)')
+    assert.deepEqual(parts(m.container), ['own $0.30', 'sub $0.30'])
+    assert.equal(barPct(m.container), 50)
     await m.unmount()
   })
 
-  test('a zero count leaves the cell and the bubble exactly as before', async () => {
+  test('a subagent-heavy conversation shows the subagents taking the bar', async () => {
+    const m = await mount(h(StatsContext, {
+      counts: noCounts,
+      cost: COST,
+      subagentCost: nearer(3_000_000),
+      subagentCount: 4,
+      locale: 'en',
+    }))
+    assert.equal(cells(m.container).values[4], '$1.20')
+    assert.deepEqual(parts(m.container), ['own $0.30', 'sub $0.90'])
+    assert.equal(barPct(m.container), 25)
+    await m.unmount()
+  })
+
+  test('no subagents leaves the cell exactly as before', async () => {
     const m = await mount(h(StatsContext, {
       counts: noCounts,
       cost: COST,
@@ -142,11 +163,12 @@ describe('StatsContext — subagent cost', () => {
       locale: 'en',
     }))
     assert.equal(cells(m.container).values[4], '$0.30')
-    assert.equal(queryAll(m.container, '.lc-stat-tip-split').length, 0)
+    assert.equal(queryAll(m.container, '.lc-stat-bar').length, 0)
+    assert.equal(queryAll(m.container, '.lc-stat-split').length, 0)
     await m.unmount()
   })
 
-  test('a count with no priced subagent usage leaves the bubble unsplit', async () => {
+  test('a count with no priced subagent usage leaves the cell unsplit', async () => {
     const m = await mount(h(StatsContext, {
       counts: noCounts,
       cost: COST,
@@ -154,11 +176,11 @@ describe('StatsContext — subagent cost', () => {
       locale: 'en',
     }))
     assert.equal(cells(m.container).values[4], '$0.30')
-    assert.equal(queryAll(m.container, '.lc-stat-tip-split').length, 0)
+    assert.equal(queryAll(m.container, '.lc-stat-bar').length, 0)
     await m.unmount()
   })
 
-  test('a session with no priced usage of its own still shows what the subagents spent', async () => {
+  test('a session that priced nothing of its own shows a dash on its side', async () => {
     const m = await mount(h(StatsContext, {
       counts: noCounts,
       subagentCost: COST,
@@ -166,11 +188,25 @@ describe('StatsContext — subagent cost', () => {
       locale: 'en',
     }))
     assert.equal(cells(m.container).values[4], '$0.30')
-    assert.equal(text(query(m.container, '.lc-stat-tip-split')), 'This session — · Subagents $0.30 (2)')
+    assert.deepEqual(parts(m.container), ['own —', 'sub $0.30'])
+    assert.equal(barPct(m.container), 0)
     await m.unmount()
   })
 
-  test('the zh locale renders the split in CNY', async () => {
+  test('a priced-but-zero pair keeps the bar at zero rather than dividing by it', async () => {
+    const m = await mount(h(StatsContext, {
+      counts: noCounts,
+      cost: nearer(0),
+      subagentCost: nearer(0),
+      subagentCount: 1,
+      locale: 'en',
+    }))
+    assert.equal(cells(m.container).values[4], '$0.0')
+    assert.equal(barPct(m.container), 0)
+    await m.unmount()
+  })
+
+  test('the zh locale renders the split in CNY under 主 and 子', async () => {
     const m = await mount(h(StatsContextZh, {
       counts: noCounts,
       cost: COST,
@@ -179,7 +215,7 @@ describe('StatsContext — subagent cost', () => {
       locale: 'zh',
     }))
     assert.equal(cells(m.container).values[4], '¥4.00')
-    assert.equal(text(query(m.container, '.lc-stat-tip-split')), '本会话 ¥2.00 · 子代理 ¥2.00（1 个）')
+    assert.deepEqual(parts(m.container), ['主 ¥2.00', '子 ¥2.00'])
     await m.unmount()
   })
 })

@@ -23,8 +23,15 @@
 .lc-stat-tipped:hover .lc-stat-q { color: var(--dsw-alias-label-primary); border-color: var(--dsw-alias-label-primary); }
 .lc-stat-tip { top: calc(100% + 6px); left: 0; max-width: 280px; line-height: 1.5; font-weight: 400; }
 .lc-stat-tipped:hover .lc-stat-tip { opacity: 1; }
-/* The session/subagents split reads as the headline figure of the bubble, so it sits above the dashed rate table and carries the emphasis. */
-.lc-stat-tip-split { display: block; margin-top: 6px; font-weight: 600; color: var(--dsw-alias-label-primary); }
+/* The cost cell's own/subagents split: a proportion bar over two compact
+   figures. A subagent's spend is written only in that subagent's own log, so
+   the share has to read without hovering. The bar divides the priced total —
+   a side that priced nothing keeps no width. */
+.lc-stat-bar { display: flex; height: 4px; margin: 1px 0; border-radius: 2px; overflow: hidden; background: var(--dsw-alias-bg-layer-1); }
+.lc-stat-bar-own { background: #94a3b8; }
+.lc-stat-bar-sub { flex: 1; background: #22c55e; }
+.lc-stat-split { display: flex; flex-wrap: wrap; justify-content: center; gap: 0 6px; font-size: 10px; line-height: 1.35; color: var(--dsw-alias-label-secondary); font-variant-numeric: tabular-nums; }
+.lc-stat-split b { color: var(--dsw-alias-label-primary); font-weight: 600; }
 .lc-stat-tip-prices { display: block; margin-top: 5px; border-top: 1px dashed var(--dsw-alias-border-l1); padding-top: 5px; }
 .lc-stat-tip-head { display: block; font-weight: 600; }
 .lc-stat-tip-row { display: block; margin-top: 2px; }

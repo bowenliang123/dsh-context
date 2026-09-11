@@ -1348,7 +1348,18 @@ describe('ContextView — subagent cost in the stats cell', () => {
     return text(query(cell, '.lc-stat-value'))
   }
 
-  test('prices the session plus every subagent at every depth', async () => {
+  /** The cell's own/subagents figures, in render order. */
+  function costParts(container: ParentNode): string[] {
+    const cell = queryAll(container, '.lc-stat')[4]
+    return queryAll(cell, '.lc-stat-split > span').map(el => text(el))
+  }
+
+  function mountAt(sessions: TestSessionList | null, sessionId: string, own: ContextTimeline) {
+    const ctx = sessions === null ? new TestClientCtx() : new TestClientCtx({ services: { sessions } })
+    return mount(h(makeView(ctx), { sessionId, useProjection: projectionsFor(own) }))
+  }
+
+  test('prices the session plus every subagent at every depth, split on the bar', async () => {
     const sessions = new TestSessionList({
       root: { displayTitle: 'Main', running: true, updatedAt: 2 },
       helper: {
@@ -1360,43 +1371,72 @@ describe('ContextView — subagent cost in the stats cell', () => {
         projectionValues: { contextTimeline: timeline({ cost: flash(M) }) },
       },
     })
-    const m = await mount(h(makeView(new TestClientCtx({ services: { sessions } })), {
-      sessionId: 'root',
-      useProjection: projectionsFor(timeline({ cost: flash(M) })),
-    }))
+    const m = await mountAt(sessions, 'root', timeline({ cost: flash(M) }))
     // The tab's own $0.30 plus the helper's and the nested agent's.
     assert.equal(costValue(m.container), '$0.90')
-    assert.equal(text(query(m.container, '.lc-stat-tip-split')), 'This session $0.30 · Subagents $0.60 (2)')
+    assert.deepEqual(costParts(m.container), ['own $0.30', 'sub $0.60'])
     await m.unmount()
   })
 
-  test('a session with no subagents keeps the cell and the bubble unchanged', async () => {
+  test('a session with no subagents keeps the cell unchanged', async () => {
     const sessions = new TestSessionList({ root: { displayTitle: 'Main', running: true, updatedAt: 2 } })
-    const m = await mount(h(makeView(new TestClientCtx({ services: { sessions } })), {
-      sessionId: 'root',
-      useProjection: projectionsFor(timeline({ cost: flash(M) })),
-    }))
+    const m = await mountAt(sessions, 'root', timeline({ cost: flash(M) }))
     assert.equal(costValue(m.container), '$0.30')
-    assert.equal(queryAll(m.container, '.lc-stat-tip-split').length, 0)
+    assert.equal(queryAll(m.container, '.lc-stat-split').length, 0)
     await m.unmount()
   })
 
   test('a harness without the sessions service prices the session alone', async () => {
-    const m = await mount(h(makeView(new TestClientCtx()), {
-      sessionId: 'root',
-      useProjection: projectionsFor(timeline({ cost: flash(M) })),
-    }))
+    const m = await mountAt(null, 'root', timeline({ cost: flash(M) }))
     assert.equal(costValue(m.container), '$0.30')
-    assert.equal(queryAll(m.container, '.lc-stat-tip-split').length, 0)
+    assert.equal(queryAll(m.container, '.lc-stat-split').length, 0)
+    await m.unmount()
+  })
+
+  // The page you land on FROM the Agent network card: the current session is
+  // itself a subagent. Its cell must price only its OWN subtree — never the
+  // parent's or a sibling's spend — and still render a sane split.
+  test('a subagent session prices its own subtree, not its parent or a sibling', async () => {
+    const sessions = new TestSessionList({
+      root: {
+        displayTitle: 'Main', running: true, updatedAt: 2,
+        projectionValues: { contextTimeline: timeline({ cost: flash(10 * M) }) },
+      },
+      sibling: {
+        parentId: 'root', origin: 'subagent', running: false, updatedAt: 1,
+        projectionValues: { contextTimeline: timeline({ cost: flash(8 * M) }) },
+      },
+      me: { parentId: 'root', origin: 'subagent', running: true, updatedAt: 3 },
+      grand: {
+        parentId: 'me', origin: 'subagent', running: false, updatedAt: 1,
+        projectionValues: { contextTimeline: timeline({ cost: flash(M) }) },
+      },
+    })
+    const m = await mountAt(sessions, 'me', timeline({ cost: flash(2 * M) }))
+    // Its own $0.60 plus the grandchild's $0.30; the parent's $3.00 and the
+    // sibling's $2.40 stay out of it.
+    assert.equal(costValue(m.container), '$0.90')
+    assert.deepEqual(costParts(m.container), ['own $0.60', 'sub $0.30'])
+    await m.unmount()
+  })
+
+  test('a subagent session with no descendants of its own shows no split', async () => {
+    const sessions = new TestSessionList({
+      root: {
+        displayTitle: 'Main', running: true, updatedAt: 2,
+        projectionValues: { contextTimeline: timeline({ cost: flash(10 * M) }) },
+      },
+      me: { parentId: 'root', origin: 'subagent', running: true, updatedAt: 3 },
+    })
+    const m = await mountAt(sessions, 'me', timeline({ cost: flash(2 * M) }))
+    assert.equal(costValue(m.container), '$0.60')
+    assert.equal(queryAll(m.container, '.lc-stat-split').length, 0)
     await m.unmount()
   })
 
   test('a later snapshot folds the new subagent in on the push', async () => {
     const sessions = new TestSessionList({ root: { displayTitle: 'Main', running: true, updatedAt: 2 } })
-    const m = await mount(h(makeView(new TestClientCtx({ services: { sessions } })), {
-      sessionId: 'root',
-      useProjection: projectionsFor(timeline({ cost: flash(M) })),
-    }))
+    const m = await mountAt(sessions, 'root', timeline({ cost: flash(M) }))
     assert.equal(costValue(m.container), '$0.30')
     await act(async () => {
       sessions.setState({
@@ -1409,7 +1449,7 @@ describe('ContextView — subagent cost in the stats cell', () => {
     })
     await flush()
     assert.equal(costValue(m.container), '$0.90')
-    assert.equal(text(query(m.container, '.lc-stat-tip-split')), 'This session $0.30 · Subagents $0.60 (1)')
+    assert.deepEqual(costParts(m.container), ['own $0.30', 'sub $0.60'])
     await m.unmount()
   })
 })
