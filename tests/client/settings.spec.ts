@@ -47,11 +47,13 @@ describe('createContextSettings defaults', () => {
     const s = createContextSettings()
     assert.deepEqual(s.store.getSnapshot(), {
       status: 'loading',
+      placement: 'all',
       granularity: 'step',
       mode: 'total',
       fileSort: 'count',
       writable: false,
     })
+    assert.equal(s.defaultPlacement(), 'all')
     assert.equal(s.defaultGranularity(), 'step')
     assert.equal(s.defaultTrendMode(), 'total')
     assert.equal(s.defaultFileSort(), 'count')
@@ -77,6 +79,8 @@ describe('set', () => {
     const s = createContextSettings()
     s.set('defaultGranularity', 'turn')
     assert.equal(s.defaultGranularity(), 'turn')
+    s.set('defaultPlacement', 'sidebar')
+    assert.equal(s.defaultPlacement(), 'sidebar')
   })
 
   test('an unchanged value does not notify listeners', () => {
@@ -135,12 +139,18 @@ describe('attach', () => {
     const s = createContextSettings()
     const scope = new TestSettingsScope({
       status: 'ready',
-      value: { defaultGranularity: 'turn', defaultTrendMode: 'delta', defaultFileSort: 'path' },
+      value: {
+        defaultPlacement: 'sidebar',
+        defaultGranularity: 'turn',
+        defaultTrendMode: 'delta',
+        defaultFileSort: 'path',
+      },
       writable: true,
     })
     s.attach(scope)
     assert.deepEqual(s.store.getSnapshot(), {
       status: 'ready',
+      placement: 'sidebar',
       granularity: 'turn',
       mode: 'delta',
       fileSort: 'path',
@@ -168,6 +178,7 @@ describe('attach', () => {
       s.attach(new TestSettingsScope({ status: 'ready', value, writable: false }))
       assert.deepEqual(s.store.getSnapshot(), {
         status: 'ready',
+        placement: 'all',
         granularity: 'step',
         mode: 'total',
         fileSort: 'count',
@@ -180,9 +191,10 @@ describe('attach', () => {
     const s = createContextSettings()
     s.attach(new TestSettingsScope({
       status: 'ready',
-      value: { defaultGranularity: 'bogus', defaultTrendMode: 7, defaultFileSort: 'alpha' },
+      value: { defaultPlacement: 'window', defaultGranularity: 'bogus', defaultTrendMode: 7, defaultFileSort: 'alpha' },
       writable: false,
     }))
+    assert.equal(s.defaultPlacement(), 'all')
     assert.equal(s.defaultGranularity(), 'step')
     assert.equal(s.defaultTrendMode(), 'total')
     assert.equal(s.defaultFileSort(), 'count')
@@ -192,9 +204,10 @@ describe('attach', () => {
     const s = createContextSettings()
     s.attach(new TestSettingsScope({
       status: 'ready',
-      value: { defaultGranularity: 'step', defaultTrendMode: 'total', defaultFileSort: 'count' },
+      value: { defaultPlacement: 'all', defaultGranularity: 'step', defaultTrendMode: 'total', defaultFileSort: 'count' },
       writable: false,
     }))
+    assert.equal(s.defaultPlacement(), 'all')
     assert.equal(s.defaultGranularity(), 'step')
     assert.equal(s.defaultTrendMode(), 'total')
     assert.equal(s.defaultFileSort(), 'count')
@@ -202,7 +215,9 @@ describe('attach', () => {
 
   test('missing fields keep the current state', () => {
     const s = createContextSettings()
+    s.set('defaultPlacement', 'tab')
     s.attach(new TestSettingsScope({ status: 'ready', value: { defaultFileSort: 'latest' }, writable: false }))
+    assert.equal(s.defaultPlacement(), 'tab', 'the in-session choice survives a section without the field')
     assert.equal(s.defaultGranularity(), 'step')
     assert.equal(s.defaultTrendMode(), 'total')
     assert.equal(s.defaultFileSort(), 'latest')
@@ -223,8 +238,11 @@ describe('attach', () => {
     scope.emit({ status: 'ready', value: { defaultFileSort: 'path' }, writable: true })
     assert.equal(calls, 3)
     assert.equal(s.defaultFileSort(), 'path')
-    scope.emit({ status: 'ready', value: { defaultFileSort: 'path' }, writable: false })
+    scope.emit({ status: 'ready', value: { defaultPlacement: 'sidebar' }, writable: true })
     assert.equal(calls, 4)
+    assert.equal(s.defaultPlacement(), 'sidebar')
+    scope.emit({ status: 'ready', value: { defaultFileSort: 'path' }, writable: false })
+    assert.equal(calls, 5)
     assert.equal(s.store.getSnapshot().writable, false)
   })
 

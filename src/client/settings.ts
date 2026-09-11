@@ -12,11 +12,11 @@
  * members keeps the dependency graph honest.
  */
 
-import type { DefaultFileSort, DefaultGranularity, DefaultTrendMode, SettingsField } from '../shared/types'
+import type { DefaultFileSort, DefaultGranularity, DefaultPlacement, DefaultTrendMode, SettingsField } from '../shared/types'
 
 // The preference vocabulary is declared once in shared/types.ts; re-exported
 // here so client-side consumers keep their canonical import path.
-export type { DefaultFileSort, DefaultGranularity, DefaultTrendMode, SettingsField } from '../shared/types'
+export type { DefaultFileSort, DefaultGranularity, DefaultPlacement, DefaultTrendMode, SettingsField } from '../shared/types'
 
 /** The bound settings scope (ctx.settingsScope.bind result), as consumed. */
 export interface SettingsScopeLike {
@@ -34,6 +34,7 @@ export interface SettingsScopeBinderFace {
 export interface SettingsState {
   /** Scope sync: loading until the first Host section, unavailable when unserved. */
   status: 'loading' | 'ready' | 'unavailable'
+  placement: DefaultPlacement
   granularity: DefaultGranularity
   mode: DefaultTrendMode
   fileSort: DefaultFileSort
@@ -43,6 +44,7 @@ export interface SettingsState {
 export interface ContextSettings {
   /** Observable snapshot store, bound onto card props as `useContextSettings`. */
   store: { subscribe(listener: () => void): () => void; getSnapshot(): SettingsState }
+  defaultPlacement(): DefaultPlacement
   defaultGranularity(): DefaultGranularity
   defaultTrendMode(): DefaultTrendMode
   defaultFileSort(): DefaultFileSort
@@ -51,10 +53,18 @@ export interface ContextSettings {
   set(field: SettingsField, value: string): void
 }
 
-function prefsOf(value: unknown): { granularity?: DefaultGranularity; mode?: DefaultTrendMode; fileSort?: DefaultFileSort } {
+type Prefs = {
+  placement?: DefaultPlacement
+  granularity?: DefaultGranularity
+  mode?: DefaultTrendMode
+  fileSort?: DefaultFileSort
+}
+
+function prefsOf(value: unknown): Prefs {
   if (value === null || typeof value !== 'object') return {}
   const v = value as Record<string, unknown>
   return {
+    ...(v.defaultPlacement === 'all' || v.defaultPlacement === 'tab' || v.defaultPlacement === 'sidebar' ? { placement: v.defaultPlacement } : {}),
     ...(v.defaultGranularity === 'step' || v.defaultGranularity === 'turn' ? { granularity: v.defaultGranularity } : {}),
     ...(v.defaultTrendMode === 'total' || v.defaultTrendMode === 'delta' ? { mode: v.defaultTrendMode } : {}),
     ...(v.defaultFileSort === 'count' || v.defaultFileSort === 'latest' || v.defaultFileSort === 'path' ? { fileSort: v.defaultFileSort } : {}),
@@ -62,11 +72,11 @@ function prefsOf(value: unknown): { granularity?: DefaultGranularity; mode?: Def
 }
 
 export function createContextSettings(): ContextSettings {
-  let state: SettingsState = { status: 'loading', granularity: 'step', mode: 'total', fileSort: 'count', writable: false }
+  let state: SettingsState = { status: 'loading', placement: 'all', granularity: 'step', mode: 'total', fileSort: 'count', writable: false }
   let scope: SettingsScopeLike | undefined
   const listeners = new Set<() => void>()
   const publish = (next: SettingsState): void => {
-    if (next.status === state.status && next.granularity === state.granularity
+    if (next.status === state.status && next.placement === state.placement && next.granularity === state.granularity
       && next.mode === state.mode && next.fileSort === state.fileSort && next.writable === state.writable) return
     state = next
     for (const listener of listeners) listener()
@@ -79,6 +89,7 @@ export function createContextSettings(): ContextSettings {
     publish({
       status: snap.status === 'ready' || snap.status === 'unavailable' ? snap.status : 'loading',
       // A section without the field (older Host half) keeps the default.
+      placement: prefs.placement ?? state.placement,
       granularity: prefs.granularity ?? state.granularity,
       mode: prefs.mode ?? state.mode,
       fileSort: prefs.fileSort ?? state.fileSort,
@@ -93,6 +104,7 @@ export function createContextSettings(): ContextSettings {
       },
       getSnapshot: () => state,
     },
+    defaultPlacement: () => state.placement,
     defaultGranularity: () => state.granularity,
     defaultTrendMode: () => state.mode,
     defaultFileSort: () => state.fileSort,

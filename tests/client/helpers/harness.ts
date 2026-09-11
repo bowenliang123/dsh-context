@@ -73,7 +73,7 @@ export class TestClientCtx {
   readonly slots = new TestSlots()
   readonly locale: TestLocale
   private readonly services = new Map<string, unknown>()
-  private readonly pending: { deps: string[]; cb: (ctx: TestClientCtx) => void }[] = []
+  private readonly pending: { deps: string[]; cb: (ctx: TestClientCtx) => (() => void) | void }[] = []
   private readonly disposers: (() => void)[] = []
 
   constructor(options: TestClientCtxOptions = {}) {
@@ -96,22 +96,53 @@ export class TestClientCtx {
       const p = this.pending[i]
       if (p.deps.every(d => this.services.has(d))) {
         this.pending.splice(i, 1)
-        this.runInjected(p.cb)
+        p.cb(this)
       }
     }
   }
 
-  private runInjected(cb: (ctx: TestClientCtx) => void): void {
-    // Cordis runs the inject callback as a disposable plugin: a returned
-    // disposer belongs to the fiber and runs on unload.
-    const dispose = cb(this)
-    if (typeof dispose === 'function') this.disposers.push(dispose)
-  }
-
-  inject(deps: string[] | Record<string, unknown>, cb: (ctx: TestClientCtx) => void): void {
+  /**
+   * Cordis semantics: an inject gets its fiber handle as soon as it is
+   * declared (PENDING while a service is still missing) — disposing it either
+   * cancels the pending wait or unwinds the loaded callback, and the loaded
+   * disposer also belongs to the context's own dispose (LIFO). Either path
+   * retires it, so the two lifetimes never run it twice.
+   */
+  inject(deps: string[] | Record<string, unknown>, cb: (ctx: TestClientCtx) => (() => void) | void): { dispose: () => Promise<void> } {
     const list = Array.isArray(deps) ? deps : Object.keys(deps)
-    if (list.every(d => this.services.has(d))) this.runInjected(cb)
-    else this.pending.push({ deps: list, cb })
+    let ran = false
+    let disposed = false
+    let retired = false
+    let inner: (() => void) | undefined
+    const fiber = {
+      dispose: async () => {
+        if (disposed) return
+        disposed = true
+        const i = this.pending.findIndex(p => p.cb === wrapped)
+        if (i >= 0) {
+          this.pending.splice(i, 1)
+          return
+        }
+        if (ran && inner !== undefined && !retired) {
+          inner()
+        }
+      },
+    }
+    const wrapped = (ctx: TestClientCtx): void => {
+      ran = true
+      const dispose = cb(ctx)
+      if (typeof dispose === 'function') {
+        inner = () => {
+          if (retired) return
+          retired = true
+          dispose()
+        }
+        this.disposers.push(inner)
+      }
+    }
+    if (list.every(d => this.services.has(d))) wrapped(this)
+    else this.pending.push({ deps: list, cb: wrapped })
+    return fiber
   }
 
   effect(fn: () => (() => void) | void, _label?: string): () => void {

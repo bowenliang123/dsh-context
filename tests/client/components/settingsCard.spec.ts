@@ -21,7 +21,7 @@ function hookFor(state: SettingsState) {
 }
 
 function stateOf(partial: Partial<SettingsState> = {}): SettingsState {
-  return { status: 'ready', granularity: 'step', mode: 'total', fileSort: 'count', writable: true, ...partial }
+  return { status: 'ready', placement: 'all', granularity: 'step', mode: 'total', fileSort: 'count', writable: true, ...partial }
 }
 
 /** Menu items portaled into document.body while a select is open. */
@@ -65,7 +65,7 @@ describe('SettingsCard', () => {
     assert.equal(head.getAttribute('aria-label'), `${DICT_EN['settings.collapse']}: ${DICT_EN['settings.title']}`)
     assert.ok(card.className.includes('lc-settings-open'))
     const selects = queryAll(m.container, '.lc-settings-select')
-    assert.equal(selects.length, 3)
+    assert.equal(selects.length, 4)
     assert.ok(selects.every(s => (s as HTMLButtonElement).disabled))
     // Loading is not ready: no read-only note.
     assert.equal(m.container.querySelector('.lc-settings-note'), null)
@@ -87,33 +87,54 @@ describe('SettingsCard', () => {
     const selects = queryAll<HTMLButtonElement>(m.container, '.lc-settings-select')
     assert.ok(selects.every(s => !s.disabled))
     assert.equal(m.container.querySelector('.lc-settings-note'), null)
-    // Active option labels resolve through the options list.
-    assert.ok(text(selects[0]).includes(DICT_EN['gran.step']))
-    assert.ok(text(selects[1]).includes(DICT_EN['gran.total']))
-    assert.ok(text(m.container).includes(DICT_EN['settings.fileSort']))
-    assert.ok(text(selects[2]).includes(DICT_EN['files.sort.count']))
-
+    // The placement row leads; its label resolves through the options list.
+    assert.ok(text(m.container).includes(DICT_EN['settings.placement']))
+    assert.ok(text(selects[0]).includes(DICT_EN['placement.all']))
     await click(selects[0])
     assert.equal(selects[0].getAttribute('aria-expanded'), 'true')
+    const placementItems = menuItems()
+    assert.equal(placementItems.length, 3)
+    assert.deepEqual(placementItems.map(i => text(i)), [
+      DICT_EN['placement.tab'],
+      DICT_EN['placement.sidebar'],
+      DICT_EN['placement.all'],
+    ])
+    await click(placementItems[1]) // 'Sidebar'
+    assert.deepEqual(calls, [['defaultPlacement', 'sidebar']])
+    assert.equal(selects[0].getAttribute('aria-expanded'), 'false')
+    assert.equal(document.body.querySelector('[role="menu"]'), null)
+
+    // The granularity row follows.
+    assert.ok(text(selects[1]).includes(DICT_EN['gran.step']))
+    assert.ok(text(selects[2]).includes(DICT_EN['gran.total']))
+    assert.ok(text(m.container).includes(DICT_EN['settings.fileSort']))
+    assert.ok(text(selects[3]).includes(DICT_EN['files.sort.count']))
+
+    await click(selects[1])
+    assert.equal(selects[1].getAttribute('aria-expanded'), 'true')
     const items = menuItems()
     assert.equal(items.length, 2)
     assert.deepEqual(items.map(i => text(i)), [DICT_EN['gran.step'], DICT_EN['gran.turn']])
 
     await click(items[1]) // 'Turn'
-    assert.deepEqual(calls, [['defaultGranularity', 'turn']])
-    assert.equal(selects[0].getAttribute('aria-expanded'), 'false')
+    assert.deepEqual(calls, [['defaultPlacement', 'sidebar'], ['defaultGranularity', 'turn']])
+    assert.equal(selects[1].getAttribute('aria-expanded'), 'false')
     assert.equal(document.body.querySelector('[role="menu"]'), null)
 
     // The trend-mode row writes the other field.
-    await click(selects[1])
+    await click(selects[2])
     const modeItems = menuItems()
     assert.deepEqual(modeItems.map(i => text(i)), [DICT_EN['gran.total'], DICT_EN['gran.delta']])
     await click(modeItems[1]) // 'Delta'
-    assert.deepEqual(calls, [['defaultGranularity', 'turn'], ['defaultTrendMode', 'delta']])
+    assert.deepEqual(calls, [
+      ['defaultPlacement', 'sidebar'],
+      ['defaultGranularity', 'turn'],
+      ['defaultTrendMode', 'delta'],
+    ])
     assert.equal(document.body.querySelector('[role="menu"]'), null)
 
-    // The file-sort row writes the third field.
-    await click(selects[2])
+    // The file-sort row writes the last field.
+    await click(selects[3])
     const sortItems = menuItems()
     assert.deepEqual(sortItems.map(i => text(i)), [
       DICT_EN['files.sort.count'],
@@ -122,6 +143,7 @@ describe('SettingsCard', () => {
     ])
     await click(sortItems[2]) // 'By path'
     assert.deepEqual(calls, [
+      ['defaultPlacement', 'sidebar'],
       ['defaultGranularity', 'turn'],
       ['defaultTrendMode', 'delta'],
       ['defaultFileSort', 'path'],
@@ -147,7 +169,7 @@ describe('SettingsCard', () => {
     const select = query(m.container, '.lc-settings-select')
     await click(select)
     assert.equal(select.getAttribute('aria-expanded'), 'true')
-    assert.equal(menuItems().length, 2)
+    assert.equal(menuItems().length, 3, 'the placement row leads with three options')
     await keydown('Escape', document.body)
     assert.equal(select.getAttribute('aria-expanded'), 'false')
     assert.equal(document.body.querySelector('[role="menu"]'), null)
@@ -167,7 +189,7 @@ describe('SettingsCard', () => {
   })
 
   test('a value matching no option falls back to the raw id; a missing set never throws', async () => {
-    const m = await mount(h(SettingsCard, { useContextSettings: hookFor(stateOf({ granularity: 'weird' as never })) }))
+    const m = await mount(h(SettingsCard, { useContextSettings: hookFor(stateOf({ placement: 'weird' as never })) }))
     await click(query(m.container, '.lc-settings-head'))
     const selects = queryAll(m.container, '.lc-settings-select')
     assert.ok(text(selects[0]).includes('weird'))
@@ -189,7 +211,7 @@ describe('SettingsCard', () => {
       const card = query(m.container, '.lc-settings-card')
       assert.ok(card.className.includes('lc-settings-open'))
       assert.equal(query(m.container, '.lc-settings-head').getAttribute('aria-expanded'), 'true')
-      assert.equal(queryAll(m.container, '.lc-settings-select').length, 3)
+      assert.equal(queryAll(m.container, '.lc-settings-select').length, 4)
       assert.equal(scrolled.length, 1, 'the card scrolls itself into view')
       assert.deepEqual(scrolled[0].arg, { block: 'nearest' })
       assert.equal(scrolled[0].el, card)

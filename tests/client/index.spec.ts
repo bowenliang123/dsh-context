@@ -313,10 +313,83 @@ describe('client entry: settings card slot', () => {
     assert.ok(query(m.container, '.lc-settings-card'))
     await click(query(m.container, '.lc-settings-head'))
     const selects = queryAll(m.container, '.lc-settings-select')
-    assert.equal(selects.length, 3)
+    assert.equal(selects.length, 4)
     for (const s of selects) assert.ok((s as HTMLButtonElement).disabled)
     await m.unmount()
     ctx.dispose()
+  })
+})
+
+describe('client entry: placement gating', () => {
+  /** A settings scope whose snapshot the test drives (the emit path). */
+  function scopeWith(snapshot: { status: string; value: unknown; writable: boolean }): SettingsScopeLike & {
+    emit(next: { status: string; value: unknown; writable: boolean }): void
+  } {
+    let current = snapshot
+    const listeners = new Set<() => void>()
+    return {
+      getSnapshot: () => current,
+      subscribe(listener) {
+        listeners.add(listener)
+        return () => { listeners.delete(listener) }
+      },
+      set: () => Promise.resolve(),
+      emit(next) {
+        current = next
+        for (const listener of listeners) listener()
+      },
+    }
+  }
+
+  /** The sidebar registry stand-in counting registrations and disposer calls. */
+  function registry(): { definitions: unknown[]; disposed: number; register(d: unknown): () => void } {
+    const rec = {
+      definitions: [] as unknown[],
+      disposed: 0,
+      register(d: unknown): () => void {
+        rec.definitions.push(d)
+        return () => { rec.disposed += 1 }
+      },
+    }
+    return rec
+  }
+
+  test("the persisted 'sidebar' placement skips the conversation tab and keeps the sidebar", () => {
+    const scope = scopeWith({ status: 'ready', value: { defaultPlacement: 'sidebar' }, writable: true })
+    const ctx = new TestClientCtx({ services: { settingsScope: { bind: () => scope } } })
+    applyTo(ctx)
+    assert.deepEqual(ctx.slots.of('conversation.view'), [], 'the dropped tab never registered')
+    const tabs = registry()
+    ctx.setService('sidebarRightTabs', tabs)
+    assert.equal(tabs.definitions.length, 1, 'the kept sidebar still registers')
+    assert.equal(ctx.slots.of('sidebar.right.pane.tab').length, 1)
+    ctx.dispose()
+    assert.equal(tabs.disposed, 1)
+    assert.deepEqual(ctx.slots.of('sidebar.right.pane.tab'), [])
+  })
+
+  test('a preference flip moves the registrations live; disposal unwinds everything', () => {
+    const scope = scopeWith({ status: 'ready', value: {}, writable: true })
+    const ctx = new TestClientCtx({ services: { settingsScope: { bind: () => scope } } })
+    applyTo(ctx)
+    const tabs = registry()
+    ctx.setService('sidebarRightTabs', tabs)
+    assert.equal(ctx.slots.of('conversation.view').length, 1, "the default 'all' carries both")
+
+    scope.emit({ status: 'ready', value: { defaultPlacement: 'tab' }, writable: true })
+    assert.equal(tabs.disposed, 1, 'the sidebar registration unwound')
+    assert.deepEqual(ctx.slots.of('sidebar.right.pane.tab'), [])
+    assert.deepEqual(ctx.slots.of('sidebar.right.pane.tab.title'), [])
+    assert.equal(ctx.slots.of('conversation.view').length, 1)
+
+    scope.emit({ status: 'ready', value: { defaultPlacement: 'all' }, writable: true })
+    assert.equal(tabs.definitions.length, 2, 'the sidebar re-registered')
+    assert.equal(ctx.slots.of('sidebar.right.pane.tab').length, 1)
+    assert.equal(ctx.slots.of('conversation.view').length, 1, 'the kept tab is never churned')
+    ctx.dispose()
+    assert.equal(tabs.disposed, 2)
+    assert.deepEqual(ctx.slots.of('conversation.view'), [])
+    assert.deepEqual(ctx.slots.of('sidebar.right.pane.tab'), [])
   })
 })
 

@@ -98,6 +98,17 @@ export function makeSettingsCard(kit: ViewKit): (props: SettingsCardProps) => Re
                 ? <p className="lc-settings-note" role="status">{t('settings.readOnly')}</p>
                 : null}
               <PrefRow
+                label={t('settings.placement')}
+                value={state.placement}
+                disabled={disabled}
+                options={[
+                  { id: 'tab', label: t('placement.tab') },
+                  { id: 'sidebar', label: t('placement.sidebar') },
+                  { id: 'all', label: t('placement.all') },
+                ]}
+                onPick={(id) => { props.set?.('defaultPlacement', id) }}
+              />
+              <PrefRow
                 label={t('settings.gran')}
                 value={state.granularity}
                 disabled={disabled}

@@ -50,16 +50,18 @@ const GUIDE_ORDER = 20
  *   locale at call time, so a language switch relabels the guide entry.
  * @param ns - the plugin's locale namespace, put on the body registration so
  *   the framework synthesizes the `t` seat for the panel too.
+ * @returns the deferred inject's disposer (placement toggling calls it to
+ *   take the mount down; a no-op on faces that return no handle).
  */
 export function watchSidebarContextTab(
   ctx: ClientCtx,
   view: (props: ContextViewProps) => unknown,
   t: Translate,
   ns: string,
-): void {
+): () => void {
   // Deferred: a harness without the right Sidebar never fires this, and the
   // plugin is simply a conversation tab there — no pending fiber, no error.
-  ctx.inject(['sidebarRightTabs'], (raw) => {
+  const fiber = ctx.inject(['sidebarRightTabs'], (raw) => {
     const injected = raw as unknown as ClientCtx & { sidebarRightTabs?: SidebarTabsFace }
     // Every registration that already landed, so a partial failure below
     // unwinds exactly what this callback owns.
@@ -104,4 +106,8 @@ export function watchSidebarContextTab(
       for (const dispose of disposers) dispose()
     }
   })
+  // The cordis inject handle disposes the callback's fiber; re-proved at
+  // runtime because a harness face may return no handle at all.
+  const handle = fiber as { dispose?: () => unknown } | undefined
+  return () => { void handle?.dispose?.() }
 }

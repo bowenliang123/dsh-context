@@ -66,6 +66,7 @@ describe('installSettings', () => {
     const descriptors = ctx.settings.describe()
     assert.ok(descriptors.some(d => String(d.ns) === 'dsh-context'), 'the namespace is registered')
     assert.deepEqual(ctx.settings.get(ns), {
+      defaultPlacement: 'all',
       defaultGranularity: 'step',
       defaultTrendMode: 'total',
       defaultFileSort: 'count',
@@ -76,14 +77,16 @@ describe('installSettings', () => {
     const { ctx, provider } = await boot()
     await ctx.settings.update(ns, { defaultGranularity: 'turn' })
     assert.deepEqual(ctx.settings.get(ns), {
+      defaultPlacement: 'all',
       defaultGranularity: 'turn',
       defaultTrendMode: 'total',
       defaultFileSort: 'count',
     }, 'the update resolves over the schema defaults')
     assert.deepEqual(provider.doc['dsh-context'], { defaultGranularity: 'turn' }, 'the provider persisted the section')
 
-    await ctx.settings.update(ns, { defaultTrendMode: 'delta', defaultFileSort: 'path' })
+    await ctx.settings.update(ns, { defaultPlacement: 'sidebar', defaultTrendMode: 'delta', defaultFileSort: 'path' })
     assert.deepEqual(ctx.settings.get(ns), {
+      defaultPlacement: 'sidebar',
       defaultGranularity: 'turn',
       defaultTrendMode: 'delta',
       defaultFileSort: 'path',
@@ -93,19 +96,26 @@ describe('installSettings', () => {
       ctx.settings.update(ns, { defaultGranularity: 'week' }),
       'an unknown granularity fails validation before anything persists',
     )
-    // The loose fields degrade instead of rejecting: a stale file sort resolves to the default.
-    await ctx.settings.update(ns, { defaultFileSort: 'net' })
+    // The loose fields degrade instead of rejecting: a stale file sort or
+    // placement resolves to the default.
+    await ctx.settings.update(ns, { defaultFileSort: 'net', defaultPlacement: 'window' })
     assert.deepEqual(ctx.settings.get(ns), {
+      defaultPlacement: 'all',
       defaultGranularity: 'turn',
       defaultTrendMode: 'delta',
       defaultFileSort: 'count',
-    }, 'a stale file sort degrades to the schema default')
-    assert.deepEqual(provider.doc['dsh-context'], { defaultGranularity: 'turn', defaultTrendMode: 'delta', defaultFileSort: 'net' }, 'the stale value stays raw in storage and degrades at read')
+    }, 'a stale value degrades to the schema default')
+    assert.deepEqual(
+      provider.doc['dsh-context'],
+      { defaultPlacement: 'window', defaultGranularity: 'turn', defaultTrendMode: 'delta', defaultFileSort: 'net' },
+      'the stale value stays raw in storage and degrades at read',
+    )
   })
 
   test('a stale persisted preference degrades to the default (loose)', async () => {
-    const { ctx } = await boot({ 'dsh-context': { defaultTrendMode: 'net', defaultFileSort: 'alpha' } })
+    const { ctx } = await boot({ 'dsh-context': { defaultPlacement: 'window', defaultTrendMode: 'net', defaultFileSort: 'alpha' } })
     const value = ctx.settings.get(ns) as PluginSettings
+    assert.equal(value.defaultPlacement, 'all', 'the stale placement falls back instead of breaking the section')
     assert.equal(value.defaultTrendMode, 'total', 'the stale value falls back instead of breaking the section')
     assert.equal(value.defaultFileSort, 'count', 'the stale file sort falls back instead of breaking the section')
     assert.equal(value.defaultGranularity, 'step')

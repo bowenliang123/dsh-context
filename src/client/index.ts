@@ -33,6 +33,7 @@ import { createContextSettings, type SettingsField, type SettingsScopeBinderFace
 import { makeContextView } from './components/contextView'
 import { makeContextJumpButton } from './components/contextJump'
 import { watchHistoryFaces } from './historyPage'
+import { watchPlacement } from './placement'
 import { watchSidebarContextTab } from './sidebar'
 import { makeViewKit } from './viewkit'
 
@@ -79,19 +80,22 @@ function apply(ctx: ClientCtx): void {
   const settings = createContextSettings()
   const ContextView = makeContextView(ctx, kit, settings)
 
-  ctx.slots.inject('conversation.view', () => {
-    return ctx.slots.register(
-      // order 20 renders right of Chat (0) and Trajectory (10); the locale
-      // namespace put the framework `t` seat on the component's props too.
-      { name: 'conversation.view', id: 'context', order: 20, locale: NS, label: () => t('tab') },
-      props => h(ContextView, props),
-    )
-  })
-
-  // Right Sidebar (dsh 0.1.5-rc.1+): the same view as a panel tab, offered
-  // from the sidebar's guide page. Optional by contract — a harness without
-  // the sidebar services simply never gets the tab (see sidebar.ts).
-  watchSidebarContextTab(ctx, ContextView, t, NS)
+  // Placement: the per-user `defaultPlacement` preference picks which
+  // registration carries the view — the conversation tab, the right Sidebar
+  // (dsh 0.1.5-rc.1+, optional by contract), or both (the default). Each
+  // mount owns its disposer so the watcher takes down exactly what a
+  // preference flip drops (see placement.ts).
+  ctx.effect(() => watchPlacement(settings, {
+    tab: () => ctx.slots.inject('conversation.view', () => {
+      return ctx.slots.register(
+        // order 20 renders right of Chat (0) and Trajectory (10); the locale
+        // namespace put the framework `t` seat on the component's props too.
+        { name: 'conversation.view', id: 'context', order: 20, locale: NS, label: () => t('tab') },
+        props => h(ContextView, props),
+      )
+    }),
+    sidebar: () => watchSidebarContextTab(ctx, ContextView, t, NS),
+  }), 'dsh-context: placement')
 
   // Chat → Context jump: an icon in each finalized reply's action row that
   // opens this tab pinned to that reply's turn (see contextJump.tsx; the
