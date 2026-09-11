@@ -32,7 +32,7 @@ export const DICT_ZH: Record<string, string> = {
   'timing.ttft': '模型等待',
   'timing.gen': '模型生成',
   'timing.reasoning': '模型思考',
-  'timing.text': '正文输出',
+  'timing.text': '模型输出',
   'timing.toolArgs': '工具参数',
   'timing.tools': '工具执行',
   'timing.other': '其他开销',

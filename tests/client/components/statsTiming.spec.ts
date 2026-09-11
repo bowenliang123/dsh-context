@@ -158,7 +158,7 @@ describe('StatsTiming — the generation split', () => {
   test('the split labels localize', async () => {
     const m = await mount(h(StatsTimingZh, { timing: SPLIT }))
     assert.equal(rowOf(m.container, 1).label, '模型思考')
-    assert.equal(rowOf(m.container, 2).label, '正文输出')
+    assert.equal(rowOf(m.container, 2).label, '模型输出')
     assert.equal(rowOf(m.container, 3).label, '工具参数')
     await m.unmount()
   })
