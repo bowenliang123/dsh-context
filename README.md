@@ -47,7 +47,7 @@ Open any session and click the **Context / 上下文** tab:
 
 | Card | The question it answers |
 | --- | --- |
-| **Context Stats** | Turns, steps, human inputs, live tool calls, the session's cache-hit rate — plus a list-price cost estimate (hover the `?` for per-1M rates). |
+| **Context Stats** | Turns, steps, human inputs, live tool calls, the session's cache-hit rate — plus a cost estimated from the models.dev list prices (hover the `?` for per-1M rates; DeepSeek peak/off-peak aware). |
 | **Token Stats** | Where the billed tokens went — the same total as the chat stats line under the composer, split by composition (system, tools, messages…) with the provider-exact output closing the ring. |
 | **Timing Stats** | How active time split across model calls, tool runs, and overhead. |
 | **Current Context** | What's in the window *right now*. |

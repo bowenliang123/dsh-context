@@ -67,9 +67,7 @@ These checks prove source-level seam compatibility, statistical parity with the 
 
 ## Upgrading from an older plugin build
 
-The plugin keeps its projection `stateVersion` unchanged, so cached per-session projection rows stay usable: bumping it would invalidate every row and orphan the `contextTimeline` key for idle sessions, which have no refresh channel until they go live again.
-
-One consequence: a session whose row was folded by an older build keeps serving that older figure set until its log receives a new event (the registry seeds the cached state and replays only the tail). New sessions are exact from their first event. To force a full refold of an existing session, delete its cached projection row — it is a derived cache and is rebuilt from the durable log:
+The session-cost rework (estimates priced from the models.dev registry) bumps the timeline projection's `stateVersion` (16 → 18): on upgrade, every cached per-session row is invalidated and re-folded from the durable log, which rebuilds the cost totals under their new per-(provider, model), per-period keys. The bump orphans the `contextTimeline` key for idle sessions, which have no refresh channel until they go live again — such a session re-folds when its log receives its next event. New sessions are exact from their first event. To force a full refold of an existing session sooner, delete its cached projection row — it is a derived cache and is rebuilt from the durable log:
 
 ```bash
 rm ~/.dsh/storages/session_projcache/sessions/<session-id>.json
