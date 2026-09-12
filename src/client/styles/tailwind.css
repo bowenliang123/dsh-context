@@ -1,0 +1,38 @@
+/*
+ * Tailwind entry: compiles (tsdown.config.ts, @tailwindcss/node) the layout
+ * utilities carried by the plugin's JSX class lists — box layout, flex/grid,
+ * spacing, sizing, positioning, overflow, and the @container responsive
+ * variants. The sibling sheets keep everything Tailwind does not own here:
+ * the harness's `--dsw-*` color/typography chrome, hover/focus states,
+ * contextual selectors, animations.
+ *
+ * Deliberate deviations from a stock Tailwind setup, all for cohabitation
+ * with the harness host page:
+ * - No preflight and no theme import: a reset would re-skin host chrome, and
+ *   the layout utilities need nothing beyond the spacing scale.
+ * - `--spacing: 4px` instead of 0.25rem: the plugin's spacing values are px
+ *   (4/6/7/14…), and anchoring the scale to px keeps every utility at its
+ *   designed size regardless of the host's root font size.
+ * - Utilities compile UNLAYERED (plain `@tailwind utilities`, no @layer):
+ *   these sheets are injected as unlayered <style> tags today, and a layered
+ *   utility would lose to ANY unlayered host rule — the inverse of the
+ *   cascade the hand-written sheets rely on. The sheet imports FIRST in
+ *   client/index.ts, so the sibling sheets still win same-specificity ties.
+ * - Generic utility class names are safe: dsh styles itself through CSS
+ *   modules (hashed names) and `--ds-*`/`--dsw-*` tokens, so no host rule
+ *   collides with `flex`/`gap-2`/… (the flat `lc-*` namespace stays for the
+ *   plugin's own chrome classes and as test anchors).
+ *
+ * The tailwindcss / @tailwindcss/node / @tailwindcss/oxide devDependencies
+ * are pinned to one exact version (as is lightningcss): the config process
+ * loads this compiler alongside lightningcss's native binding, and two
+ * copies of any native set in that realm break the napi calls.
+ */
+@theme {
+  --spacing: 4px;
+}
+
+/* The client sources — the only place utility class lists appear. */
+@source "../";
+
+@tailwind utilities;

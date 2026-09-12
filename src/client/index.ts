@@ -40,8 +40,10 @@ import { makeViewKit } from './viewkit'
 // Theme-native styles: the bundle's global-CSS channel injects each sheet as
 // a plugin-owned <style data-plugin> tag at factory execution (the web boot
 // loader and the HMR receiver claim tags carrying data-plugin). Import order
-// IS cascade order across same-specificity rules: base first, then the
-// per-component sheets in their original section order.
+// IS cascade order across same-specificity rules: the Tailwind utilities
+// first (the sibling sheets keep winning same-specificity ties), then base,
+// then the per-component sheets in their original section order.
+import './styles/tailwind.css'
 import './styles/base.css'
 import './styles/stats.css'
 import './styles/jump.css'
