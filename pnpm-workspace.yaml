@@ -22,3 +22,4 @@ minimumReleaseAgeExclude:
   - '@deepseek-ai/dsh-util-crypto@0.1.2-rc.1'
   - '@deepseek-ai/dsh-util-values@0.1.2-rc.1'
   - '@deepseek-ai/schemastery@3.18.2'
+  - '@opencode-ai/models@0.0.72'

@@ -17,7 +17,7 @@
 import type { Context } from '@deepseek-ai/cordis'
 import type { ComponentType } from 'react'
 import { estimateSystemTokens } from '../shared/estimate'
-import type { ContextBreakdown, ContextHeaders, ContextPressure, ContextTimeline, HeaderEpochContent, SystemPromptNode, TimingTotals, TokenUsage, ToolTimingTotals } from '../shared/types'
+import type { ContextBreakdown, ContextHeaders, ContextPressure, ContextTimeline, CostModelUsage, HeaderEpochContent, SystemPromptNode, TimingTotals, TokenUsage, ToolTimingTotals } from '../shared/types'
 
 export interface LocaleService {
   register(ns: string, dicts: Record<string, Record<string, string>>): () => void
@@ -304,6 +304,53 @@ export function unsupportedOf(value: unknown): { current: string; minimum: strin
 }
 
 /**
+ * The session-cost raw material, re-proved per provider/model/period/bucket
+ * (the shape the client's cost.ts prices): a branch, model, or period that
+ * is not a plain record drops whole — never a half-proved row — and bucket
+ * fields zero out via numOf, so garbage can only price as zero, never as
+ * NaN. Absent stays absent.
+ */
+function costOf(value: unknown): ContextTimeline['cost'] | undefined {
+  const data = asRecord(value)
+  if (data === null || Array.isArray(data)) return undefined
+  const out: NonNullable<ContextTimeline['cost']> = {}
+  for (const provider of Object.keys(data)) {
+    const models = asRecord(data[provider])
+    if (models === null || Array.isArray(models)) continue
+    const branch: Record<string, CostModelUsage> = {}
+    for (const model of Object.keys(models)) {
+      const periods = asRecord(models[model])
+      if (periods === null || Array.isArray(periods)) continue
+      const copy: CostModelUsage = {}
+      for (const period of ['peak', 'off'] as const) {
+        const b = asRecord(periods[period])
+        if (b === null || Array.isArray(b)) continue
+        copy[period] = {
+          uncached: numOf(b.uncached),
+          cacheRead: numOf(b.cacheRead),
+          cacheWrite: numOf(b.cacheWrite),
+          output: numOf(b.output),
+        }
+      }
+      branch[model] = copy
+    }
+    out[provider] = branch
+  }
+  return out
+}
+
+/** The fast-path structural check for `cost`: every branch is a plain record (bucket fields re-prove in costOf/cost.ts). */
+function costFastOk(value: unknown): boolean {
+  if (value === undefined) return true
+  const data = asRecord(value)
+  if (data === null || Array.isArray(data)) return false
+  return Object.keys(data).every((provider) => {
+    const models = asRecord(data[provider])
+    return models !== null && !Array.isArray(models)
+  })
+}
+
+/**
  * Narrow a delivered projection value to a RENDER-SAFE context timeline —
  * the client's no-white-screen guarantee against backend/parse failures.
  *
@@ -333,14 +380,13 @@ export function timelineOf(value: unknown): ContextTimeline | null {
     && recordsOnly(data.nodes)
     && recordsOnly(data.archive)
     && systemsFastOk(data.systems)
-    && timingFastOk(data.timing)) {
+    && timingFastOk(data.timing)
+    && costFastOk(data.cost)) {
     // Well-formed: pass the delivered value through untouched (cheap, and reference-stable so plain re-renders stay zero-copy).
     return data as unknown as ContextTimeline
   }
   const safeCurrent: Record<string, unknown> = current !== null && typeof current === 'object' ? current as Record<string, unknown> : {}
-  const cost = typeof data.cost === 'object' && data.cost !== null && !Array.isArray(data.cost)
-    ? data.cost as ContextTimeline['cost']
-    : undefined
+  const cost = costOf(data.cost)
   const timing = timingOf(data.timing)
   // The baseline-gate record survives sanitizing: a fallback payload that
   // somehow fails the fast path must still pop the gate modal.

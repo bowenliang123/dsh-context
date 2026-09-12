@@ -199,15 +199,60 @@ describe('timelineOf', () => {
     assert.ok(!('archiveFloor' in dropped))
   })
 
-  test('cost is kept only when a plain non-array object', () => {
-    const cost = { 'deepseek-v4-flash': { peak: { input: 1 } } }
+  test('cost is rebuilt per provider/model/period; garbage drops or zeroes', () => {
+    const cost = {
+      'deepseek-official': {
+        'deepseek-v4-flash': {
+          peak: { uncached: 5, cacheRead: 'x', cacheWrite: null, output: 7 },
+          off: { uncached: 1, cacheRead: 2, cacheWrite: 3, output: 4 },
+          junk: { uncached: 9, cacheRead: 0, cacheWrite: 0, output: 0 },
+          broken: null,
+          'broken-array': [],
+        },
+        'deepseek-v4-pro': { peak: [], off: null },
+        'broken-null': null,
+        'broken-array': [],
+      },
+      junk: 'not-a-record',
+      empty: {},
+    }
     const kept = timelineOf({ current: 1, cost })
     assert.ok(kept !== null)
-    assert.equal(kept.cost, cost)
+    assert.deepEqual(kept.cost, {
+      'deepseek-official': {
+        'deepseek-v4-flash': {
+          peak: { uncached: 5, cacheRead: 0, cacheWrite: 0, output: 7 },
+          off: { uncached: 1, cacheRead: 2, cacheWrite: 3, output: 4 },
+        },
+        'deepseek-v4-pro': {},
+      },
+      empty: {},
+    })
+    assert.notEqual(kept.cost, cost, 'the served buckets are a rebuilt copy, never the raw value')
     for (const bad of [[], null, 5]) {
       const out = timelineOf({ current: 1, cost: bad })
       assert.ok(out !== null)
       assert.ok(!('cost' in out))
+    }
+  })
+
+  test('a well-formed payload with a proven cost takes the fast path; a garbage cost diverts to the sanitizer', () => {
+    const cost = { 'deepseek-official': { 'deepseek-v4-flash': { peak: { uncached: 1, cacheRead: 2, cacheWrite: 3, output: 4 } } } }
+    const good = timelineOf({
+      current: { system: 1, tools: 1, user: 1, inject: 1, assistant: 1, tool: 1, total: 7 },
+      requests: [], events: [], nodes: [], archive: [],
+      cost,
+    })
+    assert.ok(good !== null)
+    assert.equal(good.cost, cost, 'the fast path passes a structurally proven cost through untouched')
+    for (const bad of [[], 'junk']) {
+      const diverted = timelineOf({
+        current: { system: 1, tools: 1, user: 1, inject: 1, assistant: 1, tool: 1, total: 7 },
+        requests: [], events: [], nodes: [], archive: [],
+        cost: bad,
+      })
+      assert.ok(diverted !== null)
+      assert.ok(!('cost' in diverted), 'a hostile cost drops through the sanitizer')
     }
   })
 

@@ -39,6 +39,9 @@ importers:
       '@deepseek-ai/schemastery':
         specifier: ^3.18.2
         version: 3.18.2
+      '@opencode-ai/models':
+        specifier: ^0.0.72
+        version: 0.0.72
       '@stylistic/eslint-plugin':
         specifier: ^5.10.0
         version: 5.10.0(eslint@10.8.1(supports-color@7.2.0))
@@ -320,6 +323,15 @@ packages:
 
   '@jridgewell/trace-mapping@0.3.31':
     resolution: {integrity: sha512-zzNR+SdQSDJzc8joaeP8QQoCQr8NuYx2dIIytl1QeBEZHJ9uW6hebsrYgbz8hJwUQao3TWCMtmfV8Nu1twOLAw==}
+
+  '@opencode-ai/models@0.0.72':
+    resolution: {integrity: sha512-a9dXb/6nMzgMliPrvXXlmo0bZ2bBvgsR51rHlvc3GJjgFOxhb/tnzxuzCmLTf9DlDlcY9/ghn6EZrIWltmmf+w==}
+    engines: {node: '>=18'}
+    peerDependencies:
+      effect: 4.0.0-beta.83
+    peerDependenciesMeta:
+      effect:
+        optional: true
 
   '@oxc-project/types@0.148.0':
     resolution: {integrity: sha512-Nm4s/jB+4FpFsPhWGEC4h7rzksesmtnMXomo6rCMcg/b8zLQuOziRgkCS1fxDCXOlJB/6Q8oABOZ/OP6RIPj9A==}
@@ -2286,6 +2298,8 @@ snapshots:
     dependencies:
       '@jridgewell/resolve-uri': 3.1.2
       '@jridgewell/sourcemap-codec': 1.5.5
+
+  '@opencode-ai/models@0.0.72': {}
 
   '@oxc-project/types@0.148.0': {}
 

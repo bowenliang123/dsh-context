@@ -124,10 +124,14 @@ const costBucketsSchema = z.object({
   output: z.number().int().nonnegative(),
 }).strict()
 
-const costFamilySchema = z.object({
+const costModelSchema = z.object({
   peak: costBucketsSchema.optional(),
   off: costBucketsSchema.optional(),
 }).strict()
+
+const costModelsSchema = z.record(z.string(), costModelSchema)
+
+const costUsageSchema = z.record(z.string(), costModelsSchema)
 
 const toolTimingSchema = z.object({
   calls: z.number().int().nonnegative(),
@@ -194,7 +198,7 @@ export const contextTimelineSchema = z.object({
   detailRev: z.number().int().nonnegative().optional(),
   requests: z.array(requestRecordSchema).optional(),
   events: z.array(contextEventSchema).optional(),
-  cost: z.object({ flash: costFamilySchema.optional(), pro: costFamilySchema.optional() }).strict().optional(),
+  cost: costUsageSchema.optional(),
   timing: timingTotalsSchema.optional(),
   systems: z.array(systemPromptNodeSchema).optional(),
   nodes: z.array(surfaceNodeSchema).optional(),
@@ -231,7 +235,7 @@ const timelineStateSchema = z.object({
   requests: z.array(requestRecordSchema),
   events: z.array(contextEventSchema),
   archived: z.array(surfaceNodeSchema),
-  cost: z.object({ flash: costFamilySchema.optional(), pro: costFamilySchema.optional() }).strict().optional(),
+  cost: costUsageSchema.optional(),
   archiveFloor: z.number().optional(),
   timing: timingTotalsSchema.optional(),
   humanInputs: z.number().int().nonnegative().optional(),
@@ -350,7 +354,20 @@ export function createContextTimelineDefinition(config: Config, slim: () => bool
     // the 0.47 additive fields a pre-tally cached row would undercount
     // forever; cached rows refold from the log, which rebuilds the tally
     // (the `timing`/`fileOps` precedent).
-    stateVersion: 16,
+    //
+    // 17: the session-cost totals (`cost`) rekeyed from the DeepSeek
+    // family × peak/off-period buckets to per-(provider, model) totals,
+    // priced client-side from the models.dev registry (client/modelPrices.ts)
+    // instead of the hardcoded rate table. The old shape cannot be
+    // reinterpreted, so cached rows refold from the log, which rebuilds the
+    // new keys.
+    //
+    // 18: the per-model totals gained the pricing-period split (peak /
+    // half-price off-peak — DeepSeek's period-based list; every other
+    // provider books everything under `peak`). The old shape cannot be
+    // reinterpreted, so cached rows refold from the log, which rebuilds the
+    // periods.
+    stateVersion: 18,
   }
   return definition
 }

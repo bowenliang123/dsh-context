@@ -145,43 +145,45 @@ describe('buildTimelineView copies', () => {
 })
 
 describe('buildTimelineView cost copy', () => {
-  test('a folded flash-only cost rides the wire as a detached copy', () => {
-    // 2024-01-04 00:00 UTC = 08:00 Beijing, a Thursday: off-peak.
+  test('a folded cost rides the wire as a detached copy', () => {
+    // Mon 2024-01-01 02:00 UTC — a DeepSeek peak window.
     const { state, view } = driveTimeline([
-      header(1, { model: 'deepseek-v4-flash', provider: 'deepseek' }),
+      header(1, { model: 'deepseek-v4-flash', provider: 'deepseek-official' }),
       assistantMessage(2, {
         turn: 1,
         step: 1,
         usage: { inputTokens: 100, cacheReadTokens: 20, cacheWriteTokens: 5, outputTokens: 10 },
-        time: Date.UTC(2024, 0, 4, 0, 0, 0),
+        time: Date.UTC(2024, 0, 1, 2, 0, 0),
       }),
     ])
-    assert.deepEqual<SessionCostUsage>(view.cost, { flash: { off: bucket(100, 20, 5, 10) } })
-    assert.notEqual(view.cost?.flash?.off, state.cost?.flash?.off)
-    assert.equal(view.cost?.pro, undefined)
+    assert.deepEqual<SessionCostUsage>(view.cost, {
+      'deepseek-official': { 'deepseek-v4-flash': { peak: bucket(100, 20, 5, 10) } },
+    })
+    assert.notEqual(view.cost, state.cost)
+    assert.notEqual(
+      view.cost?.['deepseek-official']?.['deepseek-v4-flash']?.peak,
+      state.cost?.['deepseek-official']?.['deepseek-v4-flash']?.peak,
+    )
+    assert.equal(view.cost?.['kimi-coding'], undefined, 'an absent provider stays absent')
   })
 
-  test('a pro-only cost with a peak-only bucket copies the set half only', () => {
-    const st = createTimelineState()
-    st.cost = { pro: { peak: bucket(1, 2, 3, 4) } } as SessionCostUsage
-    const view = timelineDef({}).wire.view(st)
-    assert.deepEqual<SessionCostUsage>(view.cost, { pro: { peak: bucket(1, 2, 3, 4) } })
-    assert.notEqual(view.cost?.pro?.peak, st.cost.pro?.peak)
-    assert.equal(view.cost?.flash, undefined, 'an absent family stays absent')
-    assert.equal(view.cost?.pro?.off, undefined, 'an absent bucket stays absent')
-  })
-
-  test('both families with both buckets copy through', () => {
+  test('every provider, model, and period branch copies through', () => {
     const st = createTimelineState()
     st.cost = {
-      flash: { peak: bucket(1, 0, 0, 2), off: bucket(3, 0, 0, 4) },
-      pro: { peak: bucket(5, 6, 0, 7), off: bucket(8, 0, 9, 10) },
+      'deepseek-official': {
+        'deepseek-v4-flash': { peak: bucket(1, 0, 0, 2) },
+        'deepseek-v4-pro': { peak: bucket(3, 0, 0, 4), off: bucket(5, 0, 6, 0) },
+      },
+      'kimi-coding': { 'kimi-k2.7-code': { peak: bucket(7, 8, 0, 9) } },
+      '': { 'mystery-model': { peak: bucket(8, 0, 9, 10) } },
     }
     const view = timelineDef({}).wire.view(st)
     assert.deepEqual<SessionCostUsage | undefined>(view.cost, st.cost)
-    assert.notEqual(view.cost?.flash, st.cost.flash)
-    assert.notEqual(view.cost?.flash?.peak, st.cost.flash?.peak)
-    assert.notEqual(view.cost?.pro?.off, st.cost.pro?.off)
+    assert.notEqual(view.cost?.['deepseek-official'], st.cost['deepseek-official'])
+    assert.notEqual(view.cost?.['deepseek-official']?.['deepseek-v4-flash']?.peak, st.cost['deepseek-official']['deepseek-v4-flash'].peak)
+    assert.notEqual(view.cost?.['deepseek-official']?.['deepseek-v4-pro']?.off, st.cost['deepseek-official']['deepseek-v4-pro'].off)
+    assert.notEqual(view.cost?.['kimi-coding']?.['kimi-k2.7-code']?.peak, st.cost['kimi-coding']['kimi-k2.7-code'].peak)
+    assert.notEqual(view.cost?.['']?.['mystery-model']?.peak, st.cost['']['mystery-model'].peak)
   })
 
   test('no cost in state omits the wire field entirely', () => {

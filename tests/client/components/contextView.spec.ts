@@ -8,12 +8,13 @@
 import { act, createElement as h, type ReactElement } from 'react'
 import assert from 'node:assert/strict'
 import { createRoot } from 'react-dom/client'
-import { afterEach, describe, test, vi } from 'vitest'
+import { afterEach, beforeEach, describe, test, vi } from 'vitest'
 import { makeContextView } from '../../../src/client/components/contextView'
 import { watchHistoryFaces } from '../../../src/client/historyPage'
 import { requestContextFocus, takeContextFocus } from '../../../src/client/viewFocus'
 import { createContextSettings } from '../../../src/client/settings'
 import type { SettingsScopeLike } from '../../../src/client/settings'
+import { resetModelPrices, setModelPricesLoader } from '../../../src/client/modelPrices'
 import type { UseChatLike } from '../../../src/client/services'
 import type { ContextTimeline } from '../../../src/shared/types'
 import { DICT_EN } from '../../../src/client/i18n'
@@ -1015,8 +1016,21 @@ describe('ContextView — scroll ledger', () => {
 })
 
 describe('ContextView — locale and settings', () => {
+  // A real-shaped models.dev slice: the cost cell prices against the injected
+  // book (1M uncached input at the $0.15 miss rate → $0.15 / ¥1).
   const costed = timeline({
-    cost: { flash: { off: { uncached: 1000000, output: 500000, cacheRead: 0, cacheWrite: 0 } } },
+    cost: { 'deepseek-official': { 'deepseek-v4-flash': { peak: { uncached: 1000000, output: 500000, cacheRead: 0, cacheWrite: 0 } } } },
+  })
+
+  beforeEach(() => {
+    resetModelPrices()
+    setModelPricesLoader(() => Promise.resolve({
+      deepseek: { models: { 'deepseek-v4-flash': { cost: { input: 0.15, output: 0.6, cache_read: 0.003 } } } },
+    }))
+  })
+
+  afterEach(() => {
+    resetModelPrices()
   })
 
   test('cost prices in USD by default (no locale service), CNY under zh', async () => {
@@ -1024,6 +1038,7 @@ describe('ContextView — locale and settings', () => {
       sessionId: 'sv-usd',
       useProjection: projectionsFor(costed),
     }))
+    await flush()
     assert.ok(text(m1.container).includes('$'))
     assert.ok(!text(m1.container).includes('¥'))
     await m1.unmount()
@@ -1033,6 +1048,7 @@ describe('ContextView — locale and settings', () => {
       sessionId: 'sv-cny',
       useProjection: projectionsFor(costed),
     }))
+    await flush()
     assert.ok(text(m2.container).includes('¥'))
     await m2.unmount()
 
@@ -1042,6 +1058,7 @@ describe('ContextView — locale and settings', () => {
       sessionId: 'sv-bare',
       useProjection: projectionsFor(costed),
     }))
+    await flush()
     assert.ok(text(m3.container).includes('$'))
     await m3.unmount()
   })

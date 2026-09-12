@@ -10,10 +10,12 @@
  * formula as the harness chat stats line under the composer, shown with one
  * decimal — and dashes until a provider reports usage. The cost cell prices
  * the host-folded cumulative billed totals (complete session log, never
- * trimmed) at the hardcoded DeepSeek V4 list prices (cost.ts) in the locale's
+ * trimmed) from the models.dev price book (modelPrices.ts) in the locale's
  * currency; its hover bubble (a '?' marker + styled DOM tip) explains the
- * whole-session estimate and lists the per-1M-token table straight from
- * cost.ts, so printed rates can never drift from the math.
+ * whole-session estimate and lists the per-1M-token rates of the models this
+ * session actually billed, straight from the same book (cost.ts), so printed
+ * rates can never drift from the math. A book that has not loaded (or
+ * failed) dashes the cell and notes the outage.
  *
  * The counts arrive precomputed: the split-generation wire head carries them
  * (shared/types.ts `TimelineCounts` — computed over the retained records),
@@ -23,11 +25,51 @@
 
 import { type ReactElement, type ReactNode } from 'react'
 import type { ContextEventRecord, RequestRecord, SessionCostUsage, TimelineCounts, TokenUsage } from '../../shared/types'
-import { estimateSessionCost, formatCost, formatPriceRate, sessionPrices } from '../cost'
-import type { CostCurrency } from '../cost'
+import { estimateSessionCost, formatCost, formatPriceRate, offPeakOf, priceOf, toCurrency } from '../cost'
+import type { CostCurrency, ModelPrices, PriceTriple } from '../cost'
 import { cacheHitPercent } from '../format'
-import { numOf } from '../services'
+import { useModelPrices } from '../modelPrices'
+import { asRecord, numOf } from '../services'
+import { isDeepSeekProvider } from '../../shared/providers'
 import type { ViewKit } from '../viewkit'
+
+/** One billed model's tooltip row: its display label and USD rates (`offRate` present only when the model billed off-peak). */
+interface PriceRow { key: string; label: string; rate: PriceTriple; offRate?: PriceTriple }
+
+/**
+ * The rate rows for the models this session actually billed — the usage
+ * keys priced against the book, in fold order. Hostile branches skip;
+ * unpriced models drop (their buckets simply do not contribute). The label
+ * carries the provider only when the session billed more than one; a model
+ * with an off-peak bucket (DeepSeek's period-based list) shows the
+ * peak | off-peak pair.
+ */
+function priceRowsOf(usage: SessionCostUsage | undefined, prices: ModelPrices | null): PriceRow[] {
+  if (usage === undefined || prices === null) return []
+  const rows: PriceRow[] = []
+  const multi = Object.keys(usage).length > 1
+  for (const provider of Object.keys(usage)) {
+    const models = asRecord(usage[provider])
+    if (models === null) continue
+    for (const model of Object.keys(models)) {
+      const rate = priceOf(prices, provider, model)
+      if (rate === null) continue
+      const periods = asRecord(models[model])
+      // The peak | off-peak pair is DeepSeek's alone (shared/providers):
+      // other providers bill everything at list price.
+      const off = isDeepSeekProvider(provider) && periods !== null && periods.off !== undefined
+        ? offPeakOf(rate)
+        : undefined
+      rows.push({
+        key: provider + '/' + model,
+        label: multi && provider !== '' ? `${model} · ${provider}` : model,
+        rate,
+        ...(off !== undefined ? { offRate: off } : {}),
+      })
+    }
+  }
+  return rows
+}
 
 /**
  * The inline generation's counter derivation — the exact tally the card ran
@@ -71,21 +113,44 @@ export function makeStatsContext(kit: ViewKit): (props: {
     locale: string
   }): ReactElement {
     const currency: CostCurrency = props.locale === 'zh' ? 'cny' : 'usd'
-    const cost = estimateSessionCost(props.cost, currency)
-    const fmtRate = (n: number): string => formatPriceRate(n, currency)
+    const { prices, failed } = useModelPrices()
+    const cost = estimateSessionCost(props.cost, prices, currency)
+    const fmtRate = (usd: number): string => formatPriceRate(toCurrency(usd, currency), currency)
+    const rows = priceRowsOf(props.cost, prices)
+    // DeepSeek's peak/off-peak scheme is explained only when the session
+    // actually billed a DeepSeek provider — other sessions see nothing of it.
+    const deepseek = props.cost !== undefined && Object.keys(props.cost).some(p => isDeepSeekProvider(p))
+    const anyPair = rows.some(r => r.offRate !== undefined)
+    // Usage folded but nothing priced (the book has not loaded, or carries
+    // none of this session's models): say so instead of a bare dash.
+    const unpriced = rows.length === 0 && props.cost !== undefined && Object.keys(props.cost).length > 0
+      && (failed || prices !== null)
     const costTip: ReactNode = [
-      t('stats.costTip'),
-      <span key="prices" className="lc-stat-tip-prices">
-        <span className="lc-stat-tip-head">{t('stats.costPriceHead')}</span>
-        {sessionPrices(currency).map(r => (
-          <span key={r.family} className="lc-stat-tip-row">
-            <b className="lc-stat-tip-model">{r.family}</b>
-            {' '}{t('stats.costHit')} {fmtRate(r.peak.hit)}/{fmtRate(r.off.hit)}
-            {' · '}{t('stats.costMiss')} {fmtRate(r.peak.miss)}/{fmtRate(r.off.miss)}
-            {' · '}{t('stats.costOut')} {fmtRate(r.peak.out)}/{fmtRate(r.off.out)}
+      t('stats.costTip') + (deepseek ? ' ' + t('stats.costTipDeepseek') : ''),
+      rows.length > 0 ? (
+        <span key="prices" className="lc-stat-tip-prices">
+          <span className="lc-stat-tip-head">
+            {anyPair ? t('stats.costPriceHeadPair') : t('stats.costPriceHead')}
           </span>
-        ))}
-      </span>,
+          {rows.map((r) => {
+            const cells: [string, number, number | undefined][] = [
+              [t('stats.costHit'), r.rate.hit, r.offRate?.hit],
+              [t('stats.costMiss'), r.rate.miss, r.offRate?.miss],
+              [t('stats.costWrite'), r.rate.write, r.offRate?.write],
+              [t('stats.costOut'), r.rate.out, r.offRate?.out],
+            ]
+            return (
+              <span key={r.key} className="lc-stat-tip-row">
+                <b className="lc-stat-tip-model">{r.label}</b>
+                {cells.map(([name, peak, off]) => (
+                  <span key={name}>{' · '}{name} {off === undefined ? fmtRate(peak) : `${fmtRate(peak)}|${fmtRate(off)}`}</span>
+                ))}
+              </span>
+            )
+          })}
+        </span>
+      ) : null,
+      unpriced ? <span key="unavailable">{t('stats.costUnavailable')}</span> : null,
     ]
     // The chat stats line's own figure, one decimal: prompt-side cache reads
     // over the whole billed input (output excluded), dashed until reported.

@@ -49,7 +49,7 @@ describe('createContextTimelineDefinition', () => {
   test('carries the supported projection contract on one unit', () => {
     const def = createContextTimelineDefinition({}, () => false)
     assert.equal(def.key, 'contextTimeline')
-    assert.equal(def.stateVersion, 16)
+    assert.equal(def.stateVersion, 18)
     assert.equal(typeof def.init, 'function')
     assert.equal(typeof def.apply, 'function')
     // The supported registry contract: stateSchema + a REQUIRED wire block.
