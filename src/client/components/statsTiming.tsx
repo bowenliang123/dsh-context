@@ -38,12 +38,12 @@ interface Slice {
 }
 
 const COLOR = {
-  ttft: '#3b82f6',
-  reasoning: '#8b5cf6',
-  text: '#ec4899',
-  toolarg: '#f59e0b',
-  tools: '#14b8a6',
-  other: '#94a3b8',
+  ttft: 'var(--color-blue-500)',
+  reasoning: 'var(--color-violet-500)',
+  text: 'var(--color-pink-500)',
+  toolarg: 'var(--color-amber-500)',
+  tools: 'var(--color-teal-500)',
+  other: 'var(--color-slate-400)',
 } as const
 
 export function makeStatsTiming(kit: ViewKit, Donut: (props: DonutProps) => ReactElement): (props: {

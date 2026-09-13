@@ -27,12 +27,12 @@ export interface PartsPart {
 }
 
 export const CATS: { key: Category | 'system' | 'tools'; color: string }[] = [
-  { key: 'system', color: '#6366f1' },
-  { key: 'tools', color: '#f59e0b' },
-  { key: 'user', color: '#22c55e' },
-  { key: 'inject', color: '#a855f7' },
-  { key: 'assistant', color: '#3b82f6' },
-  { key: 'tool', color: '#14b8a6' },
+  { key: 'system', color: 'var(--color-indigo-500)' },
+  { key: 'tools', color: 'var(--color-amber-500)' },
+  { key: 'user', color: 'var(--color-green-500)' },
+  { key: 'inject', color: 'var(--color-purple-500)' },
+  { key: 'assistant', color: 'var(--color-blue-500)' },
+  { key: 'tool', color: 'var(--color-teal-500)' },
 ]
 
 /** Category key → bar color, for per-item bands (the browser's DNA mode) that bypass the CATS-order part builders. */
@@ -130,5 +130,5 @@ export function billedParts(
   const prompt = input > 0
     ? anchoredParts(estimated, input)
     : estimated.map(p => ({ ...p, value: 0 }))
-  return [...prompt, { key: 'output', color: '#ec4899', value: Math.max(0, usage.outputTokens) }]
+  return [...prompt, { key: 'output', color: 'var(--color-pink-500)', value: Math.max(0, usage.outputTokens) }]
 }

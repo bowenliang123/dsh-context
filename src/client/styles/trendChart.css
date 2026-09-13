@@ -30,7 +30,7 @@
 .lc-grid-q1 { top: 102px; }
 /* The SOLID zero baseline in BOTH modes — inline-positioned off the up-arm in delta, the chart floor
    (top 130px, right under the bars) under the '0' label in total; painted after the dashed guides. */
-.lc-grid-zero { top: 130px; border-top-style: solid; border-top-color: rgba(128,128,128,0.5); }
+.lc-grid-zero { top: 130px; border-top-style: solid; border-top-color: color-mix(in srgb, var(--color-neutral-500) 50%, transparent); }
 .lc-bar { position: relative; width: 14px; flex: none; height: 100%; display: flex; align-items: flex-end; cursor: pointer; border-radius: 2px; outline: 1px dashed transparent; outline-offset: 1px; transition: opacity var(--ds-transition-duration, 0.2s) var(--ds-ease-in-out, ease-in-out), background-color var(--ds-transition-duration, 0.2s) var(--ds-ease-in-out, ease-in-out), outline-color var(--ds-transition-duration, 0.2s) var(--ds-ease-in-out, ease-in-out); }
 .lc-chart-dim .lc-bar { opacity: 0.35; }
 .lc-chart-dim .lc-bar-in-turn { opacity: 1; }
@@ -55,7 +55,7 @@
  */
 .lc-bar-hovered { outline-color: var(--dsw-alias-brand-primary); }
 .lc-bar-selected { outline: 2px solid var(--dsw-alias-label-primary); outline-offset: 1px; }
-.lc-bar-in-turn { background: rgba(128,128,128,0.14); }
+.lc-bar-in-turn { background: color-mix(in srgb, var(--color-neutral-500) 14%, transparent); }
 .lc-bar-stack { display: flex; flex-direction: column-reverse; width: 100%; }
 .lc-bar-stack > div { width: 100%; }
 /*

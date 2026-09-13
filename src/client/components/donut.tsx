@@ -95,13 +95,14 @@ export function makeDonut(kit: ViewKit): (props: DonutProps) => ReactElement {
                 cy="21"
                 r="15.9155"
                 fill="none"
-                stroke={a.color}
                 strokeWidth="4"
                 strokeDasharray={`${a.len} ${100 - a.len}`}
                 strokeDashoffset={a.offset}
                 // Sweep-in stagger slot (stats.css animates stroke-dasharray from 0 100 up to these attribute
                 // values, so the slices build clockwise from 12 o'clock, one after another).
-                style={{ '--lc-i': i } as CSSProperties}
+                // The stroke rides inline because the colors are CSS variables and SVG
+                // presentation attributes cannot carry var().
+                style={{ '--lc-i': i, stroke: a.color } as CSSProperties}
                 onMouseEnter={() => { if (props.onHoverKey !== undefined) props.onHoverKey(a.key) }}
               />
             ))}

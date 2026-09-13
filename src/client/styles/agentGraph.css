@@ -40,7 +40,7 @@
 .lc-agent-self-badge { margin-left: 5px; vertical-align: 1px; }
 .lc-agents-badge-on { color: var(--dsw-alias-state-success-primary); border-color: color-mix(in srgb, var(--dsw-alias-state-success-primary) 40%, transparent); }
 .lc-agents-inspector-stats { color: var(--dsw-alias-label-secondary); font-variant-numeric: tabular-nums; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.lc-agents-inspector-open { margin-left: auto; flex: none; color: var(--dsw-alias-brand-primary, #3b82f6); }
+.lc-agents-inspector-open { margin-left: auto; flex: none; color: var(--dsw-alias-brand-primary, var(--color-blue-500)); }
 .lc-agents-legend { display: flex; flex-wrap: wrap; gap: 4px 14px; margin-top: 8px; font-size: 11px; color: var(--dsw-alias-label-secondary); }
 .lc-agents-legend-item { display: inline-flex; align-items: center; gap: 5px; }
 .lc-agents-legend-item i { width: 8px; height: 8px; border-radius: 2px; }

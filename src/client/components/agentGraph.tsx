@@ -40,9 +40,9 @@ const CAPTION_H = 60
 /** Fallback arc color for pressure-only nodes (no composition data), by fill ratio. */
 export function ringColorOf(pct: number | null): string {
   if (pct === null) return 'var(--dsw-alias-border-l1)'
-  if (pct >= 90) return '#ef4444'
-  if (pct >= 70) return '#f59e0b'
-  return '#22c55e'
+  if (pct >= 90) return 'var(--color-red-500)'
+  if (pct >= 70) return 'var(--color-amber-500)'
+  return 'var(--color-green-500)'
 }
 
 export function makeAgentGraph(
@@ -269,9 +269,12 @@ function AgentNodeView(props: NodeViewProps): ReactElement {
           key={seg.key}
           className={'lc-agent-seg' + (seg.free ? ' lc-agent-free' : '')}
           r={AGENT_RING_R}
-          stroke={seg.free ? undefined : seg.color}
           strokeDasharray={`${seg.len} ${ring - seg.len}`}
           strokeDashoffset={-seg.offset}
+          // Inline style, not the stroke attribute: segment colors are CSS variables
+          // (var() is unusable in a presentation attribute). Free segments carry no
+          // inline stroke so the .lc-agent-free class rule keeps painting the remainder.
+          style={{ stroke: seg.free ? undefined : seg.color }}
           transform="rotate(-90)"
         />
       ))}

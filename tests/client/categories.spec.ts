@@ -24,12 +24,12 @@ describe('partsOf', () => {
   test('reads all six categories in CATS order with their colors', () => {
     const parts = partsOf(current({ system: 1, tools: 2, user: 3, inject: 4, assistant: 5, tool: 6 }))
     assert.deepEqual(parts.map(p => [p.key, p.color, p.value]), [
-      ['system', '#6366f1', 1],
-      ['tools', '#f59e0b', 2],
-      ['user', '#22c55e', 3],
-      ['inject', '#a855f7', 4],
-      ['assistant', '#3b82f6', 5],
-      ['tool', '#14b8a6', 6],
+      ['system', 'var(--color-indigo-500)', 1],
+      ['tools', 'var(--color-amber-500)', 2],
+      ['user', 'var(--color-green-500)', 3],
+      ['inject', 'var(--color-purple-500)', 4],
+      ['assistant', 'var(--color-blue-500)', 5],
+      ['tool', 'var(--color-teal-500)', 6],
     ])
   })
 
@@ -131,13 +131,13 @@ describe('billedParts', () => {
     // Input 400 equals the estimated total, so the ratios carry over as-is;
     // the seven parts sum to the chat line's 460 by construction.
     assert.deepEqual(parts.map(p => [p.key, p.color, p.value]), [
-      ['system', '#6366f1', 50],
-      ['tools', '#f59e0b', 50],
-      ['user', '#22c55e', 100],
-      ['inject', '#a855f7', 0],
-      ['assistant', '#3b82f6', 100],
-      ['tool', '#14b8a6', 100],
-      ['output', '#ec4899', 60],
+      ['system', 'var(--color-indigo-500)', 50],
+      ['tools', 'var(--color-amber-500)', 50],
+      ['user', 'var(--color-green-500)', 100],
+      ['inject', 'var(--color-purple-500)', 0],
+      ['assistant', 'var(--color-blue-500)', 100],
+      ['tool', 'var(--color-teal-500)', 100],
+      ['output', 'var(--color-pink-500)', 60],
     ])
   })
 

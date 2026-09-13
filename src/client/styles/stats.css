@@ -45,7 +45,7 @@
 .lc-donut-row .lc-sl { flex: 1 1 auto; }
 .lc-donut { position: relative; flex: none; }
 .lc-donut svg { display: block; }
-.lc-donut-track { stroke: rgba(128,128,128,0.18); }
+.lc-donut-track { stroke: color-mix(in srgb, var(--color-neutral-500) 18%, transparent); }
 /* The legend row ↔ segment hover link: hovering either side dims the ring's
    other slices to 0.35 (the stacked bars' idiom) while the active one stays
    solid; the center figures stay at rest. */

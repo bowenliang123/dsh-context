@@ -393,8 +393,8 @@ describe('AgentGraph — the family tree', () => {
 describe('ringColorOf', () => {
   test('occupancy thresholds', () => {
     assert.equal(ringColorOf(null), 'var(--dsw-alias-border-l1)')
-    assert.equal(ringColorOf(95), '#ef4444')
-    assert.equal(ringColorOf(70), '#f59e0b')
-    assert.equal(ringColorOf(12), '#22c55e')
+    assert.equal(ringColorOf(95), 'var(--color-red-500)')
+    assert.equal(ringColorOf(70), 'var(--color-amber-500)')
+    assert.equal(ringColorOf(12), 'var(--color-green-500)')
   })
 })

@@ -52,10 +52,10 @@ button.lc-brief-row-link { cursor: pointer; }
 .lc-detail-row-on i { box-shadow: 0 0 0 1px var(--dsw-alias-brand-primary); }
 .lc-detail-row-on .lc-detail-label { font-weight: 600; }
 .lc-detail-label { min-width: 70px; white-space: nowrap; color: var(--dsw-alias-label-secondary); }
-.lc-bar-track { flex: 1; height: 5px; border-radius: 3px; background: rgba(128,128,128,0.18); overflow: hidden; display: block; position: relative; }
+.lc-bar-track { flex: 1; height: 5px; border-radius: 3px; background: color-mix(in srgb, var(--color-neutral-500) 18%, transparent); overflow: hidden; display: block; position: relative; }
 .lc-bar-fill { display: block; height: 100%; border-radius: 3px; }
 /* Delta rows: a hairline zero at the middle, growth fills right of it, shrinkage left. */
-.lc-bar-zero { position: absolute; left: 50%; top: 0; bottom: 0; border-left: 1px solid rgba(128,128,128,0.45); }
+.lc-bar-zero { position: absolute; left: 50%; top: 0; bottom: 0; border-left: 1px solid color-mix(in srgb, var(--color-neutral-500) 45%, transparent); }
 .lc-bar-fill-up, .lc-bar-fill-down { position: absolute; top: 0; height: 100%; display: block; }
 .lc-bar-fill-up { left: 50%; border-radius: 0 3px 3px 0; }
 .lc-bar-fill-down { right: 50%; border-radius: 3px 0 0 3px; }

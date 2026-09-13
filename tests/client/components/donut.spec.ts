@@ -53,7 +53,9 @@ describe('Donut', () => {
     }))
     const circles = queryAll(m.container, 'circle')
     assert.equal(circles.length, 1)
-    assert.equal(circles[0].getAttribute('stroke'), '#ffffff')
+    // The color rides inline style (var() values can't live in a stroke attribute);
+    // jsdom reports the style keyword in its normalized rgb() spelling.
+    assert.equal(circles[0].style.stroke, 'rgb(255, 255, 255)')
     await m.unmount()
   })
 

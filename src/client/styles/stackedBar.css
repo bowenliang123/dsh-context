@@ -1,6 +1,6 @@
 /* The composition stacked bar with occupied-window frame, reserve band, legend chips and hover tip (stackedBar.tsx). */
 .lc-stacked-wrap { position: relative; width: 100%; }
-.lc-stacked { display: flex; width: 100%; border-radius: 5px; overflow: hidden; background: rgba(128,128,128,0.18); position: relative; }
+.lc-stacked { display: flex; width: 100%; border-radius: 5px; overflow: hidden; background: color-mix(in srgb, var(--color-neutral-500) 18%, transparent); position: relative; }
 /*
  Hover reference frame around the OCCUPIED region of the composition bar: a solid box from the left edge to the used/window boundary so the legend/tooltip 'share of used' percentages visibly map to the boxed part; pointer-events: none keeps hover on the segments/free; the free track echoes it dashed so the two read as one system.
  */
