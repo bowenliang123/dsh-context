@@ -58,11 +58,13 @@ export function makeStatsTokens(kit: ViewKit, Donut: (props: DonutProps) => Reac
       count: p.key === 'output' ? `${fmt(p.value)} · ${t('tokens.outputNote')}` : '≈' + fmt(p.value),
     }))
     return (
-      <div className="lc-card lc-col-stats lc-col-donut">
+      <div className="lc-card lc-col-stats lc-col-donut flex-1 min-w-[min(360px,100%)]">
         <div className="lc-card-title">
           <span className="lc-card-title-text">{t('tokens.title')}</span>
         </div>
-        <div className="lc-donut-row">
+        {/* donut + legend row: the gap folds at a 320px card, below 240px the row wraps
+            and the ring centers over the full-width legend (all keyed to the lc-card container). */}
+        <div className="lc-donut-row flex items-center justify-start gap-3 min-w-0 @max-[320px]/lc-card:gap-2 @max-[240px]/lc-card:flex-wrap">
           <Donut
             segments={shown}
             size={96}

@@ -171,11 +171,14 @@ export function makeStatsContext(kit: ViewKit): (props: {
       </div>
     )
     return (
-      <div className="lc-card lc-col-stats">
+      <div className="lc-card lc-col-stats flex-1 min-w-[min(360px,100%)]">
         <div className="lc-card-title">
           <span className="lc-card-title-text">{t('stats.title')}</span>
         </div>
-        <div className="lc-stats">
+        {/* The count grid: auto-fit keeps every cell ≥108px (the floor where the longest
+            English label still fits), so cells fill the card — 3 across at the default
+            half-card, 6 across on a wide card, 2 on a phone-width one. */}
+        <div className="lc-stats grid grid-cols-[repeat(auto-fit,minmax(108px,1fr))] gap-1.5">
           {cell(t('stats.turns'), props.counts.turns)}
           {cell(t('stats.steps'), props.counts.steps)}
           {cell(t('stats.humanInputs'), props.humanInputs ?? 0, t('stats.humanInputsTip'))}

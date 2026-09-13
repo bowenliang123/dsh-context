@@ -509,8 +509,8 @@ export function makeContextView(
         {/* The head band splits into two rows: the session's shape beside the
             plugin card, then the two donut cards together. The sidebar panel
             drops the first row (context stats / plugin info pay off only on
-            the full-width tab) and keeps the donut row, whose container query
-            stacks the pair in the narrow pane. */}
+            the full-width tab); the rows' own flex-wrap stacks the pair in a
+            narrow pane at the shared 360px card floor. */}
         {inSidebar ? null : (
           <div className="lc-cols lc-head">
             <StatsContext counts={counts} humanInputs={data.humanInputs} toolCalls={data.toolCalls} usage={usage}
@@ -525,18 +525,19 @@ export function makeContextView(
 
         {/* One arrangement for every host: composition over trend in the left
             column, the browser beside them and stretched to the pair's height.
-            The sidebar panel's column simply folds to one at the shared 360px
-            floor instead of splitting the three cards across two ragged rows. */}
+            All columns share the 360px floor (`min-w-[min(360px,100%)]`): the
+            rows wrap at it, and a sub-360px pane narrows the column instead
+            of overflowing. */}
         <div className="lc-cols lc-cols-main">
-          <div className="lc-col">{compositionCard}{trendCard}</div>
+          <div className="lc-col flex-1 min-w-[min(360px,100%)]">{compositionCard}{trendCard}</div>
           {/* `lc-col-browser` stretches the browser card to the left column's
               height; the /context modal, which draws its own stack, must stay
               content-sized. */}
-          <div className="lc-col lc-col-browser">{browserCard}</div>
+          <div className="lc-col lc-col-browser flex-1 min-w-[min(360px,100%)]">{browserCard}</div>
         </div>
 
         <div className="lc-cols">
-          <div className="lc-card lc-col">
+          <div className="lc-card lc-col flex-1 min-w-[min(360px,100%)]">
             <div className="lc-card-title">
               <span className="lc-card-title-text">{t('events.title')}</span>
               <div className="lc-kinds">

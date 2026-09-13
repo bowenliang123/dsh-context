@@ -156,7 +156,8 @@ export function makeFileCard(kit: ViewKit, settings: ContextSettings): Component
         ) : (
           <div>
             <div className="lc-fa-ctl">
-              <div className="lc-gran">
+              {/* The five purpose chips (labels + counts) overflow a ~300px card in English — flow the group to two lines. */}
+              <div className="lc-gran @max-[380px]/lc-card:flex-wrap">
                 {chips.map(c => (
                   <button
                     key={c.key}
@@ -225,7 +226,7 @@ export function makeFileCard(kit: ViewKit, settings: ContextSettings): Component
                     <div key={e.path} className={'lc-fa-item' + (open ? ' lc-fa-item-on' : '')}>
                       <button
                         type="button"
-                        className="lc-fa-row hover:bg-(--dsw-alias-interactive-bg-hover)"
+                        className="lc-fa-row hover:bg-(--dsw-alias-interactive-bg-hover) @max-[380px]/lc-card:flex-wrap"
                         title={e.path}
                         onClick={() => { setOpenPath(open ? null : e.path) }}
                       >
@@ -239,7 +240,10 @@ export function makeFileCard(kit: ViewKit, settings: ContextSettings): Component
                             )
                             : glyph.glyph}
                         </span>
-                        <span className="lc-fa-path">
+                        {/* Narrow cards: wrap instead of crushing — the path's near-full-width basis keeps
+                            line 1 to chevron + icon + path, badges/delta/time fold onto line 2. The 46px
+                            reservation is chevron (12) + gaps (2×7) + form icon (20). */}
+                        <span className="lc-fa-path flex-1 @max-[380px]/lc-card:basis-[calc(100%-46px)]">
                           {dir !== '' ? <em>{dir}</em> : null}
                           {openable
                             ? (

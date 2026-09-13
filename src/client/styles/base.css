@@ -89,12 +89,6 @@
  The row owns the 14px vertical rhythm (lc-cols gap); cards drop their own bottom margin (incl. the last in a column) so every section boundary measures exactly one 14px whichever way the flex wraps.
  */
 .lc-cols { display: flex; gap: 14px; flex-wrap: wrap; margin-bottom: 14px; }
-/* Columns fold at 360px: the cards that pair up — the main row's composition/trend
-   against the browser, and the events card against file activity — read cramped at a
-   quarter-share of a narrow pane, so the main row needs 2 x 360px + the 7px gap to stay
-   side by side. min() caps the floor at the row's own width: on a sub-360px pane the
-   column narrows instead of overflowing. */
-.lc-col { flex: 1; min-width: min(360px, 100%); }
 .lc-cols > .lc-card { margin-bottom: 0; }
 .lc-col > .lc-card:last-child { margin-bottom: 0; }
 .lc-col-browser { display: flex; flex-direction: column; }
@@ -102,24 +96,19 @@
 /*
  Head band: TWO rows of two EQUAL-width cards — the session's shape beside
  the plugin card (context / plugin), then the two donut cards together
- (token / timing). `flex-basis: 0` + equal grow halves each row exactly, and
- `min-width: 0` lets the split ignore content. Each row is its own
- `lc-head-row` query container, so the split folds instead of crushing the
- cards (issue #48): below 720px of row width (a half under ~350px — where the
- donut cards' ring+legend single-line and the context card's 3-column cell
- grid both start to cramp) the pair stacks single-column. Cards under that
- end of the band sit under their own lc-card reflows (stats.css: the ring
- stacks over its legend, the cell grid folds), so the two-card line is the
- trade this threshold buys. Engines without container queries keep the wide
- two-across layout. The right Sidebar's panel renders only the donut row (it
- drops the context stats / plugin info row — see contextView.tsx); the same
- rules then stack the pair in the narrow pane.
+ (token / timing). The rows are `.lc-cols` flex-wrap rows and the cards ride
+ the shared column idiom (`flex-1 min-w-[min(360px,100%)]` in the
+ components): equal `flex: 1` halves each row exactly and the min-width
+ floor is the fold — below 2 x 360px + gap of row width (a half under
+ ~360px, where the donut cards' ring+legend single-line and the count grid
+ both start to cramp, issue #48) the pair wraps onto full-width lines. Cards
+ under that end of the band sit under their own lc-card reflows (stats.css:
+ the ring stacks over its legend, the cell grid folds), so the two-card
+ line is the trade this floor buys. Engines without container queries keep
+ the wide two-across layout. The right Sidebar's panel renders only the
+ donut row (it drops the context stats / plugin info row — see
+ contextView.tsx); the same wrap then stacks the pair in the narrow pane.
  */
-.lc-head { container: lc-head-row / inline-size; }
-.lc-head > .lc-card { flex: 1 1 0; min-width: 0; }
-@container lc-head-row (max-width: 720px) {
-  .lc-head > .lc-card { flex-basis: 100%; }
-}
 /* The context card's cell grid stretches to the plugin card's height, so the row reads as one level band. */
 .lc-head > .lc-card:has(.lc-stats) { display: flex; flex-direction: column; }
 .lc-head .lc-stats { flex: 1; align-content: stretch; }

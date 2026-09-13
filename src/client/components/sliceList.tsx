@@ -38,7 +38,7 @@ export function makeSliceList(kit: ViewKit): (props: {
     onHoverKey?: (key: string | null) => void
   }): ReactElement {
     return (
-      <div className="lc-sl" onMouseLeave={() => { if (props.onHoverKey !== undefined) props.onHoverKey(null) }}>
+      <div className="lc-sl flex-auto @max-[240px]/lc-card:basis-full" onMouseLeave={() => { if (props.onHoverKey !== undefined) props.onHoverKey(null) }}>
         {props.rows.map(r => (
           <div
             key={r.key}

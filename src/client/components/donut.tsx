@@ -80,7 +80,7 @@ export function makeDonut(kit: ViewKit): (props: DonutProps) => ReactElement {
       && arcs.some(a => a.key === props.hoverKey)
     return (
       <div
-        className={'lc-donut' + (hovering ? ' lc-donut-dim' : '')}
+        className={'lc-donut @max-[240px]/lc-card:mx-auto' + (hovering ? ' lc-donut-dim' : '')}
         style={{ width: size, height: size }}
         onMouseLeave={() => { if (props.onHoverKey !== undefined) props.onHoverKey(null) }}
       >

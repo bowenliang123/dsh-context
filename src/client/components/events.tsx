@@ -119,11 +119,15 @@ export function makeEventList(kit: ViewKit): (props: EventListProps) => ReactEle
               : EVENT_ICONS[ev.kind] || '•'
           // Key on the durable seq alone: the list renders newest-first, so a fresh event lands at index 0
           // and an index-bearing key would shift EVERY existing row's key — a full-list remount on every push.
+          // Narrow cards (phone panes): the single-line row would crush the label and push the meta
+          // tail into a scrollbar, so the row wraps — the label's near-full-width basis keeps line 1
+          // to icon + kind + label, and the meta tail folds onto line 2. The 92px basis reservation
+          // covers icon + gap + the widest kind chip (both locales) + gap.
           return (
-            <div key={ev.seq} className="lc-event">
+            <div key={ev.seq} className="lc-event @max-[380px]/lc-card:flex-wrap">
               <span className={'lc-event-icon lc-event-' + ev.kind}>{glyph}</span>
               <span className={'lc-kind lc-kind-' + ev.kind}>{t('kind.' + ev.kind)}</span>
-              <span className="lc-event-label">{label}</span>
+              <span className="lc-event-label flex-1 @max-[380px]/lc-card:basis-[calc(100%-92px)]">{label}</span>
               {at !== null ? <span className="lc-event-at">{at}</span> : null}
               {ev.tokens ? (
                 <span className={'lc-event-tokens' + (ev.kind === 'inject' ? ' lc-up' : ' lc-down')}>
