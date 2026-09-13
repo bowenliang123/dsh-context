@@ -43,7 +43,7 @@ export function makePluginInfo(kit: ViewKit): () => ReactElement {
           </a>
         </div>
         <div className="lc-pi-grid">
-          {row(t('plugin.name'), nameValue, PLUGIN_REPO + '/releases', update !== null ? nameText + ' ↑ v' + update : nameText)}
+          {row(t('plugin.name'), nameValue, PLUGIN_REPO, update !== null ? nameText + ' ↑ v' + update : nameText)}
           {row(t('plugin.github'), PLUGIN_REPO_SHORT, PLUGIN_REPO, PLUGIN_REPO_SHORT)}
           {/* Best-effort jump to this plugin's settings page — openPluginSettings silently no-ops when the host's chrome doesn't match. */}
           <button type="button" className="lc-pi-row lc-pi-row-btn group/pi" onClick={() => { openPluginSettings() }}>

@@ -46,7 +46,7 @@ describe('PluginInfo', () => {
     assert.equal(rows.length, 3)
     assert.equal(query(rows[0], '.lc-pi-label').textContent, 'Plugin')
     assert.equal(query(rows[0], '.lc-pi-value').textContent, 'dsh-context (v0.0.0-dev)')
-    assert.equal(rows[0].getAttribute('href'), 'https://github.com/bowenliang123/dsh-context/releases')
+    assert.equal(rows[0].getAttribute('href'), 'https://github.com/bowenliang123/dsh-context')
     assert.equal(rows[0].getAttribute('target'), '_blank')
     assert.equal(query(rows[1], '.lc-pi-label').textContent, 'GitHub')
     assert.equal(query(rows[1], '.lc-pi-value').textContent, 'bowenliang123/dsh-context')
