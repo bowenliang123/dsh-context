@@ -8,8 +8,10 @@
  *
  * Deliberate deviations from a stock Tailwind setup, all for cohabitation
  * with the harness host page:
- * - No preflight and no theme import: a reset would re-skin host chrome, and
- *   the layout utilities need nothing beyond the spacing scale.
+ * - No preflight and no theme import: a reset would re-skin host chrome. The
+ *   palette below is a hand-picked SUBSET declared here (not the default
+ *   theme import) so the plugin's chart/accent colors are the standard
+ *   Tailwind tokens, shared by the sheets, the TS data layer and utilities.
  * - `--spacing: 4px` instead of 0.25rem: the plugin's spacing values are px
  *   (4/6/7/14…), and anchoring the scale to px keeps every utility at its
  *   designed size regardless of the host's root font size.
@@ -28,8 +30,27 @@
  * loads this compiler alongside lightningcss's native binding, and two
  * copies of any native set in that realm break the napi calls.
  */
-@theme {
+@theme static {
   --spacing: 4px;
+  /*
+   * The plugin's accent palette as standard Tailwind color tokens, values
+   * lifted verbatim from this pinned tailwindcss's theme.css. `static` is
+   * load-bearing: the sibling sheets and the TS color fields consume these
+   * via plain var()/inline styles — never a compiled utility — and Tailwind's
+   * used-only emission would never see them. dsh itself defines no
+   * `--color-*` variables, so the canonical names stay collision-free.
+   */
+  --color-red-500: oklch(63.7% 0.237 25.331);
+  --color-amber-500: oklch(76.9% 0.188 70.08);
+  --color-green-500: oklch(72.3% 0.219 149.579);
+  --color-teal-500: oklch(70.4% 0.14 182.503);
+  --color-blue-500: oklch(62.3% 0.214 259.815);
+  --color-indigo-500: oklch(58.5% 0.233 277.117);
+  --color-violet-500: oklch(60.6% 0.25 292.717);
+  --color-purple-500: oklch(62.7% 0.265 303.9);
+  --color-pink-500: oklch(65.6% 0.241 354.308);
+  --color-slate-400: oklch(70.4% 0.04 256.788);
+  --color-neutral-500: oklch(55.6% 0 none);
 }
 
 /* The client sources — the only place utility class lists appear. */
