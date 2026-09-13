@@ -150,9 +150,9 @@ export function makeStackedBar(kit: ViewKit): (props: StackedBarProps) => ReactE
             return (
               <div
                 key={p.key}
-                className={'lc-stacked-seg' + (on ? ' lc-stacked-seg-on' : '') + (pickKey !== undefined ? ' lc-stacked-seg-pick' : '')}
-                // Grow-in stagger slot (stackedBar.css): each segment scaleX-opens from the left edge in turn,
-                // capped so a long DNA band list settles fast.
+                className={'lc-stacked-seg animate-lc-stacked-in motion-reduce:animate-none' + (on ? ' lc-stacked-seg-on' : '') + (pickKey !== undefined ? ' lc-stacked-seg-pick' : '')}
+                // Grow-in stagger slot (the animate-lc-stacked-in token's delay): each segment scaleX-opens
+                // from the left edge in turn, capped so a long DNA band list settles fast.
                 style={{ width: `${widths[i]}%`, backgroundColor: p.color, '--lc-i': Math.min(i, STAGGER_CAP) } as CSSProperties}
                 onMouseEnter={() => { if (props.onHoverKey !== undefined) props.onHoverKey(p.key) }}
                 onClick={pickKey !== undefined ? () => { pickKey(p.key) } : undefined}
@@ -162,7 +162,7 @@ export function makeStackedBar(kit: ViewKit): (props: StackedBarProps) => ReactE
           {free > 0 ? (
             <div
               key="free"
-              className={'lc-stacked-free' + (props.hoverKey === 'free' ? ' lc-stacked-free-on' : '')}
+              className={'lc-stacked-free animate-lc-stacked-in motion-reduce:animate-none' + (props.hoverKey === 'free' ? ' lc-stacked-free-on' : '')}
               // The free track opens right after the last occupied segment (past the stagger cap it joins
               // one slot after the capped segments).
               style={{ width: `${free / scale * 100}%`, '--lc-i': Math.min(visible.length, STAGGER_CAP + 1) } as CSSProperties}

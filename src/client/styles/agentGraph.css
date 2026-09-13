@@ -11,20 +11,20 @@
    a running child brightens its channel and layers a traveling pulse of the
    same hue over it. */
 /* Link stroke color comes from the link itself; width/opacity ride `stroke-[1.5px] stroke-opacity-45`
-   utilities in agentGraph.tsx, the live state re-asserts opacity here (sheet order beats the utility tie). */
+   utilities in agentGraph.tsx, the live state re-asserts opacity here (sheet order beats the utility tie).
+   The flow dash's pulse rides the `animate-lc-agent-flow` utility; linecap/dasharray stay here. */
 .lc-agents-link-live { stroke-opacity: 0.85; }
-.lc-agents-flow { stroke-linecap: round; stroke-dasharray: 2 7; animation: lc-agent-flow 0.9s linear infinite; }
-@keyframes lc-agent-flow { to { stroke-dashoffset: -9; } }
+.lc-agents-flow { stroke-linecap: round; stroke-dasharray: 2 7; }
 .lc-agent-node { outline: none; }
 .lc-agent-clickable { cursor: pointer; }
 /* The halo carries node state: the resting fill and the hover/focus wash ride `fill-transparent` and
    `group-hover/agent`/`group-focus-visible/agent` variants in agentGraph.tsx, brand tint for self,
-   breathing green while running, a faint green rest for done. */
+   breathing green while running (the glow rides the `animate-lc-agent-glow` utility), a faint green
+   rest for done. */
 .lc-agent-halo { transition: fill var(--ds-transition-duration, 0.2s) var(--ds-ease-in-out, ease-in-out); }
 .lc-agent-self .lc-agent-halo { fill: var(--dsw-alias-bg-layer-2); }
-.lc-agent-running .lc-agent-halo { fill: color-mix(in srgb, var(--dsw-alias-state-success-primary) 12%, transparent); animation: lc-agent-glow 1.8s ease-in-out infinite; }
+.lc-agent-running .lc-agent-halo { fill: color-mix(in srgb, var(--dsw-alias-state-success-primary) 12%, transparent); }
 .lc-agent-done .lc-agent-halo { fill: color-mix(in srgb, var(--dsw-alias-state-success-primary) 7%, transparent); }
-@keyframes lc-agent-glow { 0%, 100% { opacity: 1; } 50% { opacity: 0.4; } }
 /* One fused ring per node: composition arcs fill the occupied share, a neutral remainder marks the free window.
    The track's fill/stroke and the arcs' fill/width ride utilities in agentGraph.tsx; the free remainder's
    color-mix stays here (it is a state-class style, not a static one). */

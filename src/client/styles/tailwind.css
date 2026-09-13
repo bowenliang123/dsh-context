@@ -3,11 +3,17 @@
  * carried by the plugin's JSX class lists — box layout, flex/grid, spacing,
  * sizing, positioning, overflow, the @container responsive variants, and the
  * pure `:hover`/`:focus` pseudo-state styling (hover/focus/group-hover
- * variants; Tailwind media-guards hover behind `(hover: hover)`). The sibling
- * sheets keep everything the variants cannot own here: the harness's
- * `--dsw-*` color/typography chrome, the JS-state class systems (the lit/dim/
- * selected markers, several of which double as test anchors and DOM query
- * hooks), their contextual overrides, and animations.
+ * variants; Tailwind media-guards hover behind `(hover: hover)`), and the
+ * animations (`animate-*` utilities over the theme tokens below, with
+ * `motion-reduce:animate-none` where the sheets had reduced-motion guards).
+ * The sibling sheets keep everything the variants cannot own here: the
+ * harness's `--dsw-*` color/typography chrome, the JS-state class systems
+ * (the lit/dim/selected markers, several of which double as test anchors and
+ * DOM query hooks), their contextual overrides, and the element transitions —
+ * those follow the harness motion tokens (`--ds-transition-duration`/
+ * `--ds-ease-in-out`, host-overridable) over exact per-element property
+ * lists, where Tailwind's preset durations/easings would freeze the values
+ * and its property bundles would transition more than the design intends.
  *
  * Deliberate deviations from a stock Tailwind setup, all for cohabitation
  * with the harness host page:
@@ -54,6 +60,24 @@
   --color-pink-500: oklch(65.6% 0.241 354.308);
   --color-slate-400: oklch(70.4% 0.04 256.788);
   --color-neutral-500: oklch(55.6% 0 none);
+  /*
+   * The plugin's entrance/state animations as theme tokens — keyframes live
+   * here and emit only when their animate-* utility is used. Entrance delays
+   * ride the element-scoped --lc-i stagger slot inside the shorthand; the
+   * donut sweep omits its 100% keyframe on purpose (CSS lands on the
+   * element's own stroke-dasharray) and runs once on mount, so hover-driven
+   * re-renders never restart it.
+   */
+  --animate-lc-donut-in: lc-donut-in 0.45s cubic-bezier(0.4, 0, 0.2, 1) calc(var(--lc-i, 0) * 50ms) backwards;
+  --animate-lc-stacked-in: lc-stacked-in 0.4s cubic-bezier(0.4, 0, 0.2, 1) calc(var(--lc-i, 0) * 40ms) backwards;
+  --animate-lc-bar-in: lc-bar-in 0.35s cubic-bezier(0.4, 0, 0.2, 1) calc(var(--lc-i, 0) * 15ms) backwards;
+  --animate-lc-agent-flow: lc-agent-flow 0.9s linear infinite;
+  --animate-lc-agent-glow: lc-agent-glow 1.8s ease-in-out infinite;
+  @keyframes lc-donut-in { from { stroke-dasharray: 0 100; } }
+  @keyframes lc-stacked-in { from { transform: scaleX(0); } }
+  @keyframes lc-bar-in { from { transform: scaleY(0); } }
+  @keyframes lc-agent-flow { to { stroke-dashoffset: -9; } }
+  @keyframes lc-agent-glow { 0%, 100% { opacity: 1; } 50% { opacity: 0.4; } }
 }
 
 /* The client sources — the only place utility class lists appear. */

@@ -90,7 +90,7 @@ export function makeDonut(kit: ViewKit): (props: DonutProps) => ReactElement {
             : arcs.map((a, i) => (
               <circle
                 key={a.key}
-                className={'lc-donut-seg fill-none stroke-4' + (props.hoverKey === a.key ? ' lc-donut-seg-on' : '')}
+                className={'lc-donut-seg fill-none stroke-4 animate-lc-donut-in motion-reduce:animate-none' + (props.hoverKey === a.key ? ' lc-donut-seg-on' : '')}
                 cx="21"
                 cy="21"
                 r="15.9155"

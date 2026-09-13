@@ -170,7 +170,7 @@ export function makeAgentGraph(
                     stroke={link.color}
                     fill="none"
                   />
-                  {link.running ? <path className="lc-agents-flow fill-none stroke-2" d={d} stroke={link.color} /> : null}
+                  {link.running ? <path className="lc-agents-flow animate-lc-agent-flow fill-none stroke-2" d={d} stroke={link.color} /> : null}
                 </g>
               )
             })}
@@ -266,7 +266,8 @@ function AgentNodeView(props: NodeViewProps): ReactElement {
     >
       {/* Halo carries the state: wash for self, breathing green while running, faint green for done. */}
       <circle
-        className="lc-agent-halo fill-transparent group-hover/agent:fill-[var(--dsw-alias-interactive-bg-hover,var(--dsw-alias-bg-layer-2))] group-focus-visible/agent:fill-[var(--dsw-alias-interactive-bg-hover,var(--dsw-alias-bg-layer-2))]"
+        className={'lc-agent-halo fill-transparent group-hover/agent:fill-[var(--dsw-alias-interactive-bg-hover,var(--dsw-alias-bg-layer-2))] group-focus-visible/agent:fill-[var(--dsw-alias-interactive-bg-hover,var(--dsw-alias-bg-layer-2))]'
+          + (node.running ? ' animate-lc-agent-glow' : '')}
         r={AGENT_NODE_R + 9}
       />
       <circle
