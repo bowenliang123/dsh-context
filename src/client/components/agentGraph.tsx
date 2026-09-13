@@ -165,12 +165,12 @@ export function makeAgentGraph(
               return (
                 <g key={link.to}>
                   <path
-                    className={'lc-agents-link' + (link.running ? ' lc-agents-link-live' : '')}
+                    className={'lc-agents-link stroke-[1.5px] stroke-opacity-45' + (link.running ? ' lc-agents-link-live' : '')}
                     d={d}
                     stroke={link.color}
                     fill="none"
                   />
-                  {link.running ? <path className="lc-agents-flow" d={d} stroke={link.color} fill="none" /> : null}
+                  {link.running ? <path className="lc-agents-flow fill-none stroke-2" d={d} stroke={link.color} /> : null}
                 </g>
               )
             })}
@@ -266,14 +266,17 @@ function AgentNodeView(props: NodeViewProps): ReactElement {
     >
       {/* Halo carries the state: wash for self, breathing green while running, faint green for done. */}
       <circle
-        className="lc-agent-halo group-hover/agent:fill-[var(--dsw-alias-interactive-bg-hover,var(--dsw-alias-bg-layer-2))] group-focus-visible/agent:fill-[var(--dsw-alias-interactive-bg-hover,var(--dsw-alias-bg-layer-2))]"
+        className="lc-agent-halo fill-transparent group-hover/agent:fill-[var(--dsw-alias-interactive-bg-hover,var(--dsw-alias-bg-layer-2))] group-focus-visible/agent:fill-[var(--dsw-alias-interactive-bg-hover,var(--dsw-alias-bg-layer-2))]"
         r={AGENT_NODE_R + 9}
       />
-      <circle className="lc-agent-track" r={AGENT_NODE_R} />
+      <circle
+        className="lc-agent-track fill-(--dsw-alias-bg-layer-1) stroke-(--dsw-alias-border-l1) stroke-[1.5px]"
+        r={AGENT_NODE_R}
+      />
       {segs.map(seg => (
         <circle
           key={seg.key}
-          className={'lc-agent-seg' + (seg.free ? ' lc-agent-free' : '')}
+          className={'lc-agent-seg fill-none stroke-9' + (seg.free ? ' lc-agent-free' : '')}
           r={AGENT_RING_R}
           strokeDasharray={`${seg.len} ${ring - seg.len}`}
           strokeDashoffset={-seg.offset}
@@ -284,7 +287,7 @@ function AgentNodeView(props: NodeViewProps): ReactElement {
           transform="rotate(-90)"
         />
       ))}
-      <text className="lc-agent-pct" textAnchor="middle" dy="0.32em">
+      <text className="lc-agent-pct fill-(--dsw-alias-label-primary)" textAnchor="middle" dy="0.32em">
         {pct !== null ? `${pct}%` : (node.head !== null ? props.fmt(node.head.tokens) : '—')}
       </text>
       {/* HTML caption (foreignObject): the full label wraps instead of truncating;

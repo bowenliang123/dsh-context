@@ -10,24 +10,27 @@
 /* Direct segment per link, family-colored (the stroke comes from the link);
    a running child brightens its channel and layers a traveling pulse of the
    same hue over it. */
-.lc-agents-link { stroke-width: 1.5; stroke-opacity: 0.45; }
+/* Link stroke color comes from the link itself; width/opacity ride `stroke-[1.5px] stroke-opacity-45`
+   utilities in agentGraph.tsx, the live state re-asserts opacity here (sheet order beats the utility tie). */
 .lc-agents-link-live { stroke-opacity: 0.85; }
-.lc-agents-flow { stroke-width: 2; stroke-linecap: round; stroke-dasharray: 2 7; animation: lc-agent-flow 0.9s linear infinite; }
+.lc-agents-flow { stroke-linecap: round; stroke-dasharray: 2 7; animation: lc-agent-flow 0.9s linear infinite; }
 @keyframes lc-agent-flow { to { stroke-dashoffset: -9; } }
 .lc-agent-node { outline: none; }
 .lc-agent-clickable { cursor: pointer; }
-/* The halo carries node state: the hover/focus wash rides `group-hover/agent`/`group-focus-visible/agent`
-   variants in agentGraph.tsx, brand tint for self, breathing green while running, a faint green rest for done. */
-.lc-agent-halo { fill: transparent; transition: fill var(--ds-transition-duration, 0.2s) var(--ds-ease-in-out, ease-in-out); }
+/* The halo carries node state: the resting fill and the hover/focus wash ride `fill-transparent` and
+   `group-hover/agent`/`group-focus-visible/agent` variants in agentGraph.tsx, brand tint for self,
+   breathing green while running, a faint green rest for done. */
+.lc-agent-halo { transition: fill var(--ds-transition-duration, 0.2s) var(--ds-ease-in-out, ease-in-out); }
 .lc-agent-self .lc-agent-halo { fill: var(--dsw-alias-bg-layer-2); }
 .lc-agent-running .lc-agent-halo { fill: color-mix(in srgb, var(--dsw-alias-state-success-primary) 12%, transparent); animation: lc-agent-glow 1.8s ease-in-out infinite; }
 .lc-agent-done .lc-agent-halo { fill: color-mix(in srgb, var(--dsw-alias-state-success-primary) 7%, transparent); }
 @keyframes lc-agent-glow { 0%, 100% { opacity: 1; } 50% { opacity: 0.4; } }
-.lc-agent-track { fill: var(--dsw-alias-bg-layer-1); stroke: var(--dsw-alias-border-l1); stroke-width: 1.5; }
-/* One fused ring per node: composition arcs fill the occupied share, a neutral remainder marks the free window. */
-.lc-agent-seg { fill: none; stroke-width: 9; transition: stroke-dasharray 300ms ease, stroke-dashoffset 300ms ease; }
+/* One fused ring per node: composition arcs fill the occupied share, a neutral remainder marks the free window.
+   The track's fill/stroke and the arcs' fill/width ride utilities in agentGraph.tsx; the free remainder's
+   color-mix stays here (it is a state-class style, not a static one). */
+.lc-agent-seg { transition: stroke-dasharray 300ms ease, stroke-dashoffset 300ms ease; }
 .lc-agent-free { stroke: color-mix(in srgb, var(--dsw-alias-label-secondary) 18%, transparent); }
-.lc-agent-pct { font-size: 11px; font-weight: 600; fill: var(--dsw-alias-label-primary); font-variant-numeric: tabular-nums; pointer-events: none; }
+.lc-agent-pct { font-size: 11px; font-weight: 600; font-variant-numeric: tabular-nums; pointer-events: none; }
 /* The caption is HTML inside a foreignObject, so long agent names wrap freely instead of truncating. */
 .lc-agent-caption { width: 100%; text-align: center; pointer-events: none; line-height: 1.25; }
 /* Labels wrap word-wise; only an extremely compressed (narrow stage) layout ellipsizes past 3 lines. */

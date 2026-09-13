@@ -86,16 +86,14 @@ export function makeDonut(kit: ViewKit): (props: DonutProps) => ReactElement {
       >
         <svg viewBox="0 0 42 42" width={size} height={size} aria-hidden="true">
           {arcs.length === 0
-            ? <circle className="lc-donut-track" cx="21" cy="21" r="15.9155" fill="none" strokeWidth="4" />
+            ? <circle className="lc-donut-track fill-none stroke-4" cx="21" cy="21" r="15.9155" />
             : arcs.map((a, i) => (
               <circle
                 key={a.key}
-                className={'lc-donut-seg' + (props.hoverKey === a.key ? ' lc-donut-seg-on' : '')}
+                className={'lc-donut-seg fill-none stroke-4' + (props.hoverKey === a.key ? ' lc-donut-seg-on' : '')}
                 cx="21"
                 cy="21"
                 r="15.9155"
-                fill="none"
-                strokeWidth="4"
                 strokeDasharray={`${a.len} ${100 - a.len}`}
                 strokeDashoffset={a.offset}
                 // Sweep-in stagger slot (stats.css animates stroke-dasharray from 0 100 up to these attribute

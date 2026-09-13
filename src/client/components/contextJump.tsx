@@ -42,10 +42,10 @@ export function seqOfMessageId(nodes: readonly ConversationNodeLike[] | undefine
 /** The jump glyph: the plugin's mini stacked composition bars, same 16px outline family as the shipped row icons. */
 function JumpIcon(): ReactElement {
   return (
-    <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
-      <rect x="2" y="3" width="12" height="2" rx="1" fill="currentColor" />
-      <rect x="2" y="7" width="8.5" height="2" rx="1" fill="currentColor" />
-      <rect x="2" y="11" width="5.5" height="2" rx="1" fill="currentColor" />
+    <svg width="16" height="16" viewBox="0 0 16 16" className="fill-none" aria-hidden="true">
+      <rect x="2" y="3" width="12" height="2" rx="1" className="fill-current" />
+      <rect x="2" y="7" width="8.5" height="2" rx="1" className="fill-current" />
+      <rect x="2" y="11" width="5.5" height="2" rx="1" className="fill-current" />
     </svg>
   )
 }
