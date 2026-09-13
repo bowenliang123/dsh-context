@@ -67,7 +67,7 @@ export function makeContextJumpButton(kit: ViewKit): (props: ContextJumpProps) =
     }
     return (
       <Tooltip label={t('jump.title')} side="bottom">
-        <button type="button" className="lc-jump" aria-label={t('jump.title')} onClick={jump}>
+        <button type="button" className="lc-jump hover:bg-(--dsw-alias-interactive-bg-hover) hover:text-(--dsw-alias-label-secondary)" aria-label={t('jump.title')} onClick={jump}>
           <JumpIcon />
         </button>
       </Tooltip>

@@ -53,9 +53,9 @@ export function makeRequestDetail(
   }): ReactElement {
     const inner = (
       <>
-        <span className="lc-brief-tag">
+        <span className="lc-brief-tag group/tip">
           {props.tag}
-          <span className="lc-tip lc-brief-tip" role="tooltip">{props.tagTip}</span>
+          <span className="lc-tip lc-brief-tip group-hover/tip:opacity-100" role="tooltip">{props.tagTip}</span>
         </span>
         {props.children}
       </>
@@ -65,7 +65,7 @@ export function makeRequestDetail(
     const onLocate = props.onLocate
     const locate = (): void => { onLocate(node, props.isResponse) }
     return (
-      <button type="button" className="lc-brief-row lc-brief-row-link" onClick={locate}>
+      <button type="button" className="lc-brief-row lc-brief-row-link hover:bg-(--dsw-alias-interactive-bg-hover)" onClick={locate}>
         {inner}
       </button>
     )
@@ -160,7 +160,7 @@ export function makeRequestDetail(
       return (
         <span
           key={n.seq}
-          className={'lc-brief-chip' + (grow ? ' lc-brief-chip-grow' : '') + (onClick !== undefined ? ' lc-brief-chip-link' : '')}
+          className={'lc-brief-chip' + (grow ? ' lc-brief-chip-grow' : '') + (onClick !== undefined ? ' lc-brief-chip-link hover:bg-(--dsw-alias-interactive-bg-hover)' : '')}
           title={factTitle(tag, text) + hint}
           onClick={onClick}
         >

@@ -116,7 +116,7 @@ export function makeContextModal(ctx: ClientCtx, kit: ViewKit): (props: ContextM
         <div className="lc-modal-card" onClick={(ev) => { ev.stopPropagation() }}>
           <div className="lc-modal-head">
             <span className="lc-modal-title">{t('tab')}</span>
-            <button className="lc-modal-close" aria-label={t('cmd.close')} onClick={close}>×</button>
+            <button className="lc-modal-close hover:text-(--dsw-alias-label-primary) hover:bg-(--dsw-alias-bg-layer-2)" aria-label={t('cmd.close')} onClick={close}>×</button>
           </div>
 
           {data === null || head === null ? (

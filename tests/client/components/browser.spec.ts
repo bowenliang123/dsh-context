@@ -879,7 +879,7 @@ describe('ContextBrowser tool schemas', () => {
     assert.equal(text(query(rows[0], '.lc-br-preview')), 'write', 'tool name leads')
     const chip = chips[0] as HTMLElement
     assert.equal(chip.previousElementSibling, query(rows[0], '.lc-br-preview'), 'plugin chip sits right after the tool name')
-    assert.equal(chip.parentElement!.className, 'lc-br-elem-row', 'plugin chip is a single frame, a direct row child')
+    assert.ok(chip.parentElement!.classList.contains('lc-br-elem-row'), 'plugin chip is a single frame, a direct row child')
     assert.equal(queryAll(chip, '.lc-br-tag').length, 0, 'no nested tag wrapper')
     await m.unmount()
   })

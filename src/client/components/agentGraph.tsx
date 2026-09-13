@@ -249,6 +249,9 @@ function AgentNodeView(props: NodeViewProps): ReactElement {
     + (node.completed && !node.running ? ' lc-agent-done' : '')
     + (props.hovered ? ' lc-agent-hover' : '')
     + (node.isCurrent ? '' : ' lc-agent-clickable')
+    // The halo's hover/focus wash rides group variants on the node (the React
+    // hover state only drives the inspector; lc-agent-hover stays as a test anchor).
+    + ' group/agent'
   return (
     <g
       className={cls}
@@ -262,7 +265,10 @@ function AgentNodeView(props: NodeViewProps): ReactElement {
       onMouseLeave={() => { props.onHover(null) }}
     >
       {/* Halo carries the state: wash for self, breathing green while running, faint green for done. */}
-      <circle className="lc-agent-halo" r={AGENT_NODE_R + 9} />
+      <circle
+        className="lc-agent-halo group-hover/agent:fill-[var(--dsw-alias-interactive-bg-hover,var(--dsw-alias-bg-layer-2))] group-focus-visible/agent:fill-[var(--dsw-alias-interactive-bg-hover,var(--dsw-alias-bg-layer-2))]"
+        r={AGENT_NODE_R + 9}
+      />
       <circle className="lc-agent-track" r={AGENT_NODE_R} />
       {segs.map(seg => (
         <circle

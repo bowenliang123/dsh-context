@@ -78,9 +78,10 @@
 .lc-gran-on .lc-kind-n { opacity: 0.85; }
 /*
  Shared tooltip-bubble chrome: pair `.lc-tip` with the owner's own tip class,
- then position locally (top/bottom anchor, width cap, whitespace, reveal rule).
- The component sheets carry the four shippers (.lc-stat-tip / .lc-brief-tip /
- .lc-fa-meta-tip / .lc-bar-tip); a new tip never re-declares this chrome.
+ then position locally (top/bottom anchor, width cap, whitespace); the reveal
+ rides a `group-hover/tip` variant on the owner. The component sheets carry
+ the four shippers (.lc-stat-tip / .lc-brief-tip / .lc-fa-meta-tip / .lc-bar-tip);
+ a new tip never re-declares this chrome.
  */
 .lc-tip { position: absolute; z-index: 6; width: max-content; background: var(--dsw-alias-bg-layer-2); border: 1px solid var(--dsw-alias-border-l1); border-radius: 6px; padding: 6px 10px; font-size: 12px; color: var(--dsw-alias-label-primary); box-shadow: var(--dsw-shadow-lv3, 0 2px 8px rgba(0, 0, 0, 0.18)); pointer-events: none; opacity: 0; transition: opacity var(--ds-transition-duration, 0.2s) var(--ds-ease-in-out, ease-in-out); }
 .lc-events, .lc-fa-list { display: flex; flex-direction: column; gap: 2px; height: 320px; overflow-y: auto; }
@@ -127,7 +128,6 @@
 .lc-error { display: flex; flex-direction: column; align-items: center; gap: 8px; padding: 40px 16px; }
 .lc-error-msg { font-family: var(--ds-font-family-code, ui-monospace, SFMono-Regular, Menlo, monospace); font-size: 12px; color: var(--dsw-alias-state-error-primary); background: var(--dsw-alias-bg-layer-2); border: 1px solid var(--dsw-alias-border-l1); border-radius: 6px; padding: 4px 8px; max-width: 100%; overflow-wrap: anywhere; }
 .lc-error-retry { border: 1px solid var(--dsw-alias-border-l2); background: var(--dsw-alias-bg-layer-2); color: var(--dsw-alias-label-primary); font: inherit; font-size: 12px; padding: 4px 14px; border-radius: 6px; cursor: pointer; transition: border-color var(--ds-transition-duration, 0.2s) var(--ds-ease-in-out, ease-in-out); }
-.lc-error-retry:hover { border-color: var(--dsw-alias-label-primary); }
 .lc-foot { color: var(--dsw-alias-label-secondary); font-size: 12px; margin-top: 4px; }
 [data-conversation-scroll]:has(.lc-root) > [data-composer-seat]:not(:has([data-approval-key], [data-question-key], [data-plan-review-key])) { display: none; }
 /*

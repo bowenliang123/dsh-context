@@ -1,10 +1,13 @@
 /*
- * Tailwind entry: compiles (tsdown.config.ts, @tailwindcss/node) the layout
- * utilities carried by the plugin's JSX class lists — box layout, flex/grid,
- * spacing, sizing, positioning, overflow, and the @container responsive
- * variants. The sibling sheets keep everything Tailwind does not own here:
- * the harness's `--dsw-*` color/typography chrome, hover/focus states,
- * contextual selectors, animations.
+ * Tailwind entry: compiles (tsdown.config.ts, @tailwindcss/node) the utilities
+ * carried by the plugin's JSX class lists — box layout, flex/grid, spacing,
+ * sizing, positioning, overflow, the @container responsive variants, and the
+ * pure `:hover`/`:focus` pseudo-state styling (hover/focus/group-hover
+ * variants; Tailwind media-guards hover behind `(hover: hover)`). The sibling
+ * sheets keep everything the variants cannot own here: the harness's
+ * `--dsw-*` color/typography chrome, the JS-state class systems (the lit/dim/
+ * selected markers, several of which double as test anchors and DOM query
+ * hooks), their contextual overrides, and animations.
  *
  * Deliberate deviations from a stock Tailwind setup, all for cohabitation
  * with the harness host page:

@@ -14,9 +14,9 @@ export function makePluginInfo(kit: ViewKit): () => ReactElement {
   // `title` carries the untruncated value: at narrow card widths the row's
   // ellipsis can cut the repo or name short, and the hover text recovers it.
   const row = (label: string, value: ReactNode, href: string, hint: string) => (
-    <a className="lc-pi-row" href={href} target="_blank" rel="noreferrer">
+    <a className="lc-pi-row group/pi" href={href} target="_blank" rel="noreferrer">
       <div className="lc-pi-label">{label}</div>
-      <div className="lc-pi-value" title={hint}>{value}</div>
+      <div className="lc-pi-value group-hover/pi:underline" title={hint}>{value}</div>
     </a>
   )
   return function PluginInfo(): ReactElement {
@@ -38,7 +38,7 @@ export function makePluginInfo(kit: ViewKit): () => ReactElement {
         <div className="lc-card-title">
           <span className="lc-card-title-text">{t('plugin.title')}</span>
           {/* The tagline doubles as the repo link: hover underlines it, a click opens GitHub. */}
-          <a className="lc-card-sub lc-pi-hint" href={PLUGIN_REPO} target="_blank" rel="noreferrer">
+          <a className="lc-card-sub lc-pi-hint hover:underline" href={PLUGIN_REPO} target="_blank" rel="noreferrer">
             {t('plugin.hint')}
           </a>
         </div>
@@ -46,9 +46,9 @@ export function makePluginInfo(kit: ViewKit): () => ReactElement {
           {row(t('plugin.name'), nameValue, PLUGIN_REPO + '/releases', update !== null ? nameText + ' ↑ v' + update : nameText)}
           {row(t('plugin.github'), PLUGIN_REPO_SHORT, PLUGIN_REPO, PLUGIN_REPO_SHORT)}
           {/* Best-effort jump to this plugin's settings page — openPluginSettings silently no-ops when the host's chrome doesn't match. */}
-          <button type="button" className="lc-pi-row lc-pi-row-btn" onClick={() => { openPluginSettings() }}>
+          <button type="button" className="lc-pi-row lc-pi-row-btn group/pi" onClick={() => { openPluginSettings() }}>
             <div className="lc-pi-label">{t('plugin.settings')}</div>
-            <div className="lc-pi-value" title={t('plugin.settingsOpen')}>{t('plugin.settingsOpen')}</div>
+            <div className="lc-pi-value group-hover/pi:underline" title={t('plugin.settingsOpen')}>{t('plugin.settingsOpen')}</div>
           </button>
         </div>
       </div>

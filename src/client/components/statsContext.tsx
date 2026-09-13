@@ -161,13 +161,13 @@ export function makeStatsContext(kit: ViewKit): (props: {
         1,
       )
     const cell = (label: string, value: string | number, tip?: ReactNode): ReactElement => (
-      <div className={'lc-stat' + (tip === undefined ? '' : ' lc-stat-tipped')}>
+      <div className={'lc-stat' + (tip === undefined ? '' : ' lc-stat-tipped group/tip')}>
         <span className="lc-stat-label">
           {label}
-          {tip !== undefined && <i className="lc-stat-q" aria-hidden="true">?</i>}
+          {tip !== undefined && <i className="lc-stat-q group-hover/tip:text-(--dsw-alias-label-primary) group-hover/tip:border-(--dsw-alias-label-primary)" aria-hidden="true">?</i>}
         </span>
         <b className="lc-stat-value">{typeof value === 'number' ? fmt(value) : value}</b>
-        {tip !== undefined && <span className="lc-tip lc-stat-tip" role="tooltip">{tip}</span>}
+        {tip !== undefined && <span className="lc-tip lc-stat-tip group-hover/tip:opacity-100" role="tooltip">{tip}</span>}
       </div>
     )
     return (

@@ -173,7 +173,7 @@ export function makeFileCard(kit: ViewKit, settings: ContextSettings): Component
                 ))}
               </div>
               <input
-                className="lc-fa-search"
+                className="lc-fa-search focus:border-(--dsw-alias-label-dimmed)"
                 value={query}
                 placeholder={t('files.search')}
                 onChange={(ev: ChangeEvent<HTMLInputElement>) => { setQuery(ev.target.value) }}
@@ -183,9 +183,9 @@ export function makeFileCard(kit: ViewKit, settings: ContextSettings): Component
               <span>{t('files.files', { n: activity.entries.length })}</span>
               {activity.totals.added + activity.totals.removed > 0 ? (
                 /* The one styled tip of the card: it lives OUTSIDE the scrolling list, so the bubble never clips. */
-                <span className="lc-fa-meta-delta">
+                <span className="lc-fa-meta-delta group/tip">
                   <DeltaPair added={activity.totals.added} removed={activity.totals.removed} />
-                  <span className="lc-tip lc-fa-meta-tip" role="tooltip">{t('files.deltaTip')}</span>
+                  <span className="lc-tip lc-fa-meta-tip group-hover/tip:opacity-100" role="tooltip">{t('files.deltaTip')}</span>
                 </span>
               ) : null}
               <span className="lc-gran lc-fa-sort" role="group" title={t('files.sortTip')}>
@@ -225,7 +225,7 @@ export function makeFileCard(kit: ViewKit, settings: ContextSettings): Component
                     <div key={e.path} className={'lc-fa-item' + (open ? ' lc-fa-item-on' : '')}>
                       <button
                         type="button"
-                        className="lc-fa-row"
+                        className="lc-fa-row hover:bg-(--dsw-alias-interactive-bg-hover)"
                         title={e.path}
                         onClick={() => { setOpenPath(open ? null : e.path) }}
                       >
@@ -244,7 +244,7 @@ export function makeFileCard(kit: ViewKit, settings: ContextSettings): Component
                           {openable
                             ? (
                               <b
-                                className="lc-fa-file"
+                                className="lc-fa-file hover:underline"
                                 title={t(previewable ? 'files.preview' : 'files.open')}
                                 onClick={(ev: MouseEvent) => {
                                   ev.stopPropagation()
@@ -284,7 +284,7 @@ export function makeFileCard(kit: ViewKit, settings: ContextSettings): Component
                                 <button
                                   key={key}
                                   type="button"
-                                  className="lc-fa-op lc-fa-op-link"
+                                  className="lc-fa-op lc-fa-op-link hover:bg-(--dsw-alias-interactive-bg-hover)"
                                   title={t('files.locate')}
                                   onClick={() => { onLocate(op) }}
                                 >

@@ -12,6 +12,4 @@
 .lc-settings-row { display: flex; align-items: center; gap: 8px; padding: 8px 0; }
 .lc-settings-label { flex: 1; min-width: 0; font-size: 14px; color: var(--dsw-alias-label-primary); }
 .lc-settings-select { display: inline-flex; align-items: center; gap: 12px; height: 36px; padding: 0 14px; border: none; border-radius: 18px; background: var(--dsw-alias-bg-module-platform); font: inherit; font-size: 14px; line-height: 22px; color: var(--dsw-alias-label-primary); cursor: pointer; transition: background-color var(--ds-transition-duration, 0.2s) var(--ds-ease-in-out, ease-in-out); }
-.lc-settings-select:hover:not(:disabled) { background: var(--dsw-alias-interactive-bg-hover); }
-.lc-settings-select:disabled { opacity: .5; cursor: default; }
 .lc-settings-note { color: var(--dsw-alias-label-tertiary); font-size: 12px; line-height: 1.5; margin: 12px 0 4px; }

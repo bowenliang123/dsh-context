@@ -204,7 +204,7 @@ export function makeTrendChart(kit: ViewKit): (props: TrendChartProps) => ReactE
     const enterStyle = { '--lc-i': Math.min(props.enterIndex, STAGGER_CAP) } as CSSProperties
     return (
       <div
-        className={'lc-bar'
+        className={'lc-bar hover:bg-(--dsw-alias-bg-layer-2)'
           + (props.selected ? ' lc-bar-selected' : '')
           + (props.hovered ? ' lc-bar-hovered' : '')
           + (props.inTurn ? ' lc-bar-in-turn' : '')}

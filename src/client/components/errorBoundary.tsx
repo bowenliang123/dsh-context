@@ -29,7 +29,7 @@ export function makeErrorBoundary(t: Translate): ComponentType<{ children?: Reac
             <code className="lc-error-msg">{error.message}</code>
             <button
               type="button"
-              className="lc-error-retry"
+              className="lc-error-retry hover:border-(--dsw-alias-label-primary)"
               onClick={() => { this.setState({ error: null }) }}
             >{t('error.retry')}</button>
           </div>

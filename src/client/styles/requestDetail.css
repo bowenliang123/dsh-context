@@ -24,12 +24,10 @@
 .lc-brief-row { display: flex; align-items: center; gap: 8px; min-width: 0; padding: 3px 6px; margin-left: -6px; margin-right: -6px; border-radius: 6px; border: 0; background: transparent; font-family: inherit; font-size: 12px; line-height: 1.5; color: var(--dsw-alias-label-primary); text-align: left; transition: background-color var(--ds-transition-duration, 0.2s) var(--ds-ease-in-out, ease-in-out); }
 /* The link class marks a hoverable ROW (buttons and the chip-carrying inputs row alike); the pointer cursor belongs only to the
    actual click targets — button rows and individual chips. */
-.lc-brief-row-link:hover { background: var(--dsw-alias-interactive-bg-hover); }
 button.lc-brief-row-link { cursor: pointer; }
 .lc-brief-tag { flex: none; box-sizing: border-box; min-width: 56px; text-align: center; font-size: 11px; padding: 0 6px; border-radius: 4px; background: var(--dsw-alias-bg-layer-2); border: 1px solid var(--dsw-alias-border-l1); color: var(--dsw-alias-label-secondary); position: relative; }
-/* The tag's explanation bubble — the shared `.lc-tip` chrome: instant styled reveal on tag hover, never intercepts the pointer. */
+/* The tag's explanation bubble — the shared `.lc-tip` chrome: instant styled reveal on tag hover (a `group-hover/tip` variant), never intercepts the pointer. */
 .lc-brief-tip { bottom: calc(100% + 6px); left: 0; max-width: 240px; white-space: normal; text-align: left; line-height: 1.5; font-weight: 400; }
-.lc-brief-tag:hover .lc-brief-tip { opacity: 1; }
 .lc-brief-text { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 /* The empty-state In row's placeholder: same anatomy as the preview text, muted. */
 .lc-brief-empty { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--dsw-alias-label-tertiary); }
@@ -42,7 +40,6 @@ button.lc-brief-row-link { cursor: pointer; }
 .lc-brief-chip-tag { flex: none; max-width: 120px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 11px; padding: 0 6px; border-radius: 4px; background: var(--dsw-alias-bg-layer-1); border: 1px solid var(--dsw-alias-border-l1); color: var(--dsw-alias-label-secondary); }
 .lc-brief-chip-text { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .lc-brief-chip-link { cursor: pointer; }
-.lc-brief-chip-link:hover { background: var(--dsw-alias-interactive-bg-hover); }
 .lc-brief-more { flex: none; font-size: 11px; color: var(--dsw-alias-label-secondary); }
 .lc-detail-row { display: flex; align-items: center; gap: 8px; border-radius: 4px; /* Padding + matching negative margin: the highlight paints past the text while the layout stays put. */ padding: 1px 4px; margin: -1px -4px; transition: background-color var(--ds-transition-duration, 0.2s) var(--ds-ease-in-out, ease-in-out); }
 /* Category hover-link: the shared hover lights the matching detail row — same pairing as the legend chips and the

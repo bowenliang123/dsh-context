@@ -30,7 +30,7 @@ export function makeDetailNote(kit: ViewKit): (props: {
     return (
       <div className={cls}>
         {props.onRetry !== undefined
-          ? <button type="button" className="lc-br-retry" onClick={props.onRetry}>{t('detail.loadFailed')}</button>
+          ? <button type="button" className="lc-br-retry hover:brightness-[1.15]" onClick={props.onRetry}>{t('detail.loadFailed')}</button>
           : t('detail.loadFailed')}
       </div>
     )

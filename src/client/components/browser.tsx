@@ -249,7 +249,7 @@ function RowToolbar(props: {
   return (
     <div className="lc-br-toolctl">
       <input
-        className="lc-br-tool-search"
+        className="lc-br-tool-search focus:border-(--dsw-alias-label-dimmed)"
         value={props.value}
         placeholder={props.placeholder}
         onChange={(ev: ChangeEvent<HTMLInputElement>) => { props.onChange(ev.target.value) }}
@@ -321,7 +321,7 @@ function ToolSchema(props: {
       <div className="lc-ts-json">
         <button
           type="button"
-          className="lc-ts-json-toggle"
+          className="lc-ts-json-toggle hover:text-(--dsw-alias-label-primary) hover:underline"
           onClick={() => { setJsonOpen(o => !o) }}
         >{(jsonOpen ? '▾ ' : '▸ ') + (jsonOpen ? props.labels.hide : props.labels.show)}</button>
         {jsonOpen ? <pre className="lc-ts-desc-body lc-br-dim">{schemaJson}</pre> : null}
@@ -820,7 +820,7 @@ export function makeContextBrowser(
       const open = openElem === key
       return (
         <div key={key} className={'lc-br-elem' + (open ? ' lc-br-elem-on' : '')}>
-          <button type="button" className="lc-br-elem-row" onClick={() => { toggleElem(key) }}>
+          <button type="button" className="lc-br-elem-row hover:bg-(--dsw-alias-interactive-bg-hover)" onClick={() => { toggleElem(key) }}>
             <span className={'lc-br-chev' + (open ? ' lc-br-chev-on' : '')} />
             {err ? <span className="lc-br-err-dot" title={t('node.failed')} /> : null}
             {tag !== null ? <span className="lc-br-tag">{tag}</span> : null}
@@ -1115,7 +1115,7 @@ export function makeContextBrowser(
               <div key={c.key} className={'lc-br-cat' + (openable ? '' : ' lc-br-cat-empty')}>
                 <button
                   type="button"
-                  className={'lc-br-cat-row' + (linked && props.hoverKey === c.key ? ' lc-br-cat-on' : '')}
+                  className={'lc-br-cat-row hover:bg-(--dsw-alias-interactive-bg-hover)' + (linked && props.hoverKey === c.key ? ' lc-br-cat-on' : '')}
                   /* v8 ignore start -- the handlers exist only when linked,
                      and linked already requires onHoverKey defined (above). */
                   onMouseEnter={linked ? () => { if (props.onHoverKey !== undefined) props.onHoverKey(c.key) } : undefined}

@@ -77,7 +77,7 @@ export function fetchMissNote(
   if (state === 'absent') return t('browser.notInLog')
   if (state === 'failed') {
     return (
-      <button type="button" className="lc-br-retry" onClick={onRetry}>
+      <button type="button" className="lc-br-retry hover:brightness-[1.15]" onClick={onRetry}>
         {t('browser.loadFailed')}
       </button>
     )

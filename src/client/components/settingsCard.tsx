@@ -44,7 +44,7 @@ function PrefRow(props: PrefRowProps): ReactElement {
         anchor={(
           <button
             type="button"
-            className="lc-settings-select"
+            className="lc-settings-select hover:enabled:bg-(--dsw-alias-interactive-bg-hover) disabled:opacity-50 disabled:cursor-default"
             disabled={props.disabled}
             aria-haspopup="menu"
             aria-expanded={open}

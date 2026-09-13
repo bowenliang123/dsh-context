@@ -143,7 +143,7 @@ export function makeImageCard(kit: ViewKit): ImageKit['Card'] {
       <>
         <button
           type="button"
-          className="lc-att-item"
+          className="lc-att-item hover:border-(--dsw-alias-label-dimmed) hover:bg-[var(--dsw-alias-interactive-bg-hover,var(--dsw-alias-bg-layer-2))]"
           title={error ? t('attach.loadFailed') : t('attach.open')}
           onClick={activate}
         >
