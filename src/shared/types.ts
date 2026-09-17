@@ -530,6 +530,17 @@ export interface SessionCostUsage {
 }
 
 /** One model-visible message on the surface, with its heuristic token price. */
+/**
+ * One provider account's wallet balance (the host balance route,
+ * client/balance.ts): what the Context card shows beside its cost estimates.
+ */
+export interface WalletBalance {
+  /** The wallet's currency, lower-cased (`cny` / `usd`). */
+  currency: 'cny' | 'usd'
+  /** The remaining amount, in `currency`. */
+  amount: number
+}
+
 export interface SurfaceNode {
   seq: number
   time?: number

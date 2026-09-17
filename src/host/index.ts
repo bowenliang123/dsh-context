@@ -6,10 +6,12 @@
  * units* (`timeline.ts`): registered on `ctx.sessionProjections`, they fold a
  * session's durable event log into the per-request context-composition
  * timeline and let the harness stream the finished values to the browser
- * through its push pipeline. The one exception is the on-demand detail
- * channel (detail.ts): a single generic Connection RPC endpoint serving the
- * heavy collections per VIEWING client, so the wire value every channel
- * carries whole stays a slim head.
+ * through its push pipeline. Two exceptions mount their own same-origin
+ * `/api` Fetch routes: the on-demand detail channel (detail.ts) serves the
+ * heavy collections per VIEWING client so the wire value every channel
+ * carries whole stays a slim head, and the optional account-balance route
+ * (balance.ts) reads the provider wallet the Context card shows beside its
+ * cost estimates.
  *
  * Required service: the session-projection registry (the framework drives
  * the unit over `session/event` and persists its state via the projection
@@ -24,6 +26,7 @@ import type { Context } from '@deepseek-ai/cordis'
 import { createContextActivityDefinition } from './activity'
 import { createToolAttribution } from './attribution'
 import { watchActivityBackfill } from './backfill'
+import { watchBalanceChannel } from './balance'
 import { Config, resolveBounds } from './config'
 import { watchDetailChannel } from './detail'
 import { createFallbackActivityDefinition, createFallbackHeadersDefinition, createFallbackTimelineDefinition } from './fallback'
@@ -75,6 +78,12 @@ export function apply(ctx: Context, config: Config): void {
   // assumed), and the unit's view reads the gate per serve — slim while the
   // channel is live, inline otherwise.
   const gate = watchDetailChannel(ctx, resolveBounds(config))
+  // The account-balance route (balance.ts): the same exact Fetch-route seam,
+  // armed whenever connection/credentials compose. It carries the wallet
+  // balance the Context card shows beside its cost estimates; a deployment
+  // without the route (no credentials seam, no provider key) simply renders
+  // no balance cell.
+  watchBalanceChannel(ctx)
   ctx.sessionProjections.register(createContextTimelineDefinition(config, () => gate.live))
   ctx.sessionProjections.register(createContextHeadersDefinition(name => attribution.ownerOf(name)))
   ctx.sessionProjections.register(createContextActivityDefinition())

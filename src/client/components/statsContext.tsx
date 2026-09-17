@@ -17,7 +17,10 @@
  * tip) explain each scope and list the per-1M-token rates of the models the
  * family actually billed, straight from the same book (cost.ts), so printed
  * rates can never drift from the math. A book that has not loaded (or
- * failed) dashes the cells and notes the outage.
+ * failed) dashes the cells and notes the outage. When the host balance route
+ * is armed (host/balance.ts) one further cell shows the provider account's
+ * live wallet balance — what is LEFT beside what the family spent; an unarmed
+ * or unreadable route renders no balance cell.
  *
  * The counts arrive precomputed: the split-generation wire head carries them
  * (shared/types.ts `TimelineCounts` — computed over the retained records),
@@ -34,6 +37,7 @@ import type { AgentHeads } from '../agentHeads'
 import { useSessionsSnapshot } from '../agentHeads'
 import { cacheHitPercent } from '../format'
 import { useModelPrices } from '../modelPrices'
+import { useWalletBalance } from '../balance'
 import { asRecord, numOf, type ClientCtx } from '../services'
 import { isDeepSeekProvider } from '../../shared/providers'
 import type { ViewKit } from '../viewkit'
@@ -172,6 +176,10 @@ export function makeStatsContext(
     const usage = mergeCostUsage(props.cost, subUsage) ?? undefined
     const cost = estimateSessionCost(usage, prices, currency)
     const subCost = estimateSessionCost(subUsage, prices, currency)
+    // The account wallet (balance.ts): what is LEFT beside what this family
+    // spent. Null whenever the route is absent or unreadable — the card then
+    // renders no balance cell at all (never a bare dash).
+    const wallet = useWalletBalance()
     const fmtRate = (usd: number): string => formatPriceRate(toCurrency(usd, currency), currency)
     const rows = priceRowsOf(usage, prices)
     // DeepSeek's peak/off-peak scheme is explained only when the family
@@ -251,6 +259,7 @@ export function makeStatsContext(
           {cell(t('stats.toolCalls'), props.toolCalls ?? 0)}
           {cell(t('stats.cacheHit'), hit === null ? '—' : `${hit}%`, t('stats.cacheHitTip'))}
           {cell(t('stats.cost'), cost === null ? '—' : formatCost(cost, currency), costTip)}
+          {wallet === null ? null : cell(t('stats.balance'), formatCost(wallet.amount, wallet.currency), t('stats.balanceTip'))}
           {cell(t('stats.subCost'), subCost === null ? '—' : formatCost(subCost, currency), subTip)}
         </div>
       </div>
