@@ -1,7 +1,7 @@
 // Fold drivers for the host specs: run event envelopes through the REAL
 // projection units the plugin registers (no harness plumbing — the units are
-// pure init/apply/view), with the framework's own serializer pinned on every
-// intermediate state.
+// pure init/apply/view), pinning the state's plain-JSON rule on every
+// intermediate state (see assertNoAbsentMembers).
 
 import assert from 'node:assert/strict'
 import type { SessionEvent } from '@deepseek-ai/dsh-session'
@@ -102,6 +102,27 @@ export function assertPlainJson<T>(state: T): T {
   return copy as T
 }
 
+/**
+ * The one plain-JSON rule a DURABLE log can break (see TimelineState): no own
+ * `undefined`-valued property may enter a folded state — one such property
+ * fails EVERY projection-cache write for that session from then on. The rest
+ * of the lossless contract cannot arrive through a real log (the durable
+ * vocabulary is JSON: no non-finite numbers, holes, or cycles, and dsh
+ * validates every payload before appending it), so `assertPlainJson` stays the
+ * explicit whole-contract check for the specs that mean to assert it.
+ *
+ * Applied to every state the fold PRODUCES, not only the last one: a mid-log
+ * violation sticks even when a later event overwrites the offending key.
+ */
+function assertNoAbsentMembers(value: unknown, path = '$', seen = new Set<object>()): void {
+  if (value === null || typeof value !== 'object' || seen.has(value)) return
+  seen.add(value)
+  for (const [key, member] of Object.entries(value)) {
+    if (member === undefined) assert.fail(`${path}.${key} must stay ABSENT, never carry undefined`)
+    assertNoAbsentMembers(member, `${path}.${key}`, seen)
+  }
+}
+
 export interface TimelineDrive {
   def: TimelineDefLike
   state: TimelineState
@@ -114,9 +135,11 @@ export interface TimelineDrive {
 export function driveTimeline(events: TimelineEvent[], config?: Config): TimelineDrive {
   const def = timelineDef(config)
   let state = def.init()
+  assertNoAbsentMembers(state)
   const states = [state]
   for (const ev of events) {
     state = def.apply(state, ev)
+    assertNoAbsentMembers(state)
     states.push(state)
   }
   return { def, state, states, view: def.wire.view(state) }

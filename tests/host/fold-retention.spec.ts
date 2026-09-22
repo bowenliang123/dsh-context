@@ -187,7 +187,3 @@ describe('trimState restored-state defenses', () => {
     assert.equal('archiveFloor' in next, false, 'the last dropped entry has no `gone`: no floor to record')
   })
 })
-
-
-
-

@@ -237,7 +237,3 @@ describe('the file-op log — retention, schema, and the served payload', () => 
     assert.equal(inline.wire.viewSchema.safeParse(full).success, true)
   })
 })
-
-
-
-
