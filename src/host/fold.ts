@@ -36,7 +36,7 @@ import type { ContentBlock, MessageSource } from './pricing'
 import { deriveEventMessage } from '@deepseek-ai/dsh-session'
 import { decodeKindOfBlock, decodeSpansOfStream, firstTokenTimeOfStream, isTokenChunk, replaceRangeOf } from './logShapes'
 import type { DecodeKind } from './logShapes'
-import { kindOfTool, opsOfCall, parseCallArgs } from '../shared/fileOps'
+import { opBearingTool, opsOfCall, parseCallArgs, rawArgsNeeded } from '../shared/fileOps'
 
 /**
  * The runtime event envelope this fold consumes. The core
@@ -961,14 +961,11 @@ export function applyTimeline(state: TimelineState, event: TimelineEvent, bounds
         if (data && typeof data.callId === 'string' && typeof data.name === 'string') {
           const s = ensure(['callNames'])
           // The raw arguments ride along for the result-time file-op derivation
-          // (shared/fileOps.ts) — ONLY for tools that can actually row an op
-          // (file tools, the args-driven str_replace_editor, and the run_code
-          // root whose description the flush reads). Skipping the stringify
-          // for the rest keeps a large bash/pwsh call's arguments off the wire.
-          const argsRaw = (kindOfTool(data.name) !== null
-            || data.name === 'str_replace_editor' || data.name === 'run_code')
-            ? argsRawOf(data.arguments)
-            : undefined
+          // (shared/fileOps.ts) — ONLY where they can be read: an op-bearing
+          // tool, or the run_code root whose description the flush reads.
+          // Skipping the stringify for the rest keeps a large bash/pwsh call's
+          // arguments out of the persisted state.
+          const argsRaw = rawArgsNeeded(data.name) ? argsRawOf(data.arguments) : undefined
           s.callNames[data.callId] = {
             name: data.name,
             start: event.time,
@@ -990,11 +987,10 @@ export function applyTimeline(state: TimelineState, event: TimelineEvent, bounds
         const rootCallId = data?.rootCallId
         const name = data?.name
         if (typeof rootCallId === 'string' && typeof name === 'string') {
-          // Same gating as tool/call: a non-file dispatch carries no op, so
-          // its arguments are never serialized.
-          const argsRaw = kindOfTool(name) !== null || name === 'str_replace_editor'
-            ? argsRawOf(data?.arguments)
-            : undefined
+          // Same gating as tool/call, minus the run_code arm: a dispatch's
+          // arguments only ever feed its own op derivation, so anything that
+          // cannot row an op is never serialized.
+          const argsRaw = opBearingTool(name) ? argsRawOf(data?.arguments) : undefined
           const ops = opsOfCall({
             seq: event.seq,
             time: event.time,
