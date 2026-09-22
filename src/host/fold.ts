@@ -854,7 +854,11 @@ export function applyTimeline(state: TimelineState, event: TimelineEvent, bounds
       else if (key === 'archived') st.archived = [...state.archived]
       else if (key === 'callNames') st.callNames = { ...state.callNames }
       else if (key === 'fileOps') st.fileOps = [...state.fileOps]
-      else st.timing = state.timing !== undefined ? { ...state.timing, tools: { ...state.timing.tools } } : undefined
+      // An ABSENT `timing` stays absent: a branch may name the key without
+      // ever reaching `ensureTiming` (an unpaired tool/result prices no call),
+      // and an own `undefined`-valued property fails EVERY projection-cache
+      // write for the session (the plain-JSON precondition, see TimelineState).
+      else if (state.timing !== undefined) st.timing = { ...state.timing, tools: { ...state.timing.tools } }
     }
     return st
   }

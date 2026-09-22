@@ -218,9 +218,13 @@ describe('timing — tool call durations', () => {
     assert.deepEqual(state.timing?.tools, { bash: { calls: 2, ms: 6_000 } })
   })
 
-  test('an unpaired result carries no duration and no tally', () => {
-    const { state } = driveTimeline([toolResult(1, { callId: 'ghost', content: text('ok') })])
-    assert.equal(state.timing, undefined)
+  test('an unpaired result carries no duration, no tally, and no `timing` slot at all', () => {
+    const drive = driveTimeline([toolResult(1, { callId: 'ghost', content: text('ok') })])
+    assert.equal(drive.state.timing, undefined)
+    // ABSENT, never materialized as an `undefined`-valued property: the fold
+    // priced no call, so the slot stays untouched — one such property fails
+    // every projection-cache write for the session (the plain-JSON contract).
+    assert.equal(Object.hasOwn(drive.state, 'timing'), false)
   })
 
   test('result before call (out-of-order log) prices nothing', () => {
