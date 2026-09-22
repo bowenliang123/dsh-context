@@ -96,6 +96,36 @@ describe('trimState request/event bounds', () => {
   })
 })
 
+describe('the incremental turnRuns ledger', () => {
+  test('counts turn runs exactly like a full scan, including a turn-less first record', () => {
+    const drive = driveTimeline([
+      assistantMessage(1, {}),
+      assistantMessage(2, { turn: 1, step: 1 }),
+      assistantMessage(3, { turn: 1, step: 2 }),
+      assistantMessage(4, { turn: 2, step: 1 }),
+      assistantMessage(5, { turn: 2, step: 2 }),
+    ])
+    // Scan semantics: the leading turn-less record forms no run; runs open at
+    // turn 1 (record 2) and turn 2 (record 4).
+    assert.equal(drive.state.turnRuns, 2)
+    assertStatesPlainJson(drive)
+  })
+
+  test('a restored row folded before the field existed recomputes its base once', () => {
+    const def = timelineDef()
+    let state = def.apply(def.init(), assistantMessage(1, { turn: 1, step: 1 }))
+    state = def.apply(state, assistantMessage(2, { turn: 1, step: 2 }))
+    // A cached row from an older build carries no `turnRuns` (additive-optional).
+    delete (state as { turnRuns?: unknown }).turnRuns
+    // A request push recomputes the base incrementally (1 retained run + the new turn).
+    const pushed = def.apply(state, assistantMessage(3, { turn: 2, step: 1 }))
+    assert.equal(pushed.turnRuns, 2)
+    // A non-request change recomputes in the trim pass instead.
+    const trimmed = def.apply(state, planMode(4, { active: true }))
+    assert.equal(trimmed.turnRuns, 1)
+  })
+})
+
 describe('trimState archive pruning', () => {
   test('removals at or before the oldest retained request are dropped, recording archiveFloor', () => {
     const drive = driveTimeline([
@@ -157,3 +187,7 @@ describe('trimState restored-state defenses', () => {
     assert.equal('archiveFloor' in next, false, 'the last dropped entry has no `gone`: no floor to record')
   })
 })
+
+
+
+

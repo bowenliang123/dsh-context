@@ -245,6 +245,7 @@ const timelineStateSchema = z.object({
   lastModel: z.string().optional(),
   contextWindow: z.number().optional(),
   requests: z.array(requestRecordSchema),
+  turnRuns: z.number().int().nonnegative().optional(),
   events: z.array(contextEventSchema),
   archived: z.array(surfaceNodeSchema),
   cost: costUsageSchema.optional(),

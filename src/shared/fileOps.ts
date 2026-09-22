@@ -203,7 +203,13 @@ export function opsOfCall(input: {
   parent?: number
   program?: string
 }): FileOpRecord[] {
-  const args = parseCallArgs(input.argsRaw)
+  // A non-file tool never rows an op — skip its arguments parse entirely (a
+  // call's arguments are its largest payload, and the fold may hand a large
+  // bash/pwsh call here). `str_replace_editor` is the one file tool whose
+  // purpose follows its arguments, so it still parses.
+  const args = input.tool === 'str_replace_editor' || kindOfTool(input.tool) !== null
+    ? parseCallArgs(input.argsRaw)
+    : null
   const kind = kindOfCall(input.tool, args)
   if (kind === null) return []
   const stamp: FileOpRecord = {

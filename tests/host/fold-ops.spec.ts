@@ -58,6 +58,23 @@ describe('the file-op log — call/result pairing', () => {
     assert.deepEqual(state.fileOps, [])
   })
 
+  test('a non-file call saves no raw arguments; str_replace_editor keeps and kinds them', () => {
+    const def = timelineDef()
+    let state = def.apply(def.init(), toolCall(1, { callId: 'b1', name: 'bash', arguments: JSON.stringify({ command: 'ls' }) }))
+    state = def.apply(state, toolCall(2, {
+      callId: 's1', name: 'str_replace_editor', arguments: JSON.stringify({ command: 'view', path: 'a.ts', view_range: [1, 3] }),
+    }))
+    // The args serialization is gated on tools that can row an op: bash never
+    // does, str_replace_editor's op derives from the arguments.
+    assert.equal(state.callNames.b1?.name, 'bash')
+    assert.ok(!('argsRaw' in (state.callNames.b1 ?? {})), 'a non-file call saves no raw arguments')
+    assert.equal(state.callNames.s1?.argsRaw, JSON.stringify({ command: 'view', path: 'a.ts', view_range: [1, 3] }))
+    state = def.apply(state, toolResult(3, { callId: 'b1', content: [{ type: 'text', text: 'ok' }] }))
+    state = def.apply(state, toolResult(4, { callId: 's1', content: [{ type: 'text', text: 'ok' }] }))
+    // A `view` command reads; the op rows off the parsed arguments.
+    assert.deepEqual(state.fileOps.map(o => [o.kind, o.path, o.tool]), [['read', 'a.ts', 'str_replace_editor']])
+  })
+
   test('a call without raw arguments pairs for the surface label but books no op', () => {
     const { state } = driveTimeline([
       { type: 'tool/call', seq: 1, time: 1, data: { callId: 'c1', name: 'read' } } as unknown as TimelineEvent,
@@ -157,6 +174,15 @@ describe('the file-op log — Code Mode (PTC) sub-dispatches', () => {
     ])
     assert.deepEqual(state.fileOps.map(o => [o.path, o.parent ?? 0]), [['a.ts', 5], ['b.ts', 6]])
   })
+
+  test('a str_replace_editor dispatch keeps its arguments and kinds by command', () => {
+    const { state } = driveTimeline([
+      toolCall(1, { callId: 'rc1', name: 'run_code', arguments: '{}' }),
+      codeDispatch(2, { rootCallId: 'rc1', name: 'str_replace_editor', arguments: { command: 'view', path: 'a.ts', view_range: [1, 3] } }),
+      toolResult(3, { callId: 'rc1', content: [{ type: 'text', text: 'ok' }] }),
+    ])
+    assert.deepEqual(state.fileOps.map(o => [o.kind, o.path, o.parent ?? 0]), [['read', 'a.ts', 3]])
+  })
 })
 
 describe('the file-op log — retention, schema, and the served payload', () => {
@@ -211,3 +237,7 @@ describe('the file-op log — retention, schema, and the served payload', () => 
     assert.equal(inline.wire.viewSchema.safeParse(full).success, true)
   })
 })
+
+
+
+
