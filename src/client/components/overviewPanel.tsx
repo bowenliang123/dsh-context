@@ -6,16 +6,17 @@
  * projection values), so the panel draws every session's insight without
  * opening one log.
  *
- * The panel's first row aggregates the range's sessions into the two donut
- * cards the per-session Context tab opens with — Token Stats (the
- * composition-split billed volume) and Timing Stats (the summed totals) —
- * folded over the KPI band's own scope. Below it, the body is a 3:7 column
- * pair: the insight column (the KPI 2×3 block over the activity heatmap, then
- * the preferences entry row) beside the session column (search, group chips,
- * and the card grid); the heatmap keeps its own fixed 8-week window and PINs
- * the list to a picked day (the panel's drill-down gesture). A session card
- * click jumps to that session through the harness's own selection verb
- * (openSessionVia) and closes the panel.
+ * The panel's first row is the KPI metrics band: the range's six figures
+ * (sessions, billed tokens, cost, cache hit, tool calls, active time) in one
+ * full-width line. Below it, the aggregate stats row folds the same range's
+ * sessions into the two donut cards the per-session Context tab opens with —
+ * Token Stats (the composition-split billed volume) and Timing Stats (the
+ * summed totals). The body is then a 3:7 column pair: the insight column (the
+ * activity heatmap, then the preferences entry row) beside the session column
+ * (search, group chips, and the card grid); the heatmap keeps its own fixed
+ * 8-week window and PINs the list to a picked day (the panel's drill-down
+ * gesture). A session card click jumps to that session through the harness's
+ * own selection verb (openSessionVia) and closes the panel.
  */
 
 import { useEffect, useMemo, useState, useSyncExternalStore, type ReactElement } from 'react'
@@ -163,47 +164,49 @@ export function makeOverviewPanel(ctx: ClientCtx, kit: ViewKit): (props: Overvie
             <div className="lc-empty">{t('ov.unavailable')}</div>
           ) : (
             <>
-              {/* The panel's first row: the range's aggregate Token Stats and
-                  Timing Stats, folded over the KPI band's own scope (the
-                  composition split and summed totals off kpisOf). */}
+              {/* The panel's first row: the KPI metrics band — the range's six
+                  figures in one full-width line. */}
+              <div className="lc-ov-kpis">
+                <div className="lc-stat lc-ov-kpi">
+                  <span className="lc-stat-label">{t('ov.kpi.sessions')}</span>
+                  <span className="lc-stat-value">{kpi.sessions}</span>
+                  <span className="lc-stat-sub">{t('ov.kpi.ofTotal', { n: kpi.listed })}</span>
+                </div>
+                <div className="lc-stat lc-ov-kpi">
+                  <span className="lc-stat-label">{t('ov.kpi.tokens')}</span>
+                  <span className="lc-stat-value">{fmt(kpi.tokens)}</span>
+                  <span className="lc-stat-sub">{t('stats.turns')} {fmt(kpi.turns)}</span>
+                </div>
+                <div className="lc-stat lc-ov-kpi">
+                  <span className="lc-stat-label">{t('stats.cost')}</span>
+                  <span className="lc-stat-value">{kpi.cost === null ? '—' : formatCost(kpi.cost, currency)}</span>
+                  <span className="lc-stat-sub">{t('ov.kpi.sessionsSub', { n: kpi.costSessions })}</span>
+                </div>
+                <div className="lc-stat lc-ov-kpi">
+                  <span className="lc-stat-label">{t('stats.cacheHit')}</span>
+                  <span className="lc-stat-value">{kpi.cacheHit === null ? '—' : kpi.cacheHit + '%'}</span>
+                  <span className="lc-stat-sub">{t('ov.kpi.sessionsSub', { n: kpi.usageSessions })}</span>
+                </div>
+                <div className="lc-stat lc-ov-kpi">
+                  <span className="lc-stat-label">{t('stats.toolCalls')}</span>
+                  <span className="lc-stat-value">{fmt(kpi.toolCalls)}</span>
+                  <span className="lc-stat-sub">{t('ov.kpi.toolSub', { dur: fmtDuration(kpi.toolsMs) })}</span>
+                </div>
+                <div className="lc-stat lc-ov-kpi">
+                  <span className="lc-stat-label">{t('timing.total')}</span>
+                  <span className="lc-stat-value">{fmtDuration(kpi.wallMs)}</span>
+                  <span className="lc-stat-sub">{t('ov.kpi.wallSub', { n: fmt(kpi.calls) })}</span>
+                </div>
+              </div>
+              {/* The aggregate stats row: the range's Token Stats and Timing
+                  Stats, folded over the KPI band's own scope (the composition
+                  split and summed totals off kpisOf). */}
               <div className="lc-ov-stats">
                 <OverviewTokens tokens={kpi.tokenParts} />
                 <StatsTiming timing={kpi.timing} />
               </div>
               <div className="lc-ov-body">
                 <div className="lc-ov-left">
-                  <div className="lc-ov-kpis">
-                    <div className="lc-stat lc-ov-kpi">
-                      <span className="lc-stat-label">{t('ov.kpi.sessions')}</span>
-                      <span className="lc-stat-value">{kpi.sessions}</span>
-                      <span className="lc-stat-sub">{t('ov.kpi.ofTotal', { n: kpi.listed })}</span>
-                    </div>
-                    <div className="lc-stat lc-ov-kpi">
-                      <span className="lc-stat-label">{t('ov.kpi.tokens')}</span>
-                      <span className="lc-stat-value">{fmt(kpi.tokens)}</span>
-                      <span className="lc-stat-sub">{t('stats.turns')} {fmt(kpi.turns)}</span>
-                    </div>
-                    <div className="lc-stat lc-ov-kpi">
-                      <span className="lc-stat-label">{t('stats.cost')}</span>
-                      <span className="lc-stat-value">{kpi.cost === null ? '—' : formatCost(kpi.cost, currency)}</span>
-                      <span className="lc-stat-sub">{t('ov.kpi.sessionsSub', { n: kpi.costSessions })}</span>
-                    </div>
-                    <div className="lc-stat lc-ov-kpi">
-                      <span className="lc-stat-label">{t('stats.cacheHit')}</span>
-                      <span className="lc-stat-value">{kpi.cacheHit === null ? '—' : kpi.cacheHit + '%'}</span>
-                      <span className="lc-stat-sub">{t('ov.kpi.sessionsSub', { n: kpi.usageSessions })}</span>
-                    </div>
-                    <div className="lc-stat lc-ov-kpi">
-                      <span className="lc-stat-label">{t('stats.toolCalls')}</span>
-                      <span className="lc-stat-value">{fmt(kpi.toolCalls)}</span>
-                      <span className="lc-stat-sub">{t('ov.kpi.toolSub', { dur: fmtDuration(kpi.toolsMs) })}</span>
-                    </div>
-                    <div className="lc-stat lc-ov-kpi">
-                      <span className="lc-stat-label">{t('timing.total')}</span>
-                      <span className="lc-stat-value">{fmtDuration(kpi.wallMs)}</span>
-                      <span className="lc-stat-sub">{t('ov.kpi.wallSub', { n: fmt(kpi.calls) })}</span>
-                    </div>
-                  </div>
                   <div className="lc-card lc-ov-heat-card">
                     <div className="lc-card-title">
                       <span className="lc-card-title-text">{t('ov.heat.title')}</span>

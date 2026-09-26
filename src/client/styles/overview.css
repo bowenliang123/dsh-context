@@ -1,11 +1,12 @@
 /*
  * The Context Insights panel: the sidebar-foot entry button (stacked above
  * Settings by the harness's own foot layout) and the frame-wide overlay
- * panel it opens — the aggregate stats row (Token Stats | Timing Stats, the
- * range's sessions folded into the per-session tab's two donut cards) over
- * a 3:7 body of insight column (KPI 2×3 block over the activity heatmap,
- * then the preferences entry row) beside the session column (search, chips,
- * card grid).
+ * panel it opens — the KPI metrics band (the range's six figures in one
+ * full-width line) over the aggregate stats row (Token Stats | Timing
+ * Stats, the range's sessions folded into the per-session tab's two donut
+ * cards) over a 3:7 body of insight column (the activity heatmap, then the
+ * preferences entry row) beside the session column (search, chips, card
+ * grid).
  * The backdrop is the `lc-ov` query container (it spans the viewport, and
  * the card sizes off the viewport too), so the column fold keys off the
  * viewport width; on the folded width the card itself scrolls in normal
@@ -51,9 +52,23 @@
 .lc-ov-balance-value { font-variant-numeric: tabular-nums; font-weight: 600; white-space: nowrap; }
 .lc-ov-head .lc-modal-close { margin-left: 0; flex: none; }
 
-/* ---- the aggregate stats row: the panel's first row, Token Stats beside
-   Timing Stats over the 3:7 body. Two half-width cards; the pair folds to
-   one column at 700px of container — below the body's own 932px fold, where
+/* ---- the KPI metrics band: the panel's first row — the range's six figures
+   in one full-width line. Under width pressure it folds 6 → 3×2 (a half-card
+   still reads every English sub-line) → 2×3 (phone), so no cell ever
+   ellipsizes its figure. ---- */
+.lc-ov-kpis { flex: none; display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 10px; margin-bottom: 10px; }
+.lc-ov-kpi { align-items: center; padding: 10px 8px; }
+.lc-ov-kpi .lc-stat-value { font-size: 20px; }
+@container lc-ov (max-width: 1000px) {
+  .lc-ov-kpis { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+}
+@container lc-ov (max-width: 640px) {
+  .lc-ov-kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+
+/* ---- the aggregate stats row: Token Stats beside Timing Stats between the
+   KPI band and the 3:7 body. Two half-width cards; the pair folds to one
+   column at 700px of container — below the body's own 932px fold, where
    a half (~340px) still fits the donut + one legend column, but narrower
    halves would wrap the legend rows into slivers. ---- */
 .lc-ov-stats { flex: none; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; margin-bottom: 10px; }
@@ -65,10 +80,10 @@
   .lc-ov-stats { grid-template-columns: minmax(0, 1fr); }
 }
 
-/* ---- the body: a 3:7 column pair — the insight column (KPI 2×3 over the
-   heat) beside the session column; under width pressure it folds to one
-   full-width column and the whole card scrolls in normal flow (no capped
-   inner scrollers to overlap). ---- */
+/* ---- the body: a 3:7 column pair — the insight column (the heat over the
+   preferences entry) beside the session column; under width pressure it
+   folds to one full-width column and the whole card scrolls in normal flow
+   (no capped inner scrollers to overlap). ---- */
 .lc-ov-body { flex: 1 1 auto; min-height: 0; display: grid; grid-template-columns: minmax(0, 3fr) minmax(0, 7fr); gap: 10px; }
 /* Each column owns its scrollbar (the harness 8px bar): `scrollbar-gutter:
    stable` holds the bar's track so cards never reflow by its width when a
@@ -86,9 +101,6 @@
 /* border-box keeps the card tracks true outer widths: under the harness's
    content-box default the padding quietly adds ~30px per card. */
 .lc-ov-left > .lc-card { margin-bottom: 0; min-width: 0; box-sizing: border-box; }
-.lc-ov-kpis { flex: none; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); grid-template-rows: repeat(3, 1fr); gap: 10px; }
-.lc-ov-kpi { align-items: center; padding: 10px 8px; }
-.lc-ov-kpi .lc-stat-value { font-size: 20px; }
 /* The heat card absorbs the insight column's leftover height (the grid
    centers inside it) but never shrinks below its own grid. */
 .lc-ov-heat-card { flex: 1 0 auto; display: flex; flex-direction: column; }
