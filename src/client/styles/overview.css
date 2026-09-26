@@ -1,9 +1,11 @@
 /*
  * The Context Insights panel: the sidebar-foot entry button (stacked above
  * Settings by the harness's own foot layout) and the frame-wide overlay
- * panel it opens — a 3:7 body of insight column (KPI 2×3 block over the
- * activity heatmap, then the preferences entry row) beside the session
- * column (search, chips, card grid).
+ * panel it opens — the aggregate stats row (Token Stats | Timing Stats, the
+ * range's sessions folded into the per-session tab's two donut cards) over
+ * a 3:7 body of insight column (KPI 2×3 block over the activity heatmap,
+ * then the preferences entry row) beside the session column (search, chips,
+ * card grid).
  * The backdrop is the `lc-ov` query container (it spans the viewport, and
  * the card sizes off the viewport too), so the column fold keys off the
  * viewport width; on the folded width the card itself scrolls in normal
@@ -48,6 +50,20 @@
 .lc-ov-balance-label { color: var(--dsw-alias-label-secondary); white-space: nowrap; }
 .lc-ov-balance-value { font-variant-numeric: tabular-nums; font-weight: 600; white-space: nowrap; }
 .lc-ov-head .lc-modal-close { margin-left: 0; flex: none; }
+
+/* ---- the aggregate stats row: the panel's first row, Token Stats beside
+   Timing Stats over the 3:7 body. Two half-width cards; the pair folds to
+   one column at 700px of container — below the body's own 932px fold, where
+   a half (~340px) still fits the donut + one legend column, but narrower
+   halves would wrap the legend rows into slivers. ---- */
+.lc-ov-stats { flex: none; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; margin-bottom: 10px; }
+/* The row's cards zero the .lc-card margin like the column's own, and take
+   the same border-box (the base .lc-card is content-box; the padding would
+   otherwise widen both tracks past the card). */
+.lc-ov-stats > .lc-card { margin-bottom: 0; min-width: 0; box-sizing: border-box; }
+@container lc-ov (max-width: 700px) {
+  .lc-ov-stats { grid-template-columns: minmax(0, 1fr); }
+}
 
 /* ---- the body: a 3:7 column pair — the insight column (KPI 2×3 over the
    heat) beside the session column; under width pressure it folds to one
