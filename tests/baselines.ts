@@ -170,6 +170,26 @@ export interface Baseline {
     transportFile: string
     transportPresent: boolean
   }
+  /**
+   * The balance capsule's host seam (src/host/balance.ts). The facts fold
+   * reads the DeepSeek API-key provider's settings row through whichever face
+   * the line serves: the `get(ns)` registered-section read through V3, the
+   * Config-form `describe()` projection on V4+ — where the provider row is
+   * the entry whose served value declares the top-level `apiKeyEnv`
+   * credential ref, preferred under the settings ids the generations have
+   * served it as. Each face is probed against the tag's real sources.
+   */
+  balance: {
+    /** The settings service source the face needles are asserted in. */
+    settingsFile: string
+    /** The `get(ns)` section read — served through V3, retired on V4+. */
+    settingsGetNeedle: string
+    settingsGetPresent: boolean
+    /** The Config-form projection needle, when this line serves one the fold reads. */
+    settingsDescribeNeedle: string | undefined
+    /** The provider sources carrying the plugin id and the section shape the fold matches. */
+    providerFiles: readonly { file: string; needles: readonly string[] }[]
+  }
 }
 
 export const BASELINES: readonly Baseline[] = [
@@ -244,6 +264,18 @@ export const BASELINES: readonly Baseline[] = [
       transport: 'settingsScope',
       transportFile: 'packages/client/ui-settings/src/client/settings-scope.ts',
       transportPresent: true,
+    },
+    balance: {
+      settingsFile: 'packages/settings/settings/src/index.ts',
+      settingsGetNeedle: 'get<const Namespace extends string>(ns:',
+      settingsGetPresent: true,
+      settingsDescribeNeedle: undefined,
+      providerFiles: [
+        {
+          file: 'packages/llm/llm-deepseek/src/index.ts',
+          needles: ["export const name = 'llm-deepseek'", "apiKeyEnv: z.string().role('credential-ref')"],
+        },
+      ],
     },
     stepGuard: {
       loopFile: 'packages/core/agent-loop/src/agent.ts',
@@ -330,6 +362,26 @@ export const BASELINES: readonly Baseline[] = [
       transport: 'configForms',
       transportFile: 'packages/client/ui-settings/src/client/config-form.ts',
       transportPresent: true,
+    },
+    balance: {
+      settingsFile: 'packages/settings/settings/src/index.ts',
+      settingsGetNeedle: 'get<const Namespace extends string>(ns:',
+      settingsGetPresent: false,
+      settingsDescribeNeedle: 'describe(options?: SettingsDescribeOptions)',
+      providerFiles: [
+        {
+          file: 'packages/llm/llm-deepseek-api-key/src/index.ts',
+          needles: ["export const name = 'llm-deepseek-api-key'"],
+        },
+        {
+          file: 'packages/llm/llm-deepseek-api-key/src/config.ts',
+          needles: ["apiKeyEnv: z.string().role('credential-ref').default('DEEPSEEK_API_KEY').volatile()"],
+        },
+        {
+          file: 'packages/llm/llm-deepseek/src/config.ts',
+          needles: ['baseURL: z.string().volatile()'],
+        },
+      ],
     },
     stepGuard: {
       loopFile: 'packages/core/agent-loop/src/agent.ts',

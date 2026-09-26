@@ -115,6 +115,33 @@ describe.skipIf(reasons.length > 0)('compat matrix — real dsh sources per base
       assert.equal(pattern.test('dsh-context'), true)
     })
 
+    test('balance: the settings face and the DeepSeek provider row the facts fold reads', () => {
+      // The balance route resolves the provider's settings row through the
+      // face this generation serves — the `get(ns)` section read through V3,
+      // the Config-form `describe()` projection on V4+ (the row matched by
+      // its own apiKeyEnv-bearing section shape). Presence asserted both
+      // ways, so a moved seam names itself instead of silently hiding the
+      // capsule.
+      const balance = baseline.balance
+      assert.equal(
+        staging.dshHasString(baseline.tag, balance.settingsGetNeedle, balance.settingsFile),
+        balance.settingsGetPresent,
+        'the settings service get face',
+      )
+      if (balance.settingsDescribeNeedle !== undefined) {
+        assert.equal(
+          staging.dshHasString(baseline.tag, balance.settingsDescribeNeedle, balance.settingsFile),
+          true,
+          'the settings service describe face',
+        )
+      }
+      for (const provider of balance.providerFiles) {
+        for (const needle of provider.needles) {
+          assert.equal(staging.dshHasString(baseline.tag, needle, provider.file), true, `provider seam: ${needle}`)
+        }
+      }
+    })
+
     for (const slot of staging.SLOT_SEAMS) {
       test(`client: slot "${slot}" exists`, () => {
         assert.equal(staging.dshHasString(baseline.tag, slot, 'packages/client/*/src/**'), true)

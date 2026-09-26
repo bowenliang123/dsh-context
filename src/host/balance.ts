@@ -5,13 +5,13 @@
  * The platform exposes exactly one account endpoint (`GET /user/balance`);
  * reaching it needs the API key, which by design never rides to the browser,
  * so the HOST reads it and serves the redacted figures. The connection facts
- * resolve per request, exactly as llm-deepseek serves its own requests: its
- * settings section (`llm-deepseek`, installed only when that provider
- * composes) carries the credential ref and the optional endpoint override,
- * and the credentials service resolves the ref to the key. Any missing fact
- * — the provider absent, no settings service, no key — answers a typed
- * `null`, as does a failed or malformed platform read: the capsule renders
- * nothing rather than a stale figure.
+ * resolve per request, exactly as the DeepSeek provider serves its own
+ * requests: its settings row carries the credential ref and the optional
+ * endpoint override, read through whichever face the running line serves
+ * (deepseekSectionOf), and the credentials service resolves the ref to the
+ * key. Any missing fact — the provider absent, no settings service, no key —
+ * answers a typed `null`, as does a failed or malformed platform read: the
+ * capsule renders nothing rather than a stale figure.
  *
  * The transport is Connection's fetch-route registry (the same authenticated
  * `/api` fence host/detail.ts mounts), registered through a deferred inject
@@ -28,7 +28,9 @@ import type { PlatformBalance, PlatformBalanceEntry } from '../shared/types'
 /** The plugin's balance route, under the authenticated `/api` fence. */
 export const BALANCE_ROUTE = '/api/dsh-context/balance'
 
-/** The settings namespace llm-deepseek installs its connection section under. */
+/** The settings id the DeepSeek API-key provider has served its connection
+ * section under: the V3 registered namespace, kept as the entry id on V4+
+ * product profiles. */
 const DEEPSEEK_SETTINGS_NS = 'llm-deepseek'
 
 /** llm-deepseek's default credential ref (the env-var name its section resolves). */
@@ -40,9 +42,15 @@ const PUBLIC_BASE_URL = 'https://api.deepseek.com'
 /** One platform read's whole budget — never worth blocking the route longer. */
 const FETCH_TIMEOUT_MS = 10_000
 
-/** The harness `settings` service, as far as the route consumes it. */
+/**
+ * The harness `settings` service, as far as the route consumes it. The face
+ * is generation-specific: V3 reads a registered section back (`get`), while
+ * V4+ retired that face and projects every configurable entry instead
+ * (`describe`) — the route folds over whichever the running line serves.
+ */
 interface SettingsHostFace {
   get?(ns: string): unknown
+  describe?(): unknown
 }
 
 /** The harness `credentials` service, as far as the route consumes it. */
@@ -79,14 +87,52 @@ function amountOf(value: unknown): number | null {
 interface DeepSeekFacts { baseUrl: string; apiKey: string }
 
 /**
+ * The DeepSeek API-key provider's settings section, read through whichever
+ * face the running line serves. V3's `get` reads the registered
+ * `llm-deepseek` section directly; V4+ retired that face, so its `describe()`
+ * projection is folded instead — the provider's row is the one whose served
+ * value declares the top-level `apiKeyEnv` credential ref (the volatile shape
+ * only that provider declares at the section root), preferred under the entry
+ * ids the generations have served it as (`llm-deepseek` on product profiles,
+ * `llm-deepseek-api-key` elsewhere). Rows fold in isolation — a hostile row
+ * drops whole, valid siblings keep serving — and a describe that throws is no
+ * section at all.
+ */
+function deepseekSectionOf(ctx: Context): Record<string, unknown> | null {
+  const settings = ctx.get('settings') as SettingsHostFace | undefined
+  const section = typeof settings?.get === 'function' ? asRecord(settings.get(DEEPSEEK_SETTINGS_NS)) : null
+  if (section !== null) return section
+  if (typeof settings?.describe !== 'function') return null
+  try {
+    const rows = settings.describe()
+    if (!Array.isArray(rows)) return null
+    let shaped: Record<string, unknown> | null = null
+    for (const row of rows) {
+      try {
+        const record = asRecord(row)
+        if (record === null) continue
+        const value = asRecord(record.value)
+        if (value === null || typeof value.apiKeyEnv !== 'string' || value.apiKeyEnv === '') continue
+        if (record.ns === DEEPSEEK_SETTINGS_NS || record.ns === 'llm-deepseek-api-key') return value
+        shaped ??= value
+      } catch {
+        continue
+      }
+    }
+    return shaped
+  } catch {
+    return null
+  }
+}
+
+/**
  * Resolve the DeepSeek connection facts exactly as llm-deepseek serves its
- * requests: its settings section for the credential ref and endpoint, the
+ * requests: its settings row for the credential ref and endpoint, the
  * credentials service for the key. `null` whenever any fact is missing —
  * the platform is simply not configured for this deployment.
  */
 async function resolveFacts(ctx: Context): Promise<DeepSeekFacts | null> {
-  const settings = ctx.get('settings') as SettingsHostFace | undefined
-  const section = typeof settings?.get === 'function' ? asRecord(settings.get(DEEPSEEK_SETTINGS_NS)) : null
+  const section = deepseekSectionOf(ctx)
   if (section === null) return null
   const apiKeyEnv = typeof section.apiKeyEnv === 'string' && section.apiKeyEnv !== ''
     ? section.apiKeyEnv
