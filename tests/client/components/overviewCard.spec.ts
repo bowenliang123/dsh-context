@@ -133,6 +133,59 @@ describe('OverviewCard', () => {
     await bare.unmount()
   })
 
+  test('the crumb trails the title on the head line instead of owning a row', async () => {
+    const m = await mount(h(Card, {
+      row: rowOf({ cwd: '/Users/bw/dev/dsh-context' }),
+      group: 'workspace-one',
+      costLabel: '—',
+      now: NOW,
+      onOpen: () => {},
+    }))
+    assert.ok(query(m.container, '.lc-ov-session-head > .lc-ov-session-crumb'))
+    await m.unmount()
+  })
+
+  test('a scoped grid drops the crumb segments its workspace chip already asserts', async () => {
+    // The single-repo case (group == project == scope): the whole crumb goes.
+    const same = await mount(h(Card, {
+      row: rowOf({ cwd: '/Users/bw/dev/dsh-context' }),
+      group: 'dsh-context',
+      workspaceScope: 'dsh-context',
+      costLabel: '—',
+      now: NOW,
+      onOpen: () => {},
+    }))
+    assert.equal(queryAll(same.container, '.lc-ov-session-crumb').length, 0)
+    await same.unmount()
+
+    // The scope asserts the workspace only; the project still discriminates.
+    const scoped = await mount(h(Card, {
+      row: rowOf({ cwd: '/Users/bw/dev/dsh-context' }),
+      group: 'workspace-one',
+      workspaceScope: 'workspace-one',
+      costLabel: '—',
+      now: NOW,
+      onOpen: () => {},
+    }))
+    assert.equal(queryAll(scoped.container, '.lc-ov-crumb-group').length, 0)
+    assert.equal(queryAll(scoped.container, '.lc-ov-crumb-sep').length, 0)
+    assert.equal(query(scoped.container, '.lc-ov-crumb-project').textContent, 'dsh-context')
+    await scoped.unmount()
+
+    // Another chip's scope leaves the crumb alone.
+    const other = await mount(h(Card, {
+      row: rowOf({ cwd: '/Users/bw/dev/dsh-context' }),
+      group: 'workspace-one',
+      workspaceScope: 'workspace-two',
+      costLabel: '—',
+      now: NOW,
+      onOpen: () => {},
+    }))
+    assert.equal(query(other.container, '.lc-ov-crumb-group').textContent, 'workspace-one')
+    assert.equal(query(other.container, '.lc-ov-crumb-project').textContent, 'dsh-context')
+    await other.unmount()
+  })
+
   test('running and current markers render', async () => {
     const m = await mount(h(Card, { row: rowOf({ running: true, current: true }), costLabel: '—', now: NOW, onOpen: () => {} }))
     assert.ok(query(m.container, '.lc-ov-running'))

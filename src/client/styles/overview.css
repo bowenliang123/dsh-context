@@ -154,10 +154,11 @@
    column's other cards (the session-card hover: border darkens, layer-2
    fill); the hint pulls to the right edge and ellipsizes under width
    pressure so the label always reads. */
-.lc-ov-settings { flex: none; display: flex; align-items: center; gap: 8px; width: 100%; box-sizing: border-box; border: 1px solid var(--dsw-alias-border-l2); background: var(--dsw-alias-bg-layer-1); border-radius: 10px; padding: 9px 12px; font: inherit; font-size: 12px; color: var(--dsw-alias-label-secondary); cursor: pointer; transition: border-color var(--ds-transition-duration, 0.2s) var(--ds-ease-in-out, ease-in-out), background-color var(--ds-transition-duration, 0.2s) var(--ds-ease-in-out, ease-in-out), color var(--ds-transition-duration, 0.2s) var(--ds-ease-in-out, ease-in-out); }
-.lc-ov-settings:hover { border-color: var(--dsw-alias-label-secondary); background: var(--dsw-alias-bg-layer-2); color: var(--dsw-alias-label-primary); }
-.lc-ov-settings-label { flex: none; display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; }
-.lc-ov-settings-hint { flex: 1 1 auto; min-width: 0; text-align: right; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+/* The preferences jump rides the header's free space beside the close: an
+   icon button, not a full-width bar (the bar cost every dashboard a 40px
+   content row under the activity card for two labels). */
+.lc-ov-settings { flex: none; display: inline-flex; align-items: center; justify-content: center; border: 0; background: transparent; color: var(--dsw-alias-label-secondary); border-radius: 6px; padding: 4px; font: inherit; cursor: pointer; transition: color var(--ds-transition-duration, 0.2s) var(--ds-ease-in-out, ease-in-out), background-color var(--ds-transition-duration, 0.2s) var(--ds-ease-in-out, ease-in-out); }
+.lc-ov-settings:hover { background: var(--dsw-alias-bg-layer-2); color: var(--dsw-alias-label-primary); }
 
 /*
  * The activity heatmap: fixed-size square cells (8 week columns ≈ a 200px
@@ -226,14 +227,19 @@ button.lc-heat-cell:hover { box-shadow: 0 0 0 1.5px color-mix(in srgb, var(--col
 .lc-ov-session-current { border-color: color-mix(in srgb, var(--color-blue-500) 65%, transparent); }
 .lc-ov-session-head { display: flex; align-items: flex-start; gap: 6px; min-width: 0; }
 .lc-ov-running { flex: none; width: 7px; height: 7px; border-radius: 50%; background: var(--color-green-500); }
-/* The title wraps (2-line clamp keeps one long title from ballooning its row); the full text stays on the tooltip. */
-.lc-ov-session-title { flex: 1 1 auto; min-width: 0; font-weight: 600; overflow: hidden; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow-wrap: anywhere; }
+/* The title wraps (2-line clamp keeps one long title from ballooning its row);
+   it gives up its grow so the crumb can sit at the end of its own text — the
+   times take the row's free space back via margin-left: auto. */
+.lc-ov-session-title { flex: 0 1 auto; min-width: 0; font-weight: 600; overflow: hidden; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow-wrap: anywhere; }
 .lc-ov-current { flex: none; font-size: 10px; line-height: 1.5; color: var(--color-blue-500); border: 1px solid color-mix(in srgb, var(--color-blue-500) 45%, transparent); border-radius: 4px; padding: 0 4px; }
-.lc-ov-session-times { flex: none; display: flex; flex-direction: column; align-items: flex-end; gap: 1px; }
+.lc-ov-session-times { flex: none; margin-left: auto; display: flex; flex-direction: column; align-items: flex-end; gap: 1px; }
 .lc-ov-session-time { color: var(--dsw-alias-label-secondary); font-size: 11px; white-space: nowrap; }
 .lc-ov-session-created { color: var(--dsw-alias-label-secondary); font-size: 10px; line-height: 1.4; white-space: nowrap; font-variant-numeric: tabular-nums; }
-/* The breadcrumb row: workspace group / project pill (the full path stays on the row's tooltip). */
-.lc-ov-session-crumb { display: flex; align-items: center; gap: 5px; min-width: 0; font-size: 11px; color: var(--dsw-alias-label-secondary); white-space: nowrap; overflow: hidden; }
+/* The breadcrumb rides the head line, right after the title (workspace group
+   text / project pill; the full path stays on the crumb's tooltip). Identity
+   belongs beside the title, and a row of its own would cost every card ~24px
+   for a label the workspace scope often already asserts. */
+.lc-ov-session-crumb { flex: none; min-width: 0; max-width: 45%; display: flex; align-items: center; gap: 5px; font-size: 11px; line-height: 1.5; color: var(--dsw-alias-label-secondary); white-space: nowrap; overflow: hidden; }
 .lc-ov-crumb-group { flex: none; max-width: 55%; overflow: hidden; text-overflow: ellipsis; }
 .lc-ov-crumb-sep { flex: none; opacity: 0.55; }
 /* The project pill's fill mixes the label gray instead of layer-2: layer-2 is
@@ -251,13 +257,14 @@ button.lc-heat-cell:hover { box-shadow: 0 0 0 1.5px color-mix(in srgb, var(--col
 .lc-ov-session-empty { color: var(--dsw-alias-label-secondary); font-size: 11px; line-height: 1.5; padding: 6px 0; }
 /* The last-user-message footer: a hairline-ruled caption anchoring the card's
    tail — the label names the line, the message text follows in the primary
-   label color (the fold already bounds it; the full text stays on the tip).
-   The auto top margin pins it to the bottom edge when a taller sibling
-   stretches the row; the rule (not a bubble or a quote glyph) keeps it quiet
-   next to the donut row and survives both themes via the border token. */
-.lc-ov-session-preview { display: flex; align-items: baseline; gap: 6px; margin-top: auto; padding-top: 6px; border-top: 1px solid color-mix(in srgb, var(--dsw-alias-border-l2) 60%, transparent); min-width: 0; }
+   label color for up to two clamped lines (the fold already bounds it; the
+   full text stays on the tip). The auto top margin pins it to the bottom edge
+   when a taller sibling stretches the row; the rule (not a bubble or a quote
+   glyph) keeps it quiet next to the donut row and survives both themes via
+   the border token. */
+.lc-ov-session-preview { display: flex; align-items: flex-start; gap: 6px; margin-top: auto; padding-top: 6px; border-top: 1px solid color-mix(in srgb, var(--dsw-alias-border-l2) 60%, transparent); min-width: 0; }
 .lc-ov-session-preview-label { flex: none; color: var(--dsw-alias-label-secondary); font-size: 10px; }
-.lc-ov-session-preview-text { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--dsw-alias-label-primary); font-size: 11px; line-height: 1.5; }
+.lc-ov-session-preview-text { flex: 0 1 auto; min-width: 0; overflow: hidden; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow-wrap: anywhere; color: var(--dsw-alias-label-primary); font-size: 11px; line-height: 1.5; }
 
 /* ---- the grid pager: one row under the card grid, only when it spans pages ---- */
 .lc-ov-pager { display: flex; align-items: center; justify-content: center; gap: 10px; margin-top: 12px; }

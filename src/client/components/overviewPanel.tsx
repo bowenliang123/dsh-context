@@ -162,6 +162,17 @@ export function makeOverviewPanel(ctx: ClientCtx, kit: ViewKit): (props: Overvie
                 >{t('ov.range.' + r)}</button>
               ))}
             </div>
+            {/* The preferences jump: an icon button beside the close, so it rides
+                the header's free space instead of owning a full-width row under
+                the activity card. The jump drives the shell chrome behind this
+                overlay, so the panel closes with it to leave the jump visible. */}
+            <button
+              type="button"
+              className="lc-ov-settings"
+              aria-label={t('plugin.settingsOpen')}
+              title={t('plugin.settingsOpen')}
+              onClick={() => { openPluginSettings(); close() }}
+            ><IconSettings size={14} /></button>
             <button type="button" className="lc-modal-close hover:text-(--dsw-alias-label-primary) hover:bg-(--dsw-alias-bg-layer-2)" aria-label={t('cmd.close')} onClick={close}>×</button>
           </div>
 
@@ -241,14 +252,6 @@ export function makeOverviewPanel(ctx: ClientCtx, kit: ViewKit): (props: Overvie
                     </div>
                     <Heatmap days={days} metric={metric} selected={day} onSelect={setDay} today={todayKey()} />
                   </div>
-                  {/* The settings entry: one quiet row under the activity card, the
-                      same best-effort preferences jump the Context tab's plugin-info
-                      row rides. The jump drives the shell chrome behind this
-                      overlay, so the panel closes with it to leave the jump visible. */}
-                  <button type="button" className="lc-ov-settings" onClick={() => { openPluginSettings(); close() }}>
-                    <span className="lc-ov-settings-label"><IconSettings size={14} />{t('plugin.settings')}</span>
-                    <span className="lc-ov-settings-hint">{t('plugin.settingsOpen')}</span>
-                  </button>
                 </div>
 
                 <div className="lc-ov-right">
@@ -308,6 +311,7 @@ export function makeOverviewPanel(ctx: ClientCtx, kit: ViewKit): (props: Overvie
                             key={row.id}
                             row={row}
                             {...(groups?.[row.id] !== undefined ? { group: groups[row.id] } : {})}
+                            {...(group !== null ? { workspaceScope: group } : {})}
                             costLabel={cardCostOf(row, book, currency)}
                             now={now}
                             onOpen={openOne}
