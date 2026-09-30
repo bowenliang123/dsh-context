@@ -90,7 +90,11 @@
    prices). ---- */
 .lc-ov-usage { flex: 1 1 auto; display: flex; flex-direction: column; margin-bottom: 0; min-width: 0; box-sizing: border-box; }
 .lc-ov-usage .lc-card-title { margin-bottom: 4px; }
-.lc-ov-usage-plot { flex: 1 1 auto; display: flex; align-items: stretch; gap: 6px; min-height: 0; }
+/* Ticks center on their gridline, so the 100% tick spends half its own line box
+   above the plot and eats that 4px margin (measured: its top lands 1.4px inside
+   the title's line box). Reserve the half-line in the plot, and the axis reads
+   clear of the title at every row height. */
+.lc-ov-usage-plot { flex: 1 1 auto; display: flex; align-items: stretch; gap: 6px; min-height: 0; padding-top: 10px; }
 /* The rails hold absolutely-positioned ticks (top = 100% peak, bottom = 0);
    a fixed width keeps both sides symmetric and the columns' geometry stable
    across tick widths ("169.2M" vs "$0.0075"). */
