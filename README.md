@@ -131,7 +131,7 @@ Pick **Live (next request)** or any retained step, and browse what that request 
 
 ![A tool result expanded with Raw/Markdown toggle](https://raw.githubusercontent.com/bowenliang123/dsh-context/main/docs/context-browser-tool-result.png)
 
-- **Image payloads render as cards** — thumbnails with name, dimensions, stored size, and the official DeepSeek image-token estimate (the dsh multimodal pipeline, e.g. `read_image` results and image attachments):
+- **Image payloads render as cards** — thumbnails with name, dimensions, stored size, and the official DeepSeek image-token estimate (the dsh multimodal pipeline, e.g. `read_image` results and image attachments). Expanded compaction checkpoints also show their image attachments beside the summary, with click-to-enlarge preview; checkpoint text envelopes stay hidden. Images are read from session history only when the checkpoint is expanded:
 
 ![An image payload rendered as a thumbnail card](https://raw.githubusercontent.com/bowenliang123/dsh-context/main/docs/context-browser-images.png)
 

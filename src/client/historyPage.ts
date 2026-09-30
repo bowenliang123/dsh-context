@@ -1,7 +1,7 @@
 /**
  * Targeted full-content fetch for the Context browser — the fallback that
- * replaces blind tail paging. When a surface node's seq is outside the
- * conversation window, ONE seq-anchored history read returns the page
+ * replaces blind tail paging. For nodes outside the conversation window or
+ * summary-only compaction joins, ONE seq-anchored history read returns the page
  * containing that event: the host cuts pages on whole append-origin message
  * boundaries, so the newest group on the page covers `seq` whenever the
  * durable log still holds it. The read rides the harness gateway remotes
@@ -22,6 +22,7 @@
  */
 
 import { useSyncExternalStore } from 'react'
+import { imageRefOf } from './components/images'
 import type {
   ClientCtx, ContentFetcher, ConversationNodeLike, HeaderFetcher,
   HistoryEntryLike, SessionPageFace,
@@ -137,10 +138,14 @@ export function pageNodesOf(entries: readonly unknown[]): Map<number, Conversati
         ? source.compactionId
         : null
       if (compactionId !== null) {
-        // A compaction checkpoint: the model-visible envelope never renders —
-        // the marker shows its summary instead (null when the page cut left
-        // the summary event outside).
-        nodes.set(seq, { kind: 'compaction', seq, summary: summaries.get(compactionId) ?? null })
+        // Keep checkpoint images, never the model-visible text envelope.
+        const content = Array.isArray(data.content)
+          ? data.content.flatMap((block: unknown) => {
+            const attachment = imageRefOf(block)
+            return attachment === null ? [] : [{ type: 'image', attachment }]
+          })
+          : []
+        nodes.set(seq, { kind: 'compaction', seq, summary: summaries.get(compactionId) ?? null, content })
         continue
       }
       nodes.set(seq, {

@@ -115,6 +115,7 @@ export interface ConversationNodeLike {
    * seat addresses a finalized reply by.
    */
   messageId?: unknown
+  /** Message blocks; on fetched compaction nodes, checkpoint images only (an empty array means none). */
   content?: readonly unknown[]
   blocks?: readonly unknown[]
   call?: { name: string; argsRaw: string } | null

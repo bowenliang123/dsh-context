@@ -1703,6 +1703,108 @@ describe('ContextBrowser targeted content fetch', () => {
     await click(elemRows(m)[1]) // seq 5 (newest first: 6, 5)
   }
 
+  test('an expanded summary-only checkpoint fetches images once and keeps its live summary', async () => {
+    let calls = 0
+    let release: (() => void) | undefined
+    const fetchContent = async (seq: number): Promise<ConversationNodeLike> => {
+      calls += 1
+      await new Promise<void>(resolve => { release = resolve })
+      return { kind: 'compaction', seq, summary: 'PAGE SUMMARY', content: [
+        { type: 'image', attachment: { attachmentId: 'archive', name: 'archive.png' } },
+        { type: 'text', text: 'HIDDEN ENVELOPE' },
+      ] }
+    }
+    const m = await mount(h(Browser, props({ data, fetchContent,
+      convNodes: [{ kind: 'compaction', seq: 5, summary: 'LIVE SUMMARY' }],
+      loadImage: async () => 'blob:archive',
+    })))
+    assert.equal(calls, 0, 'no history read while collapsed')
+    await openFirstRow(m)
+    assert.equal(calls, 1)
+    assert.ok(text(query(m.container, '.lc-br-content')).includes('LIVE SUMMARY'))
+    assert.ok(text(query(m.container, '.lc-br-content')).includes('Loading full content'))
+    await act(async () => { release?.() })
+    await flush()
+    const content = query(m.container, '.lc-br-content')
+    assert.ok(text(content).includes('LIVE SUMMARY'))
+    assert.ok(!text(content).includes('PAGE SUMMARY'))
+    assert.ok(!text(content).includes('HIDDEN ENVELOPE'))
+    assert.ok(!text(content).includes('Loading full content'))
+    assert.equal(queryAll(content, '.lc-att-thumb img').length, 1)
+    await click(query(content, '.lc-att-thumb'))
+    assert.ok(document.body.querySelector('.lc-att-lightbox') !== null)
+    await act(async () => { window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' })) })
+    await click(elemRows(m)[1])
+    await click(elemRows(m)[1])
+    assert.equal(calls, 1, 'cached checkpoint content')
+    await m.unmount()
+  })
+
+  test('checkpoint history failures offer retry without hiding the summary; text-only content settles empty', async () => {
+    silenceFetchWarn()
+    let calls = 0
+    const fetchContent = async (seq: number): Promise<ConversationNodeLike> => {
+      calls += 1
+      if (calls === 1) throw new Error('offline')
+      return { kind: 'compaction', seq, summary: null, content: [] }
+    }
+    const m = await mount(h(Browser, props({ data, fetchContent,
+      convNodes: [{ kind: 'compaction', seq: 5, summary: 'KEPT SUMMARY' }],
+    })))
+    await openFirstRow(m)
+    await flush()
+    assert.ok(text(query(m.container, '.lc-br-content')).includes('KEPT SUMMARY'))
+    await click(query(m.container, '.lc-br-retry'))
+    await flush()
+    assert.equal(calls, 2)
+    assert.ok(text(query(m.container, '.lc-br-content')).includes('KEPT SUMMARY'))
+    assert.equal(queryAll(m.container, '.lc-br-note').length, 0)
+    await m.unmount()
+  })
+
+  test.each([null, '', undefined])('a checkpoint recovers an unloaded summary (%s) from the history page', async (summary) => {
+    const fetchContent = async (seq: number): Promise<ConversationNodeLike> => ({
+      kind: 'compaction', seq, summary: 'RECOVERED SUMMARY', content: [],
+    })
+    const m = await mount(h(Browser, props({ data, fetchContent,
+      convNodes: [{ kind: 'compaction', seq: 5, summary }],
+    })))
+    await openFirstRow(m)
+    await flush()
+    assert.ok(text(query(m.container, '.lc-br-content')).includes('RECOVERED SUMMARY'))
+    await m.unmount()
+  })
+
+  test('a newer joined checkpoint summary wins when a pending image read settles', async () => {
+    let release: ((node: ConversationNodeLike) => void) | undefined
+    const fetchContent = (): Promise<ConversationNodeLike> => new Promise(resolve => { release = resolve })
+    let convNodes: ConversationNodeLike[] = [{ kind: 'compaction', seq: 5, summary: null }]
+    const el = () => h(Browser, props({ data, fetchContent, convNodes }))
+    const m = await mount(el())
+    await openFirstRow(m)
+    convNodes = [{ kind: 'compaction', seq: 5, summary: 'NEW SUMMARY' }]
+    await m.update(el())
+    await act(async () => { release?.({ kind: 'compaction', seq: 5, summary: 'OLD SUMMARY', content: [] }) })
+    await flush()
+    assert.ok(text(query(m.container, '.lc-br-content')).includes('NEW SUMMARY'))
+    assert.ok(!text(query(m.container, '.lc-br-content')).includes('OLD SUMMARY'))
+    await m.unmount()
+  })
+
+  test('a checkpoint with joined image content renders without any history read', async () => {
+    const fetchContent = vi.fn(async () => null)
+    const m = await mount(h(Browser, props({ data, fetchContent,
+      convNodes: [{ kind: 'compaction', seq: 5, summary: null, content: [
+        { type: 'image', attachment: { attachmentId: 'joined' } },
+      ] }],
+    })))
+    await openFirstRow(m)
+    await flush()
+    assert.equal(fetchContent.mock.calls.length, 0)
+    assert.ok(text(query(m.container, '.lc-br-content')).includes('Images'))
+    await m.unmount()
+  })
+
   test('a missed join fetches the seq once, and the fetched body renders', async () => {
     let calls = 0
     let release: (() => void) | null = null

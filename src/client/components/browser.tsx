@@ -31,8 +31,8 @@ export interface ContextBrowserProps {
    */
   convNodes?: readonly ConversationNodeLike[]
   /**
-   * Targeted full-content fetch for nodes outside the conversation window:
-   * one seq-anchored history read per expanded row (absent on older hosts —
+   * Targeted full-content fetch for nodes outside the conversation window
+   * or summary-only compaction joins: one read per expanded row (absent on older hosts —
    * those keep the preview-plus-hint degradation).
    */
   fetchContent?: ContentFetcher
@@ -557,9 +557,19 @@ function NodeContent(props: {
     )
   }
   if (conv.kind === 'compaction') {
-    return typeof conv.summary === 'string' && conv.summary !== ''
-      ? <TextSection label={labels.summary} text={conv.summary} rich={rich} lines={labels.lines} />
-      : <></>
+    return (
+      <>
+        {typeof conv.summary === 'string' && conv.summary !== ''
+          ? <TextSection label={labels.summary} text={conv.summary} rich={rich} lines={labels.lines} />
+          : null}
+        {Array.isArray(conv.content)
+          ? <BlocksBody
+            blocks={conv.content.filter(b => imageRefOf(b) !== null)}
+            richable={false} textLabel={labels.content} rich={rich} img={img} labels={labels}
+          />
+          : props.hint !== null ? <div className="lc-br-note">{props.hint}</div> : null}
+      </>
+    )
   }
   if (Array.isArray(conv.content)) {
     return <BlocksBody blocks={conv.content} richable textLabel={labels.content} rich={rich} img={img} labels={labels} />
@@ -729,20 +739,31 @@ export function makeContextBrowser(
     const openSeq = openElem !== null && openElem.startsWith('n')
       ? Number(openElem.slice(1))
       : null
-    // Fetch-on-miss: one targeted history read per expanded row whose seq the
-    // join missed (fetchOnMiss.tsx; landed values cache by seq — history is
-    // immutable). `failed` arms the retry button; `absent` means the page
-    // came back without the seq — it is not in the durable log.
+    // Harness compaction nodes carry only the summary; checkpoint images
+    // arrive through the same targeted read as an out-of-window message.
+    const openConv = openSeq !== null ? convBySeq.get(openSeq) : undefined
+    const contentMissing = openConv === undefined
+      || (openConv.kind === 'compaction' && !Array.isArray(openConv.content))
     const fetchContent = props.fetchContent
     const miss = useFetchOnMiss(
-      openSeq !== null && !convBySeq.has(openSeq) ? openSeq : null,
+      contentMissing ? openSeq : null,
       fetchContent,
       'dsh-context: targeted history read failed',
     )
     const bySeq = useMemo(() => {
       if (miss.values.size === 0) return convBySeq
       const m = new Map(convBySeq)
-      for (const [seq, n] of miss.values) if (!m.has(seq)) m.set(seq, n)
+      for (const [seq, n] of miss.values) {
+        const joined = m.get(seq)
+        if (joined === undefined) m.set(seq, n)
+        else if (joined.kind === 'compaction' && !Array.isArray(joined.content)) {
+          m.set(seq, {
+            ...joined,
+            content: n.content,
+            summary: typeof joined.summary === 'string' && joined.summary !== '' ? joined.summary : n.summary,
+          })
+        }
+      }
       return m
     }, [convBySeq, miss.values])
     // Pin linkage: a pinned bar selects its step (same accordion reset as a manual pick); unpin returns to live — a manual pick here is
@@ -1231,9 +1252,9 @@ export function makeContextBrowser(
                   </span>
                 ),
               }}
-              // Only the open row's body renders, so the miss note is exactly THIS join's fetch state; a joined-but-empty row keeps the
-              // static hint.
-              hint={conv === undefined ? missNote : t('browser.noContent')}
+              hint={conv?.kind === 'compaction'
+                ? fetchContent !== undefined && !Array.isArray(conv.content) ? missNote : null
+                : conv === undefined ? missNote : t('browser.noContent')}
             />,
             rowErr))}
         </div>

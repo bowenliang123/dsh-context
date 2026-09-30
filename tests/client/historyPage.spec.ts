@@ -153,8 +153,8 @@ describe('pageNodesOf — the durable-page mapper', () => {
       row('user/message', 42, { source: { kind: 'plugin', plugin: 'dsh-compaction', compactionId: 'gone' }, content: [] }),
     ]
     const nodes = pageNodesOf(page)
-    assert.deepEqual(nodes.get(41), { kind: 'compaction', seq: 41, summary: 'the gist' })
-    assert.deepEqual(nodes.get(42), { kind: 'compaction', seq: 42, summary: null }, 'summary outside the page degrades to null')
+    assert.deepEqual(nodes.get(41), { kind: 'compaction', seq: 41, summary: 'the gist', content: [] })
+    assert.deepEqual(nodes.get(42), { kind: 'compaction', seq: 42, summary: null, content: [] }, 'summary outside the page degrades to null')
     // An ordinary plugin injection is NOT a checkpoint — it stays a user node.
     const plain = pageNodesOf([row('user/message', 43, { source: { kind: 'plugin', plugin: 'other' }, content: [] })])
     assert.equal(plain.get(43)?.kind, 'user')
@@ -163,6 +163,23 @@ describe('pageNodesOf — the durable-page mapper', () => {
       pageNodesOf([{ event: { type: 'user/message', seq: 44, data: 'scalar' } }]).get(44),
       { kind: 'user', seq: 44, content: [] },
     )
+  })
+})
+
+describe('compaction checkpoint images', () => {
+  test('retains valid image references without exposing checkpoint text or other blocks', () => {
+    const attachment = { attachmentId: 'archive', name: 'archive.png', width: 1568, height: 1560 }
+    const nodes = pageNodesOf([
+      ev('user/message', 50, {
+        source: { kind: 'plugin', compactionId: 'image-only' },
+        content: [null, 42, { type: 'text', text: '<private envelope>' },
+          { type: 'image', attachment }, { type: 'image', attachment: {} },
+          { type: 'file', attachmentId: 'source' }],
+      }),
+      ev('user/message', 51, { source: { kind: 'plugin', compactionId: 'missing' } }),
+    ])
+    assert.deepEqual(nodes.get(50), { kind: 'compaction', seq: 50, summary: null, content: [{ type: 'image', attachment }] })
+    assert.deepEqual(nodes.get(51), { kind: 'compaction', seq: 51, summary: null, content: [] })
   })
 })
 
