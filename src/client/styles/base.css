@@ -101,8 +101,9 @@
 .lc-events, .lc-fa-list { display: flex; flex-direction: column; gap: 2px; height: 320px; overflow-y: auto; }
 /*
  The row owns the 14px vertical rhythm (lc-cols gap); cards drop their own bottom margin (incl. the last in a column) so every section boundary measures exactly one 14px whichever way the flex wraps.
+ A wrapped row must not stretch a short card onto its taller sibling's height: the donut cards hand the leftover height to `.lc-donut-row` (the column's flex remainder), so the ring drifts into the middle of empty space while its list stays where it was. Each card keeps its own content height instead.
  */
-.lc-cols { display: flex; gap: 14px; flex-wrap: wrap; margin-bottom: 14px; }
+.lc-cols { display: flex; gap: 14px; flex-wrap: wrap; align-items: flex-start; margin-bottom: 14px; }
 .lc-cols > .lc-card { margin-bottom: 0; }
 .lc-col > .lc-card:last-child { margin-bottom: 0; }
 .lc-col-browser { display: flex; flex-direction: column; }
