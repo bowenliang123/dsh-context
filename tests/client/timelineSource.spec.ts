@@ -254,6 +254,65 @@ describe('DetailStore', () => {
     await until(() => store.getSnapshot().detail?.rev === 2, 'the refold reset never refetched')
   })
 
+  for (const outcome of ['detail', 'absent', 'failure'] as const) {
+    for (const timerFired of [false, true]) {
+      test(`a refold ignores an old ${outcome} before a new read (timer fired: ${String(timerFired)})`, async () => {
+        vi.useFakeTimers()
+        let resolve!: (value: ContextTimelineDetail | null) => void
+        let reject!: (reason: Error) => void
+        let calls = 0
+        const first = new Promise<ContextTimelineDetail | null>((res, rej) => {
+          resolve = res
+          reject = rej
+        })
+        const store = new DetailStore(() => {
+          calls++
+          return calls === 1 ? first : Promise.resolve(detail(2))
+        }, 10)
+        store.request(5)
+        await vi.advanceTimersByTimeAsync(10)
+        store.request(2)
+        if (timerFired) await vi.advanceTimersByTimeAsync(10)
+        assert.equal(calls, 1, 'the reset never stacks a concurrent read')
+
+        if (outcome === 'failure') reject(new Error('offline'))
+        else resolve(outcome === 'detail' ? detail(5) : null)
+        await vi.advanceTimersByTimeAsync(0)
+        assert.equal(store.getSnapshot().detail, null, 'old collections must not land under the new head')
+        assert.equal(store.getSnapshot().failed, false, 'old absence or failure must not fail the new generation')
+        assert.equal(store.getSnapshot().pending, true, 'the new generation still needs its read')
+
+        await vi.advanceTimersByTimeAsync(10)
+        assert.equal(calls, 2)
+        assert.equal(store.getSnapshot().detail?.rev, 2)
+        assert.equal(store.getSnapshot().failed, false)
+        assert.equal(store.getSnapshot().pending, false)
+      })
+    }
+  }
+
+  test('several refolds during one read converge to the latest generation', async () => {
+    vi.useFakeTimers()
+    let resolve!: (value: ContextTimelineDetail | null) => void
+    let calls = 0
+    const first = new Promise<ContextTimelineDetail | null>(res => { resolve = res })
+    const store = new DetailStore(() => {
+      calls++
+      return calls === 1 ? first : Promise.resolve(detail(1))
+    }, 10)
+    store.request(5)
+    await vi.advanceTimersByTimeAsync(10)
+    store.request(3)
+    store.request(1)
+    await vi.advanceTimersByTimeAsync(10)
+    resolve(detail(5))
+    await vi.advanceTimersByTimeAsync(0)
+    assert.equal(store.getSnapshot().detail, null)
+    await vi.advanceTimersByTimeAsync(10)
+    assert.equal(calls, 2)
+    assert.equal(store.getSnapshot().detail?.rev, 1)
+  })
+
   test('a transport failure with no detail arms the failed state; the backoff trailing recovers on its own', async () => {
     const { fetcher, calls } = scriptedFetcher([new Error('offline'), detail(1)])
     const store = new DetailStore(fetcher, 20)
@@ -430,6 +489,38 @@ function probeRead(container: HTMLElement, key: string): string {
 }
 
 describe('useTimelineSource', () => {
+  test('a refold never merges the previous generation into the pushed head', async () => {
+    vi.useFakeTimers()
+    const response = (value: ContextTimelineDetail) => ({ ok: true, json: async () => ({ ok: true, value }) })
+    let resolve!: (value: ReturnType<typeof response>) => void
+    let calls = 0
+    const first = new Promise<ReturnType<typeof response>>(res => { resolve = res })
+    vi.stubGlobal('fetch', () => {
+      calls++
+      return calls === 1 ? first : Promise.resolve(response(detail(2)))
+    })
+    const ctx = asClientCtx(new TestClientCtx())
+    const m = await mount(h(SourceProbe, { ctx, sessionId: 's1', value: slimHead(5) }))
+    try {
+      await act(async () => { await vi.advanceTimersByTimeAsync(300) })
+      await m.update(h(SourceProbe, { ctx, sessionId: 's1', value: slimHead(2) }))
+      await act(async () => { await vi.advanceTimersByTimeAsync(300) })
+      await act(async () => {
+        resolve(response(detail(5)))
+        await vi.advanceTimersByTimeAsync(0)
+      })
+      assert.equal(probeRead(m.container, 'rev'), '2')
+      assert.equal(probeRead(m.container, 'state'), 'loading')
+      assert.equal(probeRead(m.container, 'steps'), '0', 'no rows from the discarded generation')
+      await act(async () => { await vi.advanceTimersByTimeAsync(300) })
+      assert.equal(calls, 2)
+      assert.equal(probeRead(m.container, 'state'), 'ready')
+      assert.equal(detailStoreOf(ctx, 's1').getSnapshot().detail?.rev, 2)
+    } finally {
+      await m.unmount()
+    }
+  })
+
   test('the inline generation passes through untouched and never fetches', async () => {
     let calls = 0
     const ctx = ctxWithCall(() => {
@@ -619,4 +710,3 @@ describe('useTimelineSource', () => {
     await m.unmount()
   })
 })
-

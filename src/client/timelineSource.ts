@@ -17,9 +17,9 @@
  * The no-stale-content guarantees: the store is per session and shared by
  * the tab and the modal; a refetch is single-flight with a trailing edge
  * (a rev bumped mid-flight re-reads after settle); responses race-safe by
- * revision (latest wins, with the refold exception — a host that refolded
- * restarts the revision, and a response matching the requested rev is
- * accepted regardless of order); a transport failure keeps the last good
+ * generation and revision (a host refold invalidates reads started before
+ * its revisions restarted, and latest wins within a generation); a
+ * transport failure keeps the last good
  * detail and backs off; an absent answer (the session left the live set)
  * stops the trailing until the head moves again. With no detail at all,
  * failure surfaces as a retryable note on the detail cards instead of an
@@ -134,6 +134,7 @@ export class DetailStore {
   private targetRev = -1
   /** The head rev seen last — a DECREASE means the host refolded (revisions restart). */
   private lastHeadRev = -1
+  private generation = 0
   private failed = false
   private inFlight = false
   private timer: ReturnType<typeof setTimeout> | null = null
@@ -161,6 +162,7 @@ export class DetailStore {
    */
   request(rev: number): void {
     if (rev < this.lastHeadRev) {
+      this.generation++
       this.acceptedRev = -1
       this.wantedRev = -1
       this.detail = null
@@ -206,13 +208,13 @@ export class DetailStore {
     }
     this.inFlight = true
     this.targetRev = this.wantedRev
+    const generation = this.generation
     this.emit()
     try {
       const d = await this.fetcher()
+      if (generation !== this.generation) return
       if (d !== null) {
-        // Latest-wins, with the refold exception: a response matching the
-        // requested rev is the current truth even when its number trails a
-        // pre-refold landing.
+        // Compare revisions only within the generation that started this read.
         if (d.rev >= this.acceptedRev || d.rev === this.targetRev) {
           this.detail = d
           this.acceptedRev = d.rev
@@ -228,14 +230,16 @@ export class DetailStore {
         this.failures++
       }
     } catch {
-      this.failed = this.detail === null
-      this.failures++
+      if (generation === this.generation) {
+        this.failed = this.detail === null
+        this.failures++
+      }
+    } finally {
+      this.inFlight = false
+      // The head moved or refolded while the read settled: trail once more.
+      if (this.wantedRev > this.acceptedRev) this.schedule()
+      this.emit()
     }
-    this.inFlight = false
-    // The head moved while the read settled (or an earlier read lost the
-    // race): trail once more, debounced.
-    if (this.wantedRev > this.acceptedRev) this.schedule()
-    this.emit()
   }
 
   private emit(): void {
