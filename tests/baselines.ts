@@ -295,7 +295,8 @@ export const BASELINES: readonly Baseline[] = [
     // (the fold reads both spellings). The baseline pins `0.1.7-rc.2`, the
     // first release of the line with a complete npm dependency closure; rc.2
     // adds `startsSeries` to the first `request/header` and the
-    // `developer/message` tool-registry events, both inert to the fold.
+    // `developer/message` tool-registry events. startsSeries is inert to the
+    // fold; registry messages contribute to injected context.
     // 0.1.7 enforces plugin dsh-peer compatibility at startup and install
     // (evaluatePluginCompatibility); this plugin's `>=0.1.5-rc.1` dsh peers
     // satisfy every supported line under the gate's includePrerelease check.
@@ -305,7 +306,7 @@ export const BASELINES: readonly Baseline[] = [
     session: '0.1.7-rc.2',
     foldEventTypes: [
       'request/header', 'request/context', 'step/start', 'step/end',
-      'user/message', 'tool/call', 'tool/result', 'assistant/message', 'assistant/attempt',
+      'user/message', 'developer/message', 'tool/call', 'tool/result', 'assistant/message', 'assistant/attempt',
       'tool/ptc-dispatch',
       'plan/mode', 'compaction/summary', 'compaction/prune', 'system/message',
     ],
@@ -410,7 +411,7 @@ export const BASELINES: readonly Baseline[] = [
     session: '0.2.0-rc.2',
     foldEventTypes: [
       'request/header', 'request/context', 'step/start', 'step/end',
-      'user/message', 'tool/call', 'tool/result', 'assistant/message', 'assistant/attempt',
+      'user/message', 'developer/message', 'tool/call', 'tool/result', 'assistant/message', 'assistant/attempt',
       'tool/ptc-dispatch',
       'plan/mode', 'compaction/summary', 'compaction/prune', 'system/message',
     ],

@@ -97,6 +97,10 @@ export interface DriverReport {
   keys: string[]
   gateOk: boolean
   coldMatches: boolean
+  /** V4 tool-registry changes survive the real registry's cache/read paths. */
+  developerTokens: number | null
+  developerRequestTokens: number | null
+  developerRestoreMatches: boolean
   /** Issue #44: hostile gateway usage keeps the served values schema-valid on the REAL registry. */
   hostileSnapshotOk: boolean
   hostilePrompt: number | null
@@ -115,7 +119,7 @@ export interface DriverReport {
  * log through the registry's own snapshot / checkpoint / restore paths, and
  * reports as one JSON line.
  */
-function driverSource(pluginUrl: string): string {
+function driverSource(pluginUrl: string, developerMessages: boolean): string {
   return `
 import { Context } from '@deepseek-ai/cordis'
 import { SessionProjectionRegistry } from './registry/index.ts'
@@ -153,6 +157,39 @@ drive(ctx, session, log)
 const snapshot = registry.snapshot(session)
 const gate = snapshotJsonValue(registry.checkpoint(session))
 const cold = registry.restore({}, log, 0, session.header)
+
+// Tool-registry messages exist only in the supported V4 baselines.
+let developerTokens = null
+let developerRequestTokens = null
+let developerRestoreMatches = false
+if (${developerMessages}) {
+  const ctxC = new Context()
+  const registryC = new SessionProjectionRegistry(ctxC)
+  ctxC.sessionProjections = registryC
+  plugin.apply(ctxC, {})
+  const sessionC = { seq: 0, header: { id: 'registry-change-session', cwd: '/tmp' }, events: [] }
+  ctxC.emit('session/created', sessionC)
+  const registryLog = [
+    ev(0, 'request/header', { header: { tools: [{ name: 'read_file', description: 'read a file', parameters: { type: 'object' } }] }, reason: 'change' }),
+    ev(1, 'user/message', { content: [{ type: 'text', text: 'hello' }] }),
+    ev(2, 'developer/message', { turn: 1, step: 1, headerSeq: 0, message: { role: 'developer', source: { kind: 'tool-registry' }, content: [{ type: 'tool-addition', toolName: 'read_file' }, { type: 'tool-removal', toolName: 'shell' }] } }),
+    ev(3, 'assistant/message', { turn: 1, step: 1, message: { content: [{ type: 'text', text: 'reply' }] } }),
+  ]
+  drive(ctxC, sessionC, registryLog)
+  const values = registryC.snapshot(sessionC).values
+  const node = values.contextTimeline.nodes.find(n => n.seq === 2)
+  developerTokens = node ? node.tokens : null
+  developerRequestTokens = values.contextTimeline.requests[0].inject
+  const rows = snapshotJsonValue(registryC.checkpoint(sessionC))
+  const warm = registryC.restore(rows, registryLog, 0, sessionC.header)
+  // Preserve log offsets while reproducing the old fold's ignored event.
+  const oldLog = registryLog.map(e => e.type === 'developer/message' ? { ...e, type: 'todo/write' } : e)
+  const oldRows = registryC.restore({}, oldLog, 0, sessionC.header).checkpoint
+  oldRows.contextTimeline.ver = 24
+  const rebuilt = registryC.restore(oldRows, registryLog, 0, sessionC.header)
+  developerRestoreMatches = JSON.stringify(warm.snapshot.values) === JSON.stringify(values)
+    && JSON.stringify(rebuilt.snapshot.values) === JSON.stringify(values)
+}
 
 // ---- Probe A (issue #44): hostile provider usage on the REAL registry. ----
 // A mis-accounting gateway's figures (negative uncached input from
@@ -229,6 +266,9 @@ process.stdout.write('DRIVER-JSON ' + JSON.stringify({
   keys: Object.keys(snapshot.values).sort(),
   gateOk: gate !== undefined,
   coldMatches: JSON.stringify(cold.snapshot.values) === JSON.stringify(snapshot.values),
+  developerTokens,
+  developerRequestTokens,
+  developerRestoreMatches,
   hostileSnapshotOk,
   hostilePrompt,
   hostileCacheRead,
@@ -246,7 +286,7 @@ export function runDriver(baseline: Baseline): DriverReport {
   stageFile(baseline, 'packages/session/session-projection/src/types.ts', join('registry', 'types.ts'))
   stageFile(baseline, 'packages/util/values/src/index.ts', join('dsh', 'json-values.ts'))
   const driver = join(STAGE, baseline.id, 'driver.mjs')
-  writeFileSync(driver, driverSource(`file://${join(REPO, 'lib', 'index.js')}`))
+  writeFileSync(driver, driverSource(`file://${join(REPO, 'lib', 'index.js')}`, baseline.foldEventTypes.includes('developer/message')))
   const run = spawnSync(process.execPath, [driver], { cwd: STAGE, encoding: 'utf8', timeout: 60_000 })
   const line = (run.stdout ?? '').split('\n').find(l => l.startsWith('DRIVER-JSON '))
   if (line === undefined) {
@@ -295,14 +335,14 @@ export const ICON_SEAMS = [
 
 /**
  * The event families the host fold switches on (src/host/fold.ts) — the UNION
- * over every supported generation (V3 and V4 carry the same families). The
+ * over every supported generation (developer/message is V4-only). The
  * per-baseline probe asserts the baseline's own `foldEventTypes` subset, and
  * a matrix test asserts this union equals the baselines' union — a fold case
  * added without a baseline list fails loudly instead of going unprobed.
  */
 export const FOLD_EVENT_TYPES = [
   'request/header', 'request/context', 'step/start', 'step/end',
-  'user/message', 'tool/call', 'tool/result', 'assistant/message',
+  'user/message', 'developer/message', 'tool/call', 'tool/result', 'assistant/message',
   'assistant/attempt', 'tool/ptc-dispatch',
   'plan/mode', 'compaction/summary', 'compaction/prune', 'system/message',
 ] as const

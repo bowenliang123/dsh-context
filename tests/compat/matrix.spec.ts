@@ -76,6 +76,14 @@ describe.skipIf(reasons.length > 0)('compat matrix — real dsh sources per base
       assert.equal(report.coldMatches, true)
     })
 
+    if (baseline.foldEventTypes.includes('developer/message')) {
+      test('host: developer messages contribute to requests and survive warm restore and v24 cache rebuild', () => {
+        assert.equal(report.developerTokens, 35)
+        assert.equal(report.developerRequestTokens, 35)
+        assert.equal(report.developerRestoreMatches, true)
+      })
+    }
+
     test('host: hostile gateway usage keeps the served view schema-valid (issue #44)', () => {
       // Negative uncached input (cached_tokens > prompt_tokens), fractional
       // counts, string buckets, and a hostile NaN must all survive the REAL

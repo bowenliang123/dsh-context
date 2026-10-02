@@ -152,7 +152,7 @@ for (const [index, baseline] of BASELINES.entries()) {
       assert.ok(rows !== undefined, 'checkpoint rows are losslessly JSON-serializable')
       for (const key of ['contextTimeline', 'contextHeaders']) {
         const row = rows[key] as { ver: number; seq: number }
-        assert.equal(row.ver, key === 'contextTimeline' ? 24 : 1)
+        assert.equal(row.ver, key === 'contextTimeline' ? 25 : 1)
         assert.equal(row.seq, 12)
       }
       // And the write-gate equivalent on every intermediate state of a fresh fold.
@@ -292,7 +292,7 @@ for (const [index, baseline] of BASELINES.entries()) {
       driver.register(def)
       // Same key at the SAME stateVersion shares the registration (preset ref-counting).
       assert.doesNotThrow(() => driver.register(createContextTimelineDefinition({}, () => false)))
-      assert.throws(() => driver.register({ ...def, stateVersion: 25 }), RegistryViolationError)
+      assert.throws(() => driver.register({ ...def, stateVersion: def.stateVersion + 1 }), RegistryViolationError)
     })
   })
 }

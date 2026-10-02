@@ -349,6 +349,7 @@ export function createTimelineState(): TimelineState {
 function categoryOf(type: string, message: { source?: MessageSource } | undefined): Category {
   if (type === 'assistant/message') return 'assistant'
   if (type === 'tool/result') return 'tool'
+  if (type === 'developer/message') return 'inject'
   // Skill machinery is its own bucket (issue #66): a user-explicit `/name`
   // invocation rides a `skill-invocation` source, the available-skills digest
   // a `skill-catalog` one — both durable user/message injections that the
@@ -482,12 +483,9 @@ interface MessageLike {
 }
 
 /**
- * The message nested under an event payload's `message` field
- * (`system/message`, `assistant/message`, `tool/result`) — read structurally
- * because the fold needs a TOTAL read over untrusted payloads: a malformed
- * message reads null here, never throws or guesses a shape. Purely a type
- * cast: `deriveEventMessage` returns `event.data` for a user/message (no
- * `data.message` indirection), so its result feeds every other case.
+ * A message nested under data.message. A structural read keeps malformed
+ * payloads total and handles developer messages absent from the V3
+ * dependency's deriveEventMessage. User messages instead live in data itself.
  */
 function messageOf(data: Record<string, unknown> | undefined): MessageLike | null {
   const message = data?.message
@@ -537,10 +535,9 @@ function applySurface(
     seq: ev.seq,
     time: ev.time,
     cat,
-    // Empty assistant messages project to no model message (usage-only), so
-    // they price 0 — `deriveEventMessage` returns null for that case, and
-    // `estimateMessage(null, true)` short-circuits before ROLE_OVERHEAD.
-    tokens: estimateMessage(message, type === 'assistant/message'),
+    // Empty assistant/developer messages project to no model message, so
+    // skip content and role framing together.
+    tokens: estimateMessage(message, type === 'assistant/message' || type === 'developer/message'),
   }
   // Image blocks ride the NODE (absent when zero): the stats board's image
   // cell sums the live surface, so a compacted message's images stop counting.
@@ -1090,15 +1087,18 @@ export function applyTimeline(state: TimelineState, event: TimelineEvent, bounds
         bumpDetailRev(s)
         break
       }
-      case 'user/message': {
-      // `deriveEventMessage` is the canonical per-event projection: returns
-      // `event.data` for user/message (no `data.message` indirection).
-        const msg = deriveEventMessage(event as never) as MessageLike | null
+      case 'user/message':
+      case 'developer/message': {
+        // The V3 dependency's deriveEventMessage has no developer case;
+        // supported V4 logs nest that message under data.message.
+        const developer = event.type === 'developer/message'
+        const msg = developer ? messageOf(data) : deriveEventMessage(event as never) as MessageLike | null
+        if (developer && (msg === null || !Array.isArray(msg.content))) return state
         const s = ensure(['surface', 'sums', 'archived', 'events'])
         bumpDetailRev(s)
         const node = applySurface(s, event, event.type, data, msg)
         const source = msg?.source
-        if (isInjection(source)) {
+        if (developer || isInjection(source)) {
           const rec: ContextEventRecord = {
             seq: event.seq,
             time: event.time,
@@ -1107,10 +1107,10 @@ export function applyTimeline(state: TimelineState, event: TimelineEvent, bounds
             // `form`, so a hostile form must degrade to the default instead of
             // failing the record's strict wire/state schemas on every delivery
             // (the permanent per-session freeze, the #44 class).
-            form: typeof source.form === 'string' && source.form !== '' ? source.form : 'context',
+            form: typeof source?.form === 'string' && source.form !== '' ? source.form : 'context',
             tokens: node.tokens,
           }
-          if (source.kind === 'skill-invocation') {
+          if (source?.kind === 'skill-invocation') {
             rec.sub = 'skill'
             rec.name = typeof source.name === 'string' ? source.name : '?'
           } else {
@@ -1123,7 +1123,7 @@ export function applyTimeline(state: TimelineState, event: TimelineEvent, bounds
               node.name = label
             }
             // A notice carries the producer's bounded one-line account; show it after the source name, as the dsh transcript row does.
-            if (source.form === 'notice' && typeof source.summary === 'string' && source.summary !== '') {
+            if (source?.form === 'notice' && typeof source.summary === 'string' && source.summary !== '') {
               rec.detail = source.summary
             }
           }

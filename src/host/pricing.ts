@@ -81,8 +81,8 @@ function estimateBlocks(blocks: unknown): number {
 
 /**
  * Price one surface message exactly like dsh's token-meter estimate:
- * an empty-content assistant/message projects to NO message (it only hosts
- * usage), so it prices 0; every other message pays content + role framing.
+ * an empty-content assistant/developer event projects to NO message, so it
+ * prices 0; every other message pays content + role framing.
  */
 export function estimateMessage(message: { content?: ContentBlock[] } | undefined | null, emptyIsZero = false): number {
   if (emptyIsZero && (message === null || message === undefined

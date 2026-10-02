@@ -444,7 +444,11 @@ export function createContextTimelineDefinition(config: Config, slim: () => bool
     // under 23 charged the marker-tiled decode window to BOTH the wait and
     // the generation split, so their legend rows sum past 100% and cannot
     // be re-split by later events; cached rows refold from the log.
-    stateVersion: 24,
+    //
+    // 25: developer/message tool-registry changes now enter the injection
+    // surface and request history. Later events cannot recover the omitted
+    // nodes or tokens, so cached rows refold from the durable log.
+    stateVersion: 25,
   }
   return definition
 }
