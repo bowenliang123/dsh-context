@@ -34,8 +34,9 @@ import {
 } from './pricing'
 import type { ContentBlock, MessageSource } from './pricing'
 import { deriveEventMessage } from '@deepseek-ai/dsh-session'
-import { decodeSpansOfStream, decodeTallyOfStream, firstTokenTimeOfStream, replaceRangeOf } from './logShapes'
+import { decodeSpansOfStream, decodeTallyOfStream, firstTokenTimeOfStream, replaceRangeOf, usageOfSettlement } from './logShapes'
 import type { DecodeKind } from './logShapes'
+import { billingSample, negateUsage, sameAttempt, type BilledSample } from './usage'
 import { opBearingTool, opsOfCall, parseCallArgs, rawArgsNeeded } from '../shared/fileOps'
 
 /**
@@ -66,6 +67,7 @@ export interface TimelineEvent {
  */
 
 export interface TimelineState {
+  lastUsage?: BilledSample
   /** Model-visible surface, newest last. */
   surface: SurfaceNode[]
   sums: Record<Category, number>
@@ -712,6 +714,24 @@ export function tokenCountOf(value: unknown): number | null {
 }
 
 /**
+ * One durable usage object's billed buckets, or null when NO bucket is
+ * readable (the same rule the timeline fold bills by: a settlement that
+ * carried no usage still counts its request without fabricating tokens).
+ * Every bucket passes the shared per-bucket sanitizer ({@link tokenCountOf}
+ * — fractions round, negatives clamp, garbage reads absent).
+ */
+export function billedUsageOf(value: unknown): BilledUsage | null {
+  if (value === null || typeof value !== 'object') return null
+  const usage = value as UsageLike
+  const input = tokenCountOf(usage.inputTokens)
+  const cacheRead = tokenCountOf(usage.cacheReadTokens)
+  const cacheWrite = tokenCountOf(usage.cacheWriteTokens)
+  const output = tokenCountOf(usage.outputTokens)
+  if (input === null && cacheRead === null && cacheWrite === null && output === null) return null
+  return { input: input ?? 0, cacheRead: cacheRead ?? 0, cacheWrite: cacheWrite ?? 0, output: output ?? 0 }
+}
+
+/**
  * DeepSeek's peak windows (the official list: UTC 01:00–04:00 and 06:00–10:00,
  * Monday through Friday — Beijing Time 09:00–12:00 and 14:00–18:00). All other
  * hours, plus entire weekends, bill at the half-price off-peak rate.
@@ -742,10 +762,10 @@ export function isPeakUtc(time: number): boolean {
  * (peak windows at list price, all other hours half price); every other
  * provider books everything under the list-price period.
  */
-function accumulateCost(st: TimelineState, time: number, usage: BilledUsage): void {
-  const model = st.model
+function accumulateCost(st: TimelineState, time: number, usage: BilledUsage, route: Pick<TimelineState, 'model' | 'provider'> = st): void {
+  const model = route.model
   if (model === undefined) return
-  const provider = st.provider ?? ''
+  const provider = route.provider ?? ''
   const period = isDeepSeekProvider(provider) && !isPeakUtc(time) ? 'off' : 'peak'
   const models = st.cost?.[provider] ?? {}
   const periods = models[model] ?? {}
@@ -759,6 +779,18 @@ function accumulateCost(st: TimelineState, time: number, usage: BilledUsage): vo
   }
   const nextModels: Record<string, CostModelUsage> = { ...models, [model]: nextPeriods }
   st.cost = { ...(st.cost ?? {}), [provider]: nextModels }
+}
+
+/** Replace a sample within an attempt; retry-started makes the next one additive. */
+function bookUsage(st: TimelineState, event: TimelineEvent, usage: BilledUsage): void {
+  const previous = st.lastUsage
+  if (previous !== undefined && sameAttempt(previous, event.data)) {
+    accumulateCost(st, previous.time, negateUsage(previous.buckets), previous)
+  }
+  accumulateCost(st, event.time, usage)
+  const sample = billingSample(event.data, event.time, usage, st.provider ?? '', st.model)
+  if (sample !== undefined) st.lastUsage = sample
+  else delete st.lastUsage
 }
 
 /**
@@ -1019,16 +1051,24 @@ export function applyTimeline(state: TimelineState, event: TimelineEvent, bounds
         }
         break
       }
+      case 'llm/retry-started': {
+        if (!sameAttempt(state.lastUsage, data)) return state
+        const s = ensure([])
+        delete s.lastUsage
+        break
+      }
       case 'assistant/attempt': {
-      // One model attempt that committed no surface message. Its embedded
-      // stream still carries the attempt's first token, which the harness's own
-      // sessionStats fold stamps on the open step the same way — an in-step
-      // retry therefore keeps its real TTFT instead of falling into the card's
-      // residue.
+        const buckets = billedUsageOf(usageOfSettlement(event.type, data))
+        if (buckets !== null) bookUsage(ensure([]), event, buckets)
+        // One model attempt that committed no surface message. Its embedded
+        // stream still carries the attempt's first token, which the harness's own
+        // sessionStats fold stamps on the open step the same way — an in-step
+        // retry therefore keeps its real TTFT instead of falling into the card's
+        // residue.
         const start = state.stepStart
-        if (start === undefined || start.firstToken !== undefined) return state
+        if (start === undefined || start.firstToken !== undefined) break
         const first = firstTokenTimeOfStream(data?.stream)
-        if (first === undefined) return state
+        if (first === undefined) break
         const s = ensure([])
         s.stepStart = { time: start.time, firstToken: first }
         break
@@ -1222,7 +1262,7 @@ export function applyTimeline(state: TimelineState, event: TimelineEvent, bounds
       case 'assistant/message': {
       // Snapshot the request exactly as dispatched: current surface + header,
       // before this response joins the surface.
-        const usage = data?.usage as UsageLike | null | undefined
+        const usage = usageOfSettlement(event.type, data) as UsageLike | null | undefined
         const s = ensure(['surface', 'sums', 'archived', 'events', 'requests', 'timing'])
         bumpDetailRev(s)
         const total = s.systemTokens + s.toolsTokens + s.sums.user + s.sums.inject + s.sums.skill + s.sums.assistant + s.sums.tool
@@ -1269,7 +1309,7 @@ export function applyTimeline(state: TimelineState, event: TimelineEvent, bounds
             // keep the cache-served half of `prompt`; absent = no cache bucket.
             if (cacheRead !== null) record.cacheRead = cacheRead
             if (output !== null) record.output = output
-            accumulateCost(s, event.time, {
+            bookUsage(s, event, {
               input: input ?? 0,
               cacheRead: cacheRead ?? 0,
               cacheWrite: cacheWrite ?? 0,
@@ -1372,6 +1412,7 @@ export function applyTimeline(state: TimelineState, event: TimelineEvent, bounds
         if (data?.inherited !== true) break
         const s = ensure([])
         s.cost = {}
+        delete s.lastUsage
         break
       }
       case 'plan/mode': {

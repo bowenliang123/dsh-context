@@ -152,7 +152,7 @@ for (const [index, baseline] of BASELINES.entries()) {
       assert.ok(rows !== undefined, 'checkpoint rows are losslessly JSON-serializable')
       for (const key of ['contextTimeline', 'contextHeaders']) {
         const row = rows[key] as { ver: number; seq: number }
-        assert.equal(row.ver, key === 'contextTimeline' ? 25 : 1)
+        assert.equal(row.ver, key === 'contextTimeline' ? 26 : 1)
         assert.equal(row.seq, 12)
       }
       // And the write-gate equivalent on every intermediate state of a fresh fold.

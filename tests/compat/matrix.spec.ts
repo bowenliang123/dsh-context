@@ -20,6 +20,7 @@ import assert from 'node:assert/strict'
 import { beforeAll, describe, test } from 'vitest'
 import { BASELINES } from '../baselines'
 import * as staging from './staging'
+import { assertUsageParity } from './usageParity'
 
 const reasons = staging.skipReasons()
 if (reasons.length > 0) {
@@ -59,6 +60,10 @@ describe.skipIf(reasons.length > 0)('compat matrix — real dsh sources per base
     beforeAll(() => {
       report = staging.runDriver(baseline)
     }, 60_000)
+
+    test('host: billed usage matches the tag\'s tokenUsage fold before and after checkpoint restore', async () => {
+      await assertUsageParity(baseline)
+    })
 
     test('host: the plugin applies into the tag\'s real registry', () => {
       assert.equal(report.registered, true)

@@ -7,7 +7,7 @@
 
 import assert from 'node:assert/strict'
 import { describe, test } from 'vitest'
-import { decodeKindOfBlock, decodeSpansOfStream, decodeTallyOfStream, firstTokenTimeOfStream, isTokenChunk, replaceRangeOf } from '../../src/host/logShapes'
+import { decodeKindOfBlock, decodeSpansOfStream, decodeTallyOfStream, firstTokenTimeOfStream, isTokenChunk, replaceRangeOf, usageOfSettlement } from '../../src/host/logShapes'
 
 describe('decodeKindOfBlock', () => {
   test('maps the three block kinds the harness emits', () => {
@@ -254,5 +254,25 @@ describe('replaceRangeOf', () => {
     assert.equal(replaceRangeOf({ op: 'replace', startSeq: Number.NaN, endSeq: 2 }), null)
     assert.equal(replaceRangeOf({ op: 'replace', startSeq: '1', endSeq: 2 }), null)
     assert.equal(replaceRangeOf({ op: 'replace', endSeq: 2 }), null)
+  })
+})
+
+describe('usageOfSettlement', () => {
+  test('malformed streams and non-usage chunks read as absent', () => {
+    assert.equal(usageOfSettlement('assistant/attempt', undefined), undefined)
+    assert.equal(usageOfSettlement('assistant/message', { stream: {} }), undefined)
+    assert.equal(usageOfSettlement('assistant/attempt', { stream: [
+      null, undefined, 7, {}, { type: 'other' }, { type: 'chunk', chunk: null },
+      { type: 'chunk' }, { type: 'chunk', chunk: 9 }, { type: 'chunk', chunk: { type: 'text' } },
+    ] }), undefined)
+  })
+  test('the last usage record survives trailing stream metadata', () => {
+    const first = { inputTokens: 1 }
+    const last = { inputTokens: 2 }
+    assert.equal(usageOfSettlement('assistant/attempt', { stream: [
+      { type: 'chunk', chunk: { type: 'usage', usage: first } },
+      { type: 'chunk', chunk: { type: 'usage', usage: last } },
+      { type: 'chunk', chunk: { type: 'end' } },
+    ] }), last)
   })
 })

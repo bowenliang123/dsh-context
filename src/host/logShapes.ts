@@ -202,3 +202,16 @@ export function replaceRangeOf(surfaceOp: unknown): { start: number; end: number
   if (typeof end !== 'number' || !Number.isFinite(end)) return null
   return { start, end }
 }
+
+/** The newest usage chunk, with a message's top-level sample taking precedence. */
+export function usageOfSettlement(type: string, data: Record<string, unknown> | undefined): unknown {
+  if (type === 'assistant/message' && data?.usage !== undefined) return data.usage
+  const stream = data?.stream
+  if (!Array.isArray(stream)) return undefined
+  for (let i = stream.length - 1; i >= 0; i--) {
+    const record = stream[i] as { type?: unknown; chunk?: { type?: unknown; usage?: unknown } | null } | null
+    if (record !== null && typeof record === 'object' && record.type === 'chunk'
+      && record.chunk !== null && typeof record.chunk === 'object' && record.chunk.type === 'usage') return record.chunk.usage
+  }
+  return undefined
+}
