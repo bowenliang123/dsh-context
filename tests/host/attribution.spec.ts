@@ -6,7 +6,7 @@ import assert from 'node:assert/strict'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { describe, test } from 'vitest'
-import { Context } from '@deepseek-ai/cordis'
+import { Context, Service } from '@deepseek-ai/cordis'
 import { UNKNOWN_TOOL_SOURCE } from '../../src/shared/types'
 import { callerPackageFrom, createToolAttribution, packageNameFrom, type ToolAttribution } from '../../src/host/attribution'
 
@@ -15,6 +15,24 @@ const fileUrl = (file: string) => 'file:///' + file.replace(/\\/g, '/')
 
 /** Absolute path of this spec file (a file inside the dsh-context package). */
 const specFile = path.normalize(fileURLToPath(import.meta.url))
+
+/** Symbol cordis registers on its traced proxies (`Symbol.for`, shared
+ * registry); reading it yields the wrapped underlying service instance. */
+const CORDIS_ORIGINAL = Symbol.for('cordis.original')
+
+/**
+ * A tracked tools service shaped like dsh's ToolRuntime: a real Service
+ * subclass whose `register` is a PROTOTYPE method — the shape that makes
+ * cordis hand out a fresh traced proxy (closing over the reader's context)
+ * on every `ctx.tools` property read.
+ */
+class TrackedTools extends Service {
+  layers = { global: { tools: new Map() } }
+  constructor(ctx: Context) { super(ctx, 'tools') }
+  register(_definition?: { name?: unknown }) {
+    return () => {}
+  }
+}
 
 describe('createToolAttribution', () => {
   test('falls back to the static chain when nothing was registered at runtime', () => {
@@ -274,6 +292,42 @@ describe('createToolAttribution', () => {
     })
     assert.equal(calls, 1, 'the original register ran once, through one wrapper only')
     assert.equal(attribution.ownerOf('reloaded_tool'), 'provider-d', 'the re-applied hook records the registration')
+  })
+
+  test('a tracked service is wrapped once on its stable identity and restored on unload', async () => {
+    const app = new Context()
+    const tools = new TrackedTools(app)
+    const original = tools.register
+    let attribution!: ToolAttribution
+    const fiber = app.plugin({
+      name: 'dsh-context',
+      apply(sub) {
+        attribution = createToolAttribution(sub)
+      },
+    })
+    await fiber
+    assert.notEqual(tools.register, original, 'the hook wrapped the tracked instance at apply')
+    const wrappedOnce = tools.register
+    await app.plugin({
+      name: 'agent-scope',
+      apply(sub) {
+        // Tracked services yield a FRESH traced proxy per property read, both
+        // peeling to the same underlying instance (issue #108's premise).
+        const first = (sub as unknown as { tools: TrackedTools & Record<symbol, unknown> }).tools
+        const second = (sub as unknown as { tools: TrackedTools & Record<symbol, unknown> }).tools
+        assert.notEqual(first, second, 'cordis hands out a fresh traced proxy per read')
+        assert.equal(first[CORDIS_ORIGINAL], tools, 'the proxy peels to the underlying service')
+        assert.equal(second[CORDIS_ORIGINAL], tools)
+        assert.equal(tools.register, wrappedOnce, 'repeated reads never re-wrap the stable instance')
+        first.register({ name: 'scoped_tool' })
+      },
+    })
+    assert.equal(attribution.ownerOf('scoped_tool'), 'agent-scope', 'the hook still attributes scoped registrations')
+    await fiber.dispose()
+    assert.equal(tools.register, original, 'unload restored the prototype register of the tracked service')
+    const orphan = tools.register({ name: 'orphan_tool' })
+    assert.equal(attribution.ownerOf('orphan_tool'), undefined, 'no dead-hook recording after unload')
+    orphan()
   })
 
   test('tags boot-time tools whose providers predate the hook as unknown', () => {

@@ -18,8 +18,11 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
-      # Reads the pinned pnpm version from `packageManager` in package.json.
+      # No `packageManager` field in this plugin's package.json — pin the
+      # version here, as release.yml does.
       - uses: pnpm/action-setup@v6
+        with:
+          version: latest
 
       - uses: actions/setup-node@v7
         with:

@@ -12,12 +12,15 @@
  * first argument, so `reader.fiber.name` identifies the plugin that is about
  * to call `register()`.
  *
- * - The `internal/get` handler records who last read the `tools` service and
- *   wraps that instance's `register` (once — an earlier wrapper of a previous
- *   hook incarnation is peeled back to the original, so a plugin reload
- *   re-wraps without stacking) to capture the reader at registration time
- *   into a live map. Every wrapper is undone when the plugin unloads: the
- *   original `register` goes back on the instance, unless a newer hook
+ * - The `internal/get` handler records the reading fiber's NAME — a scalar,
+ *   never the reader context, which would pin the caller's whole agent — and
+ *   wraps the tools service's `register` (once per underlying instance —
+ *   cordis hands out a fresh traced proxy per read of a tracked service, so
+ *   the proxy is peeled to the stable instance first; an earlier wrapper of a
+ *   previous hook incarnation is peeled back to the original, so a plugin
+ *   reload re-wraps without stacking) to capture the reader at registration
+ *   time into a live map. Every wrapper is undone when the plugin unloads:
+ *   the original `register` goes back on the instance, unless a newer hook
  *   incarnation re-wrapped it first (that incarnation's own cleanup then
  *   owns the restore).
  * - When the reader slot is missing, root-named, or this plugin's own (e.g.
@@ -100,6 +103,23 @@ export function packageNameFrom(file: string): string | undefined {
 
 const FRAME_POSITION = /:\d+:\d+$/
 
+/** Symbol cordis registers (`Symbol.for`) on its traced proxies: reading it
+ * yields the wrapped target — the stable underlying service instance. */
+const CORDIS_ORIGINAL = Symbol.for('cordis.original')
+
+/**
+ * Peel cordis's per-read traced proxy of a tracked service (dsh's ToolRuntime
+ * is one — every `ctx.tools` read returns a fresh proxy closing over the
+ * reader's context) down to the instance it wraps, so identity-keyed
+ * bookkeeping sees one stable object. Plain service objects pass through
+ * unchanged.
+ * @param tools - the value as handed out by a context read.
+ */
+function rawInstanceOf(tools: unknown): unknown {
+  const raw = (tools as { [key: symbol]: unknown } | undefined | null)?.[CORDIS_ORIGINAL]
+  return raw ?? tools
+}
+
 /** Package name of this module's own package (self-fallbacks are filtered). */
 const selfPackage = packageNameFrom(selfUrl)
 
@@ -167,7 +187,10 @@ export function createToolAttribution(ctx: Context): ToolAttribution {
   const live = new Map<string, string>()
   const wrapped = new WeakSet()
   const self = ctx.fiber.name
-  let lastReader: Context | undefined
+  // The last reader's fiber NAME — a scalar, never the reader context itself:
+  // the hook outlives every caller, and a retained context would pin its
+  // whole agent (scope tag → agent → session log) past disposal.
+  let lastReader: string | undefined
   // Restore closures for every instance this incarnation patched, run by the
   // unload effect below.
   const patched: (() => void)[] = []
@@ -185,7 +208,7 @@ export function createToolAttribution(ctx: Context): ToolAttribution {
     const instance = tools as { register: (this: unknown, definition?: { name?: unknown }) => unknown }
     const wrappedRegister = function (this: unknown, definition?: { name?: unknown }) {
       const toolName = definition?.name
-      let owner = lastReader?.fiber.name
+      let owner = lastReader
       if (!owner || owner === 'root' || owner === self) {
         owner = callerPackageFrom(new Error().stack)
       }
@@ -214,8 +237,11 @@ export function createToolAttribution(ctx: Context): ToolAttribution {
   ctx.on('internal/get', (reader, name, _error, next) => {
     if (name !== 'tools') return next() as unknown
     const tools = next() as unknown
-    lastReader = reader
-    wrapInstance(tools)
+    // Patch the stable underlying instance, not the per-read proxy — but
+    // return the caller's own proxy: its this-binding carries the scoped
+    // registration semantics of the reading context.
+    lastReader = reader.fiber.name
+    wrapInstance(rawInstanceOf(tools))
     return tools
   })
 
@@ -234,7 +260,7 @@ export function createToolAttribution(ctx: Context): ToolAttribution {
   // bundles that applied first — e.g. local links like dsh-file-claim), so
   // their provider is unknowable; the boot snapshot lets ownerOf tag them
   // with UNKNOWN_TOOL_SOURCE instead of silently showing nothing.
-  const toolsService = ctx.get('tools', false) as ToolServiceLike | undefined
+  const toolsService = rawInstanceOf(ctx.get('tools', false)) as ToolServiceLike | undefined
   wrapInstance(toolsService)
   const boot = new Set<string>()
   try {
