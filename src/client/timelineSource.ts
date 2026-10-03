@@ -149,7 +149,18 @@ export class DetailStore {
 
   readonly subscribe = (fn: () => void): (() => void) => {
     this.listeners.add(fn)
-    return () => this.listeners.delete(fn)
+    if (this.listeners.size === 1) {
+      this.failures = 0
+      if (this.wantedRev > this.acceptedRev) this.schedule()
+    }
+    return () => {
+      this.listeners.delete(fn)
+      if (this.listeners.size === 0 && this.timer !== null) {
+        clearTimeout(this.timer)
+        this.timer = null
+        this.emit()
+      }
+    }
   }
 
   readonly getSnapshot = (): DetailSnap => this.snap
@@ -185,8 +196,19 @@ export class DetailStore {
     if (!this.inFlight) void this.fire()
   }
 
+  /** Cancel cached work and discard reads belonging to this store. */
+  dispose(): void {
+    this.generation++
+    this.listeners.clear()
+    if (this.timer !== null) {
+      clearTimeout(this.timer)
+      this.timer = null
+    }
+    this.emit()
+  }
+
   private schedule(): void {
-    if (this.timer !== null) return
+    if (this.listeners.size === 0 || this.timer !== null) return
     this.timer = setTimeout(() => {
       this.timer = null
       void this.fire()
@@ -265,6 +287,7 @@ export function detailStoreOf(ctx: ClientCtx, sessionId: string): DetailStore {
 
 /** Test isolation: drop every cached store. */
 export function resetTimelineDetailStores(): void {
+  for (const store of stores.values()) store.dispose()
   stores.clear()
 }
 
