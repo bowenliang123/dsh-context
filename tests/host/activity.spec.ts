@@ -7,6 +7,8 @@ import { describe, test } from 'vitest'
 import type { SessionEvent } from '@deepseek-ai/dsh-session'
 import { applyActivity, contextActivitySchema, createContextActivityDefinition } from '../../src/host/activity'
 import { isPeakUtc } from '../../src/host/fold'
+import { driveTimeline } from './helpers/projection'
+import { header, stepStart as timelineStepStart, assistantMessage as timelineMessage } from './helpers/events'
 import { dayKeyOf } from '../../src/shared/days'
 
 /** Local noon of a day offset from 2026-01-01 — deterministic in every timezone. */
@@ -27,7 +29,7 @@ describe('contextActivity unit: shape', () => {
   test('the definition carries the contract fields', () => {
     const def = createContextActivityDefinition()
     assert.equal(def.key, 'contextActivity')
-    assert.equal(def.stateVersion, 3, 'the seed-boundary ledger reset is the third shape')
+    assert.equal(def.stateVersion, 4, 'historical pricing periods rebuild on upgrade')
     assert.deepEqual(def.init(), { days: {} })
   })
 
@@ -358,4 +360,21 @@ describe('contextActivity unit: the schemas over the pricing record', () => {
     assert.equal(def.wire.viewSchema.safeParse(bad).success, false)
     assert.equal(contextActivitySchema.safeParse(bad).success, false)
   })
+})
+
+describe('activity and timeline cost parity', () => {
+  for (const [start, end] of [['00:59','01:01'], ['03:59','04:01'], ['05:59','06:01'], ['09:59','10:01']]) {
+    test(`a step crossing ${start}→${end} keeps the same pricing period in both units`, () => {
+      const from = Date.parse(`2026-01-05T${start}:00Z`)
+      const to = Date.parse(`2026-01-05T${end}:00Z`)
+      const events = [
+        header(1, { provider: 'deepseek-official', model: 'deepseek-v4-pro', time: from }),
+        timelineStepStart(2, { time: from }),
+        timelineMessage(3, { time: to, usage: { inputTokens: 100, cacheReadTokens: 20, outputTokens: 10 } }),
+      ]
+      const timeline = driveTimeline(events).state
+      const activity = events.reduce((st, ev) => applyActivity(st, ev as never), createContextActivityDefinition().init())
+      assert.deepEqual(activity.days[dayKeyOf(from)!].cost, timeline.cost)
+    })
+  }
 })

@@ -343,7 +343,7 @@ export const ICON_SEAMS = [
 export const FOLD_EVENT_TYPES = [
   'request/header', 'request/context', 'step/start', 'step/end',
   'user/message', 'developer/message', 'tool/call', 'tool/result', 'assistant/message',
-  'assistant/attempt', 'tool/ptc-dispatch',
+  'assistant/attempt', 'llm/retry-started', 'tool/ptc-dispatch',
   'plan/mode', 'compaction/summary', 'compaction/prune', 'system/message',
 ] as const
 

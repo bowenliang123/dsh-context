@@ -207,7 +207,7 @@ export const BASELINES: readonly Baseline[] = [
     foldEventTypes: [
       'request/header', 'request/context', 'step/start', 'step/end',
       'user/message', 'tool/call', 'tool/result', 'assistant/message', 'assistant/attempt',
-      'tool/ptc-dispatch',
+      'llm/retry-started', 'tool/ptc-dispatch',
       'plan/mode', 'compaction/summary', 'compaction/prune', 'system/message',
     ],
     client: {
@@ -307,7 +307,7 @@ export const BASELINES: readonly Baseline[] = [
     foldEventTypes: [
       'request/header', 'request/context', 'step/start', 'step/end',
       'user/message', 'developer/message', 'tool/call', 'tool/result', 'assistant/message', 'assistant/attempt',
-      'tool/ptc-dispatch',
+      'llm/retry-started', 'tool/ptc-dispatch',
       'plan/mode', 'compaction/summary', 'compaction/prune', 'system/message',
     ],
     client: {
@@ -412,7 +412,7 @@ export const BASELINES: readonly Baseline[] = [
     foldEventTypes: [
       'request/header', 'request/context', 'step/start', 'step/end',
       'user/message', 'developer/message', 'tool/call', 'tool/result', 'assistant/message', 'assistant/attempt',
-      'tool/ptc-dispatch',
+      'llm/retry-started', 'tool/ptc-dispatch',
       'plan/mode', 'compaction/summary', 'compaction/prune', 'system/message',
     ],
     client: {

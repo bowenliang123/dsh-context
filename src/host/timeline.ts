@@ -18,6 +18,7 @@
  */
 
 import { z } from 'zod'
+import { billedSampleSchema } from './usage'
 import type { SessionEvent } from '@deepseek-ai/dsh-session'
 import type { Config } from './config'
 import { resolveBounds } from './config'
@@ -260,6 +261,7 @@ const timelineStateSchema = z.object({
   events: z.array(contextEventSchema),
   archived: z.array(surfaceNodeSchema),
   cost: costUsageSchema.optional(),
+  lastUsage: billedSampleSchema.optional(),
   archiveFloor: z.number().optional(),
   timing: timingTotalsSchema.optional(),
   humanInputs: z.number().int().nonnegative().optional(),
@@ -448,7 +450,9 @@ export function createContextTimelineDefinition(config: Config, slim: () => bool
     // 25: developer/message tool-registry changes now enter the injection
     // surface and request history. Later events cannot recover the omitted
     // nodes or tokens, so cached rows refold from the durable log.
-    stateVersion: 25,
+    // 26: stream-only and failed-attempt usage joins the billed totals;
+    // retry-started closes the sample replacement slot. Rebuild cached rows.
+    stateVersion: 26,
   }
   return definition
 }
