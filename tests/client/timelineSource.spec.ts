@@ -168,6 +168,12 @@ describe('makeDetailFetcher', () => {
 })
 
 describe('DetailStore', () => {
+  function activeStore(...args: ConstructorParameters<typeof DetailStore>): DetailStore {
+    const store = new DetailStore(...args)
+    store.subscribe(() => {})
+    return store
+  }
+
   /** A fetcher with a call log and a programmable queue of outcomes. */
   function scriptedFetcher(outcomes: (ContextTimelineDetail | null | Error)[]): { fetcher: () => Promise<ContextTimelineDetail | null>; calls: number[] } {
     const calls: number[] = []
@@ -188,7 +194,7 @@ describe('DetailStore', () => {
 
   test('request schedules the trailing-edge read; the snapshot transitions pending → landed', async () => {
     const { fetcher, calls } = scriptedFetcher([detail(1)])
-    const store = new DetailStore(fetcher, 0)
+    const store = activeStore(fetcher, 0)
     const seen: string[] = []
     store.subscribe(() => seen.push('change'))
     assert.equal(store.getSnapshot().pending, false)
@@ -221,7 +227,7 @@ describe('DetailStore', () => {
     let gate!: () => void
     const first = new Promise<ContextTimelineDetail | null>(resolve => { gate = () => resolve(detail(1)) })
     let call = 0
-    const store = new DetailStore(() => {
+    const store = activeStore(() => {
       call++
       return call === 1 ? first : Promise.resolve(detail(2))
     }, 0)
@@ -235,7 +241,7 @@ describe('DetailStore', () => {
 
   test('latest-wins: a stale response (behind the served rev, off-target) drops; the trail re-reads', async () => {
     const { fetcher, calls } = scriptedFetcher([detail(3), detail(2), detail(4)])
-    const store = new DetailStore(fetcher, 0)
+    const store = activeStore(fetcher, 0)
     store.request(3)
     await settle()
     assert.equal(store.getSnapshot().detail?.rev, 3)
@@ -246,7 +252,7 @@ describe('DetailStore', () => {
 
   test('a rev DECREASE means the host refolded: the ledger resets and refetches', async () => {
     const { fetcher } = scriptedFetcher([detail(5), detail(2)])
-    const store = new DetailStore(fetcher, 0)
+    const store = activeStore(fetcher, 0)
     store.request(5)
     await settle()
     assert.equal(store.getSnapshot().detail?.rev, 5)
@@ -265,7 +271,7 @@ describe('DetailStore', () => {
           resolve = res
           reject = rej
         })
-        const store = new DetailStore(() => {
+        const store = activeStore(() => {
           calls++
           return calls === 1 ? first : Promise.resolve(detail(2))
         }, 10)
@@ -296,7 +302,7 @@ describe('DetailStore', () => {
     let resolve!: (value: ContextTimelineDetail | null) => void
     let calls = 0
     const first = new Promise<ContextTimelineDetail | null>(res => { resolve = res })
-    const store = new DetailStore(() => {
+    const store = activeStore(() => {
       calls++
       return calls === 1 ? first : Promise.resolve(detail(1))
     }, 10)
@@ -315,7 +321,7 @@ describe('DetailStore', () => {
 
   test('a transport failure with no detail arms the failed state; the backoff trailing recovers on its own', async () => {
     const { fetcher, calls } = scriptedFetcher([new Error('offline'), detail(1)])
-    const store = new DetailStore(fetcher, 20)
+    const store = activeStore(fetcher, 20)
     store.request(1)
     await until(() => store.getSnapshot().failed === true, 'the failure never surfaced')
     assert.equal(store.getSnapshot().detail, null)
@@ -327,7 +333,7 @@ describe('DetailStore', () => {
 
   test('a transport failure WITH detail keeps the served value (no flicker to failed), then recovers', async () => {
     const { fetcher, calls } = scriptedFetcher([detail(1), new Error('offline'), detail(2)])
-    const store = new DetailStore(fetcher, 0)
+    const store = activeStore(fetcher, 0)
     store.request(1)
     await until(() => store.getSnapshot().detail?.rev === 1, 'the first read never landed')
     store.request(2)
@@ -340,7 +346,7 @@ describe('DetailStore', () => {
 
   test('an absent answer stops the trailing; a fresh rev asks again', async () => {
     const { fetcher, calls } = scriptedFetcher([null, detail(2)])
-    const store = new DetailStore(fetcher, 0)
+    const store = activeStore(fetcher, 0)
     store.request(1)
     await settle()
     assert.equal(store.getSnapshot().failed, true, 'absent with nothing to show arms the note')
@@ -354,7 +360,7 @@ describe('DetailStore', () => {
   test('retry with no armed timer refires directly (the stopped-trailing shape)', async () => {
     // Absence stops the trailing timer; the manual retry must not wait on one.
     const { fetcher, calls } = scriptedFetcher([null, detail(1)])
-    const store = new DetailStore(fetcher, 0)
+    const store = activeStore(fetcher, 0)
     store.request(1)
     await until(() => store.getSnapshot().failed === true, 'the absent read never settled')
     assert.equal(calls.length, 1)
@@ -366,7 +372,7 @@ describe('DetailStore', () => {
   test('retry during an in-flight read does not stack a second call', async () => {
     let release!: (d: ContextTimelineDetail | null) => void
     let started = false
-    const store = new DetailStore(() => {
+    const store = activeStore(() => {
       started = true
       return new Promise<ContextTimelineDetail | null>(resolve => { release = resolve })
     }, 0)
@@ -380,7 +386,7 @@ describe('DetailStore', () => {
 
   test('absence with a served detail keeps it and stays silent', async () => {
     const { fetcher } = scriptedFetcher([detail(1), null])
-    const store = new DetailStore(fetcher, 0)
+    const store = activeStore(fetcher, 0)
     store.request(1)
     await settle()
     store.request(2)
@@ -390,7 +396,7 @@ describe('DetailStore', () => {
   })
 
   test('without a fetcher the store types the failure (the empty-session-id path)', async () => {
-    const store = new DetailStore(undefined, 0)
+    const store = activeStore(undefined, 0)
     store.request(1)
     await settle()
     assert.equal(store.getSnapshot().failed, true)
@@ -399,7 +405,7 @@ describe('DetailStore', () => {
 
   test('retry re-arms immediately and resets the backoff', async () => {
     const { fetcher, calls } = scriptedFetcher([new Error('offline'), detail(1)])
-    const store = new DetailStore(fetcher, 1000)
+    const store = activeStore(fetcher, 1000)
     store.request(1)
     await vi.waitFor(() => { assert.equal(calls.length, 1) }, { timeout: 3000 })
     await until(() => store.getSnapshot().failed === true, 'the failure never settled')
@@ -412,10 +418,86 @@ describe('DetailStore', () => {
     assert.equal(calls.length, 2)
   })
 
+  test('a subscribed stale detail recovers after repeated refresh failures', async () => {
+    vi.useFakeTimers()
+    const { fetcher, calls } = scriptedFetcher([detail(1), ...Array.from({ length: 5 }, () => new Error('offline')), detail(2)])
+    const store = activeStore(fetcher, 10)
+    store.request(1)
+    await vi.advanceTimersByTimeAsync(10)
+    store.request(2)
+    await vi.advanceTimersByTimeAsync(1000)
+    assert.equal(calls.length, 7)
+    assert.equal(store.getSnapshot().detail?.rev, 2)
+    assert.equal(store.getSnapshot().pending, false)
+  })
+
+  test('the last unsubscribe cancels a retry; reopening resumes outstanding demand', async () => {
+    vi.useFakeTimers()
+    const fetcher = vi.fn(async () => { throw new Error('offline') })
+    const store = new DetailStore(fetcher, 10)
+    store.request(1)
+    await vi.advanceTimersByTimeAsync(100)
+    assert.equal(fetcher.mock.calls.length, 0, 'an unobserved store never reads')
+    const off = store.subscribe(() => {})
+    const off2 = store.subscribe(() => {})
+    await vi.advanceTimersByTimeAsync(10)
+    assert.equal(fetcher.mock.calls.length, 1)
+    off()
+    assert.equal(store.getSnapshot().pending, true, 'another view still owns the retry')
+    off2()
+    await vi.advanceTimersByTimeAsync(60_000)
+    assert.equal(fetcher.mock.calls.length, 1)
+    const reopened = store.subscribe(() => {})
+    await vi.advanceTimersByTimeAsync(10)
+    assert.equal(fetcher.mock.calls.length, 2)
+    reopened()
+  })
+
+  test('an in-flight failure after unmount never arms another read', async () => {
+    vi.useFakeTimers()
+    let reject!: (error: Error) => void
+    const fetcher = vi.fn(() => new Promise<ContextTimelineDetail | null>((_, no) => { reject = no }))
+    const store = new DetailStore(fetcher, 10)
+    const off = store.subscribe(() => {})
+    store.request(1)
+    await vi.advanceTimersByTimeAsync(10)
+    off()
+    reject(new Error('offline'))
+    await vi.advanceTimersByTimeAsync(60_000)
+    assert.equal(fetcher.mock.calls.length, 1)
+    assert.equal(store.getSnapshot().pending, false)
+  })
+
+  test('reset cancels cached stores and ignores their in-flight results', async () => {
+    vi.useFakeTimers()
+    let release!: (value: unknown) => void
+    let calls = 0
+    vi.stubGlobal('fetch', () => {
+      calls++
+      return new Promise(resolve => { release = resolve })
+    })
+    const ctx = asClientCtx(new TestClientCtx())
+    const pending = detailStoreOf(ctx, 'pending')
+    pending.subscribe(() => {})
+    pending.request(1)
+    resetTimelineDetailStores()
+    await vi.advanceTimersByTimeAsync(300)
+    assert.equal(calls, 0)
+    const flying = detailStoreOf(ctx, 'flying')
+    flying.subscribe(() => {})
+    flying.request(1)
+    await vi.advanceTimersByTimeAsync(300)
+    resetTimelineDetailStores()
+    release({ ok: true, json: async () => ({ ok: true, value: detail(1) }) })
+    await vi.advanceTimersByTimeAsync(60_000)
+    assert.equal(calls, 1)
+    assert.equal(flying.getSnapshot().detail, null)
+  })
+
   test('consecutive failures back the debounce off exponentially', async () => {
     vi.useFakeTimers()
     const { fetcher, calls } = scriptedFetcher([new Error('a'), new Error('b'), detail(1)])
-    const store = new DetailStore(fetcher, 10)
+    const store = activeStore(fetcher, 10)
     store.request(1)
     await vi.advanceTimersByTimeAsync(10)
     assert.equal(calls.length, 1, 'the first read fires after the base window')
@@ -437,7 +519,7 @@ describe('DetailStore', () => {
     // and must not stack a second call; the settle re-arms it.
     let release!: (d: ContextTimelineDetail | null) => void
     let call = 0
-    const store = new DetailStore(() => {
+    const store = activeStore(() => {
       call++
       if (call === 1) return new Promise<ContextTimelineDetail | null>(resolve => { release = resolve })
       return Promise.resolve(detail(2))
