@@ -1,43 +1,32 @@
 /*
- * The Context Insights panel: the sidebar-foot entry button (stacked above
- * Settings by the harness's own foot layout) and the frame-wide overlay
- * panel it opens — the first row (a 1:1 pair: the KPI metrics band, the
- * range's six figures three per row, beside the last-7-days usage chart's
- * token/cost bar columns) over the aggregate stats row (Token Stats |
- * Timing Stats, the range's sessions folded into the per-session tab's two
- * donut cards) over a 3:7 body of insight column (the activity heatmap,
- * then the preferences entry row) beside the session column (search, chips,
- * card grid).
- * The backdrop is the `lc-ov` query container (it spans the viewport, and
- * the card sizes off the viewport too), so the column fold keys off the
- * viewport width. Inline-size containment is safe here: the backdrop IS the
- * viewport rectangle, so the heat cells' fixed-position Tooltip bubbles
- * keep their viewport coordinates.
+ * The Context Insights panel — the shell's global-panel surface, mounted from
+ * the keyed `main` panel the sidebar's `sidebar.panellist` row selects: the
+ * first row (a 1:1 pair: the KPI metrics band, the range's six figures three
+ * per row, beside the last-7-days usage chart's token/cost bar columns) over
+ * the aggregate stats row (Token Stats | Timing Stats, the range's sessions
+ * folded into the per-session tab's two donut cards) over a 3:7 body of
+ * insight column (the activity heatmap, then the preferences entry row) beside
+ * the session column (search, chips, card grid).
+ *
+ * Sizing follows the pane, never the viewport: the panel IS the centre column,
+ * whose width the sidebar's collapse and drags decide, so a viewport-based
+ * width would clip the card (and put the session cards and the range group out
+ * of reach — the column clips with no scrollbar). `.lc-ov-page` therefore
+ * stretches to fill the column and carries the `lc-ov` query container, so
+ * every `@container lc-ov` fold below tracks the pane's real width.
  */
 
-/* ---- the sidebar-foot entry ---- */
-/* Geometry mirrors the harness's own Settings trigger (ui-settings-general's
-   .trigger): the 42px row, 12px radius, 14px/22px label, and its shared hover
-   fill, so the plugin entry reads as a native foot control, not a visitor. */
-.lc-ov-entry { display: flex; align-items: center; gap: 8px; width: calc(100% + 4px); height: 42px; box-sizing: border-box; margin: 0 -2px; border: 0; padding: 0 10px 0 8px; overflow: hidden; background: transparent; border-radius: 12px; color: var(--dsw-alias-label-primary); font-family: inherit; font-size: 14px; line-height: 22px; cursor: pointer; }
-.lc-ov-entry:hover { background: var(--dsw-alias-interactive-bg-hover); }
-/* The collapsed rail takes the native foot controls' 36x36 circle, icon only. */
-.lc-ov-entry-rail { flex: none; justify-content: center; gap: 0; width: 36px; height: 36px; margin: 0; padding: 0; border-radius: 50%; }
-.lc-ov-entry-icon { flex: none; }
-.lc-ov-entry-label { flex: 1 1 auto; min-width: 0; text-align: left; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-
-/* ---- the overlay chrome ---- */
-/* The backdrop carries the `lc-ov` container: it spans the viewport exactly,
-   so queries against it track the card's own sizing basis (the card is
-   min(1120px, 100vw - 32px)) without making the card unable to query itself. */
-.lc-ov-backdrop { position: fixed; inset: 0; z-index: 200; background: var(--dsw-alias-bg-mask-1, rgba(0, 0, 0, 0.45)); display: flex; align-items: center; justify-content: center; container: lc-ov / inline-size; }
-/* The card is a flex column at a FIXED height: the viewport minus a 40px
-   band top and bottom (the width keeps its 16px side frame), so the panel's
-   footprint never wobbles with the content. The backdrop is a definite-
-   height flex box, so the percentage resolves without viewport units. The
-   head stays put; the scroll region fills the rest and is the panel's one
-   scroller — the KPI band, the stats row, and the body scroll as one. */
-.lc-ov-card { display: flex; flex-direction: column; width: min(1120px, calc(100vw - 32px)); height: calc(100% - 80px); overflow: hidden; box-sizing: border-box; background: var(--dsw-alias-bg-layer-1); border: 1px solid var(--dsw-alias-border-l2); border-radius: 12px; box-shadow: var(--dsw-shadow-lv3, 0 12px 32px rgba(0, 0, 0, 0.4)); padding: 16px 18px 18px; color: var(--dsw-alias-label-primary); font-size: 13px; }
+/* ---- the panel page ---- */
+/* The page is AppFrame's `centerCol` direct child — a definite-height flex
+   column that clips — so `flex: 1 1 auto` + `min-height: 0` is what makes it
+   fill the column exactly, head-to-head, at any width. */
+.lc-ov-page { display: flex; flex-direction: column; flex: 1 1 auto; min-height: 0; overflow: hidden; container: lc-ov / inline-size; }
+/* The card carries the panel's own column and its padding, nothing else: a
+   keyed main panel IS the column, so there is no dialog footprint to draw and
+   no viewport frame to inset. The head stays put and the scroll region fills
+   the rest — the KPI band, the stats row, and the body scroll as one. */
+.lc-ov-card { display: flex; flex-direction: column; overflow: hidden; box-sizing: border-box; padding: 16px 18px 18px; color: var(--dsw-alias-label-primary); font-size: 13px; }
+.lc-ov-card-page { width: 100%; height: 100%; }
 .lc-ov-head { flex: none; display: flex; align-items: center; gap: 10px; margin-bottom: 14px; flex-wrap: wrap; }
 .lc-ov-head-icon { flex: none; }
 .lc-ov-title { font-weight: 600; font-size: 15px; white-space: nowrap; }
@@ -49,7 +38,6 @@
 .lc-ov-balance:hover .lc-ov-balance-value { text-decoration: underline; }
 .lc-ov-balance-label { color: var(--dsw-alias-label-secondary); white-space: nowrap; }
 .lc-ov-balance-value { font-variant-numeric: tabular-nums; font-weight: 600; white-space: nowrap; }
-.lc-ov-head .lc-modal-close { margin-left: 0; flex: none; }
 
 /* The panel's one scroller: everything under the head. It inherits the
    scrollbar discipline the columns used to own — the harness 8px bar with a
