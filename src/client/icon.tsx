@@ -7,11 +7,10 @@
  * it to the Plugins page's package cards. The client bundle inlines the
  * file's markup at build time (the `?raw` channel in tsdown.config.ts) and
  * re-renders it at every requested size. The identity seats (tab chip,
- * command, sidebar registration, panel head) keep the sheet's fixed fills —
- * deliberately polychrome on both light and dark chrome — while the
- * sidebar-foot entry seat (overviewButton.tsx) opts into `mono`, trading
- * every fill for `currentColor` so the glyph sits quietly beside the
- * harness's own footer rows (Settings and friends).
+ * command, panel head) keep the sheet's fixed fills — deliberately polychrome
+ * on both light and dark chrome — while the sidebar's global-panel row opts
+ * into `mono`, trading every fill for `currentColor` so the glyph sits quietly
+ * beside the harness's own rows (Tasks, Plugins and friends).
  */
 
 import sheetMarkup from '../../icon.svg?raw'
