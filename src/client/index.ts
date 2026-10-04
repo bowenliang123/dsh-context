@@ -26,9 +26,9 @@ import { createElement as h } from 'react'
 import { DICT_EN, DICT_ZH } from './i18n'
 import { registerContextCommand } from './command'
 import { makeContextModal } from './components/contextModal'
-import { makeOverviewButton } from './components/overviewButton'
 import { makeOverviewPanel } from './components/overviewPanel'
 import { makeSettingsCard, makePluginConfigCard } from './components/settingsCard'
+import { ContextIcon } from './icon'
 import { modalStoreOf } from './modalStore'
 import type { ClientCtx } from './services'
 import { createContextSettings, type ConfigFormsFace, type SettingsField, type SettingsScopeBinderFace } from './settings'
@@ -132,26 +132,52 @@ function apply(ctx: ClientCtx): void {
   })
 
   // The Context Dashboard (see components/overviewPanel.tsx): the cross-session
-  // insight surface. The entry is a footer action — the harness stacks those
-  // directly above Settings on the sidebar foot; the overlay it opens renders
-  // from the frame-wide shell.overlay seat, and the module store
-  // (overviewStore.ts) carries the open flag between the two registrations.
-  // Both seats are root-scope list slots present since the supported baseline.
-  const OverviewButton = makeOverviewButton(kit, settings)
-  ctx.slots.inject('sidebar.footer.action', () => {
-    return ctx.slots.register(
-      { name: 'sidebar.footer.action', id: 'context-overview', order: 10, locale: NS },
-      // Root-scope seats: the owner props (wide, the standard kit) arrive untyped.
-      props => h(OverviewButton, props as unknown as Parameters<typeof OverviewButton>[0]),
-    )
-  })
+  // insight surface, entered from the shell's global panel list under New
+  // Session — a `sidebar.panellist` row paired with the keyed `main` panel it
+  // selects, the harness's own idiom for a central surface (the shipped Tasks
+  // and Plugins panels register exactly this way). The row id and the panel key
+  // are both the plugin id, and the pair is strict: the sidebar row throws on
+  // selection while its main panel is missing. Both seats are root-scope and
+  // present since 0.1.5-rc.1, so the two injections land at once.
   const OverviewPanel = makeOverviewPanel(ctx, kit)
-  ctx.slots.inject('shell.overlay', () => {
+  ctx.slots.inject('main', () => {
     return ctx.slots.register(
-      { name: 'shell.overlay', id: 'context-overview', order: 10, locale: NS },
+      // Root-scope keyed seat: the standard kit (useSessions, useWorkspaces,
+      // the locale seat) arrives untyped.
+      { name: 'main', key: NS, locale: NS },
       props => h(OverviewPanel, props as unknown as Parameters<typeof OverviewPanel>[0]),
     )
   })
+  // The row itself rides the per-user `insightsEntry` preference, the same
+  // dynamic-mount idiom as the placement watcher above: `hide` unregisters the
+  // row (a preference flip brings it back) while the panel stays — the harness
+  // only ever selects a main panel FROM a row, so an absent row is what hides
+  // the dashboard.
+  ctx.effect(() => {
+    let mounted = false
+    let dispose: (() => void) | undefined
+    const mount = (): void => {
+      if (settings.insightsEntry() === 'hide') {
+        if (mounted) { dispose?.(); dispose = undefined; mounted = false }
+        return
+      }
+      if (mounted) return
+      const own = ctx.slots.inject('sidebar.panellist', () => {
+        return ctx.slots.register(
+          // The sidebar owns the row's button and its label (order 20 puts the
+          // row after the shipped Plugins (0) and Tasks (10) ones); the
+          // registration contributes the glyph alone, in the row's own colour.
+          { name: 'sidebar.panellist', id: NS, order: 20, locale: NS, label: () => t('ov.entry') },
+          props => h(ContextIcon, { size: props.size as number | undefined, mono: true }),
+        )
+      })
+      dispose = typeof own === 'function' ? own as () => void : undefined
+      mounted = true
+    }
+    mount()
+    const unsubscribe = settings.store.subscribe(mount)
+    return () => { unsubscribe(); dispose?.(); dispose = undefined; mounted = false }
+  }, 'dsh-context: insights entry')
 
   /** The injected face both preference cards ride: the settings store as the
    *  framework's hooks-compartment `useContextSettings` seat, plus the set verb. */

@@ -32,7 +32,7 @@ describe.skipIf(staging.artifactsMissing())('bundle smoke — the built lib/clie
   const state: {
     plugin?: { name: string; inject: string[]; apply(ctx: unknown): void }
     dicts: Map<string, Record<string, Record<string, string>>>
-    slots: [string, { order?: number; id?: string; label?: () => string; inject?: (sessionId?: string) => unknown }][]
+    slots: [string, { key?: string; order?: number; id?: string; label?: () => string; inject?: (sessionId?: string) => unknown }][]
     sources: { trigger: string }[]
     disposers: (() => void)[]
   } = { dicts: new Map(), slots: [], sources: [], disposers: [] }
@@ -130,7 +130,7 @@ describe.skipIf(staging.artifactsMissing())('bundle smoke — the built lib/clie
 
   test('registrations: bilingual dictionaries, five slots, the /context trigger source', () => {
     assert.ok(state.dicts.get('dsh-context')?.zh && state.dicts.get('dsh-context')?.en, 'bilingual dictionaries registered')
-    assert.equal(state.slots.length, 5, 'view tab + assistant action + input overlay + dashboard entry and overlay slots')
+    assert.equal(state.slots.length, 5, 'view tab + assistant action + input overlay + dashboard panel and entry slots')
     assert.equal(state.slots[0]?.[0], 'conversation.view')
     assert.equal(state.slots[0]?.[1].order, 20)
     assert.equal(state.slots[0]?.[1].label?.(), '上下文', 'tab label localized')
@@ -140,10 +140,10 @@ describe.skipIf(staging.artifactsMissing())('bundle smoke — the built lib/clie
     const overlayInject = state.slots[2]?.[1].inject
     const overlayHooks = overlayInject?.('s1') as { hooks: { contextModal: { getSnapshot: unknown } } } | undefined
     assert.equal(typeof overlayHooks?.hooks.contextModal.getSnapshot, 'function', 'overlay hooks carry the modal store')
-    assert.equal(state.slots[3]?.[0], 'sidebar.footer.action', 'the dashboard entry above Settings')
-    assert.equal(state.slots[3]?.[1].id, 'context-overview')
-    assert.equal(state.slots[4]?.[0], 'shell.overlay', 'the dashboard panel rides the frame-wide overlay seat')
-    assert.equal(state.slots[4]?.[1].id, 'context-overview')
+    assert.equal(state.slots[3]?.[0], 'main', 'the dashboard rides the keyed main panel seat')
+    assert.equal(state.slots[3]?.[1].key, 'dsh-context')
+    assert.equal(state.slots[4]?.[0], 'sidebar.panellist', 'the dashboard entry is a global panel row')
+    assert.equal(state.slots[4]?.[1].id, 'dsh-context', 'the row id and the panel key are the plugin id')
     assert.equal(state.sources.length, 1, '/context trigger source registered')
     assert.equal(state.sources[0]?.trigger, '/', 'trigger is the slash')
   })

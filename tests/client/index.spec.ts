@@ -27,14 +27,22 @@ function applyTo(ctx: TestClientCtx): void {
 function makeScope(snapshot: { status: string; value: unknown; writable: boolean }): SettingsScopeLike & {
   subscribes: number
   sets: { field: string; value: unknown }[]
+  emit(next: { status: string; value: unknown; writable: boolean }): void
 } {
+  let current = snapshot
+  const listeners = new Set<() => void>()
   const rec = {
     subscribes: 0,
     sets: [] as { field: string; value: unknown }[],
-    getSnapshot: () => snapshot,
-    subscribe: (_listener: () => void) => {
+    emit: (next: { status: string; value: unknown; writable: boolean }) => {
+      current = next
+      for (const listener of listeners) listener()
+    },
+    getSnapshot: () => current,
+    subscribe: (listener: () => void) => {
       rec.subscribes += 1
-      return () => {}
+      listeners.add(listener)
+      return () => { listeners.delete(listener) }
     },
     set: async (field: string, value: unknown) => {
       rec.sets.push({ field, value })
@@ -199,49 +207,75 @@ describe('client entry: conversation.input.overlay slot', () => {
 })
 
 describe('client entry: Context Dashboard seats', () => {
-  test('registers the sidebar-foot entry and the frame overlay, both rendering', async () => {
+  test('registers the keyed main panel and the sidebar panel row, both rendering', async () => {
     const ctx = new TestClientCtx()
     applyTo(ctx)
 
-    const actions = ctx.slots.of('sidebar.footer.action')
-    assert.equal(actions.length, 1)
-    assert.equal(actions[0].registration.name, 'sidebar.footer.action')
-    assert.equal(actions[0].registration.id, 'context-overview')
-    assert.equal(actions[0].registration.locale, 'dsh-context')
-    const actionEl = actions[0].component({ wide: true }) as ReactElement
-    assert.equal((actionEl.type as { name: string }).name, 'OverviewButton')
-    const actionMount = await mount(actionEl)
-    assert.equal(query(actionMount.container, '.lc-ov-entry-label').textContent, 'Context Insights')
-    await actionMount.unmount()
+    const panels = ctx.slots.of('main')
+    assert.equal(panels.length, 1)
+    assert.equal(panels[0].registration.name, 'main')
+    assert.equal(panels[0].registration.key, 'dsh-context', 'the panel key is the plugin id, the row id')
+    assert.equal(panels[0].registration.locale, 'dsh-context')
+    const panelEl = panels[0].component({}) as ReactElement
+    assert.equal((panelEl.type as { name: string }).name, 'OverviewPanel')
+    const panelMount = await mount(panelEl)
+    assert.ok(panelMount.container.textContent!.includes('The session list is unavailable'))
+    await panelMount.unmount()
 
-    const overlays = ctx.slots.of('shell.overlay')
-    assert.equal(overlays.length, 1)
-    assert.equal(overlays[0].registration.name, 'shell.overlay')
-    assert.equal(overlays[0].registration.id, 'context-overview')
-    assert.equal(overlays[0].registration.locale, 'dsh-context')
-    const overlayEl = overlays[0].component({}) as ReactElement
-    assert.equal((overlayEl.type as { name: string }).name, 'OverviewPanel')
-    const overlayMount = await mount(overlayEl)
-    assert.equal(overlayMount.container.textContent, '', 'closed by default')
-    await overlayMount.unmount()
+    const rows = ctx.slots.of('sidebar.panellist')
+    assert.equal(rows.length, 1)
+    assert.equal(rows[0].registration.name, 'sidebar.panellist')
+    assert.equal(rows[0].registration.id, 'dsh-context')
+    assert.equal(rows[0].registration.order, 20, 'after the shipped Plugins (0) and Tasks (10) rows')
+    assert.equal(rows[0].registration.locale, 'dsh-context')
+    assert.equal(rows[0].registration.label?.(), 'Context Insights')
+    const rowEl = rows[0].component({ size: 18, active: false }) as ReactElement
+    const rowMount = await mount(rowEl)
+    assert.ok(query(rowMount.container, 'svg'), 'the registration contributes the glyph')
+    await rowMount.unmount()
     ctx.dispose()
   })
 
-  test('the entry opens the overlay through the shared store', async () => {
+  test('the row label translates to zh under an zh locale', () => {
+    const ctx = new TestClientCtx({ locale: 'zh' })
+    applyTo(ctx)
+    assert.equal(ctx.slots.of('sidebar.panellist')[0].registration.label?.(), '上下文洞察')
+    ctx.dispose()
+  })
+
+  test('the insightsEntry preference takes the sidebar row down and brings it back', () => {
     const ctx = new TestClientCtx()
     applyTo(ctx)
-    const actionEl = ctx.slots.of('sidebar.footer.action')[0].component({ wide: true }) as ReactElement
-    const actionMount = await mount(actionEl)
-    await click(query(actionMount.container, 'button.lc-ov-entry'))
-    const overlayEl = ctx.slots.of('shell.overlay')[0].component({}) as ReactElement
-    const overlayMount = await mount(overlayEl)
-    assert.ok(overlayMount.container.textContent!.includes('The session list is unavailable'))
-    await actionMount.unmount()
-    await overlayMount.unmount()
-    // Reset for other specs sharing the module store.
-    const { overviewStore } = await import('../../src/client/overviewStore')
-    overviewStore.set(false)
+    assert.equal(ctx.slots.of('sidebar.panellist').length, 1, 'the default (show) registers the row')
+
+    const scope = makeScope({ status: 'ready', value: { insightsEntry: 'hide' }, writable: true })
+    ctx.setService('settingsScope', { bind: () => scope })
+    assert.equal(ctx.slots.of('sidebar.panellist').length, 0, 'hide unregisters the row')
+    assert.equal(ctx.slots.of('main').length, 1, 'the panel itself stays mounted — only the row is the entry')
+
+    scope.emit({ status: 'ready', value: { insightsEntry: 'hide', defaultGranularity: 'turn' }, writable: true })
+    assert.equal(ctx.slots.of('sidebar.panellist').length, 0, 'an unrelated preference flip keeps the row down')
+
+    scope.emit({ status: 'ready', value: { insightsEntry: 'show' }, writable: true })
+    assert.equal(ctx.slots.of('sidebar.panellist').length, 1, 'a flip back re-registers the row')
+
     ctx.dispose()
+    assert.equal(ctx.slots.of('sidebar.panellist').length, 0, 'the effect disposer takes the row down')
+  })
+
+  test('a slots face handing back no disposer still gates the row on the preference', () => {
+    const ctx = new TestClientCtx()
+    const slots = ctx.slots as unknown as { inject: (name: string, fn: () => unknown) => unknown }
+    slots.inject = (_name, fn) => { fn(); return undefined }
+    applyTo(ctx)
+    assert.equal(ctx.slots.of('sidebar.panellist').length, 1)
+
+    // Nothing to unwind is not an error: the preference flip and the teardown
+    // both run with no disposer in hand.
+    const scope = makeScope({ status: 'ready', value: { insightsEntry: 'hide' }, writable: true })
+    ctx.setService('settingsScope', { bind: () => scope })
+    ctx.dispose()
+    assert.equal(ctx.slots.of('sidebar.panellist').length, 1, 'the seat stays — this face never handed back a disposer')
   })
 })
 

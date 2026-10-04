@@ -1,10 +1,10 @@
 /**
- * The Context Dashboard panel — the cross-session insight surface opened
- * from the sidebar foot (overviewButton.tsx). Rendered from the frame-wide
- * `shell.overlay` slot behind the module store's flag; data rides the
- * root-scope `useSessions` standard kit (every list row's host-cached
- * projection values), so the panel draws every session's insight without
- * opening one log.
+ * The Context Dashboard panel — the cross-session insight surface, rendered
+ * from the keyed `main` panel the sidebar's global-panel row selects. It
+ * replaces the conversation in the centre column rather than floating over it;
+ * data rides the root-scope `useSessions` standard kit (every list row's
+ * host-cached projection values), so the panel draws every session's insight
+ * without opening one log.
  *
  * The panel's first row is a 1:1 column pair: the KPI metrics band (the
  * range's six figures — sessions, billed tokens, cost, cache hit, tool
@@ -19,10 +19,11 @@
  * (search, group chips, and the card grid); the heatmap keeps its own fixed
  * 8-week window and PINs the list to a picked day (the panel's drill-down
  * gesture). A session card click jumps to that session through the harness's
- * own selection verb (openSessionVia) and closes the panel.
+ * own selection verb (openSessionVia), which also returns the shell to the
+ * conversation.
  */
 
-import { useEffect, useMemo, useState, useSyncExternalStore, type ReactElement } from 'react'
+import { useEffect, useMemo, useState, type ReactElement } from 'react'
 import { estimateSessionCost, formatCost, type CostCurrency, type ModelBook } from '../cost'
 import { fmt } from '../format'
 import { useModelPrices } from '../modelPrices'
@@ -33,13 +34,11 @@ import {
   UNGROUPED_KEY, workspacesSnapshotOf,
   type OverviewRange, type OverviewRow, type OverviewSort,
 } from '../overview'
-import { overviewStore } from '../overviewStore'
 import { openSessionVia, type ClientCtx } from '../services'
 import { openPluginSettings } from '../settingsJump'
 import type { ViewKit } from '../viewkit'
 import { makeBalanceCapsule } from './balanceCapsule'
 import { makeErrorBoundary } from './errorBoundary'
-import { useEscapeClose } from './escapeClose'
 import { makeHeatmap, todayKey, type HeatMetric } from './heatmap'
 import { makeDonut } from './donut'
 import { makeOverviewTokens } from './overviewTokens'
@@ -82,8 +81,7 @@ export function makeOverviewPanel(ctx: ClientCtx, kit: ViewKit): (props: Overvie
     return active === 'zh' ? 'cny' : 'usd'
   }
 
-  function OverviewBody(props: OverviewPanelProps): ReactElement | null {
-    const open = useSyncExternalStore(overviewStore.subscribe, overviewStore.getSnapshot)
+  function OverviewBody(props: OverviewPanelProps): ReactElement {
     const { book } = useModelPrices()
     // The hook-level standard-kit reads (unconditional; guarded inside).
     const snapshot = sessionsSnapshotOf(props)
@@ -95,26 +93,20 @@ export function makeOverviewPanel(ctx: ClientCtx, kit: ViewKit): (props: Overvie
     const [sort, setSort] = useState<OverviewSort>('recent')
     const [metric, setMetric] = useState<HeatMetric>('steps')
     const [page, setPage] = useState(0)
-    const close = (): void => { overviewStore.set(false) }
-    useEscapeClose(open, close)
 
     const rows = useMemo(() => rowsOfSnapshot(snapshot, wsSnapshot), [snapshot, wsSnapshot])
     const groups = useMemo(() => sessionGroupsOf(wsSnapshot), [wsSnapshot])
 
-    // On open, summon the host's projection warm-up (this panel is the
-    // rows' only reader — one pass per host process) and re-pull the list
-    // once, so backfilled rows reach a long-connected page.
+    // On mount, summon the host's projection warm-up (this panel is the rows'
+    // only reader — one pass per host process) and re-pull the list once, so
+    // backfilled rows reach a long-connected page.
     useEffect(() => {
-      if (open) {
-        requestActivityBackfill()
-        refreshSessions(ctx)
-      }
-    }, [open])
+      requestActivityBackfill()
+      refreshSessions(ctx)
+    }, [])
 
     // Any filter change re-anchors the pager at the first page.
     useEffect(() => { setPage(0) }, [range, day, query, group, sort])
-
-    if (!open) return null
 
     const currency = activeCurrency()
     const now = Date.now()
@@ -140,12 +132,15 @@ export function makeOverviewPanel(ctx: ClientCtx, kit: ViewKit): (props: Overvie
     const days = aggregateDays(allRows, book, currency)
     const openOne = (id: string): void => {
       openSessionVia(ctx, id)
-      overviewStore.set(false)
     }
 
     return (
-      <div className="lc-ov-backdrop" onClick={close}>
-        <div className="lc-ov-card" onClick={(ev) => { ev.stopPropagation() }}>
+      // A keyed `main` panel IS the centre column, not a floating dialog: no
+      // mask, no close button, no Escape of its own. The sidebar row, any
+      // session click and New Session are what leave it — `uiWorkspace` returns
+      // the shell to the Conversation on its own.
+      <div className="lc-ov-page">
+        <div className="lc-ov-card lc-ov-card-page">
           <div className="lc-ov-head">
             <ContextIcon size={18} className="lc-ov-head-icon" />
             <span className="lc-ov-title">{t('ov.title')}</span>
@@ -162,7 +157,6 @@ export function makeOverviewPanel(ctx: ClientCtx, kit: ViewKit): (props: Overvie
                 >{t('ov.range.' + r)}</button>
               ))}
             </div>
-            <button type="button" className="lc-modal-close hover:text-(--dsw-alias-label-primary) hover:bg-(--dsw-alias-bg-layer-2)" aria-label={t('cmd.close')} onClick={close}>×</button>
           </div>
 
           {rows === null ? (
@@ -243,9 +237,8 @@ export function makeOverviewPanel(ctx: ClientCtx, kit: ViewKit): (props: Overvie
                   </div>
                   {/* The settings entry: one quiet row under the activity card, the
                       same best-effort preferences jump the Context tab's plugin-info
-                      row rides. The jump drives the shell chrome behind this
-                      overlay, so the panel closes with it to leave the jump visible. */}
-                  <button type="button" className="lc-ov-settings" onClick={() => { openPluginSettings(); close() }}>
+                      row rides. */}
+                  <button type="button" className="lc-ov-settings" onClick={() => { openPluginSettings() }}>
                     <span className="lc-ov-settings-label"><IconSettings size={14} />{t('plugin.settings')}</span>
                     <span className="lc-ov-settings-hint">{t('plugin.settingsOpen')}</span>
                   </button>
