@@ -9,7 +9,7 @@
 **The best [DeepSeek Harness plugin](https://www.deepseek.com/harness/) for Agent's context insights and management.**
 
 [`dsh-context`](https://www.npmjs.com/package/dsh-context) provides full context lifecycle management features.
-- **Context Dashboard** — the cross-session overview above Settings on the sidebar foot: KPI band with a 7-day token/cost usage chart, activity heatmap, aggregate composition ring, and filterable session cards that jump straight into any session.
+- **Context Dashboard** — the cross-session overview the sidebar's panel list opens in the main column: KPI band with a 7-day token/cost usage chart, activity heatmap, aggregate composition ring, and filterable session cards that jump straight into any session.
 - **Context tab** — an UI context dashboard for DeepSeek Harness's context stats, composition, trend, events, and messages.
 - **Context panel** — the same dashboard as a right-sidebar tab (dsh 0.1.5-rc.1+): pick **Context** on the sidebar's guide page and the panel opens beside the chat.
 - **`/context` command** — the slash command shows the context model for current context composition and recent context evolution.
@@ -51,7 +51,7 @@ Four surfaces, one story — what your agent is carrying, how it got there, and 
 
 ## 🗂️ The Context Dashboard
 
-Click **Context Dashboard / 上下文仪表盘** at the bottom-left of the sidebar, right above **Settings**:
+Click **Context Insights / 上下文洞察** in the sidebar's panel list under **New Session** — beside the built-in **Tasks** and **Plugins** panels. It replaces the conversation in the centre column; picking a session, **New Session**, or the panel's own row returns you to the chat.
 
 ![Context Dashboard](https://raw.githubusercontent.com/bowenliang123/dsh-context/main/docs/context-dashboard.png)
 

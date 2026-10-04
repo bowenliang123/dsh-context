@@ -1,17 +1,15 @@
 // The Context Dashboard panel (src/client/components/overviewPanel.tsx) —
 // full renders through the standard-kit seams: KPI band, heatmap day-pin,
-// filters/sorts, pagination, session open + close paths, and the
-// degraded states.
+// filters/sorts, pagination, the session jump, and the degraded states.
 
 import { act, createElement as h } from 'react'
 import assert from 'node:assert/strict'
 import { afterEach, beforeEach, describe, test, vi } from 'vitest'
 import { makeOverviewPanel } from '../../../src/client/components/overviewPanel'
 import { resetModelPrices, setModelPricesLoader } from '../../../src/client/modelPrices'
-import { overviewStore } from '../../../src/client/overviewStore'
 import { dayKeyOf } from '../../../src/shared/days'
 import { TestClientCtx, asClientCtx } from '../helpers/harness'
-import { click, flush, keydown, makeKit, mount, query, queryAll, text, until, type Mounted } from '../helpers/kit'
+import { click, flush, makeKit, mount, query, queryAll, text, until, type Mounted } from '../helpers/kit'
 
 const PROVIDERS = {
   deepseek: { models: { 'deepseek-v4-flash': { cost: { input: 1, output: 2, cache_read: 0.1 } } } },
@@ -90,7 +88,6 @@ async function openPanel(
   ctx: TestClientCtx,
   props: Record<string, unknown> = {},
 ): Promise<{ m: Mounted; Panel: ReturnType<typeof makeOverviewPanel> }> {
-  overviewStore.set(false)
   const Panel = makeOverviewPanel(asClientCtx(ctx), makeKit())
   const allProps = {
     useSessions: useHookOf(sessionsSnapshot()),
@@ -98,12 +95,8 @@ async function openPanel(
     ...props,
   }
   const m = await mount(h(Panel, allProps))
-  assert.equal(m.container.textContent, '', 'closed renders nothing')
-  await act(async () => {
-    overviewStore.set(true)
-  })
-  // The price book's first fetch resolves a microtask or two behind the store
-  // flip; a second act window keeps its notify inside act.
+  // The price book's first fetch resolves a microtask or two behind the mount;
+  // a second act window keeps its notify inside act.
   await flush()
   return { m, Panel }
 }
@@ -115,7 +108,7 @@ beforeEach(() => {
   resetModelPrices()
   setModelPricesLoader(() => Promise.resolve(PROVIDERS))
   backfillPosts.length = 0
-  // The header's balance capsule POSTs its own route on open (client/balance.ts);
+  // The header's balance capsule POSTs its own route on mount (client/balance.ts);
   // only the warm-up trigger is this spec's subject.
   vi.stubGlobal('fetch', async (url: string | URL) => {
     const route = String(url)
@@ -125,7 +118,6 @@ beforeEach(() => {
 })
 
 afterEach(async () => {
-  overviewStore.set(false)
   resetModelPrices()
   vi.unstubAllGlobals()
   await new Promise(resolve => setTimeout(resolve, 1))
@@ -337,18 +329,19 @@ describe('OverviewPanel', () => {
     await m.unmount()
   })
 
-  test('a card click opens the session through the harness verb and closes the panel', async () => {
+  test('a card click opens the session through the harness verb and leaves the panel to the shell', async () => {
     const opened: string[] = []
     const ctx = makeCtx({ open: (id: string) => { opened.push(id) } })
     const { m } = await openPanel(ctx)
     await click(query<HTMLButtonElement>(m.container, '.lc-ov-grid > .lc-ov-session'))
     assert.deepEqual(opened, ['a'])
-    assert.equal(overviewStore.getSnapshot(), false)
-    assert.equal(m.container.textContent, '', 'the panel unmounted')
+    // A keyed `main` panel has no close of its own: selecting a session hands
+    // the centre column back to the Conversation, so the panel just stays put.
+    assert.ok(m.container.textContent!.includes('Context Insights'), 'the panel rides the shell, not a store flag')
     await m.unmount()
   })
 
-  test('the settings row under the activity card runs the preferences jump and closes the panel', async () => {
+  test('the settings row under the activity card runs the preferences jump', async () => {
     // The harness chrome the jump drives (settingsJump.ts): the Plugins panel
     // entry first, then the bundle card's open control (the one non-switch
     // button inside the card), both click-tracked.
@@ -370,8 +363,6 @@ describe('OverviewPanel', () => {
       const row = query<HTMLButtonElement>(m.container, '.lc-ov-settings')
       assert.equal(row.textContent, 'SettingsOpen plugin settings')
       await click(row)
-      assert.equal(overviewStore.getSnapshot(), false, 'the panel closed so the jump lands visible')
-      assert.equal(m.container.textContent, '', 'the panel unmounted')
       assert.deepEqual(clicks, ['Plugins'], 'the jump clicked the Plugins panel entry synchronously')
       await until(() => clicks.length > 1, 'the jump never reached the bundle card open control')
       assert.equal(clicks[1], 'Context')
@@ -379,26 +370,6 @@ describe('OverviewPanel', () => {
     } finally {
       chrome.remove()
     }
-  })
-
-  test('Escape and the backdrop close; the card body swallows clicks', async () => {
-    const ctx = makeCtx()
-    const { m } = await openPanel(ctx)
-    await keydown('Escape')
-    assert.equal(overviewStore.getSnapshot(), false)
-    await m.unmount()
-
-    const second = await openPanel(ctx)
-    await click(query(second.m.container, '.lc-ov-card'))
-    assert.equal(overviewStore.getSnapshot(), true, 'a card-body click does not close')
-    await click(query(second.m.container, '.lc-ov-backdrop'))
-    assert.equal(overviewStore.getSnapshot(), false)
-    await second.m.unmount()
-
-    const third = await openPanel(ctx)
-    await click(query<HTMLButtonElement>(third.m.container, '.lc-modal-close'))
-    assert.equal(overviewStore.getSnapshot(), false)
-    await third.m.unmount()
   })
 
   test('degraded states: unavailable list, empty list, no activity', async () => {
@@ -445,9 +416,6 @@ describe('OverviewPanel', () => {
       useSessions: useHookOf(sessionsSnapshot()),
       useWorkspaces: useHookOf(workspacesSnapshotValue),
     }))
-    await act(async () => {
-      overviewStore.set(true)
-    })
     await flush()
     assert.ok(text(m.container).includes('上下文洞察'))
     assert.ok(text(m.container).includes('活跃会话'))
@@ -503,9 +471,6 @@ describe('OverviewPanel', () => {
       useSessions: useHookOf(sessionsSnapshot()),
       useWorkspaces: useHookOf(workspacesSnapshotValue),
     }))
-    await act(async () => {
-      overviewStore.set(true)
-    })
     await flush()
     await flush() // the price book lands
     const values = queryAll(m.container, '.lc-stat-value').map(el => el.textContent)
@@ -543,7 +508,7 @@ describe('OverviewPanel', () => {
     await m.unmount()
   })
 
-  test('typing keeps the search input focused (the escape hook never re-fires its focus restore)', async () => {
+  test('typing keeps the search input focused across re-renders', async () => {
     const ctx = makeCtx()
     const { m } = await openPanel(ctx)
     const input = query<HTMLInputElement>(m.container, 'input.lc-ov-search')
