@@ -58,6 +58,6 @@ describe('package meta localization', () => {
     assert.equal(manifest.icon, 'icon.svg')
     assert.ok(manifest.files.includes('icon.svg'), 'the icon ships')
     const svg = await readFile('icon.svg', 'utf8')
-    assert.match(svg, /^<svg xmlns="http:\/\/www\.w3\.org\/2000\/svg" viewBox="0 0 1024 1024">/)
+    assert.match(svg, /^<svg xmlns="http:\/\/www\.w3\.org\/2000\/svg" viewBox="0 0 36 36" fill="none">/)
   })
 })
