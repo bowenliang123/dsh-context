@@ -54,6 +54,7 @@ describe('createContextSettings defaults', () => {
       toolSort: 'count',
       fileSort: 'count',
       insightsEntry: 'show',
+      durationCurve: 'show',
       writable: false,
     })
     assert.equal(s.defaultPlacement(), 'all')
@@ -63,6 +64,7 @@ describe('createContextSettings defaults', () => {
     assert.equal(s.defaultToolSort(), 'count')
     assert.equal(s.defaultFileSort(), 'count')
     assert.equal(s.insightsEntry(), 'show')
+    assert.equal(s.defaultDurationCurve(), 'show')
   })
 })
 
@@ -205,6 +207,7 @@ describe('attach', () => {
         defaultToolSort: 'name',
         defaultFileSort: 'path',
         insightsEntry: 'hide',
+        defaultDurationCurve: 'hide',
       },
       writable: true,
     })
@@ -218,6 +221,7 @@ describe('attach', () => {
       toolSort: 'name',
       fileSort: 'path',
       insightsEntry: 'hide',
+      durationCurve: 'hide',
       writable: true,
     })
   })
@@ -249,6 +253,7 @@ describe('attach', () => {
         toolSort: 'count',
         fileSort: 'count',
         insightsEntry: 'show',
+        durationCurve: 'show',
         writable: false,
       })
     }
@@ -258,7 +263,7 @@ describe('attach', () => {
     const s = createContextSettings()
     s.attach(new TestSettingsScope({
       status: 'ready',
-      value: { defaultPlacement: 'window', defaultGranularity: 'bogus', defaultTrendMode: 7, defaultDeltaBase: 'bogus', defaultToolSort: 'alpha', defaultFileSort: 'alpha', insightsEntry: 42 },
+      value: { defaultPlacement: 'window', defaultGranularity: 'bogus', defaultTrendMode: 7, defaultDeltaBase: 'bogus', defaultToolSort: 'alpha', defaultFileSort: 'alpha', insightsEntry: 42, defaultDurationCurve: 'always' },
       writable: false,
     }))
     assert.equal(s.defaultPlacement(), 'all')
@@ -268,6 +273,7 @@ describe('attach', () => {
     assert.equal(s.defaultToolSort(), 'count')
     assert.equal(s.defaultFileSort(), 'count')
     assert.equal(s.insightsEntry(), 'show')
+    assert.equal(s.defaultDurationCurve(), 'show')
   })
 
   test('an invalid scope placement degrades to all instead of keeping the current one', () => {
@@ -292,6 +298,15 @@ describe('attach', () => {
     assert.equal(s.insightsEntry(), 'show')
   })
 
+  test('an invalid scope duration-curve value degrades to show instead of keeping the current one', () => {
+    const s = createContextSettings()
+    s.set('defaultDurationCurve', 'hide')
+    assert.equal(s.defaultDurationCurve(), 'hide')
+    const scope = new TestSettingsScope({ status: 'ready', value: { defaultDurationCurve: 'always' }, writable: false })
+    s.attach(scope)
+    assert.equal(s.defaultDurationCurve(), 'show')
+  })
+
   test('explicit schema-default values are accepted', () => {
     const s = createContextSettings()
     s.attach(new TestSettingsScope({
@@ -313,6 +328,7 @@ describe('attach', () => {
     s.set('defaultPlacement', 'tab')
     s.set('defaultToolSort', 'size')
     s.set('insightsEntry', 'hide')
+    s.set('defaultDurationCurve', 'hide')
     s.attach(new TestSettingsScope({ status: 'ready', value: { defaultFileSort: 'latest' }, writable: false }))
     assert.equal(s.defaultPlacement(), 'tab', 'the in-session choice survives a section without the field')
     assert.equal(s.defaultGranularity(), 'step')
@@ -320,6 +336,7 @@ describe('attach', () => {
     assert.equal(s.defaultToolSort(), 'size', 'the in-session tool sort survives a section without the field')
     assert.equal(s.defaultFileSort(), 'latest')
     assert.equal(s.insightsEntry(), 'hide', 'the in-session entry choice survives a section without the field')
+    assert.equal(s.defaultDurationCurve(), 'hide', 'the in-session curve choice survives a section without the field')
   })
 
   test('scope updates republish to subscribers', () => {

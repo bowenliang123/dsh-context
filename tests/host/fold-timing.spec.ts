@@ -43,6 +43,22 @@ describe('timing — step lifecycle', () => {
     assert.equal(state.stepStart, undefined, 'step/end consumes the pending slot')
   })
 
+  test('the request record carries the step\'s active time (the trend overlay\'s activeMs)', () => {
+    // step(1, 10_000, 2_000): step/start at 10_000, message at 12_000, step/end
+    // at 16_000 — no user waits, so the whole step window prices active.
+    const drive = driveTimeline(step(1, 10_000, 2_000, { tokenMs: 600 }))
+    assert.equal(drive.state.requests.length, 1)
+    assert.equal(drive.state.requests[0].activeMs, 6_000, 'step start → step end')
+    // The stamp lands at step/end: the live tail after the message carries none.
+    assert.ok(!('activeMs' in drive.states[2].requests[0]), 'no stamp before step/end')
+  })
+
+  test('a message folded without an open step slot carries no activeMs', () => {
+    const { state } = driveTimeline([assistantMessage(1, {})])
+    assert.equal(state.requests.length, 1)
+    assert.ok(!('activeMs' in state.requests[0]), 'no undefined-valued property (plain-JSON precondition)')
+  })
+
   test('steps accumulate; the pending slot prices assistant/message and step/end of the SAME step', () => {
     const { state } = driveTimeline([...step(1, 0, 1_000, { tokenMs: 200 }), ...step(4, 10_000, 3_000, { tokenMs: 1_500 })])
     assert.equal(state.timing?.wallMs, 12_000)
@@ -413,6 +429,133 @@ describe('timing — served wire view', () => {
     const c = def as unknown as { stateSchema: { parse(s: unknown): unknown } }
     for (const state of drive.states) c.stateSchema.parse(structuredClone(state)) // throws on drift
     assert.ok(drive.state.stepStart?.firstToken !== undefined, 'the open slot carried the stamp')
+  })
+})
+
+describe('timing — the step\'s active time (user waits priced out)', () => {
+  const asked = (seq: number, time: number, id: unknown): TimelineEvent => ({
+    type: 'approval/asked', seq, time, data: { id, toolName: 'bash' },
+  })
+  const decided = (seq: number, time: number, id: unknown): TimelineEvent => ({
+    type: 'approval/decided', seq, time, data: { id, outcome: 'allowed-once' },
+  })
+  const askCall = (seq: number, time: number, callId = 'q1'): TimelineEvent => ({
+    type: 'tool/call', seq, time, data: { callId, name: 'ask_user_question', arguments: '{}' },
+  })
+
+  test('the step\'s tool runs price active (the whole window counts)', () => {
+    const { state } = driveTimeline([
+      stepStart(1, { time: 0 }),
+      assistantMessage(2, { time: 2_000 }),
+      { type: 'tool/call', seq: 3, time: 3_000, data: { callId: 'c1', name: 'bash', arguments: '{}' } },
+      toolResult(4, { callId: 'c1', content: text('ok'), time: 8_000 }),
+      stepEnd(5, { time: 9_000 }),
+    ])
+    assert.equal(state.requests[0].activeMs, 9_000, 'the model call plus its tool run, start → end')
+  })
+
+  test('an approval decision wait prices out of the step', () => {
+    const { state } = driveTimeline([
+      stepStart(1, { time: 0 }),
+      assistantMessage(2, { time: 2_000 }),
+      { type: 'tool/call', seq: 3, time: 3_000, data: { callId: 'c1', name: 'bash', arguments: '{}' } },
+      asked(4, 3_500, 'a1'),
+      decided(5, 5_500, 'a1'),
+      toolResult(6, { callId: 'c1', content: text('ok'), time: 6_000 }),
+      stepEnd(7, { time: 7_000 }),
+    ])
+    assert.equal(state.requests[0].activeMs, 5_000, 'the 7s window minus the 2s decision wait')
+    assert.equal(state.timing?.wallMs, 7_000, 'the timing card keeps the wall figure')
+  })
+
+  test('an ask_user_question window prices out as the user\'s answer wait', () => {
+    const { state } = driveTimeline([
+      stepStart(1, { time: 0 }),
+      assistantMessage(2, { time: 2_000 }),
+      askCall(3, 3_000),
+      toolResult(4, { callId: 'q1', content: text('answer'), time: 8_000 }),
+      stepEnd(5, { time: 9_000 }),
+    ])
+    assert.equal(state.requests[0].activeMs, 4_000, 'the 9s window minus the 5s answer wait')
+  })
+
+  test('an approval nested inside the answer wait prices once (the union, not the sum)', () => {
+    const { state } = driveTimeline([
+      stepStart(1, { time: 0 }),
+      assistantMessage(2, { time: 2_000 }),
+      askCall(3, 3_000),
+      asked(4, 3_500, 'a1'),
+      decided(5, 4_000, 'a1'),
+      toolResult(6, { callId: 'q1', content: text('answer'), time: 8_000 }),
+      stepEnd(7, { time: 9_000 }),
+    ])
+    assert.equal(state.requests[0].activeMs, 4_000, 'the nested 500ms decision rides inside the 5s wait')
+  })
+
+  test('concurrent decisions close independently; equal starts tie-break by end', () => {
+    const drive = driveTimeline([
+      stepStart(1, { time: 0 }),
+      assistantMessage(2, { time: 2_000 }),
+      asked(3, 3_000, 'a1'),
+      asked(4, 3_000, 'a2'),
+      decided(5, 5_000, 'a1'),
+      decided(6, 6_000, 'a2'),
+      stepEnd(7, { time: 9_000 }),
+    ])
+    assert.equal(drive.state.requests[0].activeMs, 6_000, 'the overlapping waits price their union (3000→6000)')
+    // Mid-step: the first decide leaves the second approval armed.
+    const mid = drive.states[5]
+    assert.deepEqual(mid.stepApprovals, { a2: 3_000 })
+    assert.deepEqual(mid.stepWaits, [{ start: 3_000, end: 5_000 }])
+  })
+
+  test('a decision wait left dangling (a crash tail) closes at step/end', () => {
+    const { state } = driveTimeline([
+      stepStart(1, { time: 0 }),
+      assistantMessage(2, { time: 2_000 }),
+      asked(3, 3_000, 'a1'),
+      stepEnd(4, { time: 7_000 }),
+    ])
+    assert.equal(state.requests[0].activeMs, 3_000, 'the unanswered wait runs to the step\'s end')
+  })
+
+  test('a step that committed no request stamps nothing (the wall figure still prices)', () => {
+    const { state } = driveTimeline([
+      stepStart(1, { time: 0 }),
+      asked(2, 1_000, 'a1'),
+      stepEnd(3, { time: 5_000 }),
+    ])
+    assert.equal(state.requests.length, 0)
+    assert.equal(state.timing?.wallMs, 5_000)
+  })
+
+  test('a requestless step after a real one stamps nothing onto its record', () => {
+    // The seq guard: the open step armed no back-pointer, so the earlier
+    // step's record keeps its own stamp untouched.
+    const { state } = driveTimeline([
+      ...step(1, 0, 1_000, { tokenMs: 200 }),
+      stepStart(4, { time: 10_000 }),
+      stepEnd(5, { time: 12_000 }),
+    ])
+    assert.equal(state.requests.length, 1)
+    assert.equal(state.requests[0].activeMs, 5_000, 'the first step\'s own window (0→5000)')
+  })
+
+  test('approval events outside an open step are uninteresting (same state reference)', () => {
+    const { state } = driveTimeline([])
+    assertStable(state, asked(1, 0, 'a1'))
+    assertStable(state, decided(2, 1_000, 'a1'))
+  })
+
+  test('an asked without a usable id arms nothing, even inside a step', () => {
+    const { state } = driveTimeline([stepStart(1, { time: 0 })])
+    assertStable(state, { type: 'approval/asked', seq: 2, time: 100, data: {} })
+  })
+
+  test('a decided that names no armed asked prices nothing', () => {
+    const { state } = driveTimeline([stepStart(1, { time: 0 }), asked(2, 100, 'a1')])
+    assertStable(state, decided(3, 200, 'ghost'))
+    assertStable(state, { type: 'approval/decided', seq: 4, time: 300, data: {} })
   })
 })
 

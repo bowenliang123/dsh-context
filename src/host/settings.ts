@@ -27,7 +27,7 @@ export const SETTINGS_NAMESPACE = 'dsh-context'
 
 // The preference vocabulary is declared once in shared/types.ts; re-exported
 // here so host-side consumers keep their canonical import path.
-export type { DefaultDeltaBase, DefaultFileSort, DefaultGranularity, DefaultPlacement, DefaultToolSort, DefaultTrendMode, InsightsEntry, PluginSettings } from '../shared/types'
+export type { DefaultDeltaBase, DefaultFileSort, DefaultGranularity, DefaultDurationCurve, DefaultPlacement, DefaultToolSort, DefaultTrendMode, InsightsEntry, PluginSettings } from '../shared/types'
 
 /** Section schema: also the wire envelope the browser scope validates against. */
 export const SettingsSchema = z.object({
@@ -41,6 +41,7 @@ export const SettingsSchema = z.object({
   // Loose so a stale value also reads as the default (`show`): a config
   // problem must never take the panel's entry away.
   insightsEntry: z.union(['show', 'hide']).default('show').loose(),
+  defaultDurationCurve: z.union(['show', 'hide']).default('show').loose(),
 })
 
 /** Serve the namespace while a settings provider with the register face is composed; inert otherwise. */

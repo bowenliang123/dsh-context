@@ -173,6 +173,36 @@ export interface TimelineState {
     firstToken?: number
   }
   /**
+   * The open step's CLOSED user-wait intervals (real log instants), pushed
+   * replace-style as each wait settles: an approval decision (its asked →
+   * decided pair closes via `stepApprovals`) and an `ask_user_question`
+   * call's whole tool window (its body is the answer wait itself, in both
+   * the blocking and the timed schema's foreground phase). `step/end`
+   * subtracts their clamped union from the step window to price the
+   * request's `activeMs`, then DELETES the slot. Same arm/remove lifecycle
+   * as `stepStart` — never written in place, so no CloneKey covers it.
+   */
+  stepWaits?: { start: number; end: number }[]
+  /**
+   * The open step's PENDING approval waits (request id → its `approval/asked`
+   * instant), armed only while a step is open and disarmed by the matching
+   * `approval/decided`. A crash mid-decision leaves the pair dangling —
+   * resume repair appends no synthetic decision — so `step/end` closes the
+   * survivors at its own instant. One record, not a map: pending approvals
+   * are a handful at most, and the rebuild-on-change copy stays trivial.
+   * Deleted at `step/start` (a superseded step's leftovers) and `step/end`.
+   */
+  stepApprovals?: Record<string, number>
+  /**
+   * The seq of the request record committed by the open step's
+   * `assistant/message` — the back-pointer `step/end` stamps `activeMs`
+   * onto. It stays the requests TAIL until then (nothing pushes between a
+   * step's message and its end, and the turn trim only drops the oldest),
+   * so the stamp is an O(1) tail write guarded by the seq. Same arm/remove
+   * lifecycle as `stepStart`.
+   */
+  stepRequestSeq?: number
+  /**
    * The timing strip's painted spans (shared/types.ts TimingSpan): every
    * completed step's time slices in log order, stamped with their REAL
    * instants — the TTFT wait, the decode blocks in stream order, the tool-run
@@ -1081,10 +1111,15 @@ export function applyTimeline(state: TimelineState, event: TimelineEvent, bounds
         // slot value), even over an un-consumed predecessor — sequential logs
         // never hit that, hostile ones just supersede it. A superseded step's
         // leftover span accumulator dies here too (its spans predate the new
-        // window and would clamp to nothing at the flush regardless).
+        // window and would clamp to nothing at the flush regardless). The
+        // wait/approval/request back-pointer slots die with it (their waits
+        // predate the new window the same way).
         const s = ensure([])
         s.stepStart = { time: event.time }
         delete s.stepSpans
+        delete s.stepWaits
+        delete s.stepApprovals
+        delete s.stepRequestSeq
         break
       }
       case 'step/end': {
@@ -1092,8 +1127,31 @@ export function applyTimeline(state: TimelineState, event: TimelineEvent, bounds
         // refold) — nothing to price, and the state must stay reference-equal.
         const start = state.stepStart
         if (start === undefined) return state
-        const s = ensure(['timing'])
+        const s = ensure(state.stepRequestSeq !== undefined ? ['timing', 'requests'] : ['timing'])
         ensureTiming(s).wallMs += durOf(start.time, event.time)
+        // The step's ACTIVE time prices the trend chart's duration overlay:
+        // the whole step window (the model call plus its tool runs) minus the
+        // clamped union of the step's user waits (see TimelineState.stepWaits)
+        // — approval decisions, including any pair left dangling by a crash
+        // (closed at this end instant), and `ask_user_question` answer
+        // windows. The stamp lands on the step's committed request record
+        // (the requests tail while the seq guard holds — a hostile refold
+        // that lost the row just skips it).
+        const waits: { start: number; end: number }[] = [...(state.stepWaits ?? [])]
+        for (const id in state.stepApprovals) waits.push({ start: state.stepApprovals[id], end: event.time })
+        waits.sort((a, b) => (a.start - b.start) || (a.end - b.end))
+        let waitMs = 0
+        let waitCursor = start.time
+        for (const wait of waits) {
+          const from = Math.max(waitCursor, wait.start)
+          const to = Math.min(wait.end, event.time)
+          if (to > from) { waitMs += to - from; waitCursor = to }
+        }
+        const activeMs = durOf(start.time, event.time) - waitMs
+        const last = state.requests.at(-1)
+        if (last !== undefined && last.seq === state.stepRequestSeq) {
+          s.requests[s.requests.length - 1] = { ...last, activeMs }
+        }
         // Flush the open step's accumulated spans into the strip's painted
         // list (see TimelineState.stepSpans): clamp every span into the step
         // window, then tile it left to right — first-wins de-overlap
@@ -1124,7 +1182,37 @@ export function applyTimeline(state: TimelineState, event: TimelineEvent, bounds
         // would break the plain-JSON persisted-state precondition.
         delete s.stepStart
         delete s.stepSpans
+        delete s.stepWaits
+        delete s.stepApprovals
+        delete s.stepRequestSeq
         bumpDetailRev(s)
+        break
+      }
+      case 'approval/asked': {
+        // Arm the approval's wait interval (see TimelineState.stepApprovals):
+        // the harness awaits the user's decision inline between this event
+        // and its `approval/decided` — pure user time inside the step's tool
+        // window. Only an open step owns one (an out-of-step ask prices
+        // nothing here and must leave the state reference-equal).
+        const id = data?.id
+        if (state.stepStart === undefined || typeof id !== 'string') return state
+        const s = ensure([])
+        s.stepApprovals = { ...state.stepApprovals, [id]: event.time }
+        break
+      }
+      case 'approval/decided': {
+        // Close the matching wait into `stepWaits`; a decided without its
+        // armed asked (an out-of-step pair, a refold window) prices nothing.
+        const id = data?.id
+        const open = state.stepApprovals
+        const askedAt = typeof id === 'string' ? open?.[id] : undefined
+        if (open === undefined || askedAt === undefined) return state
+        const s = ensure([])
+        s.stepWaits = [...(state.stepWaits ?? []), { start: askedAt, end: event.time }]
+        const kept: Record<string, number> = {}
+        for (const k in open) if (k !== id) kept[k] = open[k]
+        if (Object.keys(kept).length > 0) s.stepApprovals = kept
+        else delete s.stepApprovals
         break
       }
       case 'user/message':
@@ -1202,6 +1290,14 @@ export function applyTimeline(state: TimelineState, event: TimelineEvent, bounds
         // tally): the result only carries its tool name when it pairs with
         // the armed call, so an unpaired/foreign one counts nothing.
         if (node.tool === ASK_USER_TOOL) s.humanInputs = (s.humanInputs ?? 0) + 1
+        // The Q&A tool's whole window is the user's answer wait — its body
+        // only awaits the reply (the blocking schema outright, the timed one
+        // through its foreground phase) — so the open step books it as a wait
+        // interval for the `activeMs` subtraction at `step/end`. Same pairing
+        // authority as the tally above: an unpaired result waits nothing.
+        if (pendingEntry !== undefined && pendingEntry.name === ASK_USER_TOOL && state.stepStart !== undefined) {
+          s.stepWaits = [...(state.stepWaits ?? []), { start: pendingEntry.start, end: event.time }]
+        }
         // The file-op derivation (shared/fileOps.ts): the armed call's
         // arguments + the result's presentation meta. Unpaired results book
         // nothing (parity with the surface node's missing tool label).
@@ -1282,6 +1378,11 @@ export function applyTimeline(state: TimelineState, event: TimelineEvent, bounds
         // materialize an `undefined` property (plain-JSON precondition, the trap that broke the projection cache here).
         if (data && typeof data.turn === 'number') record.turn = data.turn
         if (data && typeof data.step === 'number') record.step = data.step
+        // Arm the step's request back-pointer (see TimelineState.stepRequestSeq):
+        // `step/end` stamps the step's active time onto this record — the trend
+        // chart's duration overlay. A message folding without an open step slot
+        // arms nothing and its record never gains the field.
+        if (state.stepStart !== undefined) s.stepRequestSeq = record.seq
         // The provider-reported output tokens, hoisted for the timing seat
         // below: the throughput pairing needs this exact figure, and `null`
         // must mean "the message carried no readable output bucket" — the

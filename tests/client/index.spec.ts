@@ -363,7 +363,7 @@ describe('client entry: configForms inject (the Config-form generation)', () => 
     const m = await mount(h(el.type as never, {
       useContextSettings: <T,>(sel: (state: SettingsState) => T): T => sel(store.getSnapshot()),
     }))
-    assert.equal(queryAll(m.container, '.lc-settings-select').length, 7)
+    assert.equal(queryAll(m.container, '.lc-settings-select').length, 8)
     assert.equal(m.container.querySelector('.lc-settings-head'), null, 'no settings-section chrome on this seat')
     await m.unmount()
     disposeRegistration()
@@ -453,7 +453,7 @@ describe('client entry: settings card slot', () => {
     assert.ok(query(m.container, '.lc-settings-card'))
     await click(query(m.container, '.lc-settings-head'))
     const selects = queryAll(m.container, '.lc-settings-select')
-    assert.equal(selects.length, 7)
+    assert.equal(selects.length, 8)
     for (const s of selects) assert.ok((s as HTMLButtonElement).disabled)
     await m.unmount()
     ctx.dispose()

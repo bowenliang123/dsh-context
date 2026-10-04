@@ -1,5 +1,5 @@
 /**
- * The dsh-context preference cards — two seats over the same seven rows. The
+ * The dsh-context preference cards — two seats over the same eight rows. The
  * settings-section card (`settings.plugin.item`, the older harness lines)
  * renders a collapsible list item in Settings → Plugins → Plugin
  * configuration; the Plugins-page card (`plugins.bundle.config`, the
@@ -113,6 +113,16 @@ function PreferenceRows(props: { t: Translate; state: SettingsState; set?: Setti
           { id: 'delta', label: t('gran.delta') },
         ]}
         onPick={(id) => { set?.('defaultTrendMode', id) }}
+      />
+      <PrefRow
+        label={t('settings.durationCurve')}
+        value={state.durationCurve}
+        disabled={disabled}
+        options={[
+          { id: 'show', label: t('insightsEntry.show') },
+          { id: 'hide', label: t('insightsEntry.hide') },
+        ]}
+        onPick={(id) => { set?.('defaultDurationCurve', id) }}
       />
       <PrefRow
         label={t('settings.deltaBase')}

@@ -2,6 +2,11 @@
 .lc-chartrow { display: flex; gap: 6px; align-items: stretch; }
 .lc-axis { position: relative; width: 40px; height: 150px; padding-top: 18px; box-sizing: border-box; color: var(--dsw-alias-label-secondary); font-size: 11px; }
 .lc-axis span { position: absolute; right: 0; line-height: 1; }
+/* The duration overlay's right-hand axis: same fixed marks as the left, anchored to the LEFT edge of its
+   column instead (labels stream rightward away from the plot), and kept narrow — duration labels
+   (fmtDuration: "850ms" / "3.2s" / "1m5s") stay short. */
+.lc-axis-r { width: 34px; flex: none; }
+.lc-axis-r span { left: 0; right: auto; }
 .lc-axis-top { top: 13px; }
 /* Quarter-mark labels (chart top 18 + ¼ / ¾ of the 112px bar area, minus half the 11px label box);
    tops are mirrored as Q3_TOP/Q1_TOP in trendChart.tsx for the delta mode's overlap check. */
@@ -112,6 +117,17 @@
 .lc-dna-hl { position: absolute; top: 18px; right: 2px; bottom: 0; left: 2px; z-index: 1; display: flex; gap: 2px; align-items: stretch; pointer-events: none; }
 .lc-dna-cell { position: relative; width: 14px; flex: none; }
 .lc-dna-slice { position: absolute; left: 0; width: 100%; box-sizing: border-box; border: 1px solid var(--dsw-alias-brand-primary); border-radius: 1px; background: color-mix(in srgb, var(--dsw-alias-brand-primary) 26%, transparent); }
+/*
+ The duration overlay (trendChart.tsx durationCurve): one svg absolutely positioned over the bar area (the 18px
+ top band and 2px side padding mirrored from .lc-chart), sized in content px so it scrolls with the bars.
+ Pointer-transparent; z-index 1 with DOM order after .lc-dna-hl keeps the curve above the bars and the
+ highlight slices, below the ✂ markers and step flags (z-index 2). `overflow: visible` lets an adaptive-mode
+ spike off the visible window poke above the plot exactly like an off-window bar's stack does.
+*/
+.lc-duration { position: absolute; top: 18px; left: 2px; z-index: 1; overflow: visible; pointer-events: none; }
+.lc-duration polyline, .lc-duration circle { fill: none; stroke: var(--dsw-alias-brand-primary); stroke-width: 1.5; stroke-linejoin: round; stroke-linecap: round; }
+.lc-duration circle { fill: var(--dsw-alias-brand-primary); }
+.lc-chart-dim .lc-duration { opacity: 0.35; }
 .lc-bar-marker { position: absolute; top: -16px; left: 50%; transform: translateX(-50%); z-index: 2; font-size: 11px; color: var(--dsw-alias-state-warn-primary); }
 /*
  Step flags (step granularity only): every 5th bar plants a flag at its RIGHT edge — a 1px pole rising from

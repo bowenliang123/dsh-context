@@ -691,6 +691,104 @@ describe('TrendChart adaptive scale (the title-adjacent toggle)', () => {
   })
 })
 
+describe('TrendChart duration overlay (durationCurve)', () => {
+  /** The overlay's y for a duration at the whole-log scale (the component's own rounding). */
+  const activeMsY = (activeMs: number, maxActiveMs: number): number => Math.round((CHART_H - activeMs * (CHART_H / Math.max(1, maxActiveMs))) * 100) / 100
+
+  test('off by default: no curve, no right-hand axis', async () => {
+    const m = await mount(h(TrendChart, propsOf([req(1, { activeMs: 1000 }), req(2, { activeMs: 2000 })])))
+    assert.equal(queryAll(m.container, '.lc-duration').length, 0)
+    assert.equal(queryAll(m.container, '.lc-axis-r').length, 0)
+    await m.unmount()
+  })
+
+  test('on: the curve rides the bar columns and the right axis carries duration quartiles', async () => {
+    const reqs = [req(1, { activeMs: 1000 }), req(2, { activeMs: 2000 }), req(3, { activeMs: 4000 })]
+    const m = await mount(h(TrendChart, propsOf(reqs, { durationCurve: true })))
+    const svg = query(m.container, '.lc-duration')
+    assert.equal(svg.getAttribute('width'), String(3 * BAR_CELL - 2))
+    assert.equal(svg.getAttribute('height'), String(CHART_H))
+    const lines = queryAll(svg, 'polyline')
+    assert.equal(lines.length, 1, 'one contiguous run of stamped bars')
+    assert.equal(
+      lines[0].getAttribute('points'),
+      `7,${activeMsY(1000, 4000)} 23,${activeMsY(2000, 4000)} 39,${activeMsY(4000, 4000)}`,
+    )
+    assert.equal(queryAll(svg, 'circle').length, 0)
+    // The right-hand axis: max, ¾, ½, ¼, 0 — formatted as durations.
+    const axis = query(m.container, '.lc-axis-r')
+    assert.equal(query(axis, '.lc-axis-top').textContent, '4.0s')
+    assert.equal(query(axis, '.lc-axis-q3').textContent, '3.0s')
+    assert.equal(query(axis, '.lc-axis-mid').textContent, '2.0s')
+    assert.equal(query(axis, '.lc-axis-q1').textContent, '1.0s')
+    assert.equal(query(axis, '.lc-axis-bot').textContent, '0')
+    await m.unmount()
+  })
+
+  test('a bar without ms breaks the line; an isolated single point draws a dot', async () => {
+    const reqs = [req(1, { activeMs: 1000 }), req(2), req(3, { activeMs: 2000 }), req(4, { activeMs: 4000 })]
+    const m = await mount(h(TrendChart, propsOf(reqs, { durationCurve: true })))
+    const svg = query(m.container, '.lc-duration')
+    const lines = queryAll(svg, 'polyline')
+    assert.equal(lines.length, 1, 'the trailing pair re-joins after the gap')
+    assert.equal(lines[0].getAttribute('points'), `39,${activeMsY(2000, 4000)} 55,${activeMsY(4000, 4000)}`)
+    const dots = queryAll(svg, 'circle')
+    assert.equal(dots.length, 1, 'a one-point run would be an invisible polyline')
+    assert.equal(dots[0].getAttribute('cx'), '7')
+    assert.equal(dots[0].getAttribute('cy'), String(activeMsY(1000, 4000)))
+    await m.unmount()
+  })
+
+  test('turn granularity plots each turn\'s summed active time', async () => {
+    const agg = aggregateByTurn([
+      req(1, { turn: 1, step: 0, activeMs: 1000 }),
+      req(2, { turn: 1, step: 1, activeMs: 500 }),
+      req(3, { turn: 2, step: 0, activeMs: 2000 }),
+    ])
+    const m = await mount(h(TrendChart, propsOf(agg, { granularity: 'turn', durationCurve: true })))
+    const lines = queryAll(query(m.container, '.lc-duration'), 'polyline')
+    assert.equal(lines[0].getAttribute('points'), `7,${activeMsY(1500, 2000)} 23,${activeMsY(2000, 2000)}`)
+    assert.equal(query(m.container, '.lc-axis-r .lc-axis-top').textContent, '2.0s')
+    await m.unmount()
+  })
+
+  test('delta mode keeps the floor-anchored duration axis; the hover tip appends the duration row', async () => {
+    const reqs = [req(1, { activeMs: 1000 }), req(2, { activeMs: 2000 })]
+    const m = await mount(h(TrendChart, propsOf(reqs, { mode: 'delta', durationCurve: true, hoveredSeq: 1 })))
+    assert.equal(query(m.container, '.lc-axis-r .lc-axis-top').textContent, '2.0s')
+    assert.equal(queryAll(query(m.container, '.lc-duration'), 'polyline').length, 1)
+    const rows = queryAll(query(m.container, '.lc-chart-tip'), 'span').map(r => r.textContent)
+    assert.equal(rows.length, 3)
+    assert.equal(rows[2], kit.t('tip.duration', { n: '1.0s' }))
+    // Off again: the tip drops the duration row.
+    await m.update(h(TrendChart, propsOf(reqs, { mode: 'delta', hoveredSeq: 1 })))
+    assert.equal(queryAll(query(m.container, '.lc-chart-tip'), 'span').length, 2)
+    await m.unmount()
+  })
+
+  test('adaptive scale rescales the curve to the visible window like the bars', async () => {
+    const reqs: RequestRecord[] = []
+    for (let i = 0; i < 30; i++) reqs.push(req(i + 1, { turn: 1, step: i, activeMs: i === 0 ? 9000 : 1000 }))
+    const m = await mount(h(TrendChart, propsOf(reqs, { adaptive: true, durationCurve: true })))
+    await flush()
+    const scroll = query<LayoutEl>(m.container, '.lc-chart-scroll')
+    // Anchored at the newest bars (scrollLeft 80): the 9s spike at bar 0 is off screen.
+    assert.equal(query(m.container, '.lc-axis-r .lc-axis-top').textContent, '1.0s')
+    await scrollTo(scroll, 0)
+    assert.equal(query(m.container, '.lc-axis-r .lc-axis-top').textContent, '9.0s')
+    await m.unmount()
+  })
+
+  test('no stamped durations at all: the axis shows the scale floor, the curve draws nothing', async () => {
+    const m = await mount(h(TrendChart, propsOf([req(1), req(2)], { durationCurve: true })))
+    assert.equal(queryAll(m.container, '.lc-duration').length, 0)
+    const axis = query(m.container, '.lc-axis-r')
+    assert.equal(query(axis, '.lc-axis-top').textContent, '—')
+    assert.equal(query(axis, '.lc-axis-bot').textContent, '0')
+    await m.unmount()
+  })
+})
+
 describe('TrendChart markers', () => {
   test('compaction/prune markers render the ✂ glyph with a positioned or bare title', async () => {
     const reqs = [req(1, { turn: 1, step: 0 }), req(2, { turn: 1, step: 1 }), req(3, { turn: 2, step: 0 })]
@@ -1098,6 +1196,22 @@ describe('aggregateByTurn', () => {
 
   test('an empty history aggregates to nothing', () => {
     assert.deepEqual(aggregateByTurn([]), [])
+  })
+
+  test('the duration overlay\'s ms sums across a turn\'s steps; absent only when no step carried one', () => {
+    const agg = aggregateByTurn([
+      req(1, { turn: 1, step: 0, activeMs: 1000 }),
+      req(2, { turn: 1, step: 1, activeMs: 2500 }),
+      req(3, { turn: 2, step: 0, activeMs: 800 }),
+    ])
+    assert.equal(agg[0].activeMs, 3500, 'the turn bar carries its steps\' summed active time')
+    assert.equal(agg[1].activeMs, 800, 'a single-step turn keeps its own figure')
+
+    // A step without a stamp contributes nothing but does not hide the run's known share.
+    const partial = aggregateByTurn([req(1, { turn: 1, activeMs: 1000 }), req(2, { turn: 1 })])
+    assert.equal(partial[0].activeMs, 1000)
+    const none = aggregateByTurn([req(1, { turn: 1 }), req(2, { turn: 1 })])
+    assert.ok(!('ms' in none[0]), 'no fabricated zero when no step reported')
   })
 })
 

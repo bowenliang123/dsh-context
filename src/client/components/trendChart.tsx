@@ -36,6 +36,13 @@ export interface TrendChartProps {
    */
   adaptive?: boolean
   /**
+   * Duration overlay (the trend card's title-adjacent toggle): each bar's step active time (`activeMs`)
+   * drawn as a curve over the bars, read off the quartile axis on the chart's right. The curve plots the
+   * raw figure in every mode (total/delta/DNA) — duration is not a composition category — and follows the
+   * same scale window as the bars (whole log, or the visible window when adaptive is on).
+   */
+  durationCurve?: boolean
+  /**
    * DNA mode (the trend card's toggle): per bar, its assembled context decomposed into ONE band per item in
    * read order (dna.ts), aligned with `requests` by index. Non-null draws every bar as a single-gradient
    * fingerprint and implies TOTAL semantics — the parent disables the Total/Delta switch while DNA is on.
@@ -52,18 +59,24 @@ export interface TrendChartProps {
 
 /**
  * Collapse per-step requests into one bar per turn — each turn is represented by its LAST step's record, tagged `stepCount` for the bar's
- * column width; the log keeps one turn's requests consecutive, so a run of equal turns collapses to its final record.
+ * column width; the log keeps one turn's requests consecutive, so a run of equal turns collapses to its final record. The duration
+ * overlay's `activeMs` is the run's steps SUMMED (the turn's total step active time), absent only when no step of the run carried one.
  */
 export function aggregateByTurn(requests: RequestRecord[]): RequestRecord[] {
   const out: RequestRecord[] = []
   let runSteps = 0
+  let runActiveMs = 0
+  let runHasActiveMs = false
   for (const req of requests) {
     const last = out.length > 0 ? out[out.length - 1] : null
     if (last !== null && (last.turn ?? 0) === (req.turn ?? 0)) {
       runSteps++
-      out[out.length - 1] = { ...req, stepCount: runSteps }
+      if (req.activeMs !== undefined) { runActiveMs += req.activeMs; runHasActiveMs = true }
+      out[out.length - 1] = { ...req, stepCount: runSteps, ...(runHasActiveMs ? { activeMs: runActiveMs } : {}) }
     } else {
       runSteps = 1
+      runActiveMs = req.activeMs ?? 0
+      runHasActiveMs = req.activeMs !== undefined
       out.push({ ...req, stepCount: 1 })
     }
   }
@@ -113,7 +126,7 @@ export function jumpTargetOf(requests: RequestRecord[], seq: number): RequestRec
 }
 
 export function makeTrendChart(kit: ViewKit): (props: TrendChartProps) => ReactElement {
-  const { t, fmt, eventLabel, eventAt, catLabel } = kit
+  const { t, fmt, fmtDuration, eventLabel, eventAt, catLabel } = kit
 
   const CHART_H = 112
   // Quarter-mark label tops for the axis (mirrored to .lc-axis-q1/.lc-axis-q3 in trendChart.css): chart top 18
@@ -189,11 +202,12 @@ export function makeTrendChart(kit: ViewKit): (props: TrendChartProps) => ReactE
     return out
   }
 
-  /** The visible window's own maxima (adaptive scale): the total-mode peak, and the delta arms' up/down sums. */
+  /** The visible window's own maxima (adaptive scale): the total-mode peak, the delta arms' up/down sums, the duration overlay's peak. */
   interface VisibleMax {
     total: number
     up: number
     down: number
+    activeMs: number
   }
 
   interface ChartBarProps {
@@ -498,6 +512,9 @@ export function makeTrendChart(kit: ViewKit): (props: TrendChartProps) => ReactE
     const dnaOn = dnaBands !== null
     const delta = props.mode === 'delta'
     const dnaDeltaOn = dnaOn && delta
+    // The duration overlay (durationCurve): each bar's step active time as a curve over the bars,
+    // read off the right-hand quartile axis.
+    const durationOn = props.durationCurve === true
     // An unrecognized focus key degrades to the unfocused chart instead of plotting an empty axis.
     const focus = !dnaOn && props.focusCat !== null && props.focusCat !== undefined && CATS.some(c => c.key === props.focusCat)
       ? props.focusCat
@@ -537,6 +554,7 @@ export function makeTrendChart(kit: ViewKit): (props: TrendChartProps) => ReactE
       let total = 0
       let up = 0
       let down = 0
+      let activeMs = 0
       // The column holding the left edge through the one holding the right edge; the per-column test then drops
       // the neighbour whose column falls in the 2px gap just outside the viewport.
       const from = Math.max(0, Math.floor(sl / pitch))
@@ -545,6 +563,11 @@ export function makeTrendChart(kit: ViewKit): (props: TrendChartProps) => ReactE
         const col = i * pitch
         if (col >= vr || col + BAR_W <= sl) continue
         const req = requests[i]
+        // The duration overlay's window maximum rides the same pass, so the right axis
+        // follows the scroll exactly like the bars' axis (measured whether or not the
+        // overlay is currently on — a toggle-on then never re-measures).
+        const m = req.activeMs ?? 0
+        if (m > activeMs) activeMs = m
         if (dnaDeltaOn && dnaDeltas !== null) {
           // DNA+delta: the band arms' own sums — the same figures the whole-log loop takes.
           let bu = 0
@@ -568,9 +591,9 @@ export function makeTrendChart(kit: ViewKit): (props: TrendChartProps) => ReactE
           total = req.total
         }
       }
-      setVisMax(prev => prev !== null && prev.total === total && prev.up === up && prev.down === down
+      setVisMax(prev => prev !== null && prev.total === total && prev.up === up && prev.down === down && prev.activeMs === activeMs
         ? prev
-        : { total, up, down })
+        : { total, up, down, activeMs })
     }
     // Whole-log maxima: the axis when adaptive is off, and the fallback for a delta window with no change at all
     // (it carries no scale of its own).
@@ -612,6 +635,41 @@ export function makeTrendChart(kit: ViewKit): (props: TrendChartProps) => ReactE
       } else {
         maxTotal = Math.max(1, visMax.total)
       }
+    }
+    // The duration overlay's scale (the right-hand axis): mode-independent — the curve always plots the
+    // bar's raw active time, whether the bars read totals, deltas, or DNA bands. Whole-log by default; the
+    // visible window's own maximum when adaptive is on (measured on every scroll, durationCurve or not).
+    let maxActiveMs = 0
+    if (durationOn) {
+      for (const req of requests) {
+        const m = req.activeMs ?? 0
+        if (m > maxActiveMs) maxActiveMs = m
+      }
+      if (adaptive && visMax !== null) maxActiveMs = visMax.activeMs
+    }
+    // The overlay geometry: ONE polyline per contiguous run of bars carrying a duration (a bar without
+    // `activeMs` breaks the line instead of faking a value) and a dot for an isolated single point, which a
+    // one-point polyline would render invisible. X centers on each bar's column, y rides the right axis's
+    // floor-anchored scale; the svg rides the scrolling content, so scrolling needs no re-computation.
+    const durationRuns: string[] = []
+    const durationDots: [number, number][] = []
+    if (durationOn) {
+      const scale = CHART_H / Math.max(1, maxActiveMs)
+      let run: [number, number][] = []
+      const flushRun = (): void => {
+        if (run.length >= 2) durationRuns.push(run.map(p => `${p[0]},${p[1]}`).join(' '))
+        else if (run.length === 1) durationDots.push(run[0])
+        run = []
+      }
+      for (let i = 0; i < requests.length; i++) {
+        const m = requests[i].activeMs
+        if (m === undefined) {
+          flushRun()
+          continue
+        }
+        run.push([i * (BAR_W + BAR_GAP) + BAR_W / 2, Math.round((CHART_H - m * scale) * 100) / 100])
+      }
+      flushRun()
     }
     // The zero line splits the bar area PROPORTIONALLY to the larger side, so the px-per-token scale
     // is identical above and below it — a compaction's downward bar reads honestly against a growth bar.
@@ -788,12 +846,12 @@ export function makeTrendChart(kit: ViewKit): (props: TrendChartProps) => ReactE
       return containHorizontalOverscroll(el)
     }, [])
 
-    // Compact 2-row hover tooltip, shown instantly by the custom `.lc-chart-tip` (the native title is delayed):
+    // Compact hover tooltip, shown instantly by the custom `.lc-chart-tip` (the native title is delayed):
     // identity and the bar's total — the SAME value the bar height and axis are scaled against (the fold's
     // heuristic figure, matching every other card). Identity phrasing follows the granularity —
     // turn bars always speak TURN (the aggregate's step count, singular for a 1-step turn; a record missing
     // stepCount degrades to that too), step bars carry the step index plus the turn's step total. Delta swaps
-    // the metric row for the net.
+    // the metric row for the net, and the duration overlay appends a third row while it is on.
     const stepsOf = useMemo(() => turnStepsOf(props.requests), [props.requests])
     const hoveredIdx = props.hoveredSeq !== null ? requests.findIndex(r => r.seq === props.hoveredSeq) : -1
     const hoveredReq = hoveredIdx >= 0 ? requests[hoveredIdx] : null
@@ -836,7 +894,7 @@ export function makeTrendChart(kit: ViewKit): (props: TrendChartProps) => ReactE
       }
       return slices
     }, [dnaOn, dnaHit, dnaDeltaOn, dnaDeltas, dnaBands, downPx, deltaScale, maxTotal])
-    const tipRowsOf = (req: RequestRecord): [string, string] => {
+    const tipRowsOf = (req: RequestRecord): string[] => {
       const n = req.stepCount ?? 1
       const head = props.granularity === 'turn'
         ? (n > 1 ? t('tip.turn', { t: req.turn ?? 0, n }) : t('tip.turn1', { t: req.turn ?? 0 }))
@@ -846,18 +904,23 @@ export function makeTrendChart(kit: ViewKit): (props: TrendChartProps) => ReactE
       // unless a band sits under the pointer (a hover on the bar's padding above the strip falls
       // through to the mode's own row: the delta's net, else the total).
       const band = hitBand ?? hoveredDelta
+      let metric: string
       if (band !== null) {
-        return [head, t('trend.dnaItem', { label: dnaBaseLabel(band, t, catLabel), n: dnaDeltaOn ? fmtSigned(band.tokens) : fmt(band.tokens) })]
-      }
-      if (delta) {
+        metric = t('trend.dnaItem', { label: dnaBaseLabel(band, t, catLabel), n: dnaDeltaOn ? fmtSigned(band.tokens) : fmt(band.tokens) })
+      } else if (delta) {
         /* v8 ignore next 1 -- delta mode only receives records from
            deltaOf, which always assigns net; the fallback is defensive. */
-        return [head, t('tip.delta', { n: fmtSigned(req.net ?? 0) })]
+        metric = t('tip.delta', { n: fmtSigned(req.net ?? 0) })
+      } else {
+        // Focused: the metric row IS the focused category's figure, so the tip names it instead of claiming a total.
+        metric = focus !== null
+          ? t('tip.cat', { cat: catLabel(focus), n: fmt(req.total) })
+          : t('tip.total', { n: fmt(req.total) })
       }
-      // Focused: the metric row IS the focused category's figure, so the tip names it instead of claiming a total.
-      return [head, focus !== null
-        ? t('tip.cat', { cat: catLabel(focus), n: fmt(req.total) })
-        : t('tip.total', { n: fmt(req.total) })]
+      const rows = [head, metric]
+      // The overlay's own reading: the bar's step active time, only while the curve is on.
+      if (durationOn && req.activeMs !== undefined) rows.push(t('tip.duration', { n: fmtDuration(req.activeMs) }))
+      return rows
     }
 
     // Column center (content px) of the currently hovered bar, for syncTip reads outside the render pass.
@@ -983,6 +1046,21 @@ export function makeTrendChart(kit: ViewKit): (props: TrendChartProps) => ReactE
                 />
               ))}
               {dnaOn ? <DnaHighlights slices={dnaSlices} /> : null}
+              {/* The duration overlay: one svg riding the scrolling content (top 18px padding band excluded),
+                  so it scrolls with the bars and needs no scroll handler. z-index parity with the DNA
+                  highlight but later in DOM order, so the curve reads above the translucent slices; a bar
+                  without `activeMs` breaks the line instead of faking a point. */}
+              {durationOn && (durationRuns.length > 0 || durationDots.length > 0) ? (
+                <svg
+                  className="lc-duration"
+                  width={requests.length * (BAR_W + BAR_GAP) - BAR_GAP}
+                  height={CHART_H}
+                  aria-hidden="true"
+                >
+                  {durationRuns.map((pts, i) => <polyline key={i} points={pts} />)}
+                  {durationDots.map((p, i) => <circle key={i} cx={p[0]} cy={p[1]} r={1.5} />)}
+                </svg>
+              ) : null}
             </div>
             {/* Turn strip: one COLOR BLOCK per turn spanning exactly its bars' columns, so the partition reads at a glance and lines
                 up with the steps; hovering a block highlights that turn's bars and vice versa — one shared hover-only state.
@@ -1006,7 +1084,7 @@ export function makeTrendChart(kit: ViewKit): (props: TrendChartProps) => ReactE
               })}
             </div>
           </div>
-          {/* Compact 2-row hover tooltip (identity / bar total), shown instantly by the custom `.lc-chart-tip`
+          {/* Compact hover tooltip (identity / bar total), shown instantly by the custom `.lc-chart-tip`
               (the native title is delayed); the per-category breakdown lives in the detail panel below. It floats
               ABOVE the plot (CSS bottom anchoring) so it never covers the bars, is capped at the wrapper's width
               and wrapped, and is positioned imperatively over its bar's visible slice (syncTip) so scrolling keeps
@@ -1015,6 +1093,19 @@ export function makeTrendChart(kit: ViewKit): (props: TrendChartProps) => ReactE
             <div className="lc-chart-tip">{tipRowsOf(hoveredReq).map((row, i) => <span key={i}>{row}</span>)}</div>
           ) : null}
         </div>
+        {/* The duration overlay's own quartile axis rides the chart's RIGHT edge (the bars' token axis
+            keeps the left): the same five fixed marks, formatted as durations, floor-anchored in every
+            mode — the curve plots raw active time even while the bars read deltas. Only while the overlay
+            is on. */}
+        {durationOn ? (
+          <div className="lc-axis lc-axis-r">
+            <span className="lc-axis-top">{fmtDuration(maxActiveMs)}</span>
+            <span className="lc-axis-q3">{fmtDuration(Math.round(maxActiveMs * 3 / 4))}</span>
+            <span className="lc-axis-mid">{fmtDuration(Math.round(maxActiveMs / 2))}</span>
+            <span className="lc-axis-q1">{fmtDuration(Math.round(maxActiveMs / 4))}</span>
+            <span className="lc-axis-bot">{'0'}</span>
+          </div>
+        ) : null}
       </div>
     )
   }

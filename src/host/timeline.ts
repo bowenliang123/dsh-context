@@ -71,6 +71,11 @@ const requestRecordSchema = z.object({
   skill: z.number().int().nonnegative().optional(),
   cacheRead: z.number().int().nonnegative().optional(),
   output: z.number().int().nonnegative().optional(),
+  /**
+   * The request's step active milliseconds (see RequestRecord.activeMs).
+   * Optional so a record whose step never closed (the live tail) still parses.
+   */
+  activeMs: z.number().nonnegative().optional(),
   stepCount: z.number().int().positive().optional(),
 }).strict()
 
@@ -270,6 +275,9 @@ const timelineStateSchema = z.object({
     time: z.number(),
     firstToken: z.number().optional(),
   }).strict().optional(),
+  stepWaits: z.array(z.object({ start: z.number(), end: z.number() }).strict()).optional(),
+  stepApprovals: z.record(z.string(), z.number()).optional(),
+  stepRequestSeq: z.number().optional(),
   callNames: z.record(z.string(), z.object({ name: z.string(), start: z.number(), argsRaw: z.string().optional() }).strict()),
   pendingShadowedSeqs: z.array(z.number()).optional(),
   pendingShadowEventSeq: z.number().optional(),
@@ -450,9 +458,16 @@ export function createContextTimelineDefinition(config: Config, slim: () => bool
     // 25: developer/message tool-registry changes now enter the injection
     // surface and request history. Later events cannot recover the omitted
     // nodes or tokens, so cached rows refold from the durable log.
-    // 26: stream-only and failed-attempt usage joins the billed totals;
+    //
+    // 26: the per-request step active time (`activeMs`) joined request
+    // records — the trend chart's duration overlay. Later events cannot
+    // backfill it for requests already folded (the v9 `cacheRead` precedent),
+    // so cached rows refold from the durable log; the v20 warm-up rebuilds
+    // idle sessions' rows the first time the dashboard opens.
+    //
+    // 27: stream-only and failed-attempt usage joins the billed totals;
     // retry-started closes the sample replacement slot. Rebuild cached rows.
-    stateVersion: 26,
+    stateVersion: 27,
   }
   return definition
 }

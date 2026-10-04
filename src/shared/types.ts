@@ -164,6 +164,9 @@ export type DefaultPlacement = 'all' | 'tab' | 'sidebar'
 /** Whether the Context Insights panel's sidebar entry is offered at all. */
 export type InsightsEntry = 'show' | 'hide'
 
+/** Whether the trend chart mounts with the per-request duration curve overlaid. */
+export type DefaultDurationCurve = 'show' | 'hide'
+
 export interface PluginSettings {
   defaultPlacement: DefaultPlacement
   defaultGranularity: DefaultGranularity
@@ -172,6 +175,7 @@ export interface PluginSettings {
   defaultToolSort: DefaultToolSort
   defaultFileSort: DefaultFileSort
   insightsEntry: InsightsEntry
+  defaultDurationCurve: DefaultDurationCurve
 }
 
 /** The section fields the settings card edits, as the Host schema names them. */
@@ -662,6 +666,15 @@ export interface RequestRecord {
    */
   cacheRead?: number
   output?: number
+  /**
+   * The request's step ACTIVE milliseconds (`step/start` → `step/end`: the
+   * model call plus its tool runs) minus the in-step user waits — approval
+   * decisions and `ask_user_question` answer windows — the trend chart's
+   * duration overlay. Stamped at `step/end` onto the step's committed record;
+   * absent while that step is still open (the live tail) or when the step
+   * closed without one (an unpaired/hostile log).
+   */
+  activeMs?: number
   /**
    * Turn-mode aggregate marker, set by the Client's aggregateByTurn (one bar
    * per turn shows its LAST step's record). The Host never sets it.

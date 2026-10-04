@@ -12,11 +12,11 @@
  * members keeps the dependency graph honest.
  */
 
-import type { DefaultDeltaBase, DefaultFileSort, DefaultGranularity, DefaultPlacement, DefaultToolSort, DefaultTrendMode, InsightsEntry, SettingsField } from '../shared/types'
+import type { DefaultDeltaBase, DefaultFileSort, DefaultGranularity, DefaultDurationCurve, DefaultPlacement, DefaultToolSort, DefaultTrendMode, InsightsEntry, SettingsField } from '../shared/types'
 
 // The preference vocabulary is declared once in shared/types.ts; re-exported
 // here so client-side consumers keep their canonical import path.
-export type { DefaultDeltaBase, DefaultFileSort, DefaultGranularity, DefaultPlacement, DefaultToolSort, DefaultTrendMode, InsightsEntry, SettingsField } from '../shared/types'
+export type { DefaultDeltaBase, DefaultFileSort, DefaultGranularity, DefaultDurationCurve, DefaultPlacement, DefaultToolSort, DefaultTrendMode, InsightsEntry, SettingsField } from '../shared/types'
 
 /** The bound settings scope (ctx.settingsScope.bind result), as consumed. */
 export interface SettingsScopeLike {
@@ -52,6 +52,7 @@ export interface SettingsState {
   toolSort: DefaultToolSort
   fileSort: DefaultFileSort
   insightsEntry: InsightsEntry
+  durationCurve: DefaultDurationCurve
   writable: boolean
 }
 
@@ -65,6 +66,7 @@ export interface ContextSettings {
   defaultToolSort(): DefaultToolSort
   defaultFileSort(): DefaultFileSort
   insightsEntry(): InsightsEntry
+  defaultDurationCurve(): DefaultDurationCurve
   attach(scope: SettingsScopeLike): () => void
   /** Persist one preference choice (local echo, then the fenced scope write). */
   set(field: SettingsField, value: string): void
@@ -78,6 +80,7 @@ type Prefs = {
   toolSort?: DefaultToolSort
   fileSort?: DefaultFileSort
   insightsEntry?: InsightsEntry
+  durationCurve?: DefaultDurationCurve
 }
 
 function prefsOf(value: unknown): Prefs {
@@ -91,17 +94,19 @@ function prefsOf(value: unknown): Prefs {
     ...(v.defaultToolSort === 'size' || v.defaultToolSort === 'count' || v.defaultToolSort === 'name' ? { toolSort: v.defaultToolSort } : {}),
     ...(v.defaultFileSort === 'count' || v.defaultFileSort === 'latest' || v.defaultFileSort === 'path' ? { fileSort: v.defaultFileSort } : {}),
     ...(v.insightsEntry === 'show' || v.insightsEntry === 'hide' ? { insightsEntry: v.insightsEntry } : {}),
+    ...(v.defaultDurationCurve === 'show' || v.defaultDurationCurve === 'hide' ? { durationCurve: v.defaultDurationCurve } : {}),
   }
 }
 
 export function createContextSettings(): ContextSettings {
-  let state: SettingsState = { status: 'loading', placement: 'all', granularity: 'step', mode: 'total', deltaBase: 'step', toolSort: 'count', fileSort: 'count', insightsEntry: 'show', writable: false }
+  let state: SettingsState = { status: 'loading', placement: 'all', granularity: 'step', mode: 'total', deltaBase: 'step', toolSort: 'count', fileSort: 'count', insightsEntry: 'show', durationCurve: 'show', writable: false }
   let scope: SettingsScopeLike | undefined
   const listeners = new Set<() => void>()
   const publish = (next: SettingsState): void => {
     if (next.status === state.status && next.placement === state.placement && next.granularity === state.granularity
       && next.mode === state.mode && next.deltaBase === state.deltaBase && next.toolSort === state.toolSort
-      && next.fileSort === state.fileSort && next.insightsEntry === state.insightsEntry && next.writable === state.writable) return
+      && next.fileSort === state.fileSort && next.insightsEntry === state.insightsEntry && next.durationCurve === state.durationCurve
+      && next.writable === state.writable) return
     state = next
     for (const listener of listeners) listener()
   }
@@ -127,6 +132,7 @@ export function createContextSettings(): ContextSettings {
       toolSort: prefs.toolSort ?? state.toolSort,
       fileSort: prefs.fileSort ?? state.fileSort,
       insightsEntry: prefs.insightsEntry ?? (raw?.insightsEntry === undefined ? state.insightsEntry : 'show'),
+      durationCurve: prefs.durationCurve ?? (raw?.defaultDurationCurve === undefined ? state.durationCurve : 'show'),
       writable: snap.writable,
     })
     return { placement: prefs.placement, insightsEntry: prefs.insightsEntry }
@@ -146,6 +152,7 @@ export function createContextSettings(): ContextSettings {
     defaultToolSort: () => state.toolSort,
     defaultFileSort: () => state.fileSort,
     insightsEntry: () => state.insightsEntry,
+    defaultDurationCurve: () => state.durationCurve,
     attach(bound) {
       scope = bound
       sync(bound)

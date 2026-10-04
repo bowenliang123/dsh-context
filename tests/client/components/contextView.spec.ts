@@ -495,6 +495,44 @@ describe('ContextView — interactions', () => {
     await m.unmount()
   })
 
+  test('the duration toggle overlays the active-time curve with a right-hand quartile axis', async () => {
+    const View = makeView(new TestClientCtx())
+    const m = await mount(h(View, {
+      sessionId: 'sv-ms-curve',
+      useProjection: projectionsFor(timeline({
+        requests: [
+          { seq: 2, turn: 1, step: 1, time: T0 + 1000, system: 100, tools: 200, user: 10, inject: 0, assistant: 20, tool: 0, total: 330, activeMs: 1000 },
+          { seq: 4, turn: 1, step: 2, time: T0 + 3000, system: 100, tools: 200, user: 10, inject: 0, assistant: 60, tool: 30, total: 400, activeMs: 2000 },
+        ],
+      })),
+    }))
+
+    // The switch rides the title's right, next after the adaptive one.
+    const msBtn = () => buttonByText(m.container, DICT_EN['trend.duration'])
+    const group = msBtn().parentElement as HTMLElement
+    assert.ok(group.className.includes('lc-trend-duration'))
+    assert.equal(group.getAttribute('title'), DICT_EN['trend.durationTip'])
+    const adaptiveGroup = buttonByText(m.container, DICT_EN['trend.adaptive']).parentElement as HTMLElement
+    assert.equal(group.previousElementSibling, adaptiveGroup, 'Duration rides right of the adaptive switch')
+    // The settings default (show) mounts the overlay ON: the curve spans the two stamped bars and the
+    // right axis reads the 2s peak (jsdom's zero-width viewport keeps the whole-log scale, adaptive off anyway).
+    assert.ok(msBtn().className.includes('lc-gran-on'), 'on at mount (the settings default)')
+    assert.equal(queryAll(m.container, '.lc-duration polyline').length, 1)
+    assert.equal(text(query(m.container, '.lc-axis-r .lc-axis-top')), '2.0s')
+    assert.equal(text(query(m.container, '.lc-axis-r .lc-axis-mid')), '1.0s')
+
+    // Off: the curve and its axis drop away; back on they return. Mount-local, never written back.
+    await click(msBtn())
+    assert.ok(!msBtn().className.includes('lc-gran-on'))
+    assert.equal(queryAll(m.container, '.lc-duration').length, 0)
+    assert.equal(queryAll(m.container, '.lc-axis-r').length, 0)
+
+    await click(msBtn())
+    assert.equal(queryAll(m.container, '.lc-duration polyline').length, 1)
+    assert.equal(queryAll(m.container, '.lc-axis-r').length, 1)
+    await m.unmount()
+  })
+
   test('the trend card\'s DNA toggle fingerprints the bars, combinable with Delta', async () => {
     const m = await mountRich('sv-trend-dna')
     const dnaBtn = () => buttonByText(m.container, DICT_EN['trend.dna'])
@@ -1163,7 +1201,7 @@ describe('ContextView — locale and settings', () => {
       getSnapshot: () => ({
         status: 'ready',
         writable: true,
-        value: { defaultGranularity: 'turn', defaultTrendMode: 'delta', defaultFileSort: 'path' },
+        value: { defaultGranularity: 'turn', defaultTrendMode: 'delta', defaultFileSort: 'path', defaultDurationCurve: 'hide' },
       }),
       subscribe: () => () => {},
       set: async () => {},
@@ -1191,6 +1229,8 @@ describe('ContextView — locale and settings', () => {
     }))
     assert.ok(buttonByText(m.container, DICT_EN['gran.turn']).className.includes('lc-gran-on'))
     assert.ok(buttonByText(m.container, DICT_EN['gran.delta']).className.includes('lc-gran-on'))
+    // The 'hide' curve preference mounts the Duration toggle off (the schema default mounts it on).
+    assert.ok(!buttonByText(m.container, DICT_EN['trend.duration']).className.includes('lc-gran-on'))
     // Turn aggregation applies at mount: two bars (turn 1 aggregate + turn-less).
     assert.equal(queryAll(m.container, '.lc-bar').length, 2)
     // The File Activity card opens sorted by the 'path' preference, not by op count.

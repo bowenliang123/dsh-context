@@ -19,6 +19,7 @@ import { BASELINES } from '../../baselines'
 import { createContextHeadersDefinition } from '../../../src/host/headers'
 import { createContextTimelineDefinition } from '../../../src/host/timeline'
 import {
+  assistantAttempt,
   assistantMessage,
   compaction,
   header,
@@ -32,7 +33,7 @@ import {
   userMessage,
 } from '../helpers/events'
 import { assertStatesPlainJson, driveTimeline } from '../helpers/projection'
-import type { TimelineEvent } from '../../../src/host/fold'
+import type { TimelineEvent, TimelineState } from '../../../src/host/fold'
 import { RegistryDriver, RegistryViolationError } from './registryDriver'
 import type { Checkpoint, SessionLike } from './registryDriver'
 
@@ -152,7 +153,7 @@ for (const [index, baseline] of BASELINES.entries()) {
       assert.ok(rows !== undefined, 'checkpoint rows are losslessly JSON-serializable')
       for (const key of ['contextTimeline', 'contextHeaders']) {
         const row = rows[key] as { ver: number; seq: number }
-        assert.equal(row.ver, key === 'contextTimeline' ? 26 : 1)
+        assert.equal(row.ver, key === 'contextTimeline' ? 27 : 1)
         assert.equal(row.seq, 12)
       }
       // And the write-gate equivalent on every intermediate state of a fresh fold.
@@ -177,6 +178,38 @@ for (const [index, baseline] of BASELINES.entries()) {
       // A warm read seeded from the rows equals the live cut too (the rows ride stateSchema).
       const warm = driver.restore(rows, log, 0, session.header)
       assert.deepEqual(warm.values, driver.snapshot(session).values)
+    })
+
+    test('version 26 checkpoints refold failed-attempt usage and preserve step active time', () => {
+      const time = Date.parse('2026-01-05T02:00:00Z')
+      const log: TimelineEvent[] = [
+        { seq: 0, time, type: 'session/created', data: {} },
+        header(1, { time, model: 'deepseek-v4-flash', provider: 'deepseek' }),
+        stepStart(2, { time: time + 1000 }),
+        assistantAttempt(3, { time: time + 1500, turn: 1, step: 1, stream: [
+          { type: 'chunk', time: time + 1500, chunk: { type: 'usage', usage: { inputTokens: 4, outputTokens: 2 } } },
+        ] }),
+        { seq: 4, time: time + 1600, type: 'llm/retry-started', data: { turn: 1, step: 1 } },
+        { seq: 5, time: time + 1700, type: 'approval/asked', data: { id: 'approval' } },
+        { seq: 6, time: time + 1900, type: 'approval/decided', data: { id: 'approval', outcome: 'allowed-once' } },
+        assistantMessage(7, { time: time + 2200, turn: 1, step: 1, usage: { inputTokens: 10, outputTokens: 5 } }),
+        stepEnd(8, { time: time + 3000 }),
+      ]
+      const { driver, session } = bootSession(index, log)
+      const row = driver.checkpoint(session).contextTimeline
+      const oldState = structuredClone(row.val as TimelineState)
+      delete oldState.lastUsage
+      oldState.cost = { deepseek: { 'deepseek-v4-flash': {
+        peak: { uncached: 10, cacheRead: 0, cacheWrite: 0, output: 5 },
+      } } }
+      const stale: Checkpoint = { contextTimeline: { ...row, ver: 26, val: oldState } }
+      assert.equal(driver.viewCheckpoint(stale).contextTimeline, undefined)
+      const restored = driver.restore(stale, log, 0, session.header)
+      assert.deepEqual(restored.values, driver.snapshot(session).values)
+      const timeline = restored.values.contextTimeline as TimelineState
+      assert.deepEqual(timeline.cost?.deepseek?.['deepseek-v4-flash'].peak,
+        { uncached: 14, cacheRead: 0, cacheWrite: 0, output: 7 })
+      assert.equal(timeline.requests[0].activeMs, 1800)
     })
 
     test('a corrupted checkpoint row is skipped by viewCheckpoint, never served', () => {

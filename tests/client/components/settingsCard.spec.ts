@@ -21,7 +21,7 @@ function hookFor(state: SettingsState) {
 }
 
 function stateOf(partial: Partial<SettingsState> = {}): SettingsState {
-  return { status: 'ready', placement: 'all', granularity: 'step', mode: 'total', deltaBase: 'step', toolSort: 'count', fileSort: 'count', insightsEntry: 'show', writable: true, ...partial }
+  return { status: 'ready', placement: 'all', granularity: 'step', mode: 'total', deltaBase: 'step', toolSort: 'count', fileSort: 'count', insightsEntry: 'show', durationCurve: 'show', writable: true, ...partial }
 }
 
 /** Menu items portaled into document.body while a select is open. */
@@ -65,7 +65,7 @@ describe('SettingsCard', () => {
     assert.equal(head.getAttribute('aria-label'), `${DICT_EN['settings.collapse']}: ${DICT_EN['settings.title']}`)
     assert.ok(card.className.includes('lc-settings-open'))
     const selects = queryAll(m.container, '.lc-settings-select')
-    assert.equal(selects.length, 7)
+    assert.equal(selects.length, 8)
     assert.ok(selects.every(s => (s as HTMLButtonElement).disabled))
     // Loading is not ready: no read-only note.
     assert.equal(m.container.querySelector('.lc-settings-note'), null)
@@ -120,13 +120,16 @@ describe('SettingsCard', () => {
     // The granularity row follows.
     assert.ok(text(selects[2]).includes(DICT_EN['gran.step']))
     assert.ok(text(selects[3]).includes(DICT_EN['gran.total']))
+    // The duration-curve row follows the trend-mode one, reusing the entry's show/hide labels.
+    assert.ok(text(m.container).includes(DICT_EN['settings.durationCurve']))
+    assert.ok(text(selects[4]).includes(DICT_EN['insightsEntry.show']))
     // The delta-baseline row leads the tool-sort one, reusing the toolbar's option labels.
     assert.ok(text(m.container).includes(DICT_EN['settings.deltaBase']))
-    assert.ok(text(selects[4]).includes(DICT_EN['browser.base.step']))
+    assert.ok(text(selects[5]).includes(DICT_EN['browser.base.step']))
     assert.ok(text(m.container).includes(DICT_EN['settings.toolSort']))
-    assert.ok(text(selects[5]).includes(DICT_EN['tool.sort.count']))
+    assert.ok(text(selects[6]).includes(DICT_EN['tool.sort.count']))
     assert.ok(text(m.container).includes(DICT_EN['settings.fileSort']))
-    assert.ok(text(selects[6]).includes(DICT_EN['files.sort.count']))
+    assert.ok(text(selects[7]).includes(DICT_EN['files.sort.count']))
 
     await click(selects[2])
     assert.equal(selects[2].getAttribute('aria-expanded'), 'true')
@@ -156,8 +159,22 @@ describe('SettingsCard', () => {
     ])
     assert.equal(document.body.querySelector('[role="menu"]'), null)
 
-    // The delta-baseline row writes its field through the toolbar's vocabulary.
+    // The duration-curve row writes its field through the same show/hide vocabulary.
     await click(selects[4])
+    const curveItems = menuItems()
+    assert.deepEqual(curveItems.map(i => text(i)), [DICT_EN['insightsEntry.show'], DICT_EN['insightsEntry.hide']])
+    await click(curveItems[1]) // 'Hide'
+    assert.deepEqual(calls, [
+      ['defaultPlacement', 'sidebar'],
+      ['insightsEntry', 'hide'],
+      ['defaultGranularity', 'turn'],
+      ['defaultTrendMode', 'delta'],
+      ['defaultDurationCurve', 'hide'],
+    ])
+    assert.equal(document.body.querySelector('[role="menu"]'), null)
+
+    // The delta-baseline row writes its field through the toolbar's vocabulary.
+    await click(selects[5])
     const baseItems = menuItems()
     assert.deepEqual(baseItems.map(i => text(i)), [DICT_EN['browser.base.step'], DICT_EN['browser.base.turn']])
     await click(baseItems[1]) // 'prev turn'
@@ -166,12 +183,13 @@ describe('SettingsCard', () => {
       ['insightsEntry', 'hide'],
       ['defaultGranularity', 'turn'],
       ['defaultTrendMode', 'delta'],
+      ['defaultDurationCurve', 'hide'],
       ['defaultDeltaBase', 'turn'],
     ])
     assert.equal(document.body.querySelector('[role="menu"]'), null)
 
     // The tool-sort row leads the file-sort one.
-    await click(selects[5])
+    await click(selects[6])
     const toolItems = menuItems()
     assert.deepEqual(toolItems.map(i => text(i)), [
       DICT_EN['tool.sort.size'],
@@ -184,13 +202,14 @@ describe('SettingsCard', () => {
       ['insightsEntry', 'hide'],
       ['defaultGranularity', 'turn'],
       ['defaultTrendMode', 'delta'],
+      ['defaultDurationCurve', 'hide'],
       ['defaultDeltaBase', 'turn'],
       ['defaultToolSort', 'name'],
     ])
     assert.equal(document.body.querySelector('[role="menu"]'), null)
 
     // The file-sort row writes the last field.
-    await click(selects[6])
+    await click(selects[7])
     const sortItems = menuItems()
     assert.deepEqual(sortItems.map(i => text(i)), [
       DICT_EN['files.sort.count'],
@@ -203,6 +222,7 @@ describe('SettingsCard', () => {
       ['insightsEntry', 'hide'],
       ['defaultGranularity', 'turn'],
       ['defaultTrendMode', 'delta'],
+      ['defaultDurationCurve', 'hide'],
       ['defaultDeltaBase', 'turn'],
       ['defaultToolSort', 'name'],
       ['defaultFileSort', 'path'],
@@ -270,7 +290,7 @@ describe('SettingsCard', () => {
       const card = query(m.container, '.lc-settings-card')
       assert.ok(card.className.includes('lc-settings-open'))
       assert.equal(query(m.container, '.lc-settings-head').getAttribute('aria-expanded'), 'true')
-      assert.equal(queryAll(m.container, '.lc-settings-select').length, 7)
+      assert.equal(queryAll(m.container, '.lc-settings-select').length, 8)
       assert.equal(scrolled.length, 1, 'the card scrolls itself into view')
       assert.deepEqual(scrolled[0].arg, { block: 'nearest' })
       assert.equal(scrolled[0].el, card)
@@ -322,7 +342,7 @@ describe('PluginConfigCard (the Plugins-page seat)', () => {
     await m2.unmount()
   })
 
-  test('renders the seven rows flat — no card chrome, no expand request consumption', async () => {
+  test('renders the eight rows flat — no card chrome, no expand request consumption', async () => {
     requestCardExpand()
     const m = await mount(h(PluginConfigCard, { useContextSettings: hookFor(stateOf({ status: 'loading', writable: false })) }))
     assert.equal(m.container.querySelector('.lc-settings-card'), null, 'no settings-section chrome')
@@ -330,7 +350,7 @@ describe('PluginConfigCard (the Plugins-page seat)', () => {
     assert.equal(m.container.querySelector('.lc-settings-head'), null)
     // The rows render immediately: no expand/collapse leg.
     const selects = queryAll<HTMLButtonElement>(m.container, '.lc-settings-select')
-    assert.equal(selects.length, 7)
+    assert.equal(selects.length, 8)
     assert.ok(selects.every(s => s.disabled), 'loading is not ready: the rows are disabled')
     assert.equal(m.container.querySelector('.lc-settings-note'), null)
     await m.unmount()
@@ -354,7 +374,7 @@ describe('PluginConfigCard (the Plugins-page seat)', () => {
     assert.equal(writable.container.querySelector('.lc-settings-note'), null)
     const enabled = queryAll<HTMLButtonElement>(writable.container, '.lc-settings-select')
     assert.ok(enabled.every(s => !s.disabled))
-    await click(enabled[6])
+    await click(enabled[7]) // the file-sort row trails
     const items = menuItems()
     assert.deepEqual(items.map(i => text(i)), [
       DICT_EN['files.sort.count'],
