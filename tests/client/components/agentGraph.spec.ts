@@ -2,6 +2,7 @@ import { act, createElement as h } from 'react'
 import assert from 'node:assert/strict'
 import { afterEach, beforeEach, describe, test, vi } from 'vitest'
 import { makeAgentGraph } from '../../../src/client/components/agentGraph'
+import { DICT_EN } from '../../../src/client/i18n'
 import { resetModelPrices, setModelPricesLoader } from '../../../src/client/modelPrices'
 import type { AgentSelfStats } from '../../../src/client/agentTree'
 import { TestClientCtx, asClientCtx } from '../helpers/harness'
@@ -220,7 +221,7 @@ describe('AgentGraph — the family tree', () => {
     assert.ok(text(inspector).includes('500 / 1.0k · 50%'))
     assert.ok(text(inspector).includes('3 steps'))
     assert.ok(text(inspector).includes('1.2k billed'))
-    assert.ok(!text(inspector).includes('click to open'))
+    assert.ok(!text(inspector).includes(DICT_EN['fleet.open']))
     // The composition readout mirrors the inspected node's bar.
     assert.ok(text(inspector).includes('User Messages'))
     assert.ok(text(inspector).includes('≈500 (100%)'))
@@ -268,7 +269,7 @@ describe('AgentGraph — the family tree', () => {
     assert.ok(text(inspector).includes('5 steps'))
     assert.ok(text(inspector).includes('150 billed'))
     assert.ok(text(inspector).includes('42s'))
-    assert.ok(text(inspector).includes('click to open'))
+    assert.ok(text(inspector).includes(DICT_EN['fleet.open']))
     // The hovered node's composition readout lists every category share.
     assert.ok(text(inspector).includes('System Prompt'))
     assert.ok(text(inspector).includes('≈800 (96%)'))
@@ -428,7 +429,7 @@ describe('AgentGraph — the family tree', () => {
     await hover(bare)
     const inspector = query(m.container, '.lc-agents-inspector')
     assert.ok(text(inspector).includes('bare'))
-    assert.equal(query(inspector, '.lc-agents-inspector-stats').textContent, '')
+    assert.equal(query(inspector, '.lc-agents-inspector-stats').textContent, '—')
 
     // Windowless pressure: a bare token figure, no ' / window' and no percentage; the settled time trails it.
     await hover(query(m.container, '[data-agent="windowless"]'))
@@ -499,6 +500,41 @@ describe('AgentGraph — the family tree', () => {
     const mb = await mount(h(makeAgentGraph(asClientCtx(bare), kit), { sessionId: 'root', self: selfStats() }))
     await until(() => text(query(mb.container, '[data-agent="worker"]')).includes('$0.90'), 'usd fallback')
     await mb.unmount()
+  })
+})
+
+describe('AgentGraph — Fleet extras', () => {
+  const TEAM = {
+    members: [{ id: 'root', name: 'lead', role: 'lead' as const, phase: 'active' as const }],
+    tasks: [],
+  }
+
+  function extras(team: import('../../../src/client/fleetTeam').FleetTeam | null) {
+    return {
+      team,
+      pinnedId: 'worker',
+      onPin: () => {},
+      detailOf: () => ({ detail: null }),
+      commsOf: () => [],
+      labelOf: (id: string) => id,
+      roster: [],
+      onFocusTask: () => {},
+    }
+  }
+
+  test('the extras team surfaces the chip when the team prop is absent; an explicit null wins', async () => {
+    const face = new FakeSessions(family())
+    const View = makeView(face)
+    // extras alone: the chip reads the extras team; the pinned card rings.
+    const m = await mount(h(View, { sessionId: 'root', self: selfStats(), extras: extras(TEAM) }))
+    assert.ok(text(m.container).includes('1 members'))
+    assert.ok(query(m.container, '[data-agent="worker"]').className.includes('lc-agent-pinned'))
+    await m.unmount()
+
+    // extras with a null team hides the chip.
+    const m2 = await mount(h(View, { sessionId: 'root', self: selfStats(), extras: extras(null) }))
+    assert.ok(!text(m2.container).includes('members ·'))
+    await m2.unmount()
   })
 })
 

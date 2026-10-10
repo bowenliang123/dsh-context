@@ -20,6 +20,7 @@ import { makeColdReadGate } from './coldRead'
 import { Config, resolveBounds } from './config'
 import { watchDetailChannel } from './detail'
 import { createFallbackActivityDefinition, createFallbackHeadersDefinition, createFallbackTimelineDefinition } from './fallback'
+import { watchFleetChannel } from './fleet'
 import { createContextHeadersDefinition } from './headers'
 import { watchStepIdentity } from './stepIdentity'
 import { watchSkillCatalog } from './skills'
@@ -35,10 +36,14 @@ export const inject = ['sessionProjections']
 export { Config } from './config'
 
 export function apply(ctx: Context, config: Config): void {
-  // Both routes read only runtime-proved faces and work on either side of the gate, so they
+  // The host-wide cold-read gate (issue #121): every on-demand log read — detail, fleet, the
+  // warm-up — shares one FIFO admission, so a viewing client can never stack decoded logs.
+  // Routes read only runtime-proved faces and work on either side of the baseline gate, so they
   // MUST arm before the gate's early return below.
+  const coldReads = makeColdReadGate()
   watchBalanceChannel(ctx)
   watchSkillCatalog(ctx)
+  watchFleetChannel(ctx, coldReads)
   // A harness BELOW the baseline never gets the real folds (its log shapes and seam faces are
   // outside the compat matrix); fallback units serve zeroed data plus the gate record. An
   // undetectable version fails open into the normal composition below.
@@ -54,8 +59,6 @@ export function apply(ctx: Context, config: Config): void {
   // Additive over toolSources.ts's static chain; an unsupported cordis or a missed read degrades to it.
   const attribution = createToolAttribution(ctx)
   watchStepIdentity(ctx)
-  // The detail route's cold rung and the overview warm-up share this gate (coldRead.ts).
-  const coldReads = makeColdReadGate()
   // The unit's view reads the gate per serve: slim wire while the detail channel is live, inline otherwise.
   const gate = watchDetailChannel(ctx, resolveBounds(config), coldReads)
   ctx.sessionProjections.register(createContextTimelineDefinition(config, () => gate.live))

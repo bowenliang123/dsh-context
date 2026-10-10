@@ -88,6 +88,61 @@ export interface SkillInfo {
   source?: string
 }
 
+/** The durable `subagent/descriptor` identity of one agent session, as the Fleet detail route serves it. */
+export interface FleetDescriptor {
+  mode: 'one-shot' | 'continuable'
+  label?: string
+  /** The `ctx.subagents` provider name that established the child ('spawn' / 'fork' / …). */
+  provider?: string
+  agentProvider?: string
+  agentModel?: string
+  persona?: string
+}
+
+/** One inter-agent message lifted from a session log: a team relay in the recipient's log
+ * (`agent-message`), a historical mailbox delivery (`team-message`), or the runtime's account of a
+ * child settling in the parent's log (`subagent-settled`). */
+export interface FleetMessage {
+  seq: number
+  /** Event instant (epoch ms). */
+  time: number
+  kind: 'relay' | 'mailbox' | 'settled'
+  /** Sender session id, when the source attests one. */
+  from?: string
+  /** The historical mailbox's sender NAME (no id join needed). */
+  fromName?: string
+  /** Text excerpt, already capped by the route. */
+  text: string
+}
+
+/** One roster fact lifted from a lead session's durable `team/member` records — the projection
+ * strips these fields, so the Fleet detail route serves them for the member cards. */
+export interface FleetMemberInfo {
+  name: string
+  /** The delegation's own role summary, authored at spawn. */
+  description: string
+  /** The `ctx.subagents` provider that established the member ('spawn' / 'fork'). */
+  provider?: string
+  context?: 'fresh' | 'fork'
+}
+
+/** The Fleet detail route's per-session payload (`/api/dsh-context/fleet`): the agent's delegation
+ * prompt, its descriptor composition, its latest reply, and the inter-agent traffic its own log
+ * attests. A LEAD session additionally serves its roster facts. */
+export interface FleetDetail {
+  descriptor?: FleetDescriptor
+  /** The first non-injection user message — a child's delegation briefing, a root's first human prompt. */
+  initialPrompt?: string
+  /** The newest assistant text — the agent's latest report-back. */
+  lastReply?: { time: number; text: string }
+  /** Roster facts off `team/member` records (lead logs only), keyed by member name. */
+  roster?: FleetMemberInfo[]
+  /** Newest-first inter-agent messages found in this session's log. */
+  messages: FleetMessage[]
+  /** True when the route's caps cut the message list or a text. */
+  truncated: boolean
+}
+
 /** The display-preference vocabulary of the `dsh-context` entry — the ONE declaration shared by
  * the Host Config schema (host/config.ts) and the Client's settings form (client/settings.ts). */
 export type DefaultGranularity = 'step' | 'turn'

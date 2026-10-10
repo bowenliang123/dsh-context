@@ -43,6 +43,8 @@ export interface AgentStats {
   costUsage: SessionCostUsage | null
   durationMs: number | null
   identity: AgentIdentity | null
+  /** The session's current model off the timeline head, when served. */
+  model?: string
 }
 
 /** Live stats of the CURRENT session, fresher than any list row. */
@@ -69,6 +71,8 @@ export interface AgentNode extends AgentStats {
   running: boolean
   completed: boolean
   subagent: boolean
+  /** The list row's change stamp — the fleet-detail cache's freshness key. */
+  updatedAt: number
 }
 
 export interface AgentForest {
@@ -172,6 +176,7 @@ export function agentStatsOf(values: Record<string, unknown> | undefined): Agent
     costUsage: timeline?.cost ?? null,
     durationMs: agentDurationOf(values?.subagentTiming),
     identity: agentIdentityOf(values?.subagent),
+    ...(timeline !== null && typeof timeline.model === 'string' ? { model: timeline.model } : {}),
   }
 }
 
@@ -339,6 +344,7 @@ export function agentForestOf(
       completed: !row.running
         && (agentTurnCompletedOf(values?.subagentTiming) || (!subagent && stats.requests > 0)),
       subagent,
+      updatedAt: row.updatedAt,
     }
     nodes.push(node)
     if (parentId !== undefined) edges.push({ from: parentId, to: id })

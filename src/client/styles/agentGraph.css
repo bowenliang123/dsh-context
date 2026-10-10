@@ -66,6 +66,40 @@
 .lc-agent-meta-text { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
 .lc-agents-solo { padding: 4px 0 10px; }
+/* The network card's split: graph left, inspector right; the `lc-card` container query folds it
+   to stacked on narrow panes (the sidebar mount's own shape). */
+.lc-agents-split { display: flex; gap: 10px; align-items: flex-start; }
+.lc-agents-main { flex: 1 1 0; min-width: 0; }
+/* Both classes sit on the same element: the compound selector beats the strip's margin-top. */
+.lc-agents-inspector.lc-inspector { flex: 0 0 300px; width: 300px; margin-top: 0; position: sticky; top: 8px; max-height: min(560px, 80vh); overflow-y: auto; }
+@container lc-card (max-width: 720px) {
+  .lc-agents-split { flex-direction: column; }
+  .lc-agents-inspector.lc-inspector { flex: none; width: 100%; position: static; max-height: none; }
+}
+.lc-agent-pinned { border-color: color-mix(in srgb, var(--dsw-alias-brand-primary, var(--color-blue-500)) 70%, var(--dsw-alias-border-l2)); box-shadow: 0 0 0 1px color-mix(in srgb, var(--dsw-alias-brand-primary, var(--color-blue-500)) 35%, transparent); }
+.lc-agents-chip-team { color: var(--dsw-alias-brand-primary, var(--color-blue-500)); border-color: color-mix(in srgb, var(--dsw-alias-brand-primary, var(--color-blue-500)) 40%, transparent); }
+.lc-inspector[data-pinned] { border-color: color-mix(in srgb, var(--dsw-alias-brand-primary, var(--color-blue-500)) 45%, var(--dsw-alias-border-l2)); }
+.lc-inspector-head { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 6px; }
+.lc-inspector-actions { margin-left: auto; display: inline-flex; gap: 6px; }
+.lc-inspector-btn { border: 1px solid var(--dsw-alias-border-l1); background: var(--dsw-alias-bg-layer-1); color: var(--dsw-alias-brand-primary, var(--color-blue-500)); font-size: 10.5px; line-height: 1.4; padding: 1px 8px; border-radius: 999px; cursor: pointer; font-family: inherit; }
+.lc-inspector-btn:hover { border-color: var(--dsw-alias-brand-primary, var(--color-blue-500)); }
+.lc-inspector-section { margin-top: 8px; padding-top: 7px; border-top: 1px dashed var(--dsw-alias-border-l2); }
+.lc-inspector-caption { font-size: 10.5px; font-weight: 600; letter-spacing: 0.02em; color: var(--dsw-alias-label-tertiary, var(--dsw-alias-label-secondary)); margin-bottom: 5px; }
+.lc-inspector-member { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 6px; }
+.lc-inspector-member-name { color: var(--dsw-alias-brand-primary, var(--color-blue-500)); }
+.lc-agents-badge-err { color: var(--dsw-alias-state-error-primary, var(--color-red-500)); border-color: color-mix(in srgb, var(--dsw-alias-state-error-primary, var(--color-red-500)) 40%, transparent); }
+.lc-inspector-error { flex-basis: 100%; font-size: 11px; color: var(--dsw-alias-state-error-primary, var(--color-red-500)); overflow-wrap: anywhere; }
+.lc-inspector-config { font-size: 11.5px; color: var(--dsw-alias-label-secondary); overflow-wrap: anywhere; }
+.lc-inspector-prompt { font-size: 11.5px; line-height: 1.45; color: var(--dsw-alias-label-secondary); white-space: pre-wrap; overflow-wrap: anywhere; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 4; overflow: hidden; }
+.lc-inspector-prompt-open { display: block; overflow: visible; }
+.lc-inspector-section .lc-inspector-btn { margin-top: 4px; }
+.lc-inspector-loading { margin-top: 8px; font-size: 11px; color: var(--dsw-alias-label-tertiary, var(--dsw-alias-label-secondary)); }
+.lc-inspector-tasks, .lc-inspector-comms { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 5px; }
+.lc-inspector-task { display: flex; align-items: center; gap: 6px; font-size: 11.5px; color: var(--dsw-alias-label-primary); }
+.lc-inspector-task-subject { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.lc-inspector-comm { display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px 6px; font-size: 11px; }
+.lc-inspector-comm-peer { border: 0; background: transparent; padding: 0; font: inherit; color: var(--dsw-alias-brand-primary, var(--color-blue-500)); cursor: pointer; }
+.lc-inspector-comm-text { flex-basis: 100%; color: var(--dsw-alias-label-secondary); overflow-wrap: anywhere; white-space: pre-wrap; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 3; overflow: hidden; }
 .lc-agents-inspector { margin-top: 10px; padding: 7px 10px; border: 1px solid var(--dsw-alias-border-l2); border-radius: 8px; background: var(--dsw-alias-bg-layer-2); font-size: 12px; }
 .lc-agents-inspector-row { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 8px; min-width: 0; }
 .lc-agents-inspector-name { color: var(--dsw-alias-label-primary); overflow-wrap: anywhere; }

@@ -143,6 +143,12 @@ describe('agentStatsOf', () => {
     assert.deepEqual(stats.identity, { mode: 'continuable', label: 'helper' })
   })
 
+  test('the timeline head model rides the stats (the roster table and member cards read it)', () => {
+    const withModel = agentStatsOf({ contextTimeline: { ...timeline(100, 1), model: 'deepseek-flash' } })
+    assert.equal(withModel.model, 'deepseek-flash')
+    assert.equal(agentStatsOf({ contextTimeline: timeline(100, 1) }).model, undefined)
+  })
+
   test('split-generation rows: the precomputed tally serves without the request records', () => {
     // The slim wire head carries no `requests` collection — the Agent card
     // reads the host-precomputed tally off `counts.steps` instead.
@@ -638,6 +644,7 @@ describe('layoutForest', () => {
       running: id === 'b',
       completed: false,
       subagent: parent !== undefined,
+      updatedAt: 0,
       head: null,
       requests: 0,
       billed: null,
