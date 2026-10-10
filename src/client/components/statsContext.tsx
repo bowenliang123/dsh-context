@@ -2,13 +2,14 @@
  * card, and the token figures on the Token card. The counts arrive precomputed (the split-generation wire
  * head, or `countsOfRecords` on the inline generation); the card never touches the collections. */
 
-import { useEffect, useLayoutEffect, useMemo, useRef, useState, type KeyboardEvent, type MouseEvent, type ReactElement, type ReactNode } from 'react'
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type KeyboardEvent, type MouseEvent, type ReactElement, type ReactNode } from 'react'
 import type { ContextEventRecord, ContextTimeline, RequestRecord, SessionCostUsage, SurfaceNode, TimelineCounts } from '../../shared/types'
 import { estimateSessionCost, billedTokensOf, formatCost, formatPriceRate, mergeCostUsage, priceFaceOf, toCurrency } from '../cost'
 import type { CostCurrency, ModelBook, PriceFace } from '../cost'
 import { sessionsFaceOf, subagentCostFoldOf } from '../agentTree'
 import type { AgentHeads } from '../agentHeads'
 import { useSessionsSnapshot } from '../agentHeads'
+import type { Translate } from '../i18n'
 import { useModelPrices } from '../modelPrices'
 import { revealInScrollParent } from '../revealScroll'
 import { asRecord, type ClientCtx } from '../services'
@@ -170,6 +171,101 @@ export function measureFlow(boxes: Record<FlowNodeKey, FlowBox>, horizontal: boo
     d: flowCurve(flowAnchor(boxes[link.from], fromSide, link.fromAt), flowAnchor(boxes[link.to], toSide, link.toAt)),
     color: link.color,
   }))
+}
+
+/** The row's own gap, mirrored from `.lc-flow-pills` in stats.css so the fit arithmetic matches the rendered box. */
+const PILL_GAP = 4
+
+/** The tool tally on ONE line, exactly like the Input/Output row above it: every tool the card has room for, spelled
+ *  out in full, and the rest folded into a trailing "其他 +N" — so a session that used five tools shows five rather than
+ *  an arbitrary top three.
+ *
+ *  The visible row renders ONLY what fits, so nothing is ever clipped or overlapped. The fit is measured off a hidden
+ *  gauge that carries every pill at its natural width — a pill's width does not depend on whether its neighbours are on
+ *  screen, so the gauge answers for the tail the row is not showing. Because the row never wraps, the node's height is
+ *  a property of the card's width alone: it stops resizing as a session's tool mix changes. With no tally (the split
+ *  generation's head carries none) the row holds a lone "其他 +0". */
+function ToolPills(props: {
+  tools: readonly (readonly [string, number])[]
+  t: Translate
+  fmt: (n: number) => string
+}): ReactElement {
+  const { tools, t, fmt } = props
+  const rowRef = useRef<HTMLDivElement | null>(null)
+  const gaugeRef = useRef<HTMLDivElement | null>(null)
+  const chipGaugeRef = useRef<HTMLDivElement | null>(null)
+  const [shown, setShown] = useState(tools.length)
+
+  const pill = (name: string, n: number, title?: string): ReactElement => (
+    <span key={name} className="lc-flow-pill" title={title}>
+      <span className="lc-flow-pill-label">{name}</span>
+      <b>{fmt(n)}</b>
+    </span>
+  )
+
+  const fit = useCallback(() => {
+    const row = rowRef.current
+    const gauge = gaugeRef.current
+    const chipGauge = chipGaugeRef.current
+    /* v8 ignore next 3 -- the gauges always render, so their refs are set whenever the row is. */
+    if (row === null || gauge === null || chipGauge === null) return
+    const width = row.getBoundingClientRect().width
+    // Nothing measurable (a hidden pane, jsdom): show the whole tally rather than guessing a subset.
+    if (width <= 0) {
+      setShown(tools.length)
+      return
+    }
+    const widths = Array.from(gauge.children, el => el.getBoundingClientRect().width)
+    const chips = Array.from(chipGauge.children, el => el.getBoundingClientRect().width)
+    // The widest set that fits WITH the chip it would actually carry, found in one pass from the top down. Measuring
+    // the live chip instead would feed this pass's own output back into its input; measuring only the widest chip
+    // would cost a pill to digits the chip never shows.
+    let pills = 0
+    for (let n = Math.min(widths.length, chips.length - 1); n >= 0; n--) {
+      let total = chips[tools.length - n] + n * PILL_GAP
+      for (let i = 0; i < n; i++) total += widths[i]
+      if (total <= width) {
+        pills = n
+        break
+      }
+    }
+    setShown(prev => (prev === pills ? prev : pills))
+  }, [tools])
+
+  // Re-weigh on a new tally; the ResizeObserver covers a pane drag, which changes no prop.
+  useLayoutEffect(fit, [fit])
+  /* v8 ignore start -- jsdom exposes no ResizeObserver. */
+  useEffect(() => {
+    const row = rowRef.current
+    if (row === null || typeof ResizeObserver !== 'function') return
+    const observer = new ResizeObserver(fit)
+    observer.observe(row)
+    return () => { observer.disconnect() }
+  }, [fit])
+  /* v8 ignore stop */
+
+  return (
+    <>
+      <div className="lc-flow-pills lc-flow-pills-tools" ref={rowRef}>
+        {tools.slice(0, shown).map(([name, n]) => pill(name, n, name))}
+        <span className="lc-flow-pill lc-flow-pill-dim">
+          <span className="lc-flow-pill-label">{t('stats.toolsMore', { n: tools.length - shown })}</span>
+        </span>
+      </div>
+      {/* Off-flow gauges: every pill and every chip width the fit may weigh, so the row can measure the tail it is
+          not showing without rendering it. */}
+      <span className="lc-flow-pill-gauge" aria-hidden="true">
+        <div className="lc-flow-pills" ref={gaugeRef}>{tools.map(([name, n]) => pill(name, n))}</div>
+        <div className="lc-flow-pills" ref={chipGaugeRef}>
+          {Array.from({ length: tools.length + 1 }, (_, k) => (
+            <span key={k} className="lc-flow-pill lc-flow-pill-dim">
+              <span className="lc-flow-pill-label">{t('stats.toolsMore', { n: k })}</span>
+            </span>
+          ))}
+        </div>
+      </span>
+    </>
+  )
 }
 
 export function makeStatsContext(
@@ -340,8 +436,6 @@ export function makeStatsContext(
     const ioTotal = (props.humanInputs ?? 0) + props.files.reads + props.files.writes + props.files.searches + props.files.images
     // The head's live tally; the pills' own sum is the fallback on hosts too old to carry it.
     const toolTotal = props.toolCalls ?? props.tools.reduce((sum, [, n]) => sum + n, 0)
-    const topTools = props.tools.slice(0, 3)
-    const moreTools = props.tools.length - topTools.length
     return (
       <div className="lc-card flex-[3] min-w-[min(360px,100%)]">
         <div className="lc-card-title">
@@ -393,21 +487,7 @@ export function makeStatsContext(
           <div className="lc-flow-col lc-flow-col-r">
             <div className="lc-flow-node" ref={nodeRef('tools')}>
               {head(t('stats.toolCalls'), fmt(toolTotal))}
-              {topTools.length > 0
-                ? (
-                  <div className="lc-flow-pills">
-                    {topTools.map(([name, n]) => (
-                      <span key={name} className="lc-flow-pill" title={name}>
-                        <span className="lc-flow-pill-label">{name}</span>
-                        <b>{fmt(n)}</b>
-                      </span>
-                    ))}
-                    {moreTools > 0
-                      ? <span className="lc-flow-pill lc-flow-pill-dim"><span className="lc-flow-pill-label">{t('stats.toolsMore', { n: moreTools })}</span></span>
-                      : null}
-                  </div>
-                )
-                : null}
+              <ToolPills tools={props.tools} t={t} fmt={fmt} />
             </div>
             <div
               className="lc-flow-node lc-flow-team"

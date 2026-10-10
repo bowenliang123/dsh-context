@@ -74,6 +74,11 @@ a.lc-flow-head:hover .lc-flow-label { color: var(--dsw-alias-label-primary); }
 .lc-flow-total { margin-left: auto; flex: none; color: var(--dsw-alias-label-primary); font-size: 13px; font-weight: 700; font-variant-numeric: tabular-nums; }
 /* A zero pill dims; a tinted pill keeps its tally on the tint's own hue. */
 .lc-flow-pills { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 4px; }
+/* The tools row stays ONE line: `ToolPills` renders only the pills that fit and folds the tail into the "+N" chip, so
+   nothing is clipped or overlapped and the node's height depends on the card's width alone. The gauge carries the full
+   tally at its natural widths, off-flow, purely so the fit can measure the tail the row is not showing. */
+.lc-flow-pills-tools { flex-wrap: nowrap; }
+.lc-flow-pill-gauge { display: block; position: relative; height: 0; overflow: hidden; visibility: hidden; pointer-events: none; }
 .lc-flow-pill { display: inline-flex; align-items: center; gap: 5px; padding: 2px 8px; border-radius: 999px; background: var(--dsw-alias-bg-layer-1); border: 1px solid var(--dsw-alias-border-l1); color: var(--dsw-alias-label-secondary); font-size: 11px; font-variant-numeric: tabular-nums; white-space: nowrap; }
 .lc-flow-pill-label { min-width: 0; max-width: 140px; overflow: hidden; text-overflow: ellipsis; }
 .lc-flow-pill b { font-weight: 700; color: var(--dsw-alias-label-primary); }

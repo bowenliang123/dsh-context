@@ -53,9 +53,11 @@ function flowNodes(container: HTMLElement): HTMLElement[] {
   return queryAll(container, '.lc-flow-node')
 }
 
-/** One node's pills as 'label+figure' strings (tips excluded). */
+/** One node's VISIBLE pills as 'label+figure' strings. The tools node also carries an off-flow gauge (every pill at
+ *  its natural width, for `ToolPills`' fit) — the gauge is never shown, so it is not part of what a reader sees. */
 function pillsOf(node: HTMLElement): string[] {
-  return queryAll(node, '.lc-flow-pill').map(el => (el.querySelector('.lc-flow-pill-label')?.textContent ?? '') + (el.querySelector('b')?.textContent ?? ''))
+  return queryAll(node, '.lc-flow-pill').filter(el => el.closest('.lc-flow-pill-gauge') === null)
+    .map(el => (el.querySelector('.lc-flow-pill-label')?.textContent ?? '') + (el.querySelector('b')?.textContent ?? ''))
 }
 
 /** The team ledger's rows as 'label+pair' strings (tips excluded). */
@@ -179,6 +181,53 @@ describe('measureFlow (the connector geometry)', () => {
 })
 
 describe('StatsContext', () => {
+  /** jsdom has no layout, so `ToolPills` shows the whole tally. Stubbing widths lets the fit run for real: a pill is
+   *  sized by its label's length, and the "+N" chip by its own. */
+  function stubWidths(pillWidth: number, chipWidth: number, rowWidth: number): () => void {
+    const real = Element.prototype.getBoundingClientRect
+    Element.prototype.getBoundingClientRect = function (this: Element): DOMRect {
+      const chip = this.classList.contains('lc-flow-pill-dim')
+      const inGauge = this.closest('.lc-flow-pill-gauge') !== null
+      if (!this.classList.contains('lc-flow-pill') && !this.classList.contains('lc-flow-pills')) return real.call(this)
+      if (this.classList.contains('lc-flow-pills-tools')) {
+        return { width: rowWidth, height: 0, top: 0, left: 0, right: rowWidth, bottom: 0, x: 0, y: 0, toJSON: () => ({}) } as DOMRect
+      }
+      const w = chip ? chipWidth : pillWidth
+      const left = inGauge && chip ? chipWidth : 0
+      return { width: w, height: 0, top: 0, left, right: left + w, bottom: 0, x: left, y: 0, toJSON: () => ({}) } as DOMRect
+    }
+    return () => { Element.prototype.getBoundingClientRect = real }
+  }
+
+  test('the tools row folds the tail into the overflow pill at the width it is measured against', async () => {
+    const restore = stubWidths(100, 40, 260)
+    try {
+      // 100px pills + a 40px chip + 4px gaps: 260 holds two pills and the chip (248), never three (352).
+      const m = await mount(h(StatsContext, {
+        counts: NO_COUNTS, files: NO_FILES, tools: [['read', 8], ['bash', 3], ['grep', 2]], locale: 'en',
+      }))
+      await flush()
+      assert.deepEqual(pillsOf(flowNodes(m.container)[3]), ['read8', 'bash3', '+1 more'])
+      await m.unmount()
+    } finally {
+      restore()
+    }
+  })
+
+  test('a wide card spells out every tool, with the overflow pill at zero', async () => {
+    const restore = stubWidths(100, 40, 900)
+    try {
+      const m = await mount(h(StatsContext, {
+        counts: NO_COUNTS, files: NO_FILES, tools: [['read', 8], ['bash', 3], ['grep', 2]], locale: 'en',
+      }))
+      await flush()
+      assert.deepEqual(pillsOf(flowNodes(m.container)[3]), ['read8', 'bash3', 'grep2', '+0 more'])
+      await m.unmount()
+    } finally {
+      restore()
+    }
+  })
+
   test('folds the flow: source cards feed the session node, which drains into the effect cards', async () => {
     const m = await mount(h(StatsContext, {
       counts: { turns: 3, steps: 4, injects: 3, compactions: 2, prunes: 1, skills: 2 },
@@ -200,8 +249,9 @@ describe('StatsContext', () => {
     assert.deepEqual(totals, ['23', '6', '12', '1.0M/$0.30'])
     assert.deepEqual(pillsOf(nodes[0]), ['Human Inputs?7', 'Read9', 'Written2', 'Searched4', 'Images1'])
     assert.deepEqual(pillsOf(nodes[1]), ['Inject3', 'Compact2', 'Prune1'])
-    // The three most-called tools pill out; the rest fold into the overflow pill.
-    assert.deepEqual(pillsOf(nodes[3]), ['read8', 'bash3', 'grep2', '+2 more'])
+    // Every tool the row can hold pills out in full (jsdom reports no width, so nothing is folded away here); the
+    // overflow pill reads zero. The real fit is measured in the browser, where the card has a width.
+    assert.deepEqual(pillsOf(nodes[3]), ['read8', 'bash3', 'grep2', 'edit1', 'glob1', '+0 more'])
     assert.deepEqual(rowsOf(nodes[4]), ['Current Agent1.0M/$0.30', 'Subagents × 0?0/—'])
     // The session node carries two figure rows under its label — turns/steps
     // above skill loads/answers (two skills, three answers above).
@@ -230,7 +280,7 @@ describe('StatsContext', () => {
     assert.deepEqual(headsOf(m.container).totals, ['0', '0', '0', '0/—'])
     const nodes = flowNodes(m.container)
     assert.deepEqual(pillsOf(nodes[0]), ['Human Inputs?0', 'Read0', 'Written0'], 'searches/images pill only when they happened')
-    assert.deepEqual(pillsOf(nodes[3]), [], 'no tool pills without calls')
+    assert.deepEqual(pillsOf(nodes[3]), ['+0 more'], 'the overflow chip always renders, so the reserved row reads as a figure')
     assert.deepEqual(rowsOf(nodes[4]), ['Current Agent0/—', 'Subagents × 0?0/—'])
     assert.equal(queryAll(nodes[0], '.lc-flow-pill-dim').length, 3, 'every zero pill dims')
     assert.equal(queryAll(nodes[1], '.lc-flow-pill-dim').length, 3)
@@ -247,7 +297,7 @@ describe('StatsContext', () => {
     await flush()
     assert.equal(headsOf(m.container).totals[2], '11')
     const nodes = flowNodes(m.container)
-    assert.deepEqual(pillsOf(nodes[3]), ['read8', 'bash3'], 'two tools pill out, no overflow')
+    assert.deepEqual(pillsOf(nodes[3]), ['read8', 'bash3', '+0 more'], 'two tools pill out, the overflow chip reads zero')
     await m.unmount()
   })
 
@@ -370,7 +420,7 @@ describe('StatsContext', () => {
     assert.deepEqual(totals, ['3', '1', '2', '1.0M/¥2.00'])
     assert.deepEqual(pillsOf(nodes[0]), ['用户输入?0', '读取2', '写入1'])
     assert.deepEqual(pillsOf(nodes[1]), ['注入0', '压缩1', '剪枝0'])
-    assert.deepEqual(pillsOf(nodes[3]), ['read2'])
+    assert.deepEqual(pillsOf(nodes[3]), ['read2', '其他 +0'])
     assert.deepEqual(rowsOf(nodes[4]), ['当前 Agent1.0M/¥2.00', '子 Agent × 0?0/—'])
     assert.equal(nodes[2].querySelector('.lc-flow-label')?.textContent, '当前会话')
     const selfRowsZh = queryAll(nodes[2], '.lc-flow-self-stats')
