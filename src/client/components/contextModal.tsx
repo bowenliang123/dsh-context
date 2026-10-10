@@ -106,7 +106,7 @@ export function makeContextModal(
       <div ref={backdropRef} className="lc-modal-backdrop" style={{ left: dock.left, right: dock.right }} onClick={close}>
         <div className="lc-modal-card" onClick={(ev) => { ev.stopPropagation() }}>
           <div className="lc-modal-head">
-            <span className="lc-modal-title">{t('tab')}</span>
+            <span className="lc-modal-title">{t('tab.context')}</span>
             <button className="lc-modal-close hover:text-(--dsw-alias-label-primary) hover:bg-(--dsw-alias-bg-layer-2)" aria-label={t('cmd.close')} onClick={close}>×</button>
           </div>
 

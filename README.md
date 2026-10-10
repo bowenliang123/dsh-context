@@ -13,7 +13,8 @@
 [`dsh-context`](https://www.npmjs.com/package/dsh-context) provides full context lifecycle management features.
 - **Context Insights page** — the cross-session overview as a first-level sidebar panel (beside Plugins and Automation tasks): KPI band with a 7-day token/cost usage chart, activity heatmap, aggregate composition ring, and filterable session cards that jump straight into any session.
 - **Context tab** — an UI context dashboard for DeepSeek Harness's context stats, composition, trend, events, and messages.
-- **Context panel** — the same dashboard as a right-sidebar tab: pick **Context** on the sidebar's guide page and the panel opens beside the chat.
+- **Fleet tab** — the agent family's own page: the current agent, its parents, and every subagent as one live card each.
+- **Context panel** — the same dashboard as a right-sidebar tab: pick **Context** on the sidebar's guide page and the panel opens beside the chat, agent network included.
 - **`/context` command** — the slash command shows the context model for current context composition and recent context evolution.
 
 ## Install / Update
@@ -42,12 +43,13 @@ Then start the web UI with `dsh web`. No build step, no restart.
 
 ## Use it
 
-Four surfaces, one story — what your agent is carrying, how it got there, and what it did with it:
+Five surfaces, one story — what your agent is carrying, how it got there, and what it did with it:
 
 | Where | What you get |
 | --- | --- |
 | **Context Insights page** | Every session at a glance: usage, cost, cache hit, daily activity, and per-session context profiles — filtered by range, day, group, or search, one click to jump in. |
-| **Context tab** | The full dashboard: stats, composition, per-request trend, events, file activity, and the agent network — in every session. |
+| **Context tab** | The full dashboard: stats, composition, per-request trend, events, and file activity — in every session. |
+| **Fleet tab** | The agent network: the current agent, its parents, and every subagent, live. |
 | **`/context` command** | A centered modal with the same composition and context browser, without leaving the chat. |
 | **Preferences card** | Per-user defaults: view placement, trend granularity & mode, File Activity sort, and more. |
 
@@ -83,9 +85,10 @@ Open any session and click the **Context / 上下文** tab:
 | **Context Browser** | What any request was *actually* assembled from. |
 | **Context Events** | When and why the window changed. |
 | **File Activity** | What the agent *did* to your files. |
-| **Agent Network** | The whole agent family, live. |
 
 The headline occupancy and composition read the **same official token-meter projections as the chat composer's context ring** (`contextPressure` / `contextBreakdown`), so the figures always match what the ring tells you — the card's percentage is that same occupancy, printed with one decimal.
+
+The **Context Stats** card's Agent Network cell (the billed tokens and estimated cost of the whole family) jumps to the **Fleet** tab.
 
 ### Context Stats
 
@@ -158,11 +161,17 @@ One row per touched file — read, written, or searched — aggregated up to whi
 - **Click a row** to expand its full operation log — every op jumps straight to the exact tool result in the Context browser.
 - **Click a file name** to open its preview in the right Sidebar, exactly as the built-in Files sidebar does — the same viewer, the same tab-per-file behavior. On a harness without that column the name opens on your system as before.
 
-### 🕸 Agent Network — the family portrait
+## 🚢 The Fleet tab
+
+Open any session and click the **Fleet / 编队** tab (right of **Context**) — the agent family on a page of its own, with room for the collaboration surfaces that follow:
 
 ![Agent Network with seven subagents](https://raw.githubusercontent.com/bowenliang123/dsh-context/main/docs/agent-network.png)
 
+### 🕸 Agent Network — the family portrait
+
 The current agent, its parents, and every subagent — one card per agent: its title, live context size and window occupancy, a composition bar, and how long it has run for and how many steps it has taken. Edges fan out from each parent in the lineage's color — hover a card to light its whole chain and read the full breakdown in the detail strip; click to jump into that session's own Context tab. Running agents breathe with a green pulse on their incoming edge and turn over the harness's own rolling spinner beside their title, which settles into the same green dot the header's subagent list uses once the work is done; narrow panes fold the family into tidy rows — never a horizontal scrollbar.
+
+The right Sidebar's **Context** panel keeps the same card inline, so the family stays one click away while you read the chat.
 
 ## ⌨️ `/context` command
 
@@ -176,7 +185,7 @@ A centered dialog opens with the **Current Composition** card and the **Context 
 
 ## ⚙️ Settings
 
-The **Context** preferences card holds this plugin's per-user settings — default placement, trend granularity (Step/Turn), trend mode (Total/Delta), the trend duration curve (shown by default), tool and File Activity sort, and the sidebar insights entry. It lives on the **Plugins** page: the sidebar **Plugins** entry → the **dsh-context** bundle's page → its **Configuration** section (the card is served by the entry's live Config form).
+The **Context** preferences card holds this plugin's per-user settings — default placement (the **Context** and **Fleet** conversation tabs, the right Sidebar panel, or both), trend granularity (Step/Turn), trend mode (Total/Delta), the trend duration curve (shown by default), tool and File Activity sort, and the sidebar insights entry. It lives on the **Plugins** page: the sidebar **Plugins** entry → the **dsh-context** bundle's page → its **Configuration** section (the card is served by the entry's live Config form).
 
 In-chart and in-card toggles stay per-view and never overwrite the stored preference.
 

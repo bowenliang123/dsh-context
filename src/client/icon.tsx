@@ -86,7 +86,7 @@ export function makeContextTabTitle(t: Translate): () => ReactElement {
     return (
       <>
         <ContextIcon size={16} className="lc-title-icon" />
-        <span className="lc-title-label">{t('tab')}</span>
+        <span className="lc-title-label">{t('tab.context')}</span>
       </>
     )
   }

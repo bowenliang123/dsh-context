@@ -6,6 +6,9 @@ import { createElement as h, type ReactElement } from 'react'
 import assert from 'node:assert/strict'
 import { describe, test } from 'vitest'
 import { DICT_EN, DICT_ZH } from '../../src/client/i18n'
+import { makeAgentHeads } from '../../src/client/agentHeads'
+import { makeContextView } from '../../src/client/components/contextView'
+import { createContextSettings } from '../../src/client/settings'
 import {
   SIDEBAR_CONTEXT_ID,
   SIDEBAR_CONTEXT_KIND,
@@ -13,7 +16,7 @@ import {
 } from '../../src/client/sidebar'
 import type { ContextViewProps, SidebarTabDefinitionLike } from '../../src/client/services'
 import { TestClientCtx, asClientCtx } from './helpers/harness'
-import { mount, query, text } from './helpers/kit'
+import { makeKit, mount, query, text } from './helpers/kit'
 
 const NS = 'dsh-context'
 
@@ -128,6 +131,37 @@ describe('watchSidebarContextTab — the optional registration', () => {
     assert.equal(seen[0].sessionId, 's-1')
     assert.equal(seen[0].useProjection, props.useProjection, 'the standard kit survives the spread')
     assert.equal(seen[0].host, 'sidebar', 'the panel host marker')
+    ctx.dispose()
+  })
+
+  test('the real Context view through this seat keeps the Agent Network card inline', async () => {
+    // The center Context tab hands that card to the Fleet tab; this panel must keep painting it, and only the
+    // real view through the real seat proves it (the host marker alone would keep passing if the view dropped it).
+    // One stable snapshot object: the card subscribes through useSyncExternalStore, which loops on a fresh one per read.
+    const snapshot = { byId: { 's-1': { displayTitle: 'Main Agent', running: false, blank: false, updatedAt: 1 } } }
+    const ctx = new TestClientCtx({
+      services: {
+        sessions: {
+          list: {
+            getSnapshot: (): unknown => snapshot,
+            subscribe: (): (() => void) => () => {},
+          },
+        },
+      },
+    })
+    ctx.setService('sidebarRightTabs', registry())
+    const view = makeContextView(asClientCtx(ctx), makeKit(), createContextSettings(), makeAgentHeads())
+    wire(ctx, view)
+    const component = ctx.slots.of('sidebar.right.pane.tab')[0].component
+    const m = await mount(component({
+      sessionId: 's-1',
+      useProjection: (key: string) => (key === 'contextTimeline'
+        ? { ok: true, current: { system: 10, tools: 20, user: 30, inject: 0, skill: 0, assistant: 0, tool: 0, total: 60 }, requests: [], events: [], nodes: [], droppedNodes: 0, archive: [] }
+        : undefined),
+    }) as ReactElement)
+    assert.ok(query(m.container, '.lc-agents') !== null, 'the panel keeps the family card')
+    assert.ok(text(m.container).includes(DICT_EN['agents.solo']), 'and renders it with real data')
+    await m.unmount()
     ctx.dispose()
   })
 

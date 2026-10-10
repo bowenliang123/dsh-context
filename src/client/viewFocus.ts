@@ -42,9 +42,10 @@ export function openContextSidebar(ctx: ClientCtx): boolean {
   }
 }
 
-/** Activate the Context tab by clicking its own `button[role="tab"]` chrome: the harness hands `openView` only
- * to the ACTIVE view entry, so a nested chat action cannot call it; a missing tab reports failure. */
-export function activateContextTab(label: string): boolean {
+/** Activate a conversation view tab by clicking its own `button[role="tab"]` chrome: the harness hands `openView`
+ * only to the ACTIVE view entry, so a nested action cannot call it; a missing tab reports failure. The label is the
+ * tab's rendered text, so it addresses the Context tab and the Fleet tab alike. */
+export function activateViewTab(label: string): boolean {
   const tabs = document.querySelectorAll<HTMLButtonElement>('button[role="tab"]')
   for (const tab of tabs) {
     if (tab.textContent.trim() !== label) continue

@@ -9,7 +9,8 @@
 export type Translate = (key: string, params?: Record<string, string | number>) => string
 
 export const DICT_ZH = {
-  'tab': '上下文',
+  'tab.context': '上下文',
+  'tab.fleet': '编队',
   'sidebar.guideDescription': '查看上下文的构成、统计、演变。',
   'cat.system': '系统提示词',
   'cat.tools': '工具定义',
@@ -470,7 +471,8 @@ export const DICT_ZH = {
 export type DictKey = keyof typeof DICT_ZH
 
 export const DICT_EN = {
-  'tab': 'Context',
+  'tab.context': 'Context',
+  'tab.fleet': 'Fleet',
   'sidebar.guideDescription': 'Inspect context composition, stats, and evolution.',
   'cat.system': 'System Prompt',
   'cat.tools': 'Tool Schemas',

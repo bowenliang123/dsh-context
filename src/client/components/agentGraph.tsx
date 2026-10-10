@@ -1,5 +1,6 @@
 /**
- * The Agent network card — the foot of the Context tab: the current agent's
+ * The Agent network card — the body of the Fleet tab, kept inline in the right Sidebar's Context panel: the
+ * current agent's
  * whole family (ancestors, siblings, subagents) as a node graph, where every
  * node is a live card of that session's own context — title, occupancy, and a
  * composition bar — and a click jumps to that agent's session. Links are

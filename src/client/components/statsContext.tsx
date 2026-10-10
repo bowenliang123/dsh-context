@@ -11,7 +11,7 @@ import type { AgentHeads } from '../agentHeads'
 import { useSessionsSnapshot } from '../agentHeads'
 import type { Translate } from '../i18n'
 import { useModelPrices } from '../modelPrices'
-import { revealInScrollParent } from '../revealScroll'
+import { activateViewTab } from '../viewFocus'
 import { asRecord, type ClientCtx } from '../services'
 import { isDeepSeekProvider } from '../../shared/providers'
 import type { ViewKit } from '../viewkit'
@@ -420,18 +420,18 @@ export function makeStatsContext(
     const costText = cost === null ? '—' : formatCost(cost, currency)
     const ownText = ownCost === null ? '—' : formatCost(ownCost, currency)
     const subText = subCost === null ? '—' : formatCost(subCost, currency)
-    const revealAgents = (): void => {
-      const agents = flowRef.current?.closest('.lc-root')?.querySelector('.lc-agents') ?? null
-      if (agents !== null) revealInScrollParent(agents)
-    }
+    // The card this cell tallies lives on the Fleet tab, not further down this page: nothing to scroll to, so the
+    // click switches views. That tab rides the same placement gate as this board, so a miss here means a foreign
+    // tab bar (or one on a stripped harness) — a quiet no-op, never a throw.
+    const openFleetTab = (): void => { activateViewTab(t('tab.fleet')) }
     const onTeamClick = (ev: MouseEvent): void => {
       if ((ev.target as HTMLElement).closest('a') !== null) return
-      revealAgents()
+      openFleetTab()
     }
     const onTeamKeyDown = (ev: KeyboardEvent): void => {
       if (ev.key !== 'Enter' && ev.key !== ' ') return
       ev.preventDefault()
-      revealAgents()
+      openFleetTab()
     }
     const ioTotal = (props.humanInputs ?? 0) + props.files.reads + props.files.writes + props.files.searches + props.files.images
     // The head's live tally; the pills' own sum is the fallback on hosts too old to carry it.

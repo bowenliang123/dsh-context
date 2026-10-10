@@ -7,7 +7,7 @@ import { type ReactElement } from 'react'
 import { Tooltip } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { ClientCtx, ConversationNodeLike, UseChatLike } from '../services'
 import { conversationNodesOf } from '../services'
-import { activateContextTab, openContextSidebar, requestContextFocus } from '../viewFocus'
+import { activateViewTab, openContextSidebar, requestContextFocus } from '../viewFocus'
 import type { ViewKit } from '../viewkit'
 
 export interface ContextJumpProps {
@@ -54,7 +54,7 @@ export function makeContextJumpButton(ctx: ClientCtx, kit: ViewKit): (props: Con
         requestContextFocus(sessionId, seq)
       }
       // The sidebar expands over the chat, keeping the clicked reply in view; without that tab the activation stands alone.
-      if (!openContextSidebar(ctx)) activateContextTab(t('tab'))
+      if (!openContextSidebar(ctx)) activateViewTab(t('tab.context'))
     }
     return (
       <Tooltip label={t('jump.title')} side="bottom">

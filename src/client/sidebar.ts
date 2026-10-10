@@ -41,10 +41,10 @@ export function watchSidebarContextTab(
       own(tabs.register({
         id: SIDEBAR_CONTEXT_ID,
         kind: SIDEBAR_CONTEXT_KIND,
-        title: () => t('tab'),
+        title: () => t('tab.context'),
         guide: [{
           order: GUIDE_ORDER,
-          title: () => t('tab'),
+          title: () => t('tab.context'),
           description: () => t('sidebar.guideDescription'),
           icon: ContextIcon,
         }],

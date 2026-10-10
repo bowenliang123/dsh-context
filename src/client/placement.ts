@@ -1,5 +1,5 @@
-/** Placement gating for the Context view: the per-user `defaultPlacement` preference picks which
- *  registrations carry it — the conversation tab, the right Sidebar panel, or both. */
+/** Placement gating for this plugin's conversation views: the per-user `defaultPlacement` preference picks
+ *  which registrations carry them — the Context and Fleet tabs, the right Sidebar panel, or both. */
 
 import type { ContextSettings } from './settings'
 import type { DefaultPlacement } from '../shared/types'

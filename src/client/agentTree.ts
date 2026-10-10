@@ -3,7 +3,7 @@
  * into the current session's family: the topmost known ancestor's whole subtree, per-node stats, and a depth/DFS layout. */
 
 import type { PartsPart } from './categories'
-import type { ContextTimeline, SessionCostUsage } from '../shared/types'
+import type { ContextBreakdown, ContextPressure, ContextTimeline, SessionCostUsage, TokenUsage } from '../shared/types'
 import { mergeCostUsage } from './cost'
 import { headlineOf, occupancyPercent, type Headline } from './headline'
 import { asRecord, contextBreakdownOf, contextPressureOf, numOf, timelineOf, tokenUsageOf } from './services'
@@ -164,17 +164,41 @@ export function agentStatsOf(values: Record<string, unknown> | undefined): Agent
       }
     }
   }
-  const billed = usage !== null
-    ? numOf(usage.uncachedInputTokens) + numOf(usage.outputTokens) + numOf(usage.cacheReadTokens) + numOf(usage.cacheWriteTokens)
-    : null
   return {
     head,
     // The split-generation wire head carries the tally precomputed; the inline generation's rows count their served records.
     requests: timeline !== null ? (timeline.counts?.steps ?? timeline.requests.length) : 0,
-    billed,
+    billed: billedOf(usage),
     costUsage: timeline?.cost ?? null,
     durationMs: agentDurationOf(values?.subagentTiming),
     identity: agentIdentityOf(values?.subagent),
+  }
+}
+
+/** Billed tokens off a `tokenUsage` tally; null when no tally is served. */
+function billedOf(usage: TokenUsage | null): number | null {
+  return usage !== null
+    ? numOf(usage.uncachedInputTokens) + numOf(usage.outputTokens) + numOf(usage.cacheReadTokens) + numOf(usage.cacheWriteTokens)
+    : null
+}
+
+/** The current session's own live stats off the VIEW's projections — the Context tab and the Fleet tab both
+ * render the network card from this one derivation, so the two mounts can never disagree. Unlike a listed row
+ * ({@link agentStatsOf}), a top-level session carries no `subagentTiming` projection: its own whole-step time
+ * is the duration it has. */
+export function agentSelfOf(
+  timeline: ContextTimeline,
+  pressure: ContextPressure | null,
+  breakdown: ContextBreakdown | null,
+  usage: TokenUsage | null,
+): AgentSelfStats {
+  return {
+    head: headlineOf(timeline, pressure, breakdown),
+    billed: billedOf(usage),
+    // The split generation's slim head counts the retained steps itself; the inline generation's value serves them.
+    requests: timeline.counts?.steps ?? timeline.requests.length,
+    costUsage: timeline.cost ?? null,
+    durationMs: timeline.timing != null && timeline.timing.wallMs > 0 ? timeline.timing.wallMs : null,
   }
 }
 

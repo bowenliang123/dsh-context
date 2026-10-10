@@ -4,6 +4,7 @@ import { act, createElement as h, type ReactElement } from 'react'
 import { createRoot } from 'react-dom/client'
 import { afterEach, vi } from 'vitest'
 import { makeContextView } from '../../../src/client/components/contextView'
+import { makeAgentHeads } from '../../../src/client/agentHeads'
 import { resetTimelineDetailStores } from '../../../src/client/timelineSource'
 import { createContextSettings } from '../../../src/client/settings'
 import type { UseChatLike } from '../../../src/client/services'
@@ -74,7 +75,7 @@ export function projectionsFor(data: ContextTimeline, extra: Record<string, unkn
 }
 
 export function makeView(ctx: TestClientCtx, settings = createContextSettings()) {
-  return makeContextView(asClientCtx(ctx), kit, settings)
+  return makeContextView(asClientCtx(ctx), kit, settings, makeAgentHeads())
 }
 
 export function buttonByText(container: ParentNode, label: string): HTMLElement {

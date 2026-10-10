@@ -14,6 +14,8 @@ import type { ClientCtx } from './services'
 import { createContextSettings, type ConfigFormsFace, type SettingsField } from './settings'
 import { makeContextView } from './components/contextView'
 import { makeContextJumpButton } from './components/contextJump'
+import { makeFleetView } from './components/fleetView'
+import { makeAgentHeads } from './agentHeads'
 import { watchHistoryFaces } from './historyPage'
 import { watchPlacement } from './placement'
 import { watchSidebarContextTab } from './sidebar'
@@ -52,15 +54,29 @@ function apply(ctx: ClientCtx): void {
   // throws "cannot get property … without inject" and takes the view down (see historyPage.ts).
   watchHistoryFaces(ctx)
   const settings = createContextSettings()
-  const ContextView = makeContextView(ctx, kit, settings)
+  // One page-scope cold-head cache for every agent-data reader: the Context view's stats cell and inline card
+  // (right Sidebar host), and the Fleet tab's card — all of which can be mounted at the same time.
+  const heads = makeAgentHeads()
+  const ContextView = makeContextView(ctx, kit, settings, heads)
+  const FleetView = makeFleetView(ctx, kit, heads)
 
   ctx.effect(() => watchPlacement(settings, {
     tab: () => ctx.slots.inject('conversation.view', () => {
-      return ctx.slots.register(
+      const registrations = [
         // order 20 renders right of Chat (0) and Trajectory (10).
-        { name: 'conversation.view', id: 'context', order: 20, locale: NS, label: () => t('tab') },
-        props => h(ContextView, props),
-      )
+        ctx.slots.register(
+          { name: 'conversation.view', id: 'context', order: 20, locale: NS, label: () => t('tab.context') },
+          props => h(ContextView, props),
+        ),
+        // The agent family's own page, right of the Context tab.
+        ctx.slots.register(
+          { name: 'conversation.view', id: 'fleet', order: 30, locale: NS, label: () => t('tab.fleet') },
+          props => h(FleetView, props),
+        ),
+      ]
+      return () => {
+        for (const dispose of registrations) if (typeof dispose === 'function') (dispose as () => void)()
+      }
     }),
     sidebar: () => watchSidebarContextTab(ctx, ContextView, t, NS),
   }), 'dsh-context: placement')

@@ -540,44 +540,67 @@ describe('StatsContext', () => {
     await m.unmount()
   })
 
-  test('clicking the team card scrolls its Agent-network namesake into view; the price link stays out of it', async () => {
-    const m = await mount(h('div', { className: 'lc-root', style: { overflowY: 'auto' } },
-      h(StatsContext, { counts: NO_COUNTS, files: NO_FILES, tools: [], cost: COST, locale: 'en' }),
-      h('div', { className: 'lc-agents' }),
-    ))
-    await flush()
-    const root = query(m.container, '.lc-root')
-    const agents = query(m.container, '.lc-agents')
-    // jsdom reports 0 for both — the wrapper must overflow to be the operative scroller.
-    Object.defineProperty(root, 'scrollHeight', { value: 500 })
-    Object.defineProperty(root, 'clientHeight', { value: 200 })
-    agents.getBoundingClientRect = () => ({ top: 120 }) as DOMRect
-    const team = query(m.container, '.lc-flow-team')
-    await click(team)
-    assert.equal(root.scrollTop, 120)
-    root.scrollTop = 0
-    await click(query(m.container, 'a.lc-flow-head'))
-    assert.equal(root.scrollTop, 0, 'the price link never triggers the reveal')
-    // Keyboard parity: Enter/Space reveal, anything else stays quiet.
-    team.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }))
-    assert.equal(root.scrollTop, 120)
-    root.scrollTop = 0
-    team.dispatchEvent(new KeyboardEvent('keydown', { key: 'x', bubbles: true }))
-    assert.equal(root.scrollTop, 0)
-    await m.unmount()
+  test('clicking the team card switches to the Fleet tab; the price link stays out of it', async () => {
+    // The card this cell tallies lives on the Fleet tab now: the click activates that tab's own chrome.
+    const bar = document.createElement('div')
+    const fleet = document.createElement('button')
+    fleet.setAttribute('role', 'tab')
+    fleet.setAttribute('aria-selected', 'false')
+    fleet.textContent = 'Fleet'
+    let fleetClicks = 0
+    fleet.addEventListener('click', () => { fleetClicks++ })
+    const context = document.createElement('button')
+    context.setAttribute('role', 'tab')
+    context.setAttribute('aria-selected', 'true')
+    context.textContent = 'Context'
+    let contextClicks = 0
+    context.addEventListener('click', () => { contextClicks++ })
+    bar.append(context, fleet)
+    document.body.appendChild(bar)
+    try {
+      const m = await mount(h('div', { className: 'lc-root' },
+        h(StatsContext, { counts: NO_COUNTS, files: NO_FILES, tools: [], cost: COST, locale: 'en' }),
+      ))
+      await flush()
+      const team = query(m.container, '.lc-flow-team')
+      await click(team)
+      assert.equal(fleetClicks, 1, 'the click activates the Fleet tab')
+      assert.equal(contextClicks, 0)
+      // The price link inside the same cell is a navigation, never a tab switch.
+      await click(query(m.container, 'a.lc-flow-head'))
+      assert.equal(fleetClicks, 1)
+      // Keyboard parity: Enter/Space activate, anything else stays quiet.
+      team.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true }))
+      assert.equal(fleetClicks, 2)
+      team.dispatchEvent(new KeyboardEvent('keydown', { key: 'x', bubbles: true }))
+      assert.equal(fleetClicks, 2)
+      await m.unmount()
+    } finally {
+      bar.remove()
+    }
   })
 
-  test('without the namesake card a click is a quiet no-op', async () => {
-    // No .lc-root ancestor at all.
+  test('without a Fleet tab on screen a click is a quiet no-op', async () => {
+    // No tab bar at all.
     const bare = await mount(h(StatsContext, { counts: NO_COUNTS, files: NO_FILES, tools: [], cost: COST, locale: 'en' }))
     await click(query(bare.container, '.lc-flow-team'))
     await bare.unmount()
-    // A .lc-root without the Agent network card in it (a harness that hides it).
-    const m = await mount(h('div', { className: 'lc-root' },
-      h(StatsContext, { counts: NO_COUNTS, files: NO_FILES, tools: [], cost: COST, locale: 'en' }),
-    ))
-    await click(query(m.container, '.lc-flow-team'))
-    await m.unmount()
+    // A tab bar without a Fleet entry (the placement preference that drops the conversation tabs).
+    const bar = document.createElement('div')
+    const chat = document.createElement('button')
+    chat.setAttribute('role', 'tab')
+    chat.textContent = 'Chat'
+    bar.appendChild(chat)
+    document.body.appendChild(bar)
+    try {
+      const m = await mount(h('div', { className: 'lc-root' },
+        h(StatsContext, { counts: NO_COUNTS, files: NO_FILES, tools: [], cost: COST, locale: 'en' }),
+      ))
+      await click(query(m.container, '.lc-flow-team'))
+      await m.unmount()
+    } finally {
+      bar.remove()
+    }
   })
 
   test('the second-row figures fire onFigureClick on click and keyboard', async () => {

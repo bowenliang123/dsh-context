@@ -11,6 +11,7 @@ import type { SessionStandardProps } from '../../../src/client/services'
 import { makeContentFetcher, watchHistoryFaces } from '../../../src/client/historyPage'
 import { makeRichText } from '../../../src/client/components/richText'
 import { makeContextView } from '../../../src/client/components/contextView'
+import { makeAgentHeads } from '../../../src/client/agentHeads'
 import { createContextSettings } from '../../../src/client/settings'
 import { watchSidebarContextTab } from '../../../src/client/sidebar'
 import { DICT_EN } from '../../../src/client/i18n'
@@ -127,7 +128,7 @@ for (const baseline of BASELINES) {
     test('the Context tab renders through the seats of this generation without tripping the error boundary', async () => {
       const { ctx } = baselineCtx()
       const settings = createContextSettings()
-      const View = makeContextView(asClientCtx(ctx), kit, settings)
+      const View = makeContextView(asClientCtx(ctx), kit, settings, makeAgentHeads())
       const nodes = convNodes()
       const props: SessionStandardProps = {
         sessionId: 's-face',
@@ -147,7 +148,7 @@ for (const baseline of BASELINES) {
     test('the right Sidebar Context tab is optional: absent seam = inert, present seam = registered', () => {
       const { ctx } = baselineCtx()
       const settings = createContextSettings()
-      const View = makeContextView(asClientCtx(ctx), kit, settings)
+      const View = makeContextView(asClientCtx(ctx), kit, settings, makeAgentHeads())
       // Without the registry (a below-baseline gated host, say), the deferred
       // inject never fires: no tab, no body seat, no throw.
       assert.doesNotThrow(() => {
@@ -195,7 +196,7 @@ for (const baseline of BASELINES) {
       watchHistoryFaces(asClientCtx(ctx))
       assert.equal(makeContentFetcher('s-face'), undefined, 'the hostile face left the slot unset')
       const settings = createContextSettings()
-      const View = makeContextView(asClientCtx(ctx), kit, settings)
+      const View = makeContextView(asClientCtx(ctx), kit, settings, makeAgentHeads())
       const nodes = convNodes()
       const props: SessionStandardProps = {
         sessionId: 's-face',

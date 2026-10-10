@@ -90,7 +90,7 @@ a.lc-flow-head:hover .lc-flow-label { color: var(--dsw-alias-label-primary); }
 .lc-flow-pair { margin-left: auto; flex: none; display: inline-flex; align-items: baseline; gap: 5px; font-variant-numeric: tabular-nums; }
 .lc-flow-pair b { font-weight: 700; color: var(--dsw-alias-label-primary); }
 .lc-flow-pair i { font-style: normal; opacity: 0.55; }
-/* Doubles as a jump to the Agent Network card at the tab's foot; the price link inside keeps its own behavior. */
+/* Doubles as a jump to the Fleet tab, where the Agent Network card lives; the price link inside keeps its own behavior. */
 .lc-flow-team { cursor: pointer; }
 .lc-flow-team:hover { border-color: var(--dsw-alias-label-secondary); }
 .lc-flow-self { background: var(--dsw-alias-bg-layer-1); border-color: color-mix(in srgb, var(--dsw-alias-brand-primary) 40%, transparent); box-shadow: 0 0 0 3px color-mix(in srgb, var(--dsw-alias-brand-primary) 8%, transparent); padding: 8px 14px; align-items: center; gap: 6px; }

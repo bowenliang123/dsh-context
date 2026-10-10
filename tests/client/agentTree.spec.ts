@@ -8,6 +8,7 @@ import {
   agentForestOf,
   agentIdentityOf,
   agentRowOf,
+  agentSelfOf,
   agentTurnCompletedOf,
   agentStatsOf,
   barSegments,
@@ -174,6 +175,37 @@ describe('agentStatsOf', () => {
   test('usage sums into billed; a malformed usage value degrades whole (the buckets sum into the total)', () => {
     assert.equal(agentStatsOf({ tokenUsage: { uncachedInputTokens: 'x' } }).billed, null)
     assert.equal(agentStatsOf({ tokenUsage: null }).billed, null)
+  })
+})
+
+describe('agentSelfOf', () => {
+  const TIMING = { wallMs: 387_000, ttftMs: 0, genMs: 0, calls: 0, toolsMs: 0, toolCalls: 0, tools: {} }
+  const USAGE = { uncachedInputTokens: 100, outputTokens: 50, cacheReadTokens: 30, cacheWriteTokens: 20 }
+  const COST: SessionCostUsage = { 'deepseek-official': { 'deepseek-v4-flash': { peak: { uncached: 1, cacheRead: 2, cacheWrite: 0, output: 3 } } } }
+
+  test("the view's own projections fill every figure, with the head's step tally over the served records", () => {
+    const self = agentSelfOf(
+      { ...timeline(500, 3), cost: COST, timing: TIMING, counts: { turns: 1, steps: 9, injects: 0, compactions: 0, prunes: 0 } },
+      { projectedTokens: 800, contextWindow: 1000 },
+      { systemTokens: 10, toolsTokens: 20, messageTokens: 470 },
+      USAGE,
+    )
+    assert.equal(self.head?.tokens, 800, 'the pressure anchor leads the headline')
+    assert.equal(self.head?.pct, 80)
+    assert.equal(self.billed, 200)
+    assert.equal(self.requests, 9, 'the precomputed tally leads the records')
+    assert.deepEqual(self.costUsage, COST)
+    assert.equal(self.durationMs, TIMING.wallMs, 'a top-level session has no subagent timing: its own wall time stands in')
+  })
+
+  test('absent projections and a zero wall time degrade to null, never a fabricated figure', () => {
+    const bare = agentSelfOf(timeline(500, 3), null, null, null)
+    assert.equal(bare.head?.tokens, 500)
+    assert.equal(bare.billed, null)
+    assert.equal(bare.requests, 3, 'no tally on the wire value: the served records count')
+    assert.equal(bare.costUsage, null)
+    assert.equal(bare.durationMs, null)
+    assert.equal(agentSelfOf({ ...timeline(500, 3), timing: { ...TIMING, wallMs: 0 } }, null, null, null).durationMs, null)
   })
 })
 

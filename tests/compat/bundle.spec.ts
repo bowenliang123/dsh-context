@@ -25,7 +25,7 @@ describe.skipIf(staging.artifactsMissing())('bundle smoke — the built lib/clie
   const state: {
     plugin?: { name: string; inject: string[]; apply(ctx: unknown): void }
     dicts: Map<string, Record<string, Record<string, string>>>
-    slots: [string, { order?: number; id?: string; label?: () => string; inject?: (sessionId?: string) => unknown }][]
+    slots: [string, { name?: string; order?: number; id?: string; label?: () => string; inject?: (sessionId?: string) => unknown }][]
     sources: { trigger: string }[]
     disposers: (() => void)[]
   } = { dicts: new Map(), slots: [], sources: [], disposers: [] }
@@ -90,8 +90,17 @@ describe.skipIf(staging.artifactsMissing())('bundle smoke — the built lib/clie
         },
       },
       slots: {
-        inject: (name: string, fn: () => unknown) => { state.slots.push([name, fn() as (typeof state.slots)[number][1]]) },
-        register: (opts: (typeof state.slots)[number][1]) => opts,
+        // The registry records every `register()` call and returns its idempotent disposer; an `inject`
+        // callback returns the declaration effect's own disposer (registry.ts `SlotInjectionEffect`), so the
+        // return value is never the registration — one `inject` may declare several.
+        inject: (_name: string, fn: () => unknown) => fn(),
+        register: (opts: (typeof state.slots)[number][1]) => {
+          state.slots.push([opts.name ?? '', opts])
+          return () => {
+            const i = state.slots.findIndex(entry => entry[1] === opts)
+            if (i >= 0) state.slots.splice(i, 1)
+          }
+        },
       },
     }
     state.plugin = handoff.factory(moduleTable) as typeof state.plugin
@@ -118,23 +127,26 @@ describe.skipIf(staging.artifactsMissing())('bundle smoke — the built lib/clie
     assert.ok(!css.includes('120ms ease'), 'lightningcss minified the sheet')
   })
 
-  test('registrations: bilingual dictionaries, five slots, the /context trigger source', () => {
+  test('registrations: bilingual dictionaries, six slots, the /context trigger source', () => {
     assert.ok(state.dicts.get('dsh-context')?.zh && state.dicts.get('dsh-context')?.en, 'bilingual dictionaries registered')
-    assert.equal(state.slots.length, 5, 'view tab + assistant action + input overlay + insight page and sidebar entry slots')
+    assert.equal(state.slots.length, 6, 'view tabs + assistant action + input overlay + insight page and sidebar entry slots')
     assert.equal(state.slots[0]?.[0], 'conversation.view')
     assert.equal(state.slots[0]?.[1].order, 20)
     assert.equal(state.slots[0]?.[1].label?.(), '上下文', 'tab label localized')
-    assert.equal(state.slots[1]?.[0], 'conversation.chat.assistant-actions')
-    assert.equal(state.slots[1]?.[1].id, 'context-jump', 'jump action rides its own slot id')
-    assert.equal(state.slots[2]?.[0], 'conversation.input.overlay')
-    const overlayInject = state.slots[2]?.[1].inject
+    assert.equal(state.slots[1]?.[0], 'conversation.view')
+    assert.equal(state.slots[1]?.[1].order, 30, 'the Fleet tab follows the Context tab')
+    assert.equal(state.slots[1]?.[1].label?.(), '编队', 'fleet tab label localized')
+    assert.equal(state.slots[2]?.[0], 'conversation.chat.assistant-actions')
+    assert.equal(state.slots[2]?.[1].id, 'context-jump', 'jump action rides its own slot id')
+    assert.equal(state.slots[3]?.[0], 'conversation.input.overlay')
+    const overlayInject = state.slots[3]?.[1].inject
     const overlayHooks = overlayInject?.('s1') as { hooks: { contextModal: { getSnapshot: unknown } } } | undefined
     assert.equal(typeof overlayHooks?.hooks.contextModal.getSnapshot, 'function', 'overlay hooks carry the modal store')
-    assert.equal(state.slots[3]?.[0], 'main', 'the insight page rides the layout\'s keyed main seat')
-    assert.equal(state.slots[3]?.[1].key, 'dsh-context', 'the page panel key is the plugin id')
-    assert.equal(state.slots[4]?.[0], 'sidebar.panellist', 'the insight entry rides the sidebar panel list')
-    assert.equal(state.slots[4]?.[1].id, 'dsh-context', 'the entry id addresses the main panel')
-    assert.equal(state.slots[4]?.[1].label?.(), '上下文洞察', 'the entry label localized')
+    assert.equal(state.slots[4]?.[0], 'main', 'the insight page rides the layout\'s keyed main seat')
+    assert.equal(state.slots[4]?.[1].key, 'dsh-context', 'the page panel key is the plugin id')
+    assert.equal(state.slots[5]?.[0], 'sidebar.panellist', 'the insight entry rides the sidebar panel list')
+    assert.equal(state.slots[5]?.[1].id, 'dsh-context', 'the entry id addresses the main panel')
+    assert.equal(state.slots[5]?.[1].label?.(), '上下文洞察', 'the entry label localized')
     assert.equal(state.sources.length, 1, '/context trigger source registered')
     assert.equal(state.sources[0]?.trigger, '/', 'trigger is the slash')
   })

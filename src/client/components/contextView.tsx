@@ -4,17 +4,18 @@ import { CATS } from '../categories'
 import { briefNodes, briefOf } from '../brief'
 import { headlineOf } from '../headline'
 import type { ContextViewProps } from '../services'
-import { contextBreakdownOf, contextPressureOf, conversationNodesOf, headersOf, imageLoaderOf, numOf, projectionOf, tokenUsageOf, unsupportedOf } from '../services'
+import { conversationNodesOf, headersOf, imageLoaderOf, projectionOf, unsupportedOf } from '../services'
 import type { ClientCtx, ConversationNodeLike } from '../services'
 import { makeContentFetcher, makeHeaderFetcher, useHistoryFace } from '../historyPage'
-import { useTimelineSource } from '../timelineSource'
+import { useContextSession } from '../sessionData'
 import { makeDetailNote } from './detailNote'
 import { canOpenPathsOf, openPathVia, openResourceVia, workspaceOf } from '../services'
 import { activityOf, activityOfOps, locateStepOf, previewAddressOf } from '../fileActivity'
 import type { FileEntry, FileOp } from '../fileActivity'
 import type { ContextSettings } from '../settings'
 import type { ViewKit } from '../viewkit'
-import { makeAgentHeads } from '../agentHeads'
+import type { AgentHeads } from '../agentHeads'
+import { agentSelfOf } from '../agentTree'
 import { makeContextBrowser } from './browser'
 import type { CatFocus } from './browser'
 import { makeAgentGraph } from './agentGraph'
@@ -83,6 +84,8 @@ export function makeContextView(
   ctx: ClientCtx,
   kit: ViewKit,
   settings: ContextSettings,
+  /** The page-scope cold-head cache the caller shares across every agent-data reader. */
+  heads: AgentHeads,
 ): (props: ContextViewProps) => ReactElement {
   const { t, catLabel } = kit
   const StackedBar = makeStackedBar(kit)
@@ -92,9 +95,7 @@ export function makeContextView(
   const RequestDetail = makeRequestDetail(kit, StackedBar)
   const EventList = makeEventList(kit)
   const FileCard = makeFileCard(kit, settings)
-  // One page-scope cold-head cache serves both subagent-data readers: the
-  // Agent network card's composition rings and the stats board's subagent-cost cell fetch each relative once.
-  const heads = makeAgentHeads()
+  // The stats board's subagent-cost cell reads the shared page-scope cold-head cache.
   const StatsContext = makeStatsContext(kit, makeSubagentCost(ctx, heads))
   const StatsTiming = makeStatsTiming(kit, Donut)
   const StatsTokens = makeStatsTokens(kit, Donut)
@@ -108,14 +109,7 @@ export function makeContextView(
   function ContextViewBody(props: ContextViewProps): ReactElement {
     const sessionId = props.sessionId
     const inSidebar = props.host === 'sidebar'
-    const source = useTimelineSource(props)
-    const data = source.data
-    // token-meter `contextPressure` — the key the chat's ring reads; absent → derived fallback.
-    const pressure = projectionOf(props, 'contextPressure', contextPressureOf)
-    // token-meter `tokenUsage` — the same data the chat stats line reads, so the figures match by construction.
-    const usage = projectionOf(props, 'tokenUsage', tokenUsageOf)
-    // token-meter `contextBreakdown` — the exact rows the chat ring's click-open panel shows.
-    const breakdown = projectionOf(props, 'contextBreakdown', contextBreakdownOf)
+    const { source, data, pressure, breakdown, usage } = useContextSession(props)
     // `contextHeaders` (full system prompt + tool schemas) for the Context browser; absent on older Host halves →
     // tokens-only sections with a note.
     const headers = projectionOf(props, 'contextHeaders', headersOf)
@@ -600,17 +594,13 @@ export function makeContextView(
             state={source.detailState} onRetry={source.retryDetail} />
         </div>
 
-        <AgentGraph
-          sessionId={typeof sessionId === 'string' ? sessionId : undefined}
-          self={{
-            head,
-            billed: usage !== null ? numOf(usage.uncachedInputTokens) + numOf(usage.outputTokens)
-              + numOf(usage.cacheReadTokens) + numOf(usage.cacheWriteTokens) : null,
-            requests: requests.length,
-            costUsage: data.cost ?? null,
-            durationMs: data.timing != null && data.timing.wallMs > 0 ? data.timing.wallMs : null,
-          }}
-        />
+        {/* The card's standalone home is the Fleet tab; the right Sidebar's panel is too narrow to split, so it keeps the card inline. */}
+        {inSidebar ? (
+          <AgentGraph
+            sessionId={typeof sessionId === 'string' ? sessionId : undefined}
+            self={agentSelfOf(data, pressure, breakdown, usage)}
+          />
+        ) : null}
 
         <div className="lc-foot">{t('footer')}</div>
 
