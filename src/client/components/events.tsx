@@ -38,8 +38,8 @@ export function makeEventText(t: Translate): {
     return label
   }
 
-  /** Where this event sits in the timeline: boundary events (compaction/prune) label the GAP they sit in — same-turn 'Turn 2 · Step 3→4',
-   * cross-turn 'Turn 50 · Step 8 → Turn 51 · Step 1'; other kinds keep their single point; no turn/step (in flight) → null. */
+  /** Where this event sits in the timeline: boundary events (compaction/prune) label the GAP they sit in — same-turn 'T2 S3→4',
+   * cross-turn 'T50 S8 → T51 S1'; other kinds keep their single point; no turn/step (in flight) → null. */
   function eventAt(ev: ContextEventRecord): string | null {
     if (ev.kind === 'compaction' || ev.kind === 'prune') {
       if (typeof ev.turn === 'number' && typeof ev.step === 'number') {

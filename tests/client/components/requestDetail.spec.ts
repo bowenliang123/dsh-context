@@ -105,7 +105,7 @@ describe('RequestDetail header', () => {
     }
     const m = await mount(h(RequestDetail, { request: req({}), marker }))
     const chip = query(m.container, '.lc-detail-marker')
-    assert.ok(text(chip).includes('✂ Turn 2 · Step 3→4'))
+    assert.ok(text(chip).includes('✂ T2 S3→4'))
     assert.equal(chip.getAttribute('title'), 'Context compacted (summary replaced 3 messages)')
     await m.unmount()
 
@@ -113,7 +113,7 @@ describe('RequestDetail header', () => {
       request: req({}),
       marker: { seq: 9, time: 1, kind: 'prune', fromTurn: 2, fromStep: 8, turn: 3, step: 1 },
     }))
-    assert.ok(text(query(m2.container, '.lc-detail-marker')).includes('Turn 2 · Step 8 → Turn 3 · Step 1'))
+    assert.ok(text(query(m2.container, '.lc-detail-marker')).includes('T2 S8 → T3 S1'))
     await m2.unmount()
 
     // Same-request boundary (no from-stamps).
@@ -121,7 +121,7 @@ describe('RequestDetail header', () => {
       request: req({}),
       marker: { seq: 9, time: 1, kind: 'compaction', count: 2, turn: 4, step: 2 },
     }))
-    assert.ok(text(query(m3.container, '.lc-detail-marker')).includes('✂ Turn 4 · Step 2'))
+    assert.ok(text(query(m3.container, '.lc-detail-marker')).includes('✂ T4 S2'))
     await m3.unmount()
 
     // No turn/step stamps (event in flight) → no marker chip.

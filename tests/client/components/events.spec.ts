@@ -53,17 +53,17 @@ describe('makeEventText.eventLabel', () => {
 
 describe('makeEventText.eventAt', () => {
   test('boundary events label the gap: same-turn range, cross-turn range, single point', () => {
-    assert.equal(eventAt(ev({ kind: 'compaction', turn: 2, step: 4, fromTurn: 2, fromStep: 3 })), 'Turn 2 · Step 3→4')
-    assert.equal(eventAt(ev({ kind: 'prune', turn: 51, step: 1, fromTurn: 50, fromStep: 8 })), 'Turn 50 · Step 8 → Turn 51 · Step 1')
-    assert.equal(eventAt(ev({ kind: 'compaction', turn: 2, step: 3 })), 'Turn 2 · Step 3')
+    assert.equal(eventAt(ev({ kind: 'compaction', turn: 2, step: 4, fromTurn: 2, fromStep: 3 })), 'T2 S3→4')
+    assert.equal(eventAt(ev({ kind: 'prune', turn: 51, step: 1, fromTurn: 50, fromStep: 8 })), 'T50 S8 → T51 S1')
+    assert.equal(eventAt(ev({ kind: 'compaction', turn: 2, step: 3 })), 'T2 S3')
     // A partial from-side falls back to the single point.
-    assert.equal(eventAt(ev({ kind: 'compaction', turn: 2, step: 3, fromTurn: 2 })), 'Turn 2 · Step 3')
+    assert.equal(eventAt(ev({ kind: 'compaction', turn: 2, step: 3, fromTurn: 2 })), 'T2 S3')
   })
 
   test('missing turn/step yields null; non-boundary kinds keep their single point', () => {
     assert.equal(eventAt(ev({ kind: 'compaction' })), null)
     assert.equal(eventAt(ev({ kind: 'prune', turn: 1 })), null)
-    assert.equal(eventAt(ev({ kind: 'inject', turn: 1, step: 2 })), 'Turn 1 · Step 2')
+    assert.equal(eventAt(ev({ kind: 'inject', turn: 1, step: 2 })), 'T1 S2')
     assert.equal(eventAt(ev({ kind: 'model' })), null)
   })
 })
@@ -113,7 +113,7 @@ describe('EventList', () => {
     const up = query(rows[4], '.lc-event-tokens')
     assert.ok(up.className.includes('lc-up'))
     assert.equal(up.textContent, '+50')
-    assert.equal(query(rows[4], '.lc-event-at').textContent, 'Turn 1 · Step 1')
+    assert.equal(query(rows[4], '.lc-event-at').textContent, 'T1 S1')
     assert.equal(query(rows[4], '.lc-event-time').textContent, fmtTime(time))
     await m.unmount()
   })
