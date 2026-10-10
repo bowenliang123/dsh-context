@@ -301,6 +301,10 @@ describe('locateStepOf', () => {
     assert.equal(locateStepOf(requests, 35, undefined), 'live')
     assert.equal(locateStepOf([], 1, undefined), 'live')
   })
+
+  test('a re-ordered wire still resolves the first request logged after the node', () => {
+    assert.equal(locateStepOf([{ seq: 30 }, { seq: 10 }, { seq: 20 }] as RequestRecord[], 5, undefined), 10)
+  })
 })
 
 /** One settled nested sub-call block, as the conversation join delivers it. */

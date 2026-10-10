@@ -189,6 +189,31 @@ describe('EventList', () => {
     assert.ok(text(m.container).includes('No context events yet'))
     await m.unmount()
   })
+
+  test('an injection label links into the browser; other kinds and a handler-less list keep plain labels', async () => {
+    const events = [
+      ev({ seq: 1, kind: 'inject', form: 'notice', name: 'hook' }),
+      ev({ seq: 2, kind: 'prune' }),
+    ]
+    const focused: ContextEventRecord[] = []
+    const m = await mount(h(EventList, { events, onInjectFocus: e => { focused.push(e) } }))
+    const rows = queryAll(m.container, '.lc-event')
+    // Newest first: the prune row leads, and only the injection becomes a link.
+    assert.equal(rows[0].querySelector('.lc-event-jump'), null)
+    assert.equal(query(rows[0], '.lc-event-label').tagName, 'SPAN')
+    const link = query(rows[1], '.lc-event-jump')
+    assert.equal(link.tagName, 'BUTTON')
+    assert.equal(link.textContent, 'Notice · hook')
+    await click(link)
+    assert.deepEqual(focused.map(e => e.seq), [1])
+    await m.unmount()
+
+    // No handler (a view with no browser to open): every label stays a plain span.
+    const plain = await mount(h(EventList, { events }))
+    assert.equal(queryAll(plain.container, '.lc-event-jump').length, 0)
+    assert.equal(queryAll(plain.container, '.lc-event-label').length, 2)
+    await plain.unmount()
+  })
 })
 
 describe('EventList — the split generation detail states', () => {

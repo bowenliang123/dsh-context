@@ -12,6 +12,10 @@
 .lc-kind-model { background: color-mix(in srgb, var(--dsw-alias-brand-primary) 15%, transparent); color: var(--dsw-alias-brand-primary); }
 .lc-kind-mode { background: color-mix(in srgb, var(--dsw-alias-label-secondary) 15%, transparent); color: var(--dsw-alias-label-secondary); }
 .lc-event-label { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/** An injection's label is the link into the Context Browser: reset the UA button skin onto the label lane and
+ * underline on hover as the affordance. The truncated label's native title fallback stays its own text (syncTitles). */
+.lc-event-jump { border: 0; background: transparent; color: inherit; font: inherit; text-align: left; padding: 0; cursor: pointer; }
+.lc-event-jump:hover { text-decoration: underline; }
 .lc-event-at { flex: none; color: var(--dsw-alias-label-secondary); font-size: 11px; white-space: nowrap; }
 .lc-event-tokens { color: var(--dsw-alias-state-success-primary); font-weight: 600; white-space: nowrap; }
 .lc-event-tokens.lc-up { color: var(--dsw-alias-state-warn-primary); }

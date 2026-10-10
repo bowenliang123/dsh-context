@@ -18,6 +18,9 @@ export interface EventListProps {
    * retry button — an un-fetched list is not an empty one. */
   state?: DetailState
   onRetry?: () => void
+  /** Reveal an injection's own context item in the Context Browser: its label becomes a link (hover underline).
+   * Absent — every row keeps a plain label. */
+  onInjectFocus?: (ev: ContextEventRecord) => void
 }
 
 export function makeEventText(t: Translate): {
@@ -72,6 +75,8 @@ function syncTitles(root: HTMLElement): void {
 export function makeEventList(kit: ViewKit): (props: EventListProps) => ReactElement {
   const { t, fmt, fmtTime, eventLabel, eventAt } = kit
   const DetailNote = makeDetailNote(kit)
+  // The lane both row shapes share; its 92px basis reservation covers icon + gap + the widest kind chip in both locales.
+  const labelClass = 'lc-event-label flex-1 @max-[380px]/lc-card:basis-[calc(100%-92px)]'
   return function EventList(props: EventListProps): ReactElement {
     // Hooks stay unconditional (Rules of Hooks): events going empty ->
     // non-empty in one mounted instance must not grow the hook count — an
@@ -111,15 +116,20 @@ export function makeEventList(kit: ViewKit): (props: EventListProps) => ReactEle
               : EVENT_ICONS[ev.kind] || '•'
           // Key on the durable seq alone: the list renders newest-first, so a fresh event lands at index 0
           // and an index-bearing key would shift EVERY existing row's key — a full-list remount on every push.
-          // Narrow cards (phone panes): the single-line row would crush the label and push the meta
-          // tail into a scrollbar, so the row wraps — the label's near-full-width basis keeps line 1
-          // to icon + kind + label, and the meta tail folds onto line 2. The 92px basis reservation
-          // covers icon + gap + the widest kind chip (both locales) + gap.
+          // Narrow cards (phone panes): the row wraps, folding the meta tail onto line 2 instead of crushing
+          // the label into a scrollbar.
+          // An injection's label doubles as the link into the Context Browser (the row's own context item);
+          // every other kind keeps a plain label.
+          const reveal = ev.kind === 'inject' ? props.onInjectFocus : undefined
           return (
             <div key={ev.seq} className="lc-event @max-[380px]/lc-card:flex-wrap">
               <span className={'lc-event-icon lc-event-' + ev.kind}>{glyph}</span>
               <span className={'lc-kind lc-kind-' + ev.kind}>{t('kind.' + ev.kind)}</span>
-              <span className="lc-event-label flex-1 @max-[380px]/lc-card:basis-[calc(100%-92px)]">{label}</span>
+              {reveal !== undefined ? (
+                <button type="button" className={labelClass + ' lc-event-jump'} onClick={() => { reveal(ev) }}>{label}</button>
+              ) : (
+                <span className={labelClass}>{label}</span>
+              )}
               {at !== null ? <span className="lc-event-at">{at}</span> : null}
               {ev.tokens ? (
                 <span className={'lc-event-tokens' + (ev.kind === 'inject' ? ' lc-up' : ' lc-down')}>

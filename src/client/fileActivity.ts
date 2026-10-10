@@ -373,9 +373,12 @@ export function activityOf(
   return aggregateOps(ops, null)
 }
 
-/** The browser step whose surface SHOWS an op's result node: the first request dispatched after it while it was still alive. */
+/** The browser step whose surface SHOWS an op's result node: the first request dispatched after it while it was still
+ * alive. Sorted here because the wire's append order is not guaranteed (restored rows can re-order) — the same rule
+ * the browser's own entry stamps read. */
 export function locateStepOf(requests: RequestRecord[], seq: number, gone: number | undefined): number | 'live' | null {
-  for (const r of requests) {
+  const sorted = requests.slice().sort((a, b) => a.seq - b.seq)
+  for (const r of sorted) {
     if (r.seq > seq && (gone === undefined || gone > r.seq)) return r.seq
   }
   return gone === undefined ? 'live' : null

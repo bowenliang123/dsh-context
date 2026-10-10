@@ -43,6 +43,15 @@ const viewScroll = new Map<string, number>()
 
 const EVENT_KINDS = ['inject', 'compaction', 'prune', 'model', 'mode'] as const
 
+/** Scroll the Context Browser card to the top of the page's scrollport: the stats figures and the events card's
+ * injection rows both jump into it, and neither may land below the fold. */
+function revealBrowser(root: HTMLElement | null): void {
+  /* v8 ignore start -- every render path attaches the root and draws the browser card, so the target always resolves. */
+  const browser = root?.querySelector('.lc-col-browser') ?? null
+  if (browser !== null) revealInScrollParent(browser)
+  /* v8 ignore stop */
+}
+
 /** The trend card's reserved body: the plot lane plus an empty detail panel wearing the panel's OWN classes, so the
  * pending and loaded states are measured by the same CSS and cannot drift. Without it the first step's arrival grew
  * the card by its whole height and shoved every card below it down the page. */
@@ -166,11 +175,7 @@ export function makeContextView(
     const clearCatFocus = useCallback(() => { setCatFocus(null) }, [])
     const onFigureClick = useCallback((figure: 'skills' | 'answers'): void => {
       setCatFocus(figure === 'skills' ? { cat: 'skill' } : { cat: 'assistant', kind: 'answer' })
-      /** v8 ignore start -- the stats card and the browser card render in the
-       * same view, so the target always resolves here; the guard stays for defensive parity with revealAgents. */
-      const browser = rootRef.current?.querySelector('.lc-col-browser') ?? null
-      if (browser !== null) revealInScrollParent(browser)
-      /* v8 ignore stop */
+      revealBrowser(rootRef.current)
     }, [])
 
     // Restore the saved position in a layout effect, so the chat's bottom-anchored position never flashes in first.
@@ -349,6 +354,27 @@ export function makeContextView(
       const step: number | 'live' = isResponse ? (next !== null ? next.seq : 'live') : activeReq.seq
       setNodeFocus({ step, key: 'n' + String(node.seq), cat: node.cat })
     }, [activeReq, activeIdx, displayRequests])
+
+    // An injection event carries the seq of the very surface node it added (fold.ts), so its row can reveal that node
+    // at the step that first carried it. Resolution comes from the served node: its `gone` stamp bounds the reveal
+    // (a removed item shows only on the steps before its removal), and its category is the fold's own verdict — skill
+    // machinery lands in `skill`, which the event's `sub` does not cover (the catalog digest rides an untagged event).
+    const nodeOfSeq = useMemo(() => {
+      const m = new Map<number, SurfaceNode>()
+      if (data !== null) {
+        for (const n of data.nodes) m.set(n.seq, n)
+        for (const n of data.archive) m.set(n.seq, n)
+      }
+      return m
+    }, [data])
+    const focusInject = useCallback((ev: ContextEventRecord): void => {
+      const node = nodeOfSeq.get(ev.seq)
+      const step = locateStepOf(requests, ev.seq, node?.gone)
+      // Removed before any step dispatched it: there is nothing left to show.
+      if (step === null) return
+      setNodeFocus({ step, key: 'n' + String(ev.seq), cat: node?.cat ?? 'inject' })
+      revealBrowser(rootRef.current)
+    }, [requests, nodeOfSeq])
 
     if (!data) {
       return (
@@ -567,7 +593,7 @@ export function makeContextView(
                 })}
               </div>
             </div>
-            <EventList events={shownEvents} state={source.detailState} onRetry={source.retryDetail} />
+            <EventList events={shownEvents} state={source.detailState} onRetry={source.retryDetail} onInjectFocus={focusInject} />
           </div>
           <FileCard activity={fileActivity} scope={fileScope} workspace={workspace}
             onPreview={previewFile} onOpen={fileOpener} onLocate={locateFileOp}
