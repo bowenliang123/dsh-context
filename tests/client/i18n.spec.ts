@@ -1,18 +1,15 @@
-// Dictionaries (src/client/i18n.ts): both locales carry exactly the same non-empty keys with agreeing interpolation placeholders.
+// Dictionaries (src/client/i18n.ts): non-empty values and agreeing interpolation placeholders. Key-set parity is a
+// compile-time invariant now (DICT_EN is checked against DICT_ZH), so only what types cannot see is asserted here.
 
 import assert from 'node:assert/strict'
 import { describe, test } from 'vitest'
-import { DICT_EN, DICT_ZH } from '../../src/client/i18n'
+import { DICT_EN, DICT_ZH, type DictKey } from '../../src/client/i18n'
 
 function placeholders(s: string): string[] {
   return [...s.matchAll(/\{(\w+)\}/g)].map(m => m[1]).sort()
 }
 
 describe('dictionaries', () => {
-  test('zh and en carry exactly the same key set', () => {
-    assert.deepEqual(Object.keys(DICT_ZH).sort(), Object.keys(DICT_EN).sort())
-  })
-
   test('every value is a non-empty string', () => {
     for (const dict of [DICT_ZH, DICT_EN]) {
       for (const [key, value] of Object.entries(dict)) {
@@ -23,7 +20,7 @@ describe('dictionaries', () => {
   })
 
   test('interpolation placeholders agree between locales for every key', () => {
-    for (const key of Object.keys(DICT_EN)) {
+    for (const key of Object.keys(DICT_EN) as DictKey[]) {
       // 'block.line' is the one documented asymmetry: the en singular form
       // is the fixed literal '1 line' while zh keeps the {n} measure word.
       if (key === 'block.line') {

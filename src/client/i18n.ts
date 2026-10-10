@@ -1,9 +1,14 @@
 /** Bilingual dictionaries (zh/en) for every UI string; missing keys fall through the harness
- *  locale chain (active → en → common → the key). */
+ *  locale chain (active → en → common → the key).
+ *
+ *  zh is the key-set source of truth, following the harness's own idiom — see
+ *  `packages/client/ui-conversation/src/client/locales.ts` in deepseek-harness. */
 
+/** Keyed `string`, not a {@link DictKey} union: call sites compose keys at runtime (`'form.' + form`,
+ *  a weekday template), and typing the union would mean a cast at each one. */
 export type Translate = (key: string, params?: Record<string, string | number>) => string
 
-export const DICT_ZH: Record<string, string> = {
+export const DICT_ZH = {
   'tab': '上下文',
   'sidebar.guideDescription': '查看上下文的构成、统计、演变。',
   'cat.system': '系统提示词',
@@ -458,9 +463,12 @@ export const DICT_ZH: Record<string, string> = {
   'ov.time.m': '{n} 分钟前',
   'ov.time.h': '{n} 小时前',
   'ov.time.d': '{n} 天前',
-}
+} satisfies Record<string, string>
 
-export const DICT_EN: Record<string, string> = {
+/** The key union every locale of this plugin must carry in full. */
+export type DictKey = keyof typeof DICT_ZH
+
+export const DICT_EN = {
   'tab': 'Context',
   'sidebar.guideDescription': 'Inspect context composition, stats, and evolution.',
   'cat.system': 'System Prompt',
@@ -914,4 +922,4 @@ export const DICT_EN: Record<string, string> = {
   'ov.time.m': '{n}m ago',
   'ov.time.h': '{n}h ago',
   'ov.time.d': '{n}d ago',
-}
+} satisfies Record<DictKey, string>

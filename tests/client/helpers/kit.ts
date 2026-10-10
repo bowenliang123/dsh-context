@@ -22,7 +22,7 @@ export function surfaceNodeAt(seq: number, over: Partial<SurfaceNode> = {}): Sur
  * with `{name}` interpolation. Built over the plugin's REAL dictionaries, so
  * assertions exercise the shipped strings rather than a test copy. */
 export function makeTranslate(active: 'en' | 'zh' = 'en', dicts?: Record<string, Record<string, string>>): Translate {
-  const table = dicts ?? { zh: DICT_ZH, en: DICT_EN }
+  const table: Record<string, Record<string, string>> = dicts ?? { zh: DICT_ZH, en: DICT_EN }
   return (key, params) => {
     let s = table[active]?.[key] ?? table.en[key] ?? key
     if (params) for (const k in params) s = s.replace('{' + k + '}', String(params[k]))
