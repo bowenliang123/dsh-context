@@ -540,67 +540,37 @@ describe('StatsContext', () => {
     await m.unmount()
   })
 
-  test('clicking the team card switches to the Fleet tab; the price link stays out of it', async () => {
-    // The card this cell tallies lives on the Fleet tab now: the click activates that tab's own chrome.
-    const bar = document.createElement('div')
-    const fleet = document.createElement('button')
-    fleet.setAttribute('role', 'tab')
-    fleet.setAttribute('aria-selected', 'false')
-    fleet.textContent = 'Fleet'
-    let fleetClicks = 0
-    fleet.addEventListener('click', () => { fleetClicks++ })
-    const context = document.createElement('button')
-    context.setAttribute('role', 'tab')
-    context.setAttribute('aria-selected', 'true')
-    context.textContent = 'Context'
-    let contextClicks = 0
-    context.addEventListener('click', () => { contextClicks++ })
-    bar.append(context, fleet)
-    document.body.appendChild(bar)
-    try {
-      const m = await mount(h('div', { className: 'lc-root' },
-        h(StatsContext, { counts: NO_COUNTS, files: NO_FILES, tools: [], cost: COST, locale: 'en' }),
-      ))
-      await flush()
-      const team = query(m.container, '.lc-flow-team')
-      await click(team)
-      assert.equal(fleetClicks, 1, 'the click activates the Fleet tab')
-      assert.equal(contextClicks, 0)
-      // The price link inside the same cell is a navigation, never a tab switch.
-      await click(query(m.container, 'a.lc-flow-head'))
-      assert.equal(fleetClicks, 1)
-      // Keyboard parity: Enter/Space activate, anything else stays quiet.
-      team.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true }))
-      assert.equal(fleetClicks, 2)
-      team.dispatchEvent(new KeyboardEvent('keydown', { key: 'x', bubbles: true }))
-      assert.equal(fleetClicks, 2)
-      await m.unmount()
-    } finally {
-      bar.remove()
-    }
+  test('the team card hands its jump to the caller; the price link stays out of it', async () => {
+    // The card this cell tallies lives on another view, and only the caller knows where it serves it.
+    let opened = 0
+    const m = await mount(h(StatsContext, {
+      counts: NO_COUNTS, files: NO_FILES, tools: [], cost: COST, locale: 'en',
+      onTeamClick: () => { opened += 1 },
+    }))
+    await flush()
+    const team = query(m.container, '.lc-flow-team')
+    assert.equal(team.getAttribute('role'), 'button')
+    await click(team)
+    assert.equal(opened, 1)
+    // The price link inside the same cell is a navigation, never a view switch.
+    await click(query(m.container, 'a.lc-flow-head'))
+    assert.equal(opened, 1)
+    // Keyboard parity: Enter/Space open, anything else stays quiet.
+    team.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true }))
+    assert.equal(opened, 2)
+    team.dispatchEvent(new KeyboardEvent('keydown', { key: 'x', bubbles: true }))
+    assert.equal(opened, 2)
+    await m.unmount()
   })
 
-  test('without a Fleet tab on screen a click is a quiet no-op', async () => {
-    // No tab bar at all.
-    const bare = await mount(h(StatsContext, { counts: NO_COUNTS, files: NO_FILES, tools: [], cost: COST, locale: 'en' }))
-    await click(query(bare.container, '.lc-flow-team'))
-    await bare.unmount()
-    // A tab bar without a Fleet entry (the placement preference that drops the conversation tabs).
-    const bar = document.createElement('div')
-    const chat = document.createElement('button')
-    chat.setAttribute('role', 'tab')
-    chat.textContent = 'Chat'
-    bar.appendChild(chat)
-    document.body.appendChild(bar)
-    try {
-      const m = await mount(h('div', { className: 'lc-root' },
-        h(StatsContext, { counts: NO_COUNTS, files: NO_FILES, tools: [], cost: COST, locale: 'en' }),
-      ))
-      await click(query(m.container, '.lc-flow-team'))
-      await m.unmount()
-    } finally {
-      bar.remove()
-    }
+  test('without a caller the cell is a plain figure, never a dead button', async () => {
+    const m = await mount(h(StatsContext, { counts: NO_COUNTS, files: NO_FILES, tools: [], cost: COST, locale: 'en' }))
+    const team = query(m.container, '.lc-flow-team')
+    assert.equal(team.getAttribute('role'), null)
+    assert.equal(team.getAttribute('tabindex'), null)
+    await click(team)
+    team.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }))
+    await m.unmount()
   })
 
   test('the second-row figures fire onFigureClick on click and keyboard', async () => {

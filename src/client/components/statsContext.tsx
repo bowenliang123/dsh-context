@@ -11,7 +11,6 @@ import type { AgentHeads } from '../agentHeads'
 import { useSessionsSnapshot } from '../agentHeads'
 import type { Translate } from '../i18n'
 import { useModelPrices } from '../modelPrices'
-import { activateViewTab } from '../viewFocus'
 import { asRecord, type ClientCtx } from '../services'
 import { isDeepSeekProvider } from '../../shared/providers'
 import type { ViewKit } from '../viewkit'
@@ -139,6 +138,8 @@ interface StatsContextProps {
   humanInputs?: number
   answers?: number
   onFigureClick?: (figure: 'skills' | 'answers') => void
+  /** The family card's own view, wherever the caller serves it (contextView.tsx owns the jump). */
+  onTeamClick?: () => void
   toolCalls?: number
   files: { reads: number; writes: number; searches: number; images: number }
   tools: readonly (readonly [string, number])[]
@@ -420,18 +421,16 @@ export function makeStatsContext(
     const costText = cost === null ? '—' : formatCost(cost, currency)
     const ownText = ownCost === null ? '—' : formatCost(ownCost, currency)
     const subText = subCost === null ? '—' : formatCost(subCost, currency)
-    // The card this cell tallies lives on the Fleet tab, not further down this page: nothing to scroll to, so the
-    // click switches views. That tab rides the same placement gate as this board, so a miss here means a foreign
-    // tab bar (or one on a stripped harness) — a quiet no-op, never a throw.
-    const openFleetTab = (): void => { activateViewTab(t('tab.fleet')) }
+    // The card this cell tallies lives on its own view, and only the caller knows where it serves it.
+    const openTeam = props.onTeamClick
     const onTeamClick = (ev: MouseEvent): void => {
       if ((ev.target as HTMLElement).closest('a') !== null) return
-      openFleetTab()
+      openTeam?.()
     }
     const onTeamKeyDown = (ev: KeyboardEvent): void => {
       if (ev.key !== 'Enter' && ev.key !== ' ') return
       ev.preventDefault()
-      openFleetTab()
+      openTeam?.()
     }
     const ioTotal = (props.humanInputs ?? 0) + props.files.reads + props.files.writes + props.files.searches + props.files.images
     // The head's live tally; the pills' own sum is the fallback on hosts too old to carry it.
@@ -492,8 +491,8 @@ export function makeStatsContext(
             <div
               className="lc-flow-node lc-flow-team"
               ref={nodeRef('cost')}
-              role="button"
-              tabIndex={0}
+              role={openTeam === undefined ? undefined : 'button'}
+              tabIndex={openTeam === undefined ? undefined : 0}
               onClick={onTeamClick}
               onKeyDown={onTeamKeyDown}
             >

@@ -33,6 +33,7 @@ describe('Config validator (cordis Standard Schema face)', () => {
       defaultFileSort: 'count',
       insightsEntry: 'show',
       defaultDurationCurve: 'show',
+      fleetTab: 'show',
     })
     assert.deepEqual(resolveBounds(undefined), DEFAULT_BOUNDS)
     assert.deepEqual(resolveBounds({}), DEFAULT_BOUNDS)
@@ -70,7 +71,7 @@ describe('Config validator (cordis Standard Schema face)', () => {
 describe('preference fields (the Config-form generation surface)', () => {
   test('every preference is volatile-marked; the bounds are not', () => {
     const dict = Config.dict ?? {}
-    for (const pref of ['defaultPlacement', 'defaultGranularity', 'defaultTrendMode', 'defaultDeltaBase', 'defaultToolSort', 'defaultFileSort', 'insightsEntry', 'defaultDurationCurve']) {
+    for (const pref of ['defaultPlacement', 'defaultGranularity', 'defaultTrendMode', 'defaultDeltaBase', 'defaultToolSort', 'defaultFileSort', 'insightsEntry', 'defaultDurationCurve', 'fleetTab']) {
       assert.equal((dict[pref] as z['dict'] extends undefined ? never : { meta?: { volatile?: boolean } }).meta?.volatile, true, pref)
     }
     for (const bound of ['maxRequestSteps', 'maxKeptTurns', 'maxEvents', 'maxNodes', 'maxArchiveNodes', 'maxFileOps']) {
@@ -88,12 +89,14 @@ describe('preference fields (the Config-form generation surface)', () => {
     assert.equal(deref(resolved.defaultFileSort), 'count')
     assert.equal(deref(resolved.insightsEntry), 'show')
     assert.equal(deref(resolved.defaultDurationCurve), 'show')
+    assert.equal(deref(resolved.fleetTab), 'show')
   })
 
   test('a stored preference survives the resolve', () => {
-    const resolved = Config({ defaultPlacement: 'sidebar', insightsEntry: 'hide' })
+    const resolved = Config({ defaultPlacement: 'sidebar', insightsEntry: 'hide', fleetTab: 'hide' })
     assert.equal(deref(resolved.defaultPlacement), 'sidebar')
     assert.equal(deref(resolved.insightsEntry), 'hide')
+    assert.equal(deref(resolved.fleetTab), 'hide')
   })
 })
 

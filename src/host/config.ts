@@ -55,6 +55,7 @@ export const Config = z.object({
   defaultFileSort: volatileField(z.union(['count', 'latest', 'path']).default('count').loose()),
   insightsEntry: volatileField(z.union(['show', 'hide']).default('show').loose()),
   defaultDurationCurve: volatileField(z.union(['show', 'hide']).default('show').loose()),
+  fleetTab: volatileField(z.union(['show', 'hide']).default('show').loose()),
 })
 
 export function resolveBounds(config: Config | undefined): FoldBounds {

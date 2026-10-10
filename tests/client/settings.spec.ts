@@ -52,6 +52,7 @@ describe('createContextSettings defaults', () => {
       fileSort: 'count',
       insightsEntry: 'show',
       durationCurve: 'show',
+      fleetTab: 'show',
       writable: false,
     })
     assert.equal(s.defaultPlacement(), 'all')
@@ -62,6 +63,7 @@ describe('createContextSettings defaults', () => {
     assert.equal(s.defaultFileSort(), 'count')
     assert.equal(s.insightsEntry(), 'show')
     assert.equal(s.defaultDurationCurve(), 'show')
+    assert.equal(s.fleetTab(), 'show')
   })
 })
 
@@ -184,6 +186,27 @@ describe('set', () => {
     await new Promise(resolve => setTimeout(resolve, 0))
     assert.equal(s.insightsEntry(), 'hide')
   })
+
+  test('a rejected fleet-tab write degrades to show when the scope carries no valid value', async () => {
+    const s = createContextSettings()
+    const scope = new TestSettingsScope({ status: 'ready', value: {}, writable: true })
+    s.attach(scope)
+    scope.failSet = true
+    s.set('fleetTab', 'hide')
+    assert.equal(s.fleetTab(), 'hide', 'the optimistic echo lands first')
+    await new Promise(resolve => setTimeout(resolve, 0))
+    assert.equal(s.fleetTab(), 'show', 'an unpersisted hide must not keep the tab away')
+  })
+
+  test('a rejected fleet-tab write rolls back to the scope\'s valid truth', async () => {
+    const s = createContextSettings()
+    const scope = new TestSettingsScope({ status: 'ready', value: { fleetTab: 'hide' }, writable: true })
+    s.attach(scope)
+    scope.failSet = true
+    s.set('fleetTab', 'show')
+    await new Promise(resolve => setTimeout(resolve, 0))
+    assert.equal(s.fleetTab(), 'hide')
+  })
 })
 
 describe('attach', () => {
@@ -200,6 +223,7 @@ describe('attach', () => {
         defaultFileSort: 'path',
         insightsEntry: 'hide',
         defaultDurationCurve: 'hide',
+        fleetTab: 'hide',
       },
       writable: true,
     })
@@ -214,6 +238,7 @@ describe('attach', () => {
       fileSort: 'path',
       insightsEntry: 'hide',
       durationCurve: 'hide',
+      fleetTab: 'hide',
       writable: true,
     })
   })
@@ -246,6 +271,7 @@ describe('attach', () => {
         fileSort: 'count',
         insightsEntry: 'show',
         durationCurve: 'show',
+        fleetTab: 'show',
         writable: false,
       })
     }
@@ -255,7 +281,7 @@ describe('attach', () => {
     const s = createContextSettings()
     s.attach(new TestSettingsScope({
       status: 'ready',
-      value: { defaultPlacement: 'window', defaultGranularity: 'bogus', defaultTrendMode: 7, defaultDeltaBase: 'bogus', defaultToolSort: 'alpha', defaultFileSort: 'alpha', insightsEntry: 42, defaultDurationCurve: 'always' },
+      value: { defaultPlacement: 'window', defaultGranularity: 'bogus', defaultTrendMode: 7, defaultDeltaBase: 'bogus', defaultToolSort: 'alpha', defaultFileSort: 'alpha', insightsEntry: 42, defaultDurationCurve: 'always', fleetTab: 7 },
       writable: false,
     }))
     assert.equal(s.defaultPlacement(), 'all')
@@ -266,6 +292,7 @@ describe('attach', () => {
     assert.equal(s.defaultFileSort(), 'count')
     assert.equal(s.insightsEntry(), 'show')
     assert.equal(s.defaultDurationCurve(), 'show')
+    assert.equal(s.fleetTab(), 'show')
   })
 
   test('an invalid scope placement degrades to all instead of keeping the current one', () => {

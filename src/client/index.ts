@@ -15,6 +15,7 @@ import { createContextSettings, type ConfigFormsFace, type SettingsField } from 
 import { makeContextView } from './components/contextView'
 import { makeContextJumpButton } from './components/contextJump'
 import { makeFleetView } from './components/fleetView'
+import { watchFleetTab } from './fleetTab'
 import { makeAgentHeads } from './agentHeads'
 import { watchHistoryFaces } from './historyPage'
 import { watchPlacement } from './placement'
@@ -61,25 +62,22 @@ function apply(ctx: ClientCtx): void {
   const FleetView = makeFleetView(ctx, kit, heads)
 
   ctx.effect(() => watchPlacement(settings, {
-    tab: () => ctx.slots.inject('conversation.view', () => {
-      const registrations = [
-        // order 20 renders right of Chat (0) and Trajectory (10).
-        ctx.slots.register(
-          { name: 'conversation.view', id: 'context', order: 20, locale: NS, label: () => t('tab.context') },
-          props => h(ContextView, props),
-        ),
-        // The agent family's own page, right of the Context tab.
-        ctx.slots.register(
-          { name: 'conversation.view', id: 'fleet', order: 30, locale: NS, label: () => t('tab.fleet') },
-          props => h(FleetView, props),
-        ),
-      ]
-      return () => {
-        for (const dispose of registrations) if (typeof dispose === 'function') (dispose as () => void)()
-      }
-    }),
+    tab: () => ctx.slots.inject('conversation.view', () => ctx.slots.register(
+      // order 20 renders right of Chat (0) and Trajectory (10).
+      { name: 'conversation.view', id: 'context', order: 20, locale: NS, label: () => t('tab.context') },
+      props => h(ContextView, props),
+    )),
     sidebar: () => watchSidebarContextTab(ctx, ContextView, t, NS),
   }), 'dsh-context: placement')
+
+  // The Fleet tab: its own show/hide preference on top of the placement gate (fleetTab.ts).
+  ctx.effect(() => watchFleetTab(
+    ctx,
+    settings,
+    props => h(FleetView, props as unknown as Parameters<typeof FleetView>[0]),
+    t,
+    NS,
+  ), 'dsh-context: fleet tab')
 
   // Chat → Context jump: opens the right Sidebar's tab pinned to the reply's turn where served, else the
   // conversation tab (contextJump.tsx; relay and activation in viewFocus.ts).

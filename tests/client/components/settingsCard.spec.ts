@@ -14,7 +14,7 @@ function hookFor(state: SettingsState) {
 }
 
 function stateOf(partial: Partial<SettingsState> = {}): SettingsState {
-  return { status: 'ready', placement: 'all', granularity: 'step', mode: 'total', deltaBase: 'step', toolSort: 'count', fileSort: 'count', insightsEntry: 'show', durationCurve: 'show', writable: true, ...partial }
+  return { status: 'ready', placement: 'all', granularity: 'step', mode: 'total', deltaBase: 'step', toolSort: 'count', fileSort: 'count', insightsEntry: 'show', durationCurve: 'show', fleetTab: 'show', writable: true, ...partial }
 }
 
 /** Menu items portaled into document.body while a select is open. */
@@ -33,12 +33,12 @@ describe('PluginConfigCard (the Plugins-page seat)', () => {
     await m2.unmount()
   })
 
-  test('renders the eight rows flat — no card chrome', async () => {
+  test('renders the nine rows flat — no card chrome', async () => {
     const m = await mount(h(PluginConfigCard, { useContextSettings: hookFor(stateOf({ status: 'loading', writable: false })) }))
     assert.equal(m.container.querySelector('.lc-settings-card'), null, 'no settings-section chrome')
     assert.ok(query(m.container, '.lc-settings-prefs'))
     const selects = queryAll<HTMLButtonElement>(m.container, '.lc-settings-select')
-    assert.equal(selects.length, 8)
+    assert.equal(selects.length, 9)
     assert.ok(selects.every(s => s.disabled), 'loading is not ready: the rows are disabled')
     assert.equal(m.container.querySelector('.lc-settings-note'), null)
     await m.unmount()
@@ -70,73 +70,86 @@ describe('PluginConfigCard (the Plugins-page seat)', () => {
     assert.equal(document.body.querySelector('[role="menu"]'), null)
 
     assert.ok(text(m.container).includes(DICT_EN['settings.insightsEntry']))
-    assert.ok(text(selects[1]).includes(DICT_EN['insightsEntry.show']))
+    assert.ok(text(selects[1]).includes(DICT_EN['showHide.show']))
     await click(selects[1])
     const entryItems = menuItems()
-    assert.deepEqual(entryItems.map(i => text(i)), [DICT_EN['insightsEntry.show'], DICT_EN['insightsEntry.hide']])
+    assert.deepEqual(entryItems.map(i => text(i)), [DICT_EN['showHide.show'], DICT_EN['showHide.hide']])
     await click(entryItems[1]) // 'Hide'
     assert.deepEqual(calls, [['defaultPlacement', 'sidebar'], ['insightsEntry', 'hide']])
 
-    assert.ok(text(selects[2]).includes(DICT_EN['gran.step']))
-    assert.ok(text(selects[3]).includes(DICT_EN['gran.total']))
+    // The Fleet-tab row follows the insights entry: the two view-visibility gates sit together.
+    assert.ok(text(m.container).includes(DICT_EN['settings.fleetTab']))
+    assert.ok(text(selects[2]).includes(DICT_EN['showHide.show']))
+    await click(selects[2])
+    const fleetItems = menuItems()
+    assert.deepEqual(fleetItems.map(i => text(i)), [DICT_EN['showHide.show'], DICT_EN['showHide.hide']])
+    await click(fleetItems[1]) // 'Hide'
+    assert.deepEqual(calls, [['defaultPlacement', 'sidebar'], ['insightsEntry', 'hide'], ['fleetTab', 'hide']])
+
+    assert.ok(text(selects[3]).includes(DICT_EN['gran.step']))
+    assert.ok(text(selects[4]).includes(DICT_EN['gran.total']))
     // The duration-curve row follows the trend-mode one, reusing the entry's show/hide labels.
     assert.ok(text(m.container).includes(DICT_EN['settings.durationCurve']))
-    assert.ok(text(selects[4]).includes(DICT_EN['insightsEntry.show']))
+    assert.ok(text(selects[5]).includes(DICT_EN['showHide.show']))
     // The delta-baseline row leads the tool-sort one, reusing the toolbar's option labels.
     assert.ok(text(m.container).includes(DICT_EN['settings.deltaBase']))
-    assert.ok(text(selects[5]).includes(DICT_EN['browser.base.step']))
+    assert.ok(text(selects[6]).includes(DICT_EN['browser.base.step']))
     assert.ok(text(m.container).includes(DICT_EN['settings.toolSort']))
-    assert.ok(text(selects[6]).includes(DICT_EN['tool.sort.count']))
+    assert.ok(text(selects[7]).includes(DICT_EN['tool.sort.count']))
     assert.ok(text(m.container).includes(DICT_EN['settings.fileSort']))
-    assert.ok(text(selects[7]).includes(DICT_EN['files.sort.count']))
+    assert.ok(text(selects[8]).includes(DICT_EN['files.sort.count']))
 
-    await click(selects[2])
+    await click(selects[3])
     const items = menuItems()
     assert.deepEqual(items.map(i => text(i)), [DICT_EN['gran.step'], DICT_EN['gran.turn']])
     await click(items[1]) // 'Turn'
     assert.deepEqual(calls, [
       ['defaultPlacement', 'sidebar'],
       ['insightsEntry', 'hide'],
+      ['fleetTab', 'hide'],
       ['defaultGranularity', 'turn'],
     ])
 
-    await click(selects[3])
+    await click(selects[4])
     const modeItems = menuItems()
     assert.deepEqual(modeItems.map(i => text(i)), [DICT_EN['gran.total'], DICT_EN['gran.delta']])
     await click(modeItems[1]) // 'Delta'
     assert.deepEqual(calls, [
       ['defaultPlacement', 'sidebar'],
       ['insightsEntry', 'hide'],
+      ['fleetTab', 'hide'],
       ['defaultGranularity', 'turn'],
       ['defaultTrendMode', 'delta'],
     ])
 
-    await click(selects[4])
+    await click(selects[5])
     const curveItems = menuItems()
-    assert.deepEqual(curveItems.map(i => text(i)), [DICT_EN['insightsEntry.show'], DICT_EN['insightsEntry.hide']])
+    assert.deepEqual(curveItems.map(i => text(i)), [DICT_EN['showHide.show'], DICT_EN['showHide.hide']])
     await click(curveItems[1]) // 'Hide'
     assert.deepEqual(calls, [
       ['defaultPlacement', 'sidebar'],
       ['insightsEntry', 'hide'],
+      ['fleetTab', 'hide'],
       ['defaultGranularity', 'turn'],
       ['defaultTrendMode', 'delta'],
       ['defaultDurationCurve', 'hide'],
     ])
 
-    await click(selects[5])
+    await click(selects[6])
     const baseItems = menuItems()
     assert.deepEqual(baseItems.map(i => text(i)), [DICT_EN['browser.base.step'], DICT_EN['browser.base.turn']])
     await click(baseItems[1]) // 'prev turn'
     assert.deepEqual(calls, [
       ['defaultPlacement', 'sidebar'],
       ['insightsEntry', 'hide'],
+      ['fleetTab', 'hide'],
       ['defaultGranularity', 'turn'],
       ['defaultTrendMode', 'delta'],
       ['defaultDurationCurve', 'hide'],
       ['defaultDeltaBase', 'turn'],
     ])
 
-    await click(selects[6])
+    await click(selects[7])
     const toolItems = menuItems()
     assert.deepEqual(toolItems.map(i => text(i)), [
       DICT_EN['tool.sort.size'],
@@ -147,6 +160,7 @@ describe('PluginConfigCard (the Plugins-page seat)', () => {
     assert.deepEqual(calls, [
       ['defaultPlacement', 'sidebar'],
       ['insightsEntry', 'hide'],
+      ['fleetTab', 'hide'],
       ['defaultGranularity', 'turn'],
       ['defaultTrendMode', 'delta'],
       ['defaultDurationCurve', 'hide'],
@@ -154,7 +168,7 @@ describe('PluginConfigCard (the Plugins-page seat)', () => {
       ['defaultToolSort', 'name'],
     ])
 
-    await click(selects[7])
+    await click(selects[8])
     const sortItems = menuItems()
     assert.deepEqual(sortItems.map(i => text(i)), [
       DICT_EN['files.sort.count'],
@@ -165,6 +179,7 @@ describe('PluginConfigCard (the Plugins-page seat)', () => {
     assert.deepEqual(calls, [
       ['defaultPlacement', 'sidebar'],
       ['insightsEntry', 'hide'],
+      ['fleetTab', 'hide'],
       ['defaultGranularity', 'turn'],
       ['defaultTrendMode', 'delta'],
       ['defaultDurationCurve', 'hide'],

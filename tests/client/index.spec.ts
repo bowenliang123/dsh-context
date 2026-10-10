@@ -147,6 +147,19 @@ describe('client entry: conversation.view slot', () => {
     assert.deepEqual(labels, ['上下文', '编队'])
     ctx.dispose()
   })
+
+  test('the fleetTab preference serves and withdraws the Fleet tab alone', () => {
+    const scope = scopeWith({ status: 'ready', value: { fleetTab: 'hide' }, writable: true })
+    const ctx = new TestClientCtx({ services: { configForms: formsServing(scope) } })
+    applyTo(ctx)
+    assert.deepEqual(ctx.slots.of('conversation.view').map(e => e.registration.id), ['context'], 'only the Context tab is served')
+    scope.emit({ status: 'ready', value: { fleetTab: 'show' }, writable: true })
+    assert.deepEqual(ctx.slots.of('conversation.view').map(e => e.registration.id), ['context', 'fleet'])
+    scope.emit({ status: 'ready', value: { fleetTab: 'hide' }, writable: true })
+    assert.deepEqual(ctx.slots.of('conversation.view').map(e => e.registration.id), ['context'], 'the Context tab is never churned')
+    ctx.dispose()
+    assert.deepEqual(ctx.slots.of('conversation.view'), [])
+  })
 })
 
 describe('client entry: assistant-actions seat', () => {
@@ -376,7 +389,7 @@ describe('client entry: configForms inject', () => {
     const m = await mount(h(el.type as never, {
       useContextSettings: <T,>(sel: (state: SettingsState) => T): T => sel(store.getSnapshot()),
     }))
-    assert.equal(queryAll(m.container, '.lc-settings-select').length, 8)
+    assert.equal(queryAll(m.container, '.lc-settings-select').length, 9)
     assert.equal(m.container.querySelector('.lc-settings-head'), null, 'no settings-section chrome on this seat')
     await m.unmount()
     disposeRegistration()

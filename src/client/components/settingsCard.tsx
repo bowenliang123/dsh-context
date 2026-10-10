@@ -54,6 +54,22 @@ function PrefRow(props: PrefRowProps): ReactElement {
 
 type Translate = ViewKit['t']
 
+/** The three on/off gates (entry visibility, the Fleet tab, the trend duration curve) share one row shape. */
+function ShowHideRow(props: { t: Translate; label: string; value: string; disabled: boolean; onPick: (id: string) => void }): ReactElement {
+  return (
+    <PrefRow
+      label={props.label}
+      value={props.value}
+      disabled={props.disabled}
+      options={[
+        { id: 'show', label: props.t('showHide.show') },
+        { id: 'hide', label: props.t('showHide.hide') },
+      ]}
+      onPick={props.onPick}
+    />
+  )
+}
+
 function PreferenceRows(props: { t: Translate; state: SettingsState; set?: SettingsCardProps['set'] }): ReactElement {
   const { t, state, set } = props
   const disabled = state.status !== 'ready' || !state.writable
@@ -70,16 +86,10 @@ function PreferenceRows(props: { t: Translate; state: SettingsState; set?: Setti
         ]}
         onPick={(id) => { set?.('defaultPlacement', id) }}
       />
-      <PrefRow
-        label={t('settings.insightsEntry')}
-        value={state.insightsEntry}
-        disabled={disabled}
-        options={[
-          { id: 'show', label: t('insightsEntry.show') },
-          { id: 'hide', label: t('insightsEntry.hide') },
-        ]}
-        onPick={(id) => { set?.('insightsEntry', id) }}
-      />
+      <ShowHideRow t={t} label={t('settings.insightsEntry')} value={state.insightsEntry} disabled={disabled}
+        onPick={(id) => { set?.('insightsEntry', id) }} />
+      <ShowHideRow t={t} label={t('settings.fleetTab')} value={state.fleetTab} disabled={disabled}
+        onPick={(id) => { set?.('fleetTab', id) }} />
       <PrefRow
         label={t('settings.gran')}
         value={state.granularity}
@@ -100,16 +110,8 @@ function PreferenceRows(props: { t: Translate; state: SettingsState; set?: Setti
         ]}
         onPick={(id) => { set?.('defaultTrendMode', id) }}
       />
-      <PrefRow
-        label={t('settings.durationCurve')}
-        value={state.durationCurve}
-        disabled={disabled}
-        options={[
-          { id: 'show', label: t('insightsEntry.show') },
-          { id: 'hide', label: t('insightsEntry.hide') },
-        ]}
-        onPick={(id) => { set?.('defaultDurationCurve', id) }}
-      />
+      <ShowHideRow t={t} label={t('settings.durationCurve')} value={state.durationCurve} disabled={disabled}
+        onPick={(id) => { set?.('defaultDurationCurve', id) }} />
       <PrefRow
         label={t('settings.deltaBase')}
         value={state.deltaBase}

@@ -107,6 +107,9 @@ export type InsightsEntry = 'show' | 'hide'
 
 export type DefaultDurationCurve = 'show' | 'hide'
 
+/** Whether the Fleet conversation tab is served. */
+export type FleetTab = 'show' | 'hide'
+
 export interface PluginSettings {
   defaultPlacement: DefaultPlacement
   defaultGranularity: DefaultGranularity
@@ -116,6 +119,7 @@ export interface PluginSettings {
   defaultFileSort: DefaultFileSort
   insightsEntry: InsightsEntry
   defaultDurationCurve: DefaultDurationCurve
+  fleetTab: FleetTab
 }
 
 export type SettingsField = keyof PluginSettings

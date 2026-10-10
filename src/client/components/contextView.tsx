@@ -34,7 +34,7 @@ import { aggregateByTurn, attachMarkers, jumpTargetOf, makeTrendChart, turnSteps
 import { assemble } from '../assemble'
 import { trendBandsOf } from '../dna'
 
-import { subscribeContextFocus, takeContextFocus } from '../viewFocus'
+import { activateViewTab, openContextSidebar, subscribeContextFocus, takeContextFocus } from '../viewFocus'
 import { revealInScrollParent } from '../revealScroll'
 import { makeErrorBoundary } from './errorBoundary'
 
@@ -171,6 +171,13 @@ export function makeContextView(
       setCatFocus(figure === 'skills' ? { cat: 'skill' } : { cat: 'assistant', kind: 'answer' })
       revealBrowser(rootRef.current)
     }, [])
+    // The stats board's family cell names the Agent Network card: its own tab when the preferences serve one,
+    // else the right Sidebar panel that keeps the card inline. A deployment serving neither — a stripped
+    // harness, or the tab hidden with no Sidebar — leaves the cell a plain figure instead of a dead button.
+    const hasFamilyView = settings.fleetTab() === 'show' || settings.defaultPlacement() !== 'tab'
+    const onTeamClick = useCallback((): void => {
+      if (!activateViewTab(t('tab.fleet'))) openContextSidebar(ctx)
+    }, [t])
 
     // Restore the saved position in a layout effect, so the chat's bottom-anchored position never flashes in first.
     useLayoutEffect(() => {
@@ -551,7 +558,7 @@ export function makeContextView(
             <StatsContext counts={counts} humanInputs={data.humanInputs} answers={data.answers} toolCalls={data.toolCalls}
               files={ioTotals} tools={toolTally}
               cost={data.cost} locale={activeLocale} sessionId={typeof sessionId === 'string' ? sessionId : undefined}
-              onFigureClick={onFigureClick} />
+              onFigureClick={onFigureClick} onTeamClick={hasFamilyView ? onTeamClick : undefined} />
             <PluginInfo />
           </div>
         )}
