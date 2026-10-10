@@ -24,7 +24,6 @@ export interface AgentRow {
   parentId?: string
   origin?: string
   running: boolean
-  completed: boolean
   blank: boolean
   updatedAt: number
   projections?: Record<string, unknown>
@@ -106,7 +105,6 @@ export function agentRowOf(value: unknown): AgentRow | null {
     ...(typeof rec.parentId === 'string' ? { parentId: rec.parentId } : {}),
     ...(typeof rec.origin === 'string' ? { origin: rec.origin } : {}),
     running: rec.running === true,
-    completed: rec.completed === true,
     blank: rec.blank === true,
     updatedAt: numOf(rec.updatedAt),
     ...(projections !== null ? { projections } : {}),
@@ -131,6 +129,13 @@ export function agentDurationOf(value: unknown): number | null {
   const openMs = active !== null ? Math.max(0, numOf(active.through) - numOf(active.since)) : 0
   const total = settled + openMs
   return total > 0 ? total : null
+}
+
+/** The harness's own done signal (its subagent header popup's green dot): the last closed turn
+ * after the child's descriptor finished normally. A running session is never done, whatever it
+ * last turned in. */
+export function agentTurnCompletedOf(value: unknown): boolean {
+  return asRecord(value)?.lastTurnCompleted === true
 }
 
 /** Fold one row's projection values into render-ready stats. The composition
@@ -222,7 +227,7 @@ export function agentForestOf(
     if (row !== null && (!row.blank || key === currentId)) rows.set(key, row)
   }
   if (!rows.has(currentId)) {
-    rows.set(currentId, { running: false, completed: false, blank: false, updatedAt: 0 })
+    rows.set(currentId, { running: false, blank: false, updatedAt: 0 })
   }
 
   // Topmost known ancestor; a lineage cycle anchors at the first repeated id.
@@ -287,6 +292,14 @@ export function agentForestOf(
       ? { ...values, contextTimeline: fetchedHead }
       : values)
     const identity = stats.identity
+    if (id === currentId && self !== undefined) {
+      stats.head = self.head ?? stats.head
+      stats.billed = self.billed ?? stats.billed
+      stats.requests = self.requests > 0 ? self.requests : stats.requests
+      stats.costUsage = self.costUsage ?? stats.costUsage
+      stats.durationMs = self.durationMs ?? stats.durationMs
+    }
+    const subagent = row.origin === 'subagent' || identity !== null
     const node: AgentNode = {
       ...stats,
       id,
@@ -296,15 +309,12 @@ export function agentForestOf(
       family,
       isCurrent: id === currentId,
       running: row.running,
-      completed: row.completed,
-      subagent: row.origin === 'subagent' || identity !== null,
-    }
-    if (node.isCurrent && self !== undefined) {
-      node.head = self.head ?? node.head
-      node.billed = self.billed ?? node.billed
-      node.requests = self.requests > 0 ? self.requests : node.requests
-      node.costUsage = self.costUsage ?? node.costUsage
-      node.durationMs = self.durationMs ?? node.durationMs
+      // Done, by the harness popup's own rule: a stopped agent only, and the signal is the
+      // last closed subagent turn finishing normally. A session that is not a subagent never
+      // carries that projection, so its own folded steps stand in for it.
+      completed: !row.running
+        && (agentTurnCompletedOf(values?.subagentTiming) || (!subagent && stats.requests > 0)),
+      subagent,
     }
     nodes.push(node)
     if (parentId !== undefined) edges.push({ from: parentId, to: id })

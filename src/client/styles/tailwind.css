@@ -38,13 +38,11 @@
   --animate-lc-stacked-in: lc-stacked-in 0.4s cubic-bezier(0.4, 0, 0.2, 1) calc(var(--lc-i, 0) * 40ms) backwards;
   --animate-lc-bar-in: lc-bar-in 0.35s cubic-bezier(0.4, 0, 0.2, 1) calc(var(--lc-i, 0) * 15ms) backwards;
   --animate-lc-agent-flow: lc-agent-flow 0.9s linear infinite;
-  --animate-lc-agent-glow: lc-agent-glow 1.8s ease-in-out infinite;
   --animate-lc-agent-in: lc-agent-in 0.35s cubic-bezier(0.4, 0, 0.2, 1) calc(var(--lc-i, 0) * 35ms) backwards;
   @keyframes lc-donut-in { from { stroke-dasharray: 0 100; } }
   @keyframes lc-stacked-in { from { transform: scaleX(0); } }
   @keyframes lc-bar-in { from { transform: scaleY(0); } }
   @keyframes lc-agent-flow { to { stroke-dashoffset: -9; } }
-  @keyframes lc-agent-glow { 0%, 100% { opacity: 1; } 50% { opacity: 0.4; } }
   @keyframes lc-agent-in { from { opacity: 0; transform: translateY(6px); } }
 }
 

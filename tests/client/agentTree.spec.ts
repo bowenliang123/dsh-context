@@ -8,6 +8,7 @@ import {
   agentForestOf,
   agentIdentityOf,
   agentRowOf,
+  agentTurnCompletedOf,
   agentStatsOf,
   barSegments,
   familyHue,
@@ -52,22 +53,22 @@ describe('agentRowOf', () => {
     assert.equal(agentRowOf(null), null)
     assert.equal(agentRowOf('row'), null)
     assert.deepEqual(agentRowOf({}), {
-      running: false, completed: false, blank: false, updatedAt: 0,
+      running: false, blank: false, updatedAt: 0,
     })
     assert.deepEqual(agentRowOf({
       displayTitle: 'Main', title: 'T', parentId: 'p', origin: 'subagent',
-      running: true, completed: true, blank: true, updatedAt: 42,
+      running: true, blank: true, updatedAt: 42,
       projectionValues: { title: 'x' },
     }), {
       displayTitle: 'Main', title: 'T', parentId: 'p', origin: 'subagent',
-      running: true, completed: true, blank: true, updatedAt: 42,
+      running: true, blank: true, updatedAt: 42,
       projections: { title: 'x' },
     })
     // Wrong-typed members drop; non-numeric updatedAt zeroes; non-record projections drop.
     assert.deepEqual(agentRowOf({
       displayTitle: 1, title: null, parentId: 2, origin: false,
       running: 'yes', updatedAt: 'soon', projectionValues: 7,
-    }), { running: false, completed: false, blank: false, updatedAt: 0 })
+    }), { running: false, blank: false, updatedAt: 0 })
   })
 })
 
@@ -93,6 +94,19 @@ describe('agentDurationOf', () => {
     // A backwards open window clamps to zero instead of going negative.
     assert.equal(agentDurationOf({ active: { since: 4000, through: 10 } }), null)
     assert.equal(agentDurationOf({ active: { since: 'x', through: 3000 } }), 3000)
+  })
+})
+
+describe('agentTurnCompletedOf', () => {
+  test('only the harness\'s own true flag counts as a finished turn', () => {
+    assert.equal(agentTurnCompletedOf(null), false)
+    assert.equal(agentTurnCompletedOf('x'), false)
+    assert.equal(agentTurnCompletedOf({}), false)
+    assert.equal(agentTurnCompletedOf({ lastTurnCompleted: 'yes' }), false)
+    // An open turn carries no flag, so the subagent is still mid-work.
+    assert.equal(agentTurnCompletedOf({ settledMs: 5000 }), false)
+    assert.equal(agentTurnCompletedOf({ lastTurnCompleted: false }), false)
+    assert.equal(agentTurnCompletedOf({ lastTurnCompleted: true }), true)
   })
 })
 
@@ -181,6 +195,60 @@ describe('agentForestOf', () => {
     assert.equal(forest.nodes[0].label, 's1')
     assert.equal(forest.nodes[0].isCurrent, true)
     assert.deepEqual(forest.edges, [])
+  })
+
+  test('a finished subagent turn marks the node done, and a running one never is', () => {
+    const forest = agentForestOf(snap({
+      root: row({ running: true }),
+      kid: row({ parentId: 'root', projectionValues: { subagentTiming: { settledMs: 5000, lastTurnCompleted: true } } }),
+      open: row({ parentId: 'root', projectionValues: { subagentTiming: { settledMs: 1000, active: { since: 10, through: 99 } } } }),
+    }), 'root')
+    assert.ok(forest !== null)
+    const byId = new Map(forest.nodes.map(n => [n.id, n]))
+    assert.equal(byId.get('kid')?.completed, true)
+    // A turn still open carries no completion flag, and an agent with nothing done yet has
+    // no steps either — neither claims to be finished.
+    assert.equal(byId.get('open')?.completed, false)
+    // A running session is never done, whatever its last closed turn said.
+    const live = agentForestOf(snap({
+      root: row({ running: true }),
+      kid: row({ parentId: 'root', running: true, projectionValues: { subagentTiming: { settledMs: 5000, lastTurnCompleted: true } } }),
+    }), 'root')
+    assert.ok(live !== null)
+    assert.equal(live.nodes.find(n => n.id === 'kid')?.completed, false)
+  })
+
+  test('a session that is not a subagent is done once it has folded steps and stopped running', () => {
+    // A top-level session never carries a subagent-timing projection, so its own folded steps
+    // are the only proof of finished work it can offer. Reached from a subagent's own tab, the
+    // main agent is an ancestor node, not the current one — the same rule has to hold there.
+    const idle = agentForestOf(snap({ root: row({}) }), 'root', { head: null, billed: null, requests: 9 })
+    assert.ok(idle !== null)
+    assert.equal(idle.nodes[0].completed, true)
+    const ancestor = agentForestOf(snap({
+      root: row({ projectionValues: { contextTimeline: timeline(10, 3) } }),
+      kid: row({ parentId: 'root', origin: 'subagent' }),
+    }), 'kid')
+    assert.ok(ancestor !== null)
+    assert.equal(ancestor.nodes.find(n => n.id === 'root')?.completed, true)
+    // A session that has not run a step yet claims nothing.
+    const fresh = agentForestOf(snap({ root: row({}) }), 'root', { head: null, billed: null, requests: 0 })
+    assert.ok(fresh !== null)
+    assert.equal(fresh.nodes[0].completed, false)
+    // And a live parent is never done, however many steps it has folded.
+    const live = agentForestOf(snap({ root: row({ running: true }) }), 'root', { head: null, billed: null, requests: 9 })
+    assert.ok(live !== null)
+    assert.equal(live.nodes[0].completed, false)
+  })
+
+  test('a subagent without the completion flag is never done on its steps alone', () => {
+    // Steps alone would call an aborted subagent finished; only the harness flag may.
+    const forest = agentForestOf(snap({
+      root: row({ running: true }),
+      kid: row({ parentId: 'root', origin: 'subagent', projectionValues: { contextTimeline: timeline(10, 3) } }),
+    }), 'root')
+    assert.ok(forest !== null)
+    assert.equal(forest.nodes.find(n => n.id === 'kid')?.completed, false)
   })
 
   test('merges live self stats onto the current node', () => {

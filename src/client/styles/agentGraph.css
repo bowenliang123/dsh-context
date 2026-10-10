@@ -50,10 +50,8 @@
   border-color: color-mix(in srgb, var(--dsw-alias-brand-primary, var(--color-blue-500)) 55%, var(--dsw-alias-border-l2));
 }
 .lc-agent-card-head { display: flex; align-items: flex-start; gap: 6px; }
-.lc-agent-dot { flex: none; width: 7px; height: 7px; border-radius: 50%; margin-top: 4px; box-sizing: border-box; }
-.lc-agent-running .lc-agent-dot { background: var(--dsw-alias-state-success-primary); animation: lc-agent-glow 1.8s ease-in-out infinite; }
-.lc-agent-done .lc-agent-dot { border: 1.5px solid var(--dsw-alias-state-success-primary); }
-@media (prefers-reduced-motion: reduce) { .lc-agent-running .lc-agent-dot { animation: none; } }
+/* The harness's own StateDot (the header popup's glyph), nudged onto the title's first line. */
+.lc-agent-state { margin-top: 2px; }
 /* Fixed two-line title box: every card's metric and bar sit at the same height,
    whether the title wraps or not. */
 .lc-agent-label { flex: 1; min-width: 0; height: 30px; font-size: 11.5px; line-height: 1.3; color: var(--dsw-alias-label-primary); overflow-wrap: break-word; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; }

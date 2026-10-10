@@ -20,6 +20,7 @@
  */
 
 import { useEffect, useMemo, useRef, useState, type CSSProperties, type KeyboardEvent, type ReactElement } from 'react'
+import { StateDot } from '@deepseek-ai/dsh-client-ui-primitives'
 import { CATS } from '../categories'
 import type { AgentHeads } from '../agentHeads'
 import { makeAgentHeads, useSessionsSnapshot } from '../agentHeads'
@@ -307,8 +308,6 @@ function AgentCard(props: CardProps): ReactElement {
   if (node.requests > 0) meta.push(props.t('agents.steps', { n: node.requests }))
   const cls = 'lc-agent-card animate-lc-agent-in motion-reduce:animate-none'
     + (node.isCurrent ? ' lc-agent-self' : '')
-    + (node.running ? ' lc-agent-running' : '')
-    + (node.completed && !node.running ? ' lc-agent-done' : '')
     // lc-agent-hover carries no rule of its own — the hover/focus wash rides
     // :hover/:focus-visible; the class stays as the specs' state anchor.
     + (props.hovered ? ' lc-agent-hover' : '')
@@ -328,7 +327,9 @@ function AgentCard(props: CardProps): ReactElement {
       onBlur={() => { props.onHover(null) }}
     >
       <div className="lc-agent-card-head">
-        {node.running || node.completed ? <i className="lc-agent-dot" /> : null}
+        {node.running || node.completed
+          ? <StateDot state={node.running ? 'ongoing' : 'done'} size={11} className="lc-agent-state" />
+          : null}
         <div className="lc-agent-label">{node.label}</div>
         {/* The badge sits OUTSIDE the clamped label: an inline badge would be clipped away
             whenever a long title claims both lines. The lc-agent-self-badge class carries no

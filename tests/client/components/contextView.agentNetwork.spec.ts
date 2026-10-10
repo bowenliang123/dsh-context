@@ -14,7 +14,7 @@ import { makeView, projectionsFor, richTimeline } from './contextViewHarness'
  * getSnapshot hands back the SAME object every call — the card reads it through
  * useSyncExternalStore, which loops on a fresh snapshot per read. */
 function selfOnly() {
-  const snapshot = { byId: { 'sv-self': { displayTitle: 'Main Agent', running: false, completed: false, blank: false, updatedAt: 1 } } }
+  const snapshot = { byId: { 'sv-self': { displayTitle: 'Main Agent', running: false, blank: false, updatedAt: 1 } } }
   return { list: { getSnapshot: (): unknown => snapshot, subscribe: (): (() => void) => () => {} } }
 }
 

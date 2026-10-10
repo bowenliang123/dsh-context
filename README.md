@@ -162,7 +162,7 @@ One row per touched file — read, written, or searched — aggregated up to whi
 
 ![Agent Network with seven subagents](https://raw.githubusercontent.com/bowenliang123/dsh-context/main/docs/agent-network.png)
 
-The current agent, its parents, and every subagent — one card per agent: its title, live context size and window occupancy, a composition bar, and how long it has run for and how many steps it has taken. Edges fan out from each parent in the lineage's color — hover a card to light its whole chain and read the full breakdown in the detail strip; click to jump into that session's own Context tab. Running agents breathe with a green pulse on their incoming edge, and narrow panes fold the family into tidy rows — never a horizontal scrollbar.
+The current agent, its parents, and every subagent — one card per agent: its title, live context size and window occupancy, a composition bar, and how long it has run for and how many steps it has taken. Edges fan out from each parent in the lineage's color — hover a card to light its whole chain and read the full breakdown in the detail strip; click to jump into that session's own Context tab. Running agents breathe with a green pulse on their incoming edge and turn over the harness's own rolling spinner beside their title, which settles into the same green dot the header's subagent list uses once the work is done; narrow panes fold the family into tidy rows — never a horizontal scrollbar.
 
 ## ⌨️ `/context` command
 

@@ -98,7 +98,7 @@ function family(): Record<string, unknown> {
       projectionValues: { contextTimeline: timeline(200, 2) },
     },
     worker: {
-      parentId: 'root', origin: 'subagent', running: true, completed: false, updatedAt: 8,
+      parentId: 'root', origin: 'subagent', running: true, updatedAt: 8,
       projectionValues: {
         contextTimeline: timeline(800, 5),
         subagent: { mode: 'continuable', label: 'worker-bee' },
@@ -107,10 +107,11 @@ function family(): Record<string, unknown> {
       },
     },
     done: {
-      parentId: 'root', origin: 'subagent', running: false, completed: true, updatedAt: 6,
+      parentId: 'root', origin: 'subagent', running: false, updatedAt: 6,
       projectionValues: {
         contextPressure: { projectedTokens: 950, contextWindow: 1000 },
         subagent: { mode: 'one-shot' },
+        subagentTiming: { settledMs: 9000, lastTurnCompleted: true },
       },
     },
   }
@@ -196,18 +197,22 @@ describe('AgentGraph — the family tree', () => {
     assert.equal(query(self, '.lc-agent-meta-text').textContent, '6m27s · 3 steps')
     // Every card shares one pitch — the root claims no extra room.
     assert.equal(self.style.width, worker.style.width)
-    assert.ok(worker.classList.contains('lc-agent-running'))
     // Timeline composition → one bar segment per non-empty category.
     assert.equal(worker.querySelectorAll('.lc-agent-bar-seg').length, 3)
 
     const done = query(m.container, '[data-agent="done"]')
-    assert.ok(done.classList.contains('lc-agent-done'))
+    // The work state rides the harness's own glyphs: the popup's spinner while an agent runs,
+    // its green dot once it is done.
+    assert.equal(query(self, '.lc-agent-state').getAttribute('data-state'), 'ongoing')
+    assert.equal(query(worker, '.lc-agent-state').getAttribute('data-state'), 'ongoing')
+    assert.equal(query(done, '.lc-agent-state').getAttribute('data-state'), 'done')
     // Pressure-only: a single threshold-colored fill; no consumption data → a dash headline,
     // and the meta row carries just the occupancy at its right.
     assert.equal(done.querySelectorAll('.lc-agent-bar-seg').length, 1)
     assert.ok(text(done).includes('—'))
-    assert.equal(query(done, '.lc-agent-meta').textContent, '95%')
-    assert.equal(query(done, '.lc-agent-meta-text').textContent, '')
+    // Its settled turn gives it the duration too; the occupancy keeps the right edge.
+    assert.equal(query(done, '.lc-agent-meta-text').textContent, '9s')
+    assert.equal(query(done, '.lc-agent-meta').textContent, '9s95%')
 
     const inspector = query(m.container, '.lc-agents-inspector')
     assert.ok(text(inspector).includes('Main Agent'))
@@ -229,6 +234,25 @@ describe('AgentGraph — the family tree', () => {
     assert.equal(wheel(stage, 30, 120), false, 'vertical-dominant gestures stay with the page')
 
     await m.unmount()
+  })
+
+  test('the current card goes green once its own session stops running', async () => {
+    // A parent session never carries a subagent-timing projection, so the tab's own folded
+    // steps are the only proof of finished work it can offer.
+    const idle = family() as { root: { running: boolean } }
+    idle.root.running = false
+    const View = makeView(new FakeSessions(idle))
+    const m = await mount(h(View, { sessionId: 'root', self: selfStats() }))
+    assert.equal(query(m.container, '.lc-agent-card.lc-agent-self .lc-agent-state').getAttribute('data-state'), 'done')
+    await m.unmount()
+
+    // A session that has never folded a step claims nothing at all.
+    const fresh = await mount(h(
+      makeView(new FakeSessions({ root: { displayTitle: 'Main Agent', running: false, updatedAt: 10 } })),
+      { sessionId: 'root', self: { head: null, billed: null, requests: 0 } },
+    ))
+    assert.equal(queryAll(fresh.container, '.lc-agent-state').length, 0)
+    await fresh.unmount()
   })
 
   test('hover moves the inspector, click/Enter opens the session', async () => {
