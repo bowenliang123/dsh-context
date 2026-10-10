@@ -64,6 +64,24 @@ describe('ContextView — the split generation (slim head + detail channel)', ()
     await m.unmount()
   })
 
+  test('the pending trend body reserves the loaded panel, so the detail fills the card instead of growing it', async () => {
+    const ctx = slimCtx(async () => ({ ok: true, value: slimDetail() }))
+    const View = makeView(ctx)
+    const m = await mount(h(View, { sessionId: 'sv-reserve', useProjection: projectionsFor(slimHead()) }))
+
+    // Pending: the trend card stands in the same boxes the loaded panel uses, so its arrival changes no card's height.
+    assert.equal(queryAll(m.container, '.lc-trend-lane').length, 1, 'the reserved body renders while the read is in flight')
+    assert.equal(queryAll(m.container, '.lc-trend-lane .lc-detail-rows .lc-detail-row').length, 7,
+      'the lane reserves one row per category')
+    assert.equal(queryAll(m.container, '.lc-trend-lane .lc-detail-metrics').length, 0,
+      'no fabricated figures in the reserved panel')
+
+    await until(() => queryAll(m.container, '.lc-bar').length === 3, 'the detail never landed')
+    assert.equal(queryAll(m.container, '.lc-trend-lane').length, 0, 'the lane yields to the real panel')
+    assert.equal(queryAll(m.container, '.lc-chartrow').length, 1, 'the chart took its place')
+    await m.unmount()
+  })
+
   test('the stats figures jump into the browser: skill loads open the skill section, answers open assistant filtered to Answer', async () => {
     const rich = richTimeline()
     const nodes = [...rich.nodes, { seq: 7, cat: 'skill', tokens: 5, skill: 'pdf', text: 'instructions', time: T0 + 6000 }]

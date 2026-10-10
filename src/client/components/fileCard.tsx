@@ -112,159 +112,158 @@ export function makeFileCard(kit: ViewKit, settings: ContextSettings): Component
           <span className="lc-card-title-text">{t('files.title')}</span>
           <span className="lc-card-sub">{props.scope}</span>
         </div>
-        {activity.entries.length === 0 && props.state === 'loading' ? (
-          <DetailNote state="loading" />
-        ) : activity.entries.length === 0 && props.state === 'failed' && props.onRetry !== undefined ? (
-          <DetailNote state="failed" onRetry={props.onRetry} />
-        ) : activity.entries.length === 0 ? (
-          <div className="lc-empty">{t('files.empty')}</div>
-        ) : (
-          <div>
-            <div className="lc-fa-ctl">
-              {/* The five chips overflow a ~300px card in English — fold the group to two lines. */}
-              <div className="lc-gran @max-[380px]/lc-card:flex-wrap">
-                {chips.map(c => (
-                  <button
-                    key={c.key}
-                    type="button"
-                    className={'lc-gran-btn' + (filter === c.key ? ' lc-gran-on' : '')
-                      + (c.key === 'read' || c.key === 'write' || c.key === 'search' ? ' lc-fa-chip-' + c.key : '')}
-                    title={t('files.chipTip', { files: c.files, ops: c.ops })}
-                    onClick={() => { setFilter(cur => (cur === c.key ? 'all' : c.key)) }}
-                  >
-                    {t('files.kind.' + c.key)}
-                    <b className="lc-fa-n">{fmt(c.ops)}</b>
-                  </button>
-                ))}
-              </div>
-              <input
-                className="lc-fa-search focus:border-(--dsw-alias-label-dimmed)"
-                value={query}
-                placeholder={t('files.search')}
-                onChange={(ev: ChangeEvent<HTMLInputElement>) => { setQuery(ev.target.value) }}
-              />
+        {/* The filter band and the list lane render in EVERY state, so an empty or pending card measures exactly what a
+            populated one does: the band alone was worth 55px of the row, which reflowed the page below it on the first
+            read of a session. */}
+        <div>
+          <div className="lc-fa-ctl">
+            {/* The five chips overflow a ~300px card in English — fold the group to two lines. */}
+            <div className="lc-gran @max-[380px]/lc-card:flex-wrap">
+              {chips.map(c => (
+                <button
+                  key={c.key}
+                  type="button"
+                  className={'lc-gran-btn' + (filter === c.key ? ' lc-gran-on' : '')
+                    + (c.key === 'read' || c.key === 'write' || c.key === 'search' ? ' lc-fa-chip-' + c.key : '')}
+                  title={t('files.chipTip', { files: c.files, ops: c.ops })}
+                  onClick={() => { setFilter(cur => (cur === c.key ? 'all' : c.key)) }}
+                >
+                  {t('files.kind.' + c.key)}
+                  <b className="lc-fa-n">{fmt(c.ops)}</b>
+                </button>
+              ))}
             </div>
-            <div className="lc-fa-meta">
-              <span>{t('files.files', { n: activity.entries.length })}</span>
-              {activity.totals.added + activity.totals.removed > 0 ? (
-                /* The one styled tip of the card lives OUTSIDE the scrolling list, so the bubble never clips. */
-                <span className="lc-fa-meta-delta group/tip">
-                  <DeltaPair added={activity.totals.added} removed={activity.totals.removed} />
-                  <span className="lc-tip lc-fa-meta-tip group-hover/tip:opacity-100" role="tooltip">{t('files.deltaTip')}</span>
-                </span>
-              ) : null}
-              <span className="lc-gran lc-fa-sort" role="group" title={t('files.sortTip')}>
-                {(['count', 'latest', 'path'] as const).map(k => (
-                  <button
-                    key={k}
-                    type="button"
-                    className={'lc-gran-btn' + (sort === k ? ' lc-gran-on' : '')}
-                    onClick={() => { setSort(k) }}
-                  >
-                    {t('files.sort.' + k)}
-                  </button>
-                ))}
+            <input
+              className="lc-fa-search focus:border-(--dsw-alias-label-dimmed)"
+              value={query}
+              placeholder={t('files.search')}
+              onChange={(ev: ChangeEvent<HTMLInputElement>) => { setQuery(ev.target.value) }}
+            />
+          </div>
+          <div className="lc-fa-meta">
+            <span>{t('files.files', { n: activity.entries.length })}</span>
+            {activity.totals.added + activity.totals.removed > 0 ? (
+              /* The one styled tip of the card lives OUTSIDE the scrolling list, so the bubble never clips. */
+              <span className="lc-fa-meta-delta group/tip">
+                <DeltaPair added={activity.totals.added} removed={activity.totals.removed} />
+                <span className="lc-tip lc-fa-meta-tip group-hover/tip:opacity-100" role="tooltip">{t('files.deltaTip')}</span>
               </span>
-            </div>
-            {shown.length === 0 ? (
-              <div className="lc-empty">{t('files.noMatch')}</div>
-            ) : (
-              <div className="lc-fa-list">
-                {shown.map((e) => {
-                  const open = openPath === e.path
-                  const display = displayOf(e)
-                  const trimmed = display.endsWith('/') ? display.slice(0, -1) : display
-                  const slash = trimmed.lastIndexOf('/')
-                  const dir = slash >= 0 ? trimmed.slice(0, slash + 1) : ''
-                  const base = slash >= 0 ? trimmed.slice(slash + 1) : trimmed
-                  const glyph = glyphOf(e.path, e.form)
-                  const abs = e.pattern === true ? undefined : absPathOf(e.path, props.workspace)
-                  const previewable = props.onPreview !== undefined && e.pattern !== true && e.form !== 'dir'
-                  const openable = previewable || (abs !== undefined && props.onOpen !== undefined)
-                  return (
-                    <div key={e.path} className={'lc-fa-item' + (open ? ' lc-fa-item-on' : '')}>
-                      <button
-                        type="button"
-                        className="lc-fa-row hover:bg-(--dsw-alias-interactive-bg-hover) @max-[380px]/lc-card:flex-wrap"
-                        title={e.path}
-                        onClick={() => { setOpenPath(open ? null : e.path) }}
-                      >
-                        <span className={'lc-br-chev' + (open ? ' lc-br-chev-on' : '')} />
-                        <span className="lc-fa-form" title={t(glyph.tip)}>
-                          {glyph.color !== undefined
-                            ? (
-                              <span className="lc-fa-lang" style={{ background: glyph.color, color: glyph.text }}>
-                                {glyph.glyph}
-                              </span>
-                            )
-                            : glyph.glyph}
-                        </span>
-                        {/* Narrow cards wrap instead of crushing: the path's near-full-width basis keeps line 1 to
+            ) : null}
+            <span className="lc-gran lc-fa-sort" role="group" title={t('files.sortTip')}>
+              {(['count', 'latest', 'path'] as const).map(k => (
+                <button
+                  key={k}
+                  type="button"
+                  className={'lc-gran-btn' + (sort === k ? ' lc-gran-on' : '')}
+                  onClick={() => { setSort(k) }}
+                >
+                  {t('files.sort.' + k)}
+                </button>
+              ))}
+            </span>
+          </div>
+          {activity.entries.length === 0 && props.state === 'loading' ? (
+            <DetailNote state="loading" className="lc-empty lc-lane" />
+          ) : activity.entries.length === 0 && props.state === 'failed' && props.onRetry !== undefined ? (
+            <DetailNote state="failed" onRetry={props.onRetry} className="lc-empty lc-lane" />
+          ) : shown.length === 0 ? (
+            <div className="lc-empty lc-lane">{t(activity.entries.length === 0 ? 'files.empty' : 'files.noMatch')}</div>
+          ) : (
+            <div className="lc-fa-list">
+              {shown.map((e) => {
+                const open = openPath === e.path
+                const display = displayOf(e)
+                const trimmed = display.endsWith('/') ? display.slice(0, -1) : display
+                const slash = trimmed.lastIndexOf('/')
+                const dir = slash >= 0 ? trimmed.slice(0, slash + 1) : ''
+                const base = slash >= 0 ? trimmed.slice(slash + 1) : trimmed
+                const glyph = glyphOf(e.path, e.form)
+                const abs = e.pattern === true ? undefined : absPathOf(e.path, props.workspace)
+                const previewable = props.onPreview !== undefined && e.pattern !== true && e.form !== 'dir'
+                const openable = previewable || (abs !== undefined && props.onOpen !== undefined)
+                return (
+                  <div key={e.path} className={'lc-fa-item' + (open ? ' lc-fa-item-on' : '')}>
+                    <button
+                      type="button"
+                      className="lc-fa-row hover:bg-(--dsw-alias-interactive-bg-hover) @max-[380px]/lc-card:flex-wrap"
+                      title={e.path}
+                      onClick={() => { setOpenPath(open ? null : e.path) }}
+                    >
+                      <span className={'lc-br-chev' + (open ? ' lc-br-chev-on' : '')} />
+                      <span className="lc-fa-form" title={t(glyph.tip)}>
+                        {glyph.color !== undefined
+                          ? (
+                            <span className="lc-fa-lang" style={{ background: glyph.color, color: glyph.text }}>
+                              {glyph.glyph}
+                            </span>
+                          )
+                          : glyph.glyph}
+                      </span>
+                      {/* Narrow cards wrap instead of crushing: the path's near-full-width basis keeps line 1 to
                             chevron + icon + path, badges/delta/time fold onto line 2. The 46px reservation is
                             chevron (12) + gaps (2×7) + form icon (20). */}
-                        <span className="lc-fa-path flex-1 @max-[380px]/lc-card:basis-[calc(100%-46px)]">
-                          {dir !== '' ? <em>{dir}</em> : null}
-                          {openable
-                            ? (
-                              <b
-                                className="lc-fa-file hover:underline"
-                                title={t(previewable ? 'files.preview' : 'files.open')}
-                                onClick={(ev: MouseEvent) => {
-                                  ev.stopPropagation()
-                                  if (previewable && props.onPreview?.(e) === true) return
-                                  if (abs !== undefined) props.onOpen?.(abs)
-                                }}
-                              >
-                                {base}
-                              </b>
-                            )
-                            : <b>{base}</b>}
-                        </span>
-                        {e.reads > 0 ? (
-                          <span className="lc-fa-badge lc-fa-b-read" title={t('files.kind.read')}><i />{fmt(e.reads)}</span>
-                        ) : null}
-                        {e.writes > 0 ? (
-                          <span className="lc-fa-badge lc-fa-b-write" title={t('files.kind.write')}><i />{fmt(e.writes)}</span>
-                        ) : null}
-                        {e.searches > 0 ? (
-                          <span className="lc-fa-badge lc-fa-b-search" title={t('files.kind.search')}><i />{fmt(e.searches)}</span>
-                        ) : null}
-                        {e.added + e.removed > 0 ? <DeltaPair added={e.added} removed={e.removed} /> : null}
-                        {e.errs > 0 ? <span className="lc-br-err-dot" title={t('files.errs', { n: e.errs })} /> : null}
-                        {e.ops[0].time !== undefined
-                          ? <span className="lc-fa-time">{fmtTime(e.ops[0].time)}</span>
-                          : null}
-                      </button>
-                      {open ? (
-                        <div className="lc-fa-ops">
-                          {e.ops.map((op, i) => {
-                            const onLocate = props.onLocate
-                            // A meta-attributed search rows one op per matched file off ONE result — the ops share
-                            // that result's seq, so the key joins the index.
-                            const key = `${op.seq}:${i}`
-                            return onLocate !== undefined
-                              ? (
-                                <button
-                                  key={key}
-                                  type="button"
-                                  className="lc-fa-op lc-fa-op-link hover:bg-(--dsw-alias-interactive-bg-hover)"
-                                  title={t('files.locate')}
-                                  onClick={() => { onLocate(op) }}
-                                >
-                                  {opLine(op)}
-                                </button>
-                              )
-                              : <div key={key} className="lc-fa-op">{opLine(op)}</div>
-                          })}
-                        </div>
+                      <span className="lc-fa-path flex-1 @max-[380px]/lc-card:basis-[calc(100%-46px)]">
+                        {dir !== '' ? <em>{dir}</em> : null}
+                        {openable
+                          ? (
+                            <b
+                              className="lc-fa-file hover:underline"
+                              title={t(previewable ? 'files.preview' : 'files.open')}
+                              onClick={(ev: MouseEvent) => {
+                                ev.stopPropagation()
+                                if (previewable && props.onPreview?.(e) === true) return
+                                if (abs !== undefined) props.onOpen?.(abs)
+                              }}
+                            >
+                              {base}
+                            </b>
+                          )
+                          : <b>{base}</b>}
+                      </span>
+                      {e.reads > 0 ? (
+                        <span className="lc-fa-badge lc-fa-b-read" title={t('files.kind.read')}><i />{fmt(e.reads)}</span>
                       ) : null}
-                    </div>
-                  )
-                })}
-              </div>
-            )}
-          </div>
-        )}
+                      {e.writes > 0 ? (
+                        <span className="lc-fa-badge lc-fa-b-write" title={t('files.kind.write')}><i />{fmt(e.writes)}</span>
+                      ) : null}
+                      {e.searches > 0 ? (
+                        <span className="lc-fa-badge lc-fa-b-search" title={t('files.kind.search')}><i />{fmt(e.searches)}</span>
+                      ) : null}
+                      {e.added + e.removed > 0 ? <DeltaPair added={e.added} removed={e.removed} /> : null}
+                      {e.errs > 0 ? <span className="lc-br-err-dot" title={t('files.errs', { n: e.errs })} /> : null}
+                      {e.ops[0].time !== undefined
+                        ? <span className="lc-fa-time">{fmtTime(e.ops[0].time)}</span>
+                        : null}
+                    </button>
+                    {open ? (
+                      <div className="lc-fa-ops">
+                        {e.ops.map((op, i) => {
+                          const onLocate = props.onLocate
+                          // A meta-attributed search rows one op per matched file off ONE result — the ops share
+                          // that result's seq, so the key joins the index.
+                          const key = `${op.seq}:${i}`
+                          return onLocate !== undefined
+                            ? (
+                              <button
+                                key={key}
+                                type="button"
+                                className="lc-fa-op lc-fa-op-link hover:bg-(--dsw-alias-interactive-bg-hover)"
+                                title={t('files.locate')}
+                                onClick={() => { onLocate(op) }}
+                              >
+                                {opLine(op)}
+                              </button>
+                            )
+                            : <div key={key} className="lc-fa-op">{opLine(op)}</div>
+                        })}
+                      </div>
+                    ) : null}
+                  </div>
+                )
+              })}
+            </div>
+          )}
+        </div>
       </div>
     )
   })

@@ -11,13 +11,15 @@
 .lc-br-cats { margin-top: 10px; display: flex; flex-direction: column; gap: 4px; }
 .lc-br-cat { border: 1px solid var(--dsw-alias-border-l2); border-radius: 8px; background: var(--dsw-alias-bg-layer-2); overflow: hidden; }
 .lc-br-cat-empty { opacity: 0.55; }
-.lc-br-cat-row { display: flex; align-items: center; gap: 8px; width: 100%; border: 0; background: transparent; color: var(--dsw-alias-label-primary); font: inherit; padding: 7px 10px; cursor: pointer; text-align: left; transition: background-color var(--ds-transition-duration, 0.2s) var(--ds-ease-in-out, ease-in-out); }
+/* The row stays ONE line: the item counts change as the hovered step moves, and a wrapped row resized the browser
+   card (and the page below it) mid-scrub. The figures keep their width; the name yields and ellipsizes instead. */
+.lc-br-cat-row { display: flex; flex-wrap: nowrap; align-items: center; gap: 8px; width: 100%; border: 0; background: transparent; color: var(--dsw-alias-label-primary); font: inherit; padding: 7px 10px; cursor: pointer; text-align: left; transition: background-color var(--ds-transition-duration, 0.2s) var(--ds-ease-in-out, ease-in-out); }
 /* Current-composition hover echo: the shared hover link lights the category row as a physical hover would. */
 .lc-br-cat-on { background: var(--dsw-alias-interactive-bg-hover); }
 .lc-br-cat-on i { box-shadow: 0 0 0 1px var(--dsw-alias-brand-primary); }
 .lc-br-cat-open { background: var(--dsw-alias-interactive-bg-hover); }
 .lc-br-cat-row i { display: inline-block; width: 8px; height: 8px; border-radius: 2px; flex: none; transition: box-shadow var(--ds-transition-duration, 0.2s) var(--ds-ease-in-out, ease-in-out); }
-.lc-br-cat-label { font-weight: 600; }
+.lc-br-cat-label { font-weight: 600; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .lc-br-cat-count { color: var(--dsw-alias-label-secondary); font-size: 12px; white-space: nowrap; }
 .lc-br-count-grp { flex: 1; min-width: 0; display: inline-flex; align-items: center; gap: 4px; }
 /* A bordered box instead of a ▸ glyph: it rotates about its true center and stays crisp at any zoom. */

@@ -12,7 +12,13 @@
 .lc-root .lc-card { box-sizing: border-box; padding: 7px 8px; margin-bottom: 7px; container: lc-card / inline-size; }
 .lc-root .lc-cols { gap: 7px; margin-bottom: 7px; }
 .lc-card-title { font-weight: 600; margin-bottom: 10px; display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; }
+/* A title carrying ONLY text keeps one line: its right-hand chip carries step-scoped text that changes length with the
+   selection (longest in English), so a wrapped title resized the card — and the page below it — on every scrub. The
+   chip ellipsizes instead. Titles that carry toggle groups keep the wrap they need (`lc-trend-ctl`, `lc-kinds`). */
+.lc-card-title:not(:has(.lc-gran, .lc-kinds)) { flex-wrap: nowrap; }
 .lc-card-title-text { flex: none; white-space: nowrap; }
+/* The right-hand chip yields rather than wrapping, so a title's line count never depends on its text's length. */
+.lc-card-sub, .lc-card-rate { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .lc-gran, .lc-kinds { margin-left: auto; display: flex; gap: 2px; background: var(--dsw-alias-bg-layer-2); border: 1px solid var(--dsw-alias-border-l2); border-radius: 6px; padding: 1px; }
 /* A title carrying two toggle groups wraps them so the row keeps a single auto-margin push. */
 .lc-trend-ctl, .lc-heat-ctl { margin-left: auto; display: flex; gap: 6px; align-items: center; }
@@ -29,6 +35,10 @@
 /* Shared tooltip chrome: pair with the owner's own tip class, then position locally; new tips never re-declare it. */
 .lc-tip { position: absolute; z-index: 6; width: max-content; background: var(--dsw-alias-bg-layer-2); border: 1px solid var(--dsw-alias-border-l1); border-radius: 6px; padding: 6px 10px; font-size: 12px; color: var(--dsw-alias-label-primary); box-shadow: var(--dsw-shadow-lv3, 0 2px 8px rgba(0, 0, 0, 0.18)); pointer-events: none; opacity: 0; transition: opacity var(--ds-transition-duration, 0.2s) var(--ds-ease-in-out, ease-in-out); }
 .lc-events, .lc-fa-list { display: flex; flex-direction: column; gap: 2px; height: 320px; overflow-y: auto; }
+/* An empty or pending lane holds the height of the list it stands in for: the file card's activity re-scopes on every
+   step (and is empty until the first read), so a lane that collapsed to its one-line note moved the whole page below
+   it by 265px mid-turn. Mirrored by the 320px above. */
+.lc-lane { display: flex; flex-direction: column; align-items: center; justify-content: center; height: 320px; box-sizing: border-box; }
 /* The `.lc-cols` row owns the vertical rhythm; cards drop their own bottom margin so every section boundary measures one gap whichever way the flex wraps. */
 .lc-cols { display: flex; gap: 14px; flex-wrap: wrap; margin-bottom: 14px; }
 .lc-cols > .lc-card { margin-bottom: 0; }

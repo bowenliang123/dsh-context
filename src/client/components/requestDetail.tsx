@@ -228,21 +228,25 @@ export function makeRequestDetail(
           {delta ? <span className="lc-detail-tag">{t('gran.delta')}</span> : null}
           <span className="lc-detail-time">{fmtTime(req.time)}</span>
           {/* Metric chips: one neutral pill per provider figure; the cache figure drops out on hosts
-              that do not fold `cacheRead` (and on usage-less requests). */}
-          {delta ? (
-            <span className={'lc-detail-metric' + (net > 0 ? ' lc-detail-metric-up' : net < 0 ? ' lc-detail-metric-down' : '')}>
-              {t('tip.delta', { n: (net > 0 ? '+' : '') + fmt(net) })}
-            </span>
-          ) : null}
-          {!delta && req.prompt !== undefined
-            ? <span className="lc-detail-metric">{t('detail.actual', { n: fmt(req.prompt) })}</span>
-            : null}
-          {!delta && req.output !== undefined
-            ? <span className="lc-detail-metric">{t('detail.output', { n: fmt(req.output) })}</span>
-            : null}
-          {!delta && req.prompt !== undefined && req.cacheRead !== undefined
-            ? <span className="lc-detail-metric">{t('detail.cache', { n: cacheHitPercent(req.cacheRead, req.prompt) ?? '—' })}</span>
-            : null}
+              that do not fold `cacheRead` (and on usage-less requests). They share one row of their own
+              (`flex-basis: 100%`), so the header is always the same height: sharing a wrapped line with the
+              identity row made it depend on which pill topped each line, which moved as the figures changed. */}
+          <span className="lc-detail-metrics">
+            {delta ? (
+              <span className={'lc-detail-metric' + (net > 0 ? ' lc-detail-metric-up' : net < 0 ? ' lc-detail-metric-down' : '')}>
+                {t('tip.delta', { n: (net > 0 ? '+' : '') + fmt(net) })}
+              </span>
+            ) : null}
+            {!delta && req.prompt !== undefined
+              ? <span className="lc-detail-metric">{t('detail.actual', { n: fmt(req.prompt) })}</span>
+              : null}
+            {!delta && req.output !== undefined
+              ? <span className="lc-detail-metric">{t('detail.output', { n: fmt(req.output) })}</span>
+              : null}
+            {!delta && req.prompt !== undefined && req.cacheRead !== undefined
+              ? <span className="lc-detail-metric">{t('detail.cache', { n: cacheHitPercent(req.cacheRead, req.prompt) ?? '—' })}</span>
+              : null}
+          </span>
         </div>
         <BriefSection brief={props.brief} convOf={props.convOf} onLocate={props.onLocate} />
         {/* Mirrors the shared category hover with the tip off — a cross-card hover must not float a second tooltip

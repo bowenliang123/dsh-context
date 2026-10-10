@@ -1,5 +1,6 @@
-import { createElement as h, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactElement } from 'react'
+import { createElement as h, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactElement, type ReactNode } from 'react'
 import type { Category, ContextEventRecord, RequestRecord, SurfaceNode } from '../../shared/types'
+import { CATS } from '../categories'
 import { briefNodes, briefOf } from '../brief'
 import { headlineOf } from '../headline'
 import type { ContextViewProps } from '../services'
@@ -42,12 +43,39 @@ const viewScroll = new Map<string, number>()
 
 const EVENT_KINDS = ['inject', 'compaction', 'prune', 'model', 'mode'] as const
 
+/** The trend card's reserved body: the plot lane plus an empty detail panel wearing the panel's OWN classes, so the
+ * pending and loaded states are measured by the same CSS and cannot drift. Without it the first step's arrival grew
+ * the card by its whole height and shoved every card below it down the page. */
+function TrendReserved(props: { children: ReactNode; catLabel: (cat: Category | 'system' | 'tools') => string }): ReactElement {
+  return (
+    <div className="lc-trend-lane">
+      <div className="lc-trend-plot">{props.children}</div>
+      <div className="lc-detail">
+        <div className="lc-detail-head" />
+        <div className="lc-brief" />
+        <div className="lc-stacked-wrap"><div className="lc-stacked" /></div>
+        <div className="lc-detail-rows">
+          {CATS.map(c => (
+            <div key={c.key} className="lc-detail-row">
+              <i style={{ background: c.color }} />
+              <span className="lc-detail-label">{props.catLabel(c.key)}</span>
+              <span className="lc-bar-track" />
+              <span className="lc-detail-num" />
+              <span className="lc-detail-pct" />
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  )
+}
+
 export function makeContextView(
   ctx: ClientCtx,
   kit: ViewKit,
   settings: ContextSettings,
 ): (props: ContextViewProps) => ReactElement {
-  const { t } = kit
+  const { t, catLabel } = kit
   const StackedBar = makeStackedBar(kit)
   const Legend = makeLegend(kit)
   const CurrentComposition = makeCurrentComposition(kit, StackedBar, Legend)
@@ -422,8 +450,10 @@ export function makeContextView(
         {displayRequests.length === 0
           // Split generation, first detail read pending or failed: say so instead of claiming no history.
           ? (detailReady
-            ? <div className="lc-empty">{t('trend.empty')}</div>
-            : <DetailNote state={source.detailState === 'failed' ? 'failed' : 'loading'} onRetry={source.retryDetail} />)
+            ? <TrendReserved catLabel={catLabel}><div className="lc-empty">{t('trend.empty')}</div></TrendReserved>
+            : <TrendReserved catLabel={catLabel}>
+              <DetailNote state={source.detailState === 'failed' ? 'failed' : 'loading'} onRetry={source.retryDetail} />
+            </TrendReserved>)
           : (
             <div>
               <TrendChart

@@ -1,7 +1,12 @@
 .lc-detail { margin-top: 12px; border-top: 1px solid var(--dsw-alias-border-l1); padding-top: 12px; }
 .lc-detail-head { display: flex; align-items: center; flex-wrap: wrap; gap: 6px 8px; margin-bottom: 10px; color: var(--dsw-alias-label-secondary); }
+/* The reserved trend body (`.lc-trend-lane`) wears this class empty: it holds the header's own two-row height (the
+   bold line plus the metrics' full-width row) so the pending card measures what the loaded one will. */
+.lc-trend-lane .lc-detail-head { min-height: 45px; }
 .lc-detail-head b { font-size: 13px; color: var(--dsw-alias-label-primary); }
 .lc-detail-time { margin-left: auto; font-size: 12px; font-variant-numeric: tabular-nums; white-space: nowrap; }
+/* The provider figures claim a full row of their own, so the header's height never depends on where a pill wraps. */
+.lc-detail-metrics { flex: 1 0 100%; display: flex; flex-wrap: wrap; gap: 4px 6px; min-width: 0; }
 .lc-detail-marker { color: var(--dsw-alias-state-warn-primary); font-size: 11px; background: color-mix(in srgb, var(--dsw-alias-state-warn-primary) 12%, transparent); border-radius: 6px; padding: 1px 7px; }
 .lc-detail-tag { background: var(--dsw-alias-bg-layer-2); border: 1px solid var(--dsw-alias-border-l1); border-radius: 4px; padding: 0 6px; font-size: 11px; color: var(--dsw-alias-label-secondary); }
 .lc-detail-metric { font-size: 12px; font-weight: 600; font-variant-numeric: tabular-nums; white-space: nowrap; padding: 2px 8px; border-radius: 6px; color: var(--dsw-alias-label-primary); background: color-mix(in srgb, var(--dsw-alias-label-secondary) 14%, transparent); }
@@ -10,9 +15,12 @@
 .lc-detail-metric-down { color: var(--dsw-alias-state-error-primary); background: color-mix(in srgb, var(--dsw-alias-state-error-primary) 15%, transparent); }
 /* auto-fit instead of a fixed pair: a row's min-content is ~196px, below which two columns would spill. */
 .lc-detail-rows { margin-top: 10px; display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 4px 24px; }
-/* A fixed three-row lane: the container exists even when no row resolves, so hovering the trend chart never changes the detail panel's height. */
-.lc-brief { display: flex; flex-direction: column; gap: 2px; margin: -4px 0 10px; min-height: 76px; }
-.lc-brief-row { display: flex; align-items: center; gap: 8px; min-width: 0; padding: 3px 6px; margin-left: -6px; margin-right: -6px; border-radius: 6px; border: 0; background: transparent; font-family: inherit; font-size: 12px; line-height: 1.5; color: var(--dsw-alias-label-primary); text-align: left; transition: background-color var(--ds-transition-duration, 0.2s) var(--ds-ease-in-out, ease-in-out); }
+/* A fixed three-row lane (3 x the 27px row + 2 x the 2px gap): the container exists even when no row resolves, AND
+   every row is a constant height whether or not it carries a chip — a chip is 2px taller than bare text, so without
+   the floor the lane measured 79.5px on an input-less step and 81.5px on one with chips, moving the trend card (and
+   everything below it) on every step. Mirrored as the row's min-height below. */
+.lc-brief { display: flex; flex-direction: column; gap: 2px; margin: -4px 0 10px; min-height: 85px; }
+.lc-brief-row { box-sizing: border-box; min-height: 27px; display: flex; align-items: center; gap: 8px; min-width: 0; padding: 3px 6px; margin-left: -6px; margin-right: -6px; border-radius: 6px; border: 0; background: transparent; font-family: inherit; font-size: 12px; line-height: 1.5; color: var(--dsw-alias-label-primary); text-align: left; transition: background-color var(--ds-transition-duration, 0.2s) var(--ds-ease-in-out, ease-in-out); }
 /* The link class marks a hoverable row; the pointer cursor belongs only to real click targets. */
 button.lc-brief-row-link { cursor: pointer; }
 .lc-brief-tag { flex: none; box-sizing: border-box; min-width: 56px; text-align: center; font-size: 11px; padding: 0 6px; border-radius: 4px; background: var(--dsw-alias-bg-layer-2); border: 1px solid var(--dsw-alias-border-l2); color: var(--dsw-alias-label-secondary); position: relative; }

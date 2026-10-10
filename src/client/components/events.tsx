@@ -94,11 +94,11 @@ export function makeEventList(kit: ViewKit): (props: EventListProps) => ReactEle
       return () => { window.removeEventListener('resize', onResize) }
     }, [])
     if (props.events.length === 0) {
-      if (props.state === 'loading') return <DetailNote state="loading" />
+      if (props.state === 'loading') return <DetailNote state="loading" className="lc-empty lc-lane" />
       if (props.state === 'failed' && props.onRetry !== undefined) {
-        return <DetailNote state="failed" onRetry={props.onRetry} />
+        return <DetailNote state="failed" onRetry={props.onRetry} className="lc-empty lc-lane" />
       }
-      return <div className="lc-empty">{t('events.empty')}</div>
+      return <div className="lc-empty lc-lane">{t('events.empty')}</div>
     }
     const sorted = props.events.slice().reverse()
     return (

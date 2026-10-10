@@ -78,14 +78,19 @@ async function typeSearch(container: ParentNode, value: string): Promise<void> {
 }
 
 describe('FileCard — empty state', () => {
-  test('no file ops renders the empty state without controls', async () => {
+  test('no file ops keeps the controls so the card measures the same as a populated one', async () => {
     const m = await mount(h(FileCard, {
       activity: richActivity({ entries: [] }),
       scope: 'Turn 1 · Step 1',
     }))
     assert.ok(text(m.container).includes('No file reads, writes, or searches'))
     assert.ok(text(m.container).includes('Turn 1 · Step 1'))
-    assert.equal(queryAll(m.container, '.lc-fa-ctl').length, 0)
+    // The empty state wears the SAME filter band and the SAME reserved lane as a populated card: the card's
+    // activity re-scopes on every step, and a controls-free empty state resized the page on the first read.
+    assert.equal(queryAll(m.container, '.lc-fa-ctl').length, 1)
+    assert.equal(queryAll(m.container, '.lc-fa-meta').length, 1)
+    assert.equal(queryAll(m.container, '.lc-lane').length, 1)
+    assert.equal(queryAll(m.container, '.lc-fa-list').length, 0)
     await m.unmount()
   })
 })

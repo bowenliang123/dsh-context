@@ -1,4 +1,11 @@
 .lc-fa-ctl, .lc-br-toolctl { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-bottom: 8px; }
+/* The tally chips widen as their counts gain digits, which used to rewrap the band mid-session and reflow the page.
+   The band holds TWO lines unconditionally — the folded width is where the chips and the search box land together, so
+   reserving it makes the line count a property of the card's width alone, never of the numbers. On a phone-width card
+   the chip group folds to two lines of its own (see the `@max-[380px]` rule on `.lc-gran` in the JSX), so the band
+   holds three there. */
+.lc-fa-ctl { min-height: 51px; align-content: center; }
+@container lc-card (max-width: 380px) { .lc-fa-ctl { min-height: 70px; } }
 .lc-fa-ctl .lc-gran { margin-left: 0; }
 .lc-fa-n { margin-left: 4px; font-weight: 700; opacity: 0.75; }
 .lc-fa-search, .lc-br-tool-search, .lc-find-input { flex: 1; min-width: 80px; font: inherit; font-size: 12px; color: var(--dsw-alias-label-primary); background: var(--dsw-alias-bg-layer-2); border: 1px solid var(--dsw-alias-border-l2); border-radius: 6px; padding: 3px 8px; outline: none; }

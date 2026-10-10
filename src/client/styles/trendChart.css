@@ -1,4 +1,13 @@
 .lc-chartrow { display: flex; gap: 6px; align-items: stretch; }
+/* The trend card's reserved body, standing in for the plot + the detail panel while no step is selected. Every box
+   wears the panel's OWN class, so both states are measured by the same rules and cannot drift apart; only the boxes
+   that would otherwise collapse to nothing carry a pinned height. The pending/empty note sits in the plot lane, so
+   the first step's arrival fills this card instead of pushing every card below it down the page. */
+.lc-trend-lane { display: flex; flex-direction: column; }
+/* Mirrors `.lc-chart-scroll`'s height: the 130px plot + the 14px turn strip + the 4px gap + the 8px scrollbar gutter. */
+.lc-trend-lane > .lc-trend-plot { display: flex; align-items: center; justify-content: center; height: 156px; box-sizing: border-box; }
+/* The composed strip rides `StackedBar`'s own 10px height plus its 3px margins; an empty one needs the same pin. */
+.lc-trend-lane .lc-stacked { height: 10px; margin: 3px 0; }
 .lc-axis { position: relative; width: 40px; height: 150px; padding-top: 18px; box-sizing: border-box; color: var(--dsw-alias-label-secondary); font-size: 11px; }
 .lc-axis span { position: absolute; right: 0; line-height: 1; }
 /* Anchored to the column's LEFT edge so the duration labels stream rightward away from the plot. */
