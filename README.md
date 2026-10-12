@@ -86,7 +86,7 @@ Open any session and click the **Context / 上下文** tab:
 | **Context Events** | When and why the window changed. |
 | **File Activity** | What the agent *did* to your files. |
 
-The headline occupancy and composition read the **same official token-meter projections as the chat composer's context ring** (`contextPressure` / `contextBreakdown`), so the figures always match what the ring tells you — the card's percentage is that same occupancy, printed with one decimal.
+The headline occupancy and composition read the **same official token-meter projections as the chat composer's context ring** (`contextPressure` / `contextBreakdown`), so the figures always match what the ring tells you — the card's percentage is that same occupancy, printed with one decimal. When the assembled context outgrows what the provider reports the last request carried by a wide margin — the signature of wire-side compression or pruning (e.g. an external compression proxy): the durable log keeps the full history while every request carries far fewer tokens — the card adds a second reading: what the last request actually carried.
 
 The **Context Stats** card's Agent Network cell (the billed tokens and estimated cost of the whole family) jumps to the **Fleet** tab.
 

@@ -1,6 +1,6 @@
 import { type ReactElement } from 'react'
 import type { PartsPart } from '../categories'
-import type { Headline } from '../headline'
+import { wireGapOf, type Headline } from '../headline'
 import type { ViewKit } from '../viewkit'
 import { AUTO_COMPACT_RATIO } from './stackedBar'
 import type { StackedBarProps } from './stackedBar'
@@ -29,6 +29,7 @@ export function makeCurrentComposition(
     const reserve = head.window != null && head.window > 0
       ? { ratio: AUTO_COMPACT_RATIO, label: t('overview.compactReserve', { pct: Math.round(AUTO_COMPACT_RATIO * 100) }) }
       : undefined
+    const gapSampled = wireGapOf(head)
     return (
       <div className="lc-card" data-lc-current>
         <div className="lc-card-title">
@@ -49,6 +50,13 @@ export function makeCurrentComposition(
               {/* One decimal: the card's reading of the kernel's occupancy percent (headline.ts). */}
               <b>{`${head.pct.toFixed(1)}%`}</b>
               {t('overview.used')}
+            </span>
+          ) : null}
+          {gapSampled !== null ? (
+            <span className="lc-overview-wire" title={t('overview.wireTip')}>
+              <b>{fmt(gapSampled)}</b>
+              {' '}
+              {t('overview.wireCarried')}
             </span>
           ) : null}
         </div>

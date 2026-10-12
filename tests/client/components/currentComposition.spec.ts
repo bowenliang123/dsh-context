@@ -51,4 +51,36 @@ describe('CurrentComposition header', () => {
     assert.ok(text(m.container).includes('tokens (estimated)'))
     await m.unmount()
   })
+
+  test('wire gap: the provider-carried reading appears while a near sample stays hidden', async () => {
+    const m = await mount(h(CurrentComposition, {
+      head: headOf({ tokens: 1_000_000, window: 1_000_000, pct: 100, sampled: 300_000 }),
+    }))
+    const wire = query(m.container, '.lc-overview-wire')
+    assert.ok(text(wire).includes('300.0k'))
+    assert.ok(text(wire).includes('carried by the last request'))
+    assert.ok(wire.getAttribute('title')?.includes('wire-side compression') ?? false)
+    // No wide divergence: the reading stays off the card.
+    await m.update(h(CurrentComposition, {
+      head: headOf({ tokens: 5_000, sampled: 4_000 }),
+    }))
+    assert.equal(queryAll(m.container, '.lc-overview-wire').length, 0)
+    // A sample ABOVE the headline (the heuristic underpricing direction) never flags either.
+    await m.update(h(CurrentComposition, {
+      head: headOf({ tokens: 300_000, sampled: 500_000 }),
+    }))
+    assert.equal(queryAll(m.container, '.lc-overview-wire').length, 0)
+    await m.unmount()
+  })
+
+  test('wire gap reading renders in zh from its own dictionary', async () => {
+    const zhCurrentComposition = makeCurrentComposition(makeKit('zh'), makeStackedBar(makeKit('zh')), makeLegend(makeKit('zh')))
+    const m = await mount(h(zhCurrentComposition, {
+      head: headOf({ tokens: 1_000_000, window: 1_000_000, pct: 100, sampled: 300_000 }),
+    }))
+    const wire = query(m.container, '.lc-overview-wire')
+    assert.ok(text(wire).includes('上次请求实际携带'))
+    assert.ok(wire.getAttribute('title')?.includes('外部压缩代理') ?? false)
+    await m.unmount()
+  })
 })

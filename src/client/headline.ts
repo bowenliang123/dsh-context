@@ -12,6 +12,24 @@ export interface Headline {
   /** Composition parts: `value` is the provider-anchored bar width (the ring's fill), `raw` the official
    *  heuristic count the legend and tooltips show. */
   parts: PartsPart[]
+  /** What the newest request actually carried per the provider (`contextPressure.pressureTokens`, or the
+   *  derived anchor's reported prompt when no projection is delivered). */
+  sampled?: number
+}
+
+/** Wire-gap flag thresholds. The fixed heuristic underprices CJK text and JSON schemas (the token-meter's
+ * own documented bias), so samples ABOVE the estimate are normal; only the reverse direction — the wire
+ * carrying much less than the assembled context — indicates external compression or pruning on the proxy
+ * side. Both a ratio and an absolute margin must hold so sub-kilo sessions never trip the flag. */
+export const WIRE_GAP_RATIO = 2
+export const WIRE_GAP_MIN = 4096
+
+/** The provider-carried reading behind the headline when the assembled context outgrows it by both
+ * thresholds — null otherwise (no sample, or no wide-enough divergence in either direction). */
+export function wireGapOf(head: Pick<Headline, 'tokens' | 'sampled'>): number | null {
+  const s = head.sampled
+  if (s === undefined || s <= 0 || head.tokens <= 0) return null
+  return head.tokens >= WIRE_GAP_RATIO * s && head.tokens - s >= WIRE_GAP_MIN ? s : null
 }
 
 /**
@@ -46,9 +64,9 @@ export function headlineOf(
   const requests = data.requests
   const lastReq = requests.length > 0 ? requests[requests.length - 1] : null
   const anchor = last !== undefined ? last : lastReq
-  const derived = anchor !== null && typeof anchor.prompt === 'number'
-    ? anchor.prompt + (current.total - anchor.total)
-    : undefined
+  const anchorTotal = anchor !== null ? anchor.total : 0
+  const anchorPrompt = anchor !== null && typeof anchor.prompt === 'number' ? anchor.prompt : undefined
+  const derived = anchorPrompt !== undefined ? anchorPrompt + (current.total - anchorTotal) : undefined
   const occupancyTokens = projected ?? sampled ?? derived ?? null
   const window = pressure !== null && typeof pressure.contextWindow === 'number'
     ? pressure.contextWindow
@@ -59,5 +77,14 @@ export function headlineOf(
     officialParts(current, breakdown),
     occupancyTokens !== null && tokens > 0 ? tokens : null,
   )
-  return { tokens, window, pct, parts }
+  // The provider sample behind whatever anchors the figure; on real rows the projection's sample and the
+  // fold's newest request prompt agree, so the order only matters for foreign or hand-edited values.
+  const exposedSampled = sampled ?? anchorPrompt
+  return {
+    tokens,
+    window,
+    pct,
+    parts,
+    ...(exposedSampled === undefined ? {} : { sampled: exposedSampled }),
+  }
 }

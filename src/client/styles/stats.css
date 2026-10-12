@@ -19,6 +19,8 @@
 .lc-overview-num { display: flex; align-items: baseline; flex-wrap: wrap; gap: 6px; margin-bottom: 8px; }
 .lc-overview-num > b { font-size: 20px; }
 .lc-overview-num span { color: var(--dsw-alias-label-secondary); }
+/* The provider-carried reading takes its own line so the headline figure never crowds at narrow panes. */
+.lc-overview-wire { flex-basis: 100%; margin-top: -2px; }
 .lc-overview-pct { margin-left: auto; font-size: 11px; }
 .lc-overview-pct b { font-size: 20px; color: var(--dsw-alias-label-primary); margin-right: 4px; }
 .lc-col-donut { display: flex; flex-direction: column; }

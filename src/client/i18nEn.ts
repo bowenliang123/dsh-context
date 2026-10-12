@@ -19,6 +19,8 @@ export const DICT_EN = {
   'overview.used': 'of context used',
   'overview.ofUsed': 'of used context',
   'overview.compactReserve': 'Auto-compaction reserve: auto-compaction triggers at {pct}% of the window — this area is normally kept as headroom, not actually used',
+  'overview.wireCarried': 'carried by the last request',
+  'overview.wireTip': 'The assembled context outgrew what the provider reports the last request carried — wire-side compression or pruning (for example an external compression proxy) keeps the model’s view smaller than the local history.',
   'stats.title': 'Context Stats',
   'stats.session': 'Current Session',
   'stats.turns': 'Turns',

@@ -16,6 +16,8 @@ export const DICT_ZH = {
   'overview.used': '上下文已用',
   'overview.ofUsed': '占已用上下文',
   'overview.compactReserve': '自动压缩预留：占用达 {pct}% 窗口时触发压缩，此区域一般不实际占用',
+  'overview.wireCarried': '上次请求实际携带',
+  'overview.wireTip': '本地组装的上下文已超过 provider 上报的最近一次请求实际携带量——wire 侧存在压缩或裁剪（如外部压缩代理），模型看到的视图比本地历史小。',
   'stats.title': '上下文统计',
   'stats.session': '当前会话',
   'stats.turns': '轮次',

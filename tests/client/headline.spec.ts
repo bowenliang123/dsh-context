@@ -3,7 +3,7 @@
 
 import assert from 'node:assert/strict'
 import { describe, test } from 'vitest'
-import { headlineOf, occupancyPercent } from '../../src/client/headline'
+import { headlineOf, occupancyPercent, wireGapOf, WIRE_GAP_MIN } from '../../src/client/headline'
 import type { ContextTimeline, RequestRecord } from '../../src/shared/types'
 
 function timeline(over: Partial<ContextTimeline> = {}): ContextTimeline {
@@ -163,5 +163,70 @@ describe('headlineOf parts', () => {
     assert.deepEqual(h.parts.map(p => [p.value, p.raw]), [
       [10, 10], [20, 20], [30, 30], [0, 0], [0, 0], [40, 40], [0, 0],
     ])
+  })
+})
+
+describe('headlineOf sampled', () => {
+  test('exposes the provider sample behind a projected anchor', () => {
+    const h = headlineOf(timeline(), { projectedTokens: 200, pressureTokens: 150 })
+    assert.equal(h.tokens, 200)
+    assert.equal(h.sampled, 150)
+  })
+
+  test('exposes the bare sample when it anchors the headline', () => {
+    const h = headlineOf(timeline(), { pressureTokens: 150 })
+    assert.equal(h.sampled, 150)
+  })
+
+  test('a projection without its own sample falls back to the derived request prompt', () => {
+    const data = timeline({ requests: [req({ prompt: 150 })] })
+    const h = headlineOf(data, { projectedTokens: 999 })
+    assert.equal(h.sampled, 150)
+  })
+
+  test('without a projection the derived request prompt serves as the sample', () => {
+    const data = timeline({ requests: [req({ prompt: 150 })] })
+    const h = headlineOf(data, null)
+    assert.equal(h.sampled, 150)
+  })
+
+  test('the split head anchors the sample from `last`', () => {
+    const h = headlineOf(timeline({ last: { seq: 9, total: 80, prompt: 150 } }), null)
+    assert.equal(h.sampled, 150)
+  })
+
+  test('non-number samples expose nothing', () => {
+    const data = timeline({ requests: [req({ prompt: 'junk' as unknown as number })] })
+    assert.equal(headlineOf(data, { pressureTokens: 'junk' as unknown as number }).sampled, undefined)
+    assert.equal(headlineOf(timeline({ last: { seq: 9, total: 80 } }), null).sampled, undefined)
+  })
+})
+
+describe('wireGapOf', () => {
+  test('flags the sample when the headline outgrows it by ratio and margin', () => {
+    assert.equal(wireGapOf({ tokens: 1_000_000, sampled: 300_000 }), 300_000)
+  })
+
+  test('exactly twice the sample with the minimum margin flags', () => {
+    assert.equal(wireGapOf({ tokens: WIRE_GAP_MIN * 2, sampled: WIRE_GAP_MIN }), WIRE_GAP_MIN)
+  })
+
+  test('below the absolute margin no flag at the exact ratio', () => {
+    // Ratio holds (8000 = 2 × 4000) but the 4000 gap stays under the minimum.
+    assert.equal(wireGapOf({ tokens: 8000, sampled: 4000 }), null)
+  })
+
+  test('below the ratio no flag even past the absolute margin', () => {
+    assert.equal(wireGapOf({ tokens: 7_000, sampled: 4_000 }), null)
+  })
+
+  test('a sample above the headline never flags (the heuristic underpricing direction)', () => {
+    assert.equal(wireGapOf({ tokens: 300_000, sampled: 500_000 }), null)
+  })
+
+  test('no sample or non-positive values yield nothing', () => {
+    assert.equal(wireGapOf({ tokens: 1_000_000 }), null)
+    assert.equal(wireGapOf({ tokens: 1_000_000, sampled: 0 }), null)
+    assert.equal(wireGapOf({ tokens: 0, sampled: 100 }), null)
   })
 })
