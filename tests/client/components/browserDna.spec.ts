@@ -3,8 +3,8 @@ import assert from 'node:assert/strict'
 import { describe, test } from 'vitest'
 import type { ContextBrowserProps } from '../../../src/client/components/browser'
 import type { ContextHeaders } from '../../../src/shared/types'
-import { click, hover, mount, query, queryAll, surfaceNode, text, tipRows, unhover, type Mounted } from '../helpers/kit'
-import { Browser, catRow, elemRows, kit, props, req, tl, typeToolSearch } from './browserHarness'
+import { click, flush, hover, mount, query, queryAll, surfaceNode, text, tipRows, unhover, type Mounted } from '../helpers/kit'
+import { Browser, catRow, elemRows, kit, props, req, tl, typeToolSearch, withEpochContent } from './browserHarness'
 
 describe('ContextBrowser DNA mode and the open-category bar pin', () => {
   const dnaHeaders: ContextHeaders = {
@@ -132,46 +132,103 @@ describe('ContextBrowser DNA mode and the open-category bar pin', () => {
     await m.unmount()
   })
 
-  test('clicking a band opens its category + element row below and scrolls it into view; a stale row filter is cleared', async () => {
+  test('the DNA list renders every entry in the strip\'s prompt order; the filter scans what the rows show', async () => {
+    const lazy = withEpochContent(dnaHeaders, {
+      1: { system: 'You are a helpful assistant.', tools: [{ name: 'bash', description: 'run a shell command', schema: {} }, { name: 'write', schema: {} }] },
+    })
+    const m = await mount(h(Browser, props({ data: dnaData, ...lazy })))
+    await click(dnaButton(m))
+    await flush()
+    const list = query(m.container, '.lc-br-dna-list')
+    // One row per band, in the strip's prompt order: the system prompt, the two tool schemas in producer
+    // order, then the messages in model-visible order — NOT the fold's category order.
+    assert.equal(elemRows(m).length, 7)
+    const previews = queryAll(list, '.lc-br-preview').map(el => text(el))
+    assert.ok(previews[0].includes('helpful assistant'))
+    assert.deepEqual(previews.slice(1, 3), ['bash', 'write'])
+    assert.ok(previews[3].includes('hi'))
+    assert.ok(text(queryAll(list, '.lc-br-elem-row')[4]).includes('bash'), 'the tool result keeps its tool tag')
+    // Every row annotates itself with its type — the category view's dot+label.
+    const types = queryAll(list, '.lc-br-type').map(el => text(el))
+    assert.deepEqual(types, [
+      kit.catLabel('system'), kit.catLabel('tools'), kit.catLabel('tools'),
+      kit.catLabel('user'), kit.catLabel('tool'), kit.catLabel('assistant'), kit.catLabel('inject'),
+    ])
+    assert.equal(types.length, queryAll(list, '.lc-br-type i').length, 'each type tag carries its category dot')
+    // Independent prompt-position counters: tool schemas 1..N, messages 1..M; the system prompt unnumbered.
+    const nos = queryAll(list, '.lc-br-idx').map(el => text(el))
+    assert.deepEqual(nos, ['#1', '#2', '#1', '#2', '#3', '#4'])
+    const chips = queryAll(list, '.lc-br-idx')
+    assert.equal(chips[0].getAttribute('title'), kit.t('browser.toolNoTip'))
+    assert.equal(chips[2].getAttribute('title'), kit.t('browser.msgNoTip'))
+
+    // The filter scans exactly what the rows show: prompt text, tool name and schema text, tag and preview.
+    await typeToolSearch(m, 'helpful')
+    assert.equal(elemRows(m).length, 1, 'the system prompt matches on its text')
+    await typeToolSearch(m, 'shell command')
+    assert.equal(elemRows(m).length, 1, 'the tool schema matches on its description')
+    await typeToolSearch(m, 'write')
+    assert.equal(elemRows(m).length, 1)
+    await typeToolSearch(m, 'zzz')
+    assert.ok(text(query(m.container, '.lc-br-dna-list')).includes('No rows match'))
+    await typeToolSearch(m, '')
+    assert.equal(elemRows(m).length, 7)
+    await m.unmount()
+  })
+
+  test('a compacted summary keeps its prompt seat — the DNA list numbers messages in model order', async () => {
+    const data = tl({
+      current: { system: 0, tools: 0, user: 35, inject: 0, skill: 0, assistant: 25, tool: 0, total: 60 },
+      nodes: [
+        surfaceNode({ seq: 3, tokens: 10, text: 'older question' }),
+        surfaceNode({ seq: 40, cat: 'assistant', tokens: 25, text: 'later answer' }),
+        // The fold splices the replacement at the replaced range's seat: newest seq, oldest prompt position.
+        surfaceNode({ seq: 60, tokens: 25, text: 'compacted summary', seat: 1 }),
+      ],
+    })
+    const m = await mount(h(Browser, props({ data, headers: null })))
+    await click(dnaButton(m))
+    const rows = queryAll(m.container, '.lc-br-elem-row').map(el => text(el))
+    assert.ok(rows[0].includes('compacted summary'), 'the summary leads the message flow, not the list tail')
+    assert.ok(rows[1].includes('older question'))
+    assert.ok(rows[2].includes('later answer'))
+    assert.deepEqual(queryAll(m.container, '.lc-br-idx').map(el => text(el)), ['#1', '#2', '#3'])
+    await m.unmount()
+  })
+
+  test('an empty context renders no DNA list rows', async () => {
+    const m = await mount(h(Browser, props({ data: tl({}), headers: null })))
+    await click(dnaButton(m))
+    assert.equal(query(m.container, '.lc-br-dna-list').textContent, '')
+    await m.unmount()
+  })
+
+  test('clicking a band opens its row in the DNA list and scrolls it into view; a stale row filter is cleared', async () => {
     const scrolls: unknown[] = []
     const orig = Element.prototype.scrollIntoView
     Element.prototype.scrollIntoView = function (this: Element, arg?: unknown) { scrolls.push(arg) } as never
     try {
       const m = await mount(h(Browser, props({ data: dnaData, headers: dnaHeaders })))
       await click(dnaButton(m))
-      // Band n3 (index 4) opens the tool-results category on that exact row.
+      // Band n3 (index 4) opens its own row — the list mirrors the strip one-to-one, no category accordion.
       await click(bands(m)[4])
-      assert.equal(queryAll(m.container, '.lc-br-body').length, 1)
+      assert.equal(queryAll(m.container, '.lc-br-cat').length, 0)
       const onRows = queryAll(m.container, '.lc-br-elem-on')
       assert.equal(onRows.length, 1)
       assert.ok(text(onRows[0]).includes('bash'))
       assert.deepEqual(scrolls, [{ block: 'nearest' }])
 
       // A stale row filter cannot hide the clicked band's row.
-      await click(catRow(m, 'user'))
       await typeToolSearch(m, 'zzz')
-      assert.ok(text(query(m.container, '.lc-br-body')).includes('No rows match'))
+      assert.ok(text(query(m.container, '.lc-br-dna-list')).includes('No rows match'))
       await click(bands(m)[3])
       assert.equal(query<HTMLInputElement>(m.container, '.lc-br-tool-search').value, '')
       assert.equal(queryAll(m.container, '.lc-br-elem-on').length, 1)
-      assert.ok(text(query(m.container, '.lc-br-body')).includes('hi'))
-
-      // A stale kind chip clears the same way — even when the band reopens the SAME category (zero counts render too).
-      await click(catRow(m, 'assistant'))
-      const toolsChip = queryAll(m.container, '.lc-br-toolctl .lc-gran-btn')[1]
-      assert.equal(text(toolsChip), 'Tools0')
-      await click(toolsChip)
-      assert.ok(text(query(m.container, '.lc-br-body')).includes('No rows match'))
-      await click(bands(m)[5])
-      const kindChips = queryAll(m.container, '.lc-br-toolctl .lc-gran-btn')
-      assert.equal(kindChips.length, 3)
-      assert.ok(kindChips.every(b => !b.className.includes('lc-gran-on')), 'the band click clears a stale kind chip')
-      assert.equal(elemRows(m).length, 1)
-      assert.equal(queryAll(m.container, '.lc-br-elem-on').length, 1)
+      assert.ok(text(query(m.container, '.lc-br-dna-list')).includes('hi'))
 
       // The system band opens the system section (metadata-only note without a header fetcher).
       await click(bands(m)[0])
-      assert.ok(text(query(m.container, '.lc-br-body')).includes('token estimates only'))
+      assert.ok(text(query(m.container, '.lc-br-dna-list')).includes('token estimates only'))
       await m.unmount()
     } finally {
       Element.prototype.scrollIntoView = orig
@@ -222,30 +279,36 @@ describe('ContextBrowser DNA mode and the open-category bar pin', () => {
     await m.unmount()
   })
 
-  test('DNA mode: the open category lights all its bands as a group (no tooltip); a band hover overrides, the pin resumes', async () => {
-    // No shared-hover wiring (the /context modal path): the pin works standalone.
-    const m = await mount(h(Browser, props({ data: dnaData, headers: dnaHeaders })))
+  test('DNA mode: an open row lights its own band (no floating tooltip); a band hover overrides, the row resumes', async () => {
+    // No shared-hover wiring (the /context modal path): the row's light works standalone. The epoch content
+    // rides along so every band — the system prompt included — renders as an openable row.
+    const lazy = withEpochContent(dnaHeaders, { 1: { system: 'You are a helpful assistant.', tools: [{ name: 'bash', schema: {} }, { name: 'write', schema: {} }] } })
+    const m = await mount(h(Browser, props({ data: dnaData, ...lazy })))
     await click(dnaButton(m))
-    await click(catRow(m, 'tools'))
+    await flush()
+    // Opening the assistant row (band 5) lights exactly that band — the list indexes the bar back.
+    await click(elemRows(m)[5])
     const stack = query(m.container, '.lc-stacked')
-    // Band order: sys, bash, write, n2, n3, n4, n5 — the tools group is bands 1-2.
-    assert.deepEqual(bands(m).map(seg => seg.className.includes('lc-stacked-seg-on')), [false, true, true, false, false, false, false])
+    assert.deepEqual(bands(m).map(seg => seg.className.includes('lc-stacked-seg-on')), [false, false, false, false, false, true, false])
     assert.ok(stack.className.includes('lc-stacked-dim'))
-    assert.ok(!query(m.container, '.lc-bar-tip').className.includes('lc-bar-tip-on'), 'the group pin exact-matches no band — no tooltip')
-    await hover(bands(m)[4])
+    assert.equal(queryAll(m.container, '.lc-bar-tip').length, 0, 'a browsed row lights its band without floating a tooltip')
+    // A pointer hover on the bar overrides the row's light and floats its tooltip again.
+    await hover(bands(m)[1])
     assert.ok(query(m.container, '.lc-bar-tip').className.includes('lc-bar-tip-on'))
-    assert.deepEqual(bands(m).map(seg => seg.className.includes('lc-stacked-seg-on')), [false, false, false, false, true, false, false])
+    assert.deepEqual(bands(m).map(seg => seg.className.includes('lc-stacked-seg-on')), [false, true, false, false, false, false, false])
     await unhover(stack)
-    assert.deepEqual(bands(m).map(seg => seg.className.includes('lc-stacked-seg-on')), [false, true, true, false, false, false, false])
-    await click(catRow(m, 'tools'))
+    assert.deepEqual(bands(m).map(seg => seg.className.includes('lc-stacked-seg-on')), [false, false, false, false, false, true, false])
+    await click(elemRows(m)[5])
     assert.ok(bands(m).every(seg => !seg.className.includes('lc-stacked-seg-on')))
     assert.ok(!stack.className.includes('lc-stacked-dim'))
     await m.unmount()
   })
 
-  test('a push dropping the hovered band does not dim the bar with nothing lit; the pin resumes underneath', async () => {
-    const m = await mount(h(Browser, props({ data: dnaData, headers: dnaHeaders })))
+  test('a push dropping the hovered band does not dim the bar with nothing lit; the open row resumes underneath', async () => {
+    const lazy = withEpochContent(dnaHeaders, { 1: { system: 'You are a helpful assistant.', tools: [{ name: 'bash', schema: {} }, { name: 'write', schema: {} }] } })
+    const m = await mount(h(Browser, props({ data: dnaData, ...lazy })))
     await click(dnaButton(m))
+    await flush()
     await hover(bands(m)[3])
     assert.ok(bands(m)[3].className.includes('lc-stacked-seg-on'))
     assert.ok(query(m.container, '.lc-stacked').className.includes('lc-stacked-dim'))
@@ -256,12 +319,12 @@ describe('ContextBrowser DNA mode and the open-category bar pin', () => {
       requests: dnaData.requests,
       nodes: dnaData.nodes.filter(n => n.seq !== 2),
     })
-    await m.update(h(Browser, props({ data: pushed, headers: dnaHeaders })))
+    await m.update(h(Browser, props({ data: pushed, ...lazy })))
     assert.ok(!query(m.container, '.lc-stacked').className.includes('lc-stacked-dim'))
     assert.ok(bands(m).every(seg => !seg.className.includes('lc-stacked-seg-on')))
     assert.ok(!query(m.container, '.lc-bar-tip').className.includes('lc-bar-tip-on'), 'the dead key floats no tooltip either')
-    // Band order is now sys, bash, write, n3, n4, n5: the open-category pin still lights its group under the stale hover.
-    await click(catRow(m, 'assistant'))
+    // Band order is now sys, bash, write, n3, n4, n5: the open row's band still lights under the stale hover.
+    await click(elemRows(m)[4])
     assert.deepEqual(bands(m).map(seg => seg.className.includes('lc-stacked-seg-on')), [false, false, false, false, true, false])
     await hover(bands(m)[3])
     assert.deepEqual(bands(m).map(seg => seg.className.includes('lc-stacked-seg-on')), [false, false, false, true, false, false])

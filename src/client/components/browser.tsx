@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactElement, type ReactNode } from 'react'
+import { Fragment, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactElement, type ReactNode } from 'react'
 import { UNKNOWN_TOOL_SOURCE, type Category, type ContextHeaders, type ContextTimeline, type HeaderTool, type RequestRecord, type SurfaceNode } from '../../shared/types'
 import { assemble } from '../assemble'
 import type { Assembled } from '../assemble'
@@ -58,6 +58,19 @@ export interface ContextBrowserProps {
 export interface CatFocus {
   cat: string
   kind?: RowKind
+}
+
+/** One message row's display facts: the row and the text filter read the same derivation, so a filter scans
+ * exactly what the rows show. */
+interface RowFacts {
+  n: SurfaceNode
+  conv: ConversationNodeLike | undefined
+  rowErr: boolean
+  tag: string | null
+  tagNames: string[] | null
+  preview: string
+  reasoning: string
+  kinds: ReturnType<typeof msgKindsOf>
 }
 
 function countOf(asm: Assembled, byCat: Partial<Record<Category, SurfaceNode[]>>, c: string): number {
@@ -241,14 +254,15 @@ export function makeContextBrowser(
     const fetchHeader = props.fetchHeader
     const headerSeq = view.header !== null ? view.header.seq : null
     const systemSeq = view.system !== null ? view.system.seq : null
-    const contentSeq = openCat === 'system' ? systemSeq : openCat === 'tools' ? headerSeq : null
+    // The DNA flat list renders the system prompt and tool schemas as rows in their own right, so it needs the
+    // epoch content even with no category accordion open.
+    const dnaContentSeq = dna ? systemSeq ?? headerSeq : null
+    const contentSeq = openCat === 'system' ? systemSeq : openCat === 'tools' ? headerSeq : dnaContentSeq
     const epoch = useFetchOnMiss(
       contentSeq,
       fetchHeader,
       'dsh-context: header content fetch failed',
     )
-    const headerContent = epoch.values
-    const headerNote = fetchMissNote(t, fetchHeader, epoch.state, epoch.retry, 'browser.headerMetaOnly')
 
     const breakdown = req !== null ? req : data.current
     const parts = partsOf(breakdown)
@@ -303,11 +317,12 @@ export function makeContextBrowser(
     // A band hover is honored only while its key names a RENDERED band: a push can drop the band under a resting pointer
     // without a mouseleave, and a dead key would leave the bar all-dimmed (the same invariant the pin's gate keeps).
     const liveDnaKey = dnaKey !== null && dnaByKey.has(dnaKey) ? dnaKey : null
+    // An open row keeps its own band lit — the list indexes the bar back; a pointer hover on the bar overrides it.
+    const browseKey = dna && openElem !== null && dnaByKey.has(openElem) ? openElem : null
     const pickDna = (key: string): void => {
       const it = dnaByKey.get(key)
       /* v8 ignore next 1 -- the bar only reports keys of the parts it was handed; defensive. */
       if (it === undefined) return
-      setCat(it.cat)
       setRowQuery('')
       setRowKind(null)
       setOpenElem(key)
@@ -399,32 +414,149 @@ export function makeContextBrowser(
       ))
     }
 
-    const catBody = (c: string): ReactNode => {
-      if (c === 'system') {
-        // No prompt in force: the note must name the missing PROJECTION — no headers service versus no epoch yet.
-        const sys = view.system
-        if (sys === null) {
-          return <div className="lc-br-note">{t(headers === null ? 'browser.noHeader' : 'browser.noEpoch')}</div>
-        }
-        const content = headerContent.get(sys.seq)
-        if (content === undefined) return <div className="lc-br-note">{headerNote}</div>
-        if (content.system === undefined) return <div className="lc-br-note">{t('browser.noSystem')}</div>
-        return elemRow('sys', null, content.system.replace(/\s+/g, ' ').trim().slice(0, 80), breakdown.system, undefined,
-          <TextSection label={catLabel('system')} text={content.system} rich={rich} lines={lineLabel} />,
-          false, null, stampFor(sys.seq))
+    // Shared row builders: the category view and the DNA flat list render the SAME rows — only the grouping/ordering differs.
+    const headerContent = epoch.values
+    const headerNote = fetchMissNote(t, fetchHeader, epoch.state, epoch.retry, 'browser.headerMetaOnly')
+    const headerRow = view.header !== null ? headerContent.get(view.header.seq) : undefined
+    // One stamp for every tool-schema row: a tool row exists only while the header epoch does.
+    const epochStamp = view.header !== null ? stampFor(view.header.seq) : null
+    const contentByName = new Map(headerRow?.tools.map(tool => [tool.name, tool] as const) ?? [])
+    const toolLabels = {
+      desc: t('tool.desc'),
+      title: t('tool.params'),
+      empty: t('tool.paramsEmpty'),
+      show: t('tool.jsonToggle'),
+      hide: t('tool.jsonHide'),
+    }
+    const toolBody = (tool: HeaderTool): ReactNode => {
+      if (headerRow === undefined) return <div className="lc-br-note">{headerNote}</div>
+      const row = contentByName.get(tool.name)
+      return row === undefined
+        ? <div className="lc-br-note">{t('browser.notInLog')}</div>
+        : <ToolSchema description={row.description} schema={row.schema} rich={rich} lines={lineLabel} labels={toolLabels} />
+    }
+    const toolRow = (tool: HeaderTool, tag: ReactNode = null): ReactNode => {
+      // Best-effort host attribution (toolSources.ts); a provider predating the attribution hook arrives as the
+      // UNKNOWN_TOOL_SOURCE sentinel and renders the localized "unknown plugin" tag.
+      const trailing = (
+        <>
+          {tool.plugin !== undefined
+            ? <span className="lc-br-tag lc-br-tool-plugin" title={tool.plugin === UNKNOWN_TOOL_SOURCE ? t('tool.unknownTitle') : t('tool.plugin')}>
+              {tool.plugin === UNKNOWN_TOOL_SOURCE ? t('tool.unknown') : tool.plugin}
+            </span>
+            : null}
+          <span className="lc-br-hits" title={t('tool.hitsTip')}>{'×' + fmt(toolHitsOf(tool))}</span>
+        </>
+      )
+      return elemRow('tool:' + tool.name, tag, tool.name, tool.tokens, undefined,
+        toolBody(tool), false, trailing, epochStamp)
+    }
+    const systemRow = (tag: ReactNode = null): ReactNode => {
+      const sys = view.system
+      // No prompt in force: the note must name the missing PROJECTION — no headers service versus no epoch yet.
+      if (sys === null) {
+        return <div className="lc-br-note">{t(headers === null ? 'browser.noHeader' : 'browser.noEpoch')}</div>
       }
+      const content = headerContent.get(sys.seq)
+      if (content === undefined) return <div className="lc-br-note">{headerNote}</div>
+      if (content.system === undefined) return <div className="lc-br-note">{t('browser.noSystem')}</div>
+      return elemRow('sys', tag, content.system.replace(/\s+/g, ' ').trim().slice(0, 80), breakdown.system, undefined,
+        <TextSection label={catLabel('system')} text={content.system} rich={rich} lines={lineLabel} />,
+        false, null, stampFor(sys.seq))
+    }
+    const rowFactsOf = (n: SurfaceNode) => {
+      const conv = bySeq.get(n.seq)
+      // A `skill`-tool load reclassifies into the `skill` bucket but stays a tool result — same failure rule.
+      const rowErr = (n.cat === 'tool' || n.cat === 'skill') && toolErrOf(n, conv).err
+      let tag: string | null = null
+      let tagNames: string[] | null = null
+      let preview = nodeText(n)
+      const id = nodeNameOf(n)
+      if (n.cat === 'tool') {
+        tag = n.tool ?? '?'
+        tagNames = n.tool !== undefined ? [n.tool] : null
+        preview = callSummaryOf(conv) ?? t('node.toolResult')
+      } else if (n.cat === 'skill') {
+        tag = n.skill !== undefined ? t('node.skillTag', { name: n.skill }) : t('form.' + (n.form || 'context'))
+        preview = (n.skill === undefined && id !== '' ? id : null)
+          ?? (n.text !== undefined && n.text !== '' ? n.text : null)
+          ?? callSummaryOf(conv) ?? preview
+      } else if (n.cat === 'assistant') {
+        // The fold stamps `calls` only on TEXT-LESS replies; a reply carrying both text and calls recovers its
+        // breadcrumb through the join.
+        const names = Array.isArray(n.calls) && n.calls.length > 0 ? n.calls : callNamesOf(conv)
+        if (names.length > 0) {
+          tag = names.join(' › ')
+          tagNames = names
+          preview = (n.text !== undefined && n.text !== '' ? n.text : null)
+            ?? blockSummaryOf(conv)
+            ?? t('node.empty')
+        } else if (n.text === undefined || n.text === '') {
+          preview = blockSummaryOf(conv) ?? preview
+        }
+      } else if (n.cat === 'user') {
+        const attCount = attachmentsIn(conv?.content).length
+        if (attCount > 0 && openElem !== `n${n.seq}`) {
+          tag = t('attach.title') + (attCount > 1 ? ' ×' + String(attCount) : '')
+        }
+      } else {
+        tag = t('form.' + (n.form || 'context'))
+        if (id !== '') {
+          preview = id
+        } else if (n.text !== undefined && n.text !== '') {
+          preview = n.form === 'snapshot' ? t('node.snapshot') + n.text : n.text
+        }
+      }
+      return {
+        n,
+        conv,
+        rowErr,
+        tag,
+        tagNames,
+        preview,
+        reasoning: n.cat === 'assistant' ? reasoningTextOf(conv) : '',
+        kinds: msgKindsOf(n, conv),
+      }
+    }
+    /** The DNA rows annotate every entry with its type — the category view's dot+label echoed per row. */
+    const typeTag = (cat: Category | 'system' | 'tools'): ReactNode => (
+      <span className="lc-br-tag lc-br-type"><i style={{ background: CAT_COLOR[cat] }} />{catLabel(cat)}</span>
+    )
+    const msgRow = (r: RowFacts, lead: ReactNode = null): ReactNode => {
+      const tag = rowTagNode(r.tag, r.tagNames)
+      return elemRow(`n${r.n.seq}`, lead === null ? tag : <>{lead}{tag}</>, r.preview, r.n.tokens, r.n.time,
+        <NodeContent
+          node={r.n}
+          conv={r.conv}
+          rich={rich}
+          att={{ Section: AttachmentSection, load: props.loadImage, open: props.openAttachment }}
+          labels={{
+            thinking: t('block.thinking'),
+            answer: t('block.answer'),
+            content: t('block.content'),
+            result: t('block.result'),
+            summary: t('block.summary'),
+            other: t('attach.other'),
+            lines: lineLabel,
+            callState: (err: boolean, exit: number | null) => (
+              <span className={'lc-ts-call-state ' + (err ? 'lc-ts-call-err' : 'lc-ts-call-ok')}>
+                <i />
+                {err
+                  ? t('call.fail') + (exit !== null ? ' · ' + t('call.exit', { n: exit }) : '')
+                  : t('call.ok')}
+              </span>
+            ),
+          }}
+          // Only the open row's body renders, so the miss note is exactly THIS join's fetch state.
+          hint={r.conv === undefined ? missNote : t('browser.noContent')}
+        />,
+        r.rowErr, null, stampFor(r.n.seq))
+    }
+
+    const catBody = (c: string): ReactNode => {
+      if (c === 'system') return systemRow()
       if (c === 'tools') {
         if (view.header === null) return <div className="lc-br-note">{t(headers === null ? 'browser.noHeader' : 'browser.noEpoch')}</div>
-        const labels = {
-          desc: t('tool.desc'),
-          title: t('tool.params'),
-          empty: t('tool.paramsEmpty'),
-          show: t('tool.jsonToggle'),
-          hide: t('tool.jsonHide'),
-        }
-        const content = headerContent.get(view.header.seq)
-        const epochStamp = stampFor(view.header.seq)
-        const contentByName = new Map(content?.tools.map(t => [t.name, t]) ?? [])
         const q = rowQuery.trim().toLowerCase()
         const shown = view.header.tools
           .filter((tool: HeaderTool) => {
@@ -464,33 +596,10 @@ export function makeContextBrowser(
             </div>
           )
         }
-        const toolBody = (tool: HeaderTool): ReactNode => {
-          if (content === undefined) return <div className="lc-br-note">{headerNote}</div>
-          const row = contentByName.get(tool.name)
-          return row === undefined
-            ? <div className="lc-br-note">{t('browser.notInLog')}</div>
-            : <ToolSchema description={row.description} schema={row.schema} rich={rich} lines={lineLabel} labels={labels} />
-        }
         return (
           <div>
             {toolctl}
-            {shown.map((tool: HeaderTool) => {
-              // Best-effort host attribution (toolSources.ts); a provider predating the attribution hook arrives as the
-              // UNKNOWN_TOOL_SOURCE sentinel and renders the localized "unknown plugin" tag.
-              const trailing = (
-                <>
-                  {tool.plugin !== undefined
-                    ? <span className="lc-br-tag lc-br-tool-plugin" title={tool.plugin === UNKNOWN_TOOL_SOURCE ? t('tool.unknownTitle') : t('tool.plugin')}>
-                      {tool.plugin === UNKNOWN_TOOL_SOURCE ? t('tool.unknown') : tool.plugin}
-                    </span>
-                    : null}
-                  <span className="lc-br-hits" title={t('tool.hitsTip')}>{'×' + fmt(toolHitsOf(tool))}</span>
-                </>
-              )
-              return elemRow('tool:' + tool.name, null, tool.name, tool.tokens, undefined,
-                toolBody(tool),
-                false, trailing, epochStamp)
-            })}
+            {shown.map((tool: HeaderTool) => toolRow(tool))}
           </div>
         )
       }
@@ -498,60 +607,7 @@ export function makeContextBrowser(
          which requires count > 0 ⟺ byCat[c] exists; defensive. */
       const nodes = (byCat[c as Category] ?? []).slice().reverse()
       // Rows derive their display facts first, so the text filter scans exactly what the rows show — at derivation time, not per keystroke.
-      const rows = nodes.map((n) => {
-        const conv = bySeq.get(n.seq)
-        // A `skill`-tool load reclassifies into the `skill` bucket but stays a tool result — same failure rule.
-        const rowErr = (n.cat === 'tool' || n.cat === 'skill') && toolErrOf(n, conv).err
-        let tag: string | null = null
-        let tagNames: string[] | null = null
-        let preview = nodeText(n)
-        const id = nodeNameOf(n)
-        if (n.cat === 'tool') {
-          tag = n.tool ?? '?'
-          tagNames = n.tool !== undefined ? [n.tool] : null
-          preview = callSummaryOf(conv) ?? t('node.toolResult')
-        } else if (n.cat === 'skill') {
-          tag = n.skill !== undefined ? t('node.skillTag', { name: n.skill }) : t('form.' + (n.form || 'context'))
-          preview = (n.skill === undefined && id !== '' ? id : null)
-            ?? (n.text !== undefined && n.text !== '' ? n.text : null)
-            ?? callSummaryOf(conv) ?? preview
-        } else if (n.cat === 'assistant') {
-          // The fold stamps `calls` only on TEXT-LESS replies; a reply carrying both text and calls recovers its
-          // breadcrumb through the join.
-          const names = Array.isArray(n.calls) && n.calls.length > 0 ? n.calls : callNamesOf(conv)
-          if (names.length > 0) {
-            tag = names.join(' › ')
-            tagNames = names
-            preview = (n.text !== undefined && n.text !== '' ? n.text : null)
-              ?? blockSummaryOf(conv)
-              ?? t('node.empty')
-          } else if (n.text === undefined || n.text === '') {
-            preview = blockSummaryOf(conv) ?? preview
-          }
-        } else if (n.cat === 'user') {
-          const attCount = attachmentsIn(conv?.content).length
-          if (attCount > 0 && openElem !== `n${n.seq}`) {
-            tag = t('attach.title') + (attCount > 1 ? ' ×' + String(attCount) : '')
-          }
-        } else {
-          tag = t('form.' + (n.form || 'context'))
-          if (id !== '') {
-            preview = id
-          } else if (n.text !== undefined && n.text !== '') {
-            preview = n.form === 'snapshot' ? t('node.snapshot') + n.text : n.text
-          }
-        }
-        return {
-          n,
-          conv,
-          rowErr,
-          tag,
-          tagNames,
-          preview,
-          reasoning: n.cat === 'assistant' ? reasoningTextOf(conv) : '',
-          kinds: msgKindsOf(n, conv),
-        }
-      })
+      const rows = nodes.map(rowFactsOf)
       const q = rowQuery.trim().toLowerCase()
       // Kind chips count over ALL of the shown step's rows — the step's composition, not the text-lens survivors.
       const kindCounts = c === 'assistant'
@@ -588,37 +644,64 @@ export function makeContextBrowser(
       return (
         <div>
           {rowctl}
-          {shown.map(({ n, conv, rowErr, tag, tagNames, preview }) => elemRow(`n${n.seq}`, rowTagNode(tag, tagNames), preview, n.tokens, n.time,
-            <NodeContent
-              node={n}
-              conv={conv}
-              rich={rich}
-              att={{ Section: AttachmentSection, load: props.loadImage, open: props.openAttachment }}
-              labels={{
-                thinking: t('block.thinking'),
-                answer: t('block.answer'),
-                content: t('block.content'),
-                result: t('block.result'),
-                summary: t('block.summary'),
-                other: t('attach.other'),
-                lines: lineLabel,
-                callState: (err: boolean, exit: number | null) => (
-                  <span className={'lc-ts-call-state ' + (err ? 'lc-ts-call-err' : 'lc-ts-call-ok')}>
-                    <i />
-                    {err
-                      ? t('call.fail') + (exit !== null ? ' · ' + t('call.exit', { n: exit }) : '')
-                      : t('call.ok')}
-                  </span>
-                ),
-              }}
-              // Only the open row's body renders, so the miss note is exactly THIS join's fetch state.
-              hint={conv === undefined ? missNote : t('browser.noContent')}
-            />,
-            rowErr, null, stampFor(n.seq)))}
+          {shown.map(r => msgRow(r))}
         </div>
       )
     }
 
+    // The DNA flat list: one row per band, in the strip's own PROMPT order — the bar indexes the list (a band click
+    // opens its row) and the list indexes the bar back (an open row lights its band).
+    const promptNoTag = (no: number, tip: string): ReactNode => (
+      <span className="lc-br-tag lc-br-idx" title={tip}>#{fmt(no)}</span>
+    )
+    const toolDnaRow = (key: string, tag: ReactNode): ReactNode => {
+      const tool = view.header?.tools.find(tool => 'tool:' + tool.name === key)
+      /* v8 ignore next 1 -- dnaOf emits tool bands only from the header's own list; defensive. */
+      return tool === undefined ? <div className="lc-br-note">{t('browser.notInLog')}</div> : toolRow(tool, tag)
+    }
+    const dnaSearchOf = (it: DnaItem): string => {
+      if (!('node' in it)) {
+        if (it.cat === 'system') {
+          const sys = view.system
+          /* v8 ignore next 1 -- a 'sys' band exists only while the system projection does; defensive. */
+          return sys !== null ? headerContent.get(sys.seq)?.system ?? '' : ''
+        }
+        const tool = view.header?.tools.find(tool => 'tool:' + tool.name === it.key)
+        /* v8 ignore next 1 -- dnaOf emits tool bands only from the header's own list; defensive. */
+        if (tool === undefined) return ''
+        const row = contentByName.get(tool.name)
+        return [tool.name, tool.plugin ?? '', row?.description ?? '', row !== undefined ? schemaTextOf(row.schema) : ''].join('\n')
+      }
+      const f = rowFactsOf(it.node)
+      return [(f.tag ?? ''), f.preview, typeof f.n.text === 'string' ? f.n.text : '', f.reasoning].join('\n')
+    }
+    const dnaRowOf = (it: DnaItem, lead: ReactNode): ReactNode => {
+      if (!('node' in it)) return it.cat === 'system' ? systemRow(lead) : toolDnaRow(it.key, lead)
+      return msgRow(rowFactsOf(it.node), lead)
+    }
+    const dnaList = (): ReactNode => {
+      if (dnaItems === null || dnaItems.length === 0) return null
+      // Independent prompt-position counters, stable under the row filter: tool schemas number 1..N in
+      // the epoch's producer order, messages 1..M in model-visible order; the system prompt is unnumbered.
+      const leads = new Map<string, ReactNode>()
+      let toolNo = 0
+      let msgNo = 0
+      for (const it of dnaItems) {
+        if ('node' in it) leads.set(it.key, <>{typeTag(it.cat)}{promptNoTag(++msgNo, t('browser.msgNoTip'))}</>)
+        else if (it.cat === 'tools') leads.set(it.key, <>{typeTag('tools')}{promptNoTag(++toolNo, t('browser.toolNoTip'))}</>)
+        else leads.set(it.key, typeTag('system'))
+      }
+      const q = rowQuery.trim().toLowerCase()
+      const shown = q === '' ? dnaItems : dnaItems.filter(it => dnaSearchOf(it).toLowerCase().includes(q))
+      return (
+        <>
+          <RowToolbar value={rowQuery} placeholder={t('browser.search.dna')} onChange={setRowQuery} />
+          {shown.length === 0
+            ? <div className="lc-br-note">{t('browser.rowNoMatch')}</div>
+            : shown.map(it => <Fragment key={it.key}>{dnaRowOf(it, leads.get(it.key))}</Fragment>)}
+        </>
+      )
+    }
     return (
       <div className="lc-card" ref={rootRef}>
         <div className="lc-card-title">
@@ -677,12 +760,14 @@ export function makeContextBrowser(
           <StackedBar
             parts={dnaParts ?? parts}
             height={10}
-            // Highlight precedence: pointer hover (local in DNA mode, the shared link otherwise) over the open-category pin. In
-            // DNA mode the mirrored link is ONE-WAY: an incoming category key lights that category's bands, while band hovers stay
-            // on the bar and never report upward.
-            hoverKey={dna ? liveDnaKey ?? linkKey ?? pinKey : linkKey ?? pinKey}
+            // Highlight precedence: pointer hover (local in DNA mode, the shared link otherwise), then the OPEN ROW's
+            // own band (the list indexes the bar back), then the open-category pin. In DNA mode the mirrored link is
+            // ONE-WAY: an incoming category key lights that category's bands, while band hovers stay on the bar and
+            // never report upward.
+            hoverKey={dna ? liveDnaKey ?? browseKey ?? linkKey ?? pinKey : linkKey ?? pinKey}
             onHoverKey={dna ? setDnaKey : linked ? props.onHoverKey : undefined}
-            tip={dna}
+            // The tooltip belongs to the pointer: a browsed row's lit band floats none (the open row is its own label).
+            tip={dna && (liveDnaKey !== null || browseKey === null)}
             onPickKey={dna ? pickDna : undefined}
             minBand={dna ? DNA_MIN_BAND : undefined}
           />
@@ -701,8 +786,9 @@ export function makeContextBrowser(
           ? <DetailNote state="failed" onRetry={props.onDetailRetry} className="lc-br-note" />
           : null}
 
-        <div className="lc-br-cats">
-          {CATS.map((c) => {
+        {/* DNA mode presents the entries in the strip's own prompt order; category mode keeps the category accordions. */}
+        <div className={dna ? 'lc-br-dna-list' : 'lc-br-cats'}>
+          {dna ? dnaList() : CATS.map((c) => {
             const count = toolCount(c.key)
             const v = breakdown[c.key] || 0
             const prevCount = zeroBase ? 0 : prevView !== null && prevByCat !== null ? countOf(prevView, prevByCat, c.key) : null
