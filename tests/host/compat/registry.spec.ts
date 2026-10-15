@@ -137,7 +137,7 @@ describe('registry contract — the semantics every supported line shares', () =
     assert.ok(rows !== undefined, 'checkpoint rows are losslessly JSON-serializable')
     for (const key of ['contextTimeline', 'contextHeaders']) {
       const row = rows[key] as { ver: number; seq: number }
-      assert.equal(row.ver, key === 'contextTimeline' ? 28 : 1)
+      assert.equal(row.ver, key === 'contextTimeline' ? 29 : 1)
       assert.equal(row.seq, 12)
     }
     assertStatesPlainJson(driveTimeline(canonicalLog()))
