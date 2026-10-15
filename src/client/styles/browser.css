@@ -38,7 +38,10 @@
 .lc-br-meta .lc-est { margin-left: auto; }
 .lc-br-note { margin-top: 8px; color: var(--dsw-alias-label-secondary); font-size: 12px; }
 .lc-br-retry { border: 0; background: transparent; padding: 0; color: var(--dsw-alias-brand-primary); font: inherit; font-size: 12px; cursor: pointer; text-decoration: underline; text-underline-offset: 2px; transition: filter var(--ds-transition-duration, 0.2s) var(--ds-ease-in-out, ease-in-out); }
-.lc-br-cats { margin-top: 10px; display: flex; flex-direction: column; gap: 4px; }
+/* One list element whose class DNA mode swaps; height-bounded with the scroll INSIDE the section, so the card's
+   header, meta and the DNA strip above stay in view — the strip is the highlight anchor for the rows below. */
+.lc-br-cats, .lc-br-dna-list { margin-top: 10px; display: flex; flex-direction: column; gap: 4px; max-height: min(60vh, 520px); overflow-y: auto; scrollbar-width: thin; }
+.lc-br-dna-list { gap: 2px; border: 1px solid var(--dsw-alias-border-l2); border-radius: 8px; background: var(--dsw-alias-bg-layer-2); padding: 4px 6px; }
 .lc-br-cat { border: 1px solid var(--dsw-alias-border-l2); border-radius: 8px; background: var(--dsw-alias-bg-layer-2); overflow: hidden; }
 .lc-br-cat-empty { opacity: 0.55; }
 /* The row stays ONE line: the item counts change as the hovered step moves, and a wrapped row resized the browser
@@ -66,11 +69,18 @@
 .lc-br-elem { border-radius: 6px; }
 .lc-br-elem-on { background: var(--dsw-alias-interactive-bg-active); }
 .lc-br-elem-row { display: flex; align-items: center; gap: 8px; width: 100%; border: 0; background: transparent; color: var(--dsw-alias-label-primary); font: inherit; font-size: 12px; padding: 5px 6px; cursor: pointer; text-align: left; border-radius: 6px; transition: background-color var(--ds-transition-duration, 0.2s) var(--ds-ease-in-out, ease-in-out); }
+/* The DNA list's folded tool-schema group: row-shaped, but its summary reads as secondary, not as a browsed item. */
+.lc-br-fold .lc-br-preview { color: var(--dsw-alias-label-secondary); }
 /* The chat's run-state dot, so the failure scans without expanding the row. */
 .lc-br-err-dot { flex: none; width: 6px; height: 6px; border-radius: 50%; background: var(--dsw-alias-state-error-primary); box-shadow: 0 0 0 2px color-mix(in srgb, var(--dsw-alias-state-error-primary) 10%, transparent); }
 .lc-br-tag { min-width: 0; font-size: 11px; color: var(--dsw-alias-label-secondary); background: var(--dsw-alias-bg-layer-1); border: 1px solid var(--dsw-alias-border-l2); border-radius: 4px; padding: 0 6px; max-width: 220px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 /* One capsule per distinct call name, repeats folded into a ×N multiplier. */
 .lc-br-tags { min-width: 0; display: inline-flex; align-items: center; gap: 4px; }
+/* The DNA rows' leading type tag: the category view's dot+label echoed per row. */
+.lc-br-type { display: inline-flex; align-items: center; gap: 5px; flex: none; }
+.lc-br-type i { display: inline-block; width: 8px; height: 8px; border-radius: 2px; flex: none; }
+/* The DNA rows' prompt-position index chip (#n) — tabular digits keep the counters scannable. */
+.lc-br-idx { font-variant-numeric: tabular-nums; flex: none; }
 /* Same face and size as the tool name it tags. */
 .lc-br-tool-plugin { font-size: 12px; border-radius: 6px; color: var(--dsw-alias-brand-primary); background: color-mix(in srgb, var(--dsw-alias-brand-primary) 14%, transparent); border-color: transparent; }
 .lc-br-preview { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
