@@ -44,8 +44,9 @@ export function catRow(m: Mounted, cat: keyof typeof ROW): HTMLElement {
   return queryAll(m.container, '.lc-br-cat-row')[ROW[cat]]
 }
 
+/** The browser's browsable content rows; the DNA list's folded group header is a control, not one of them. */
 export function elemRows(m: Mounted): HTMLElement[] {
-  return queryAll(m.container, '.lc-br-elem-row')
+  return queryAll(m.container, '.lc-br-elem-row:not(.lc-br-fold)')
 }
 
 /** Type into the tool-schema search box like a real user (native setter + input event). */
