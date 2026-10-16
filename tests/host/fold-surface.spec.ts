@@ -221,11 +221,36 @@ describe('surfaceOp variants', () => {
       userMessage(5, text('bbbbbbbb'), undefined, { surfaceOp: { op: 'replace', startSeq: 1, endSeq: 2 } }), // 10 tokens
     ])
     assert.deepEqual(state.surface.map(n => n.seq), [3, 5])
+    assert.equal(state.surface[1].seat, 1, "the replacement takes the declared range start's prompt seat")
     assert.equal(state.sums.user, 22)
     assert.deepEqual(state.archived.map(n => [n.seq, n.gone]), [[1, 5], [2, 5]], 'removed nodes archived as stamped copies')
     // Gross 100 rewritten to the net freed amount: 24 removed - 10 re-added.
     assert.equal(state.events[0].tokens, 14)
     assertPlainJson(state)
+  })
+
+  test('a replacement inherits the seat of the replacement it shadows', () => {
+    const { state } = driveTimeline([
+      userMessage(1, text(big)),
+      compaction(2, 'summary', { shadowedTokenCount: 20, shadowedSeqs: [1] }),
+      userMessage(3, text('sum'), undefined, { surfaceOp: { op: 'replace', startSeq: 1, endSeq: 1 } }),
+      // A second compaction over the PRIOR SUMMARY itself: its prompt seat is the first range's seat, not the summary's log seq.
+      compaction(4, 'summary', { shadowedTokenCount: 20, shadowedSeqs: [3] }),
+      userMessage(5, text('sum2'), undefined, { surfaceOp: { op: 'replace', startSeq: 3, endSeq: 3 } }),
+    ])
+    assert.equal(state.surface.at(-1)?.seq, 5)
+    assert.equal(state.surface.at(-1)?.seat, 1)
+  })
+
+  test('an armed claim whose declared start is not among the shadowed seqs stamps no seat', () => {
+    const { state } = driveTimeline([
+      userMessage(1, text('aaaa')),
+      userMessage(2, text('bbbb')),
+      compaction(3, 'summary', { shadowedTokenCount: 10, shadowedSeqs: [2] }),
+      userMessage(4, text('cccc'), undefined, { surfaceOp: { op: 'replace', startSeq: 1, endSeq: 2 } }),
+    ])
+    assert.deepEqual(state.surface.map(n => n.seq), [1, 4])
+    assert.equal(state.surface[1].seat, undefined)
   })
 
   test('the net-freed rewrite clamps at zero when the replacement outweighs the shadow', () => {
@@ -260,7 +285,19 @@ describe('surfaceOp variants', () => {
       userMessage(4, text('dddddddd'), undefined, { surfaceOp: { op: 'replace', startSeq: 2, endSeq: 2 } }),
     ])
     assert.deepEqual(state.surface.map(n => n.seq), [1, 4, 3])
+    assert.equal(state.surface[1].seat, 2, 'the replacement takes the replaced node 2\'s position')
     assert.deepEqual(state.archived.map(n => [n.seq, n.gone]), [[2, 4]])
+  })
+
+  test('a range rewrite over a replacement keeps that replacement\'s prompt seat', () => {
+    const { state } = driveTimeline([
+      userMessage(1, text(big)),
+      compaction(2, 'summary', { shadowedTokenCount: 12, shadowedSeqs: [1] }),
+      userMessage(3, text('sum'), undefined, { surfaceOp: { op: 'replace', startSeq: 1, endSeq: 1 } }), // seat 1
+      userMessage(4, text('sum2'), undefined, { surfaceOp: { op: 'replace', startSeq: 3, endSeq: 3 } }),
+    ])
+    assert.deepEqual(state.surface.map(n => n.seq), [4])
+    assert.equal(state.surface[0].seat, 1, 'the inherited seat survives a later range rewrite')
   })
 
   test('a replace whose start seq is missing appends', () => {

@@ -234,6 +234,10 @@ function applySurface(
     if (Array.isArray(shadowedSeqs) && shadowedSeqs.length > 0) {
       const removed = removeSurfaceSeqs(st, new Set(shadowedSeqs), ev.seq)
       st.sums[cat] += node.tokens
+      // This path removes by seq and appends, while the harness splices the replacement at the declared range
+      // start's index — so the node takes that start's seat, or its own newer seq parks it after every message.
+      const head = removed.find(n => n.seq === op.start)
+      if (head !== undefined) node.seat = head.seat ?? head.seq
       st.surface.push(node)
       // Rewrite the metering row from its gross shadow price to the NET freed amount, so it matches the drop the
       // trend chart shows. Cloned: the events array's elements are shared with the persisted state.
@@ -254,6 +258,7 @@ function applySurface(
     }
     if (si >= 0 && ei >= si) {
       const removed = st.surface.splice(si, ei - si + 1, node)
+      node.seat = removed[0].seat ?? removed[0].seq
       archiveRemoved(st, removed, ev.seq)
       for (const r of removed) st.sums[r.cat] -= r.tokens
       st.sums[cat] += node.tokens

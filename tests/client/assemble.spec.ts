@@ -85,9 +85,26 @@ describe('assemble past step', () => {
     assert.deepEqual(out.nodes.map(n => n.seq), [1, 2, 3])
   })
 
-  test('the assembled nodes come back in seq order', () => {
+  test('the assembled nodes come back in model-visible order', () => {
     const data = timeline({ nodes: [surfaceNodeAt(3), surfaceNodeAt(1)], archive: [surfaceNodeAt(2, { gone: 10 })] })
     assert.deepEqual(assemble(data, null, 7).nodes.map(n => n.seq), [1, 2, 3])
+  })
+
+  test('a replacement node orders at its prompt seat, not at its log seq', () => {
+    const data = timeline({ nodes: [surfaceNodeAt(3), surfaceNodeAt(30, { seat: 1 })] })
+    assert.deepEqual(assemble(data, null, null).nodes.map(n => n.seq), [30, 3])
+  })
+
+  test('a past step interleaves archive copies on the same seat key', () => {
+    const data = timeline({
+      nodes: [surfaceNodeAt(3)],
+      archive: [
+        // An archived replacement keeps the seat it was spliced at, so it still leads its own range.
+        surfaceNodeAt(45, { gone: 60, seat: 1 }),
+        surfaceNodeAt(2, { gone: 40 }),
+      ],
+    })
+    assert.deepEqual(assemble(data, null, 50).nodes.map(n => n.seq), [45, 3])
   })
 
   test('the header in force at the step rides along', () => {

@@ -1,5 +1,5 @@
 // dnaOf (src/client/dna.ts): the DNA strip's per-item decomposition — the system prompt and the header epoch's
-// tool schemas lead, the message flow follows in seq order (the order the model reads the context).
+// tool schemas lead, the message flow follows in the assembled model-visible order (the order the model reads the context).
 
 import assert from 'node:assert/strict'
 import { describe, test } from 'vitest'
@@ -51,7 +51,7 @@ describe('dnaOf', () => {
     assert.deepEqual(items.map(i => i.key), ['tool:bash'])
   })
 
-  test('message bands follow node seqs and hand the node through, with time only when logged', () => {
+  test('message bands follow the assembled node order and hand the node through, with time only when logged', () => {
     const a = surfaceNode({ seq: 3, tokens: 7, time: 3000 })
     const b = surfaceNode({ seq: 8, cat: 'tool', tokens: 9 })
     const items = dnaOf(asm({ nodes: [a, b] }))
@@ -78,6 +78,13 @@ describe('dnaOf', () => {
   test('zero-token items keep their band (the bar drops zero widths, the reading order stays truthful)', () => {
     const items = dnaOf(asm({ nodes: [surfaceNode({ seq: 1, tokens: 0 }), surfaceNode({ seq: 2 })] }))
     assert.deepEqual(items.map(i => i.key), ['n1', 'n2'])
+  })
+
+  test('bands read in the assembled order — a compacted summary leads at its prompt seat despite its newest seq', () => {
+    const items = dnaOf(asm({
+      nodes: [surfaceNode({ seq: 60, tokens: 20, seat: 1 }), surfaceNode({ seq: 3 }), surfaceNode({ seq: 40 })],
+    }))
+    assert.deepEqual(items.map(i => i.key), ['n60', 'n3', 'n40'])
   })
 })
 

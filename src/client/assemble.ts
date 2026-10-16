@@ -62,7 +62,9 @@ export function assemble(data: ContextTimeline, headers: ContextHeaders | null, 
     }
     nodes = picked
   }
-  nodes.sort((a, b) => a.seq - b.seq)
+  // Model-visible order: a replacement node carries the seat of the range it replaced, every other node its log
+  // seq. Past-step archive copies ride the same key, so their interleaving stays truthful too.
+  nodes.sort((a, b) => (a.seat ?? a.seq) - (b.seat ?? b.seq))
 
   let missingLive = 0
   if (data.droppedNodes > 0) {

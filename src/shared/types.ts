@@ -418,6 +418,10 @@ export interface SurfaceNode {
   imgs?: number
   /** Set only on `archive` entries: the seq of the replacement event that shadowed this node. */
   gone?: number
+  /** Set on a node that REPLACED surface nodes (compaction summary/prune, result rewrite): the replaced range
+   * start's own ordering key — the position the harness's surface fold spliced the replacement at. Order by
+   * `seat ?? seq` (`seq` is the LOG position), or a compaction summary lands behind the messages it precedes. */
+  seat?: number
   form?: string
   /** The producer identity the matching inject event names (host pricing.ts
    * `injectionSourceName`); absent when unreadable or predating the stamp. */
