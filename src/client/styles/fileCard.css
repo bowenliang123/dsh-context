@@ -16,7 +16,8 @@
 .lc-fa-meta-tip { top: calc(100% + 6px); left: 0; max-width: 260px; white-space: normal; line-height: 1.5; }
 .lc-fa-item { border: 1px solid transparent; border-radius: 8px; transition: background-color var(--ds-transition-duration, 0.2s) var(--ds-ease-in-out, ease-in-out), border-color var(--ds-transition-duration, 0.2s) var(--ds-ease-in-out, ease-in-out); }
 .lc-fa-item-on { background: var(--dsw-alias-bg-layer-2); border-color: var(--dsw-alias-border-l2); }
-.lc-fa-row { display: flex; align-items: center; gap: 7px; width: 100%; border: 0; background: transparent; color: var(--dsw-alias-label-primary); font: inherit; font-size: 12px; padding: 6px 8px; cursor: pointer; text-align: left; border-radius: 7px; transition: background-color var(--ds-transition-duration, 0.2s) var(--ds-ease-in-out, ease-in-out); }
+.lc-row-pad { flex: none; }
+.lc-fa-row { content-visibility: auto; contain-intrinsic-size: auto 27px; display: flex; align-items: center; gap: 7px; width: 100%; border: 0; background: transparent; color: var(--dsw-alias-label-primary); font: inherit; font-size: 12px; padding: 6px 8px; cursor: pointer; text-align: left; border-radius: 7px; transition: background-color var(--ds-transition-duration, 0.2s) var(--ds-ease-in-out, ease-in-out); }
 .lc-fa-form { flex: none; width: 20px; height: 14px; display: flex; align-items: center; justify-content: center; font-size: 11px; opacity: 0.85; }
 .lc-fa-lang { display: inline-flex; align-items: center; justify-content: center; min-width: 16px; height: 13px; padding: 0 2px; border-radius: 4px; font-size: 8px; font-weight: 700; line-height: 1; }
 .lc-fa-row .lc-br-chev { margin-right: -2px; }

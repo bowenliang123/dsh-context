@@ -1,9 +1,9 @@
-import { createElement as h } from 'react'
+import { act, createElement as h } from 'react'
 import assert from 'node:assert/strict'
 import { describe, test } from 'vitest'
 import type { TimingSpan } from '../../../src/shared/types'
-import { makeTimingStrip } from '../../../src/client/components/timingStrip'
-import { makeKit, mount, query, queryAll, hover, unhover } from '../helpers/kit'
+import { makeTimingStrip, timingGradientOf } from '../../../src/client/components/timingStrip'
+import { flush, makeKit, mount, query, queryAll, hover, unhover } from '../helpers/kit'
 
 const kit = makeKit()
 const kitZh = makeKit('zh')
@@ -108,6 +108,62 @@ describe('TimingStrip', () => {
     assert.equal(on[1], segsOf(m.container)[5])
     assert.ok(query(m.container, '.lc-tstrip-bar').className.includes('lc-tstrip-dim'))
     assert.equal(query(m.container, '.lc-bar-tip').className, 'lc-tip lc-bar-tip')
+    await m.unmount()
+  })
+
+  test('a packed strip paints gradient layers and hit-tests the full band model', async () => {
+    const spans: TimingSpan[] = []
+    for (let i = 0; i < 700; i++) spans.push({ kind: i % 2 === 0 ? 'ttft' : 'tools', start: i * 1_000, end: i * 1_000 + 500 })
+    let relayed: string | null = 'unset'
+    const m = await mount(h(Strip, { spans, onHoverKey: (k) => { relayed = k } }))
+    // Thousands of sub-pixel divs would be pointless: the dense strip paints two gradients instead.
+    assert.equal(segsOf(m.container).length, 0)
+    const bar = query(m.container, '.lc-tstrip-bar')
+    // A zero-width box cannot answer a hit and keeps the tip closed.
+    await act(async () => { bar.dispatchEvent(new MouseEvent('mousemove', { bubbles: true, clientX: 10 })) })
+    await flush()
+    assert.equal(queryAll(m.container, '.lc-bar-tip-on').length, 0)
+    Object.defineProperty(bar, 'getBoundingClientRect', {
+      configurable: true,
+      value: () => ({ left: 0, top: 0, width: 1_000, height: 12, right: 1_000, bottom: 12 }),
+    })
+    await act(async () => { bar.dispatchEvent(new MouseEvent('mousemove', { bubbles: true, clientX: 500 })) })
+    await flush()
+    // 700 equal 0.5s bands: half-way is band 350 (even → ttft).
+    assert.equal(relayed, 'ttft')
+    const tip = query(m.container, '.lc-bar-tip')
+    assert.ok(tip.className.includes('lc-bar-tip-on'))
+    assert.ok(tip.textContent?.startsWith('TTFT 500ms'))
+    assert.ok(tip.textContent?.includes(timeOf(350_000)))
+    // Past the right edge clamps to the last band.
+    await act(async () => { bar.dispatchEvent(new MouseEvent('mousemove', { bubbles: true, clientX: 1_500 })) })
+    await flush()
+    assert.equal(relayed, 'tools')
+    await unhover(bar)
+    assert.equal(relayed, null)
+    await m.unmount()
+  })
+
+  test('gradient stops coalesce contiguous same-kind runs', () => {
+    const bands = [
+      { kind: 'tools' as const, leftPct: 0, widthPct: 10 },
+      { kind: 'tools' as const, leftPct: 10, widthPct: 10 },
+      { kind: 'ttft' as const, leftPct: 20, widthPct: 10 },
+    ]
+    const base = timingGradientOf(bands, null)
+    assert.equal((base.match(/--color-teal-500/g) || []).length, 1)
+    assert.ok(base.includes('var(--color-teal-500) 0.0000% 20.0000%'))
+    const hot = timingGradientOf(bands, 'tools')
+    assert.ok(hot.includes('var(--color-teal-500) 0.0000% 20.0000%, transparent 20.0000% 30.0000%'))
+  })
+
+  test('a dense hover lights its kind through the hot layer', async () => {
+    const spans: TimingSpan[] = []
+    for (let i = 0; i < 700; i++) spans.push({ kind: i % 2 === 0 ? 'ttft' : 'tools', start: i * 1_000, end: i * 1_000 + 500 })
+    const m = await mount(h(Strip, { spans, hoverKey: 'ttft' }))
+    assert.ok(query(m.container, '.lc-tstrip-bar').className.includes('lc-tstrip-dim'))
+    const hot = query<HTMLElement>(m.container, '.lc-tstrip-gradient-hot')
+    assert.ok(hot.style.background.includes('--color-blue-500'))
     await m.unmount()
   })
 

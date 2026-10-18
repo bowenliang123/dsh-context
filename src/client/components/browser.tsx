@@ -1,9 +1,9 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactElement, type ReactNode } from 'react'
+import { assembleCached } from './derivedCache'
 import { UNKNOWN_TOOL_SOURCE, type Category, type ContextHeaders, type ContextTimeline, type HeaderRecord, type HeaderTool, type RequestRecord, type SurfaceNode, type SystemPromptNode } from '../../shared/types'
-import { assemble } from '../assemble'
-import type { Assembled } from '../assemble'
 import { CATS, CAT_COLOR, partsOf } from '../categories'
 import { dnaBaseLabel, dnaOf } from '../dna'
+import { useRowWindow } from './useRowWindow'
 import type { DnaItem } from '../dna'
 import type { ContentFetcher, ConversationNodeLike, HeaderFetcher } from '../services'
 import type { ContextSettings, DefaultDeltaBase, DefaultToolSort } from '../settings'
@@ -23,6 +23,10 @@ import { TextSection, schemaTextOf, RowToolbar, ToolSchema, toolErrOf } from './
 import { revealRowInCard } from '../revealScroll'
 import { NodeContent, byCatOf, nodeNameOf, msgKindsOf, reasoningTextOf, ROW_KINDS } from './browserNodes'
 import type { RowKind } from './browserNodes'
+import { DNA_MIN_BAND, countOf, lastOfTurn, stepStampOf } from './browserHelpers'
+import type { CatFocus } from './browserHelpers'
+export type { CatFocus } from './browserHelpers'
+export { stepStampOf } from './browserHelpers'
 import { MapIcon, makeBrowserTreemap } from './browserTreemap'
 import type { MapBlock } from '../treemap'
 
@@ -57,41 +61,6 @@ export interface ContextBrowserProps {
   onDetailRetry?: () => void
 }
 
-
-export interface CatFocus {
-  cat: string
-  kind?: RowKind
-}
-
-function countOf(asm: Assembled, byCat: Partial<Record<Category, SurfaceNode[]>>, c: string): number {
-  if (c === 'system') return asm.system !== null ? 1 : 0
-  if (c === 'tools') return asm.header !== null ? asm.header.tools.length : 0
-  return byCat[c as Category]?.length ?? 0
-}
-
-function lastOfTurn(requests: RequestRecord[], turn: number): RequestRecord | null {
-  for (let i = requests.length - 1; i >= 0; i--) if ((requests[i].turn ?? 0) === turn) return requests[i]
-  return null
-}
-
-/** The turn/step marking where a surface item entered the context: the FIRST request logged after the item's seq is
- * the first that carried it (assemble's inclusion rule is `n.seq < R.seq`); no following request stamps null. */
-export function stepStampOf(requests: RequestRecord[]): (itemSeq: number) => { turn: number; step: number } | null {
-  // Sort a copy: the wire arrives in append order, but the derivation must not depend on it (restored rows can re-order).
-  const sorted = requests.slice().sort((a, b) => a.seq - b.seq)
-  return (itemSeq) => {
-    for (const r of sorted) {
-      if (r.seq > itemSeq) {
-        return typeof r.turn === 'number' && typeof r.step === 'number' ? { turn: r.turn, step: r.step } : null
-      }
-    }
-    return null
-  }
-}
-
-/** Bands keep at least this share of the occupied region, so a tiny item stays a hoverable/clickable filament
- * instead of a sub-pixel sliver; tooltips still report true shares. */
-const DNA_MIN_BAND = 0.35
 
 export function makeContextBrowser(
   kit: ViewKit,
@@ -171,6 +140,11 @@ export function makeContextBrowser(
       setOpenElem(null)
     }, [pinSeq, onOpenCat])
     const rootRef = useRef<HTMLDivElement | null>(null)
+    const scrollRef = useRef<HTMLDivElement | null>(null)
+    // The DNA flat feed can carry thousands of sub-row-sized items; the rows region is a fixed-pitch scroller, so
+    // only the visible window is rendered once the card is wide enough for single-line rows.
+    const [flatWide, setFlatWide] = useState(false)
+    const [flatReady, setFlatReady] = useState(false)
     const focusScrollRef = useRef(false)
     const nodeFocus = props.nodeFocus
     useEffect(() => {
@@ -206,6 +180,15 @@ export function makeContextBrowser(
 
     const requests = data.requests
     const stepsOf = useMemo(() => turnStepsOf(requests), [requests])
+    // One <option> per retained request: rebuilt only when the records or locale inputs change, never on hover.
+    const pickOptions = useMemo(
+      () => requests.slice().reverse().map(r => (
+        <option key={r.seq} value={String(r.seq)}>
+          {t('detail.step', { t: r.turn ?? 0, s: r.step ?? 0, n: stepsOf(r.turn) })}
+        </option>
+      )),
+      [requests, stepsOf, t],
+    )
     const stampOf = useMemo(() => stepStampOf(requests), [requests])
     // The live tail — items no logged request carries yet — rides the NEXT request, following the harness's step loop
     // (`core/agent-loop`'s agent.ts): a newest user message opens a new turn, a text-only final reply ends the turn,
@@ -246,7 +229,9 @@ export function makeContextBrowser(
     const linkKey = linked && props.hoverKey !== null && props.hoverKey !== 'free'
       ? props.hoverKey
       : null
-    const view = assemble(data, headers, seq)
+    // assemble() is a pure walk over the served projection; memoize it per (projection, step) so a hover
+    // preview only pays for the steps it actually shows.
+    const view = useMemo(() => assembleCached(data, headers, seq), [data, headers, seq])
 
     /** The tools group's element keys: the group key itself or any exact tool schema key. */
     const toolsElemOpen = (): boolean => openElem === 'tools' || (openElem !== null && openElem.startsWith('tool:'))
@@ -292,7 +277,10 @@ export function makeContextBrowser(
       ? deltaBase === 'step' ? lastReq : lastReq === null ? null : turnBaseOf(lastReq)
       : deltaBase === 'turn' ? turnBaseOf(req) : prevRecordOf(req)
     const zeroBase = refReq === null && lastReq !== null
-    const prevView = refReq !== null ? assemble(data, headers, refReq.seq) : null
+    const prevView = useMemo(
+      () => (refReq !== null ? assembleCached(data, headers, refReq.seq) : null),
+      [data, headers, refReq],
+    )
     const prevByCat = prevView !== null ? byCatOf(prevView) : null
 
     const byCat = byCatOf(view)
@@ -766,20 +754,38 @@ export function makeContextBrowser(
       <RowToolbar value={rowQuery} placeholder={t('browser.search.flat')} onChange={setRowQuery} />
     )
 
-    const flatRows = (): ReactElement => {
+    /* v8 ignore start -- jsdom has no layout/ResizeObserver: the wide gate and the first-paint skeleton are live-only. */
+    useEffect(() => {
+      if (!dna) {
+        setFlatReady(false)
+        return
+      }
+      const el = scrollRef.current
+      if (el === null) return
+      const sync = (): void => { setFlatWide(el.clientWidth >= 380) }
+      sync()
+      setFlatReady(true)
+      if (typeof ResizeObserver !== 'function') return
+      const observer = new ResizeObserver(sync)
+      observer.observe(el)
+      return () => { observer.disconnect() }
+    }, [dna])
+    /* v8 ignore stop */
+
+    interface FlatEntry {
+      r: NodeRow
+      pos: number
+    }
+    /** Only the visible feed slice becomes React elements: a long session carries over a thousand rows, and
+     *  building them all just to render ~30 was the DNA toggle's dominant cost. */
+    const flatRows = (): { entries: FlatEntry[]; tail: ReactElement[]; empty: boolean } => {
       const q = rowQuery.trim().toLowerCase()
-      const rows: ReactElement[] = []
       // Positions count ascending in reading order; reversing the array must not renumber them.
-      const flow = view.nodes.map((n, i) => ({ r: nodeRowOf(n), pos: i + 1 })).reverse()
-      for (const { r, pos } of flow) {
+      const entries: FlatEntry[] = []
+      for (let i = view.nodes.length - 1; i >= 0; i--) {
+        const r = nodeRowOf(view.nodes[i])
         if (q !== '' && !rowMatches(r, q)) continue
-        rows.push(messageRow(r, (
-          <>
-            {catChip(r.n.cat)}
-            <span className="lc-br-pos">#{fmt(pos)}</span>
-            {rowTagNode(r.tag, r.tagNames)}
-          </>
-        ), (over) => { setRowDnaKey(over ? 'n' + String(r.n.seq) : null) }))
+        entries.push({ r, pos: i + 1 })
       }
       // An empty q matches everything (String.includes('') is true), so the lens needs no short-circuit arms.
       // A header-less surface (no epoch served) renders message bands only, so its feed carries no header rows.
@@ -788,15 +794,16 @@ export function makeContextBrowser(
       const sys = view.system
       const sysText = sys !== null ? headerContent.get(sys.seq)?.system ?? '' : ''
       const sysHit = sys !== null && (systemPreviewOf(sys).toLowerCase().includes(q) || sysText.toLowerCase().includes(q))
-      if (view.header !== null && toolsHit) rows.push(toolsGroupRow(view.header))
-      if (sys !== null && sysHit) rows.push(systemRow(sys))
-      return (
-        <div className="lc-br-flat">
-          {rows}
-          {rows.length === 0 ? <div className="lc-br-note">{t('browser.rowNoMatch')}</div> : null}
-        </div>
-      )
+      const tail: ReactElement[] = []
+      if (view.header !== null && toolsHit) tail.push(toolsGroupRow(view.header))
+      if (sys !== null && sysHit) tail.push(systemRow(sys))
+      return { entries, tail, empty: entries.length === 0 && tail.length === 0 }
     }
+    const flatRowsModel = dna && flatReady ? flatRows() : null
+    // 28px row + 2px flat gap: the pad formula reproduces the full feed height while only the viewport renders.
+    const flatRange = useRowWindow(scrollRef, flatRowsModel?.entries.length ?? 0, 30, dna && flatReady && flatWide && openElem === null)
+    // A non-DNA render never shows this model; the local keeps the JSX branch-free (the DNA branch owns the rows).
+    const flat = flatRowsModel ?? { entries: [] as FlatEntry[], tail: [] as ReactElement[], empty: true }
 
     return (
       <div className="lc-card lc-br" ref={rootRef}>
@@ -834,11 +841,7 @@ export function makeContextBrowser(
               onChange={(e) => { pick(e.target.value) }}
             >
               <option value="live">{t('browser.live')}</option>
-              {requests.slice().reverse().map(r => (
-                <option key={r.seq} value={String(r.seq)}>
-                  {t('detail.step', { t: r.turn ?? 0, s: r.step ?? 0, n: stepsOf(r.turn) })}
-                </option>
-              ))}
+              {pickOptions}
             </select>
           </div>
 
@@ -913,9 +916,29 @@ export function makeContextBrowser(
           )
           : null}
 
-        <div className="lc-br-scroll">
+        <div className="lc-br-scroll" ref={scrollRef}>
           {dna
-            ? flatRows()
+            ? (!flatReady
+              /* v8 ignore next 2 -- first paint only; jsdom flushes effect work before assertions. */
+              ? <div className="lc-br-flat" style={{ minHeight: 320 }} aria-hidden="true" />
+              : (
+                <div className="lc-br-flat">
+                  {flatRange.from > 0 ? <div className="lc-row-pad" style={{ height: flatRange.from * 30 }} aria-hidden="true" /> : null}
+                  {flat.entries.slice(flatRange.from, flatRange.to + 1).map(({ r, pos }) => messageRow(r, (
+                    <>
+                      {catChip(r.n.cat)}
+                      <span className="lc-br-pos">#{fmt(pos)}</span>
+                      {rowTagNode(r.tag, r.tagNames)}
+                    </>
+                  ), (over) => { setRowDnaKey(over ? 'n' + String(r.n.seq) : null) }))}
+                  {flatRange.to < flat.entries.length - 1
+                    ? <div className="lc-row-pad" style={{ height: (flat.entries.length - 1 - flatRange.to) * 30 }} aria-hidden="true" />
+                    : null}
+                  {/* Header groups are the feed's tail: render them AFTER the bottom pad so they stay at the end. */}
+                  {flat.tail}
+                  {flat.empty ? <div className="lc-br-note">{t('browser.rowNoMatch')}</div> : null}
+                </div>
+              ))
             : (
               <div className="lc-br-cats">
                 {CATS.map((c) => {

@@ -1,4 +1,4 @@
-.lc-event { display: flex; align-items: center; gap: 8px; padding: 3px 0; }
+.lc-event { content-visibility: auto; contain-intrinsic-size: auto 25px; display: flex; align-items: center; gap: 8px; padding: 3px 0; }
 .lc-event-icon { width: 18px; text-align: center; color: var(--dsw-alias-state-warn-primary); }
 .lc-event-icon.lc-event-inject { color: var(--color-purple-500); }
 .lc-event-icon.lc-event-model { color: var(--dsw-alias-brand-primary); }

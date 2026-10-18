@@ -351,12 +351,12 @@ export function makeStatsContext(
       ...notes(subDeepseek),
       subUnpriced ? <span key="unavailable">{t('stats.costUnavailable')}</span> : null,
     ]
-    // A no-deps layout effect re-measures after every render (a same-string bail-out keeps it loopless); the
+    // Re-measures when the values that move the flow change (the same-string bail-out keeps it loopless); the
     // ResizeObserver tick covers pane drags, which change no prop.
     const flowRef = useRef<HTMLDivElement | null>(null)
     const nodeEls = useRef(new Map<FlowNodeKey, HTMLDivElement>())
     const [links, setLinks] = useState<FlowLink[]>([])
-    const [, setResizeTick] = useState(0)
+    const [resizeTick, setResizeTick] = useState(0)
     const nodeRef = (key: FlowNodeKey) => (el: HTMLDivElement | null): void => {
       if (el === null) nodeEls.current.delete(key)
       else nodeEls.current.set(key, el)
@@ -377,7 +377,13 @@ export function makeStatsContext(
       }
       const next = measureFlow(boxes, root.clientWidth > FLOW_FOLD_PX)
       setLinks(prev => (prev.length === next.length && prev.every((l, i) => l.d === next[i].d && l.color === next[i].color) ? prev : next))
-    })
+      // Chart hover commits never move a flow node: only these inputs (or a ResizeObserver tick) can.
+    }, [
+      props.counts, props.humanInputs, props.answers, props.toolCalls, props.files, props.tools,
+      props.cost, props.locale, props.sessionId, props.onTeamClick,
+      // A pane drag only ticks this state; the async subagent usage lands later and moves the flow's text widths.
+      resizeTick, subUsage, book,
+    ])
     /* v8 ignore start -- jsdom has neither ResizeObserver nor layout: tests pin the geometry through measureFlow's unit tests. */
     useEffect(() => {
       const root = flowRef.current

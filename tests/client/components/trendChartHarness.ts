@@ -31,7 +31,9 @@ beforeAll(() => {
     configurable: true,
     get(this: LayoutEl): number {
       if (this.classList && this.classList.contains('lc-chart-scroll')) {
-        return Math.max(this.clientWidth, this.querySelectorAll('.lc-bar').length * BAR_CELL)
+        const total = Number(this.querySelector('.lc-chart')?.getAttribute('data-lc-bars') ?? '')
+        const columns = Number.isFinite(total) && total > 0 ? total : this.querySelectorAll('.lc-bar').length
+        return Math.max(this.clientWidth, columns * BAR_CELL)
       }
       return this.__scrollW ?? 0
     },

@@ -181,11 +181,17 @@ export function makeStackedBar(kit: ViewKit): (props: StackedBarProps) => ReactE
     // keeps that loopless. Rects, not clientWidth: the latter truncates to a whole pixel, and the residue lands
     // straight back on the overhang. A pane drag that changes no prop leaves the shift as last measured.
     useLayoutEffect(() => {
+      // No visible tip → no measurement. Chart hover commits re-render this bar with no tip; reading layout
+      // here would flush the whole page's layout for nothing.
+      if (tip === null) {
+        setTipShift(prev => (prev === 0 ? prev : 0))
+        return
+      }
       /* v8 ignore next -- unreachable: the wrap commits its ref before layout effects run. */
       const wrapW = wrapRef.current === null ? 0 : wrapRef.current.getBoundingClientRect().width
       const tipW = tipRef.current === null ? 0 : tipRef.current.getBoundingClientRect().width
       setTipShift((prev) => {
-        if (tip === null || wrapW <= 0 || tipW <= 0) return prev === 0 ? prev : 0
+        if (wrapW <= 0 || tipW <= 0) return prev === 0 ? prev : 0
         const center = tip.leftPct / 100 * wrapW
         const leftOver = tipW / 2 - center
         const rightOver = center + tipW / 2 - wrapW

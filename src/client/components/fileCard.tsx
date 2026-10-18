@@ -1,10 +1,11 @@
-import { memo, useEffect, useState, type ChangeEvent, type ComponentType, type MouseEvent, type ReactElement } from 'react'
+import { memo, useEffect, useRef, useState, type ChangeEvent, type ComponentType, type MouseEvent, type ReactElement } from 'react'
 import { absPathOf, baseNameOf, displayPathOf, glyphOf } from '../fileActivity'
 import type { FileActivity, FileEntry, FileOp, FileOpKind } from '../fileActivity'
 import type { ContextSettings, DefaultFileSort } from '../settings'
 import type { DetailState } from '../timelineSource'
 import type { ViewKit } from '../viewkit'
 import { makeDetailNote } from './detailNote'
+import { useRowWindow } from './useRowWindow'
 
 export type FileFilter = 'all' | FileOpKind | 'image'
 
@@ -55,6 +56,13 @@ export function makeFileCard(kit: ViewKit, settings: ContextSettings): Component
     const [sort, setSort] = useState<DefaultFileSort>(() => settings.defaultFileSort())
     const [query, setQuery] = useState('')
     const [openPath, setOpenPath] = useState<string | null>(null)
+    // The list lane is a fixed-height virtual scroller while no row is expanded and the card is wide enough for
+    // single-line rows (narrow cards wrap, so their heights are not uniform and the list renders in full).
+    const listRef = useRef<HTMLDivElement | null>(null)
+    const [listWide, setListWide] = useState(false)
+    // Row pitch (height + any gap) is measured from the full list before windowing: rows wrap on narrow cards, so a
+    // hard-coded height would break the scroll geometry there (the gate below keeps narrow cards unwindowed).
+    const [rowPitch, setRowPitch] = useState(0)
 
     // A stats-board jump re-points the chip band: the card drops its own lens and open row, so the landing is the
     // frontier the click promised. The request is handed back so an unchanged kind can fire again.
@@ -90,6 +98,30 @@ export function makeFileCard(kit: ViewKit, settings: ContextSettings): Component
             ? byName(a, b)
             : (a.path < b.path ? -1 : 1))
 
+    useEffect(() => {
+      const el = listRef.current
+      if (el === null) {
+        setListWide(false)
+        return
+      }
+      const sync = (): void => { setListWide(el.clientWidth >= 380) }
+      sync()
+      if (typeof ResizeObserver !== 'function') return
+      /* v8 ignore start -- jsdom has neither a layout nor ResizeObserver; the live page covers a pane resize. */
+      const observer = new ResizeObserver(sync)
+      observer.observe(el)
+      return () => { observer.disconnect() }
+      /* v8 ignore stop */
+    }, [shown.length > 0])
+    useEffect(() => {
+      const el = listRef.current
+      if (el === null) return
+      const items = el.querySelectorAll<HTMLElement>('.lc-fa-item')
+      if (items.length < 2) return
+      const pitch = items[1].getBoundingClientRect().top - items[0].getBoundingClientRect().top
+      if (Number.isFinite(pitch) && pitch > 4) setRowPitch(Math.round(pitch))
+    }, [shown.length, listWide, filter, query, sort, openPath])
+    const rowRange = useRowWindow(listRef, shown.length, rowPitch, listWide && openPath === null && rowPitch > 0)
     const chips: { key: FileFilter; files: number; ops: number }[] = [
       {
         key: 'all',
@@ -192,8 +224,9 @@ export function makeFileCard(kit: ViewKit, settings: ContextSettings): Component
           ) : shown.length === 0 ? (
             <div className="lc-empty lc-lane">{t(activity.entries.length === 0 ? 'files.empty' : 'files.noMatch')}</div>
           ) : (
-            <div className="lc-fa-list">
-              {shown.map((e) => {
+            <div className="lc-fa-list" ref={listRef}>
+              {rowRange.from > 0 ? <div className="lc-row-pad" style={{ height: rowRange.from * rowPitch }} aria-hidden="true" /> : null}
+              {shown.slice(rowRange.from, rowRange.to + 1).map((e) => {
                 const open = openPath === e.path
                 const display = displayOf(e)
                 const trimmed = display.endsWith('/') ? display.slice(0, -1) : display
@@ -284,6 +317,7 @@ export function makeFileCard(kit: ViewKit, settings: ContextSettings): Component
                   </div>
                 )
               })}
+              {rowRange.to < shown.length - 1 ? <div className="lc-row-pad" style={{ height: (shown.length - 1 - rowRange.to) * rowPitch }} aria-hidden="true" /> : null}
             </div>
           )}
         </div>

@@ -220,6 +220,37 @@ describe('StackedBar hover link', () => {
     await m.unmount()
   })
 
+  test('a tip whose boxes collapse to zero width clears a previous shift', async () => {
+    const props = { parts: [part('system', 100, 120), part('user', 900)], max: 2000, hoverKey: 'system' }
+    const m = await mount(h(StackedBar, props))
+    const wrap = query(m.container, '.lc-stacked-wrap')
+    const tip = query(m.container, '.lc-bar-tip')
+    const pin = (el: Element, width: number): void => {
+      Object.defineProperty(el, 'getBoundingClientRect', {
+        configurable: true,
+        value: () => ({ left: 0, top: 0, width, height: 0, right: width, bottom: 0 }),
+      })
+    }
+    pin(wrap, 400)
+    pin(tip, 300)
+    await m.update(h(StackedBar, props))
+    assert.equal(tip.style.transform, 'translateX(calc(-50% + 140px))')
+    pin(wrap, 0)
+    pin(tip, 0)
+    await m.update(h(StackedBar, props))
+    assert.equal(tip.style.transform, '')
+    await m.unmount()
+  })
+
+  test('a tip whose boxes lay out at zero width keeps the bare anchor', async () => {
+    // jsdom reports zero rects: the measure pass must bail out without shifting the bubble.
+    const m = await mount(h(StackedBar, { parts: [part('system', 100, 120), part('user', 900)], max: 2000, hoverKey: 'system' }))
+    const tip = query(m.container, '.lc-bar-tip')
+    await m.update(h(StackedBar, { parts: [part('system', 100, 120), part('user', 900)], max: 2000, hoverKey: 'system' }))
+    assert.equal(tip.style.transform, '')
+    await m.unmount()
+  })
+
   test('hover without onHoverKey is a no-op and never throws', async () => {
     const m = await mount(h(StackedBar, { parts: [part('user', 100)], max: 200 }))
     await hover(query(m.container, '.lc-stacked-seg'))

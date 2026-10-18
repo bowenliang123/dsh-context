@@ -1,6 +1,6 @@
 import { createElement as h } from 'react'
 import assert from 'node:assert/strict'
-import { describe, test } from 'vitest'
+import { describe, test, vi } from 'vitest'
 import { DICT_EN } from '../../../src/client/i18n'
 import type { UseChatLike } from '../../../src/client/services'
 import type { ContextTimeline } from '../../../src/shared/types'
@@ -9,6 +9,9 @@ import { click, flush, hover, mount, query, queryAll, text, unhover } from '../h
 import { buttonByText, makeView, projectionsFor, T0, timeline } from './contextViewHarness'
 
 describe('ContextView — file activity card', () => {
+  // Chart hover previews the browser/file activity after a short rest; a rapid sweep keeps only the trailing
+  // value (contextView's hover debounce), so tests wait for the trailing update before asserting.
+  const rest = (): Promise<void> => new Promise(resolve => setTimeout(resolve, 200))
   /** Six steps with two file ops: a live read (seq 3) and an edit (seq 5) compacted away before seq 6 dispatched. */
   function fileTimeline(): ContextTimeline {
     const req = (seq: number, time: number, extra: Record<string, unknown> = {}) =>
@@ -64,6 +67,7 @@ describe('ContextView — file activity card', () => {
 
     // Hovering the FIRST bar bounds the fold at the second request: the edit drops out.
     await hover(query(m.container, '.lc-bar[data-seq="2"]'))
+    await rest()
     assert.ok(text(card).includes('Turn 1 · Step 1'))
     assert.equal(queryAll(card, '.lc-fa-meta-delta').length, 0)
     assert.equal(queryAll(card, '.lc-fa-row').length, 1)
@@ -71,11 +75,38 @@ describe('ContextView — file activity card', () => {
 
     // The turn-less mid step falls back to zero labels and still bounds at the next request.
     await hover(query(m.container, '.lc-bar[data-seq="6"]'))
+    await rest()
     assert.ok(text(card).includes('Turn 0 · Step 0'))
     assert.ok(text(card).includes('+1'))
 
     await unhover(query(m.container, '.lc-chart'))
     assert.ok(text(card).includes(DICT_EN['files.scopeLatest']))
+    await m.unmount()
+  })
+
+  test('a rapid second hover keeps only the trailing preview', async () => {
+    const { m, card } = await mountFiles('sv-files-trailing')
+    // Freeze the hover clock across both moves: the first previews immediately, the second can only trail.
+    const frozen = performance.now()
+    const clock = vi.spyOn(performance, 'now').mockReturnValue(frozen)
+    await hover(query(m.container, '.lc-bar[data-seq="2"]'))
+    await hover(query(m.container, '.lc-bar[data-seq="4"]'))
+    await hover(query(m.container, '.lc-bar[data-seq="6"]'))
+    clock.mockRestore()
+    await rest()
+    assert.ok(text(card).includes('Turn 0 · Step 0'))
+    await m.unmount()
+  })
+
+  test('DNA mode waits for the pointer to rest before updating the preview', async () => {
+    const { m, card } = await mountFiles('sv-files-dna-hover')
+    await click(buttonByText(m.container, DICT_EN['trend.dna']))
+    await hover(query(m.container, '.lc-bar[data-seq="2"]'))
+    await new Promise(resolve => setTimeout(resolve, 80))
+    // The chart lights its own bar immediately; the cross-card preview stays on the latest scope.
+    assert.ok(text(card).includes(DICT_EN['files.scopeLatest']))
+    await new Promise(resolve => setTimeout(resolve, 300))
+    assert.ok(text(card).includes('Turn 1 · Step 1'))
     await m.unmount()
   })
 
@@ -85,10 +116,13 @@ describe('ContextView — file activity card', () => {
 
     await click(buttonByText(m.container, DICT_EN['gran.turn']))
     await hover(query(m.container, '.lc-bar[data-seq="4"]'))
+    await rest()
     assert.ok(text(card).includes(DICT_EN['detail.turn'].replace('{t}', '1').replace('{n}', '2')))
     await hover(query(m.container, '.lc-bar[data-seq="7"]'))
+    await rest()
     assert.ok(text(card).includes(DICT_EN['detail.turn'].replace('{t}', '0').replace('{n}', '2')))
     await hover(query(m.container, '.lc-bar[data-seq="8"]'))
+    await rest()
     assert.ok(text(card).includes('Turn 2 · Step 1'))
     await unhover(query(m.container, '.lc-chart'))
 

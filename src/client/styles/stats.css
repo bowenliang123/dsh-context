@@ -129,6 +129,10 @@ a.lc-flow-head:hover .lc-flow-label { color: var(--dsw-alias-label-primary); }
 .lc-tstrip-seg-on { filter: brightness(1.18); }
 .lc-tstrip-dim .lc-tstrip-seg { opacity: 0.35; }
 .lc-tstrip-dim .lc-tstrip-seg-on { opacity: 1; }
+/* Dense mode: one base gradient + one kind-highlight gradient instead of thousands of sub-pixel divs. */
+.lc-tstrip-gradient { position: absolute; inset: 0; pointer-events: none; transition: opacity var(--ds-transition-duration, 0.2s) var(--ds-ease-in-out, ease-in-out); }
+.lc-tstrip-gradient-base { transition: opacity var(--ds-transition-duration, 0.2s) var(--ds-ease-in-out, ease-in-out); }
+.lc-tstrip-dim .lc-tstrip-gradient-base { opacity: 0.35; }
 /* The ends pin outward — first hugs the left edge, last the right — so width pressure squeezes the interior labels instead of the endpoints. */
 .lc-tstrip-axis { position: relative; height: 13px; margin-top: 5px; font-size: 10px; line-height: 13px; color: var(--dsw-alias-label-secondary); font-variant-numeric: tabular-nums; }
 .lc-tstrip-tick { position: absolute; transform: translateX(-50%); white-space: nowrap; }
