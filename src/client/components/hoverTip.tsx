@@ -22,10 +22,10 @@ interface ActiveTip {
   label: string
   side: 'top' | 'bottom'
   rect: { left: number; top: number; width: number; height: number; bottom: number }
+  signature: string
 }
 
 interface Measured {
-  /** The geometry this measurement answers (see tipSignature); a rebuilt tip with the same one must not re-measure. */
   signature: string
   left: number
   top: number
@@ -39,21 +39,12 @@ function tipOf(anchor: Element): ActiveTip | null {
   const label = anchor.getAttribute('data-lc-tip')
   if (label === null || label === '') return null
   const r = anchor.getBoundingClientRect()
-  return {
-    anchor,
-    label,
-    side: anchor.getAttribute('data-lc-tip-side') === 'bottom' ? 'bottom' : 'top',
-    rect: { left: r.left, top: r.top, width: r.width, height: r.height, bottom: r.bottom },
-  }
-}
-
-/** The geometry a measurement depends on. The tip OBJECT is rebuilt on every `show()`, so a bail-out keyed on
- * object identity re-measures on every hover event the browser replays — and a synchronous replay chain then
- * commits once per measurement until React throws #185 (Maximum update depth exceeded). Key on the geometry
- * instead: an equivalent tip is the same answer, whatever object carries it. */
-function tipSignature(tip: ActiveTip): string {
-  const { rect } = tip
-  return `${tip.side}|${rect.left}|${rect.top}|${rect.width}|${rect.height}|${rect.bottom}`
+  const side = anchor.getAttribute('data-lc-tip-side') === 'bottom' ? 'bottom' : 'top'
+  const rect = { left: r.left, top: r.top, width: r.width, height: r.height, bottom: r.bottom }
+  // The pass reads side, the rect edges and the viewport; the label sets the bubble width. Key it on those inputs,
+  // not the tip object: React can replay the show updater, and an equivalent rebuilt tip must not re-measure.
+  const signature = JSON.stringify([side, label, rect.left, rect.top, rect.width, rect.bottom, window.innerWidth, window.innerHeight])
+  return { anchor, label, side, rect, signature }
 }
 
 export interface HoverTipZone {
@@ -117,12 +108,8 @@ export function useHoverTip(): HoverTipZone {
     return () => { window.removeEventListener('resize', retract) }
   }, [tip, hide])
 
-  // Measured once per shown geometry (keyed on the signature, so a same-anchor mousemove — or a tip object the
-  // browser's hover replay rebuilt — never re-measures).
   useLayoutEffect(() => {
-    if (tip === null) return
-    const signature = tipSignature(tip)
-    if (measured?.signature === signature) return
+    if (tip === null || measured?.signature === tip.signature) return
     const el = bubbleRef.current
     /* v8 ignore next -- unreachable: the portal commits its ref before layout effects run. */
     if (el === null) return
@@ -133,10 +120,10 @@ export function useHoverTip(): HoverTipZone {
     let top = tip.side === 'top' ? rect.top - h - GAP : rect.bottom + GAP
     if (tip.side === 'top' && top < VIEWPORT_MARGIN) top = rect.bottom + GAP
     else if (tip.side === 'bottom' && top + h > window.innerHeight - VIEWPORT_MARGIN) top = rect.top - h - GAP
-    setMeasured({ signature, left, top: Math.max(VIEWPORT_MARGIN, top) })
+    setMeasured({ signature: tip.signature, left, top: Math.max(VIEWPORT_MARGIN, top) })
   }, [tip, measured])
 
-  const shown = measured !== null && tip !== null && measured.signature === tipSignature(tip) ? measured : null
+  const shown = tip !== null && measured?.signature === tip.signature ? measured : null
   return {
     zoneProps: { onMouseOver, onMouseOut, onFocusCapture, onBlurCapture, onScrollCapture },
     bubble: tip === null ? null : createPortal(
