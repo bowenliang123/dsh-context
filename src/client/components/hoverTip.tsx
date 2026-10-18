@@ -25,7 +25,8 @@ interface ActiveTip {
 }
 
 interface Measured {
-  tip: ActiveTip
+  /** The geometry this measurement answers (see tipSignature); a rebuilt tip with the same one must not re-measure. */
+  signature: string
   left: number
   top: number
 }
@@ -44,6 +45,15 @@ function tipOf(anchor: Element): ActiveTip | null {
     side: anchor.getAttribute('data-lc-tip-side') === 'bottom' ? 'bottom' : 'top',
     rect: { left: r.left, top: r.top, width: r.width, height: r.height, bottom: r.bottom },
   }
+}
+
+/** The geometry a measurement depends on. The tip OBJECT is rebuilt on every `show()`, so a bail-out keyed on
+ * object identity re-measures on every hover event the browser replays — and a synchronous replay chain then
+ * commits once per measurement until React throws #185 (Maximum update depth exceeded). Key on the geometry
+ * instead: an equivalent tip is the same answer, whatever object carries it. */
+function tipSignature(tip: ActiveTip): string {
+  const { rect } = tip
+  return `${tip.side}|${rect.left}|${rect.top}|${rect.width}|${rect.height}|${rect.bottom}`
 }
 
 export interface HoverTipZone {
@@ -107,9 +117,12 @@ export function useHoverTip(): HoverTipZone {
     return () => { window.removeEventListener('resize', retract) }
   }, [tip, hide])
 
-  // Measured once per shown tip (keyed on tip identity, so a same-anchor mousemove never re-hides).
+  // Measured once per shown geometry (keyed on the signature, so a same-anchor mousemove — or a tip object the
+  // browser's hover replay rebuilt — never re-measures).
   useLayoutEffect(() => {
-    if (tip === null || measured?.tip === tip) return
+    if (tip === null) return
+    const signature = tipSignature(tip)
+    if (measured?.signature === signature) return
     const el = bubbleRef.current
     /* v8 ignore next -- unreachable: the portal commits its ref before layout effects run. */
     if (el === null) return
@@ -120,10 +133,10 @@ export function useHoverTip(): HoverTipZone {
     let top = tip.side === 'top' ? rect.top - h - GAP : rect.bottom + GAP
     if (tip.side === 'top' && top < VIEWPORT_MARGIN) top = rect.bottom + GAP
     else if (tip.side === 'bottom' && top + h > window.innerHeight - VIEWPORT_MARGIN) top = rect.top - h - GAP
-    setMeasured({ tip, left, top: Math.max(VIEWPORT_MARGIN, top) })
+    setMeasured({ signature, left, top: Math.max(VIEWPORT_MARGIN, top) })
   }, [tip, measured])
 
-  const shown = measured !== null && measured.tip === tip ? measured : null
+  const shown = measured !== null && tip !== null && measured.signature === tipSignature(tip) ? measured : null
   return {
     zoneProps: { onMouseOver, onMouseOut, onFocusCapture, onBlurCapture, onScrollCapture },
     bubble: tip === null ? null : createPortal(

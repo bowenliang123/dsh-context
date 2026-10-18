@@ -166,6 +166,45 @@ describe('useHoverTip', () => {
     await m.unmount()
   })
 
+  test('a re-shown tip over unchanged geometry reuses the measurement', async () => {
+    // A touch browser (and any DOM update under the pointer) replays hover:
+    // hide then show on the SAME anchor rebuilds the tip object. Keying the
+    // measure pass on that object identity commits once per replay, and a
+    // synchronous replay chain runs React's nested-update limit out (#185,
+    // dsh-context#162). The measurement answers geometry, so equivalent
+    // geometry must reuse it.
+    let renders = 0
+    function CountingZone(): ReactElement {
+      renders += 1
+      const { zoneProps, bubble } = useHoverTip()
+      return h('div', zoneProps, h('button', { id: 'a', 'data-lc-tip': 'tip A' }, 'A'), bubble)
+    }
+    const m = await mount(h(CountingZone))
+    const a = query(m.container, '#a')
+    pinRect(a, { left: 100, top: 100, width: 40, height: 20 })
+
+    await mouseover(a)
+    assert.equal(bubble()?.style.left, '120px')
+
+    renders = 0
+    await mouseout(a, m.container)
+    assert.equal(bubble(), null)
+    assert.equal(renders, 1, 'hiding commits once')
+
+    renders = 0
+    await mouseover(a)
+    assert.equal(bubble()?.textContent, 'tip A')
+    assert.equal(bubble()?.style.left, '120px', 'the measured spot is reused')
+    assert.equal(renders, 1, 'an equivalent tip does not re-measure')
+
+    // A genuinely moved anchor still measures again.
+    pinRect(a, { left: 300, top: 100, width: 40, height: 20 })
+    await mouseout(a, m.container)
+    await mouseover(a)
+    assert.equal(bubble()?.style.left, '320px')
+    await m.unmount()
+  })
+
   test('unmounting the zone removes the portaled bubble', async () => {
     const m: Mounted = await mount(h(Zone))
     await mouseover(query(m.container, '#a'))
