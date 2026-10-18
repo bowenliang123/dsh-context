@@ -9,7 +9,8 @@ import { makeKit, mount, query, queryAll, until } from '../helpers/kit'
 const kit = makeKit()
 const FileCard = makeFileCard(kit, createContextSettings())
 
-const ROW = 41
+const PITCH = 41
+const GAP = 2
 const T0 = 1700000000000
 let originals: [string, PropertyDescriptor | undefined][] = []
 
@@ -49,7 +50,10 @@ beforeAll(() => {
       if (this.classList.contains('lc-fa-item')) {
         const items = [...(this.parentElement?.querySelectorAll('.lc-fa-item') ?? [])]
         const i = items.indexOf(this)
-        return { left: 0, top: i * ROW, width: 500, height: ROW, right: 500, bottom: i * ROW + ROW, x: 0, y: i * ROW, toJSON: () => ({}) } as DOMRect
+        return {
+          left: 0, top: i * PITCH, width: 500, height: PITCH - GAP,
+          right: 500, bottom: i * PITCH + PITCH - GAP, x: 0, y: i * PITCH, toJSON: () => ({}),
+        } as DOMRect
       }
       return rect.call(this) as DOMRect
     },
@@ -99,6 +103,10 @@ describe('FileCard row windowing', () => {
       await until(() => queryAll<HTMLElement>(m.container, '.lc-row-pad').length === 2, 'a top pad appears after scrolling')
       const afterScroll = queryAll(m.container, '.lc-fa-item').length
       assert.ok(afterScroll < 60 && afterScroll >= 8)
+      // Pads reproduce the skipped rows' pitch, letting the flex gap supply one slot between pad and row.
+      const [topPad, bottomPad] = queryAll<HTMLElement>(m.container, '.lc-row-pad')
+      assert.equal(topPad.style.height, `${13 * PITCH - GAP}px`)
+      assert.equal(bottomPad.style.height, `${21 * PITCH - GAP}px`)
     } finally {
       await m.unmount()
     }

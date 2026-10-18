@@ -269,7 +269,7 @@ export function makeTrendChart(kit: ViewKit): (props: TrendChartProps) => ReactE
     onHover: (seq: number | null) => void
   }
 
-  // Memoized so a hover/selection change re-renders only the bars whose flags flipped (the retained log renders in full);
+  // Memoized so a hover/selection change re-renders only the bars whose flags flipped (the window keeps bar props stable);
   // `req`/`marker` keep stable identities because the parent memoizes its aggregation, so the default shallow compare suffices.
   const ChartBar = memo(function ChartBar(props: ChartBarProps): ReactElement {
     const { req, marker } = props
@@ -461,8 +461,8 @@ export function makeTrendChart(kit: ViewKit): (props: TrendChartProps) => ReactE
     let maxUp = 0
     let maxDown = 0
     if (dnaDeltaOn) {
-      // Net totals cannot bound churn (keys grow and shrink against each other), so delta axes always read the
-      // per-key bands. The context view keeps DNA+delta eager precisely because this walk needs the full model.
+      // Net totals cannot bound churn (keys grow and shrink against each other), so delta axes walk the per-key
+      // bands. The context view hands delta mode its eager array, because this walk needs the full model.
       for (let i = 0; i < requests.length; i++) {
         const d = deltaAt(i)
         let up = 0
@@ -611,12 +611,14 @@ export function makeTrendChart(kit: ViewKit): (props: TrendChartProps) => ReactE
     useEffect(() => () => {
       if (winRafRef.current !== null) cancelAnimationFrame(winRafRef.current)
     }, [])
-    const prevDnaOn = useRef(dnaOn)
+    const prevDnaOn = useRef<boolean | null>(null)
     useLayoutEffect(() => {
+      const first = prevDnaOn.current === null
       const changed = prevDnaOn.current !== dnaOn
       prevDnaOn.current = dnaOn
       const el = scrollRef.current
-      if (!changed || el === null || requests.length <= TREND_WINDOW_MIN) return
+      // A first mount with DNA on still needs the tight window; a first mount without it keeps the anchored one.
+      if (el === null || requests.length <= TREND_WINDOW_MIN || (first && !dnaOn) || (!first && !changed)) return
       // DNA bars are expensive, so a DNA mount/toggle re-windows immediately instead of waiting for a scroll to
       // leave the (much wider) ordinary window; leaving DNA restores the ordinary range so no blank tray remains.
       const overscan = dnaOn ? DNA_WINDOW_OVERSCAN : WINDOW_OVERSCAN_BARS
@@ -875,7 +877,7 @@ export function makeTrendChart(kit: ViewKit): (props: TrendChartProps) => ReactE
               // The shared category hover rides a plain attribute: the CSS lights that key's segment in every bar,
               // so the memoized bars never re-render on a cross-card hover.
               data-catdim={props.hoverCat ?? undefined}
-              onMouseLeave={() => { props.onHover(null); setDnaHit(null) }}
+              onMouseLeave={() => { props.onHover(null); setLocalHover(null); setDnaHit(null) }}
             >
               <div className="lc-grid lc-grid-top" />
               {/* Dashed guides aligning the bars with the axis quarter marks; a delta mark that yielded to the

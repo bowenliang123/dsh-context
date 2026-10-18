@@ -278,12 +278,10 @@ export function makeContextView(
 
     // Below-the-fold cards: keep the first commit to the cards the reader actually sees, then mount the event/file
     // row in an idle slice once it nears the conversation viewport. The two skeleton cards reserve the row height.
-    const belowFoldRef = useRef<HTMLDivElement | null>(null)
-    const belowFoldMounted = useLazyMount(belowFoldRef, filterFocus !== null)
+    const [belowFoldRef, belowFoldMounted] = useLazyMount(filterFocus !== null)
     // The browser card is visible but heavy (assembled rows for the current step): paint its card-shaped skeleton
     // in the first commit, then fill it in the next idle slice so the open's commit stays small.
-    const browserRef = useRef<HTMLDivElement | null>(null)
-    const browserMounted = useLazyMount(browserRef)
+    const [browserRef, browserMounted] = useLazyMount()
 
     // The browser column's height cap (browserCapOf), re-measured for new data and ResizeObserver ticks:
     // pane drags and card reflows change no prop.
@@ -379,19 +377,23 @@ export function makeContextView(
     /* v8 ignore next 1 -- a missing projection returns the loading screen before the trend card
        (and its DNA toggle) renders, so `dna && data === null` cannot occur. */
     // A long log carries thousands of requests: assembling every step's context up front blocked the DNA toggle.
-    // Small logs keep the eager array (identical behavior); large ones hand the chart a per-seq accessor so only
-    // the rendered window assembles.
-    /* v8 ignore next 1 -- the sidebar-visible operand is only reachable in a live dock (jsdom has no IO); the
-       hidden-copy path is verified on the live page and every main-host test covers the short-circuit. */
+    // Small logs and delta mode keep the eager array; large total-mode logs hand the chart a per-seq accessor so only
+    // the rendered window assembles. Delta needs every bar's per-key change: net totals cannot bound key churn.
+    /* v8 ignore next 1 -- the sidebar-visible operand is only reachable in a live dock (jsdom has no IO);
+       the hidden-copy path is verified on the live page and every main-host test covers the short-circuit. */
     const dnaAllowed = dna && data !== null && (!inSidebar || sidebarVisible)
+    const dnaEager = dnaAllowed && (displayRequests.length <= DNA_LAZY_MIN || trendMode === 'delta')
+    // Bands depend on the header epoch as well as the timeline; the composite owner keeps a late epoch from
+    // reusing bands assembled without its system prompt/tool schemas.
+    const dnaCacheOwner = useMemo(() => ({ data, headers }), [data, headers])
     const dnaBands = useMemo(
-      () => (dnaAllowed && displayRequests.length <= DNA_LAZY_MIN
-        ? cachedByData(data, `dna:${granularity}`, () => displayRequests.map(req => trendBandsOf(assembleCached(data, headers, req.seq))))
+      () => (dnaEager
+        ? cachedByData(dnaCacheOwner, `dna:${granularity}`, () => displayRequests.map(req => trendBandsOf(assembleCached(data, headers, req.seq))))
         : null),
-      [dnaAllowed, data, headers, displayRequests, granularity],
+      [dnaEager, dnaCacheOwner, data, headers, displayRequests, granularity],
     )
     const dnaAt = useMemo(() => {
-      if (!dnaAllowed || displayRequests.length <= DNA_LAZY_MIN) return null
+      if (!dnaAllowed || displayRequests.length <= DNA_LAZY_MIN || trendMode === 'delta') return null
       const bandsBySeq = new Map<number, TrendBand[]>()
       return (seq: number): TrendBand[] => {
         let bands = bandsBySeq.get(seq)
@@ -785,6 +787,7 @@ export function makeContextView(
         // The DNA switch is shared with the trend card: both toggles move as one.
         dna={dna}
         onDnaChange={setDna}
+        locale={activeLocale}
       />
     )
 
@@ -802,7 +805,7 @@ export function makeContextView(
         )}
         <div className="lc-cols lc-head">
           <StatsTokens usage={usage} current={data.current} breakdown={breakdown} />
-          <StatsTiming timing={data.timing ?? null} spans={data.spans} />
+          <StatsTiming timing={data.timing ?? null} spans={data.spans} locale={activeLocale} />
         </div>
 
         <div className="lc-cols lc-cols-main">

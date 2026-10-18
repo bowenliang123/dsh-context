@@ -380,7 +380,7 @@ export function makeStatsContext(
       // Chart hover commits never move a flow node: only these inputs (or a ResizeObserver tick) can.
     }, [
       props.counts, props.humanInputs, props.answers, props.toolCalls, props.files, props.tools,
-      props.cost, props.locale, props.sessionId, props.onTeamClick,
+      props.cost, props.locale, props.sessionId, props.onTeamClick, sub.count,
       // A pane drag only ticks this state; the async subagent usage lands later and moves the flow's text widths.
       resizeTick, subUsage, book,
     ])

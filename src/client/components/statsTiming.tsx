@@ -55,10 +55,11 @@ export function makeStatsTiming(kit: ViewKit, Donut: (props: DonutProps) => Reac
    * slices). Absent on the overview's cross-session aggregate card and on
    * rows folded before the collection existed — the card then shows no strip. */
   spans?: TimingSpan[]
+  locale?: string
 }) => ReactElement {
   const { t, fmt, fmtDuration, fmtShare } = kit
   const TimingStrip = makeTimingStrip(kit)
-  return function StatsTiming(props: { timing: TimingTotals | null; spans?: TimingSpan[] }): ReactElement {
+  return function StatsTiming(props: { timing: TimingTotals | null; spans?: TimingSpan[]; locale?: string }): ReactElement {
     // The legend row ↔ donut segment hover link (shared key, set from either side).
     const [hoverKey, setHoverKey] = useState<string | null>(null)
     const timing = props.timing
@@ -201,7 +202,7 @@ export function makeStatsTiming(kit: ViewKit, Donut: (props: DonutProps) => Reac
                   every span of its KIND plus the donut arc and the legend row,
                   and a legend/donut hover lights the strip's matching spans. */}
               {props.spans !== undefined && props.spans.length > 0
-                ? <TimingStrip spans={props.spans} hoverKey={hoverKey} onHoverKey={setHoverKey} />
+                ? <TimingStrip spans={props.spans} hoverKey={hoverKey} onHoverKey={setHoverKey} locale={props.locale} />
                 : null}
             </>
           )}

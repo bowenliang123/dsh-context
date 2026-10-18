@@ -1,13 +1,12 @@
 import assert from 'node:assert/strict'
-import { createElement as h, useRef } from 'react'
+import { createElement as h } from 'react'
 import { act } from 'react'
 import { describe, test, vi } from 'vitest'
 import { useLazyMount } from '../../../src/client/components/useLazyMount'
 import { mount, query } from '../helpers/kit'
 
 function Probe(props: { attachRef?: boolean; wrap?: boolean; force?: boolean }) {
-  const ref = useRef<HTMLDivElement | null>(null)
-  const mounted = useLazyMount(ref, props.force === true)
+  const [ref, mounted] = useLazyMount(props.force === true)
   const body = mounted ? h('span', { 'data-mounted': 'yes' }) : h('span', { 'data-mounted': 'no' })
   const inner = h('div', { ...(props.attachRef === false ? {} : { ref }), 'data-probe': '' }, body)
   return props.wrap === true
@@ -37,6 +36,24 @@ describe('useLazyMount', () => {
     const m = await mount(h(Probe, {}))
     assert.equal(query(m.container, '[data-mounted]')?.getAttribute('data-mounted'), 'yes')
     await m.unmount()
+  })
+
+  test('re-observes a reattached placeholder (a hidden sidebar copy comes back)', async () => {
+    const observer = stubObserver()
+    vi.stubGlobal('requestIdleCallback', undefined)
+    try {
+      const m = await mount(h(Probe, { attachRef: false }))
+      assert.equal(observer.records.length, 0)
+      await m.update(h(Probe, { attachRef: true }))
+      assert.equal(observer.records.length, 1, 'the first attach observes')
+      await m.update(h(Probe, { attachRef: false }))
+      await m.update(h(Probe, { attachRef: true }))
+      assert.equal(observer.records.length, 2, 'a reattach observes again')
+      await m.unmount()
+    } finally {
+      observer.restore()
+      vi.unstubAllGlobals()
+    }
   })
 
   test('force mounts without waiting for the observer (a pending jump)', async () => {

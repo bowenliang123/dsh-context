@@ -1,4 +1,4 @@
-import { useEffect, useState, type RefObject } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 
 /** Give the idle slice (or the timeout fallback) room to mount the deferred block without blocking a scroll frame. */
 const IDLE_TIMEOUT_MS = 200
@@ -8,7 +8,9 @@ const IDLE_TIMEOUT_MS = 200
  * IntersectionObserver, immediately): the first commit then stays small and the deferred cards mount in an
  * idle slice instead of stretching the open's long task. The placeholder keeps the row's measured height.
  */
-export function useLazyMount(ref: RefObject<HTMLElement | null>, force = false): boolean {
+export function useLazyMount(force = false): [(el: HTMLElement | null) => void, boolean] {
+  const [node, setNode] = useState<HTMLElement | null>(null)
+  const ref = useCallback((el: HTMLElement | null) => { setNode(el) }, [])
   const [mounted, setMounted] = useState(() => force || typeof IntersectionObserver !== 'function')
   useEffect(() => {
     if (mounted) return
@@ -16,8 +18,7 @@ export function useLazyMount(ref: RefObject<HTMLElement | null>, force = false):
       setMounted(true)
       return
     }
-    const el = ref.current
-    if (el === null) return
+    if (node === null) return
     /* v8 ignore start -- jsdom has neither IntersectionObserver nor layout: without it the block mounts at once. */
     let idle = 0
     const reveal = (): void => {
@@ -27,14 +28,14 @@ export function useLazyMount(ref: RefObject<HTMLElement | null>, force = false):
         idle = window.setTimeout(() => { setMounted(true) }, 0)
       }
     }
-    const root = el.closest('[data-conversation-scroll]')
+    const root = node.closest('[data-conversation-scroll]')
     const observer = new IntersectionObserver(([entry]) => {
       if (entry.isIntersecting) {
         observer.disconnect()
         reveal()
       }
     }, { root: root instanceof Element ? root : null, rootMargin: '200px' })
-    observer.observe(el)
+    observer.observe(node)
     return () => {
       observer.disconnect()
       if (idle !== 0) {
@@ -43,6 +44,6 @@ export function useLazyMount(ref: RefObject<HTMLElement | null>, force = false):
       }
     }
     /* v8 ignore stop */
-  }, [ref, mounted, force])
-  return mounted
+  }, [node, mounted, force])
+  return [ref, mounted]
 }

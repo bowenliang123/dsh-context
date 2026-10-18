@@ -63,6 +63,7 @@ export function makeFileCard(kit: ViewKit, settings: ContextSettings): Component
     // Row pitch (height + any gap) is measured from the full list before windowing: rows wrap on narrow cards, so a
     // hard-coded height would break the scroll geometry there (the gate below keeps narrow cards unwindowed).
     const [rowPitch, setRowPitch] = useState(0)
+    const [rowGap, setRowGap] = useState(0)
 
     // A stats-board jump re-points the chip band: the card drops its own lens and open row, so the landing is the
     // frontier the click promised. The request is handed back so an unchanged kind can fire again.
@@ -118,8 +119,12 @@ export function makeFileCard(kit: ViewKit, settings: ContextSettings): Component
       if (el === null) return
       const items = el.querySelectorAll<HTMLElement>('.lc-fa-item')
       if (items.length < 2) return
-      const pitch = items[1].getBoundingClientRect().top - items[0].getBoundingClientRect().top
-      if (Number.isFinite(pitch) && pitch > 4) setRowPitch(Math.round(pitch))
+      const first = items[0].getBoundingClientRect()
+      const pitch = items[1].getBoundingClientRect().top - first.top
+      if (Number.isFinite(pitch) && pitch > 4) {
+        setRowPitch(Math.round(pitch))
+        setRowGap(Math.max(0, Math.round(pitch - first.height)))
+      }
     }, [shown.length, listWide, filter, query, sort, openPath])
     const rowRange = useRowWindow(listRef, shown.length, rowPitch, listWide && openPath === null && rowPitch > 0)
     const chips: { key: FileFilter; files: number; ops: number }[] = [
@@ -225,7 +230,7 @@ export function makeFileCard(kit: ViewKit, settings: ContextSettings): Component
             <div className="lc-empty lc-lane">{t(activity.entries.length === 0 ? 'files.empty' : 'files.noMatch')}</div>
           ) : (
             <div className="lc-fa-list" ref={listRef}>
-              {rowRange.from > 0 ? <div className="lc-row-pad" style={{ height: rowRange.from * rowPitch }} aria-hidden="true" /> : null}
+              {rowRange.from > 0 ? <div className="lc-row-pad" style={{ height: Math.max(0, rowRange.from * rowPitch - rowGap) }} aria-hidden="true" /> : null}
               {shown.slice(rowRange.from, rowRange.to + 1).map((e) => {
                 const open = openPath === e.path
                 const display = displayOf(e)
@@ -317,7 +322,7 @@ export function makeFileCard(kit: ViewKit, settings: ContextSettings): Component
                   </div>
                 )
               })}
-              {rowRange.to < shown.length - 1 ? <div className="lc-row-pad" style={{ height: (shown.length - 1 - rowRange.to) * rowPitch }} aria-hidden="true" /> : null}
+              {rowRange.to < shown.length - 1 ? <div className="lc-row-pad" style={{ height: Math.max(0, (shown.length - 1 - rowRange.to) * rowPitch - rowGap) }} aria-hidden="true" /> : null}
             </div>
           )}
         </div>

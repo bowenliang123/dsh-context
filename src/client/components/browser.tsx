@@ -31,6 +31,8 @@ import { MapIcon, makeBrowserTreemap } from './browserTreemap'
 import type { MapBlock } from '../treemap'
 
 export interface ContextBrowserProps {
+  /** Active UI locale; the picker labels are translated eagerly, so a switch must rebuild them. */
+  locale?: string
   data: ContextTimeline
   headers: ContextHeaders | null
   /** Resolved by the caller so the `useChat` seat's hook order lives in exactly one place. */
@@ -187,7 +189,7 @@ export function makeContextBrowser(
           {t('detail.step', { t: r.turn ?? 0, s: r.step ?? 0, n: stepsOf(r.turn) })}
         </option>
       )),
-      [requests, stepsOf, t],
+      [requests, stepsOf, t, props.locale],
     )
     const stampOf = useMemo(() => stepStampOf(requests), [requests])
     // The live tail — items no logged request carries yet — rides the NEXT request, following the harness's step loop
@@ -923,7 +925,7 @@ export function makeContextBrowser(
               ? <div className="lc-br-flat" style={{ minHeight: 320 }} aria-hidden="true" />
               : (
                 <div className="lc-br-flat">
-                  {flatRange.from > 0 ? <div className="lc-row-pad" style={{ height: flatRange.from * 30 }} aria-hidden="true" /> : null}
+                  {flatRange.from > 0 ? <div className="lc-row-pad" style={{ height: Math.max(0, flatRange.from * 30 - 2) }} aria-hidden="true" /> : null}
                   {flat.entries.slice(flatRange.from, flatRange.to + 1).map(({ r, pos }) => messageRow(r, (
                     <>
                       {catChip(r.n.cat)}
@@ -932,7 +934,7 @@ export function makeContextBrowser(
                     </>
                   ), (over) => { setRowDnaKey(over ? 'n' + String(r.n.seq) : null) }))}
                   {flatRange.to < flat.entries.length - 1
-                    ? <div className="lc-row-pad" style={{ height: (flat.entries.length - 1 - flatRange.to) * 30 }} aria-hidden="true" />
+                    ? <div className="lc-row-pad" style={{ height: Math.max(0, (flat.entries.length - 1 - flatRange.to) * 30 - 2) }} aria-hidden="true" />
                     : null}
                   {/* Header groups are the feed's tail: render them AFTER the bottom pad so they stay at the end. */}
                   {flat.tail}

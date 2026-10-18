@@ -105,12 +105,15 @@ export function makeTimingStrip(kit: ViewKit): (props: {
   hoverKey?: string | null
   /** Hover relay; absent renders the bands inert. */
   onHoverKey?: (key: string | null) => void
+  locale?: string
 }) => ReactElement | null {
   const { t, fmtDuration, fmtTime } = kit
   return function TimingStrip(props: {
     spans: TimingSpan[]
     hoverKey?: string | null
     onHoverKey?: (key: string | null) => void
+    /** Active UI locale: tooltip labels are translated eagerly, so a switch must rebuild the band model. */
+    locale?: string
   }): ReactElement | null {
     // The strip's own pointer hover: the floating tip answers this alone.
     const [tipKey, setTipKey] = useState<number | null>(null)
@@ -140,7 +143,7 @@ export function makeTimingStrip(kit: ViewKit): (props: {
         }
       })
       return { bands, total }
-    }, [props.spans, t, fmtDuration, fmtTime])
+    }, [props.spans, t, fmtDuration, fmtTime, props.locale])
     const dense = model !== null && model.bands.length > TIMING_DOM_MAX
     const hoverKey = props.hoverKey
     const baseGradient = useMemo(
