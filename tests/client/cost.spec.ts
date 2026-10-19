@@ -157,6 +157,56 @@ describe('priceIndexOf / the model-side resolution tiers', () => {
     assert.deepEqual(priceOf(hostOnly, 'hx', 'deepseek-junk'), AZURE_FLAT, 'no first-party branch in the book leaves the tiers in charge')
   })
 
+  test('an org that is a price-book provider prices its own branch, not an aggregator key (issue #174)', () => {
+    // Magpie writes `<provider>/<model>`. models.dev's llmgateway-providers files
+    // `google-vertex/gemini-4-argon` as its own model key, so a full-id lookup
+    // used to return that lone carrier before Vertex's branch was considered.
+    // `google` is also primary and a prefix of `google-vertex`, at a different
+    // cache-write rate, so a bare-id pass through the org rule would tie.
+    const VERTEX = { hit: 0.1, miss: 2, write: 2, out: 10 }
+    const GOOGLE = { hit: 0.1, miss: 2, write: 9, out: 10 }
+    const AGG = { hit: 0.2, miss: 4, write: 0.375, out: 20 }
+    const GEMINI_FLASH = { hit: 0.15, miss: 1.5, write: 1.5, out: 9 }
+    const FLASH_AGG = { hit: 0.15, miss: 1.5, write: 0.0833, out: 9 }
+    const gateway = bookOf({
+      google: { 'gemini-4-argon': GOOGLE, 'gemini-3.5-flash': GEMINI_FLASH },
+      'google-vertex': { 'gemini-4-argon': VERTEX, 'gemini-3.5-flash': GEMINI_FLASH },
+      'llmgateway-providers': {
+        'google-vertex/gemini-4-argon': AGG,
+        'google-vertex/gemini-3.5-flash': FLASH_AGG,
+        'google/gemini-4-argon': AGG,
+        'not-a-provider/kimi-k2.7-code': AGG,
+      },
+      deepseek: { 'deepseek-v4-pro': PRO },
+      moonshotai: { 'kimi-k2.7-code': KIMI },
+    }, {
+      google: '@ai-sdk/google',
+      'google-vertex': '@ai-sdk/google-vertex',
+      'llmgateway-providers': '@ai-sdk/openai-compatible',
+      deepseek: '@ai-sdk/openai-compatible',
+      moonshotai: '@ai-sdk/openai-compatible',
+    })
+    assert.deepEqual(priceFaceOf(gateway, 'magpie', 'google-vertex/gemini-4-argon'), { pid: 'google-vertex', mid: 'gemini-4-argon', rate: VERTEX })
+    assert.deepEqual(priceFaceOf(gateway, 'magpie', 'Google-Vertex/Gemini-4-Argon'), { pid: 'google-vertex', mid: 'gemini-4-argon', rate: VERTEX }, 'the org and model spelling are case-insensitive')
+    assert.deepEqual(priceFaceOf(gateway, 'magpie', 'google-vertex/gemini-3.5-flash'), { pid: 'google-vertex', mid: 'gemini-3.5-flash', rate: GEMINI_FLASH }, 'a matching input/output still keeps the vendor cache-write rate')
+    assert.deepEqual(priceFaceOf(gateway, 'magpie', 'google/gemini-4-argon'), { pid: 'google', mid: 'gemini-4-argon', rate: GOOGLE }, 'the named provider is exact, not the longer vertex id')
+    // Bare id: no org segment, so the model-side tiers stay in charge.
+    assert.deepEqual(priceFaceOf(gateway, 'magpie', 'kimi-k2.7-code'), { pid: 'moonshotai', mid: 'kimi-k2.7-code', rate: KIMI })
+    // `deepseek-` ids still price from the first-party branch ahead of the index.
+    assert.deepEqual(priceFaceOf(gateway, 'magpie', 'deepseek-v4-pro'), { pid: 'deepseek', mid: 'deepseek-v4-pro', rate: PRO })
+    assert.equal(priceOf(gateway, 'deepseek-official', 'deepseek-v4-pro'), PRO, 'a native DeepSeek route still prices its own branch')
+    // The org provider does not list this model: fall through to the bare id.
+    assert.deepEqual(priceOf(gateway, 'magpie', 'google-vertex/kimi-k2.7-code'), KIMI)
+    // An org that is not a provider keeps the full-id carrier, even when the bare id exists elsewhere.
+    assert.deepEqual(priceFaceOf(gateway, 'magpie', 'not-a-provider/kimi-k2.7-code'), { pid: 'llmgateway-providers', mid: 'not-a-provider/kimi-k2.7-code', rate: AGG })
+    // A non-rate on the org branch is not indexed; the later tiers still run.
+    const partial = bookOf({
+      'google-vertex': { 'gemini-4-argon': { hit: 1 } },
+      solo: { 'gemini-4-argon': K3 },
+    } as unknown as ModelPrices)
+    assert.deepEqual(priceOf(partial, 'magpie', 'google-vertex/gemini-4-argon'), K3)
+  })
+
   test('tier: a lone carrier prices without any vendor signal', () => {
     const lone = bookOf({ solo: { 'weird-model-9': K3 } })
     assert.deepEqual(priceOf(lone, 'unknown', 'weird-model-9'), K3)
@@ -219,7 +269,8 @@ describe('priceIndexOf / the model-side resolution tiers', () => {
       xx: { 'm': R1 },
       'xx-ai': { 'm': R2 },
     }, { xx: '@ai-sdk/openai-compatible', 'xx-ai': '@ai-sdk/openai-compatible' })
-    assert.equal(priceOf(org, '', 'xx-ai/m'), null, 'org tier ties and nothing below resolves')
+    assert.deepEqual(priceOf(org, '', 'xx-ai/m'), R2, 'an org that is itself a provider prices that branch')
+    assert.equal(priceOf(org, '', 'xx-ai-lab/m'), null, 'a longer org that names both providers still ties')
     const prefix = bookOf({
       x: { 'x-y-z': R1 },
       'x-y': { 'x-y-z': R2 },

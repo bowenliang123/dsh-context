@@ -119,13 +119,25 @@ function resolveCandidates(lower: string, cands: PriceCandidate[], org: string |
   return cands.length === 1 ? cands[0] : null
 }
 
-/** Resolve a model id book-wide: the full id, then its last `/`-segment. */
-function resolveRate(index: PriceIndex, model: string): PriceCandidate | null {
+/** Resolve a model id book-wide. An org segment that is itself a price-book
+ * provider (`google-vertex/gemini-4-argon` on a gateway) prices from that
+ * provider's own branch first: an aggregator can file the full id as its model
+ * key and would otherwise win as the lone carrier (issue #174). The org rule
+ * inside one key cannot do this — `google` also matches `google-vertex` — so
+ * the branch lookup is exact. Otherwise the full id, then its last `/`-segment. */
+function resolveRate(book: ModelBook, model: string): PriceCandidate | null {
   const lower = model.toLowerCase()
   const slash = lower.lastIndexOf('/')
   const org = slash > 0 ? lower.slice(0, slash) : null
+  if (org !== null) {
+    const own = branchOf(book.prices, org)
+    const hit = own === null ? null : lookupFace(own, model.slice(slash + 1))
+    // lookupFace accepts entries the index dropped, so only an indexed candidate is a rate.
+    const listed = hit === null ? undefined : book.index.byModel.get(hit.mid.toLowerCase())?.find(c => c.pid === org)
+    if (listed !== undefined) return listed
+  }
   for (const key of slash > 0 ? [lower, lower.slice(slash + 1)] : [lower]) {
-    const cands = index.byModel.get(key)
+    const cands = book.index.byModel.get(key)
     if (cands === undefined) continue
     const cand = resolveCandidates(key, cands, org)
     if (cand !== null) return cand
@@ -182,7 +194,7 @@ export function priceFaceOf(book: ModelBook | null | undefined, provider: string
       if (official !== null) return { pid: 'deepseek', mid: official.mid, rate: official.rate }
     }
   }
-  const cand = resolveRate(book.index, model)
+  const cand = resolveRate(book, model)
   return cand === null ? null : { pid: cand.pid, mid: cand.mid, rate: cand.rate }
 }
 
