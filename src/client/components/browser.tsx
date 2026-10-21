@@ -21,6 +21,7 @@ import type { StackedBarProps } from './stackedBar'
 import type { AttachmentOpener, ImageLoader } from '../services'
 import { TextSection, schemaTextOf, RowToolbar, ToolSchema, toolErrOf } from './browserToolCard'
 import { revealRowInCard } from '../revealScroll'
+import { wheelToPage } from '../wheelPass'
 import { NodeContent, byCatOf, nodeNameOf, msgKindsOf, reasoningTextOf, ROW_KINDS } from './browserNodes'
 import type { RowKind } from './browserNodes'
 import { DNA_MIN_BAND, countOf, lastOfTurn, stepStampOf } from './browserHelpers'
@@ -146,6 +147,21 @@ export function makeContextBrowser(
     }, [pinSeq, onOpenCat])
     const rootRef = useRef<HTMLDivElement | null>(null)
     const scrollRef = useRef<HTMLDivElement | null>(null)
+    // The rows region's `overscroll-behavior: contain` (styles/browser.css) also swallows a wheel it has
+    // nothing to scroll — every category collapsed — so the page under the card freezes; hand that one to it.
+    useEffect(() => {
+      const el = scrollRef.current
+      /* v8 ignore next -- the card always mounts its rows region. */
+      if (el === null) return
+      const onWheel = (e: WheelEvent): void => {
+        // Ctrl+wheel is the page-zoom gesture, never a scroll: cancelling it would disable zoom over the card.
+        if (e.ctrlKey) return
+        const px = e.deltaMode === 1 ? e.deltaY * 16 : e.deltaMode === 2 ? e.deltaY * el.clientHeight : e.deltaY
+        if (wheelToPage(el, px)) e.preventDefault()
+      }
+      el.addEventListener('wheel', onWheel, { passive: false })
+      return () => { el.removeEventListener('wheel', onWheel) }
+    }, [])
     const flatIndexRef = useRef<Map<string, number>>(new Map())
     // The DNA flat feed can carry thousands of sub-row-sized items; the rows region is a fixed-pitch scroller, so
     // only the visible window is rendered once the card is wide enough for single-line rows.
