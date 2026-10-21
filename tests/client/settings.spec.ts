@@ -49,6 +49,7 @@ describe('createContextSettings defaults', () => {
       overviewAutoSteps: '200',
       overviewRange: '30d',
       fleetTab: 'show',
+      displayCurrency: 'auto',
       promptPrefix: '',
       promptSuffix: '',
       writable: false,
@@ -64,6 +65,7 @@ describe('createContextSettings defaults', () => {
     assert.equal(s.overviewAutoSteps(), '200')
     assert.equal(s.defaultOverviewRange(), '30d')
     assert.equal(s.fleetTab(), 'show')
+    assert.equal(s.displayCurrency(), 'auto')
   })
 })
 
@@ -105,6 +107,8 @@ describe('set', () => {
     assert.equal(s.overviewAutoSteps(), 'off')
     s.set('defaultOverviewRange', 'today')
     assert.equal(s.defaultOverviewRange(), 'today')
+    s.set('displayCurrency', 'cny')
+    assert.equal(s.displayCurrency(), 'cny')
   })
 
   test('the hidden placement is a served preference both from the scope and from a pick', () => {
@@ -228,6 +232,27 @@ describe('set', () => {
     assert.equal(s.fleetTab(), 'hide')
   })
 
+  test('a rejected currency write degrades to auto when the scope carries no valid value', async () => {
+    const s = createContextSettings()
+    const scope = new TestSettingsScope({ status: 'ready', value: {}, writable: true })
+    s.attach(scope)
+    scope.failSet = true
+    s.set('displayCurrency', 'cny')
+    assert.equal(s.displayCurrency(), 'cny', 'the optimistic echo lands first')
+    await new Promise(resolve => setTimeout(resolve, 0))
+    assert.equal(s.displayCurrency(), 'auto', 'the echo degrades instead of staying unpersisted')
+  })
+
+  test('a rejected currency write rolls back to the scope\'s valid truth', async () => {
+    const s = createContextSettings()
+    const scope = new TestSettingsScope({ status: 'ready', value: { displayCurrency: 'usd' }, writable: true })
+    s.attach(scope)
+    scope.failSet = true
+    s.set('displayCurrency', 'cny')
+    await new Promise(resolve => setTimeout(resolve, 0))
+    assert.equal(s.displayCurrency(), 'usd')
+  })
+
   test('a rejected prompt write rolls back to the scope truth', async () => {
     const s = createContextSettings()
     const scope = new TestSettingsScope({ status: 'ready', value: { promptPrefix: 'kept' }, writable: true })
@@ -257,6 +282,7 @@ describe('attach', () => {
         overviewAutoSteps: '300',
         defaultOverviewRange: '7d',
         fleetTab: 'hide',
+        displayCurrency: 'cny',
         promptPrefix: 'Be terse.',
         promptSuffix: 'Sign as Atlas.',
       },
@@ -276,6 +302,7 @@ describe('attach', () => {
       overviewAutoSteps: '300',
       overviewRange: '7d',
       fleetTab: 'hide',
+      displayCurrency: 'cny',
       promptPrefix: 'Be terse.',
       promptSuffix: 'Sign as Atlas.',
       writable: true,
@@ -313,6 +340,7 @@ describe('attach', () => {
         overviewAutoSteps: '200',
         overviewRange: '30d',
         fleetTab: 'show',
+        displayCurrency: 'auto',
         promptPrefix: '',
         promptSuffix: '',
         writable: false,
@@ -324,7 +352,7 @@ describe('attach', () => {
     const s = createContextSettings()
     s.attach(new TestSettingsScope({
       status: 'ready',
-      value: { defaultPlacement: 'window', defaultGranularity: 'bogus', defaultTrendMode: 7, defaultDeltaBase: 'bogus', defaultToolSort: 'alpha', defaultFileSort: 'alpha', insightsEntry: 42, defaultDurationCurve: 'always', overviewAutoSteps: 200, defaultOverviewRange: 'week', fleetTab: 7, promptPrefix: 9, promptSuffix: {} },
+      value: { defaultPlacement: 'window', defaultGranularity: 'bogus', defaultTrendMode: 7, defaultDeltaBase: 'bogus', defaultToolSort: 'alpha', defaultFileSort: 'alpha', insightsEntry: 42, defaultDurationCurve: 'always', overviewAutoSteps: 200, defaultOverviewRange: 'week', fleetTab: 7, displayCurrency: 'euro', promptPrefix: 9, promptSuffix: {} },
       writable: false,
     }))
     assert.equal(s.defaultPlacement(), 'all')
@@ -338,6 +366,7 @@ describe('attach', () => {
     assert.equal(s.overviewAutoSteps(), '200')
     assert.equal(s.defaultOverviewRange(), '30d')
     assert.equal(s.fleetTab(), 'show')
+    assert.equal(s.displayCurrency(), 'auto', 'an unknown currency degrades to the language rule')
     assert.equal(s.store.getSnapshot().promptPrefix, '', 'a non-string prompt value degrades to the empty default')
     assert.equal(s.store.getSnapshot().promptSuffix, '')
   })
@@ -526,6 +555,7 @@ describe('attach', () => {
       overviewAutoSteps: '200',
       overviewRange: '30d',
       fleetTab: 'show',
+      displayCurrency: 'auto',
       promptPrefix: '',
       promptSuffix: '',
       writable: true,

@@ -169,6 +169,17 @@ function PreferenceRows(props: { t: Translate; state: SettingsState; set?: Setti
           onPick={(id) => { set?.('defaultOverviewRange', id) }}
         />
         <PrefRow
+          label={t('settings.currency')}
+          value={state.displayCurrency}
+          disabled={disabled}
+          options={[
+            { id: 'auto', label: t('currency.auto') },
+            { id: 'cny', label: t('currency.cny') },
+            { id: 'usd', label: t('currency.usd') },
+          ]}
+          onPick={(id) => { set?.('displayCurrency', id) }}
+        />
+        <PrefRow
           label={t('settings.gran')}
           value={state.granularity}
           disabled={disabled}

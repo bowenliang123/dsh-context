@@ -2,7 +2,8 @@
 import { Fragment, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type KeyboardEvent, type MouseEvent, type ReactElement, type ReactNode } from 'react'
 import type { ContextEventRecord, ContextTimeline, RequestRecord, SessionCostUsage, SurfaceNode, TimelineCounts } from '../../shared/types'
 import { estimateSessionCost, billedTokensOf, formatCost, formatPriceRate, mergeCostUsage, priceLookupsOf, toCurrency } from '../cost'
-import type { CostCurrency, ModelBook, PriceFace, PriceMiss } from '../cost'
+import type { ModelBook, PriceFace, PriceMiss } from '../cost'
+import { useDisplayCurrency } from '../currency'
 import { sessionsFaceOf, subagentCostFoldOf } from '../agentTree'
 import { useSessionsSnapshot } from '../agentHeads'
 import type { AgentHeads } from '../agentHeads'
@@ -341,7 +342,7 @@ export function makeStatsContext(
 ): (props: StatsContextProps) => ReactElement {
   const { t, fmt } = kit
   return function StatsContext(props: StatsContextProps): ReactElement {
-    const currency: CostCurrency = props.locale === 'zh' ? 'cny' : 'usd'
+    const currency = useDisplayCurrency(props.locale)
     const { book, failed } = useModelPrices()
     const sub = useSubagentCost(props.sessionId)
     const subUsage = sub.usage

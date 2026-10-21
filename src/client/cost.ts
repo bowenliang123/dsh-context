@@ -1,7 +1,7 @@
 /** Session-cost estimate from the models.dev book (USD per 1M tokens; CNY at 1 CNY = 0.15 USD); DeepSeek's
  * OFF-peak figures, so only its `peak` buckets double. */
 
-import type { SessionCostUsage } from '../shared/types'
+import type { DisplayCurrency, SessionCostUsage } from '../shared/types'
 import { isDeepSeekProvider, modelsDevProviderOf } from '../shared/providers'
 import { asRecord, numOf, type LocaleService } from './services'
 import {
@@ -466,9 +466,17 @@ export function formatCost(amount: number, currency: CostCurrency): string {
   return symbol + (amount >= 1 ? amount.toFixed(2) : amount.toPrecision(2))
 }
 
-/** The display currency follows the active locale — read per render: slot outlets re-render on a locale switch. */
-export function displayCurrencyOf(locale: LocaleService): CostCurrency {
-  return typeof locale.getLocale === 'function' && locale.getLocale().active === 'zh' ? 'cny' : 'usd'
+/** The active locale's code; the stats card carries it as a plain string, the panels as the service. */
+function activeLocaleOf(locale: LocaleService | string): string {
+  return typeof locale === 'string'
+    ? locale
+    : typeof locale.getLocale === 'function' ? locale.getLocale().active : 'en'
+}
+
+/** The display currency for a preference over a locale; `auto` keeps the language rule (zh → CNY, else USD). */
+export function resolveCurrency(preference: DisplayCurrency, locale: LocaleService | string): CostCurrency {
+  if (preference !== 'auto') return preference
+  return activeLocaleOf(locale) === 'zh' ? 'cny' : 'usd'
 }
 
 export function formatPriceRate(amount: number, currency: CostCurrency): string {

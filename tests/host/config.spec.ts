@@ -32,6 +32,7 @@ describe('Config validator (cordis Standard Schema face)', () => {
       overviewAutoSteps: '200',
       defaultOverviewRange: '30d',
       fleetTab: 'show',
+      displayCurrency: 'auto',
       promptPrefix: '',
       promptSuffix: '',
     })
@@ -91,18 +92,20 @@ describe('preference fields (the Config-form generation surface)', () => {
     assert.equal(deref(resolved.overviewAutoSteps), '200')
     assert.equal(deref(resolved.defaultOverviewRange), '30d')
     assert.equal(deref(resolved.fleetTab), 'show')
+    assert.equal(deref(resolved.displayCurrency), 'auto')
     assert.equal(deref(resolved.promptPrefix), '', 'a non-string prompt value degrades to the empty default')
     assert.equal(deref(resolved.promptSuffix), '')
   })
 
   test('a stored preference survives the resolve', () => {
-    const resolved = Config({ defaultPlacement: 'hide', defaultFileSort: 'count', insightsEntry: 'hide', overviewAutoSteps: 'off', defaultOverviewRange: '7d', fleetTab: 'hide', promptPrefix: 'Be terse.', promptSuffix: 'Sign as Atlas.' })
+    const resolved = Config({ defaultPlacement: 'hide', defaultFileSort: 'count', insightsEntry: 'hide', overviewAutoSteps: 'off', defaultOverviewRange: '7d', fleetTab: 'hide', displayCurrency: 'cny', promptPrefix: 'Be terse.', promptSuffix: 'Sign as Atlas.' })
     assert.equal(deref(resolved.defaultPlacement), 'hide')
     assert.equal(deref(resolved.defaultFileSort), 'count')
     assert.equal(deref(resolved.insightsEntry), 'hide')
     assert.equal(deref(resolved.overviewAutoSteps), 'off')
     assert.equal(deref(resolved.defaultOverviewRange), '7d')
     assert.equal(deref(resolved.fleetTab), 'hide')
+    assert.equal(deref(resolved.displayCurrency), 'cny')
     assert.equal(deref(resolved.promptPrefix), 'Be terse.')
     assert.equal(deref(resolved.promptSuffix), 'Sign as Atlas.')
   })

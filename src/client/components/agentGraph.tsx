@@ -6,7 +6,8 @@ import { IconWorkspaceTreeOutlineRegular, StateDot } from '@deepseek-ai/dsh-clie
 import { CATS } from '../categories'
 import type { AgentHeads } from '../agentHeads'
 import { makeAgentHeads } from '../agentHeads'
-import { billedTokensOf, displayCurrencyOf, estimateSessionCost, formatCost, type CostCurrency, type ModelBook } from '../cost'
+import { billedTokensOf, estimateSessionCost, formatCost, type CostCurrency, type ModelBook } from '../cost'
+import { useDisplayCurrency } from '../currency'
 import { useModelPrices } from '../modelPrices'
 import { containHorizontalOverscroll } from '../overscroll'
 import { scrollIntoViewIfPossible } from '../revealScroll'
@@ -78,7 +79,7 @@ export function makeAgentGraph(
     const onHover = props.onHover ?? setInternalHover
     // The shared price book (the stats board's own store): a card's cost estimate appears once the book lands, never blocks it.
     const { book } = useModelPrices()
-    const currency = displayCurrencyOf(ctx.locale)
+    const currency = useDisplayCurrency(ctx.locale)
 
     // Re-layout whenever the stage's visible width changes (sidebar toggles, resizes, split views).
     const stageRef = useRef<HTMLDivElement | null>(null)

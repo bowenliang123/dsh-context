@@ -5,7 +5,7 @@
 import { createElement as h, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactElement } from 'react'
 import type { AgentHeads } from '../agentHeads'
 import { agentSelfOf } from '../agentTree'
-import { displayCurrencyOf } from '../cost'
+import { useDisplayCurrency } from '../currency'
 import { mergeComms } from '../fleetDetail'
 import { attestedNamesOf, commsAgentsOf } from '../fleetAgents'
 import { useFleetDetails, useFleetModel } from '../fleetModel'
@@ -107,7 +107,7 @@ export function makeFleetView(
     const [ownerFilter, setOwnerFilter] = useState<string | null>(null)
     const [focusTaskId, setFocusTaskId] = useState<string | null>(null)
     const { book } = useModelPrices()
-    const currency = displayCurrencyOf(ctx.locale)
+    const currency = useDisplayCurrency(ctx.locale)
 
     const byId = useMemo(
       () => new Map((forest?.nodes ?? []).map(n => [n.id, n])),

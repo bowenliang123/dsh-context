@@ -3,6 +3,7 @@
 
 import { useEffect, useMemo, useState, useSyncExternalStore, type ReactElement } from 'react'
 import { estimateSessionCost, formatCost, type CostCurrency, type ModelBook } from '../cost'
+import { useDisplayCurrency } from '../currency'
 import { fmt } from '../format'
 import { useModelPrices } from '../modelPrices'
 import {
@@ -67,12 +68,9 @@ export function makeOverviewPanel(
     return typeof locale.getLocale === 'function' ? locale.getLocale().active : 'en'
   }
 
-  function activeCurrency(): CostCurrency {
-    return activeLocale() === 'zh' ? 'cny' : 'usd'
-  }
-
   function OverviewBody(props: OverviewPanelProps): ReactElement | null {
     const { book } = useModelPrices()
+    const currency = useDisplayCurrency(ctx.locale)
     const snapshot = sessionsSnapshotOf(props)
     const wsSnapshot = workspacesSnapshotOf(props)
     // The preset follows the served default until the reader picks one; a pick is written back as the new default where
@@ -117,7 +115,6 @@ export function makeOverviewPanel(
 
     useEffect(() => { setPage(0) }, [preset, custom, coverage, day, query, group, skill, sort])
 
-    const currency = activeCurrency()
     // The stage below is memoized on the scope's identity, so the clock feeds it at minute grain: a keystroke or an
     // unrelated session's push re-renders within the same minute against the same scope object. The ledger reads are
     // day-grained (dayInScope compares day keys), so their admitted days cannot change inside a minute; only a row's

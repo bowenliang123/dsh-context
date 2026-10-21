@@ -159,6 +159,30 @@ describe('balanceEntryOf', () => {
     const eurOnly = platformBalanceOf({ balances: [{ currency: 'EUR', total: 2, granted: 0, toppedUp: 2 }] })
     assert.deepEqual(balanceEntryOf(eurOnly, 'usd'), eurOnly?.balances[0] ?? null)
   })
+
+  test('a zero entry never shadows the funded one', () => {
+    // A CNY account also answers a zero USD entry, so the display currency alone would paint $0.00.
+    const cnyFunded = platformBalanceOf({
+      balances: [
+        { currency: 'CNY', total: 58.97, granted: 0, toppedUp: 58.97 },
+        { currency: 'USD', total: 0, granted: 0, toppedUp: 0 },
+      ],
+    })
+    assert.deepEqual(balanceEntryOf(cnyFunded, 'usd'), cnyFunded?.balances[0])
+    assert.deepEqual(balanceEntryOf(cnyFunded, 'cny'), cnyFunded?.balances[0])
+  })
+
+  test('an all-zero account falls back to the display currency, then to its first entry', () => {
+    const allZero = platformBalanceOf({
+      balances: [
+        { currency: 'CNY', total: 0, granted: 0, toppedUp: 0 },
+        { currency: 'USD', total: 0, granted: 0, toppedUp: 0 },
+      ],
+    })
+    assert.deepEqual(balanceEntryOf(allZero, 'usd'), allZero?.balances[1], 'nothing funded: the display currency still names one')
+    const eurZero = platformBalanceOf({ balances: [{ currency: 'EUR', total: 0, granted: 0, toppedUp: 0 }] })
+    assert.deepEqual(balanceEntryOf(eurZero, 'usd'), eurZero?.balances[0], 'an account without the wanted currency shows its first entry')
+  })
 })
 
 describe('readPlatformBalance', () => {

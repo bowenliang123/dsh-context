@@ -49,14 +49,16 @@ export function platformBalanceOf(value: unknown): PlatformBalance | null {
     : null
 }
 
-/** Falls back to the account's first entry: a figure in another currency beats none. */
+/** A funded entry beats a zero one; a figure in another currency beats none. */
 export function balanceEntryOf(
   balance: PlatformBalance | null | undefined,
   currency: 'cny' | 'usd',
 ): PlatformBalanceEntry | null {
   if (balance === null || balance === undefined || balance.balances.length === 0) return null
   const want = currency === 'cny' ? 'CNY' : 'USD'
-  return balance.balances.find(entry => entry.currency === want) ?? balance.balances[0]
+  const preferred = balance.balances.find(entry => entry.currency === want)
+  if (preferred !== undefined && preferred.total > 0) return preferred
+  return balance.balances.find(entry => entry.total > 0) ?? preferred ?? balance.balances[0]
 }
 
 let cached: PlatformBalance | null = null

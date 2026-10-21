@@ -176,6 +176,9 @@ export type DefaultOverviewRange = 'today' | '7d' | '30d' | 'all'
 
 export type FleetTab = 'show' | 'hide'
 
+/** The display currency of every money figure; `auto` follows the UI language (zh → CNY, else USD). */
+export type DisplayCurrency = 'auto' | 'cny' | 'usd'
+
 export interface PluginSettings {
   defaultPlacement: DefaultPlacement
   defaultGranularity: DefaultGranularity
@@ -188,6 +191,7 @@ export interface PluginSettings {
   overviewAutoSteps: OverviewAutoSteps
   defaultOverviewRange: DefaultOverviewRange
   fleetTab: FleetTab
+  displayCurrency: DisplayCurrency
   /** Free text joined ahead of the harness's assembled system prompt; empty disables. */
   promptPrefix: string
   /** Free text joined behind the harness's assembled system prompt; empty disables. */

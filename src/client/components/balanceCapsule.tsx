@@ -2,6 +2,7 @@
 
 import { useState, type ReactElement } from 'react'
 import { balanceEntryOf, readPlatformBalance } from '../balance'
+import { useDisplayCurrency } from '../currency'
 import type { PlatformBalance } from '../../shared/types'
 import type { ClientCtx } from '../services'
 import type { ViewKit } from '../viewkit'
@@ -18,9 +19,7 @@ export function makeBalanceCapsule(ctx: ClientCtx, kit: ViewKit): () => ReactEle
   const { t } = kit
   return function BalanceCapsule(): ReactElement | null {
     const [balance, setBalance] = useState<PlatformBalance | null>(() => readPlatformBalance((v) =>{  setBalance(v) }))
-    const locale = ctx.locale
-    const active = typeof locale.getLocale === 'function' ? locale.getLocale().active : 'en'
-    const entry = balanceEntryOf(balance, active === 'zh' ? 'cny' : 'usd')
+    const entry = balanceEntryOf(balance, useDisplayCurrency(ctx.locale))
     if (entry === null) return null
     const money = (amount: number): string => symbolOf(entry.currency) + amount.toFixed(2)
     const tipLines = [
