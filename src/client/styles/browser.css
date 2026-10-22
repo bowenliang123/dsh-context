@@ -4,9 +4,8 @@
    map never scroll; only the rows region below them scrolls, in every host — the capped tab column
    (browserCapOf), the /context modal's filled dialog (modal.css). The region's wheel never chains past its
    ends, so the page (and the fixed zone with it) only moves when the pointer leaves it; its small floor
-   keeps a readable slice while the map folds under pane pressure. A region with nothing to scroll — every
-   category collapsed — cannot use the wheel either, and `contain` swallows it anyway, so that one case is
-   handed to the page (wheelPass.ts). */
+   keeps a readable slice while the map folds under pane pressure. A wheel the region cannot use — nothing
+   to scroll, every category collapsed, or the end it would go — is handed to the page (wheelPass.ts). */
 .lc-br { display: flex; flex-direction: column; min-height: 0; }
 .lc-br-head { flex: none; }
 .lc-br-scroll { flex: 1 1 auto; min-height: 28px; overflow-y: auto; overscroll-behavior: contain; }

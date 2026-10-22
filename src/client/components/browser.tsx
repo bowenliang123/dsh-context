@@ -147,8 +147,8 @@ export function makeContextBrowser(
     }, [pinSeq, onOpenCat])
     const rootRef = useRef<HTMLDivElement | null>(null)
     const scrollRef = useRef<HTMLDivElement | null>(null)
-    // The rows region's `overscroll-behavior: contain` (styles/browser.css) also swallows a wheel it has
-    // nothing to scroll — every category collapsed — so the page under the card freezes; hand that one to it.
+    // The rows region's `overscroll-behavior: contain` (styles/browser.css) swallows a wheel it cannot use —
+    // nothing to scroll, or the end it would go — so the page under the card would freeze; hand those to it.
     useEffect(() => {
       const el = scrollRef.current
       /* v8 ignore next -- the card always mounts its rows region. */

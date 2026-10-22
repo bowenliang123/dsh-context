@@ -22,6 +22,17 @@ function pinPageTop(el: Element): { top(): number } {
   return { top: () => top }
 }
 
+/** A region's own scrollTop, readable and writable (jsdom never scrolls it). */
+function pinScrollTop(el: Element, initial = 0): { top(): number } {
+  let top = initial
+  Object.defineProperty(el, 'scrollTop', {
+    configurable: true,
+    get: () => top,
+    set: (v: number) => { top = v },
+  })
+  return { top: () => top }
+}
+
 function wheelOn(el: Element, deltaY: number, deltaMode = 0, ctrlKey = false): boolean {
   const event = new WheelEvent('wheel', { bubbles: true, cancelable: true, deltaY, deltaMode, ctrlKey })
   el.dispatchEvent(event)
@@ -65,9 +76,56 @@ describe('ContextBrowser — the rows region hands a wheel it cannot use to the 
     const top = pinPageTop(wrapper)
     const region = query<HTMLElement>(m.container, '.lc-br-scroll')
     pinBoxes(region, 300, 100)
+    pinScrollTop(region)
 
     assert.equal(wheelOn(region, 300), false)
     assert.equal(top.top(), 0)
+    await m.unmount()
+  })
+
+  test('at the end of the rows: the next wheel continues onto the page', async () => {
+    const page = h('div', { style: { overflowY: 'auto' } }, h(Browser, props({ data: tl({}) })))
+    const m = await mount(page)
+    const wrapper = m.container.firstElementChild as HTMLElement
+    pinBoxes(wrapper, 400, 100)
+    const top = pinPageTop(wrapper)
+    const region = query<HTMLElement>(m.container, '.lc-br-scroll')
+    pinBoxes(region, 300, 100)
+    const inner = pinScrollTop(region, 200)
+
+    assert.equal(wheelOn(region, 300), true)
+    assert.equal(top.top(), 300)
+    assert.equal(inner.top(), 200)
+    await m.unmount()
+  })
+
+  test('scrolling up from the top of the rows: the page keeps going', async () => {
+    const page = h('div', { style: { overflowY: 'auto' } }, h(Browser, props({ data: tl({}) })))
+    const m = await mount(page)
+    const wrapper = m.container.firstElementChild as HTMLElement
+    pinBoxes(wrapper, 400, 100)
+    const top = pinPageTop(wrapper)
+    wrapper.scrollTop = 200
+    const region = query<HTMLElement>(m.container, '.lc-br-scroll')
+    pinBoxes(region, 300, 100)
+    pinScrollTop(region)
+
+    assert.equal(wheelOn(region, -120), true)
+    assert.equal(top.top(), 80)
+    await m.unmount()
+  })
+
+  test('an overflow of a rounding artifact is not a scroller', async () => {
+    const page = h('div', { style: { overflowY: 'auto' } }, h(Browser, props({ data: tl({}) })))
+    const m = await mount(page)
+    const wrapper = m.container.firstElementChild as HTMLElement
+    pinBoxes(wrapper, 400, 100)
+    const top = pinPageTop(wrapper)
+    const region = query<HTMLElement>(m.container, '.lc-br-scroll')
+    pinBoxes(region, 101, 100)
+
+    assert.equal(wheelOn(region, 300), true)
+    assert.equal(top.top(), 300)
     await m.unmount()
   })
 
@@ -135,6 +193,44 @@ describe('wheelToPage', () => {
     const region = document.createElement('div')
     pinBoxes(region, 100, 100)
     assert.equal(wheelToPage(region, 120), false)
+  })
+
+  test('the root element takes the wheel when no ancestor scrolls', () => {
+    const region = document.createElement('div')
+    document.body.appendChild(region)
+    pinBoxes(region, 100, 100)
+    const doc = document.documentElement
+    pinBoxes(doc, 400, 100)
+    const top = pinPageTop(doc)
+    try {
+      assert.equal(wheelToPage(region, 120), true)
+      assert.equal(top.top(), 120)
+    } finally {
+      region.remove()
+      Reflect.deleteProperty(doc, 'scrollHeight')
+      Reflect.deleteProperty(doc, 'clientHeight')
+      Reflect.deleteProperty(doc, 'scrollTop')
+    }
+  })
+
+  test('a host that reports a scrollingElement uses that root', () => {
+    const root = document.documentElement
+    Object.defineProperty(document, 'scrollingElement', { configurable: true, get: () => root })
+    pinBoxes(root, 400, 100)
+    const top = pinPageTop(root)
+    const region = document.createElement('div')
+    document.body.appendChild(region)
+    pinBoxes(region, 100, 100)
+    try {
+      assert.equal(wheelToPage(region, 120), true)
+      assert.equal(top.top(), 120)
+    } finally {
+      region.remove()
+      Reflect.deleteProperty(document, 'scrollingElement')
+      Reflect.deleteProperty(root, 'scrollHeight')
+      Reflect.deleteProperty(root, 'clientHeight')
+      Reflect.deleteProperty(root, 'scrollTop')
+    }
   })
 
   test('a hostile host degrades to no scroll instead of a throw', () => {
