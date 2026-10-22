@@ -23,6 +23,7 @@ import type { CatFocus } from './browser'
 import { makeAgentGraph } from './agentGraph'
 import { Donut } from './donut'
 import { makeCurrentComposition } from './currentComposition'
+import { EVENT_KINDS } from '../eventText'
 import { makeEventList } from './events'
 import { makeFileCard } from './fileCard'
 import type { FileFilter } from './fileCard'
@@ -50,7 +51,6 @@ import { makeErrorBoundary } from './errorBoundary'
 // a module-level per-session ledger survives tab remounts and restores once content renders.
 const viewScroll = new Map<string, number>()
 
-const EVENT_KINDS = ['inject', 'compaction', 'prune', 'model', 'mode'] as const
 /** Ordinary sweeps coalesce on this trailing delay; DNA bars are heavier and wait longer for the pointer to rest. */
 const HOVER_DELAY_MS = 140
 const DNA_HOVER_DELAY = 220

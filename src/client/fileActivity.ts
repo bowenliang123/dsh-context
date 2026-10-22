@@ -1,7 +1,7 @@
 /** The op-log generation's host fold derives one record per op; older hosts serve no `fileOps`, so the
  * legacy path derives ops from the served nodes. `before` is the exclusive upper seq bound. */
 
-import type { FileOpRecord, RequestRecord, SurfaceNode } from '../shared/types'
+import type { DefaultFileSort, FileOpRecord, RequestRecord, SurfaceNode } from '../shared/types'
 import { opsOfCall, parseCallArgs } from '../shared/fileOps'
 import { leafNameOf } from '../shared/attachment'
 // The harness's browser-safe file-address layer, inlined by the bundle to produce `dsh-resource://file/…`.
@@ -248,6 +248,31 @@ function aggregateOps(ops: readonly FileOp[], before: number | null): FileActivi
   }
   entries.sort((a, b) => b.ops[0].seq - a.ops[0].seq)
   return { entries, totals }
+}
+
+export type FileComparator = (a: FileEntry, b: FileEntry) => number
+
+export const FILE_SORTS: readonly DefaultFileSort[] = ['count', 'lines', 'latest', 'path', 'name']
+
+/** One comparator per File Activity sort: `count` ranks by the caller's op count (a kind chip narrows it), and both volume sorts
+ * break ties toward the newest op. */
+export function fileComparators(
+  countOf: (e: FileEntry) => number,
+  displayOf: (e: FileEntry) => string,
+): Record<DefaultFileSort, FileComparator> {
+  const byLatest: FileComparator = (a, b) => b.ops[0].seq - a.ops[0].seq
+  const byVolume = (keyOf: (e: FileEntry) => number): FileComparator => (a, b) => keyOf(b) - keyOf(a) || byLatest(a, b)
+  return {
+    count: byVolume(countOf),
+    lines: byVolume(e => e.added + e.removed),
+    latest: byLatest,
+    name: (a, b) => {
+      const an = baseNameOf(displayOf(a))
+      const bn = baseNameOf(displayOf(b))
+      return an !== bn ? (an < bn ? -1 : 1) : (a.path < b.path ? -1 : 1)
+    },
+    path: (a, b) => (a.path < b.path ? -1 : 1),
+  }
 }
 
 /** Op-log generation's read; `gone` is joined from the detail's archive at render time. */

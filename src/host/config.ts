@@ -30,6 +30,16 @@ export function volatileField<S extends z>(field: S): S {
   return typeof volatile === 'function' ? volatile.call(field) : field
 }
 
+/** The live value behind one config field: a volatile-marked field resolves to a `{ get }` reference the loader rewrites on preference
+ * edits; below the volatile seam the value is the plain stored one. */
+export function liveRead(value: unknown): () => unknown {
+  if (value !== null && typeof value === 'object' && typeof (value as { get?: unknown }).get === 'function') {
+    const get = (value as { get: () => unknown }).get
+    return () => get()
+  }
+  return () => value
+}
+
 function count(defaultValue: number) {
   return z.number().min(1).step(1).default(defaultValue)
 }

@@ -1,5 +1,5 @@
 import { memo, useEffect, useRef, useState, type ChangeEvent, type ComponentType, type MouseEvent, type ReactElement } from 'react'
-import { absPathOf, baseNameOf, displayPathOf, glyphOf, surfaceSeqOf } from '../fileActivity'
+import { FILE_SORTS, absPathOf, displayPathOf, fileComparators, glyphOf, surfaceSeqOf } from '../fileActivity'
 import type { FileActivity, FileEntry, FileOp, FileOpKind } from '../fileActivity'
 import type { ContextSettings, DefaultFileSort } from '../settings'
 import type { DetailState } from '../timelineSource'
@@ -84,25 +84,9 @@ export function makeFileCard(kit: ViewKit, settings: ContextSettings): Component
     const displayOf = (e: FileEntry): string => (e.pattern === true ? e.path : displayPathOf(e.path, props.workspace))
     const countOf = (e: FileEntry): number =>
       filter === 'read' ? e.reads : filter === 'write' ? e.writes : filter === 'search' ? e.searches : e.ops.length
-    const linesOf = (e: FileEntry): number => e.added + e.removed
-    const byLatest = (a: FileEntry, b: FileEntry): number => b.ops[0].seq - a.ops[0].seq
-    const byVolume = (keyOf: (e: FileEntry) => number) => (a: FileEntry, b: FileEntry): number =>
-      keyOf(b) - keyOf(a) || byLatest(a, b)
-    const byName = (a: FileEntry, b: FileEntry): number => {
-      const an = baseNameOf(displayOf(a))
-      const bn = baseNameOf(displayOf(b))
-      return an !== bn ? (an < bn ? -1 : 1) : (a.path < b.path ? -1 : 1)
-    }
-    const comparators: Record<DefaultFileSort, (a: FileEntry, b: FileEntry) => number> = {
-      count: byVolume(countOf),
-      lines: byVolume(linesOf),
-      latest: byLatest,
-      name: byName,
-      path: (a, b) => (a.path < b.path ? -1 : 1),
-    }
     const shown = activity.entries
       .filter(e => matches(e, filter) && (q === '' || displayOf(e).toLowerCase().includes(q)))
-      .sort(comparators[sort])
+      .sort(fileComparators(countOf, displayOf)[sort])
 
     useEffect(() => {
       const el = listRef.current
@@ -239,7 +223,7 @@ export function makeFileCard(kit: ViewKit, settings: ContextSettings): Component
               onChange={(ev: ChangeEvent<HTMLInputElement>) => { setQuery(ev.target.value) }}
             />
             <span className="lc-gran lc-fa-sort" role="group" title={t('files.sortTip')}>
-              {(['count', 'lines', 'latest', 'path', 'name'] as const).map(k => (
+              {FILE_SORTS.map(k => (
                 <button
                   key={k}
                   type="button"

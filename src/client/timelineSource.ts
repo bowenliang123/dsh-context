@@ -5,7 +5,7 @@ import { useEffect, useMemo, useSyncExternalStore } from 'react'
 import type { ContextTimeline, ContextTimelineDetail } from '../shared/types'
 import { DETAIL_ROUTE } from './apiRoutes'
 import type { SessionStandardProps } from './services'
-import { asRecord, collectionsOf, projectionOf, timelineOf } from './services'
+import { asRecord, collectionsOf, projectionOf, timelineOf, withDetail } from './services'
 
 /** A missing or NaN revision rejects the whole payload, so the caller shows its retryable note, never half-merged data. */
 export function detailOf(value: unknown): ContextTimelineDetail | null {
@@ -293,20 +293,6 @@ export function useTimelineSource(props: SessionStandardProps): TimelineSource {
       // The head's counters render while the first read is in flight (the failure note rides beside).
       return { data: base, detailState: snap.failed ? 'failed' : 'loading', retryDetail: retry }
     }
-    const data: ContextTimeline = {
-      ...base,
-      requests: detail.requests,
-      events: detail.events,
-      nodes: detail.nodes,
-      droppedNodes: detail.droppedNodes,
-      archive: detail.archive,
-      // Slim heads serve no floors; the detail's pair lands whole here.
-      ...(detail.surfaceFloor !== undefined ? { surfaceFloor: detail.surfaceFloor } : {}),
-      ...(detail.archiveFloor !== undefined ? { archiveFloor: detail.archiveFloor } : {}),
-      ...(detail.fileOps !== undefined ? { fileOps: detail.fileOps } : {}),
-      ...(detail.fileOpsFloor !== undefined ? { fileOpsFloor: detail.fileOpsFloor } : {}),
-      ...(detail.spans !== undefined ? { spans: detail.spans } : {}),
-    }
-    return { data, detailState: 'ready', retryDetail: retry }
+    return { data: withDetail(base, detail), detailState: 'ready', retryDetail: retry }
   }, [head, slim, store, snap])
 }

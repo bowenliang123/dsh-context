@@ -1,6 +1,6 @@
 import type { ContextEventRecord } from '../shared/types'
 import { fmt, fmtDuration, fmtShare, fmtTime } from './format'
-import { makeEventText } from './components/events'
+import { makeEventText } from './eventText'
 import type { Translate } from './i18n'
 
 export interface ViewKit {

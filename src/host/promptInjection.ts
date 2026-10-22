@@ -3,7 +3,7 @@
  * without remounting the entry. */
 
 import type { Context } from '@deepseek-ai/cordis'
-import type { Config } from './config'
+import { liveRead, type Config } from './config'
 
 /** The `ctx.systemPrompt` face consumed here; feature-detected so a composition without it degrades to a no-op. */
 export interface SystemPromptFace {
@@ -16,18 +16,12 @@ export interface SystemPromptFace {
   getSectionOrder(name: string): number
 }
 
-/** The live text behind one config field: a volatile-marked field resolves to a `{ get }` reference the loader rewrites on preference
- * edits; below the volatile seam the value is the plain stored string. */
 function liveText(value: unknown): () => string {
-  if (value !== null && typeof value === 'object' && typeof (value as { get?: unknown }).get === 'function') {
-    const get = (value as { get: () => unknown }).get
-    return () => {
-      const text = get()
-      return typeof text === 'string' ? text : ''
-    }
+  const read = liveRead(value)
+  return () => {
+    const text = read()
+    return typeof text === 'string' ? text : ''
   }
-  const text = typeof value === 'string' ? value : ''
-  return () => text
 }
 
 /** The section text provider: whitespace-only text is disabled (the harness's `renderPrompt` drops empty sections), any other text stays

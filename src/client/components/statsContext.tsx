@@ -1,6 +1,6 @@
 /** The Context card: counts only, arriving precomputed (the split-generation wire head, or `countsOfRecords` inline). */
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type KeyboardEvent, type MouseEvent, type ReactElement, type ReactNode } from 'react'
-import type { ContextEventRecord, ContextTimeline, RequestRecord, SessionCostUsage, SurfaceNode, TimelineCounts } from '../../shared/types'
+import type { ContextTimeline, SessionCostUsage, SurfaceNode, TimelineCounts } from '../../shared/types'
 import { estimateSessionCost, billedTokensOf, formatCost, formatPriceRate, mergeCostUsage, priceFaceOf, toCurrency } from '../cost'
 import type { CostCurrency, ModelBook, PriceFace } from '../cost'
 import { sessionsFaceOf, subagentCostFoldOf } from '../agentTree'
@@ -11,6 +11,7 @@ import { useModelPrices } from '../modelPrices'
 import { asRecord, type ClientCtx } from '../services'
 import { isDeepSeekProvider } from '../../shared/providers'
 import type { ViewKit } from '../viewkit'
+export { countsOfRecords } from '../records'
 
 interface PriceRow { key: string; face: PriceFace }
 
@@ -37,24 +38,6 @@ function priceRowsOf(usage: SessionCostUsage | undefined, book: ModelBook | null
     }
   }
   return rows
-}
-
-/** Inline counter derivation; the host's split-generation counts match it by construction (fold.ts buildTimelineHead). */
-export function countsOfRecords(requests: readonly RequestRecord[], events: readonly ContextEventRecord[]): TimelineCounts {
-  const turns = new Set<number>()
-  for (const req of requests) turns.add(req.turn ?? 0)
-  let injects = 0
-  let compactions = 0
-  let prunes = 0
-  // Loaded skills: distinct names among skill-tagged injects — the host fold's tag set (`sub: 'skill'`).
-  const skills = new Set<string>()
-  for (const ev of events) {
-    if (ev.kind === 'inject') injects++
-    else if (ev.kind === 'compaction') compactions++
-    else if (ev.kind === 'prune') prunes++
-    if (ev.sub === 'skill' && typeof ev.name === 'string' && ev.name !== '') skills.add(ev.name)
-  }
-  return { turns: turns.size, steps: requests.length, injects, compactions, prunes, skills: skills.size }
 }
 
 /** null usage = nothing reported (no subagents, no usage, or no sessions face on this harness). */

@@ -5,7 +5,7 @@ import type { ComponentType } from 'react'
 import type { AttachmentRef } from '../shared/attachment'
 import { estimateSystemTokens } from '../shared/estimate'
 import { PLUGIN_NAME } from './meta'
-import type { ActivityDay, ContextActivity, ContextBreakdown, ContextHeaders, ContextPressure, ContextTimeline, CostModelUsage, HeaderEpochContent, SystemPromptNode, TimingTotals, TokenUsage, ToolTimingTotals } from '../shared/types'
+import type { ActivityDay, ContextActivity, ContextBreakdown, ContextHeaders, ContextPressure, ContextTimeline, ContextTimelineDetail, CostModelUsage, HeaderEpochContent, SystemPromptNode, TimingTotals, TokenUsage, ToolTimingTotals } from '../shared/types'
 
 export interface LocaleService {
   register(ns: string, dicts: Record<string, Record<string, string>>): () => void
@@ -203,6 +203,23 @@ export function collectionsOf(data: Record<string, unknown>): Pick<ContextTimeli
     ...(data.fileOps !== undefined ? { fileOps: objectsOf(data.fileOps) } : {}),
     ...(typeof data.fileOpsFloor === 'number' ? { fileOpsFloor: data.fileOpsFloor } : {}),
     ...(data.spans !== undefined ? { spans: objectsOf(data.spans) } : {}),
+  }
+}
+
+/** The slim head with the detail payload's collections in place; slim heads serve no floors, so the detail's land whole. */
+export function withDetail(base: ContextTimeline, detail: ContextTimelineDetail): ContextTimeline {
+  return {
+    ...base,
+    requests: detail.requests,
+    events: detail.events,
+    nodes: detail.nodes,
+    droppedNodes: detail.droppedNodes,
+    archive: detail.archive,
+    ...(detail.surfaceFloor !== undefined ? { surfaceFloor: detail.surfaceFloor } : {}),
+    ...(detail.archiveFloor !== undefined ? { archiveFloor: detail.archiveFloor } : {}),
+    ...(detail.fileOps !== undefined ? { fileOps: detail.fileOps } : {}),
+    ...(detail.fileOpsFloor !== undefined ? { fileOpsFloor: detail.fileOpsFloor } : {}),
+    ...(detail.spans !== undefined ? { spans: detail.spans } : {}),
   }
 }
 
