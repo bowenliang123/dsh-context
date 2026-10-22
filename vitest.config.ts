@@ -31,6 +31,15 @@ export default defineConfig({
         },
       },
       {
+        // The view models run in plain node; component specs opt into jsdom per file.
+        test: {
+          name: 'tui',
+          include: ['tests/tui/**/*.spec.ts'],
+          environment: 'node',
+          setupFiles: ['tests/tui/setup.ts'],
+        },
+      },
+      {
         // Exercises the BUILT plugin and skips cleanly when lib/ is absent. The matrix also needs a dsh checkout (env DSH_REPO), and its first run per baseline installs the tag's vendored cordis into .tmp/compat — hence the timeout.
         test: {
           name: 'compat',
@@ -48,6 +57,7 @@ export default defineConfig({
         // Pure type declarations: no runtime surface to instrument.
         'src/shared/types.ts',
         'src/host/projection.ts',
+        'src/tui/hostTypes.ts',
       ],
       thresholds: { perFile: true, statements: 100, branches: 100, functions: 100, lines: 100 },
       reporter: ['text', 'html'],

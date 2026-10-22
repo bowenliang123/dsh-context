@@ -25,16 +25,20 @@
       "default": "./lib/index.js"
     },
     "./client": "./lib/client.js",
+    "./tui": {
+      "types": "./lib/tui.d.ts",
+      "default": "./lib/tui.js"
+    },
     "./package.json": "./package.json",
     "./locale/*.json": "./locale/*.json"
   },
   "files": [
     "icon.svg",
     "locale/*.json",
-    "lib/client.js",
-    "lib/index.js",
-    "lib/index.d.ts",
+    "lib/*.js",
+    "lib/*.d.ts",
     "cordis.patch.yml",
+    "dsh-plugin.json",
     "README.md",
     "LICENSE"
   ],

@@ -18,6 +18,7 @@
 - **Fleet tab** — the agent family's own page: the current agent, its parents, and every subagent as one live card each.
 - **Context panel** — the same dashboard as a right-sidebar tab: pick **Context** on the sidebar's guide page and the panel opens beside the chat, agent network included.
 - **`/context` command** — the slash command shows the context model for current context composition and recent context evolution.
+- **Terminal (dsh-TUI)** — a Context side panel and a full-screen Context view in [dsh-TUI](https://github.com/ccch1mneyyy/dsh-TUI).
 
 ## Install / Update
 
@@ -45,7 +46,7 @@ Then start the web UI with `dsh web`. No build step, no restart.
 
 ## Use it
 
-Five surfaces, one story — what your agent is carrying, how it got there, and what it did with it:
+Six surfaces, one story — what your agent is carrying, how it got there, and what it did with it:
 
 | Where | What you get |
 | --- | --- |
@@ -53,6 +54,7 @@ Five surfaces, one story — what your agent is carrying, how it got there, and 
 | **Context tab** | The full dashboard: stats, composition, per-request trend, events, and file activity — in every session. |
 | **Fleet tab** | The agent network: the current agent, its parents, and every subagent, live. |
 | **`/context` command** | A centered modal with the same composition and context browser, without leaving the chat. |
+| **dsh-TUI** | The Context side panel and the full-screen Context view in the terminal. |
 | **Preferences card** | Per-user defaults: view placement, trend granularity & mode, File Activity sort, and the system prompt prefix/suffix joined around every session. |
 
 ## 🗂️ The Context Insights page
@@ -187,6 +189,21 @@ Type `/context` (or pick it from the `/` menu) and press Enter:
 A centered dialog opens with the **Current Composition** card and the **Context browser** — the same composition bar, per-step picker, and `vs previous turn` diff badges as the tab:
 
 ![The /context modal](https://raw.githubusercontent.com/bowenliang123/dsh-context/main/docs/context-command.png)
+
+## 🖥️ Terminal (dsh-TUI)
+
+Install the plugin into the dsh-TUI profile (`dsh plugin --profile dsh-tui add dsh-context`) and run a dsh-TUI with the plugin UI kit — its chart primitives, session data, surface navigation and multi-command plugin admission ship together in one release. The terminal half loads only there, so web and desktop deployments never run it; colors follow your dsh-TUI theme.
+
+- **Context side panel** — the occupancy headline (the same figure as the dsh-TUI footer), the window bar with the compaction reserve hatched at its true tail, the category legend, recent context events and recent file activity. While focused: `↑`/`↓` select an event or a file, `o` opens the selected file, `Enter` opens the full-screen view. A collapsed sidebar shows a one-row `ctx 62% ███──╱╱` form.
+- **Full-screen Context view** — `Tab`/`Shift+Tab` or `1`–`5` switch tabs, `↑`/`↓` and `PgUp`/`PgDn` move through a list, `Esc`/`q` closes:
+  - **Overview** — composition, session counts, billed tokens with the cache hit, cost and timing.
+  - **Trend** — one stacked column per step or turn, `✂` where a compaction or prune landed; `←`/`→` select, `t` toggles step/turn, the step's User / In / Response brief below.
+  - **Browser** — categories → items → content for the live context or the selected step, with `vs prev` deltas; `Enter` expands a category or an item (an item into its preview, wrapped to the width), `l` toggles live/selected.
+  - **Events** — the full list; `f` filters by kind.
+  - **Files** — the full file table; `Enter` opens the file, `s` changes the sort.
+- **Commands** — `/ctx [overview|trend|browser|events|files]` opens the full-screen view (on that tab); `/dsh-context:context [tab]` does the same, since dsh-TUI's built-in `/context` keeps the bare name.
+
+The full view opens with the trend granularity and the File Activity sort from the preferences below; dsh-TUI's `/settings` → **Plugins** page edits them too. The Browser shows each item's first line (the full message stays in the transcript).
 
 ## ⚙️ Settings
 

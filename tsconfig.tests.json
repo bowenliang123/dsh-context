@@ -4,5 +4,5 @@
     // Tests import node:assert and vitest; the app code stays on types: [].
     "types": ["node"]
   },
-  "include": ["tests/host/**/*.ts", "tests/shared/**/*.ts", "tests/client/**/*.ts", "src/client/globals.d.ts", "vitest.config.ts", "tsdown.config.ts"]
+  "include": ["tests/host/**/*.ts", "tests/shared/**/*.ts", "tests/client/**/*.ts", "tests/tui/**/*.ts", "src/client/globals.d.ts", "vitest.config.ts", "tsdown.config.ts"]
 }

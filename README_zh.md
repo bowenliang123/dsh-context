@@ -18,6 +18,7 @@
 - **Fleet 标签页** — Agent 家族专属页面：当前 Agent、它的父级，以及每个子 Agent 各自显示为一张实时卡片。
 - **Context 面板** — 同一仪表板也可作为右侧边栏标签页：在侧边栏指南页面选择 **Context**，面板便会在聊天旁打开，并包含 Agent 网络。
 - **`/context` 命令** — 斜杠命令会显示当前上下文组成模型和近期上下文演变。
+- **终端（dsh-TUI）** — 在 [dsh-TUI](https://github.com/ccch1mneyyy/dsh-TUI) 中提供 Context 侧栏面板和全屏 Context 视图。
 
 ## 安装 / 更新
 
@@ -45,7 +46,7 @@ dsh plugin --profile web update dsh-context@latest
 
 ## 使用方法
 
-五种入口，讲述同一件事——你的 Agent 正在携带什么、它如何获得这些内容，以及它如何使用这些内容：
+六种入口，讲述同一件事——你的 Agent 正在携带什么、它如何获得这些内容，以及它如何使用这些内容：
 
 | 入口 | 功能 |
 | --- | --- |
@@ -53,6 +54,7 @@ dsh plugin --profile web update dsh-context@latest
 | **Context 标签页** | 完整仪表板：统计、组成、逐请求趋势、事件和文件活动——适用于每个会话。 |
 | **Fleet 标签页** | Agent 网络：当前 Agent、它的父级以及所有子 Agent，实时呈现。 |
 | **`/context` 命令** | 居中弹窗，提供相同的组成信息和上下文浏览器，无需离开聊天。 |
+| **dsh-TUI** | 终端里的 Context 侧栏面板与全屏 Context 视图。 |
 | **Preferences 卡片** | 每位用户的默认设置：视图位置、趋势粒度和模式、File Activity 排序，以及拼接在每个会话系统提示词前后的前缀/后缀。 |
 
 ## 🗂️ 上下文洞察页面
@@ -185,6 +187,21 @@ dsh plugin --profile web update dsh-context@latest
 居中对话框会显示 **Current Composition** 卡片和 **Context browser**——与标签页相同的组成条、逐步选择器和 `vs previous turn` 差异徽标：
 
 ![The /context modal](https://raw.githubusercontent.com/bowenliang123/dsh-context/main/docs/context-command.png)
+
+## 🖥️ 终端（dsh-TUI）
+
+把插件装进 dsh-TUI profile（`dsh plugin --profile dsh-tui add dsh-context`），并使用带插件 UI 套件的 dsh-TUI——图表原语、会话数据、表面导航与多命令插件准入在同一个版本里一起发布。终端部分只在那里加载，网页版和桌面版永远不会运行它；配色跟随你的 dsh-TUI 主题。
+
+- **Context 侧栏面板** — 占用率标题（与 dsh-TUI 底栏同一数字）、窗口条（压缩预留以斜纹画在窗口真实的尾部）、分类图例、最近的上下文事件和文件活动。聚焦时：`↑`/`↓` 选择事件或文件，`o` 打开所选文件，`Enter` 打开全屏视图。侧栏收起时显示一行 `ctx 62% ███──╱╱`。
+- **全屏 Context 视图** — `Tab`/`Shift+Tab` 或 `1`–`5` 切换标签，`↑`/`↓` 与 `PgUp`/`PgDn` 在列表中移动，`Esc`/`q` 关闭：
+  - **概览** — 组成、会话计数、含缓存命中率的计费 token、费用与耗时。
+  - **趋势** — 每一步（或每一轮）一根堆叠柱，`✂` 标出压缩或剪枝落在的位置；`←`/`→` 选择，`t` 切换步/轮，下方显示该步的 用户 / 输入 / 回复 摘要。
+  - **浏览** — 实时上下文或所选步骤的 分类 → 条目 → 内容，附 `较上一步` 变化；`Enter` 展开分类或条目（条目展开为按宽度折行的预览），`l` 切换实时/所选步骤。
+  - **事件** — 完整列表；`f` 按类型筛选。
+  - **文件** — 完整的文件表；`Enter` 打开文件，`s` 切换排序。
+- **命令** — `/ctx [overview|trend|browser|events|files]` 打开全屏视图（并切到该标签）；`/dsh-context:context [标签]` 作用相同——dsh-TUI 内建的 `/context` 保留裸名。
+
+全屏视图按下方偏好设置中的趋势粒度和 File Activity 排序打开；dsh-TUI 的 `/settings` → **Plugins** 页面同样可以修改它们。浏览标签显示每个条目的首行（完整消息仍在对话记录中）。
 
 ## ⚙️ 设置
 

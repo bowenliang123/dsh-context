@@ -1,0 +1,48 @@
+{
+  "$schema": "urn:dsh-std:community-draft:dsh-plugin:0.15",
+  "manifestVersion": "0.15",
+  "id": "dsh-context",
+  "name": "dsh-context",
+  "version": "0.74.0",
+  "facets": {
+    "host": {
+      "entry": "lib/index.js",
+      "apiVersion": "v1alpha1"
+    }
+  },
+  "requires": {
+    "contracts": [
+      {
+        "apiVersion": "commands.dsh/v1alpha1",
+        "kind": "Command"
+      }
+    ]
+  },
+  "permissions": [
+    {
+      "name": "commands.invoke",
+      "scope": "dsh-context.*",
+      "reason": "Open the full-screen context dashboard from /ctx, and from /context (shadowed by dsh-TUI's built-in, so reached as /dsh-context:context)"
+    }
+  ],
+  "contributes": {
+    "commands": [
+      {
+        "id": "dsh-context.context",
+        "title": "Context",
+        "description": "Open the context dashboard; an optional argument picks the tab: overview, trend, browser, events or files"
+      },
+      {
+        "id": "dsh-context.ctx",
+        "title": "Context (short)",
+        "description": "Open the context dashboard; same as /context, never shadowed by a built-in"
+      }
+    ],
+    "panels": []
+  },
+  "subscriptions": [],
+  "license": "Apache-2.0",
+  "source": {
+    "repository": "https://github.com/bowenliang123/dsh-context"
+  }
+}

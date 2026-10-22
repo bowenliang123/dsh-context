@@ -1,9 +1,12 @@
 import { readFile, readdir } from 'node:fs/promises'
 import assert from 'node:assert/strict'
 import { describe, test } from 'vitest'
+import { COMMAND_NAMES } from '../../src/tui/mount'
 
 interface PackageManifest {
-  exports: Record<string, string>
+  version: string
+  main: string
+  exports: Record<string, unknown>
   files: string[]
   icon?: string
 }
@@ -49,5 +52,25 @@ describe('package meta localization', () => {
     assert.ok(manifest.files.includes('icon.svg'), 'the icon ships')
     const svg = await readFile('icon.svg', 'utf8')
     assert.match(svg, /^<svg xmlns="http:\/\/www\.w3\.org\/2000\/svg" viewBox="0 0 1024 1024">/)
+  })
+})
+
+describe('dsh-TUI component manifest', () => {
+  test('dsh-plugin.json tracks the package, declares the terminal commands, and ships', async () => {
+    const plugin = JSON.parse(await readFile('dsh-plugin.json', 'utf8')) as {
+      id: string
+      version: string
+      facets: { host: { entry: string } }
+      permissions: { name: string; scope: string }[]
+      contributes: { commands: { id: string }[]; panels: unknown[] }
+    }
+    assert.equal(plugin.id, 'dsh-context')
+    assert.equal(plugin.version, manifest.version, 'bumped with package.json')
+    assert.equal(plugin.facets.host.entry, manifest.main)
+    assert.deepEqual(plugin.contributes.commands.map(c => c.id), COMMAND_NAMES.map(name => `dsh-context.${name}`))
+    assert.deepEqual(plugin.permissions.map(p => [p.name, p.scope]), [['commands.invoke', 'dsh-context.*']], 'one namespace-wide permission')
+    assert.deepEqual(plugin.contributes.panels, [])
+    assert.ok(manifest.files.includes('dsh-plugin.json'), 'the manifest ships')
+    assert.deepEqual(manifest.exports['./tui'], { types: './lib/tui.d.ts', default: './lib/tui.js' })
   })
 })

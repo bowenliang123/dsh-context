@@ -17,6 +17,7 @@ import { createContextHeadersDefinition } from './headers'
 import { watchPromptInjection } from './promptInjection'
 import { watchStepIdentity } from './stepIdentity'
 import { watchSkillCatalog } from './skills'
+import { watchTerminal } from './terminal'
 import { createContextTimelineDefinition } from './timeline'
 import { detectHarnessVersion } from './version'
 import { meetsBaseline } from '../shared/version'
@@ -35,6 +36,8 @@ export function apply(ctx: Context, config: Config): void {
   watchSkillCatalog(ctx)
   watchFleetChannel(ctx, coldReads)
   watchAttachmentChannel(ctx, coldReads)
+  // The terminal half shows the gate record too, so it arms before the early return.
+  watchTerminal(ctx, config)
   // Below the baseline: fallback units serve zeroed data plus the gate record, never the real folds; an undetectable version fails open
   // into the normal composition below (docs/compatibility.md §2).
   const harnessVersion = detectHarnessVersion(ctx)

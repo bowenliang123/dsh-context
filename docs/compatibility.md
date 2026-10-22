@@ -115,3 +115,14 @@ Last verified: **2026-10-22** (dsh-context `0.74.0`, dsh `0.2.0-rc.2` / `0.2.1-r
 - **Check — hostile fixtures:** every guard branch carries them (wrong types, missing fields, throwing accessors) — an untested guard is an unverified promise.
 - **Procedure — add a baseline:** one `Baseline` entry in `tests/baselines.ts` (tag, vendored cordis, faces) plus the tag in both workflows' fetch step; run `pnpm test` and re-fit whichever seam a failing probe names.
 - **Limitation — scope:** these checks prove source-level seam compatibility, statistical parity, and install/uninstall per release — not full web-app runtime acceptance on a real profile.
+
+## 9 · Terminal surface
+
+*What the dsh-TUI half may rely on. `dsh-TUI:` paths are in the [dsh-TUI](https://github.com/ccch1mneyyy/dsh-TUI) tree. It needs the dsh-TUI release with the plugin UI kit, `tuiSessionData` and multi-command admission — they ship together.*
+
+1. **Load only where `tuiSessionData` exists** — a deferred `ctx.inject`, so web and desktop never import `lib/tui.js`; the chart kit is feature-detected per render, never by version. (`src/host/terminal.ts`, `src/tui/detect.ts`; dsh-TUI: `docs/plugin-ui-kit-design.md`)
+2. **Register through the executing activation** — dsh-TUI admits a service call only from the activation whose callback is running, and nested fibers inherit the plugin's `dsh-plugin.json` Component identity, so each registration goes through its own inject's context. (`src/tui/mount.ts`; dsh-TUI: `src/dsh-adapter/host-access.ts`, `src/dsh-adapter/component-identity.ts`)
+3. **Cover the commands with one namespace permission** — the component projection keys permissions by name, so a facet carries one `commands.invoke`, scoped `dsh-context.*` over `context` and `ctx`; dsh-TUI's built-in `/context` shadows the bare `context`, reached as `/dsh-context:context`. (`dsh-plugin.json`; dsh-TUI: `src/adapter/standard/permission-scope.ts`)
+
+- **Limitation — content:** the Browser shows the fold's one-line previews; full message text needs a history read with no non-deprecated in-process face (`Session.eventAt` is deprecated).
+- **Limitation — release:** `scripts/publish.sh`'s auto-bump does not rewrite `dsh-plugin.json`; bump both together (`tests/shared/packageMeta.spec.ts` fails on drift).

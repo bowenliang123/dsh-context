@@ -205,7 +205,7 @@ const OUTPUT_COMMENTS = { legal: true, annotation: false, jsdoc: false } as cons
 export default defineConfig([
   {
     name: pkg.name,
-    entry: { index: 'src/host/index.ts' },
+    entry: { index: 'src/host/index.ts', tui: 'src/tui/index.ts' },
     outDir: 'lib',
     format: ['esm'],
     platform: 'node',
