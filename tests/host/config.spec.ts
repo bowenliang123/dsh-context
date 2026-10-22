@@ -36,6 +36,11 @@ describe('Config validator (cordis Standard Schema face)', () => {
       overviewAutoSteps: '200',
       defaultOverviewRange: '30d',
       fleetTab: 'show',
+      usageWindow: '7d',
+      costFxRate: 'official',
+      costPeakFactor: '2',
+      costMultiplier: '1',
+      costActualPrice: 'hide',
       promptPrefix: '',
       promptSuffix: '',
     })

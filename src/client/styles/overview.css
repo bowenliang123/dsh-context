@@ -68,6 +68,11 @@
   .lc-ov-usage-day:nth-child(even) { visibility: hidden; }
   .lc-ov-usage-value { visibility: hidden; }
 }
+/* The 30-column dense layout: tighter gaps and slimmer bars so thirty columns keep visible
+   widths where the 7-day spacing would leave the strip all gutter. */
+.lc-ov-usage-dense .lc-ov-usage-cols,
+.lc-ov-usage-dense .lc-ov-usage-days { gap: 2px; }
+.lc-ov-usage-dense .lc-ov-usage-bar { width: 6px; border-radius: 2px 2px 0 0; }
 .lc-ov-usage-key { flex: none; display: flex; align-items: center; justify-content: flex-end; gap: 5px; padding-top: 5px; }
 .lc-ov-usage-swatch { flex: none; width: 10px; height: 8px; border-radius: 2px; }
 .lc-ov-usage-key-label { font-size: 9px; color: var(--dsw-alias-label-secondary); }
@@ -213,3 +218,14 @@ button.lc-heat-cell:hover { box-shadow: 0 0 0 1.5px color-mix(in srgb, var(--col
 .lc-ov-pager-btn:hover:enabled { border-color: var(--dsw-alias-label-secondary); }
 .lc-ov-pager-btn:disabled { opacity: 0.4; cursor: default; }
 .lc-ov-pager-n { color: var(--dsw-alias-label-secondary); font-size: 11px; font-variant-numeric: tabular-nums; white-space: nowrap; }
+
+/* The cost KPI's disclosure: a compact per-model pricing table under the sub-line. */
+.lc-ov-cost-detail { margin-top: 6px; font-size: 11px; }
+.lc-ov-cost-detail summary { color: var(--dsw-alias-label-secondary); cursor: pointer; user-select: none; }
+.lc-ov-cost-detail summary:hover { color: var(--dsw-alias-label-primary); }
+.lc-ov-cost-table { width: 100%; margin-top: 6px; border-collapse: collapse; }
+.lc-ov-cost-table th { text-align: left; font-weight: 400; color: var(--dsw-alias-label-secondary); padding: 2px 8px 2px 0; border-bottom: 1px solid var(--dsw-alias-border-l2); white-space: nowrap; }
+.lc-ov-cost-table td { padding: 3px 8px 3px 0; border-bottom: 1px solid color-mix(in srgb, var(--dsw-alias-border-l2) 50%, transparent); font-variant-numeric: tabular-nums; vertical-align: top; }
+.lc-ov-cost-face { color: var(--dsw-alias-label-secondary); font-size: 10px; }
+.lc-ov-cost-unpriced { color: var(--dsw-alias-label-secondary); font-style: italic; }
+.lc-ov-kpi-mult { margin-left: 5px; font-size: 10px; line-height: 1.5; font-weight: 400; color: var(--dsw-alias-label-secondary); border: 1px solid var(--dsw-alias-border-l2); border-radius: 4px; padding: 0 4px; vertical-align: 2px; }

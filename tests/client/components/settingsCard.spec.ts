@@ -14,7 +14,7 @@ function hookFor(state: SettingsState) {
 }
 
 function stateOf(partial: Partial<SettingsState> = {}): SettingsState {
-  return { status: 'ready', placement: 'all', granularity: 'step', mode: 'total', deltaBase: 'step', toolSort: 'count', fileSort: 'count', insightsEntry: 'show', durationCurve: 'show', overviewAutoSteps: '200', overviewRange: '30d', fleetTab: 'show', promptPrefix: '', promptSuffix: '', writable: true, ...partial }
+  return { status: 'ready', placement: 'all', granularity: 'step', mode: 'total', deltaBase: 'step', toolSort: 'count', fileSort: 'count', insightsEntry: 'show', durationCurve: 'show', overviewAutoSteps: '200', overviewRange: '30d', fleetTab: 'show', usageWindow: '7d', costFxRate: 'official', costPeakFactor: '2', costMultiplier: '1', costActualPrice: 'hide', promptPrefix: '', promptSuffix: '', writable: true, ...partial }
 }
 
 /** Menu items portaled into document.body while a select is open. */
@@ -36,24 +36,25 @@ describe('PluginConfigCard (the Plugins-page seat)', () => {
     await m2.unmount()
   })
 
-  test('renders the eleven selects and the two prompt text rows across three titled groups — no card chrome', async () => {
+  test('renders the sixteen selects and the two prompt text rows across four titled groups — no card chrome', async () => {
     const m = await mount(h(PluginConfigCard, { useContextSettings: hookFor(stateOf({ status: 'loading', writable: false })) }))
     assert.equal(m.container.querySelector('.lc-settings-card'), null, 'no settings-section chrome')
     assert.ok(query(m.container, '.lc-settings-prefs'))
     const groups = queryAll(m.container, '.lc-settings-group')
-    assert.equal(groups.length, 3)
+    assert.equal(groups.length, 4)
     assert.deepEqual(groups.map(g => g.getAttribute('aria-label')), [
       DICT_EN['settings.group.entry'],
       DICT_EN['settings.group.view'],
+      DICT_EN['settings.group.cost'],
       DICT_EN['settings.group.prompt'],
     ])
     const selects = queryAll<HTMLButtonElement>(m.container, '.lc-settings-select')
-    assert.equal(selects.length, 11)
+    assert.equal(selects.length, 16)
     assert.ok(selects.every(s => s.disabled), 'loading is not ready: the rows are disabled')
     const textareas = queryAll<HTMLTextAreaElement>(m.container, '.lc-settings-textarea')
     assert.equal(textareas.length, 2)
     assert.ok(textareas.every(t => t.disabled), 'loading is not ready: the text rows are disabled')
-    assert.ok(text(groups[2]).includes(DICT_EN['settings.promptHint']), 'the prompt hint lives inside the prompt group')
+    assert.ok(text(groups[3]).includes(DICT_EN['settings.promptHint']), 'the prompt hint lives inside the prompt group')
     assert.equal(m.container.querySelector('[role="status"]'), null, 'no read-only notice while loading')
     await m.unmount()
   })
@@ -226,6 +227,92 @@ describe('PluginConfigCard (the Plugins-page seat)', () => {
       ['defaultFileSort', 'name'],
     ])
 
+    // The cost group follows the view one: the usage chart's window, the fx presets,
+    // the peak factor, the actual-price multiplier, and that multiplier's on/off gate.
+    assert.ok(text(m.container).includes(DICT_EN['settings.group.cost']))
+    assert.ok(text(m.container).includes(DICT_EN['settings.usageWindow']))
+    assert.ok(text(selects[11]).includes(DICT_EN['ov.usage.title']))
+    await click(selects[11])
+    const windowItems = menuItems()
+    assert.deepEqual(windowItems.map(i => text(i)), [DICT_EN['ov.usage.title'], DICT_EN['ov.usage.title30']])
+    await click(windowItems[1]) // 'Last 30 Days'
+    assert.deepEqual(calls, [
+      ['defaultPlacement', 'sidebar'],
+      ['insightsEntry', 'hide'],
+      ['fleetTab', 'hide'],
+      ['defaultGranularity', 'turn'],
+      ['defaultTrendMode', 'delta'],
+      ['defaultDurationCurve', 'hide'],
+      ['overviewAutoSteps', 'off'],
+      ['defaultDeltaBase', 'turn'],
+      ['defaultToolSort', 'name'],
+      ['defaultFileSort', 'name'],
+      ['usageWindow', '30d'],
+    ])
+
+    assert.ok(text(m.container).includes(DICT_EN['settings.costFxRate']))
+    assert.ok(text(selects[12]).includes(DICT_EN['settings.costFxOfficial']))
+    await click(selects[12])
+    const fxItems = menuItems()
+    assert.deepEqual(fxItems.map(i => text(i)), [
+      DICT_EN['settings.costFxOfficial'],
+      DICT_EN['settings.costFxAt'].replace('{r}', '7.0'),
+      DICT_EN['settings.costFxAt'].replace('{r}', '7.2'),
+      DICT_EN['settings.costFxAt'].replace('{r}', '7.4'),
+    ])
+    await click(fxItems[2]) // 1 USD = 7.2 CNY
+    assert.deepEqual(calls, [
+      ['defaultPlacement', 'sidebar'],
+      ['insightsEntry', 'hide'],
+      ['fleetTab', 'hide'],
+      ['defaultGranularity', 'turn'],
+      ['defaultTrendMode', 'delta'],
+      ['defaultDurationCurve', 'hide'],
+      ['overviewAutoSteps', 'off'],
+      ['defaultDeltaBase', 'turn'],
+      ['defaultToolSort', 'name'],
+      ['defaultFileSort', 'name'],
+      ['usageWindow', '30d'],
+      ['costFxRate', '7.2'],
+    ])
+
+    assert.ok(text(m.container).includes(DICT_EN['settings.costPeak']))
+    await click(selects[13])
+    const peakItems = menuItems()
+    assert.deepEqual(peakItems.map(i => text(i)), [
+      DICT_EN['settings.costTimes'].replace('{n}', '1'),
+      DICT_EN['settings.costTimes'].replace('{n}', '1.5'),
+      DICT_EN['settings.costTimes'].replace('{n}', '2'),
+    ])
+    await click(peakItems[0]) // 1×
+    assert.ok(text(m.container).includes(DICT_EN['settings.costMultiplier']))
+    await click(selects[14])
+    const multItems = menuItems()
+    assert.deepEqual(multItems.map(i => text(i)), ['1', '0.95', '0.9', '0.8', '0.7', '0.5'].map(n => DICT_EN['settings.costTimes'].replace('{n}', n)))
+    await click(multItems[3]) // 0.8×
+    assert.ok(text(m.container).includes(DICT_EN['settings.costActualPrice']))
+    await click(selects[15])
+    const actualItems = menuItems()
+    assert.deepEqual(actualItems.map(i => text(i)), [DICT_EN['showHide.show'], DICT_EN['showHide.hide']])
+    await click(actualItems[0]) // 'Show'
+    assert.deepEqual(calls, [
+      ['defaultPlacement', 'sidebar'],
+      ['insightsEntry', 'hide'],
+      ['fleetTab', 'hide'],
+      ['defaultGranularity', 'turn'],
+      ['defaultTrendMode', 'delta'],
+      ['defaultDurationCurve', 'hide'],
+      ['overviewAutoSteps', 'off'],
+      ['defaultDeltaBase', 'turn'],
+      ['defaultToolSort', 'name'],
+      ['defaultFileSort', 'name'],
+      ['usageWindow', '30d'],
+      ['costFxRate', '7.2'],
+      ['costPeakFactor', '1'],
+      ['costMultiplier', '0.8'],
+      ['costActualPrice', 'show'],
+    ])
+
     await click(selects[3])
     const rangeItems = menuItems()
     assert.deepEqual(rangeItems.map(i => text(i)), [
@@ -246,6 +333,11 @@ describe('PluginConfigCard (the Plugins-page seat)', () => {
       ['defaultDeltaBase', 'turn'],
       ['defaultToolSort', 'name'],
       ['defaultFileSort', 'name'],
+      ['usageWindow', '30d'],
+      ['costFxRate', '7.2'],
+      ['costPeakFactor', '1'],
+      ['costMultiplier', '0.8'],
+      ['costActualPrice', 'show'],
       ['defaultOverviewRange', '7d'],
     ])
     assert.equal(document.body.querySelector('[role="menu"]'), null)

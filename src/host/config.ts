@@ -58,6 +58,11 @@ export const Config = z.object({
   overviewAutoSteps: volatileField(z.union(['100', '200', '300', 'off']).default('200').loose()),
   defaultOverviewRange: volatileField(z.union(['today', '7d', '30d', 'all']).default('30d').loose()),
   fleetTab: volatileField(z.union(['show', 'hide']).default('show').loose()),
+  usageWindow: volatileField(z.union(['7d', '30d']).default('7d').loose()),
+  costFxRate: volatileField(z.union(['official', '7.0', '7.2', '7.4']).default('official').loose()),
+  costPeakFactor: volatileField(z.union(['1', '1.5', '2']).default('2').loose()),
+  costMultiplier: volatileField(z.union(['1', '0.95', '0.9', '0.8', '0.7', '0.5']).default('1').loose()),
+  costActualPrice: volatileField(z.union(['show', 'hide']).default('hide').loose()),
   // Loose: a stale persisted value (or a non-string) degrades to the empty default instead of failing the entry.
   promptPrefix: volatileField(z.string().default('').loose()),
   promptSuffix: volatileField(z.string().default('').loose()),

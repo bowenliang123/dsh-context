@@ -389,7 +389,7 @@ describe('client entry: configForms inject', () => {
     const m = await mount(h(el.type as never, {
       useContextSettings: <T,>(sel: (state: SettingsState) => T): T => sel(store.getSnapshot()),
     }))
-    assert.equal(queryAll(m.container, '.lc-settings-select').length, 11)
+    assert.equal(queryAll(m.container, '.lc-settings-select').length, 16)
     assert.equal(queryAll(m.container, '.lc-settings-textarea').length, 2)
     assert.equal(m.container.querySelector('.lc-settings-head'), null, 'no settings-section chrome on this seat')
     await m.unmount()

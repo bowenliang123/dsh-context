@@ -18,7 +18,7 @@
  */
 
 import { useEffect, useMemo, useState, useSyncExternalStore, type ReactElement } from 'react'
-import { estimateSessionCost, formatCost, type CostCurrency, type ModelBook } from '../cost'
+import { costBreakdownOf, estimateSessionCost, formatCost, type CostCurrency, type CostModelLine, type CostPrefs, type ModelBook } from '../cost'
 import { fmt } from '../format'
 import { useModelPrices } from '../modelPrices'
 import {
@@ -32,6 +32,7 @@ import { openSessionVia, type ClientCtx } from '../services'
 import { readSkillCatalog } from '../skills'
 import { openPluginSettings } from '../settingsJump'
 import type { ContextSettings } from '../settings'
+import { costPrefsOf } from '../settings'
 import type { SkillInfo } from '../../shared/types'
 import { dayKeyOf } from '../../shared/days'
 import type { ViewKit } from '../viewkit'
@@ -90,13 +91,62 @@ export function makeOverviewPanel(
     return activeLocale() === 'zh' ? 'cny' : 'usd'
   }
 
-  function OverviewBody(props: OverviewPanelProps): ReactElement | null {
-    const { book } = useModelPrices()
+  /** The cost KPI's disclosure: one line per billed model — the tokens, the priced
+   * cost, and the book face the price came from, or the reason nothing priced.
+   * Renders nothing while no usage merged (no expander for an empty band). */
+  function CostBreakdown(props: { lines: CostModelLine[]; currency: CostCurrency }): ReactElement | null {
+    if (props.lines.length === 0) return null
+    return (
+      <details className="lc-ov-cost-detail">
+        <summary>{t('ov.kpi.breakdown')}</summary>
+        <table className="lc-ov-cost-table">
+          <thead>
+            <tr>
+              <th scope="col">{t('ov.cost.model')}</th>
+              <th scope="col">{t('ov.usage.tokens')}</th>
+              <th scope="col">{t('stats.cost')}</th>
+              <th scope="col">{t('ov.cost.source')}</th>
+            </tr>
+          </thead>
+          <tbody>
+            {props.lines.map(line => (
+              <tr key={line.provider + '/' + line.model}>
+                <td>
+                  {line.model}
+                  {/* The registry's spelling, when the billed id differs from the face the price read off. */}
+                  {line.rate !== null && line.mid !== line.model && <span className="lc-ov-cost-face"> {line.mid}</span>}
+                </td>
+                <td>{fmt(line.tokens)}</td>
+                <td>{line.cost === null ? '—' : formatCost(line.cost, props.currency)}</td>
+                <td className={line.cost === null ? 'lc-ov-cost-unpriced' : undefined}>
+                  {line.cost === null
+                    ? t('ov.cost.reason.' + line.reason)
+                    : `${line.pid} · ${line.mid}`}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </details>
+    )
+  }
+
+  function OverviewBody(props: OverviewPanelProps): ReactElement | null {    const { book } = useModelPrices()
     const snapshot = sessionsSnapshotOf(props)
     const wsSnapshot = workspacesSnapshotOf(props)
     // The preset follows the served default until the reader picks one; a pick is written back as the
     // new default where settings are writable, and a late-arriving section still lands while none is picked.
     const configuredRange = useSyncExternalStore(subscribeSettings, () => settings.defaultOverviewRange())
+    // The cost figures' display preferences: read per render off the store so a
+    // settings edit re-prices the band, the chart, and the breakdown alike.
+    const usageWindow = useSyncExternalStore(subscribeSettings, () => settings.usageWindow())
+    const fxRate = useSyncExternalStore(subscribeSettings, () => settings.costFxRate())
+    const peakFactor = useSyncExternalStore(subscribeSettings, () => settings.costPeakFactor())
+    const multiplier = useSyncExternalStore(subscribeSettings, () => settings.costMultiplier())
+    const actualPrice = useSyncExternalStore(subscribeSettings, () => settings.costActualPrice())
+    const costPrefs = costPrefsOf({
+      costFxRate: fxRate, costPeakFactor: peakFactor, costMultiplier: multiplier, costActualPrice: actualPrice,
+    })
     const [picked, setPicked] = useState<OverviewRange | null>(null)
     const preset = picked ?? configuredRange
     const [custom, setCustom] = useState<DayRange | null>(null)
@@ -173,8 +223,10 @@ export function makeOverviewPanel(
       sort,
     )
     const paged = pageOf(visible, page)
-    const kpi = kpisOf(ranged, book, currency, scope)
-    const days = aggregateDays(covered, book, currency)
+    const kpi = kpisOf(ranged, book, currency, scope, costPrefs)
+    const days = aggregateDays(covered, book, currency, costPrefs)
+    // The cost KPI's per-model disclosure, priced by the same prefs.
+    const breakdown = costBreakdownOf(kpi.usage, book, currency, costPrefs)
     /** A preset pick applies at once and becomes the stored default where the settings form is writable. */
     const pickPreset = (range: OverviewRange): void => {
       setPicked(range)
@@ -249,8 +301,15 @@ export function makeOverviewPanel(
                     </div>
                     <div className="lc-stat lc-ov-kpi">
                       <span className="lc-stat-label">{t('stats.cost')}</span>
-                      <span className="lc-stat-value">{kpi.cost === null ? '—' : formatCost(kpi.cost, currency)}</span>
+                      <span className="lc-stat-value">
+                        {kpi.cost === null ? '—' : formatCost(kpi.cost, currency)}
+                        {/* The actual-price badge marks a figure the multiplier moved off the book's own. */}
+                        {actualPrice === 'show' && costPrefs.multiplier !== 1 && (
+                          <span className="lc-ov-kpi-mult" title={t('ov.kpi.multTip')}>×{costPrefs.multiplier}</span>
+                        )}
+                      </span>
                       <span className="lc-stat-sub">{t('ov.kpi.pricedSub', { n: kpi.costSessions, total: kpi.sessions })}</span>
+                      <CostBreakdown lines={breakdown} currency={currency} />
                     </div>
                     <div className="lc-stat lc-ov-kpi">
                       <span className="lc-stat-label">{t('stats.cacheHit')}</span>
@@ -268,7 +327,7 @@ export function makeOverviewPanel(
                       <span className="lc-stat-sub">{t('ov.kpi.wallSub', { n: fmt(kpi.calls) })}</span>
                     </div>
                   </div>
-                  <OverviewUsage days={days} currency={currency} today={todayKey()} />
+                  <OverviewUsage days={days} currency={currency} today={todayKey()} window={usageWindow} />
                 </div>
                 <div className="lc-ov-stats">
                   <OverviewTokens tokens={kpi.tokenParts} />
@@ -380,7 +439,7 @@ export function makeOverviewPanel(
                               key={row.id}
                               row={row}
                               {...(groups?.[row.id] !== undefined ? { group: groups[row.id] } : {})}
-                              costLabel={cardCostOf(row, book, currency)}
+                              costLabel={cardCostOf(row, book, currency, costPrefs)}
                               now={now}
                               onOpen={openOne}
                             />
@@ -423,8 +482,8 @@ export function makeOverviewPanel(
 }
 
 /** One card's priced cost label at the team scope, or the dash (no book yet, nothing billed, unpriceable models). */
-function cardCostOf(row: OverviewRow, book: ModelBook | null, currency: CostCurrency): string {
+function cardCostOf(row: OverviewRow, book: ModelBook | null, currency: CostCurrency, prefs: CostPrefs): string {
   if (row.familyCost === null) return '—'
-  const cost = estimateSessionCost(row.familyCost, book, currency)
+  const cost = estimateSessionCost(row.familyCost, book, currency, prefs)
   return cost === null ? '—' : formatCost(cost, currency)
 }

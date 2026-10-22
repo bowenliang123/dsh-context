@@ -228,6 +228,57 @@ function PreferenceRows(props: { t: Translate; state: SettingsState; set?: Setti
           onPick={(id) => { set?.('defaultFileSort', id) }}
         />
       </Group>
+      <Group title={t('settings.group.cost')}>
+        <PrefRow
+          label={t('settings.usageWindow')}
+          value={state.usageWindow}
+          disabled={disabled}
+          options={[
+            { id: '7d', label: t('ov.usage.title') },
+            { id: '30d', label: t('ov.usage.title30') },
+          ]}
+          onPick={(id) => { set?.('usageWindow', id) }}
+        />
+        <PrefRow
+          label={t('settings.costFxRate')}
+          value={state.costFxRate}
+          disabled={disabled}
+          options={[
+            { id: 'official', label: t('settings.costFxOfficial') },
+            { id: '7.0', label: t('settings.costFxAt', { r: '7.0' }) },
+            { id: '7.2', label: t('settings.costFxAt', { r: '7.2' }) },
+            { id: '7.4', label: t('settings.costFxAt', { r: '7.4' }) },
+          ]}
+          onPick={(id) => { set?.('costFxRate', id) }}
+        />
+        <PrefRow
+          label={t('settings.costPeak')}
+          value={state.costPeakFactor}
+          disabled={disabled}
+          options={[
+            { id: '1', label: t('settings.costTimes', { n: '1' }) },
+            { id: '1.5', label: t('settings.costTimes', { n: '1.5' }) },
+            { id: '2', label: t('settings.costTimes', { n: '2' }) },
+          ]}
+          onPick={(id) => { set?.('costPeakFactor', id) }}
+        />
+        <PrefRow
+          label={t('settings.costMultiplier')}
+          value={state.costMultiplier}
+          disabled={disabled}
+          options={[
+            { id: '1', label: t('settings.costTimes', { n: '1' }) },
+            { id: '0.95', label: t('settings.costTimes', { n: '0.95' }) },
+            { id: '0.9', label: t('settings.costTimes', { n: '0.9' }) },
+            { id: '0.8', label: t('settings.costTimes', { n: '0.8' }) },
+            { id: '0.7', label: t('settings.costTimes', { n: '0.7' }) },
+            { id: '0.5', label: t('settings.costTimes', { n: '0.5' }) },
+          ]}
+          onPick={(id) => { set?.('costMultiplier', id) }}
+        />
+        <ShowHideRow t={t} label={t('settings.costActualPrice')} value={state.costActualPrice} disabled={disabled}
+          onPick={(id) => { set?.('costActualPrice', id) }} />
+      </Group>
       <Group title={t('settings.group.prompt')}>
         <p className="lc-settings-note">{t('settings.promptHint')}</p>
         <PromptTextRow

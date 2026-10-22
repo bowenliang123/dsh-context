@@ -1,7 +1,8 @@
 /** The plugin's user-settings binding (browser half): the Host-served `dsh-context` namespace carries per-user
  * display preferences, degrading to the schema defaults wherever that surface is absent or read-only. */
 
-import type { DefaultDeltaBase, DefaultFileSort, DefaultGranularity, DefaultDurationCurve, DefaultOverviewRange, DefaultPlacement, DefaultToolSort, DefaultTrendMode, FleetTab, InsightsEntry, OverviewAutoSteps, SettingsField } from '../shared/types'
+import type { CostActualPrice, CostFxRate, CostMultiplier, CostPeakFactor, DefaultDeltaBase, DefaultFileSort, DefaultGranularity, DefaultDurationCurve, DefaultOverviewRange, DefaultPlacement, DefaultToolSort, DefaultTrendMode, FleetTab, InsightsEntry, OverviewAutoSteps, SettingsField, UsageWindow } from '../shared/types'
+import { OFFICIAL_PREFS, type CostPrefs } from './cost'
 
 export type { DefaultDeltaBase, DefaultFileSort, DefaultToolSort, SettingsField } from '../shared/types'
 
@@ -38,6 +39,11 @@ export interface SettingsState {
   overviewAutoSteps: OverviewAutoSteps
   overviewRange: DefaultOverviewRange
   fleetTab: FleetTab
+  usageWindow: UsageWindow
+  costFxRate: CostFxRate
+  costPeakFactor: CostPeakFactor
+  costMultiplier: CostMultiplier
+  costActualPrice: CostActualPrice
   promptPrefix: string
   promptSuffix: string
   writable: boolean
@@ -57,6 +63,11 @@ export interface ContextSettings {
   overviewAutoSteps(): OverviewAutoSteps
   defaultOverviewRange(): DefaultOverviewRange
   fleetTab(): FleetTab
+  usageWindow(): UsageWindow
+  costFxRate(): CostFxRate
+  costPeakFactor(): CostPeakFactor
+  costMultiplier(): CostMultiplier
+  costActualPrice(): CostActualPrice
   attach(scope: SettingsScopeLike): () => void
   /** Persist one preference choice (local echo, then the fenced scope write). */
   set(field: SettingsField, value: string): void
@@ -74,6 +85,11 @@ type Prefs = {
   overviewAutoSteps?: OverviewAutoSteps
   overviewRange?: DefaultOverviewRange
   fleetTab?: FleetTab
+  usageWindow?: UsageWindow
+  costFxRate?: CostFxRate
+  costPeakFactor?: CostPeakFactor
+  costMultiplier?: CostMultiplier
+  costActualPrice?: CostActualPrice
   promptPrefix?: string
   promptSuffix?: string
 }
@@ -93,13 +109,18 @@ function prefsOf(value: unknown): Prefs {
     ...(v.overviewAutoSteps === '100' || v.overviewAutoSteps === '200' || v.overviewAutoSteps === '300' || v.overviewAutoSteps === 'off' ? { overviewAutoSteps: v.overviewAutoSteps } : {}),
     ...(v.defaultOverviewRange === 'today' || v.defaultOverviewRange === '7d' || v.defaultOverviewRange === '30d' || v.defaultOverviewRange === 'all' ? { overviewRange: v.defaultOverviewRange } : {}),
     ...(v.fleetTab === 'show' || v.fleetTab === 'hide' ? { fleetTab: v.fleetTab } : {}),
+    ...(v.usageWindow === '7d' || v.usageWindow === '30d' ? { usageWindow: v.usageWindow } : {}),
+    ...(v.costFxRate === 'official' || v.costFxRate === '7.0' || v.costFxRate === '7.2' || v.costFxRate === '7.4' ? { costFxRate: v.costFxRate } : {}),
+    ...(v.costPeakFactor === '1' || v.costPeakFactor === '1.5' || v.costPeakFactor === '2' ? { costPeakFactor: v.costPeakFactor } : {}),
+    ...(v.costMultiplier === '1' || v.costMultiplier === '0.95' || v.costMultiplier === '0.9' || v.costMultiplier === '0.8' || v.costMultiplier === '0.7' || v.costMultiplier === '0.5' ? { costMultiplier: v.costMultiplier } : {}),
+    ...(v.costActualPrice === 'show' || v.costActualPrice === 'hide' ? { costActualPrice: v.costActualPrice } : {}),
     ...(typeof v.promptPrefix === 'string' ? { promptPrefix: v.promptPrefix } : {}),
     ...(typeof v.promptSuffix === 'string' ? { promptSuffix: v.promptSuffix } : {}),
   }
 }
 
 export function createContextSettings(): ContextSettings {
-  let state: SettingsState = { status: 'loading', placement: 'all', granularity: 'step', mode: 'total', deltaBase: 'step', toolSort: 'count', fileSort: 'count', insightsEntry: 'show', durationCurve: 'show', overviewAutoSteps: '200', overviewRange: '30d', fleetTab: 'show', promptPrefix: '', promptSuffix: '', writable: false }
+  let state: SettingsState = { status: 'loading', placement: 'all', granularity: 'step', mode: 'total', deltaBase: 'step', toolSort: 'count', fileSort: 'count', insightsEntry: 'show', durationCurve: 'show', overviewAutoSteps: '200', overviewRange: '30d', fleetTab: 'show', usageWindow: '7d', costFxRate: 'official', costPeakFactor: '2', costMultiplier: '1', costActualPrice: 'hide', promptPrefix: '', promptSuffix: '', writable: false }
   let scope: SettingsScopeLike | undefined
   const listeners = new Set<() => void>()
   /** Every field is a scalar, so a shallow compare is the store's identity check — and a new preference
@@ -136,6 +157,11 @@ export function createContextSettings(): ContextSettings {
       overviewAutoSteps: prefs.overviewAutoSteps ?? (raw?.overviewAutoSteps === undefined ? state.overviewAutoSteps : '200'),
       overviewRange: prefs.overviewRange ?? (raw?.defaultOverviewRange === undefined ? state.overviewRange : '30d'),
       fleetTab: prefs.fleetTab ?? (raw?.fleetTab === undefined ? state.fleetTab : 'show'),
+      usageWindow: prefs.usageWindow ?? state.usageWindow,
+      costFxRate: prefs.costFxRate ?? state.costFxRate,
+      costPeakFactor: prefs.costPeakFactor ?? state.costPeakFactor,
+      costMultiplier: prefs.costMultiplier ?? state.costMultiplier,
+      costActualPrice: prefs.costActualPrice ?? state.costActualPrice,
       promptPrefix: prefs.promptPrefix ?? (raw?.promptPrefix === undefined ? state.promptPrefix : ''),
       promptSuffix: prefs.promptSuffix ?? (raw?.promptSuffix === undefined ? state.promptSuffix : ''),
       writable: snap.writable,
@@ -161,6 +187,11 @@ export function createContextSettings(): ContextSettings {
     overviewAutoSteps: () => state.overviewAutoSteps,
     defaultOverviewRange: () => state.overviewRange,
     fleetTab: () => state.fleetTab,
+    usageWindow: () => state.usageWindow,
+    costFxRate: () => state.costFxRate,
+    costPeakFactor: () => state.costPeakFactor,
+    costMultiplier: () => state.costMultiplier,
+    costActualPrice: () => state.costActualPrice,
     attach(bound) {
       scope = bound
       sync(bound)
@@ -188,5 +219,17 @@ export function createContextSettings(): ContextSettings {
         if (Object.keys(refused).length > 0) publish({ ...state, ...refused })
       })
     },
+  }
+}
+
+/** The pricing inputs the cost preferences resolve to. The multiplier prices into the
+ * estimates only in actual-price mode, so official figures never move behind the user's back. */
+export function costPrefsOf(
+  state: Pick<SettingsState, 'costFxRate' | 'costPeakFactor' | 'costMultiplier' | 'costActualPrice'>,
+): CostPrefs {
+  return {
+    usdPerCny: state.costFxRate === 'official' ? OFFICIAL_PREFS.usdPerCny : 1 / Number(state.costFxRate),
+    peakFactor: Number(state.costPeakFactor),
+    multiplier: state.costActualPrice === 'show' ? Number(state.costMultiplier) : 1,
   }
 }

@@ -2,8 +2,8 @@
 
 import assert from 'node:assert/strict'
 import { describe, test } from 'vitest'
-import { estimateSessionCost, billedTokensOf, formatCost, formatPriceRate, mergeCostUsage, priceFaceOf, priceIndexOf, priceOf, toCurrency } from '../../src/client/cost'
-import type { ModelBook, ModelPrices } from '../../src/client/cost'
+import { costBreakdownOf, estimateSessionCost, billedTokensOf, formatCost, formatPriceRate, mergeCostUsage, OFFICIAL_PREFS, priceFaceDetailedOf, priceFaceOf, priceIndexOf, priceOf, toCurrency } from '../../src/client/cost'
+import type { CostPrefs, ModelBook, ModelPrices } from '../../src/client/cost'
 import type { CostBucketTotals, SessionCostUsage } from '../../src/shared/types'
 
 const M = 1_000_000
@@ -428,5 +428,138 @@ describe('formatPriceRate', () => {
     assert.equal(formatPriceRate(4.5, 'cny'), '¥4.50')
     assert.equal(formatPriceRate(0.007, 'usd'), '$0.01')
     assert.equal(formatPriceRate(0.1, 'usd'), '$0.10')
+  })
+})
+
+describe('priceFaceDetailedOf (the resolution with its verdict)', () => {
+  test('no book at all verdicts no-book', () => {
+    assert.deepEqual(priceFaceDetailedOf(null, 'deepseek', 'deepseek-v4-flash'), { face: null, reason: 'no-book' })
+    assert.deepEqual(priceFaceDetailedOf(undefined, 'deepseek', 'deepseek-v4-flash'), { face: null, reason: 'no-book' })
+  })
+
+  test('a direct branch hit carries the registry provider and model ids', () => {
+    assert.deepEqual(priceFaceDetailedOf(BOOK_B, 'deepseek', 'deepseek-v4-flash'), { face: { pid: 'deepseek', mid: 'deepseek-v4-flash', rate: FLASH } })
+    // A short id suffix-matches: the face spells the registry's id.
+    assert.deepEqual(priceFaceDetailedOf(BOOK_B, 'kimi-coding', 'k3'), { face: { pid: 'moonshotai', mid: 'kimi-k3', rate: K3 } })
+  })
+
+  test('a carried provider with an unknown model and a suffix tie verdict ambiguous', () => {
+    const book = bookOf({ moonshotai: { 'kimi-k3': K3, 'other-k3': KIMI } })
+    assert.deepEqual(priceFaceDetailedOf(book, 'kimi-coding', 'k3'), { face: null, reason: 'ambiguous' })
+    assert.deepEqual(priceFaceDetailedOf(BOOK_B, 'deepseek', 'mystery'), { face: null, reason: 'unknown-model' })
+  })
+
+  test('a deepseek- id under a foreign provider prices from the first-party branch first', () => {
+    // No branch carries the provider, and DeepSeek's own listing stands in —
+    // the cache-rate-bearing book — before the model-side index is searched.
+    assert.deepEqual(
+      priceFaceDetailedOf(bookOf({ deepseek: { 'deepseek-v4-flash': FLASH } }), 'future-provider', 'deepseek-v4-flash'),
+      { face: { pid: 'deepseek', mid: 'deepseek-v4-flash', rate: FLASH } },
+    )
+    // With no first-party branch either, the index resolves the vendor-named id off whichever branch carries it.
+    assert.deepEqual(
+      priceFaceDetailedOf(bookOf({ 'bare-host': { 'deepseek-v4-flash': FLASH } }), 'future-provider', 'deepseek-v4-flash'),
+      { face: { pid: 'bare-host', mid: 'deepseek-v4-flash', rate: FLASH } },
+    )
+  })
+
+  test('an index hit the index found but could not break a tie on verdicts ambiguous, not unknown', () => {
+    // Two branches carry the id, the provider names neither, and no npm primary exists.
+    const book = bookOf({
+      vivgrid: { 'claude-sonnet-5': KIMI },
+      'other-host': { 'claude-sonnet-5': KIMI },
+    })
+    assert.deepEqual(priceFaceDetailedOf(book, 'future-provider', 'claude-sonnet-5'), { face: null, reason: 'ambiguous' })
+    assert.deepEqual(priceFaceDetailedOf(book, 'future-provider', 'mystery'), { face: null, reason: 'unknown-model' })
+  })
+})
+
+describe('costBreakdownOf (the breakdown lines)', () => {
+  const usage: SessionCostUsage = {
+    deepseek: {
+      'deepseek-v4-flash': { off: { uncached: 1_000_000, cacheRead: 0, cacheWrite: 0, output: 0 } },
+    },
+    moonshotai: {
+      'kimi-k3': { peak: { uncached: 0, cacheRead: 1_000_000, cacheWrite: 0, output: 2_000_000 } },
+      mystery: { peak: { uncached: 500_000, cacheRead: 0, cacheWrite: 0, output: 0 } },
+    },
+  }
+
+  test('null or undefined usage prices to no lines', () => {
+    assert.deepEqual(costBreakdownOf(null, BOOK_B, 'usd'), [])
+    assert.deepEqual(costBreakdownOf(undefined, BOOK_B, 'usd'), [])
+  })
+
+  test('hostile usage shapes (non-record providers, models, buckets) are skipped or emptied, not thrown', () => {
+    assert.deepEqual(costBreakdownOf({ p: null } as never, BOOK_B, 'usd'), [], 'a non-record provider value')
+    assert.deepEqual(costBreakdownOf({ p: { m: null } } as never, BOOK_B, 'usd'), [], 'a non-record model value')
+    // A null bucket contributes no tokens but the model line still reports its verdict.
+    assert.deepEqual(
+      costBreakdownOf({ p: { m: { peak: null } } } as never, BOOK_B, 'usd'),
+      [{ provider: 'p', model: 'm', tokens: 0, cost: null, pid: null, mid: null, rate: null, reason: 'unknown-model' }],
+    )
+  })
+
+  test('lines price off the face, sort priced-first by cost then tokens, unpriced last with the verdict', () => {
+    const lines = costBreakdownOf(usage, BOOK_B, 'usd')
+    assert.equal(lines.length, 3)
+    const [kimi, flash, mystery] = lines
+    assert.deepEqual({ ...kimi, cost: 0 }, { provider: 'moonshotai', model: 'kimi-k3', tokens: 3_000_000, cost: 0, pid: 'moonshotai', mid: 'kimi-k3', rate: K3 })
+    close(kimi.cost, 1_000_000 * K3.hit / 1e6 + 2_000_000 * K3.out / 1e6, 'kimi prices peak without the deepseek stand-in')
+    assert.deepEqual({ ...flash, cost: 0 }, { provider: 'deepseek', model: 'deepseek-v4-flash', tokens: 1_000_000, cost: 0, pid: 'deepseek', mid: 'deepseek-v4-flash', rate: FLASH })
+    close(flash.cost, FLASH.miss)
+    assert.deepEqual(mystery, { provider: 'moonshotai', model: 'mystery', tokens: 500_000, cost: null, pid: null, mid: null, rate: null, reason: 'unknown-model' })
+  })
+
+  test('the display currency and the actual-price prefs ride the line costs, and the peak factor stands in for DeepSeek', () => {
+    const prefs: CostPrefs = { usdPerCny: 1 / 7.2, peakFactor: 1.5, multiplier: 0.8 }
+    const lines = costBreakdownOf(usage, BOOK_B, 'cny', prefs)
+    close(lines[0].cost, (1_000_000 * K3.hit / 1e6 + 2_000_000 * K3.out / 1e6) * 0.8 * 7.2)
+    // The deepseek line bills off-peak: no peak stand-in applies; the multiplier still does.
+    close(lines[1].cost, FLASH.miss * 0.8 * 7.2)
+    const peaked = costBreakdownOf({
+      deepseek: { 'deepseek-v4-flash': { peak: { uncached: 1_000_000, cacheRead: 0, cacheWrite: 0, output: 0 } } },
+    }, BOOK_B, 'usd', prefs)
+    close(peaked[0].cost, FLASH.miss * 1.5 * 0.8, 'the peak factor multiplies the deepseek peak period')
+  })
+
+  test('the default prefs price the official book (no multiplier, the 2× DeepSeek peak)', () => {
+    const lines = costBreakdownOf({
+      deepseek: { 'deepseek-v4-flash': { peak: { uncached: 1_000_000, cacheRead: 0, cacheWrite: 0, output: 0 } } },
+    }, BOOK_B, 'usd')
+    close(lines[0].cost, OFFICIAL_PREFS.peakFactor * FLASH.miss)
+  })
+
+  test('equal costs break by tokens, then provider, then model', () => {
+    const tie: SessionCostUsage = {
+      alpha: { 'z-model': { off: { uncached: 1_000_000, cacheRead: 0, cacheWrite: 0, output: 0 } }, 'a-model': { off: { uncached: 1_000_000, cacheRead: 0, cacheWrite: 0, output: 0 } } },
+      beta: { 'a-model': { off: { uncached: 1_000_000, cacheRead: 0, cacheWrite: 0, output: 0 } }, 'b-model': { off: { uncached: 2_000_000, cacheRead: 0, cacheWrite: 0, output: 0 } } },
+    }
+    const book = bookOf({
+      alpha: { 'z-model': { hit: 1, miss: 1, write: 1, out: 1 }, 'a-model': { hit: 1, miss: 1, write: 1, out: 1 } },
+      beta: { 'a-model': { hit: 1, miss: 1, write: 1, out: 1 }, 'b-model': { hit: 1, miss: 0.5, write: 1, out: 1 } },
+    })
+    const lines = costBreakdownOf(tie, book, 'usd')
+    // Equal costs: the larger-token line first; identical cost and tokens then
+    // sort by provider, and within one provider by the model id.
+    assert.deepEqual(lines.map(l => `${l.provider}/${l.model}`), ['beta/b-model', 'alpha/a-model', 'alpha/z-model', 'beta/a-model'])
+  })
+
+  test('two unpriced lines tie on null and keep the provider/model order', () => {
+    const book = bookOf({ alpha: { 'priced': { hit: 1, miss: 1, write: 1, out: 1 } } })
+    const lines = costBreakdownOf({
+      alpha: { nope: { off: { uncached: 1, cacheRead: 0, cacheWrite: 0, output: 0 } }, 'nope-2': { off: { uncached: 1, cacheRead: 0, cacheWrite: 0, output: 0 } } },
+      beta: { 'also-nope': { off: { uncached: 1, cacheRead: 0, cacheWrite: 0, output: 0 } } },
+    }, book, 'usd')
+    assert.deepEqual(lines.map(l => `${l.provider}/${l.model}`), ['alpha/nope', 'alpha/nope-2', 'beta/also-nope'])
+    assert.deepEqual(lines.map(l => 'reason' in l ? l.reason : null), ['unknown-model', 'unknown-model', 'unknown-model'])
+  })
+
+  test('an unpriced line ahead of a priced one in source order still sinks', () => {
+    const lines = costBreakdownOf({
+      moonshotai: { mystery: { off: { uncached: 1, cacheRead: 0, cacheWrite: 0, output: 0 } } },
+      deepseek: { 'deepseek-v4-flash': { off: { uncached: 1_000_000, cacheRead: 0, cacheWrite: 0, output: 0 } } },
+    }, BOOK_B, 'usd')
+    assert.deepEqual(lines.map(l => l.model), ['deepseek-v4-flash', 'mystery'])
   })
 })

@@ -725,6 +725,87 @@ describe('OverviewPanel', () => {
     await m.unmount()
   })
 
+  test('the cost KPI discloses the per-model breakdown: priced lines sort by cost, the face annotation rides a suffix hit, the unpriced line names its reason', async () => {
+    const ctx = makeCtx()
+    // One session billing three models off its daily ledger: the book's exact id,
+    // a short suffix hit, and an id the book never carries.
+    const mixed = {
+      deepseek: {
+        'deepseek-v4-flash': { off: { uncached: 1000, cacheRead: 500, cacheWrite: 0, output: 250 } },
+        flash: { off: { uncached: 2000, cacheRead: 0, cacheWrite: 0, output: 0 } },
+        mystery: { off: { uncached: 500, cacheRead: 0, cacheWrite: 0, output: 0 } },
+      },
+    }
+    const { m } = await openPanel(ctx, {
+      useSessions: useHookOf({
+        ids: ['a'],
+        byId: {
+          a: {
+            displayTitle: 'mixed session',
+            updatedAt: MIDNIGHT,
+            projectionValues: {
+              contextTimeline: timeline({ cost: undefined }),
+              contextActivity: { days: { [TODAY]: { tokens: 100, requests: 2, turns: 2, toolCalls: 4, toolsMs: 10_000, wallMs: 45_000, cost: mixed } } },
+            },
+          },
+        },
+        phase: 'ready',
+      }),
+    })
+    await flush() // the price book lands
+    const detail = query(m.container, '.lc-ov-cost-detail')
+    assert.ok(detail !== null, 'the disclosure exists once usage merges')
+    assert.ok(text(detail).includes('Pricing detail'))
+    const rows = queryAll(detail, '.lc-ov-cost-table tbody tr')
+    assert.equal(rows.length, 3)
+    // Descending cost, unpriced last: flash (0.002) edges the exact id (0.00155).
+    const cells = (row: HTMLElement): string[] => queryAll(row, 'td').map(el => el.textContent)
+    assert.deepEqual(cells(rows[0]), ['flash deepseek-v4-flash', '2.0k', '$0.0020', 'deepseek · deepseek-v4-flash'])
+    assert.equal(queryAll(rows[0], '.lc-ov-cost-face').length, 1, 'the suffix hit annotates the registry spelling')
+    assert.deepEqual(cells(rows[1]), ['deepseek-v4-flash', '1.8k', '$0.0015', 'deepseek · deepseek-v4-flash'])
+    assert.equal(queryAll(rows[1], '.lc-ov-cost-face').length, 0, 'an exact hit needs no annotation')
+    assert.deepEqual(cells(rows[2]), ['mystery', '500', '—', 'Model not in the price book'])
+    assert.ok(rows[2].querySelector('td.lc-ov-cost-unpriced') !== null, 'the unpriced line carries its class')
+    await m.unmount()
+  })
+
+  test('the actual-price switch re-prices the band and badges it; the multiplier off the book never badges', async () => {
+    const initial = {
+      defaultOverviewRange: '30d' as const,
+      costFxRate: 'official',
+      costPeakFactor: '2',
+      costMultiplier: '1',
+      costActualPrice: 'hide',
+    }
+    let value: Record<string, unknown> = initial
+    const listeners = new Set<() => void>()
+    const settings = createContextSettings()
+    settings.attach({
+      getSnapshot: () => ({ status: 'ready', value, writable: true }),
+      subscribe: (listener) => { listeners.add(listener); return () => { listeners.delete(listener) } },
+      set: async (field, next) => { value = { ...value, [field]: next }; for (const l of listeners) l() },
+    })
+    const Panel = makeOverviewPanel(asClientCtx(makeCtx()), makeKit(), settings)
+    const m = await mount(h(Panel, {
+      useSessions: useHookOf(sessionsSnapshot()),
+      useWorkspaces: useHookOf(workspacesSnapshotValue),
+    }))
+    await flush() // the price book lands
+    const costCell = (): string => queryAll(m.container, '.lc-stat-value')[2].textContent
+    assert.equal(costCell(), '$0.0031', 'the book figure with the defaults')
+    assert.equal(queryAll(m.container, '.lc-ov-kpi-mult').length, 0)
+    act(() => { value = { ...value, costActualPrice: 'show', costMultiplier: '0.8' }; for (const l of listeners) l() })
+    assert.ok(costCell().startsWith('$0.0025'), 'the multiplier re-prices the estimate')
+    const badge = query(m.container, '.lc-ov-kpi-mult')
+    assert.ok(badge !== null, 'a moved figure badges itself')
+    assert.equal(badge.textContent, '×0.8')
+    assert.equal(badge.getAttribute('title'), 'The actual-price multiplier is applied to this estimate')
+    act(() => { value = { ...value, costMultiplier: '1' }; for (const l of listeners) l() })
+    assert.equal(costCell(), '$0.0031', 'the identity multiplier is the book figure again')
+    assert.equal(queryAll(m.container, '.lc-ov-kpi-mult').length, 0, 'an unmoved figure never badges')
+    await m.unmount()
+  })
+
   test('a locale service without getLocale falls back to USD', async () => {
     // A hand-rolled ctx: the locale face carries no getLocale at all.
     const bare = {
