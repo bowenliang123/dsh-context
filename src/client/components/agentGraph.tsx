@@ -6,7 +6,8 @@ import { IconWorkspaceTreeOutlineRegular, StateDot } from '@deepseek-ai/dsh-clie
 import { CATS } from '../categories'
 import type { AgentHeads } from '../agentHeads'
 import { makeAgentHeads } from '../agentHeads'
-import { billedTokensOf, displayCurrencyOf, estimateSessionCost, formatCost, type CostCurrency, type ModelBook } from '../cost'
+import { billedTokensOf, displayCurrencyOf, estimateSessionCost, formatCost, type CostCurrency, type CostPrefs, type ModelBook } from '../cost'
+import { useCostPrefs, type ContextSettings } from '../settings'
 import { useModelPrices } from '../modelPrices'
 import { containHorizontalOverscroll } from '../overscroll'
 import { openSessionVia, type ClientCtx } from '../services'
@@ -54,11 +55,14 @@ export function makeAgentGraph(
   kit: ViewKit,
   /** The shared page-scope cold-head cache — the stats board's subagent-cost cell reads the same fetches. */
   heads: AgentHeads = makeAgentHeads(),
+  /** The plugin settings the cards price with; absent reads as the book's own list rates. */
+  settings: ContextSettings | null = null,
 ): (props: AgentGraphProps) => ReactElement | null {
   const { t, fmt, catLabel } = kit
 
   function AgentGraph(props: AgentGraphProps): ReactElement | null {
     const sessionId = props.sessionId
+    const prefs = useCostPrefs(settings)
     // The internal derivation runs only when the caller passes no forest in; the flag is a mount-stable prop split
     // (the Fleet tab always passes one, the sidebar never does).
     const internal = useFleetModel(ctx, heads, sessionId, props.self, props.forest === undefined)
@@ -256,6 +260,7 @@ export function makeAgentGraph(
                       onKeyOpen={keyOpen(node.id)}
                       book={book}
                       currency={currency}
+                      prefs={prefs}
                       memberName={teammateNameOf(team, node)}
                       t={t}
                       fmt={fmt}
@@ -307,6 +312,7 @@ interface CardProps {
   /** The price book and display currency for the cost estimate (null book → no estimate shown). */
   book: ModelBook | null
   currency: CostCurrency
+  prefs: CostPrefs
   /** The roster name when the node belongs to the team (undefined family outsiders and the self card). */
   memberName?: string
   t: ViewKit['t']
@@ -321,7 +327,7 @@ function AgentCard(props: CardProps): ReactElement {
   // when the tally is absent (cold relatives).
   const consumed = node.billed !== null && node.billed > 0 ? node.billed
     : node.costUsage !== null ? billedTokensOf(node.costUsage) : null
-  const cost = estimateSessionCost(node.costUsage, props.book, props.currency)
+  const cost = estimateSessionCost(node.costUsage, props.book, props.currency, props.prefs)
   const metricBits: string[] = []
   if (consumed !== null && consumed > 0) metricBits.push(props.fmt(consumed))
   if (cost !== null) metricBits.push(formatCost(cost, props.currency))

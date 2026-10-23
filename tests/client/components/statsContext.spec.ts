@@ -7,6 +7,7 @@ import type { SubagentStats } from '../../../src/client/components/statsContext'
 import { DICT_EN } from '../../../src/client/i18n'
 import { makeAgentHeads } from '../../../src/client/agentHeads'
 import { resetModelPrices, setModelPricesLoader } from '../../../src/client/modelPrices'
+import { createContextSettings } from '../../../src/client/settings'
 import type { ContextEventRecord, ContextTimeline, RequestRecord, SessionCostUsage, SurfaceNode } from '../../../src/shared/types'
 import { TestClientCtx, asClientCtx } from '../helpers/harness'
 import { click, flush, makeKit, mount, query, queryAll, text } from '../helpers/kit'
@@ -21,6 +22,7 @@ const StatsContextZh = makeStatsContext(kitZh, NO_SUB)
 const PROVIDERS = {
   deepseek: { models: { 'deepseek-v4-flash': { cost: { input: 0.15, output: 0.6, cache_read: 0.003 } } } },
   zhipuai: { models: { 'glm-5.3-flash': { cost: { input: 0.075, output: 0.25, cache_read: 0.015, cache_write: 0 } } } },
+  zai: { models: { 'glm-5.3-flash': { cost: { input: 0.15, output: 0.5, cache_read: 0.03, cache_write: 0 } } } },
 }
 
 const COST: SessionCostUsage = {
@@ -683,6 +685,25 @@ describe('StatsContext — the subagent split (injected seat)', () => {
     const tips = queryAll(m.container, '.lc-stat-tip').map(el => text(el))
     assert.ok(tips[2].includes('unavailable'))
     await m.unmount()
+  })
+
+  test('the plugin settings re-price the board, so one basis covers every surface', async () => {
+    const settings = createContextSettings()
+    settings.attach({
+      getSnapshot: () => ({ status: 'ready', value: { costPriceBasis: 'official' }, writable: false }),
+      subscribe: () => () => {},
+      set: () => Promise.resolve(),
+    })
+    const usage: SessionCostUsage = { zhipuai: { 'glm-5.3-flash': { off: { uncached: 1_000_000, cacheRead: 0, cacheWrite: 0, output: 0 } } } }
+    const priced = makeStatsContext(kit, NO_SUB, settings)
+    const own = await mount(h(priced, { counts: NO_COUNTS, files: NO_FILES, tools: [], cost: usage, locale: 'en' }))
+    await flush()
+    assert.equal(headsOf(own.container).totals[3], '1.0M/$0.15', 'the official basis bills the vendor listing')
+    await own.unmount()
+    const book = await mount(h(StatsContext, { counts: NO_COUNTS, files: NO_FILES, tools: [], cost: usage, locale: 'en' }))
+    await flush()
+    assert.equal(headsOf(book.container).totals[3], '1.0M/$0.075', 'no settings keeps the billed provider listing')
+    await book.unmount()
   })
 
   test('a null seat keeps the figure dashed with the ledger zeroed and no outage notes', async () => {

@@ -16,6 +16,7 @@ import { useContextSession } from '../sessionData'
 import type { ViewKit } from '../viewkit'
 import type { FleetDetail } from '../../shared/types'
 import { makeAgentGraph } from './agentGraph'
+import { useCostPrefs, type ContextSettings } from '../settings'
 import { CommsPanel } from './commsPanel'
 import { makeDetailNote } from './detailNote'
 import { makeRichText } from './richText'
@@ -29,9 +30,11 @@ export function makeFleetView(
   ctx: ClientCtx,
   kit: ViewKit,
   heads: AgentHeads,
+  /** The plugin settings the strip and the cards price with. */
+  settings: ContextSettings | null = null,
 ): (props: SessionStandardProps) => ReactElement {
   const { t } = kit
-  const AgentGraph = makeAgentGraph(ctx, kit, heads)
+  const AgentGraph = makeAgentGraph(ctx, kit, heads, settings)
   const UpgradeGate = makeUpgradeGate(kit)
   const DetailNote = makeDetailNote(kit)
   const ErrorBoundary = makeErrorBoundary(t)
@@ -92,6 +95,7 @@ export function makeFleetView(
     const [focusTaskId, setFocusTaskId] = useState<string | null>(null)
     const { book } = useModelPrices()
     const currency = displayCurrencyOf(ctx.locale)
+    const prefs = useCostPrefs(settings)
 
     const byId = useMemo(
       () => new Map((forest?.nodes ?? []).map(n => [n.id, n])),
@@ -231,7 +235,7 @@ export function makeFleetView(
     return (
       <div className="lc-root" ref={rootRef}>
         {forest !== null
-          ? <FleetSummary forest={forest} team={team} book={book} currency={currency} t={t} fmt={kit.fmt} />
+          ? <FleetSummary forest={forest} team={team} book={book} currency={currency} prefs={prefs} t={t} fmt={kit.fmt} />
           : null}
         {forest !== null || boardsColumn !== null
           ? (

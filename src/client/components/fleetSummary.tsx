@@ -3,7 +3,7 @@
 
 import type { ReactElement } from 'react'
 import type { AgentForest } from '../agentTree'
-import { estimateSessionCost, formatCost, type CostCurrency, type ModelBook } from '../cost'
+import { BOOK_PREFS, estimateSessionCost, formatCost, type CostCurrency, type CostPrefs, type ModelBook } from '../cost'
 import type { FleetTeam } from '../fleetTeam'
 import type { ViewKit } from '../viewkit'
 
@@ -12,6 +12,8 @@ export interface FleetSummaryProps {
   team: FleetTeam | null
   book: ModelBook | null
   currency: CostCurrency
+  /** The pricing inputs the caller resolved; absent reads as the book's own list rates. */
+  prefs?: CostPrefs
   t: ViewKit['t']
   fmt: ViewKit['fmt']
 }
@@ -27,7 +29,7 @@ export function FleetSummary(props: FleetSummaryProps): ReactElement {
   let cost = 0
   let costKnown = false
   for (const n of nodes) {
-    const priced = estimateSessionCost(n.costUsage, props.book, props.currency)
+    const priced = estimateSessionCost(n.costUsage, props.book, props.currency, props.prefs ?? BOOK_PREFS)
     if (priced !== null && priced > 0) {
       cost += priced
       costKnown = true

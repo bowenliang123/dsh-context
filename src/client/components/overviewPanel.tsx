@@ -2,7 +2,7 @@
  * `lc-ov` query container — unlike the shipped first-level 960px frame, the column spans the pane; tips portal to `body`. */
 
 import { useEffect, useMemo, useState, useSyncExternalStore, type ReactElement } from 'react'
-import { estimateSessionCost, formatCost, type CostCurrency, type ModelBook } from '../cost'
+import { costBreakdownOf, estimateSessionCost, formatCost, type CostCurrency, type CostPrefs, type ModelBook } from '../cost'
 import { fmt } from '../format'
 import { useModelPrices } from '../modelPrices'
 import {
@@ -15,6 +15,7 @@ import {
 import { openPluginSettings, openSessionVia, type ClientCtx } from '../services'
 import { readSkillCatalog } from '../skills'
 import type { ContextSettings } from '../settings'
+import { costPrefsOf } from '../settings'
 import type { SkillInfo } from '../../shared/types'
 import { dayKeyOf } from '../../shared/days'
 import type { ViewKit } from '../viewkit'
@@ -25,6 +26,7 @@ import { makeHeatmap, todayKey, type HeatMetric } from './heatmap'
 import { Donut } from './donut'
 import { useHoverTip } from './hoverTip'
 import { makeOverviewTokens } from './overviewTokens'
+import { makeCostCard } from './costCard'
 import { makeOverviewUsage } from './overviewUsage'
 import { makeStatsTiming } from './statsTiming'
 import { makeOverviewCard } from './overviewCard'
@@ -56,6 +58,7 @@ export function makeOverviewPanel(
   const OverviewTokens = makeOverviewTokens(kit, Donut)
   const StatsTiming = makeStatsTiming(kit, Donut)
   const OverviewUsage = makeOverviewUsage(kit)
+  const CostCard = makeCostCard(kit)
   const OverviewSkills = makeOverviewSkills(kit)
   const UpdatePill = makeUpdatePill(kit)
   const ErrorBoundary = makeErrorBoundary(t)
@@ -74,9 +77,12 @@ export function makeOverviewPanel(
     const { book } = useModelPrices()
     const snapshot = sessionsSnapshotOf(props)
     const wsSnapshot = workspacesSnapshotOf(props)
+    const stored = useSyncExternalStore(subscribeSettings, () => settings.store.getSnapshot())
+    const costPrefs = useMemo(() => costPrefsOf(stored), [stored])
     // The preset follows the served default until the reader picks one; a pick is written back as the new default where
     // settings are writable, and a late-arriving section still lands while none is picked.
-    const configuredRange = useSyncExternalStore(subscribeSettings, () => settings.defaultOverviewRange())
+    const configuredRange = stored.overviewRange
+    const usageWindow = stored.usageWindow
     const [picked, setPicked] = useState<OverviewRange | null>(null)
     const preset = picked ?? configuredRange
     const [custom, setCustom] = useState<DayRange | null>(null)
@@ -142,8 +148,10 @@ export function makeOverviewPanel(
       sort,
     )
     const paged = pageOf(visible, page)
-    const kpi = kpisOf(ranged, book, currency, scope)
-    const days = aggregateDays(covered, book, currency)
+    const kpi = kpisOf(ranged, book, currency, scope, costPrefs)
+    const days = aggregateDays(covered, book, currency, costPrefs)
+    // The cost KPI's per-model disclosure, priced by the same prefs.
+    const breakdown = costBreakdownOf(kpi.usage, book, currency, costPrefs)
     /** A preset pick applies at once and becomes the stored default where the settings form is writable. */
     const pickPreset = (range: OverviewRange): void => {
       setPicked(range)
@@ -215,7 +223,12 @@ export function makeOverviewPanel(
                     </div>
                     <div className="lc-stat lc-ov-kpi">
                       <span className="lc-stat-label">{t('stats.cost')}</span>
-                      <span className="lc-stat-value">{kpi.cost === null ? '—' : formatCost(kpi.cost, currency)}</span>
+                      <span className="lc-stat-value">
+                        {kpi.cost === null ? '—' : formatCost(kpi.cost, currency)}
+                        {costPrefs.multiplier !== 1 && (
+                          <span className="lc-ov-kpi-mult" title={t('ov.kpi.multTip')}>×{costPrefs.multiplier}</span>
+                        )}
+                      </span>
                       <span className="lc-stat-sub">{t('ov.kpi.pricedSub', { n: kpi.costSessions, total: kpi.sessions })}</span>
                     </div>
                     <div className="lc-stat lc-ov-kpi">
@@ -234,12 +247,13 @@ export function makeOverviewPanel(
                       <span className="lc-stat-sub">{t('ov.kpi.wallSub', { n: fmt(kpi.calls) })}</span>
                     </div>
                   </div>
-                  <OverviewUsage days={days} currency={currency} today={todayKey()} />
+                  <OverviewUsage days={days} currency={currency} today={todayKey()} window={usageWindow} />
                 </div>
                 <div className="lc-ov-stats">
                   <OverviewTokens tokens={kpi.tokenParts} />
                   <StatsTiming timing={kpi.timing} />
                 </div>
+                <CostCard lines={breakdown} currency={currency} prefs={costPrefs} />
                 <div className="lc-ov-body">
                   <div className="lc-ov-left">
                     <div className="lc-card lc-ov-heat-card">
@@ -346,7 +360,7 @@ export function makeOverviewPanel(
                               key={row.id}
                               row={row}
                               {...(groups?.[row.id] !== undefined ? { group: groups[row.id] } : {})}
-                              costLabel={cardCostOf(row, book, currency)}
+                              costLabel={cardCostOf(row, book, currency, costPrefs)}
                               now={now}
                               onOpen={openOne}
                             />
@@ -389,8 +403,8 @@ export function makeOverviewPanel(
 }
 
 /** One card's priced cost label at the team scope, or the dash (no book yet, nothing billed, unpriceable models). */
-function cardCostOf(row: OverviewRow, book: ModelBook | null, currency: CostCurrency): string {
+function cardCostOf(row: OverviewRow, book: ModelBook | null, currency: CostCurrency, prefs: CostPrefs): string {
   if (row.familyCost === null) return '—'
-  const cost = estimateSessionCost(row.familyCost, book, currency)
+  const cost = estimateSessionCost(row.familyCost, book, currency, prefs)
   return cost === null ? '—' : formatCost(cost, currency)
 }

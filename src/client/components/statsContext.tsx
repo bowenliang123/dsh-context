@@ -2,12 +2,13 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type KeyboardEvent, type MouseEvent, type ReactElement, type ReactNode } from 'react'
 import type { ContextEventRecord, ContextTimeline, RequestRecord, SessionCostUsage, SurfaceNode, TimelineCounts } from '../../shared/types'
 import { estimateSessionCost, billedTokensOf, formatCost, formatPriceRate, mergeCostUsage, priceFaceOf, toCurrency } from '../cost'
-import type { CostCurrency, ModelBook, PriceFace } from '../cost'
+import type { CostCurrency, CostPrefs, ModelBook, PriceFace } from '../cost'
 import { sessionsFaceOf, subagentCostFoldOf } from '../agentTree'
 import type { AgentHeads } from '../agentHeads'
 import { useSessionsSnapshot } from '../agentHeads'
 import type { Translate } from '../i18n'
 import { useModelPrices } from '../modelPrices'
+import { useCostPrefs, type ContextSettings } from '../settings'
 import { asRecord, type ClientCtx } from '../services'
 import { isDeepSeekProvider } from '../../shared/providers'
 import type { ViewKit } from '../viewkit'
@@ -21,7 +22,7 @@ const BANDS: readonly (readonly [keyof PriceFace['rate'], string])[] = [
   ['out', 'stats.costOut'],
 ]
 
-function priceRowsOf(usage: SessionCostUsage | undefined, book: ModelBook | null): PriceRow[] {
+function priceRowsOf(usage: SessionCostUsage | undefined, book: ModelBook | null, prefs: CostPrefs): PriceRow[] {
   if (usage === undefined || book === null) return []
   const rows: PriceRow[] = []
   for (const provider of Object.keys(usage)) {
@@ -31,7 +32,7 @@ function priceRowsOf(usage: SessionCostUsage | undefined, book: ModelBook | null
        reaches here; the guard stays for the helper's own contract. */
     if (models === null) continue
     for (const model of Object.keys(models)) {
-      const face = priceFaceOf(book, provider, model)
+      const face = priceFaceOf(book, provider, model, prefs)
       if (face === null) continue
       rows.push({ key: provider + '/' + model, face })
     }
@@ -273,19 +274,22 @@ function ToolPills(props: {
 export function makeStatsContext(
   kit: ViewKit,
   useSubagentCost: (sessionId: string | undefined) => SubagentStats,
+  /** The plugin settings the cost figures price with; absent reads as the book's own list rates. */
+  settings: ContextSettings | null = null,
 ): (props: StatsContextProps) => ReactElement {
   const { t, fmt } = kit
   return function StatsContext(props: StatsContextProps): ReactElement {
     const currency: CostCurrency = props.locale === 'zh' ? 'cny' : 'usd'
+    const prefs = useCostPrefs(settings)
     const { book, failed } = useModelPrices()
     const sub = useSubagentCost(props.sessionId)
     const subUsage = sub.usage
     const usage = mergeCostUsage(props.cost, subUsage) ?? undefined
-    const cost = estimateSessionCost(usage, book, currency)
-    const subCost = estimateSessionCost(subUsage, book, currency)
-    const fmtRate = (usd: number): string => formatPriceRate(toCurrency(usd, currency), currency)
-    const rows = priceRowsOf(usage, book)
-    const subRows = priceRowsOf(subUsage ?? undefined, book)
+    const cost = estimateSessionCost(usage, book, currency, prefs)
+    const subCost = estimateSessionCost(subUsage, book, currency, prefs)
+    const fmtRate = (usd: number): string => formatPriceRate(toCurrency(usd, currency, prefs), currency)
+    const rows = priceRowsOf(usage, book, prefs)
+    const subRows = priceRowsOf(subUsage ?? undefined, book, prefs)
     const deepseek = usage !== undefined && Object.keys(usage).some(p => isDeepSeekProvider(p))
     const subDeepseek = subUsage !== null && Object.keys(subUsage).some(p => isDeepSeekProvider(p))
     // Folded usage with no priced row (book not loaded, or it carries none of this scope's models): say so instead of a bare dash.
@@ -430,7 +434,7 @@ export function makeStatsContext(
     }
     const costPids = new Set(rows.map(r => r.face.pid).filter(p => p !== ''))
     const costHref = costPids.size === 1 ? 'https://models.dev/providers/' + [...costPids][0] + '/' : undefined
-    const ownCost = estimateSessionCost(props.cost, book, currency)
+    const ownCost = estimateSessionCost(props.cost, book, currency, prefs)
     const familyTokens = billedTokensOf(usage)
     const ownTokens = billedTokensOf(props.cost)
     const subTokens = billedTokensOf(subUsage)

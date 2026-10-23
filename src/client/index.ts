@@ -63,7 +63,7 @@ function apply(ctx: ClientCtx): void {
   // One page-scope cold-head cache for every agent-data reader: the Context view's cells and the Fleet card.
   const heads = makeAgentHeads()
   const ContextView = makeContextView(ctx, kit, settings, heads)
-  const FleetView = makeFleetView(ctx, kit, heads)
+  const FleetView = makeFleetView(ctx, kit, heads, settings)
 
   ctx.effect(() => watchPlacement(settings, {
     tab: () => ctx.slots.inject('conversation.view', () => ctx.slots.register(

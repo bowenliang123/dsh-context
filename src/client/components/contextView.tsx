@@ -130,14 +130,14 @@ export function makeContextView(
   const EventList = makeEventList(kit)
   const FileCard = makeFileCard(kit, settings)
   const CommandPanel = makeCommandPanel(kit)
-  const StatsContext = makeStatsContext(kit, makeSubagentCost(ctx, heads))
+  const StatsContext = makeStatsContext(kit, makeSubagentCost(ctx, heads), settings)
   const StatsTiming = makeStatsTiming(kit, Donut)
   const StatsTokens = makeStatsTokens(kit, Donut)
   const PluginInfo = makePluginInfo(kit, ctx)
   const UpgradeGate = makeUpgradeGate(kit)
   const DetailNote = makeDetailNote(kit)
   const ContextBrowser = makeContextBrowser(kit, StackedBar, settings)
-  const AgentGraph = makeAgentGraph(ctx, kit, heads)
+  const AgentGraph = makeAgentGraph(ctx, kit, heads, settings)
   const ErrorBoundary = makeErrorBoundary(t)
 
   function ContextViewBody(props: ContextViewProps): ReactElement {

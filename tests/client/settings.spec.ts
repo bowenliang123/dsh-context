@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict'
 import { describe, test } from 'vitest'
-import { createContextSettings, overviewThresholdOf, type SettingsScopeLike } from '../../src/client/settings'
+import { BOOK_PREFS } from '../../src/client/cost'
+import { createContextSettings, costPrefsOf, overviewThresholdOf, type ContextSettings, type SettingsScopeLike } from '../../src/client/settings'
 
 class TestSettingsScope implements SettingsScopeLike {
   private snapshot: { status: string; value: unknown; writable: boolean }
@@ -49,6 +50,12 @@ describe('createContextSettings defaults', () => {
       overviewAutoSteps: '200',
       overviewRange: '30d',
       fleetTab: 'show',
+      usageWindow: '7d',
+      costFxRate: 'official',
+      costPeakFactor: '2',
+      costMultiplier: '1',
+      costActualPrice: 'hide',
+      costPriceBasis: 'book',
       promptPrefix: '',
       promptSuffix: '',
       writable: false,
@@ -64,6 +71,12 @@ describe('createContextSettings defaults', () => {
     assert.equal(s.overviewAutoSteps(), '200')
     assert.equal(s.defaultOverviewRange(), '30d')
     assert.equal(s.fleetTab(), 'show')
+    assert.equal(s.usageWindow(), '7d')
+    assert.equal(s.costFxRate(), 'official')
+    assert.equal(s.costPeakFactor(), '2')
+    assert.equal(s.costMultiplier(), '1')
+    assert.equal(s.costActualPrice(), 'hide')
+    assert.equal(s.costPriceBasis(), 'book')
   })
 })
 
@@ -247,6 +260,12 @@ describe('attach', () => {
         overviewAutoSteps: '300',
         defaultOverviewRange: '7d',
         fleetTab: 'hide',
+        usageWindow: '7d',
+        costFxRate: '7.2',
+        costPeakFactor: '1.5',
+        costMultiplier: '0.8',
+        costActualPrice: 'show',
+        costPriceBasis: 'book',
         promptPrefix: 'Be terse.',
         promptSuffix: 'Sign as Atlas.',
       },
@@ -266,10 +285,22 @@ describe('attach', () => {
       overviewAutoSteps: '300',
       overviewRange: '7d',
       fleetTab: 'hide',
+      usageWindow: '7d',
+      costFxRate: '7.2',
+      costPeakFactor: '1.5',
+      costMultiplier: '0.8',
+      costActualPrice: 'show',
+      costPriceBasis: 'book',
       promptPrefix: 'Be terse.',
       promptSuffix: 'Sign as Atlas.',
       writable: true,
     })
+    assert.equal(s.usageWindow(), '7d')
+    assert.equal(s.costFxRate(), '7.2')
+    assert.equal(s.costPeakFactor(), '1.5')
+    assert.equal(s.costMultiplier(), '0.8')
+    assert.equal(s.costActualPrice(), 'show')
+    assert.equal(s.costPriceBasis(), 'book')
   })
 
   test('an unavailable snapshot keeps parsed preferences', () => {
@@ -303,6 +334,12 @@ describe('attach', () => {
         overviewAutoSteps: '200',
         overviewRange: '30d',
         fleetTab: 'show',
+        usageWindow: '7d',
+        costFxRate: 'official',
+        costPeakFactor: '2',
+        costMultiplier: '1',
+        costActualPrice: 'hide',
+        costPriceBasis: 'book',
         promptPrefix: '',
         promptSuffix: '',
         writable: false,
@@ -516,9 +553,71 @@ describe('attach', () => {
       overviewAutoSteps: '200',
       overviewRange: '30d',
       fleetTab: 'show',
+      usageWindow: '7d',
+      costFxRate: 'official',
+      costPeakFactor: '2',
+      costMultiplier: '1',
+      costActualPrice: 'hide',
+      costPriceBasis: 'book',
       promptPrefix: '',
       promptSuffix: '',
       writable: true,
     })
+  })
+})
+
+describe('cost preferences', () => {
+  const getters: Record<string, (s: ContextSettings) => string> = {
+    usageWindow: s => s.usageWindow(),
+    costFxRate: s => s.costFxRate(),
+    costPeakFactor: s => s.costPeakFactor(),
+    costMultiplier: s => s.costMultiplier(),
+    costActualPrice: s => s.costActualPrice(),
+  }
+
+  test('every accepted enum value parses through prefsOf and its getter', () => {
+    const values: [string, string[]][] = [
+      ['usageWindow', ['7d', '30d']],
+      ['costFxRate', ['official', '7.0', '7.2', '7.4']],
+      ['costPeakFactor', ['1', '1.5', '2']],
+      ['costMultiplier', ['1', '0.95', '0.9', '0.8', '0.7', '0.5']],
+      ['costActualPrice', ['show', 'hide']],
+    ]
+    for (const [field, options] of values) {
+      for (const option of options) {
+        const s = createContextSettings()
+        s.attach(new TestSettingsScope({ status: 'ready', value: { [field]: option }, writable: true }))
+        assert.equal(getters[field](s), option, `${field}=${option}`)
+      }
+    }
+  })
+
+  test('costPrefsOf converts the enum presets into numeric factors', () => {
+    assert.deepEqual(
+      costPrefsOf({ costFxRate: 'official', costPeakFactor: '2', costMultiplier: '1', costActualPrice: 'hide', costPriceBasis: 'book' }),
+      { usdPerCny: BOOK_PREFS.usdPerCny, peakFactor: 2, multiplier: 1, priceBasis: 'book' },
+    )
+    assert.deepEqual(
+      costPrefsOf({ costFxRate: '7.2', costPeakFactor: '1.5', costMultiplier: '0.8', costActualPrice: 'show', costPriceBasis: 'official' }),
+      { usdPerCny: 1 / 7.2, peakFactor: 1.5, multiplier: 0.8, priceBasis: 'official' },
+    )
+  })
+
+  test('the multiplier prices in only when the actual-price switch is on', () => {
+    assert.deepEqual(
+      costPrefsOf({ costFxRate: '7.0', costPeakFactor: '1', costMultiplier: '0.5', costActualPrice: 'hide', costPriceBasis: 'book' }),
+      { usdPerCny: 1 / 7, peakFactor: 1, multiplier: 1, priceBasis: 'book' },
+    )
+  })
+
+  test('a cost field write echoes locally and reaches the scope', async () => {
+    const s = createContextSettings()
+    const scope = new TestSettingsScope({ status: 'ready', value: {}, writable: true })
+    s.attach(scope)
+    s.set('costFxRate', '7.2')
+    assert.equal(s.costFxRate(), '7.2', 'the optimistic echo lands first')
+    await new Promise(resolve => setTimeout(resolve, 0))
+    assert.deepEqual(scope.sets[0], { field: 'costFxRate', value: '7.2' })
+    assert.equal(s.costFxRate(), '7.2')
   })
 })

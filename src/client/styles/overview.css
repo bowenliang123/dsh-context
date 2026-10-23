@@ -61,6 +61,11 @@
   .lc-ov-usage-day:nth-child(even) { visibility: hidden; }
   .lc-ov-usage-value { visibility: hidden; }
 }
+/* The 30-column dense layout: tighter gaps and slimmer bars so thirty columns keep visible
+   widths where the 7-day spacing would leave the strip all gutter. */
+.lc-ov-usage-dense .lc-ov-usage-cols,
+.lc-ov-usage-dense .lc-ov-usage-days { gap: 2px; }
+.lc-ov-usage-dense .lc-ov-usage-bar { width: 6px; border-radius: 2px 2px 0 0; }
 .lc-ov-usage-key { flex: none; display: flex; align-items: center; justify-content: flex-end; gap: 5px; padding-top: 5px; }
 .lc-ov-usage-swatch { flex: none; width: 10px; height: 8px; border-radius: 2px; }
 .lc-ov-usage-key-label { font-size: 9px; color: var(--dsw-alias-label-secondary); }
@@ -196,3 +201,25 @@ button.lc-heat-cell:hover { box-shadow: 0 0 0 1.5px color-mix(in srgb, var(--col
 .lc-ov-pager-btn:hover:enabled { border-color: var(--dsw-alias-label-secondary); }
 .lc-ov-pager-btn:disabled { opacity: 0.4; cursor: default; }
 .lc-ov-pager-n { color: var(--dsw-alias-label-secondary); font-size: 11px; font-variant-numeric: tabular-nums; white-space: nowrap; }
+
+/* The pricing disclosure band: one row per vendor, its models folded underneath. */
+.lc-ov-cost-card { margin-bottom: 10px; }
+.lc-ov-cost-groups { display: flex; flex-direction: column; gap: 2px; }
+.lc-ov-cost-group { border-radius: 6px; }
+.lc-ov-cost-group-on { background: color-mix(in srgb, var(--dsw-alias-border-l2) 22%, transparent); }
+.lc-ov-cost-prow { display: flex; align-items: center; gap: 8px; width: 100%; padding: 5px 8px; border: 0; border-radius: 6px; background: none; color: inherit; font: inherit; text-align: left; cursor: pointer; }
+.lc-ov-cost-prow:hover { background: color-mix(in srgb, var(--dsw-alias-border-l2) 40%, transparent); }
+.lc-ov-cost-caret { display: inline-flex; color: var(--dsw-alias-label-secondary); }
+.lc-ov-cost-pname { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.lc-ov-cost-pcount { color: var(--dsw-alias-label-secondary); font-size: 11px; }
+.lc-ov-cost-tag { font-size: 10px; line-height: 1.5; padding: 0 5px; border-radius: 4px; color: var(--dsw-alias-label-secondary); border: 1px solid var(--dsw-alias-border-l2); }
+.lc-ov-cost-ptokens { margin-left: auto; font-variant-numeric: tabular-nums; color: var(--dsw-alias-label-secondary); }
+.lc-ov-cost-pcost { min-width: 78px; text-align: right; font-variant-numeric: tabular-nums; font-weight: 500; }
+.lc-ov-cost-table { width: 100%; margin: 0 0 6px; padding: 0 8px 0 26px; border-collapse: collapse; font-size: 11px; }
+.lc-ov-cost-table th { text-align: left; font-weight: 400; color: var(--dsw-alias-label-secondary); padding: 2px 8px 2px 0; border-bottom: 1px solid var(--dsw-alias-border-l2); white-space: nowrap; }
+.lc-ov-cost-table td { padding: 3px 8px 3px 0; border-bottom: 1px solid color-mix(in srgb, var(--dsw-alias-border-l2) 50%, transparent); font-variant-numeric: tabular-nums; vertical-align: top; }
+.lc-ov-cost-table tr:last-child td { border-bottom: 0; }
+.lc-ov-cost-face { color: var(--dsw-alias-label-secondary); font-size: 10px; }
+.lc-ov-cost-muted { color: var(--dsw-alias-label-secondary); font-style: italic; }
+.lc-ov-cost-src { color: var(--dsw-alias-label-secondary); font-size: 10px; }
+.lc-ov-kpi-mult { margin-left: 5px; font-size: 10px; line-height: 1.5; font-weight: 400; color: var(--dsw-alias-label-secondary); border: 1px solid var(--dsw-alias-border-l2); border-radius: 4px; padding: 0 4px; vertical-align: 2px; }

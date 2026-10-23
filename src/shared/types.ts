@@ -162,6 +162,24 @@ export type DefaultOverviewRange = 'today' | '7d' | '30d' | 'all'
 
 export type FleetTab = 'show' | 'hide'
 
+/** The usage chart's calendar span; '30d' renders the dense single-scale layout. */
+export type UsageWindow = '7d' | '30d'
+
+/** CNY-per-USD presets for the CNY display; 'official' keeps the book's 6.6667 conversion. */
+export type CostFxRate = 'official' | '7.0' | '7.2' | '7.4'
+
+/** DeepSeek peak-bucket multiplier presets; the book's list prices are off-peak. */
+export type CostPeakFactor = '1' | '1.5' | '2'
+
+/** Global display-multiplier presets pricing actual-paid scenarios (relay discounts). */
+export type CostMultiplier = '1' | '0.95' | '0.9' | '0.8' | '0.7' | '0.5'
+
+/** Whether cost figures show the multiplier-adjusted (actual-paid) estimate. */
+export type CostActualPrice = 'show' | 'hide'
+
+/** Which listing prices a model a mirror renamed: the billed provider's, or the vendor's own. */
+export type CostPriceBasis = 'book' | 'official'
+
 export interface PluginSettings {
   defaultPlacement: DefaultPlacement
   defaultGranularity: DefaultGranularity
@@ -174,6 +192,12 @@ export interface PluginSettings {
   overviewAutoSteps: OverviewAutoSteps
   defaultOverviewRange: DefaultOverviewRange
   fleetTab: FleetTab
+  usageWindow: UsageWindow
+  costFxRate: CostFxRate
+  costPeakFactor: CostPeakFactor
+  costMultiplier: CostMultiplier
+  costActualPrice: CostActualPrice
+  costPriceBasis: CostPriceBasis
   /** Free text joined ahead of the harness's assembled system prompt; empty disables. */
   promptPrefix: string
   /** Free text joined behind the harness's assembled system prompt; empty disables. */

@@ -1,7 +1,13 @@
+/**
+ * The KPI row's usage chart: day columns pairing billed TOKENS and the day's estimated COST, each bar a share of
+ * its own series' peak. The window is the last 7 or 30 days, and the dense 30-day layout drops the per-bar figures.
+ */
+
 import type { ReactElement } from 'react'
 import { formatCost, type CostCurrency } from '../cost'
 import { type DayTotals } from '../overview'
 import { shiftDayKey } from '../../shared/days'
+import type { UsageWindow } from '../../shared/types'
 import type { ViewKit } from '../viewkit'
 
 export interface OverviewUsageProps {
@@ -9,11 +15,14 @@ export interface OverviewUsageProps {
   currency: CostCurrency
   /** Local today key — injected so specs can pin the calendar. */
   today: string
+  /** The chart's calendar span: the last 7 or 30 days. */
+  window: UsageWindow
 }
 
-export function usageWindowOf(today: string): string[] {
+/** Today and the span before it, oldest first. */
+export function usageWindowOf(today: string, window: UsageWindow = '7d'): string[] {
   const columns: string[] = []
-  for (let d = -6; d <= 0; d++) {
+  for (let d = -(window === '30d' ? 30 : 7) + 1; d <= 0; d++) {
     const key = shiftDayKey(today, d)
     if (key === null) return []
     columns.push(key)
@@ -26,7 +35,9 @@ const TICKS: readonly number[] = [0, 25, 50, 75, 100]
 export function makeOverviewUsage(kit: ViewKit): (props: OverviewUsageProps) => ReactElement {
   const { t, fmt } = kit
   return function OverviewUsage(props: OverviewUsageProps): ReactElement {
-    const window = usageWindowOf(props.today)
+    const window = usageWindowOf(props.today, props.window)
+    const dense = props.window === '30d'
+    const labelStride = dense ? 5 : 1
     const byKey: Record<string, DayTotals | undefined> = props.days
     const columns = window.map(key => ({ key, entry: byKey[key] }))
     const empty = columns.every(c => c.entry === undefined || (c.entry.tokens <= 0 && c.entry.cost === null))
@@ -45,12 +56,12 @@ export function makeOverviewUsage(kit: ViewKit): (props: OverviewUsageProps) => 
       return percent === 0 ? '0' : formatCost((maxCost * percent) / 100, props.currency)
     }
     return (
-      <div className="lc-card lc-ov-usage">
+      <div className={'lc-card lc-ov-usage' + (dense ? ' lc-ov-usage-dense' : '')}>
         <div className="lc-card-title">
-          <span className="lc-card-title-text">{t('ov.usage.title')}</span>
+          <span className="lc-card-title-text">{t(dense ? 'ov.usage.title30' : 'ov.usage.title')}</span>
         </div>
         {empty || window.length === 0
-          ? <div className="lc-empty">{t('ov.usage.empty')}</div>
+          ? <div className="lc-empty">{t(dense ? 'ov.usage.empty30' : 'ov.usage.empty')}</div>
           : (
             <>
               <div className="lc-ov-usage-plot" role="group" aria-label={t('ov.usage.title')}>
@@ -80,7 +91,8 @@ export function makeOverviewUsage(kit: ViewKit): (props: OverviewUsageProps) => 
                               className="lc-ov-usage-bar lc-ov-usage-tokens"
                               style={{ height: heightOf(tokens, maxTokens) }}
                             >
-                              {tokens > 0 && <span className="lc-ov-usage-value">{fmt(tokens)}</span>}
+                              {/* Dense columns have no room for the figure; the tooltip carries it. */}
+                              {!dense && tokens > 0 && <span className="lc-ov-usage-value">{fmt(tokens)}</span>}
                             </span>
                             <span
                               className="lc-ov-usage-bar lc-ov-usage-cost"
@@ -97,7 +109,13 @@ export function makeOverviewUsage(kit: ViewKit): (props: OverviewUsageProps) => 
                 </div>
                 {/* Day strip is the plot grid's row 2, so labels center under their columns by construction. */}
                 <div className="lc-ov-usage-days" aria-hidden="true">
-                  {columns.map(c => <span key={c.key} className="lc-ov-usage-day">{c.key.slice(5)}</span>)}
+                  {columns.map((c, i) => (
+                    <span
+                      key={c.key}
+                      className="lc-ov-usage-day"
+                      style={dense && (columns.length - 1 - i) % labelStride !== 0 ? { visibility: 'hidden' } : undefined}
+                    >{c.key.slice(5)}</span>
+                  ))}
                 </div>
               </div>
             </>

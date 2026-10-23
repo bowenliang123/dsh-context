@@ -6,8 +6,8 @@ import { dayKeyOf, endOfDayKey, startOfDayKey } from '../shared/days'
 import { BACKFILL_ROUTE } from './apiRoutes'
 import { billedParts } from './categories'
 import { cacheHitPercent } from './format'
-import { estimateSessionCost, mergeCostUsage } from './cost'
-import type { CostCurrency, ModelBook } from './cost'
+import { estimateSessionCost, mergeCostUsage, BOOK_PREFS } from './cost'
+import type { CostCurrency, CostPrefs, ModelBook } from './cost'
 import { agentRowOf, familyChildrenOf, type AgentRow } from './agentTree'
 import { activityOf, asRecord, timelineOf, type ClientCtx, type SessionsFace } from './services'
 import type { ActivityDay, ContextActivity, ContextTimeline, DefaultOverviewRange, SessionCostUsage, TimingTotals, TokenUsage, ToolTimingTotals } from '../shared/types'
@@ -635,6 +635,8 @@ export interface OverviewKpis {
   wallMs: number
   tokenParts: { parts: TokenPartTotal[]; total: number } | null
   timing: TimingTotals | null
+  /** The merged billed usage behind `cost` (the breakdown disclosure's source). */
+  usage: SessionCostUsage | null
 }
 
 export function kpisOf(
@@ -642,6 +644,7 @@ export function kpisOf(
   book: ModelBook | null | undefined,
   currency: CostCurrency,
   scope?: RangeWindow,
+  prefs: CostPrefs = BOOK_PREFS,
 ): OverviewKpis {
   // Every figure folds the SAME daily ledger over the window; the lifetime heads serve only no-scope (or no-ledger) callers.
   let usage: SessionCostUsage | null = null
@@ -672,7 +675,7 @@ export function kpisOf(
       wallMs += timing?.wallMs ?? 0
     }
     // Each sub-line counts the sessions its own figure covers: a session with usage but no book rates feeds the cache-hit rate.
-    if (estimateSessionCost(rowUsage, book, currency) !== null) costSessions++
+    if (estimateSessionCost(rowUsage, book, currency, prefs) !== null) costSessions++
     if (usageTotalsOf(rowUsage) !== null) usageSessions++
   }
   const totals = usageTotalsOf(usage)
@@ -680,7 +683,8 @@ export function kpisOf(
     sessions: rows.length,
     tokens: totals?.total ?? 0,
     turns,
-    cost: estimateSessionCost(usage, book, currency),
+    cost: estimateSessionCost(usage, book, currency, prefs),
+    usage,
     costSessions,
     cacheHit: totals === null ? null : cacheHitPercent(totals.cacheRead, totals.input + totals.cacheRead + totals.cacheWrite),
     usageSessions,
@@ -706,6 +710,7 @@ export function aggregateDays(
   rows: readonly OverviewRow[],
   book: ModelBook | null | undefined,
   currency: CostCurrency,
+  prefs: CostPrefs = BOOK_PREFS,
 ): Record<string, DayTotals> {
   const merged: Record<string, { tokens: number; requests: number; sessions: number; fees: SessionCostUsage[] }> = {}
   const byKey: Record<string, { tokens: number; requests: number; sessions: number; fees: SessionCostUsage[] } | undefined> = merged
@@ -736,7 +741,7 @@ export function aggregateDays(
       tokens: day.tokens,
       requests: day.requests,
       sessions: day.sessions,
-      cost: estimateSessionCost(mergeCostUsage(...day.fees), book, currency),
+      cost: estimateSessionCost(mergeCostUsage(...day.fees), book, currency, prefs),
     }
   }
   return days
