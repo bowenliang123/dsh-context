@@ -390,6 +390,32 @@ describe('timing — served wire view', () => {
     assert.doesNotThrow(() => wire.wire.viewSchema.parse(drive.view))
   })
 
+  test('a hostile __proto__ callId arms no pairing row and keeps the state schema-valid', () => {
+    const def = timelineDef({})
+    const drive = driveTimeline([
+      toolCall(5, { callId: '__proto__', name: 'bash' }),
+      // Any later result runs the pairing-map rebuild: an inherited entry would land as own scalar props.
+      toolResult(6, { callId: 'c1', content: text('ok') }),
+    ])
+    const names = drive.state.callNames ?? {}
+    assert.equal(Object.getPrototypeOf(names), Object.prototype, 'the pairing map keeps a plain prototype')
+    assert.deepEqual(Object.keys(names), [], 'the reserved id arms no row')
+    // The consequence this guards: assigning that id installs the entry as the map's prototype instead of a row,
+    // so the rebuild's `for...in` copies its name/start as own scalars — which the record-of-objects state schema
+    // rejects on every restore, forcing the session off its checkpoint channel.
+    const c = def as unknown as { stateSchema: { parse(s: unknown): unknown } }
+    assert.doesNotThrow(() => c.stateSchema.parse(structuredClone(drive.state)))
+  })
+
+  test('a tool/result citing the reserved id pairs no tool and leaves no undefined property', () => {
+    // driveTimeline's assertNoAbsentMembers fails on any own undefined property, so reaching the assertions below
+    // already proves no `node.tool = undefined` materialized from the prototype lookup.
+    const drive = driveTimeline([toolResult(5, { callId: '__proto__', content: text('ok') })])
+    const node = drive.state.surface.at(-1)
+    assert.ok(node !== undefined && !('tool' in node), 'no own tool property materializes from the prototype')
+    assert.equal(drive.state.timing?.toolCalls ?? 0, 0, 'a phantom pairing books no tool time')
+  })
+
   test('the persisted-state schema accepts the timing shape (stamped slot included)', () => {
     const def = timelineDef({})
     const drive = driveTimeline([...step(1, 0, 1_000, { tokenMs: 300 }),

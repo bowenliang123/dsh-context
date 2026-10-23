@@ -182,7 +182,7 @@ function applySurface(
     }
   } else if (type === 'tool/result') {
     const srcId = (source as { callId?: unknown } | undefined)?.callId
-    const toolEntry = typeof srcId === 'string' ? st.callNames[srcId] : undefined
+    const toolEntry = typeof srcId === 'string' && Object.hasOwn(st.callNames, srcId) ? st.callNames[srcId] : undefined
     if (toolEntry !== undefined) {
       node.tool = toolEntry.name
       const timing = ensureTiming(st)
@@ -357,10 +357,14 @@ export function applyTimeline(state: TimelineState, event: TimelineEvent, bounds
           // Arguments are kept ONLY where read (an op-bearing tool, or the run_code root the flush reads), keeping a
           // large bash/pwsh call out of the persisted state — the command record below parses its own at the event.
           const argsRaw = rawArgsNeeded(data.name) ? argsRawOf(data.arguments) : undefined
-          s.callNames[data.callId] = {
-            name: data.name,
-            start: event.time,
-            ...(argsRaw !== undefined ? { argsRaw } : {}),
+          // `__proto__` assigns the prototype instead of a row: lookups and `for...in` rebuilds would read the entry
+          // back as inherited members, breaking the persisted state's strict schema (bumpToolTotals' guarded hazard).
+          if (data.callId !== '__proto__') {
+            s.callNames[data.callId] = {
+              name: data.name,
+              start: event.time,
+              ...(argsRaw !== undefined ? { argsRaw } : {}),
+            }
           }
           if (cmdTool !== null) {
             const parsed = commandArgsOf(cmdTool, data.arguments, bounds.maxCommandChars)
@@ -637,7 +641,7 @@ export function applyTimeline(state: TimelineState, event: TimelineEvent, bounds
         // Read before `applySurface` consumes it: pairing into file ops and the Code-Mode flush key both need it.
         const msgSource = toolMsg?.source as { callId?: unknown } | undefined
         const srcId = msgSource?.callId
-        const pendingEntry = typeof srcId === 'string' ? state.callNames[srcId] : undefined
+        const pendingEntry = typeof srcId === 'string' && Object.hasOwn(state.callNames, srcId) ? state.callNames[srcId] : undefined
         const buffered = typeof srcId === 'string' ? state.pendingCodeOps?.[srcId] : undefined
         const bufferedCmds = typeof srcId === 'string' ? state.pendingCodeCmds?.[srcId] : undefined
         const s = ensure(['surface', 'sums', 'archived', 'events', 'fileOps', 'timing', 'commands'])
