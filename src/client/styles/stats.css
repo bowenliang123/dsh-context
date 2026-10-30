@@ -30,7 +30,7 @@
 .lc-donut-center b { line-height: 1.15; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
 .lc-donut-center span { color: var(--dsw-alias-label-secondary); white-space: nowrap; }
 .lc-sl { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(150px, 100%), 1fr)); gap: 4px 8px; min-width: 0; overflow: hidden; }
-.lc-sl-row { display: flex; flex-direction: column; gap: 1px; font-size: 12px; min-width: 0; border-radius: 6px; padding: 1px 6px; margin: 0 -6px; transition: background-color var(--ds-transition-duration, 0.2s) var(--ds-ease-in-out, ease-in-out); }
+.lc-sl-row { display: flex; flex-direction: column; gap: 1px; font-size: 12px; min-width: 0; border-radius: 6px; padding: 1px 6px; margin: 0 -6px; cursor: pointer; transition: background-color var(--ds-transition-duration, 0.2s) var(--ds-ease-in-out, ease-in-out); }
 .lc-sl-row-on { background: var(--dsw-alias-interactive-bg-hover); }
 .lc-sl-row-dim { opacity: 0.55; }
 .lc-sl-main { display: flex; align-items: center; gap: 6px; min-width: 0; }
