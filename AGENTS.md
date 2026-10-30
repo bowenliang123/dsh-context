@@ -100,6 +100,7 @@ Complete ALL of these before ANY commit:
 ## Build & run
 - **Build**: run `pnpm run build` after applying code changes.
 - **Watch**: run `pnpm run watch` to hot-reload the local plugin in dsh while developing in the browser. The watch build is the lean profile — unminified JavaScript, no source maps, no declaration file — which keeps the watcher's resident set low; `pnpm run build` emits the full release artifacts.
+- **Windows**: `pnpm run watch` and `pnpm run web` are pure Node; the bash-backed scripts locate Git for Windows automatically, and `DSH_CTX_BASH` overrides the `bash.exe` path.
 - **Web server**: it may already be running at `http://127.0.0.1:3080/`. To restart, run `pnpm run web` (kills the running `dsh web`, then starts `dsh web --no-open`).
 - **Tokenized URL**: always open the full URL printed at startup, `http://127.0.0.1:3080/?token=XXXXXXXXX`. Save it to `.tmp/dsh-web-url.txt` and read it from there for later browser runs; each restart prints a new token and the old URL stops working, so overwrite the file every time.
 - **Auth-token errors**: kill the dsh process, restart with `dsh web --no-open`, and open the newly printed tokenized URL.

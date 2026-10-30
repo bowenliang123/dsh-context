@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Publishes dsh-context to npm as the authenticated user.
 #
-# Usage: NPM_TOKEN=<token> ./scripts/publish.sh [patch|minor]; 2FA accounts also pass NPM_OTP (or use an Automation
+# Usage: NPM_TOKEN=<token> pnpm run release [patch|minor]; 2FA accounts also pass NPM_OTP (or use an Automation
 # token). The token comes from the environment only, never a file — export it to keep it out of shell history.
 set -euo pipefail
 
@@ -9,7 +9,7 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT"
 
 BUMP="${1:-patch}"
-: "${NPM_TOKEN:?NPM_TOKEN is not set — run with NPM_TOKEN=<token> ./scripts/publish.sh}"
+: "${NPM_TOKEN:?NPM_TOKEN is not set — run with NPM_TOKEN=<token> pnpm run release}"
 
 # Keep npm's cache/logs inside the repo when the default location (~/.npm) is not writable (sandboxed builds, read-only home).
 export NPM_CONFIG_CACHE="${NPM_CONFIG_CACHE:-$ROOT/.npm-cache}"
