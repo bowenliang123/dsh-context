@@ -102,12 +102,10 @@
 .lc-inspector-comm-peer { border: 0; background: transparent; padding: 0; font: inherit; color: var(--dsw-alias-brand-primary, var(--color-blue-500)); cursor: pointer; }
 .lc-inspector-comm-text { flex-basis: 100%; color: var(--dsw-alias-label-secondary); overflow-wrap: anywhere; white-space: pre-wrap; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 3; overflow: hidden; }
 .lc-agents-inspector { margin-top: 10px; padding: 7px 10px; border: var(--lc-line-fine, 1px solid var(--dsw-alias-border-l2)); border-radius: 8px; background: var(--lc-subpanel-bg); font-size: 12px; }
-.lc-agents-inspector-row { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 8px; min-width: 0; }
 .lc-agents-inspector-name { color: var(--dsw-alias-label-primary); overflow-wrap: anywhere; }
 .lc-agents-badge { flex: none; font-size: 10px; padding: 1px 6px; border-radius: 999px; background: var(--dsw-alias-bg-layer-1); border: var(--lc-line-fine, 1px solid var(--dsw-alias-border-l1)); color: var(--dsw-alias-label-secondary); }
 .lc-agents-badge-on { color: var(--dsw-alias-state-success-primary); border-color: color-mix(in srgb, var(--dsw-alias-state-success-primary) 40%, transparent); }
 .lc-agents-inspector-stats { color: var(--dsw-alias-label-secondary); font-variant-numeric: tabular-nums; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.lc-agents-inspector-open { margin-left: auto; flex: none; color: var(--dsw-alias-brand-primary, var(--color-blue-500)); }
 .lc-agents-inspector-parts { display: flex; flex-wrap: wrap; gap: 4px 12px; margin-top: 6px; padding-top: 6px; border-top: var(--lc-line-dashed, 1px dashed var(--dsw-alias-border-l2)); font-size: 11px; color: var(--dsw-alias-label-secondary); }
 .lc-agents-part { display: inline-flex; align-items: center; gap: 4px; white-space: nowrap; }
 .lc-agents-part i { width: 7px; height: 7px; border-radius: 2px; }
