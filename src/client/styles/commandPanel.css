@@ -38,7 +38,7 @@
 .lc-cmd-attn-row.lc-cmd-attn-on, .lc-cmd-attn-row.lc-cmd-attn-on:hover { background: color-mix(in srgb, var(--lc-attn-tone) 12%, var(--lc-control-track)); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--lc-attn-tone) 45%, transparent); }
 .lc-cmd-attn-dot { flex: none; width: 7px; height: 7px; border-radius: 50%; background: var(--lc-attn-tone); }
 .lc-cmd-attn-k { flex: none; width: 70px; font-size: 10.5px; font-weight: 600; color: var(--dsw-alias-label-secondary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.lc-cmd-attn-v { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-family: var(--dsw-alias-mono-font-family, ui-monospace, monospace); font-size: 10.5px; }
+.lc-cmd-attn-v { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 10.5px; }
 .lc-cmd-attn-n { flex: none; font-size: 10.5px; font-weight: 600; font-variant-numeric: tabular-nums; color: color-mix(in srgb, var(--lc-attn-tone) 60%, var(--dsw-alias-label-primary)); }
 
 .lc-cmd-progs { flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; }
@@ -50,7 +50,7 @@
 .lc-cmd-progs-list .lc-cmd-prog:hover { background: var(--dsw-alias-interactive-bg-hover); }
 .lc-cmd-progs-list .lc-cmd-prog.lc-cmd-prog-on, .lc-cmd-progs-list .lc-cmd-prog.lc-cmd-prog-on:hover { background: color-mix(in srgb, var(--dsw-alias-state-business-primary) 10%, transparent); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--dsw-alias-state-business-primary) 55%, transparent); }
 .lc-cmd-prog-dot { flex: none; width: 7px; height: 7px; border-radius: 50%; align-self: center; }
-.lc-cmd-prog-name { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-family: var(--dsw-alias-mono-font-family, ui-monospace, monospace); font-size: 11px; color: var(--dsw-alias-label-primary); }
+.lc-cmd-prog-name { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 11px; color: var(--dsw-alias-label-primary); }
 .lc-cmd-prog-n { flex: none; font-variant-numeric: tabular-nums; font-size: 11px; color: var(--dsw-alias-label-primary); }
 .lc-cmd-prog-runs { flex: none; min-width: 30px; text-align: right; white-space: nowrap; font-size: 10px; color: var(--dsw-alias-label-secondary); font-variant-numeric: tabular-nums; }
 .lc-cmd-prog-bar { position: absolute; left: 6px; bottom: 1px; height: 2px; border-radius: 1px; opacity: 0.45; pointer-events: none; }
@@ -70,7 +70,7 @@ body:not([data-ds-dark-theme]) .lc-cmd-item-on > .lc-cmd-row:hover { background:
 .lc-cmd-st-kill { color: var(--dsw-alias-state-warn-primary); }
 .lc-cmd-st-run { color: var(--dsw-alias-brand-primary); animation: lc-cmd-pulse 1.6s ease-in-out infinite; }
 @keyframes lc-cmd-pulse { 50% { opacity: 0.35; } }
-.lc-cmd-cmd { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-family: var(--dsw-alias-mono-font-family, ui-monospace, monospace); font-size: 11.5px; }
+.lc-cmd-cmd { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 11.5px; }
 .lc-cmd-tool { font-size: 10px; font-weight: 600; padding: 0 5px; margin-right: 5px; border-radius: 4px; background: var(--dsw-alias-bg-layer-1); border: var(--lc-line-fine, 1px solid var(--dsw-alias-border-l2)); color: var(--dsw-alias-label-secondary); font-family: inherit; }
 .lc-cmd-badges { flex: none; display: inline-flex; gap: 4px; }
 .lc-cmd-badge { font-size: 10px; padding: 1px 6px; border-radius: 999px; background: var(--dsw-alias-bg-layer-1); border: var(--lc-line-fine, 1px solid var(--dsw-alias-border-l2)); color: var(--dsw-alias-label-secondary); white-space: nowrap; }
@@ -85,7 +85,7 @@ body:not([data-ds-dark-theme]) .lc-cmd-item-on > .lc-cmd-row:hover { background:
 .lc-cmd-time-link { cursor: pointer; border-radius: 4px; padding: 0 3px; margin-right: -3px; }
 .lc-cmd-time-link:hover { color: var(--dsw-alias-brand-primary); text-decoration: underline; text-underline-offset: 2px; }
 .lc-cmd-detail { margin: 8px 8px 8px 15px; display: flex; flex-direction: column; gap: 8px; }
-.lc-cmd-full { margin: 0; padding: 8px 10px; max-height: 220px; overflow-y: auto; font-family: var(--dsw-alias-mono-font-family, ui-monospace, monospace); font-size: 11px; line-height: 1.5; white-space: pre-wrap; word-break: break-all; color: var(--dsw-alias-label-primary); }
+.lc-cmd-full { margin: 0; padding: 8px 10px; max-height: 220px; overflow-y: auto; font-family: inherit; font-size: 11px; line-height: 1.5; white-space: pre-wrap; word-break: break-all; color: var(--dsw-alias-label-primary); }
 .lc-cmd-result-note { padding: 6px 10px; font-size: 11px; color: var(--dsw-alias-label-secondary); }
 .lc-cmd-detail-facts { display: flex; flex-wrap: wrap; gap: 4px 12px; padding: 6px 10px; border-top: var(--lc-line-fine, 1px solid var(--dsw-alias-border-l1)); font-size: 11px; color: var(--dsw-alias-label-secondary); font-variant-numeric: tabular-nums; }
 .lc-cmd-detail-facts em { font-style: normal; color: var(--dsw-alias-state-warn-primary); margin-left: 4px; }
