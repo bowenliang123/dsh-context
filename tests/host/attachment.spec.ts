@@ -3,7 +3,7 @@ import { describe, test } from 'vitest'
 import type { Context } from '@deepseek-ai/cordis'
 import { mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
-import { join } from 'node:path'
+import { basename, join } from 'node:path'
 import { afterEach } from 'vitest'
 import { ATTACHMENT_ROUTE, referencedAttachmentOf, imagePreviewNameOf, watchAttachmentChannel } from '../../src/host/attachment'
 import type { ColdReadGate } from '../../src/host/coldRead'
@@ -87,10 +87,6 @@ const USER_EVENT = {
       { type: 'text', text: 'how many files?' },
     ],
   },
-}
-
-function basename(path: string): string {
-  return path.slice(path.lastIndexOf('/') + 1)
 }
 
 function observing(events: unknown): { observeSession(id: string, options: unknown): Promise<unknown>; disposed(): boolean } {
