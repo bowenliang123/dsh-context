@@ -52,7 +52,7 @@ body:not([data-ds-dark-theme]) .lc-stat { box-shadow: var(--lc-shadow-tile); }
 .lc-searchbox > input::placeholder { color: var(--dsw-alias-label-dimmed); }
 .lc-searchbox:has(> .lc-fleet-search) { flex: 1 1 140px; min-width: 120px; max-width: 240px; }
 .lc-searchbox:has(> .lc-ov-search) { flex: 1 1 150px; min-width: 110px; }
-.lc-searchbox:has(> .lc-ov-skills-search) { flex: 0 1 170px; min-width: 110px; margin-left: auto; }
+.lc-searchbox:has(> .lc-ov-skills-search) { flex: 1 1 96px; min-width: 104px; max-width: 160px; margin-left: auto; }
 .lc-searchbox:has(> .lc-cmd-prog-search) { flex: 0 1 110px; min-width: 60px; }
 .lc-searchbox-on > input { padding-right: 20px; }
 .lc-searchbox > input::-webkit-search-cancel-button,
