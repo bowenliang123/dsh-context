@@ -1,7 +1,9 @@
 import type { CommandRecord } from './types'
 import { parseCallArgs } from './fileOps'
 
-export function commandTool(tool: string | undefined): 'bash' | 'pwsh' | 'run_code' | null {
+export type CommandTool = 'bash' | 'pwsh' | 'run_code'
+
+export function commandTool(tool: string | undefined): CommandTool | null {
   if (tool === 'bash' || tool === 'pwsh' || tool === 'run_code') return tool
   return null
 }
@@ -714,6 +716,21 @@ function pwshProgram(cmd: string, vars = new Map<string, string | null>()): stri
 
 export function headProgramOf(cmd: string, dialect: CommandDialect = 'bash'): string {
   return programOfText(cmd, dialect)
+}
+
+export function programOfCommand(tool: CommandTool, cmd: string): string {
+  if (tool === 'run_code') return 'run_code'
+  const head = headProgramOf(cmd, tool)
+  return head === '' ? (tool === 'pwsh' ? 'pwsh' : 'shell') : head
+}
+
+const PROGRAM_SCAN_CHARS = 4096
+
+export function commandProgramOf(tool: string | undefined, raw: unknown): string | null {
+  const cmdTool = commandTool(tool)
+  if (cmdTool === null) return null
+  const parsed = commandArgsOf(cmdTool, raw, PROGRAM_SCAN_CHARS)
+  return parsed === null ? null : programOfCommand(cmdTool, parsed.cmd)
 }
 
 function programOfText(text: string, dialect: CommandDialect, vars = new Map<string, string | null>()): string {

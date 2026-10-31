@@ -1,5 +1,5 @@
 import type { CommandRecord, CommandStats, SurfaceNode } from '../shared/types'
-import { firstLineOf, headProgramOf, hideableCdPrefix, programsOfCommand, shapeOfCmd } from '../shared/commands'
+import { commandTool, programsOfCommand, programOfCommand, firstLineOf, hideableCdPrefix, shapeOfCmd } from '../shared/commands'
 import type { CommandShape } from '../shared/commands'
 
 export type Command = CommandRecord
@@ -113,11 +113,8 @@ export function tallyOfCommands(records: readonly CommandRecord[]): CommandStats
 }
 
 export function programOf(rec: CommandRecord): string {
-  if (rec.tool === 'bash' || rec.tool === 'pwsh') {
-    const head = headProgramOf(rec.cmd, rec.tool)
-    return head === '' ? (rec.tool === 'pwsh' ? 'pwsh' : 'shell') : head
-  }
-  return rec.tool
+  const tool = commandTool(rec.tool)
+  return tool === null ? rec.tool : programOfCommand(tool, rec.cmd)
 }
 
 export interface ProgramCount {

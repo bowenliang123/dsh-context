@@ -40,6 +40,11 @@ export interface TimelineLast {
   prompt?: number
 }
 
+export interface ActivityTally {
+  n: number
+  last: number
+}
+
 export interface ActivityDay {
   tokens: number
   requests: number
@@ -48,7 +53,9 @@ export interface ActivityDay {
   toolCalls?: number
   toolsMs?: number
   wallMs?: number
-  skills?: Record<string, { n: number; last: number }>
+  skills?: Record<string, ActivityTally>
+  tools?: Record<string, ActivityTally>
+  cmds?: Record<string, ActivityTally>
 }
 
 export interface ContextActivity {

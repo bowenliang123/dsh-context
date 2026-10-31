@@ -31,7 +31,7 @@ describe('contextActivity unit: shape', () => {
   test('the definition contract holds and both schemas accept every folded field', () => {
     const def = createContextActivityDefinition()
     assert.equal(def.key, 'contextActivity')
-    assert.equal(def.stateVersion, 5, 'the daily turns/tool/wall tallies are the fifth shape')
+    assert.equal(def.stateVersion, 6, 'the daily turns/tool/wall/per-tool/per-command tallies are the sixth shape')
     assert.deepEqual(def.init(), { days: {} })
     let state = applyActivity(def.init(), requestHeader('deepseek-v4', 'deepseek-official'))
     state = applyActivity(state, stepStart(at(0)))
@@ -48,10 +48,17 @@ describe('contextActivity unit: shape', () => {
     assert.equal(def.stateSchema.safeParse({ days: { '2026-01-01': { tokens: 'x', requests: 1 } } }).success, false)
     assert.equal(def.stateSchema.safeParse({ days: {}, model: 'm', provider: 'p', stepStart: 1 }).success, true)
     assert.equal(def.stateSchema.safeParse({ days: {}, lastTurn: 3, toolStarts: { c1: { start: 1, day: '2026-01-01' } } }).success, true)
+    assert.equal(def.stateSchema.safeParse({ days: {}, toolStarts: { c1: { start: 1, day: '2026-01-01', name: 'read' } } }).success, true)
     assert.equal(def.stateSchema.safeParse({ days: {}, toolStarts: { c1: { start: -1, day: '2026-01-01' } } }).success, false)
     assert.equal(def.stateSchema.safeParse({ days: { '2026-01-01': { tokens: 0, requests: 0, turns: 1, toolCalls: 2, toolsMs: 1.5, wallMs: 2 } } }).success, true)
     assert.equal(def.stateSchema.safeParse({ days: { '2026-01-01': { tokens: 0, requests: 0, turns: 1.5 } } }).success, false)
     assert.equal(contextActivitySchema.safeParse({ days: { '2026-01-01': { tokens: 0, requests: 0, turns: 1, toolCalls: 2, toolsMs: 1.5, wallMs: 2 } } }).success, true)
+    assert.equal(def.stateSchema.safeParse({
+      days: { '2026-01-01': { tokens: 0, requests: 0, tools: { read: { n: 2, last: 1 } }, cmds: { git: { n: 1, last: 1 } } } },
+    }).success, true)
+    assert.equal(def.stateSchema.safeParse({
+      days: { '2026-01-01': { tokens: 0, requests: 0, tools: { read: { n: 2, last: 1, x: 1 } } } },
+    }).success, false, 'a tally carries exactly n and last')
 
     const bad = { days: { '2026-01-01': { tokens: 1, requests: 1, cost: { deepseek: { 'deepseek-v4': { peak: { uncached: 'x' } } } } } } }
     assert.equal(def.stateSchema.safeParse(bad).success, false)
@@ -479,6 +486,116 @@ describe('applyActivity: turn, tool-run, and step-time attribution', () => {
 
 })
 
+function toolResultAt(time: number, callId: string): SessionEvent {
+  return {
+    type: 'tool/result',
+    seq: 1,
+    time,
+    data: { message: { toolCallId: callId, content: [] } },
+  } as never
+}
+
+function commandCall(time: number, callId: unknown, name: unknown, args?: unknown): SessionEvent {
+  return { type: 'tool/call', seq: 1, time, data: { callId, name, arguments: args } } as never
+}
+
+describe('applyActivity: the per-tool table', () => {
+  test('a paired result books its tool name on the step day; a nameless call books only the run count', () => {
+    let state = applyActivity({ days: {} }, stepStart(at(0)))
+    state = applyActivity(state, toolCall(at(0), 'c1', 'read'))
+    state = applyActivity(state, toolResultAt(at(0) + 500, 'c1'))
+    state = applyActivity(state, toolCall(at(0), 'c2', 'read'))
+    state = applyActivity(state, toolResultAt(at(0) + 900, 'c2'))
+    state = applyActivity(state, toolCall(at(0), 'c3', 'grep'))
+    state = applyActivity(state, toolResultAt(at(0) + 1000, 'c3'))
+    const day = state.days['2026-01-01']
+    assert.equal(day.toolCalls, 3)
+    assert.equal(day.toolsMs, 2400)
+    assert.deepEqual(day.tools, {
+      read: { n: 2, last: at(0) + 900 },
+      grep: { n: 1, last: at(0) + 1000 },
+    })
+
+    const nameless = applyActivity(applyActivity({ days: {} }, toolCall(at(0), 'c9', 7)), toolResultAt(at(0), 'c9'))
+    assert.equal(nameless.days['2026-01-01'].toolCalls, 1)
+    assert.equal(nameless.days['2026-01-01'].tools, undefined)
+  })
+
+  test('an unreadable result time keeps the start instant as the last stamp', () => {
+    let state = applyActivity({ days: {} }, toolCall(at(0), 'c1', 'read'))
+    state = applyActivity(state, toolResultAt(Number.NaN, 'c1'))
+    assert.deepEqual(state.days['2026-01-01'].tools, { read: { n: 1, last: at(0) } })
+  })
+
+  test('a day’s tool table is capped: new names drop, booked names keep tallying', () => {
+    let state: ReturnType<typeof applyActivity> = { days: {} }
+    for (let i = 0; i < 64; i++) {
+      state = applyActivity(state, toolCall(at(0), `c${i}`, `tool-${i}`))
+      state = applyActivity(state, toolResultAt(at(0), `c${i}`))
+    }
+    const capped = applyActivity(applyActivity(state, toolCall(at(0), 'x', 'tool-64')), toolResultAt(at(0), 'x'))
+    assert.deepEqual(capped.days['2026-01-01'].tools, state.days['2026-01-01'].tools, 'the 65th distinct name books no table entry')
+    assert.equal(capped.days['2026-01-01'].toolCalls, 65, 'the run itself still counts')
+    const again = applyActivity(applyActivity(capped, toolCall(at(0), 'y', 'tool-0')), toolResultAt(at(0), 'y'))
+    assert.equal(again.days['2026-01-01'].tools?.['tool-0'].n, 2, 'a booked name still grows')
+  })
+})
+
+describe('applyActivity: the per-day command table', () => {
+  test('a command call books its head program on the initiation day; a call without a command books nothing', () => {
+    let state = applyActivity({ days: {} }, stepStart(at(0)))
+    state = applyActivity(state, commandCall(at(0), 'c1', 'bash', { command: 'cd /repo && git status' }))
+    state = applyActivity(state, commandCall(at(0), 'c2', 'bash', { command: 'pnpm exec vitest run' }))
+    state = applyActivity(state, commandCall(at(0), 'c3', 'run_code', { code: 'print(1)' }))
+    state = applyActivity(state, commandCall(at(0), 'c4', 'read', { file_path: '/x' }))
+    state = applyActivity(state, commandCall(at(0), 'c5', 'bash', { description: 'no command here' }))
+    assert.deepEqual(state.days['2026-01-01'].cmds, {
+      git: { n: 1, last: at(0) },
+      pnpm: { n: 1, last: at(0) },
+      run_code: { n: 1, last: at(0) },
+    })
+    assert.equal(state.days['2026-01-01'].toolCalls, undefined, 'a dispatch alone books no tool run')
+    const settled = applyActivity(state, assistantMessage(at(0), { inputTokens: 1 }))
+    assert.deepEqual(settled.days['2026-01-01'].cmds, state.days['2026-01-01'].cmds, 'a later settlement keeps the command table')
+  })
+
+  test('the command day follows the step stamp, and a JSON string of args parses too', () => {
+    const late = new Date(2026, 0, 1, 23, 30).getTime()
+    const early = new Date(2026, 0, 2, 0, 30).getTime()
+    let state = applyActivity({ days: {} }, stepStart(late))
+    state = applyActivity(state, commandCall(early, 'c1', 'pwsh', JSON.stringify({ command: 'git status' })))
+    assert.deepEqual(state.days['2026-01-01'].cmds, { git: { n: 1, last: early } })
+    assert.equal(state.days['2026-01-02'], undefined)
+    const fallback = applyActivity({ days: {} }, commandCall(at(1), 'c2', 'bash', { command: '' }))
+    assert.equal(fallback.days['2026-01-02'], undefined, 'an empty command derives no program')
+  })
+
+  test('a nested code-mode dispatch books its own run; a hostile dispatch stays inert', () => {
+    const dispatch = (data: unknown, time = at(0)): SessionEvent =>
+      ({ type: 'tool/ptc-dispatch-start', seq: 1, time, data } as never)
+    const state = applyActivity({ days: {} }, dispatch({ name: 'bash', arguments: { command: 'node build.js' } }))
+    assert.deepEqual(state.days['2026-01-01'].cmds, { node: { n: 1, last: at(0) } })
+    for (const data of [null, {}, { name: 7, arguments: {} }, { name: 'bash' }, { name: 'read', arguments: { path: '/x' } }]) {
+      assert.ok(applyActivity(state, dispatch(data)) === state, JSON.stringify(data))
+    }
+    assert.ok(
+      applyActivity(state, { type: 'tool/ptc-dispatch-start', seq: 1, time: Number.NaN, data: { name: 'bash', arguments: { command: 'git' } } } as never) === state,
+      'an unreadable instant books nothing',
+    )
+  })
+
+  test('a day’s command table is capped: new programs drop, booked programs keep tallying', () => {
+    let state: ReturnType<typeof applyActivity> = { days: {} }
+    for (let i = 0; i < 64; i++) {
+      state = applyActivity(state, commandCall(at(0), `c${i}`, 'bash', { command: `prog${i} --flag` }))
+    }
+    const capped = applyActivity(state, commandCall(at(0), 'x', 'bash', { command: 'prog64' }))
+    assert.deepEqual(capped.days['2026-01-01'].cmds, state.days['2026-01-01'].cmds, 'the 65th distinct program books nothing')
+    const again = applyActivity(capped, commandCall(at(0), 'y', 'bash', { command: 'prog0' }))
+    assert.equal(again.days['2026-01-01'].cmds?.prog0.n, 2, 'a booked program still grows')
+  })
+})
+
 describe('applyActivity: the per-day pricing record', () => {
   test('DeepSeek peak windows book the doubled list price; off-peak books the plain one', () => {
     let state = applyActivity({ days: {} }, requestHeader('deepseek-v4', 'deepseek-official'))
@@ -515,17 +632,21 @@ describe('applyActivity: the per-day pricing record', () => {
 })
 
 describe('contextActivity unit: the schemas over the pricing record', () => {
-  test('the served view never aliases a day\'s nested cost or skill records', () => {
+  test('the served view never aliases a day\'s nested cost or tally records', () => {
     const def = createContextActivityDefinition()
     let state = applyActivity(def.init(), requestHeader('deepseek-v4', 'deepseek-official'))
     state = applyActivity(state, stepStart(at(0)))
     state = applyActivity(state, assistantMessage(at(0), { inputTokens: 1, outputTokens: 2 }))
     state = applyActivity(state, skillInvocation(at(0), INVOCATION))
+    state = applyActivity(state, toolCall(at(0), 'c1', 'read'))
+    state = applyActivity(state, toolResultAt(at(0), 'c1'))
+    state = applyActivity(state, commandCall(at(0), 'c2', 'bash', { command: 'git status' }))
     const view = def.wire.view(state)
     const day = Object.keys(state.days)[0]
     const served = view.days[day]
     const persisted = state.days[day]
     assert.ok(persisted.cost !== undefined && persisted.skills !== undefined, 'the fixture carries both records')
+    assert.ok(persisted.tools !== undefined && persisted.cmds !== undefined, 'the fixture carries both tallies')
     assert.notEqual(served.cost, persisted.cost)
     assert.notEqual(served.cost?.['deepseek-official'], persisted.cost?.['deepseek-official'])
     assert.notEqual(served.cost?.['deepseek-official']?.['deepseek-v4'], persisted.cost?.['deepseek-official']?.['deepseek-v4'])
@@ -533,6 +654,10 @@ describe('contextActivity unit: the schemas over the pricing record', () => {
     assert.notEqual(served, persisted)
     assert.notEqual(served.skills, persisted.skills)
     assert.notEqual(served.skills?.tdd, persisted.skills?.tdd)
+    assert.notEqual(served.tools, persisted.tools)
+    assert.notEqual(served.tools?.read, persisted.tools?.read)
+    assert.notEqual(served.cmds, persisted.cmds)
+    assert.notEqual(served.cmds?.git, persisted.cmds?.git)
     assert.deepEqual(served, persisted)
     served.tokens = 999
     assert.equal(persisted.tokens, 3, 'mutating the view never reaches the fold’s record')

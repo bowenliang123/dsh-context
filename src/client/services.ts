@@ -3,7 +3,7 @@ import type { ComponentType } from 'react'
 import type { AttachmentRef } from '../shared/attachment'
 import { estimateSystemTokens } from '../shared/estimate'
 import { PLUGIN_NAME } from './meta'
-import type { ActivityDay, ContextActivity, ContextBreakdown, ContextHeaders, ContextPressure, ContextTimeline, CostModelUsage, HeaderEpochContent, SystemPromptNode, TimingTotals, TokenUsage, ToolTimingTotals } from '../shared/types'
+import type { ActivityDay, ActivityTally, ContextActivity, ContextBreakdown, ContextHeaders, ContextPressure, ContextTimeline, CostModelUsage, HeaderEpochContent, SystemPromptNode, TimingTotals, TokenUsage, ToolTimingTotals } from '../shared/types'
 
 export interface LocaleService {
   register(ns: string, dicts: Record<string, Record<string, string>>): () => void
@@ -554,7 +554,9 @@ function dayEntryOf(key: string, raw: unknown): ActivityDay | undefined {
   const toolsMs = nonNegativeOf(entry.toolsMs)
   const wallMs = nonNegativeOf(entry.wallMs)
   const clean = costWellFormed(entry.cost)
-    && skillTalliesWellFormed(entry.skills)
+    && talliesWellFormed(entry.skills)
+    && talliesWellFormed(entry.tools)
+    && talliesWellFormed(entry.cmds)
     && (entry.turns === undefined || turns !== undefined)
     && (entry.toolCalls === undefined || toolCalls !== undefined)
     && (entry.toolsMs === undefined || toolsMs !== undefined)
@@ -562,7 +564,9 @@ function dayEntryOf(key: string, raw: unknown): ActivityDay | undefined {
   if (clean) return entry as unknown as ActivityDay
   const costRaw = costOf(entry.cost)
   const cost = costRaw !== undefined && Object.keys(costRaw).length > 0 ? costRaw : undefined
-  const skills = skillTalliesOf(entry.skills)
+  const skills = talliesOf(entry.skills)
+  const tools = talliesOf(entry.tools)
+  const cmds = talliesOf(entry.cmds)
   return {
     tokens,
     requests,
@@ -572,6 +576,8 @@ function dayEntryOf(key: string, raw: unknown): ActivityDay | undefined {
     ...(toolsMs !== undefined ? { toolsMs } : {}),
     ...(wallMs !== undefined ? { wallMs } : {}),
     ...(skills !== undefined ? { skills } : {}),
+    ...(tools !== undefined ? { tools } : {}),
+    ...(cmds !== undefined ? { cmds } : {}),
   }
 }
 
@@ -607,7 +613,7 @@ function costWellFormed(value: unknown): boolean {
   return any
 }
 
-function skillTalliesWellFormed(value: unknown): boolean {
+function talliesWellFormed(value: unknown): boolean {
   if (value === undefined) return true
   const data = asRecord(value)
   if (data === null || Array.isArray(data)) return false
@@ -650,10 +656,10 @@ export function costFullyQuantified(value: unknown): boolean {
   return any
 }
 
-function skillTalliesOf(value: unknown): ActivityDay['skills'] | undefined {
+function talliesOf(value: unknown): Record<string, ActivityTally> | undefined {
   const data = asRecord(value)
   if (data === null || Array.isArray(data)) return undefined
-  const skills: Record<string, { n: number; last: number }> = {}
+  const tallies: Record<string, ActivityTally> = {}
   let any = false
   for (const name of Object.keys(data)) {
     const tally = asRecord(data[name])
@@ -661,10 +667,10 @@ function skillTalliesOf(value: unknown): ActivityDay['skills'] | undefined {
     const last = tally?.last
     if (typeof n !== 'number' || !Number.isFinite(n) || n < 0
       || typeof last !== 'number' || !Number.isFinite(last)) continue
-    skills[name] = { n, last }
+    tallies[name] = { n, last }
     any = true
   }
-  return any ? skills : undefined
+  return any ? tallies : undefined
 }
 
 export interface TriggerCandidate {

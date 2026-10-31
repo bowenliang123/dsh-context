@@ -766,6 +766,34 @@ describe('activityOf', () => {
     }, 'non-record and empty-after-scrubbing tables drop whole; the days survive')
   })
 
+  test('the tool and command tables repair like the skill table', () => {
+    const clean = {
+      days: {
+        '2026-09-16': {
+          tokens: 1,
+          requests: 1,
+          tools: { read: { n: 2, last: 5 } },
+          cmds: { git: { n: 1, last: 6 } },
+        },
+      },
+    }
+    assert.ok(activityOf(clean) === (clean as never), 'clean tables ride the pass-through')
+    const dirty = activityOf({
+      days: {
+        '2026-09-16': {
+          tokens: 1,
+          requests: 1,
+          tools: { read: { n: 1 }, 'bad-name': { n: -1, last: 2 } },
+          cmds: { git: { n: 2, last: 3 } },
+        },
+        '2026-09-17': { tokens: 1, requests: 1, tools: { read: { n: 2, last: 4 } }, cmds: [1] },
+      },
+    })
+    assert.deepEqual(dayOf(dirty).tools, undefined, 'no readable tool tally leaves no table')
+    assert.deepEqual(dayOf(dirty).cmds, { git: { n: 2, last: 3 } })
+    assert.deepEqual(dayOf(dirty, '2026-09-17'), { tokens: 1, requests: 1, tools: { read: { n: 2, last: 4 } } }, 'a malformed command table drops alone')
+  })
+
   test('the daily tallies ride the pass-through and the sanitized copy; malformed figures drop alone', () => {
     const tallies = { turns: 2, toolCalls: 3, toolsMs: 4.5, wallMs: 5 }
     const wire = { days: { '2026-09-16': { tokens: 15, requests: 1, ...tallies } } }

@@ -5,12 +5,17 @@ import { skillNameOf } from './fold'
 import { addBilledUsage, copyCostUsage, durOf, tokenCountOf } from './foldMetering'
 import type { BilledUsage, UsageLike } from './foldMetering'
 import { costUsageSchema } from './timeline'
+import { commandProgramOf } from '../shared/commands'
 import { dayKeyOf } from '../shared/days'
-import type { ActivityDay, ContextActivity } from '../shared/types'
+import type { ActivityDay, ActivityTally, ContextActivity } from '../shared/types'
 
 const MAX_KEPT_DAYS = 400
 
 const MAX_SKILLS_PER_DAY = 100
+
+const MAX_TOOLS_PER_DAY = 64
+
+const MAX_PROGRAMS_PER_DAY = 64
 
 const MAX_PENDING_SKILL_CALLS = 100
 
@@ -19,6 +24,7 @@ const MAX_PENDING_TOOL_CALLS = 100
 interface ToolStart {
   start: number
   day: string
+  name?: string
 }
 
 export interface ActivityState {
@@ -31,7 +37,7 @@ export interface ActivityState {
   skillCalls?: string[]
 }
 
-const activitySkillSchema = z.object({
+const activityTallySchema = z.object({
   n: z.number().int().nonnegative(),
   last: z.number(),
 }).strict()
@@ -39,6 +45,7 @@ const activitySkillSchema = z.object({
 const toolStartSchema = z.object({
   start: z.number().nonnegative(),
   day: z.string(),
+  name: z.string().optional(),
 }).strict()
 
 const activityDaySchema = z.object({
@@ -49,7 +56,9 @@ const activityDaySchema = z.object({
   toolCalls: z.number().int().nonnegative().optional(),
   toolsMs: z.number().nonnegative().optional(),
   wallMs: z.number().nonnegative().optional(),
-  skills: z.record(z.string(), activitySkillSchema).optional(),
+  skills: z.record(z.string(), activityTallySchema).optional(),
+  tools: z.record(z.string(), activityTallySchema).optional(),
+  cmds: z.record(z.string(), activityTallySchema).optional(),
 }).strict()
 export const contextActivitySchema = z.object({
   days: z.record(z.string(), activityDaySchema),
@@ -97,6 +106,8 @@ function copyDay(prev: ActivityDay | undefined): ActivityDay {
     ...(prev?.toolsMs !== undefined ? { toolsMs: prev.toolsMs } : {}),
     ...(prev?.wallMs !== undefined ? { wallMs: prev.wallMs } : {}),
     ...(prev?.skills !== undefined ? { skills: prev.skills } : {}),
+    ...(prev?.tools !== undefined ? { tools: prev.tools } : {}),
+    ...(prev?.cmds !== undefined ? { cmds: prev.cmds } : {}),
   }
 }
 
@@ -104,13 +115,44 @@ function withDayPatch(state: ActivityState, key: string, patch: Partial<Activity
   return withDayEntry(state, key, { ...copyDay(state.days[key]), ...patch })
 }
 
-function withToolStart(state: ActivityState, callId: string, start: number): ActivityState {
+function bumpTally(
+  table: Record<string, ActivityTally> | undefined,
+  name: string,
+  time: number,
+  cap: number,
+): Record<string, ActivityTally> | null {
+  const prev = table?.[name]
+  if (prev !== undefined) {
+    return { ...table, [name]: { n: prev.n + 1, last: Math.max(prev.last, time) } }
+  }
+  if (table !== undefined && Object.keys(table).length >= cap) return null
+  return { ...(table ?? {}), [name]: { n: 1, last: time } }
+}
+
+function withTally(
+  state: ActivityState,
+  key: string,
+  field: 'skills' | 'tools' | 'cmds',
+  name: string,
+  time: number,
+  cap: number,
+): ActivityState {
+  const byKey: Record<string, ActivityDay | undefined> = state.days
+  const prev = byKey[key]
+  const table = bumpTally(prev?.[field], name, time, cap)
+  return table === null ? state : withDayEntry(state, key, { ...copyDay(prev), [field]: table })
+}
+
+function withToolStart(state: ActivityState, callId: string, name: string | undefined, start: number): ActivityState {
   if (!Number.isFinite(start) || start < 0) return state
   const day = dayKeyOf(state.stepStart ?? start)
   if (day === null) return state
   const prev = state.toolStarts?.[callId]
-  if (prev !== undefined && prev.start === start && prev.day === day) return state
-  const starts: Record<string, ToolStart | undefined> = { ...state.toolStarts, [callId]: { start, day } }
+  if (prev !== undefined && prev.start === start && prev.day === day && prev.name === name) return state
+  const starts: Record<string, ToolStart | undefined> = {
+    ...state.toolStarts,
+    [callId]: { start, day, ...(name !== undefined ? { name } : {}) },
+  }
   const entries = Object.entries(starts)
   const toolStarts = entries.length > MAX_PENDING_TOOL_CALLS
     ? Object.fromEntries(entries.slice(entries.length - MAX_PENDING_TOOL_CALLS))
@@ -132,21 +174,20 @@ function bookToolResult(state: ActivityState, callId: string, end: number): Acti
   const next = { ...timed }
   if (Object.keys(kept).length > 0) next.toolStarts = kept
   else delete next.toolStarts
-  return next
+  if (start.name === undefined) return next
+  return withTally(next, start.day, 'tools', start.name, Number.isFinite(end) ? end : start.start, MAX_TOOLS_PER_DAY)
 }
 
 function bookSkillLoad(state: ActivityState, name: string, time: number): ActivityState {
   const key = dayKeyOf(time)
-  if (key === null) return state
-  const byKey: Record<string, ActivityDay | undefined> = state.days
-  const prev = byKey[key]
-  const existing = prev?.skills?.[name]
-  if (existing === undefined && prev?.skills !== undefined && Object.keys(prev.skills).length >= MAX_SKILLS_PER_DAY) return state
-  const skills = {
-    ...prev?.skills,
-    [name]: { n: (existing?.n ?? 0) + 1, last: existing === undefined ? time : Math.max(existing.last, time) },
-  }
-  return withDayEntry(state, key, { ...copyDay(prev), skills })
+  return key === null ? state : withTally(state, key, 'skills', name, time, MAX_SKILLS_PER_DAY)
+}
+
+function bookCommandRun(state: ActivityState, tool: string | undefined, raw: unknown, time: number): ActivityState {
+  const program = commandProgramOf(tool, raw)
+  const key = dayKeyOf(state.stepStart ?? time)
+  if (program === null || key === null) return state
+  return withTally(state, key, 'cmds', program, time, MAX_PROGRAMS_PER_DAY)
 }
 
 function invokedSkillOf(event: SessionEvent): string {
@@ -211,14 +252,20 @@ export function applyActivity(state: ActivityState, event: SessionEvent): Activi
     return name === '' ? state : bookSkillLoad(state, name, event.time)
   }
   if (event.type === 'tool/call') {
-    const data = event.data as { callId?: unknown; name?: unknown } | null | undefined
+    const data = event.data as { callId?: unknown; name?: unknown; arguments?: unknown } | null | undefined
     const callId = data?.callId
     if (typeof callId !== 'string' || callId === '') return state
-    const next = withToolStart(state, callId, event.time)
-    if (data?.name !== 'skill') return next
+    const name = typeof data?.name === 'string' && data.name !== '' ? data.name : undefined
+    const next = bookCommandRun(withToolStart(state, callId, name, event.time), name, data?.arguments, event.time)
+    if (name !== 'skill') return next
     const pending = next.skillCalls ?? []
     if (pending.includes(callId)) return next
     return { ...next, skillCalls: [...pending, callId].slice(-MAX_PENDING_SKILL_CALLS) }
+  }
+  const eventType: string = event.type
+  if (eventType === 'tool/ptc-dispatch-start') {
+    const data = event.data as { name?: unknown; arguments?: unknown } | null | undefined
+    return bookCommandRun(state, typeof data?.name === 'string' ? data.name : undefined, data?.arguments, event.time)
   }
   if (event.type === 'tool/result') {
     const message = (event.data as { message?: unknown } | null | undefined)?.message
@@ -258,6 +305,8 @@ export function applyActivity(state: ActivityState, event: SessionEvent): Activi
     ...(prev?.toolsMs !== undefined ? { toolsMs: prev.toolsMs } : {}),
     ...(prev?.wallMs !== undefined ? { wallMs: prev.wallMs } : {}),
     ...(prev?.skills !== undefined ? { skills: prev.skills } : {}),
+    ...(prev?.tools !== undefined ? { tools: prev.tools } : {}),
+    ...(prev?.cmds !== undefined ? { cmds: prev.cmds } : {}),
   }
   const next = withDayEntry(state, key, entry)
   return newTurn ? { ...next, lastTurn: turn } : next
@@ -275,12 +324,16 @@ export function createContextActivityDefinition(): WiredProjection<'contextActiv
         days: Object.fromEntries(Object.entries(state.days).map(([k, v]) => [k, {
           ...v,
           ...(v.cost !== undefined ? { cost: copyCostUsage(v.cost) } : {}),
-          ...(v.skills !== undefined
-            ? { skills: Object.fromEntries(Object.entries(v.skills).map(([n, t]) => [n, { ...t }])) }
-            : {}),
+          ...(v.skills !== undefined ? { skills: copyTallies(v.skills) } : {}),
+          ...(v.tools !== undefined ? { tools: copyTallies(v.tools) } : {}),
+          ...(v.cmds !== undefined ? { cmds: copyTallies(v.cmds) } : {}),
         }])),
       }),
     },
-    stateVersion: 5,
+    stateVersion: 6,
   }
+}
+
+function copyTallies(table: Record<string, ActivityTally>): Record<string, ActivityTally> {
+  return Object.fromEntries(Object.entries(table).map(([name, tally]) => [name, { ...tally }]))
 }

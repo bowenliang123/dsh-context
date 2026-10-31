@@ -154,6 +154,7 @@ describe('the rail derivations', () => {
     assert.equal(programOf(cmd(4, { cmd: 'for f in a; do echo $f; done' })), 'shell')
     assert.equal(programOf(cmd(5, { cmd: '   ' })), 'shell', 'a blank command reads as shell too')
     assert.equal(programOf(cmd(6, { tool: 'pwsh', cmd: '   ' })), 'pwsh', 'a blank pwsh command reads as pwsh')
+    assert.equal(programOf(cmd(7, { tool: 'read', cmd: '' })), 'read', 'a non-command tool names itself')
   })
 
   test('programsOf ranks every program by count with a stable name tie-break', () => {
