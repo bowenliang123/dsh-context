@@ -311,6 +311,7 @@ export const ICON_SEAMS = [
   'IconContextInjectionOutlineRegular',
   'IconFolderOpenOutlineRegular',
   'IconApiOutlineRegular',
+  'IconInspectOutlineRegular',
   'IconPluginPinwheelOutlineRegular',
   'FileTypeIcon',
 ] as const

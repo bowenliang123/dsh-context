@@ -1,7 +1,7 @@
 import type { ReactElement, ReactNode } from 'react'
 import { nameColorOf } from '../nameColor'
 import { relativeTime, type TallyStat } from '../overview'
-import { IconApi, IconDatabase, type IconComponent } from '../primitives'
+import { IconApi, IconInspect, type IconComponent } from '../primitives'
 import type { ViewKit } from '../viewkit'
 
 const MAX_ROWS = 24
@@ -98,7 +98,7 @@ interface CardFace {
 
 const FACES: Record<TallyCardKind, CardFace> = {
   tool: {
-    icon: IconDatabase,
+    icon: IconInspect,
     title: 'stats.toolCalls',
     empty: 'ov.tools.empty',
     summary: 'ov.tools.summary',
