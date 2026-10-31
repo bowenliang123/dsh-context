@@ -17,7 +17,7 @@ describe('OverviewTally', () => {
       stats: [statOf('read', 8, NOW - 3600_000, 3), statOf('bash', 2, NOW - 40_000)],
     }))
     assert.equal(text(query(m.container, '.lc-card-title-text')), 'Tool Calls')
-    assert.ok(text(query(m.container, '.lc-ov-tally-sub')).includes('2 tools · 10 calls'))
+    assert.ok(text(query(m.container, '.lc-ov-tally-note')).includes('2 tools · 10 calls'))
     const rows = queryAll<HTMLButtonElement>(m.container, 'button.lc-ov-tally')
     assert.equal(rows.length, 2)
     assert.equal(text(query(rows[0], '.lc-ov-tally-name')), 'read')
@@ -36,7 +36,7 @@ describe('OverviewTally', () => {
       stats: [statOf('git', 4, NOW - 5000), statOf('pnpm', 1, NOW - 10_000)],
     }))
     assert.equal(text(query(m.container, '.lc-card-title-text')), 'Command Executions')
-    assert.ok(text(query(m.container, '.lc-ov-tally-sub')).includes('2 programs · 5 runs'))
+    assert.ok(text(query(m.container, '.lc-ov-tally-note')).includes('2 programs · 5 runs'))
     assert.equal(query<HTMLElement>(m.container, 'button.lc-ov-tally').title, '4 runs · 1 sessions')
     await m.unmount()
   })
@@ -60,7 +60,7 @@ describe('OverviewTally', () => {
 
   test('an empty scope keeps the summary line and the body note, and the day sub rides the title', async () => {
     const empty = await mount(h(Tally, { kind: 'command', stats: [], day: '2026-09-19' }))
-    assert.ok(text(query(empty.container, '.lc-ov-tally-sub')).includes('0 programs · 0 runs'))
+    assert.ok(text(query(empty.container, '.lc-ov-tally-note')).includes('0 programs · 0 runs'))
     assert.ok(text(query(empty.container, '.lc-card-sub')).includes('2026-09-19'))
     assert.ok(text(empty.container).includes('No commands in this range'))
     assert.equal(queryAll(empty.container, 'button.lc-ov-tally').length, 0)
@@ -72,7 +72,7 @@ describe('OverviewTally', () => {
     const m = await mount(h(Tally, { kind: 'tool', stats }))
     assert.equal(queryAll(m.container, 'button.lc-ov-tally').length, 24)
     assert.ok(text(query(m.container, '.lc-ov-tally-more')).includes('6 more tools'))
-    assert.ok(text(query(m.container, '.lc-ov-tally-sub')).includes('30 tools · 465 calls'))
+    assert.ok(text(query(m.container, '.lc-ov-tally-note')).includes('30 tools · 465 calls'))
     await m.unmount()
 
     const commands = await mount(h(Tally, { kind: 'command', stats }))

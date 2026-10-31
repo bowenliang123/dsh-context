@@ -50,7 +50,7 @@ describe('OverviewSkills', () => {
     assert.ok(query<HTMLElement>(rows[0], '.lc-ov-tally-dot').getAttribute('style')?.includes(skillColorOf('tdd')))
     assert.ok(query<HTMLElement>(rows[0], '.lc-ov-tally-bar').getAttribute('style')?.includes('calc(100% - 12px)'))
     assert.ok(query<HTMLElement>(rows[1], '.lc-ov-tally-bar').getAttribute('style')?.includes('calc(25% - 3px)'), 'the share of the heaviest row')
-    assert.ok(text(query(m.container, '.lc-ov-tally-sub')).includes('2 skills · 15 loads'))
+    assert.ok(text(query(m.container, '.lc-ov-tally-note')).includes('2 skills · 15 loads'))
     await m.unmount()
 
     const day = await mount(h(Skills, { stats: [statOf('tdd', 1, NOW)], day: '2026-09-19' }))
@@ -67,13 +67,17 @@ describe('OverviewSkills', () => {
     const zero = await mount(h(Skills, { stats: [statOf('zero', 0, NOW)] }))
     assert.ok(query<HTMLElement>(zero.container, '.lc-ov-tally-bar').getAttribute('style')?.includes('calc(0% - 0px)'))
     await zero.unmount()
+  })
 
-    const filtered = await mount(h(Skills, { stats: [statOf('heavy', 8, NOW), statOf('light', 4, NOW)] }))
-    await actType(query<HTMLInputElement>(filtered.container, 'input.lc-ov-skills-search'), 'light')
-    const filteredRows = queryAll<HTMLElement>(filtered.container, 'button.lc-ov-tally')
-    assert.equal(filteredRows.length, 1)
-    assert.ok(query(filteredRows[0], '.lc-ov-tally-bar').getAttribute('style')?.includes('calc(50% - 6px)'))
-    await filtered.unmount()
+  test('the share bar scales to the heaviest row wherever the ordering puts it — never past the content edge', async () => {
+    const m = await mount(h(Skills, { stats: [statOf('light', 1, NOW), statOf('heavy', 2, NOW)] }))
+    const rows = queryAll<HTMLElement>(m.container, 'button.lc-ov-tally')
+    assert.ok(query(rows[0], '.lc-ov-tally-bar').getAttribute('style')?.includes('calc(50% - 6px)'))
+    assert.ok(query(rows[1], '.lc-ov-tally-bar').getAttribute('style')?.includes('calc(100% - 12px)'))
+    await m.unmount()
+    const zero = await mount(h(Skills, { stats: [statOf('zero', 0, NOW)] }))
+    assert.ok(query<HTMLElement>(zero.container, '.lc-ov-tally-bar').getAttribute('style')?.includes('calc(0% - 0px)'))
+    await zero.unmount()
   })
 
   test('a row click pins and releases through onSelect; the pinned row wraps with its detail into one unit', async () => {
@@ -297,64 +301,15 @@ describe('OverviewSkills', () => {
     await m.unmount()
   })
 
-  test('the name filter narrows the rows and the summary, case-insensitively; clearing restores', async () => {
-    const m = await mount(h(Skills, {
-      stats: [statOf('ponytail', 2, NOW), statOf('grilling', 1, NOW), statOf('grill-me', 1, NOW)],
-    }))
-    const input = query<HTMLInputElement>(m.container, 'input.lc-ov-skills-search')
-    assert.equal(input.getAttribute('aria-label'), 'Search skills…')
-    assert.equal(queryAll(m.container, 'button.lc-ov-tally').length, 3)
-    assert.ok(text(query(m.container, '.lc-ov-tally-note')).includes('3 skills · 4 loads'))
-    await actType(input, 'GRILL')
-    assert.deepEqual(
-      queryAll(m.container, '.lc-ov-tally-name').map(n => text(n)),
-      ['grilling', 'grill-me'],
-      'the substring match ignores case',
-    )
-    assert.ok(text(query(m.container, '.lc-ov-tally-note')).includes('2 skills · 2 loads'), 'the counts follow the filter')
-    await actType(input, '  grill-me  ')
-    assert.deepEqual(queryAll(m.container, '.lc-ov-tally-name').map(n => text(n)), ['grill-me'], 'the query trims')
-    await actType(input, '')
-    assert.equal(queryAll(m.container, 'button.lc-ov-tally').length, 3, 'clearing restores the scope')
-    await m.unmount()
-  })
-
-  test('an empty match keeps the filter input mounted and swaps the note; a lone row offers nothing to filter', async () => {
-    const m = await mount(h(Skills, { stats: [statOf('tdd', 1, NOW), statOf('grill-me', 1, NOW)] }))
-    const input = query<HTMLInputElement>(m.container, 'input.lc-ov-skills-search')
-    await actType(input, 'zzz')
-    assert.equal(queryAll(m.container, 'button.lc-ov-tally').length, 0)
-    assert.ok(text(query(m.container, '.lc-ov-tally-note')).includes('0 skills · 0 loads'), 'the counts follow the filter down to zero')
-    assert.ok(text(m.container).includes('No skills match the current filter'))
-    await actType(input, 'tdd')
-    assert.equal(queryAll(m.container, 'button.lc-ov-tally').length, 1, 'the input stays mounted and can clear the filter')
-    await m.unmount()
-    const one = await mount(h(Skills, { stats: [statOf('tdd', 1, NOW)] }))
-    assert.equal(queryAll(one.container, 'input.lc-ov-skills-search').length, 0, 'a lone row has nothing to filter')
-    await one.unmount()
-  })
-
-  test('a pin the filter hides falls back to the detached block; the filtered overflow line counts the matches', async () => {
+  test('a pin beyond the row cap falls back to the detached block; the overflow line counts the capped rows', async () => {
     const stats = Array.from({ length: 25 }, (_, i) => statOf(`skill-${i}`, i + 1, NOW - i * 1000))
     stats.push(statOf('grill-me', 1, NOW))
-    const m = await mount(h(Skills, { stats, selected: 'skill-24' }))
-    const input = query<HTMLInputElement>(m.container, 'input.lc-ov-skills-search')
-    await actType(input, 'grill')
-    assert.equal(queryAll(m.container, 'button.lc-ov-tally').length, 1)
+    const m = await mount(h(Skills, { stats, selected: 'grill-me' }))
+    assert.equal(queryAll(m.container, 'button.lc-ov-tally').length, 20)
     const detail = query(m.container, '.lc-ov-skill-detail')
     assert.equal(detail.closest('.lc-ov-skill-unit'), null, 'no inline seat without the pinned row')
     assert.equal(queryAll(detail, '.lc-skilld-head').length, 1, 'the detached seat carries the head')
-    await actType(input, 'skill')
-    assert.equal(queryAll(m.container, 'button.lc-ov-tally').length, 20)
-    assert.ok(text(m.container).includes('5 more skills'), 'the overflow counts the filtered set')
+    assert.ok(text(m.container).includes('6 more skills'), 'the overflow counts the capped rows')
     await m.unmount()
   })
 })
-
-async function actType(input: HTMLInputElement, value: string): Promise<void> {
-  await act(async () => {
-    const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value')?.set
-    setter?.call(input, value)
-    input.dispatchEvent(new Event('input', { bubbles: true }))
-  })
-}

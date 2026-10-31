@@ -7,7 +7,6 @@ import { copySkillPath } from '../skills'
 import { nameColorOf } from '../nameColor'
 import { IconCheck, IconCopy, IconSkill } from '../primitives'
 import type { ViewKit } from '../viewkit'
-import { ClearableInput } from './clearableInput'
 import { TallyCard, TallyRow, shareOf } from './overviewTally'
 
 const MAX_ROWS = 20
@@ -76,11 +75,7 @@ export function makeOverviewSkills(kit: ViewKit): (props: OverviewSkillsProps) =
   return function OverviewSkills(props: OverviewSkillsProps): ReactElement {
     const { stats } = props
     const max = stats.reduce((top, s) => Math.max(top, s.n), 0)
-
-    const [query, setQuery] = useState('')
-    const needle = query.trim().toLowerCase()
-    const visible = needle === '' ? stats : stats.filter(s => s.name.toLowerCase().includes(needle))
-    const visibleTotal = visible.reduce((sum, s) => sum + s.n, 0)
+    const total = stats.reduce((sum, s) => sum + s.n, 0)
 
     const [hoverRow, setHoverRow] = useState<HoverRow | null>(null)
     const [spot, setSpot] = useState<{ forRow: HoverRow; left: number; top: number } | null>(null)
@@ -140,7 +135,7 @@ export function makeOverviewSkills(kit: ViewKit): (props: OverviewSkillsProps) =
       }
     const detailPath = detail?.path
     const pinnedRowVisible = selected !== null && selected !== undefined
-      && visible.slice(0, MAX_ROWS).some(s => s.name === selected)
+      && stats.slice(0, MAX_ROWS).some(s => s.name === selected)
     const detailBlock = detail === null ? null : (
       <div className="lc-ov-skill-detail">
         {!pinnedRowVisible && <DetailHead name={detail.name} origin="" />}
@@ -211,26 +206,14 @@ export function makeOverviewSkills(kit: ViewKit): (props: OverviewSkillsProps) =
         icon={<IconSkill size={14} />}
         title={t('stats.skills')}
         day={props.day}
-        summary={t('ov.skills.summary', { skills: fmt(visible.length), loads: fmt(visibleTotal) })}
-        search={stats.length > 1 ? (
-          <ClearableInput
-            className="lc-ov-search lc-ov-skills-search"
-            type="search"
-            value={query}
-            placeholder={t('ov.skills.search')}
-            clearLabel={t('field.clear')}
-            onChange={setQuery}
-          />
-        ) : undefined}
+        summary={t('ov.skills.summary', { skills: fmt(stats.length), loads: fmt(total) })}
       >
         {!pinnedRowVisible && detailBlock}
         {stats.length === 0 ? (
           <div className="lc-empty">{t('ov.skills.empty')}</div>
-        ) : visible.length === 0 ? (
-          <div className="lc-empty">{t('ov.skills.noMatch')}</div>
         ) : (
           <div className="lc-ov-tallies" role="group" aria-label={t('stats.skills')}>
-            {visible.slice(0, MAX_ROWS).map((s) => {
+            {stats.slice(0, MAX_ROWS).map((s) => {
               const color = skillColorOf(s.name)
               const pinned = props.selected === s.name
               const rowButton = (
@@ -253,8 +236,8 @@ export function makeOverviewSkills(kit: ViewKit): (props: OverviewSkillsProps) =
                 ? <div key={s.name} className="lc-ov-skill-unit">{rowButton}{detailBlock}</div>
                 : <Fragment key={s.name}>{rowButton}</Fragment>
             })}
-            {visible.length > MAX_ROWS && (
-              <div className="lc-ov-tally-more">{t('ov.skills.more', { n: visible.length - MAX_ROWS })}</div>
+            {stats.length > MAX_ROWS && (
+              <div className="lc-ov-tally-more">{t('ov.skills.more', { n: stats.length - MAX_ROWS })}</div>
             )}
           </div>
         )}

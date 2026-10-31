@@ -670,8 +670,6 @@ export const DICT_EN = {
   'ov.heat.mon.11': 'Nov',
   'ov.heat.mon.12': 'Dec',
   'ov.skills.empty': 'No skill loads in this range — loaded skills appear here with their counts and last load',
-  'ov.skills.noMatch': 'No skills match the current filter',
-  'ov.skills.search': 'Search skills…',
   'ov.skills.more': '{n} more skills',
   'ov.skills.loads': '{n} loads',
   'ov.skills.summary': '{skills} skills · {loads} loads',

@@ -105,8 +105,8 @@ button.lc-heat-cell:hover { box-shadow: 0 0 0 1.5px color-mix(in srgb, var(--col
 }
 
 .lc-ov-tallies { display: flex; flex-direction: column; gap: 2px; }
-.lc-ov-tally-sub { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin: -4px 0 8px; }
-.lc-ov-tally-note { margin-left: 0; min-width: 88px; }
+.lc-ov-tally-note { color: var(--dsw-alias-label-primary); }
+.lc-card-sub + .lc-ov-tally-note { margin-left: 0; }
 .lc-ov-tally { position: relative; display: flex; align-items: baseline; gap: 7px; min-width: 0; width: 100%; border: 0; border-radius: 6px; padding: 2px 6px 4px; background: transparent; font: inherit; font-size: 12px; line-height: 1.7; color: inherit; text-align: left; cursor: pointer; transition: background-color var(--ds-transition-duration, 0.2s) var(--ds-ease-in-out, ease-in-out); }
 .lc-ov-tally:hover { background: var(--dsw-alias-interactive-bg-hover); }
 .lc-ov-skill-unit { background: var(--lc-subpanel-bg); border-radius: 8px; box-shadow: 0 0 0 1.5px color-mix(in srgb, var(--color-blue-500) 45%, transparent); }

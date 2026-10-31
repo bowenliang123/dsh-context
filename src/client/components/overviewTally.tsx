@@ -10,9 +10,7 @@ export interface TallyCardProps {
   icon: ReactElement
   title: string
   day?: string | null
-  controls?: ReactNode
   summary: string
-  search?: ReactNode
   children: ReactNode
 }
 
@@ -25,11 +23,7 @@ export function TallyCard(props: TallyCardProps): ReactElement {
           {props.title}
         </span>
         {props.day !== null && props.day !== undefined && <span className="lc-card-sub">{props.day}</span>}
-        {props.controls}
-      </div>
-      <div className="lc-ov-tally-sub">
         <span className="lc-card-sub lc-ov-tally-note">{props.summary}</span>
-        {props.search}
       </div>
       <div className="lc-ov-tile-body">{props.children}</div>
     </div>

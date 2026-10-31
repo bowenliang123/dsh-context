@@ -668,8 +668,6 @@ export const DICT_ZH = {
   'ov.heat.mon.11': '11月',
   'ov.heat.mon.12': '12月',
   'ov.skills.empty': '统计范围内暂无技能加载 — 加载技能后，这里会按名称列出次数与最近加载',
-  'ov.skills.noMatch': '没有匹配当前筛选的技能',
-  'ov.skills.search': '搜索技能…',
   'ov.skills.more': '另有 {n} 个技能',
   'ov.skills.loads': '{n} 次加载',
   'ov.skills.summary': '{skills} 个技能 · {loads} 次加载',
