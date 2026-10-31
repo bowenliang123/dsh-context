@@ -4,10 +4,10 @@ import type { Context } from '@deepseek-ai/cordis'
 import { DETAIL_ROUTE, watchDetailChannel } from '../../src/host/detail'
 import { resolveBounds } from '../../src/host/config'
 import type { TimelineState } from '../../src/host/fold'
-import { buildTimelineDetail } from '../../src/host/foldWire'
+import { buildTimelineDetail, buildTimelineHead } from '../../src/host/foldWire'
 import type { TimelineEvent } from '../../src/host/foldState'
 import { assistantMessage, header, userMessage } from './helpers/events'
-import { driveTimeline } from './helpers/projection'
+import { driveTimeline, timelineDef } from './helpers/projection'
 
 const BOUNDS = resolveBounds({})
 
@@ -19,6 +19,7 @@ interface CtxSpec {
   sessionQuery?: unknown
   sessionPersistence?: unknown
   stateOf?: (session: unknown, key: string) => unknown
+  snapshot?: (session: unknown, keys: unknown) => unknown
 }
 
 function ctxOf(spec: CtxSpec): { ctx: Context; captured: { path?: string; fetch?: RouteFetch }; disposers: (() => void)[] } {
@@ -31,7 +32,10 @@ function ctxOf(spec: CtxSpec): { ctx: Context; captured: { path?: string; fetch?
   if ('sessionPersistence' in spec) services.set('sessionPersistence', spec.sessionPersistence)
   const ctx = {
     get: (name: string) => services.get(name),
-    sessionProjections: { stateOf: spec.stateOf ?? (() => undefined) },
+    sessionProjections: {
+      stateOf: spec.stateOf ?? (() => undefined),
+      snapshot: spec.snapshot ?? (() => ({ values: {} })),
+    },
     effect(fn: () => unknown, _label?: string) {
       const d = fn()
       if (typeof d === 'function') disposers.push(d as () => void)
@@ -83,17 +87,72 @@ function okSession(): object {
   return { id: 's1' }
 }
 
-describe('watchDetailChannel gating', () => {
-  test('the gate stays closed without the connection or sessions service, and a rejecting registry keeps it closed', () => {
-    assert.equal(watchDetailChannel(ctxOf({}).ctx, BOUNDS).live, false)
-    assert.equal(watchDetailChannel(ctxOf({ sessions: sessionsWith(okSession()) }).ctx, BOUNDS).live, false)
+function headStateOf(events: TimelineEvent[]): TimelineState {
+  const def = timelineDef({}, true)
+  let state = def.init()
+  for (const ev of events) state = def.apply(state, ev)
+  return state
+}
+
+function sampleLog(): TimelineEvent[] {
+  return [
+    header(1, { model: 'deepseek-v4-flash', provider: 'deepseek' }),
+    userMessage(2, [{ type: 'text', text: 'hi' }], { kind: 'user' }),
+    assistantMessage(3, { turn: 1, step: 0, usage: { inputTokens: 10, outputTokens: 5 } }),
+  ]
+}
+
+function liveCtx(events: TimelineEvent[], head?: TimelineState | null): { ctx: Context; captured: { fetch?: RouteFetch } } {
+  const headerOf = { id: 's1' }
+  return ctxOf({
+    connection: { fetch: { register: () => () => {} } },
+    sessions: sessionsWith(okSession()),
+    snapshot: head === null
+      ? () => ({ values: {} })
+      : () => ({ values: { contextTimeline: buildTimelineHead(head ?? headStateOf(events)) } }),
+    sessionQuery: {
+      observeSession: (id: string) => Promise.resolve(id === 's1'
+        ? {
+          source: 'live',
+          header: headerOf,
+          events,
+          cursor: events.length - 1,
+          [Symbol.dispose]: () => {},
+        }
+        : null),
+    },
+    sessionPersistence: { backend: 'live' },
+  })
+}
+
+describe('watchDetailChannel registration', () => {
+  test('the channel stays unregistered without either face or a working registrar', () => {
+    const none = ctxOf({})
+    watchDetailChannel(none.ctx, BOUNDS)
+    assert.equal(none.captured.fetch, undefined)
+    const sessionsOnly = ctxOf({ sessions: sessionsWith(okSession()) })
+    watchDetailChannel(sessionsOnly.ctx, BOUNDS)
+    assert.equal(sessionsOnly.captured.fetch, undefined)
     const connOnly = ctxOf({ connection: { fetch: { register: () => () => {} } } })
-    assert.equal(watchDetailChannel(connOnly.ctx, BOUNDS).live, false)
-    assert.equal(watchDetailChannel(ctxOf({ connection: { fetch: {} }, sessions: sessionsWith(okSession()) }).ctx, BOUNDS).live, false)
-    assert.equal(watchDetailChannel(ctxOf({
+    watchDetailChannel(connOnly.ctx, BOUNDS)
+    assert.equal(connOnly.captured.fetch, undefined)
+    const noFetch = ctxOf({ connection: { fetch: {} }, sessions: sessionsWith(okSession()) })
+    watchDetailChannel(noFetch.ctx, BOUNDS)
+    assert.equal(noFetch.captured.fetch, undefined)
+    const noGet = ctxOf({ connection: { fetch: { register: () => () => {} } }, sessions: { get: 42 } })
+    watchDetailChannel(noGet.ctx, BOUNDS)
+    assert.equal(noGet.captured.fetch, undefined)
+  })
+
+  test('the route registers with both faces and survives a rejecting registrar and unload', () => {
+    const { ctx, captured, disposers } = ctxOf({
       connection: { fetch: { register: () => () => {} } },
-      sessions: { get: 42 },
-    }).ctx, BOUNDS).live, false)
+      sessions: sessionsWith(okSession()),
+    })
+    watchDetailChannel(ctx, BOUNDS)
+    assert.equal(captured.path, '/api/dsh-context/detail')
+    assert.equal(typeof captured.fetch, 'function')
+    for (const d of disposers) d()
     const rejecting = {
       get: (name: string) =>
         name === 'connection'
@@ -110,33 +169,13 @@ describe('watchDetailChannel gating', () => {
         if (deps.every(d => (d === 'connection' || d === 'sessions'))) cb(rejecting)
       },
     }
-    assert.equal(watchDetailChannel(rejecting as unknown as Context, BOUNDS).live, false, 'a rejecting registry keeps the gate closed')
-  })
-
-  test('the gate opens on registration and closes on unload', () => {
-    const { ctx, captured, disposers } = ctxOf({
-      connection: { fetch: { register: () => () => {} } },
-      sessions: sessionsWith(okSession()),
-    })
-    const gate = watchDetailChannel(ctx, BOUNDS)
-    assert.equal(gate.live, true)
-    assert.equal(captured.path, '/api/dsh-context/detail')
-    for (const d of disposers) d()
-    assert.equal(gate.live, false)
+    assert.doesNotThrow(() => watchDetailChannel(rejecting as unknown as Context, BOUNDS))
   })
 })
 
 describe('the detail route', () => {
-  function liveCtx(state: TimelineState | undefined): { ctx: Context; captured: { fetch?: RouteFetch } } {
-    return ctxOf({
-      connection: { fetch: { register: () => () => {} } },
-      sessions: sessionsWith(okSession()),
-      stateOf: () => state,
-    })
-  }
-
   test('bad payloads fail with typed envelopes', async () => {
-    const { ctx, captured } = liveCtx(undefined)
+    const { ctx, captured } = liveCtx(sampleLog())
     watchDetailChannel(ctx, BOUNDS)
     for (const body of [null, 42, {}, { sessionId: 42 }, { sessionId: '' }]) {
       const result = await call(captured, body) as { ok: boolean; error?: { code: string } }
@@ -148,22 +187,22 @@ describe('the detail route', () => {
     assert.equal(raw.error?.code, 'dsh-context/bad-request')
   })
 
-  test('a session outside the live set and an absent unit state both resolve to the typed null', async () => {
-    const { state } = driveTimeline([userMessage(1, [{ type: 'text', text: 'hi' }], { kind: 'user' })])
-    const { ctx, captured } = liveCtx(state)
+  test('a session outside the live set and an absent observation resolve to the typed null', async () => {
+    const { ctx, captured } = liveCtx(sampleLog(), null)
     watchDetailChannel(ctx, BOUNDS)
     assert.deepEqual(await call(captured, { sessionId: 'gone' }), { ok: true, value: null })
-    const absent = liveCtx(undefined)
+    const absent = ctxOf({
+      connection: { fetch: { register: () => () => {} } },
+      sessions: sessionsWith(okSession()),
+      stateOf: () => undefined,
+      sessionQuery: { observeSession: () => Promise.resolve(null) },
+    })
     watchDetailChannel(absent.ctx, BOUNDS)
     assert.deepEqual(await call(absent.captured, { sessionId: 's1' }), { ok: true, value: null })
   })
 
   test('a cold session (never entered into the live store) folds its detail off the observed log', async () => {
-    const events = [
-      header(1, { model: 'deepseek-v4-flash', provider: 'deepseek' }),
-      userMessage(2, [{ type: 'text', text: 'hi' }], { kind: 'user' }),
-      assistantMessage(3, { turn: 1, step: 0, usage: { inputTokens: 10, outputTokens: 5 } }),
-    ]
+    const events = sampleLog()
     let disposed = 0
     let observedOptions: unknown
     const { ctx, captured } = ctxOf({
@@ -188,7 +227,7 @@ describe('the detail route', () => {
     assert.ok(result.value !== null)
     assert.equal(result.value.requests.length, 1, 'the observed log folded')
     assert.equal(result.value.nodes.length, 2)
-    assert.ok(result.value.head.current.total > 0, 'the slim head rides the cold fold (the graph ring fetch)')
+    assert.ok(result.value.head.current.total > 0, 'the slim head rides the cold fold')
     assert.deepEqual(observedOptions, { projectionMode: 'none' }, 'the observation skips projection work')
     assert.equal(disposed, 1, 'the observation lease disposed after the fold')
     assert.deepEqual(await call(captured, { sessionId: 'nobody' }), { ok: true, value: null })
@@ -251,8 +290,7 @@ describe('the detail route', () => {
     assert.equal(admitted, 1, 'the cold read went through the gate')
     assert.equal(observed, 0, 'a skipped read never touches the log')
 
-    const { state } = driveTimeline([userMessage(1, [{ type: 'text', text: 'hi' }], { kind: 'user' })])
-    const live = liveCtx(state)
+    const live = liveCtx(sampleLog())
     watchDetailChannel(live.ctx, BOUNDS, {
       admit: () => Promise.reject(new Error('the gate must not see a live read')),
     })
@@ -261,13 +299,8 @@ describe('the detail route', () => {
     assert.ok(result.value !== null, 'the live read served its detail without the gate')
   })
 
-  test('serves the fold state\'s detail payload with its revision', async () => {
-    const { state } = driveTimeline([
-      header(1, { model: 'deepseek-v4-flash', provider: 'deepseek' }),
-      userMessage(2, [{ type: 'text', text: 'hi' }], { kind: 'user' }),
-      assistantMessage(3, { turn: 1, step: 0, usage: { inputTokens: 10, outputTokens: 5 } }),
-    ])
-    const { ctx, captured } = liveCtx(state)
+  test('serves the folded live detail with its revision', async () => {
+    const { ctx, captured } = liveCtx(sampleLog())
     watchDetailChannel(ctx, BOUNDS)
     const result = await call(captured, { sessionId: 's1' }) as { ok: true; value: { rev: number; requests: unknown[]; nodes: unknown[]; head: { current: { total: number } } } }
     assert.equal(result.ok, true)
@@ -277,13 +310,29 @@ describe('the detail route', () => {
     assert.ok(result.value.head.current.total > 0, 'the slim head rides the live read too')
   })
 
+  test('a live read folds only the appended tail and invalidates the cached payload', async () => {
+    const events = sampleLog()
+    const headerOf = { id: 's1' }
+    let observed: TimelineEvent[] = events
+    const { ctx, captured } = ctxOf({
+      connection: { fetch: { register: () => () => {} } },
+      sessions: sessionsWith(okSession()),
+      stateOf: () => undefined,
+      sessionQuery: { observeSession: () => Promise.resolve({ source: 'live', header: headerOf, events: observed, cursor: observed.length - 1, [Symbol.dispose]: () => {} }) },
+    })
+    watchDetailChannel(ctx, BOUNDS)
+    const first = await call(captured, { sessionId: 's1' }) as { value: { requests: unknown[]; rev: number } }
+    assert.equal(first.value.requests.length, 1)
+    observed = [...events, userMessage(4, [{ type: 'text', text: 'more' }], { kind: 'user' })]
+    const second = await call(captured, { sessionId: 's1' }) as { value: { requests: unknown[]; rev: number; nodes: unknown[] } }
+    assert.equal(second.value.requests.length, 1)
+    assert.equal(second.value.nodes.length, 3, 'the appended message folded onto the cached state')
+    const third = await call(captured, { sessionId: 's1' }) as { value: unknown }
+    assert.deepEqual(third.value, second.value, 'an unchanged log re-serves the cached payload')
+  })
+
   test('a head read serves the envelope only, live and cold', async () => {
-    const { state } = driveTimeline([
-      header(1, { model: 'deepseek-v4-flash', provider: 'deepseek' }),
-      userMessage(2, [{ type: 'text', text: 'hi' }], { kind: 'user' }),
-      assistantMessage(3, { turn: 1, step: 0, usage: { inputTokens: 10, outputTokens: 5 } }),
-    ])
-    const live = liveCtx(state)
+    const live = liveCtx(sampleLog())
     watchDetailChannel(live.ctx, BOUNDS)
     const liveHead = await call(live.captured, { sessionId: 's1', head: true }) as { ok: true; value: { rev: number; head: { current: { total: number } }; requests?: unknown } }
     assert.equal(liveHead.ok, true)
@@ -291,7 +340,7 @@ describe('the detail route', () => {
     assert.ok(liveHead.value.head.current.total > 0)
     assert.equal(liveHead.value.requests, undefined, 'the collections never ride a head read')
 
-    const fresh = liveCtx(driveTimeline([header(1, { model: 'deepseek-v4-flash', provider: 'deepseek' })]).state)
+    const fresh = liveCtx([header(1, { model: 'deepseek-v4-flash', provider: 'deepseek' })])
     watchDetailChannel(fresh.ctx, BOUNDS)
     const freshHead = await call(fresh.captured, { sessionId: 's1', head: true }) as { ok: true; value: { rev: number; head: { model?: unknown } } }
     assert.equal(freshHead.value.rev, 0)
@@ -302,12 +351,9 @@ describe('the detail route', () => {
       sessions: sessionsWith(okSession()),
       stateOf: () => undefined,
       sessionQuery: { observeSession: () => Promise.resolve({
+        source: 'prepared',
         revision: 'rev-1',
-        events: [
-          header(1, { model: 'deepseek-v4-flash', provider: 'deepseek' }),
-          userMessage(2, [{ type: 'text', text: 'hi' }], { kind: 'user' }),
-          assistantMessage(3, { turn: 1, step: 0, usage: { inputTokens: 10, outputTokens: 5 } }),
-        ],
+        events: sampleLog(),
         [Symbol.dispose]: () => {},
       }) },
       sessionPersistence: { backend: 'default' },
@@ -328,16 +374,28 @@ describe('the detail route', () => {
       connection: { fetch: { register: () => () => {} } },
       sessions: sessionsWith(okSession()),
       stateOf: () => undefined,
+      snapshot: () => ({ values: { contextTimeline: { current: { total: 1 } } } }),
+    })
+    watchDetailChannel(unkeyed.ctx, BOUNDS)
+    const unkeyedHead = await call(unkeyed.captured, { sessionId: 's1', head: true }) as { ok: true; value: { rev: number; head: { current: { total: number } } } }
+    assert.equal(unkeyedHead.ok, true)
+    assert.equal(unkeyedHead.value.rev, 0, 'a head without its revision defaults to zero')
+    assert.equal(unkeyedHead.value.head.current.total, 1)
+
+    const unkeyedCold = ctxOf({
+      connection: { fetch: { register: () => () => {} } },
+      sessions: sessionsWith(okSession()),
+      stateOf: () => undefined,
       sessionQuery: { observeSession: () => Promise.resolve({
         events: [header(1, { model: 'deepseek-v4-flash', provider: 'deepseek' })],
         [Symbol.dispose]: () => {},
       }) },
       sessionPersistence: { backend: 'default' },
     })
-    watchDetailChannel(unkeyed.ctx, BOUNDS)
-    const unkeyedHead = await call(unkeyed.captured, { sessionId: 'cold2', head: true }) as { ok: true; value: { rev: number; head: { model?: unknown } } }
-    assert.equal(unkeyedHead.ok, true)
-    assert.equal(unkeyedHead.value.head.model, 'deepseek-v4-flash')
+    watchDetailChannel(unkeyedCold.ctx, BOUNDS)
+    const unkeyedColdHead = await call(unkeyedCold.captured, { sessionId: 'cold2', head: true }) as { ok: true; value: { rev: number; head: { model?: unknown } } }
+    assert.equal(unkeyedColdHead.ok, true)
+    assert.equal(unkeyedColdHead.value.head.model, 'deepseek-v4-flash')
   })
 
   test('hostile reads degrade to the failure envelope, never a throw', async () => {
@@ -354,26 +412,28 @@ describe('the detail route', () => {
     assert.equal(r1.ok, false)
     assert.equal(r1.error.code, 'gateway/internal')
     assert.equal(r1.error.message, 'hostile sessions')
+
     const throwingState = ctxOf({
       connection: { fetch: { register: () => () => {} } },
       sessions: sessionsWith(okSession()),
-      stateOf: () => {
+      snapshot: () => {
         throw new Error('hostile registry')
       },
     })
     watchDetailChannel(throwingState.ctx, BOUNDS)
-    const r2 = await call(throwingState.captured, { sessionId: 's1' }) as { ok: boolean; error: { message: string } }
-    assert.equal(r2.ok, false)
-    assert.equal(r2.error.message, 'hostile registry')
+    const r2 = await call(throwingState.captured, { sessionId: 's1', head: true }) as { ok: boolean; value: unknown }
+    assert.equal(r2.ok, true)
+    assert.equal(r2.value, null, 'the throwing head face falls through to the observation path')
 
     const junkState = ctxOf({
       connection: { fetch: { register: () => () => {} } },
       sessions: sessionsWith(okSession()),
-      stateOf: () => ({ requests: null }),
+      snapshot: () => ({ values: {} }),
     })
     watchDetailChannel(junkState.ctx, BOUNDS)
-    const r3 = await call(junkState.captured, { sessionId: 's1' }) as { ok: boolean }
-    assert.equal(r3.ok, false)
+    const r3 = await call(junkState.captured, { sessionId: 's1', head: true }) as { ok: boolean; value: unknown }
+    assert.equal(r3.ok, true)
+    assert.equal(r3.value, null, 'an absent head view falls through too')
 
     const stringThrow = ctxOf({
       connection: { fetch: { register: () => () => {} } },

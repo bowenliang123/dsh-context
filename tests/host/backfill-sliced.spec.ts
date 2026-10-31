@@ -25,7 +25,7 @@ interface SliceRig {
 function referenceRows(events: SessionEvent[], id: string): unknown {
   const ctx = new Context()
   const registry = new SessionProjectionRegistry(ctx as never)
-  registry.register(createContextTimelineDefinition({}, () => true) as never)
+  registry.register(createContextTimelineDefinition({}) as never)
   registry.register(createContextActivityDefinition() as never)
   registry.register(createContextHeadersDefinition() as never)
   return registry.restore({}, events, 0 as never, { id, version: 1, createdAt: 1, cwd: `/repo/${id}`, isSeeded: false } as never, 0 as never).checkpoint
@@ -48,7 +48,7 @@ function armSliced(ctx: Context, eventsById: Map<string, SessionEvent[]>, opts: 
     restoreCalls: [],
   }
   const registry = new SessionProjectionRegistry(ctx as never)
-  registry.register(createContextTimelineDefinition({}, () => true) as never)
+  registry.register(createContextTimelineDefinition({}) as never)
   registry.register(createContextActivityDefinition() as never)
   registry.register(createContextHeadersDefinition() as never)
   const realRestore = registry.restore.bind(registry)

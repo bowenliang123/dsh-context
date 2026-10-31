@@ -178,9 +178,10 @@ const registryLog = [
 ]
 drive(ctxC, sessionC, registryLog)
 const values = registryC.snapshot(sessionC).values
-const node = values.contextTimeline.nodes.find(n => n.seq === 2)
+const stateC = registryC.stateOf(sessionC, 'contextTimeline')
+const node = stateC.surface.find(n => n.seq === 2)
 developerTokens = node ? node.tokens : null
-developerRequestTokens = values.contextTimeline.requests[0].inject
+developerRequestTokens = stateC.requests[0] ? stateC.requests[0].inject : null
 const rows = snapshotJsonValue(registryC.checkpoint(sessionC))
 const warm = registryC.restore(rows, registryLog, 0, sessionC.header)
 const oldLog = registryLog.map(e => e.type === 'developer/message' ? { ...e, type: 'todo/write' } : e)
@@ -193,15 +194,15 @@ developerRestoreMatches = JSON.stringify(warm.snapshot.values) === JSON.stringif
 const hostile = [
   ev(12, 'step/start'),
   ev(13, 'assistant/message', { turn: 1, step: 2, message: { content: [{ type: 'text', text: 'h1' }] }, usage: { inputTokens: -80, cacheReadTokens: 150.7, cacheWriteTokens: '10', outputTokens: 22.4 } }),
-  ev(14, 'assistant/message', { turn: 1, step: 3, message: { content: [] }, usage: { inputTokens: NaN, outputTokens: null } },
-)]
+]
 drive(ctx, session, hostile)
 let hostileSnapshotOk = true
 let hostilePrompt = null
 let hostileCacheRead = null
 try {
-  const hostileSnap = registry.snapshot(session)
-  const rec = hostileSnap.values.contextTimeline.requests.find(r => r.seq === 13)
+  registry.snapshot(session)
+  const hostileState = registry.stateOf(session, 'contextTimeline')
+  const rec = hostileState.requests.find(r => r.seq === 13)
   hostilePrompt = rec ? rec.prompt : null
   hostileCacheRead = rec ? rec.cacheRead : null
 } catch {

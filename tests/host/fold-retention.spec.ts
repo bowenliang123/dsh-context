@@ -50,6 +50,23 @@ describe('trimState request/event bounds', () => {
     assert.deepEqual(drive.state.requests.map(r => r.seq), [3, 4, 5])
   })
 
+  test('the head turn window follows the retained steps when maxRequestSteps cuts across turns', () => {
+    const turns = driveTimeline(
+      [1, 2, 3, 4, 5].map(i => assistantMessage(i, { turn: i, step: 1 })),
+      { maxKeptTurns: 10, maxRequestSteps: 3 },
+    )
+    assert.equal(turns.state.head.turns, 3, 'only the turns represented by the retained steps count')
+    assert.equal(turns.state.head.steps, 3)
+    const straddling = driveTimeline([
+      assistantMessage(1, { turn: 1, step: 1 }),
+      assistantMessage(2, { turn: 1, step: 2 }),
+      assistantMessage(3, { turn: 2, step: 1 }),
+      assistantMessage(4, { turn: 2, step: 2 }),
+    ], { maxKeptTurns: 10, maxRequestSteps: 3 })
+    assert.equal(straddling.state.head.turns, 2, 'a partially retained turn still counts once')
+    assert.equal(straddling.state.head.steps, 3)
+  })
+
   test('maxEvents keeps the newest tail', () => {
     const drive = driveTimeline([
       planMode(1, { active: true }),
@@ -59,6 +76,31 @@ describe('trimState request/event bounds', () => {
       planMode(5, { active: true }),
     ], { maxEvents: 3 })
     assert.deepEqual(drive.state.events.map(e => e.seq), [3, 4, 5])
+  })
+
+  test('the head event window evicts kind tallies and distinct skill names with the ring', () => {
+    const skills = driveTimeline([
+      userMessage(1, [{ type: 'text', text: 'a' }], { kind: 'skill-invocation', form: 'skill', name: 'a' }),
+      userMessage(2, [{ type: 'text', text: 'b' }], { kind: 'skill-invocation', form: 'skill', name: 'b' }),
+    ], { maxEvents: 1 })
+    assert.deepEqual(skills.state.head.skills, { b: 1 })
+    assert.equal(skills.state.head.injects, 1)
+    const repeated = driveTimeline([
+      userMessage(1, [{ type: 'text', text: 'a' }], { kind: 'skill-invocation', form: 'skill', name: 'a' }),
+      userMessage(2, [{ type: 'text', text: 'a' }], { kind: 'skill-invocation', form: 'skill', name: 'a' }),
+      userMessage(3, [{ type: 'text', text: 'b' }], { kind: 'skill-invocation', form: 'skill', name: 'b' }),
+    ], { maxEvents: 2 })
+    assert.deepEqual(repeated.state.head.skills, { a: 1, b: 1 }, 'an evicted duplicate decrements its ref without dropping the name')
+    const prunes = driveTimeline([
+      compaction(1, 'prune', { shadowedTokenCount: 1 }),
+      planMode(2, { active: false }),
+    ], { maxEvents: 1 })
+    assert.equal(prunes.state.head.prunes, 0)
+    const compactions = driveTimeline([
+      compaction(1, 'summary', { shadowedSeqs: [] }),
+      planMode(2, { active: false }),
+    ], { maxEvents: 1 })
+    assert.equal(compactions.state.head.compactions, 0)
   })
 })
 

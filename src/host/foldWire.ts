@@ -11,12 +11,8 @@ export function serveCommand(rec: CommandStateRecord): CommandRecord {
 
 function headFieldsOf(state: TimelineState): Snapshot {
   const surfaceTotal = state.sums.user + state.sums.inject + state.sums.skill + state.sums.assistant + state.sums.tool
-  let images = 0
-  let toolCalls = 0
-  for (const node of state.surface) {
-    if (node.imgs !== undefined) images += node.imgs
-    if (node.cat === 'tool' || (node.cat === 'skill' && node.tool !== undefined)) toolCalls++
-  }
+  const images = state.head.images
+  const toolCalls = state.head.toolCalls
   const result: Snapshot = {
     ok: true,
     ...(state.model !== undefined ? { model: state.model } : {}),
@@ -113,19 +109,14 @@ function detailCollectionsOf(state: TimelineState, bounds: FoldBounds): Omit<Con
 
 export function buildTimelineHead(state: TimelineState): Snapshot {
   const result = headFieldsOf(state)
-  const turns = new Set<number>()
-  for (const r of state.requests) turns.add(r.turn ?? 0)
-  let injects = 0
-  let compactions = 0
-  let prunes = 0
-  const skills = new Set<string>()
-  for (const e of state.events) {
-    if (e.kind === 'inject') injects++
-    else if (e.kind === 'compaction') compactions++
-    else if (e.kind === 'prune') prunes++
-    if (e.sub === 'skill' && typeof e.name === 'string' && e.name !== '') skills.add(e.name)
+  result.counts = {
+    turns: state.head.turns,
+    steps: state.head.steps,
+    injects: state.head.injects,
+    compactions: state.head.compactions,
+    prunes: state.head.prunes,
+    skills: Object.keys(state.head.skills).length,
   }
-  result.counts = { turns: turns.size, steps: state.requests.length, injects, compactions, prunes, skills: skills.size }
   const last = state.requests.at(-1)
   if (last !== undefined) {
     result.last = { seq: last.seq, total: last.total, ...(typeof last.prompt === 'number' ? { prompt: last.prompt } : {}) }
@@ -136,8 +127,4 @@ export function buildTimelineHead(state: TimelineState): Snapshot {
 
 export function buildTimelineDetail(state: TimelineState, bounds: FoldBounds): ContextTimelineDetail {
   return { rev: state.detailRev ?? 0, head: buildTimelineHead(state), ...detailCollectionsOf(state, bounds) }
-}
-
-export function buildTimelineView(state: TimelineState, bounds: FoldBounds): Snapshot {
-  return { ...headFieldsOf(state), ...detailCollectionsOf(state, bounds) }
 }

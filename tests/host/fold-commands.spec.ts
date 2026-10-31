@@ -5,7 +5,7 @@ import { buildTimelineDetail } from '../../src/host/fold'
 import { resolveBounds } from '../../src/host/config'
 import type { CommandStateRecord } from '../../src/host/foldState'
 import { codeDispatch, codeDispatchStart, jobRegistered, jobSettled, toolCall, toolResult } from './helpers/events'
-import { assertStable, driveTimeline, timelineDef, assertStatesPlainJson } from './helpers/projection'
+import { driveTimeline, timelineDef, assertStatesPlainJson } from './helpers/projection'
 
 function bashCall(seq: number, callId: string, args: Record<string, unknown>, time?: number): TimelineEvent {
   return toolCall(seq, { callId, name: 'bash', arguments: JSON.stringify(args), turn: 1, step: 1, time })
@@ -157,11 +157,16 @@ describe('the command log — job events', () => {
     assert.equal(state.commandStats?.ms, 4100)
   })
 
-  test('a killed job reports its signal; job events for unknown calls return the same state', () => {
+  test('a killed job reports its signal; job events for unknown calls only signal a refetch', () => {
     const def = timelineDef()
     let state = def.init()
-    assertStable(state, jobRegistered(1, { callId: 'ghost', startedAt: 1 }), def)
-    assertStable(state, jobSettled(2, { callId: 'ghost', finishedAt: 2, status: 'completed' }), def)
+    const before = state.detailRev ?? 0
+    const registered = def.apply(state, jobRegistered(1, { callId: 'ghost', startedAt: 1 }))
+    assert.equal(registered.detailRev, before + 1)
+    assert.deepEqual(cmdsOf(registered), [])
+    const settled = def.apply(registered, jobSettled(2, { callId: 'ghost', finishedAt: 2, status: 'completed' }))
+    assert.equal(settled.detailRev, before + 2)
+    assert.deepEqual(cmdsOf(settled), [])
     state = def.apply(state, bashCall(3, 'c1', { command: 'x' }, 1000))
     state = def.apply(state, jobSettled(4, { callId: 'c1', finishedAt: 2000, status: 'killed', detail: 'signal: SIGTERM' }))
     const rec = cmdsOf(state)[0]
@@ -362,11 +367,19 @@ describe('the command log — Code Mode (PTC) sub-dispatches', () => {
   test('job events skip buffers that do not hold the call (no buffer, a stale buffer, a multi-root scan)', () => {
     const def = timelineDef()
     const noBuffer = def.apply(def.init(), toolCall(1, { callId: 'rc1', name: 'run_code', arguments: JSON.stringify({ code: 'x' }) }))
-    assert.equal(def.apply(noBuffer, jobSettled(2, { callId: 'rc1:ptc:9', finishedAt: 5, status: 'completed', detail: 'exit code: 0' })), noBuffer, 'no buffer at all')
-    assert.equal(def.apply(noBuffer, jobRegistered(3, { callId: 'rc1:ptc:9', startedAt: 5 })), noBuffer)
+    const settled = def.apply(noBuffer, jobSettled(2, { callId: 'rc1:ptc:9', finishedAt: 5, status: 'completed', detail: 'exit code: 0' }))
+    assert.equal(settled.detailRev, (noBuffer.detailRev ?? 0) + 1, 'no buffer: only the refetch signal')
+    assert.deepEqual(settled.commands, noBuffer.commands)
+    const registered = def.apply(noBuffer, jobRegistered(3, { callId: 'rc1:ptc:9', startedAt: 5 }))
+    assert.equal(registered.detailRev, (noBuffer.detailRev ?? 0) + 1)
+    assert.deepEqual(registered.commands, noBuffer.commands)
     const buffered = def.apply(noBuffer, codeDispatchStart(4, { rootCallId: 'rc1', subCallId: 'rc1:ptc:0', name: 'bash', arguments: { command: 'one' } }))
-    assert.equal(def.apply(buffered, jobRegistered(5, { callId: 'rc1:ptc:ghost', startedAt: 5 })), buffered)
-    assert.equal(def.apply(buffered, jobSettled(6, { callId: 'rc1:ptc:ghost', finishedAt: 9, status: 'completed' })), buffered)
+    const staleRegistered = def.apply(buffered, jobRegistered(5, { callId: 'rc1:ptc:ghost', startedAt: 5 }))
+    assert.equal(staleRegistered.detailRev, (buffered.detailRev ?? 0) + 1)
+    assert.deepEqual(staleRegistered.pendingCodeCmds, buffered.pendingCodeCmds, 'a stale buffer stays untouched')
+    const staleSettled = def.apply(buffered, jobSettled(6, { callId: 'rc1:ptc:ghost', finishedAt: 9, status: 'completed' }))
+    assert.equal(staleSettled.detailRev, (buffered.detailRev ?? 0) + 1)
+    assert.deepEqual(staleSettled.pendingCodeCmds, buffered.pendingCodeCmds)
     const { state } = driveTimeline([
       toolCall(1, { callId: 'rc1', name: 'run_code', arguments: JSON.stringify({ code: 'a' }) }),
       toolCall(2, { callId: 'rc2', name: 'run_code', arguments: JSON.stringify({ code: 'b' }) }),

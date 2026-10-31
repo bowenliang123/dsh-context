@@ -7,6 +7,7 @@ import { applyTimeline } from './fold'
 import { createTimelineState } from './foldState'
 import type { CommandStateRecord, TimelineState } from './foldState'
 import { serveCommand } from './foldWire'
+import { disposeObservation, revisionOf } from './observation'
 
 export const COMMANDS_ROUTE = '/api/dsh-context/commands'
 
@@ -43,11 +44,6 @@ function reply(value: unknown): Response {
 
 function failure(code: string, message: string): Response {
   return reply({ ok: false, error: { code, message } })
-}
-
-function revisionOf(observation: CommandObservation): string | undefined {
-  const revision = observation.revision
-  return typeof revision === 'string' && revision !== '' ? revision : undefined
 }
 
 function cursorOf(observation: CommandObservation): number {
@@ -157,8 +153,7 @@ export function watchCommandPageChannel(
           try {
             return await readPage(observation, beforeSeq, pageSize, bounds, cache, sessionId, persistence)
           } finally {
-            const dispose = observation[Symbol.dispose]
-            if (typeof dispose === 'function') dispose.call(observation)
+            disposeObservation(observation)
           }
         })
         return reply({ ok: true, value: value ?? null })

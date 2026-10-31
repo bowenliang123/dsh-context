@@ -1,7 +1,8 @@
 import assert from 'node:assert/strict'
 import { describe, test } from 'vitest'
 import { buildTimelineDetail, buildTimelineHead, skillNameOf } from '../../src/host/fold'
-import type { TimelineEvent } from '../../src/host/fold'
+import type { TimelineEvent, TimelineState } from '../../src/host/fold'
+import { createTimelineState } from '../../src/host/foldState'
 import { resolveBounds } from '../../src/host/config'
 import {
   assistantMessage,
@@ -142,26 +143,36 @@ describe('buildTimelineDetail', () => {
   })
 })
 
-describe('the split wire generation (definition slim flag)', () => {
-  test('each generation validates on the one schema, and the inline value is exactly the head plus the detail', () => {
-    const { state } = driveTimeline(canonicalLog())
-    const slim = timelineDef({}, true)
-    const slimView = slim.wire.view(state)
-    assert.equal(slim.wire.viewSchema.safeParse(slimView).success, true, 'the slim head validates')
-    assert.equal(typeof slimView.detailRev, 'number', 'the split marker is present')
-    assert.ok(slimView.counts !== undefined)
-    assert.deepEqual(slimView.nodes, [], 'collections stay off the wire value')
-    const inline = timelineDef({}, false)
-    const inlineView = inline.wire.view(state)
-    assert.equal(inline.wire.viewSchema.safeParse(inlineView).success, true, 'the inline value validates on the same schema')
-    assert.equal(inlineView.detailRev, undefined)
-    assert.equal(inlineView.counts, undefined)
-    assert.ok(inlineView.nodes.length > 0)
-    assert.ok(inlineView.requests.length > 0)
-    const head = buildTimelineHead(state)
-    const detail = buildTimelineDetail(state, resolveBounds({}))
-    const { counts: _counts, last: _last, detailRev: _rev, ...headScalars } = head
-    const { rev: _detailRev, head: _detailHead, ...collections } = detail
-    assert.deepEqual(inlineView, { ...headScalars, ...collections })
+describe('the split wire generation (head-only persisted state)', () => {
+  test('the registered definition serves the head and compacts a legacy full state to the same head', () => {
+    const full = driveTimeline(canonicalLog())
+    const head = timelineDef({}, true)
+    const headView = head.wire.view(full.state)
+    assert.equal(head.wire.viewSchema.safeParse(headView).success, true, 'the slim head validates')
+    assert.equal(typeof headView.detailRev, 'number', 'the split marker is present')
+    assert.deepEqual(headView.counts, { turns: 1, steps: 2, injects: 0, compactions: 1, prunes: 0, skills: 0 })
+    assert.deepEqual(headView.nodes, [], 'collections stay off the wire value')
+    const compacted = head.stateSchema.parse(structuredClone(full.state)) as TimelineState
+    assert.equal(compacted.compact, true)
+    assert.deepEqual(compacted.requests.map(r => r.seq), [10])
+    assert.deepEqual(compacted.events, [])
+    assert.deepEqual(compacted.fileOps, [])
+    assert.deepEqual(compacted.commands, [])
+    assert.deepEqual(compacted.spans, [])
+    assert.deepEqual(head.wire.view(compacted), headView, 'the compacted legacy state serves the identical head')
+    assert.deepEqual(timelineDef({}, true).init(), head.init())
+  })
+
+  test('a legacy row without head counters derives them to the identical head', () => {
+    const full = driveTimeline(canonicalLog()).state
+    const legacy = structuredClone(full) as TimelineState
+    delete (legacy as { head?: unknown }).head
+    const parsed = timelineDef({}, true).stateSchema.parse(legacy) as TimelineState
+    assert.deepEqual(parsed.head, full.head, 'the derived counters match the maintained ledger')
+    assert.deepEqual(buildTimelineHead(parsed), buildTimelineHead(full))
+  })
+
+  test('a fresh detail carries revision zero', () => {
+    assert.equal(buildTimelineDetail(createTimelineState(), resolveBounds({})).rev, 0)
   })
 })

@@ -2,6 +2,7 @@ import type { Context } from '@deepseek-ai/cordis'
 import type { FleetDescriptor, FleetDetail, FleetMemberInfo, FleetMessage } from '../shared/types'
 import { type ColdReadGate, makeColdReadGate } from './coldRead'
 import { type ConnectionHostFace, registerPostRoute } from './connection'
+import { disposeObservation, revisionOf } from './observation'
 
 export const FLEET_ROUTE = '/api/dsh-context/fleet'
 
@@ -323,11 +324,6 @@ interface FoldEntry {
 
 const FOLD_CACHE_MAX = 8
 
-function revisionOf(observation: unknown): string | undefined {
-  const revision = (observation as { revision?: unknown } | null)?.revision
-  return typeof revision === 'string' && revision !== '' ? revision : undefined
-}
-
 interface ObservationLike {
   source?: unknown
   revision?: unknown
@@ -427,8 +423,7 @@ export function watchFleetChannel(ctx: Context, coldReads: ColdReadGate = makeCo
               cursorOfEvents(events),
             ).serve()
           } finally {
-            const dispose = observation?.[Symbol.dispose]
-            if (typeof dispose === 'function') dispose.call(observation)
+            disposeObservation(observation)
           }
         })
         return reply({ ok: true, value: value ?? null })

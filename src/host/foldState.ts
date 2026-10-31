@@ -13,6 +13,25 @@ export interface TimelineEvent {
   surfaceOp?: unknown
 }
 
+export interface TimelineHeadEvent {
+  kind: number
+  name: string
+}
+
+export interface TimelineHead {
+  turns: number
+  steps: number
+  turnSteps: number[]
+  turnKeys: (number | null)[]
+  events: TimelineHeadEvent[]
+  skills: Record<string, number>
+  injects: number
+  compactions: number
+  prunes: number
+  images: number
+  toolCalls: number
+}
+
 export interface TimelineState {
   surface: SurfaceNode[]
   sums: Record<Category, number>
@@ -63,6 +82,39 @@ export interface TimelineState {
   commandStats?: CommandStats
   pendingCodeCmds?: Record<string, CommandStateRecord[]>
   pendingCodeOps?: Record<string, FileOpRecord[]>
+  compact?: true
+  head: TimelineHead
+}
+
+export const HEAD_KIND_NONE = 0
+export const HEAD_KIND_INJECT = 1
+export const HEAD_KIND_COMPACTION = 2
+export const HEAD_KIND_PRUNE = 3
+
+export function emptyHead(): TimelineHead {
+  return {
+    turns: 0,
+    steps: 0,
+    turnSteps: [],
+    turnKeys: [],
+    events: [],
+    skills: {},
+    injects: 0,
+    compactions: 0,
+    prunes: 0,
+    images: 0,
+    toolCalls: 0,
+  }
+}
+
+export function cloneHead(head: TimelineHead): TimelineHead {
+  return {
+    ...head,
+    turnSteps: [...head.turnSteps],
+    turnKeys: [...head.turnKeys],
+    events: [...head.events],
+    skills: { ...head.skills },
+  }
 }
 
 export function trimToLastTurns(requests: RequestRecord[], maxTurns: number): RequestRecord[] {
@@ -93,7 +145,133 @@ export function countTurnRuns(requests: RequestRecord[]): number {
   return runs
 }
 
+function stepsOf(head: TimelineHead): number {
+  let steps = 0
+  for (const n of head.turnSteps) steps += n
+  return steps
+}
+
+export function noteRequest(head: TimelineHead, record: RequestRecord, prev: RequestRecord | undefined, bounds: FoldBounds): void {
+  const key = record.turn ?? null
+  const prevKey = prev?.turn ?? null
+  if (prev === undefined || key !== prevKey) {
+    head.turnSteps.push(1)
+    head.turnKeys.push(key)
+  } else {
+    head.turnSteps[head.turnSteps.length - 1] += 1
+  }
+  while (head.turnSteps.length > bounds.maxKeptTurns) {
+    head.turnSteps.shift()
+    head.turnKeys.shift()
+  }
+  const turnValues = new Set<number>()
+  let retained = bounds.maxRequestSteps
+  for (let index = head.turnSteps.length - 1; index >= 0 && retained > 0; index--) {
+    turnValues.add(head.turnKeys[index] ?? 0)
+    retained -= head.turnSteps[index]
+  }
+  head.turns = turnValues.size
+  head.steps = Math.min(stepsOf(head), bounds.maxRequestSteps)
+}
+
+export function noteEvent(head: TimelineHead, kind: number, name: string, maxEvents: number): void {
+  head.events.push({ kind, name })
+  if (kind === HEAD_KIND_INJECT) head.injects += 1
+  else if (kind === HEAD_KIND_COMPACTION) head.compactions += 1
+  else if (kind === HEAD_KIND_PRUNE) head.prunes += 1
+  if (name !== '' && name !== '__proto__') head.skills[name] = (head.skills[name] ?? 0) + 1
+  while (head.events.length > maxEvents) {
+    const old = head.events[0]
+    head.events.shift()
+    if (old.kind === HEAD_KIND_INJECT) head.injects -= 1
+    else if (old.kind === HEAD_KIND_COMPACTION) head.compactions -= 1
+    else if (old.kind === HEAD_KIND_PRUNE) head.prunes -= 1
+    if (old.name !== '' && old.name !== '__proto__') {
+      const count = head.skills[old.name] - 1
+      if (count > 0) head.skills[old.name] = count
+      else Reflect.deleteProperty(head.skills, old.name)
+    }
+  }
+}
+
+export function noteSurface(head: TimelineHead, node: SurfaceNode, sign: 1 | -1): void {
+  if (node.imgs !== undefined) head.images += sign * node.imgs
+  if (node.cat === 'tool' || (node.cat === 'skill' && node.tool !== undefined)) head.toolCalls += sign
+}
+
+const HEAD_SURFACE_KEYS = new Set(['seq', 'cat', 'tokens', 'reasoning', 'answerTokens', 'callTokens', 'imgs', 'tool'])
+
+export function compactSurfaceNode(node: SurfaceNode): SurfaceNode {
+  const next: SurfaceNode = { seq: node.seq, cat: node.cat, tokens: node.tokens }
+  if (node.reasoning !== undefined) next.reasoning = node.reasoning
+  if (node.answerTokens !== undefined) next.answerTokens = node.answerTokens
+  if (node.callTokens !== undefined) next.callTokens = node.callTokens
+  if (node.imgs !== undefined) next.imgs = node.imgs
+  if (node.tool !== undefined) next.tool = node.tool
+  return next
+}
+
+export function compactSurfaceNodeInPlace(node: SurfaceNode): void {
+  for (const key of Object.keys(node)) {
+    if (!HEAD_SURFACE_KEYS.has(key)) Reflect.deleteProperty(node, key)
+  }
+}
+
+function deriveHead(state: TimelineState, bounds: FoldBounds): TimelineHead {
+  const input = state as Partial<TimelineState>
+  const head = emptyHead()
+  let prev: RequestRecord | undefined
+  for (const record of input.requests ?? []) {
+    noteRequest(head, record, prev, bounds)
+    prev = record
+  }
+  for (const ev of input.events ?? []) {
+    let kind = HEAD_KIND_NONE
+    if (ev.kind === 'inject') kind = HEAD_KIND_INJECT
+    else if (ev.kind === 'compaction') kind = HEAD_KIND_COMPACTION
+    else if (ev.kind === 'prune') kind = HEAD_KIND_PRUNE
+    const name = ev.sub === 'skill' && typeof ev.name === 'string' && ev.name !== '' ? ev.name : ''
+    noteEvent(head, kind, name, bounds.maxEvents)
+  }
+  for (const node of state.surface) noteSurface(head, node, 1)
+  return head
+}
+
+export function compactTimelineState(state: TimelineState, bounds: FoldBounds): TimelineState {
+  const input = state as Partial<TimelineState>
+  if (input.compact === true && input.head !== undefined) return state
+  const callNamesIn = state.callNames
+  const callNames: Record<string, { name: string; start: number }> = {}
+  for (const key in callNamesIn) {
+    const entry = callNamesIn[key]
+    callNames[key] = { name: entry.name, start: entry.start }
+  }
+  const requests = input.requests ?? []
+  const next: TimelineState = {
+    ...state,
+    compact: true,
+    head: input.head ?? deriveHead(state, bounds),
+    surface: state.surface.map(compactSurfaceNode),
+    requests: requests.length > 0 ? [requests[requests.length - 1]] : [],
+    events: [],
+    archived: [],
+    fileOps: [],
+    commands: [],
+    spans: [],
+    callNames,
+  }
+  delete next.turnRuns
+  delete next.fileOpsFloor
+  delete next.commandsFloor
+  delete next.commandStats
+  delete next.pendingCodeCmds
+  delete next.pendingCodeOps
+  delete next.archiveFloor
+  return next
+}
+
 export function trimState(st: TimelineState, bounds: FoldBounds): void {
+  if (st.compact === true) return
   st.turnRuns = st.turnRuns ?? countTurnRuns(st.requests)
   if (st.turnRuns > bounds.maxKeptTurns) {
     st.requests = trimToLastTurns(st.requests, bounds.maxKeptTurns)
@@ -150,7 +328,7 @@ export function trimState(st: TimelineState, bounds: FoldBounds): void {
 
 const TIMING_SPANS_MAX = 2_000
 
-export function createTimelineState(): TimelineState {
+export function createTimelineState(full = true): TimelineState {
   return {
     surface: [],
     sums: { user: 0, inject: 0, skill: 0, assistant: 0, tool: 0 },
@@ -167,5 +345,7 @@ export function createTimelineState(): TimelineState {
     fileOps: [],
     commands: [],
     spans: [],
+    ...(full ? {} : { compact: true }),
+    head: emptyHead(),
   }
 }

@@ -8,7 +8,7 @@ import { assertPlainJson, driveTimeline, timelineDef } from './helpers/projectio
 const bucket = (uncached: number, cacheRead: number, cacheWrite: number, output: number): CostBucketTotals =>
   ({ uncached, cacheRead, cacheWrite, output })
 
-describe('buildTimelineView unknown-model shape', () => {
+describe('the full fold view unknown-model shape', () => {
   test('optional scalars stay ABSENT keys until known, then ride their own keys (issue #29)', () => {
     const unknown = driveTimeline([
       userMessage(1, [{ type: 'text', text: 'aaaa' }]),
@@ -59,7 +59,7 @@ describe('buildTimelineView unknown-model shape', () => {
   })
 })
 
-describe('buildTimelineView counters', () => {
+describe('the full fold view counters', () => {
   test('images and toolCalls sum live surface nodes, absent counts as zero', () => {
     const { view } = driveTimeline([
       userMessage(1, [{ type: 'image', attachment: { width: 800, height: 600 } }]),
@@ -105,7 +105,7 @@ describe('buildTimelineView counters', () => {
   })
 })
 
-describe('buildTimelineView lastUser preview', () => {
+describe('the full fold view lastUser preview', () => {
   test('the newest own message rides the view, whitespace collapsed and bounded; injections and text-less inputs leave it alone', () => {
     const { view } = driveTimeline([
       userMessage(1, [{ type: 'text', text: '  hello   world  ' }]),
@@ -136,7 +136,7 @@ describe('buildTimelineView lastUser preview', () => {
   })
 })
 
-describe('buildTimelineView copies', () => {
+describe('the full fold view copies', () => {
   test('the view is detached from state; repeated views are deep-equal but distinct, and state is untouched', () => {
     const { def, state } = driveTimeline([
       userMessage(1, [{ type: 'text', text: 'aaaa' }]),
@@ -165,7 +165,7 @@ describe('buildTimelineView copies', () => {
   })
 })
 
-describe('buildTimelineView cost copy', () => {
+describe('the full fold view cost copy', () => {
   test('every provider, model, and period branch copies through; no cost omits the field', () => {
     const st = createTimelineState()
     st.cost = {
@@ -187,7 +187,7 @@ describe('buildTimelineView cost copy', () => {
   })
 })
 
-describe('buildTimelineView serving window', () => {
+describe('the full fold view serving window', () => {
   test('overflow drops the oldest non-inject nodes and floors the newest dropped seq', () => {
     const { view } = driveTimeline([
       userMessage(1, [{ type: 'text', text: 'injected' }], { kind: 'plugin', form: 'context', plugin: 'dsh-test' }),
@@ -240,7 +240,7 @@ describe('buildTimelineView serving window', () => {
   })
 })
 
-describe('buildTimelineView event attribution', () => {
+describe('the full fold view event attribution', () => {
   test('an event before the first or after the last request takes only the available side; between two requests, both', () => {
     const before = driveTimeline([
       userMessage(1, [{ type: 'text', text: 'ctx' }], { kind: 'plugin', form: 'notice', plugin: 'p', summary: 'hi' }),

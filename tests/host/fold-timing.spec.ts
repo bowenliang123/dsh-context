@@ -281,7 +281,7 @@ describe('timing — the generation split (reasoning / text / tool args)', () =>
 })
 
 describe('timing — served wire view', () => {
-  test('buildTimelineView serves deep copies; absent timing stays absent', () => {
+  test('the full fold view serves deep copies; absent timing stays absent', () => {
     const drive = driveTimeline([...step(1, 0, 1_000, { tokenMs: 300 }),
       toolCall(5, { callId: 'c1', name: 'bash' }),
       toolResult(6, { callId: 'c1', content: text('ok') })])

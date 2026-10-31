@@ -271,7 +271,7 @@ describe('spans — retention, wire, and schema faces', () => {
     assert.equal(Object.hasOwn(slimDef.wire.view(slimState), 'spans'), false)
   })
 
-  test('every intermediate state stays plain JSON and validates against the state schema; a spans-less state fails it (the v23 gate)', () => {
+  test('every intermediate state stays plain JSON and validates; the head state parses without its detail arrays', () => {
     const drive = driveTimeline([
       stepStart(1, { time: 0 }),
       assistantMessage(2, { time: 1_000, stream: [chunkRec(100, { type: 'text-delta', text: 'x' })] }),
@@ -285,8 +285,13 @@ describe('spans — retention, wire, and schema faces', () => {
       assertPlainJson(state)
       drive.def.stateSchema.parse(structuredClone(state))
     }
-    const stale = structuredClone(drive.state) as unknown as Record<string, unknown>
-    delete stale.spans
-    assert.throws(() => drive.def.stateSchema.parse(stale))
+    const head = structuredClone(drive.state) as unknown as Record<string, unknown>
+    delete head.spans
+    delete head.fileOps
+    delete head.events
+    assert.doesNotThrow(() => drive.def.stateSchema.parse(head), 'a persisted head omits the detail collections')
+    const broken = structuredClone(drive.state) as unknown as Record<string, unknown>
+    delete broken.surface
+    assert.throws(() => drive.def.stateSchema.parse(broken))
   })
 })

@@ -76,7 +76,8 @@ describe('dsh-context host plugin', () => {
     assert.equal(timeline.model, 'deepseek-v4-flash')
     assert.equal(timeline.provider, 'deepseek')
     assert.ok(timeline.current.total > 0, 'the folded totals are non-zero')
-    assert.equal(timeline.nodes.length, 2, 'user + assistant surface nodes')
+    assert.equal(timeline.nodes.length, 0, 'the surface collections stay off the wire head')
+    assert.deepEqual(timeline.counts, { turns: 1, steps: 1, injects: 0, compactions: 0, prunes: 0, skills: 0 })
 
     const headers = snapshot.values.contextHeaders
     assert.ok(headers !== undefined, 'contextHeaders served after real appends')
@@ -105,7 +106,7 @@ describe('dsh-context host plugin', () => {
     assert.ok(timeline.length > 0, 'contextTimeline changes notified')
     const last = timeline.at(-1)?.value
     assert.equal(
-      createContextTimelineDefinition({}, () => false).wire.viewSchema.safeParse(last).success,
+      createContextTimelineDefinition({}).wire.viewSchema.safeParse(last).success,
       true,
       'the notified value is the validated wire view',
     )
@@ -186,6 +187,18 @@ describe('dsh-context host plugin', () => {
     })
     await ctx.plugin(SessionStore)
     await ctx.plugin(SessionProjectionRegistry)
+    ctx.provide('sessionQuery', {
+      observeSession: (id: string) => {
+        const live = ctx.sessions.get(id as never)
+        if (live === undefined) return Promise.resolve(null)
+        return Promise.resolve({
+          source: 'live',
+          header: live.header,
+          events: live.snapshotEvents(),
+          [Symbol.dispose]: () => {},
+        })
+      },
+    })
     await ctx.plugin(plugin, noConfig)
     const session = ctx.sessions.create()
     appendRealEnvelopes(session)
@@ -222,14 +235,15 @@ describe('dsh-context host plugin', () => {
     assert.deepEqual(ops?.map(o => [o.kind, o.tool, o.path]), [['read', 'read', 'src/a.ts']])
   })
 
-  test('without the connection service the wire value stays inline', async () => {
+  test('without the connection service the wire value stays a head', async () => {
     const { ctx } = await boot()
     const session = ctx.sessions.create()
     appendRealEnvelopes(session)
     const timeline = ctx.sessionProjections.snapshot(session).values.contextTimeline
     assert.ok(timeline !== undefined)
-    assert.equal(timeline.detailRev, undefined, 'no channel, no split marker')
-    assert.equal(timeline.nodes.length, 2, 'the collections ride the wire value as before')
+    assert.equal(typeof timeline.detailRev, 'number', 'the head always carries its revision marker')
+    assert.equal(timeline.nodes.length, 0, 'the detail collections never ride the persisted head')
+    assert.ok(timeline.current.total > 0, 'the served head is the folded state')
   })
 
   test('stays pending without the registry, starts when it arrives', async () => {

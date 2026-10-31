@@ -1,6 +1,10 @@
 import assert from 'node:assert/strict'
 import type { Config } from '../../../src/host/config'
+import { resolveBounds } from '../../../src/host/config'
 import type { TimelineEvent, TimelineState } from '../../../src/host/fold'
+import { applyTimeline } from '../../../src/host/fold'
+import { createTimelineState } from '../../../src/host/foldState'
+import { buildTimelineDetail, buildTimelineHead } from '../../../src/host/foldWire'
 import type { ContextTimeline } from '../../../src/shared/types'
 import { createContextTimelineDefinition } from '../../../src/host/timeline'
 
@@ -15,8 +19,28 @@ export interface TimelineDefLike {
   }
 }
 
+function fullView(state: TimelineState, bounds: ReturnType<typeof resolveBounds>): ContextTimeline {
+  const detail = buildTimelineDetail(state, bounds)
+  const head = detail.head ?? buildTimelineHead(state)
+  const { counts: _counts, last: _last, detailRev: _detailRev, ...scalars } = head
+  const { rev: _rev, head: _head, ...collections } = detail
+  return { ...scalars, ...collections } as unknown as ContextTimeline
+}
+
 export function timelineDef(config?: Config, slim = false): TimelineDefLike {
-  return createContextTimelineDefinition(config ?? {}, () => slim) as unknown as TimelineDefLike
+  const production = createContextTimelineDefinition(config ?? {})
+  const bounds = resolveBounds(config ?? {})
+  return {
+    ...production,
+    init: () => createTimelineState(!slim),
+    apply: (state: TimelineState, event: TimelineEvent) => applyTimeline(state, event, bounds),
+    wire: {
+      viewSchema: production.wire.viewSchema,
+      view: slim
+        ? production.wire.view
+        : (state: TimelineState) => fullView(state, bounds),
+    },
+  } as unknown as TimelineDefLike
 }
 
 export function snapshotJson(value: unknown, ancestors: Set<object> = new Set()): unknown {

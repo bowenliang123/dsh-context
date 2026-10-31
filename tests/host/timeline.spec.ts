@@ -41,7 +41,7 @@ function realLog(): TimelineEvent[] {
 
 describe('createContextTimelineDefinition', () => {
   test('carries the pinned projection contract; the wire and state schemas accept a real fold', () => {
-    const def = createContextTimelineDefinition({}, () => false)
+    const def = createContextTimelineDefinition({})
     assert.equal(def.key, 'contextTimeline')
     assert.equal(def.stateVersion, 36, 'pinned: the idle carve and per-step heartbeats cannot backfill from later events')
     const drive = driveTimeline(realLog())
@@ -62,7 +62,7 @@ describe('createContextTimelineDefinition', () => {
   })
 
   test('the wire schema rejects drift', () => {
-    const def = createContextTimelineDefinition({}, () => false)
+    const def = createContextTimelineDefinition({})
     const drive = driveTimeline(realLog())
 
     const extra = structuredClone(drive.view) as unknown as Record<string, unknown>

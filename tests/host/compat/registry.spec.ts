@@ -52,7 +52,7 @@ function fullLog(): TimelineEvent[] {
 
 function bootSession(log = fullLog(), slim = false): { driver: RegistryDriver; session: SessionLike } {
   const driver = new RegistryDriver()
-  driver.register(createContextTimelineDefinition({}, () => slim))
+  driver.register(createContextTimelineDefinition({}))
   driver.register(createContextHeadersDefinition())
   const session: SessionLike = { seq: 0, header: { id: slim ? 's-slim' : 's-matrix', cwd: '/tmp' }, inheritedEventCount: 0, events: [] }
   driver.sessionCreated(session)
@@ -70,9 +70,10 @@ describe('registry contract — the semantics every supported line shares', () =
     const snapshot = driver.snapshot(session)
     assert.deepEqual(Object.keys(snapshot.values).sort(), ['contextHeaders', 'contextTimeline'])
     assert.equal(snapshot.asOfSeq, 12)
-    const timeline = snapshot.values.contextTimeline as { current: { total: number }; nodes: unknown[] }
+    const timeline = snapshot.values.contextTimeline as { current: { total: number }; nodes: unknown[]; counts?: { steps: number } }
     assert.ok(timeline.current.total > 0)
-    assert.ok(timeline.nodes.length > 0)
+    assert.equal(timeline.nodes.length, 0, 'the persisted wire value is the head')
+    assert.equal(timeline.counts?.steps, 2)
     const headers = snapshot.values.contextHeaders as { headers: { tools: { name: string }[] }[] }
     assert.equal(headers.headers[0].tools[0].name, 'bash')
     assertStatesPlainJson(driveTimeline(canonicalLog()))
@@ -95,7 +96,7 @@ describe('registry contract — the semantics every supported line shares', () =
   })
 
   test('the local unit contract stays assignable to the harness projection contract', () => {
-    const timeline: ProjectionDefinition<'contextTimeline', TimelineState> = createContextTimelineDefinition({}, () => false)
+    const timeline: ProjectionDefinition<'contextTimeline', TimelineState> = createContextTimelineDefinition({})
     const headers: ProjectionDefinition<'contextHeaders', HeadersState> = createContextHeadersDefinition()
     const activity: ProjectionDefinition<'contextActivity', ActivityState> = createContextActivityDefinition()
     for (const definition of [timeline, headers, activity]) {
@@ -106,7 +107,7 @@ describe('registry contract — the semantics every supported line shares', () =
   })
 
   test('init tolerates the registry call shape: the header and inherited-count arguments go unobserved', () => {
-    const timelineDef = createContextTimelineDefinition({}, () => false)
+    const timelineDef = createContextTimelineDefinition({})
     const headersDef = createContextHeadersDefinition()
     const probe = { id: 's-init', cwd: '/tmp' }
     for (const def of [timelineDef, headersDef]) {
@@ -115,7 +116,7 @@ describe('registry contract — the semantics every supported line shares', () =
       assert.deepEqual(bare, headed, 'the zero-argument init ignores the registry arguments')
     }
     const driver = new RegistryDriver()
-    driver.register(createContextTimelineDefinition({}, () => false))
+    driver.register(createContextTimelineDefinition({}))
     const session: SessionLike = { seq: 0, header: probe, inheritedEventCount: 7, events: [] }
     driver.sessionCreated(session)
     assert.equal(driver.snapshot(session).values.contextTimeline !== undefined, true)
@@ -174,24 +175,21 @@ describe('registry contract — the semantics every supported line shares', () =
     assert.equal(viewed.contextTimeline, undefined)
     assert.ok(viewed.contextHeaders !== undefined, 'the untouched row still serves')
     const restored = driver.restore(stale, log, 0, session.header)
-    const timeline = restored.values.contextTimeline as { requests: { seq: number; prompt?: number; cacheRead?: number; output?: number }[] }
-    assert.deepEqual(timeline.requests.map(r => r.seq), [6, 10, 13, 14, 15])
-    assert.deepEqual(
-      timeline.requests.filter(r => r.seq >= 13).map(r => [r.prompt, r.cacheRead, r.output]),
-      [[151, 151, 22], [undefined, undefined, undefined], [12, undefined, undefined]],
-    )
+    const timeline = restored.values.contextTimeline as { counts?: { steps: number }; last?: { seq: number; prompt?: number } }
+    assert.equal(timeline.counts?.steps, 5, 'the full refold re-tracks every request')
+    assert.deepEqual([timeline.last?.seq, timeline.last?.prompt], [15, 12], 'the head keeps the newest request anchor')
 
     const currentLog = fullLog()
     const current = bootSession(currentLog)
     const rows = current.driver.checkpoint(current.session)
     const rolledBack = new RegistryDriver()
-    rolledBack.register({ ...createContextTimelineDefinition({}, () => false), stateVersion: 12 })
+    rolledBack.register({ ...createContextTimelineDefinition({}), stateVersion: 12 })
     rolledBack.register(createContextHeadersDefinition())
     assert.equal(rolledBack.viewCheckpoint(rows).contextTimeline, undefined)
     const rolled = rolledBack.restore(rows, currentLog, 0, current.session.header)
-    const rolledTimeline = rolled.values.contextTimeline as { current: { total: number }; requests: unknown[] }
+    const rolledTimeline = rolled.values.contextTimeline as { current: { total: number }; counts?: { steps: number } }
     assert.ok(rolledTimeline.current.total > 0)
-    assert.equal(rolledTimeline.requests.length, 2)
+    assert.equal(rolledTimeline.counts?.steps, 2)
   })
 
   test('the change gate keeps an uninteresting event inert; malformed committed events never throw the drive', () => {
@@ -222,14 +220,14 @@ describe('registry contract — the semantics every supported line shares', () =
 
   test('registry registration rules: bad stateVersion and shared-key version conflicts are refused', () => {
     const driver = new RegistryDriver()
-    const def = createContextTimelineDefinition({}, () => false)
+    const def = createContextTimelineDefinition({})
     assert.throws(() => driver.register({ ...def, key: 'x' as never, stateVersion: -1 }), RegistryViolationError)
     assert.throws(() => driver.register({ ...def, key: 'y' as never, stateVersion: 1.5 }), RegistryViolationError)
     driver.register(def)
-    assert.doesNotThrow(() => driver.register(createContextTimelineDefinition({}, () => false)))
+    assert.doesNotThrow(() => driver.register(createContextTimelineDefinition({})))
     assert.throws(() => driver.register({ ...def, stateVersion: def.stateVersion + 1 }), RegistryViolationError)
     const disposable = new RegistryDriver()
-    const dispose = disposable.register(createContextTimelineDefinition({}, () => false))
+    const dispose = disposable.register(createContextTimelineDefinition({}))
     const session: SessionLike = { seq: 0, header: { id: 'reg' }, inheritedEventCount: 0, events: [] }
     disposable.sessionCreated(session)
     assert.ok(disposable.snapshot(session).values.contextTimeline !== undefined)
