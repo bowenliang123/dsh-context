@@ -31,6 +31,7 @@ interface ObservationFace {
   events: readonly unknown[]
   source?: unknown
   revision?: unknown
+  cursor?: unknown
   [Symbol.dispose]?: unknown
 }
 
@@ -128,7 +129,15 @@ export function watchDetailChannel(ctx: Context, bounds: FoldBounds, coldReads: 
             const revision = revisionOf(observation)
             const source = typeof observation?.source === 'string' ? observation.source : ''
             const header = observation?.header
+            const cursor = typeof observation?.cursor === 'number' ? observation.cursor : undefined
             const hit = entries.get(sessionId)
+            if (source === 'live' && cursor !== undefined && hit !== undefined
+              && hit.source === 'live' && hit.header === header
+              && hit.events === cursor + 1 && (headOnly || hit.full)) {
+              touch(entries, sessionId, hit)
+              if (headOnly) return headPayloadOf(hit.state)
+              return hit.value
+            }
             if (source !== 'live' && revision !== undefined && hit !== undefined
               && hit.source === source && hit.revision === revision && hit.persistence === persistence
               && (headOnly || hit.full)) {

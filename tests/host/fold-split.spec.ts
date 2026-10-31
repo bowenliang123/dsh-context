@@ -172,6 +172,17 @@ describe('the split wire generation (head-only persisted state)', () => {
     assert.deepEqual(buildTimelineHead(parsed), buildTimelineHead(full))
   })
 
+  test('a compact checkpoint without the optional arrays is normalized before serving', () => {
+    const sparse = structuredClone(createTimelineState(false)) as unknown as Record<string, unknown>
+    for (const key of ['requests', 'events', 'archived', 'fileOps', 'commands', 'spans']) delete sparse[key]
+    const parsed = timelineDef({}, true).stateSchema.parse(sparse) as TimelineState
+    assert.deepEqual(parsed.requests, [])
+    assert.deepEqual(parsed.events, [])
+    assert.deepEqual(parsed.fileOps, [])
+    assert.deepEqual(parsed.spans, [])
+    assert.doesNotThrow(() => buildTimelineHead(parsed))
+  })
+
   test('a fresh detail carries revision zero', () => {
     assert.equal(buildTimelineDetail(createTimelineState(), resolveBounds({})).rev, 0)
   })

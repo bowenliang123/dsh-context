@@ -319,6 +319,43 @@ describe('DetailStore', () => {
     assert.equal(calls.length, 3)
   })
 
+  test('a head bump during an in-flight read still trails when the detail revision is ahead', async () => {
+    let gate!: () => void
+    const first = new Promise<ContextTimelineDetail | null>((resolve) => { gate = () => resolve(detail(5)) })
+    let call = 0
+    const store = new DetailStore(() => {
+      call++
+      return call === 1 ? first : Promise.resolve(detail(5))
+    }, 0)
+    store.request(3)
+    await vi.waitFor(() => { assert.equal(call, 1) })
+    store.request(4)
+    gate()
+    await until(() => call === 2, 'the trailing read never fired for the newer head')
+    assert.equal(store.getSnapshot().detail?.rev, 5)
+  })
+
+  test('an absent answer never turns its detail revision into a head revision', async () => {
+    const { fetcher, calls } = scriptedFetcher([detail(5), null, detail(6)])
+    const store = new DetailStore(fetcher, 0)
+    store.request(3)
+    await settle()
+    assert.equal(store.getSnapshot().detail?.rev, 5)
+    store.request(4)
+    await settle()
+    assert.equal(calls.length, 2, 'the absent read settled')
+    store.request(5)
+    await until(() => store.getSnapshot().detail?.rev === 6, 'a head revision below the served detail was suppressed')
+    assert.equal(calls.length, 3)
+  })
+
+  test('a lower requested head never lowers the target', () => {
+    const store = new DetailStore(async () => detail(1), 0)
+    ;(store as unknown as { wantedRev: number }).wantedRev = 5
+    store.request(3)
+    assert.equal(store.getSnapshot().pending, false, 'the lower revision was not admitted')
+  })
+
   test('a rev DECREASE means the host refolded: the ledger resets and refetches', async () => {
     const { fetcher } = scriptedFetcher([detail(5), detail(2)])
     const store = new DetailStore(fetcher, 0)

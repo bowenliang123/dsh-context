@@ -241,7 +241,17 @@ function deriveHead(state: TimelineState, bounds: FoldBounds): TimelineHead {
 
 export function compactTimelineState(state: TimelineState, bounds: FoldBounds): TimelineState {
   const input = state as Partial<TimelineState>
-  if (input.compact === true && input.head !== undefined) return state
+  if (input.compact === true && input.head !== undefined) {
+    return {
+      ...state,
+      requests: input.requests ?? [],
+      events: input.events ?? [],
+      archived: input.archived ?? [],
+      fileOps: input.fileOps ?? [],
+      commands: input.commands ?? [],
+      spans: input.spans ?? [],
+    }
+  }
   const callNamesIn = state.callNames
   const callNames: Record<string, { name: string; start: number }> = {}
   for (const key in callNamesIn) {

@@ -331,6 +331,64 @@ describe('the detail route', () => {
     assert.deepEqual(third.value, second.value, 'an unchanged log re-serves the cached payload')
   })
 
+  test('an unchanged live log re-serves the detail without materializing its events', async () => {
+    const events = sampleLog()
+    const headerOf = { id: 's1' }
+    let reads = 0
+    const observation = {
+      source: 'live',
+      header: headerOf,
+      cursor: events.length - 1,
+      get events() {
+        reads++
+        return events
+      },
+      [Symbol.dispose]: () => {},
+    }
+    const { ctx, captured } = ctxOf({
+      connection: { fetch: { register: () => () => {} } },
+      sessions: sessionsWith(okSession()),
+      sessionQuery: { observeSession: () => Promise.resolve(observation) },
+    })
+    watchDetailChannel(ctx, BOUNDS)
+    const first = await call(captured, { sessionId: 's1' })
+    const second = await call(captured, { sessionId: 's1' })
+    assert.deepEqual(second, first)
+    assert.equal(reads, 1, 'the unchanged log is never materialized a second time')
+  })
+
+  test('a live cache hit serves head-only and an unchanged re-read without refolding', async () => {
+    const events = sampleLog()
+    const headerOf = { id: 's1' }
+    let reads = 0
+    let withCursor = true
+    const observation = () => ({
+      source: 'live',
+      header: headerOf,
+      ...(withCursor ? { cursor: events.length - 1 } : {}),
+      get events() {
+        reads++
+        return events
+      },
+      [Symbol.dispose]: () => {},
+    })
+    const { ctx, captured } = ctxOf({
+      connection: { fetch: { register: () => () => {} } },
+      sessions: sessionsWith(okSession()),
+      sessionQuery: { observeSession: () => Promise.resolve(observation()) },
+    })
+    watchDetailChannel(ctx, BOUNDS)
+    const full = await call(captured, { sessionId: 's1' })
+    const head = await call(captured, { sessionId: 's1', head: true }) as { value: { rev: number; head: { current: { total: number } } } }
+    assert.equal(head.value.rev, 2)
+    assert.ok(head.value.head.current.total > 0)
+    assert.equal(reads, 1, 'the head hit served from the cached state')
+    withCursor = false
+    const again = await call(captured, { sessionId: 's1' })
+    assert.deepEqual(again, full, 'the unchanged live log re-serves the cached payload')
+    assert.equal(reads, 2, 'only the cursor-less observation materialized the log again')
+  })
+
   test('a head read serves the envelope only, live and cold', async () => {
     const live = liveCtx(sampleLog())
     watchDetailChannel(live.ctx, BOUNDS)

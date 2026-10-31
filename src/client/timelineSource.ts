@@ -100,7 +100,8 @@ export class DetailStore {
       this.catchUpTarget = -1
     }
     this.lastHeadRev = rev
-    if (rev <= this.wantedRev) return
+    if (rev < this.wantedRev) return
+    if (rev === this.wantedRev && this.acceptedRev >= rev) return
     this.wantedRev = rev
     this.schedule()
   }
@@ -209,35 +210,37 @@ export class DetailStore {
     this.targetRev = this.wantedRev
     const background = this.background
     const generation = this.generation
+    let retry = false
     this.emit()
     try {
       const d = await this.fetcher()
       if (generation !== this.generation) return
       if (d !== null) {
-        if (d.rev >= this.acceptedRev || d.rev === this.targetRev) {
+        const previousAccepted = this.acceptedRev
+        const accepted = d.rev >= previousAccepted || d.rev === this.targetRev
+        if (accepted) {
           this.detail = d
           this.bytes = detailBytesOf(d)
           this.acceptedRev = d.rev
         }
-        if (d.rev >= this.acceptedRev && d.rev < this.targetRev) {
-          this.wantedRev = d.rev
-          if (this.listeners.size > 0 && this.catchUpTarget !== this.targetRev) {
-            this.catchUpTarget = this.targetRev
-            this.clearCatchUp()
-            const target = this.targetRev
-            this.catchUp = setTimeout(() => {
-              this.catchUp = null
-              if (this.detail === null || this.acceptedRev < target) {
-                this.wantedRev = target
-                void this.fire()
-              }
-            }, CATCH_UP_MS)
+        if (d.rev < this.targetRev) {
+          if (accepted) {
+            if (this.listeners.size > 0 && this.catchUpTarget !== this.wantedRev) {
+              const target = this.wantedRev
+              this.catchUpTarget = target
+              this.clearCatchUp()
+              this.catchUp = setTimeout(() => {
+                this.catchUp = null
+                if (this.detail === null || this.acceptedRev < target) void this.fire()
+              }, CATCH_UP_MS)
+            }
+          } else {
+            retry = true
           }
         }
         this.failures = 0
         this.failed = false
       } else {
-        this.wantedRev = this.acceptedRev
         this.failed = this.detail === null
         this.failures++
       }
@@ -245,11 +248,14 @@ export class DetailStore {
       if (generation === this.generation) {
         this.failed = this.detail === null
         this.failures++
+        retry = true
       }
     } finally {
       this.inFlight = false
-      if (this.failed && background && this.listeners.size === 0) this.wantedRev = this.acceptedRev
-      if (this.wantedRev > this.acceptedRev && (this.listeners.size > 0 || !background)) this.schedule()
+      const replaced = generation !== this.generation
+      if (this.wantedRev >= 0
+        && (replaced || this.wantedRev > this.targetRev || retry)
+        && (this.listeners.size > 0 || !background)) this.schedule()
       this.emit()
     }
   }
