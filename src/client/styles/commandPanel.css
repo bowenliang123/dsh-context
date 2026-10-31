@@ -15,7 +15,7 @@
 .lc-cmd-body { display: grid; grid-template-columns: minmax(200px, 1fr) minmax(0, 2fr); gap: 16px; flex: 1; min-height: 0; }
 .lc-cmd-main { min-width: 0; min-height: 0; display: flex; flex-direction: column; }
 .lc-cmd-main:only-child { grid-column: 1 / -1; }
-.lc-cmd-list { flex: 1; min-height: 120px; overflow-y: auto; overscroll-behavior: contain; }
+.lc-cmd-list { flex: 1; min-height: 120px; overflow-y: auto; }
 .lc-cmd-rail { min-width: 0; min-height: 0; display: flex; flex-direction: column; gap: 16px; }
 .lc-cmd-rail-sec { min-width: 0; flex: none; }
 .lc-cmd-rail-h { display: flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 600; color: var(--dsw-alias-label-primary); margin-bottom: 8px; padding-bottom: 5px; border-bottom: var(--lc-line-strong, 1px solid var(--dsw-alias-border-l2)); }
@@ -44,7 +44,7 @@
 .lc-cmd-progs { flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; }
 .lc-cmd-progs-h { justify-content: space-between; flex: none; }
 .lc-cmd-prog-search { font: inherit; font-size: 11px; color: var(--dsw-alias-label-primary); padding: 2px 6px; font-weight: 400; }
-.lc-cmd-progs-list { flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; gap: 1px; overflow-y: auto; overscroll-behavior: contain; }
+.lc-cmd-progs-list { flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; gap: 1px; overflow-y: auto; }
 .lc-cmd-prog { position: relative; display: flex; align-items: baseline; gap: 7px; min-width: 0; width: 100%; border: 0; border-radius: 6px; padding: 2px 6px 4px; background: transparent; font: inherit; font-size: 12px; line-height: 1.7; color: inherit; text-align: left; cursor: pointer; transition: background-color var(--ds-transition-duration, 0.2s) var(--ds-ease-in-out, ease-in-out); }
 .lc-cmd-prog:nth-child(even of .lc-cmd-prog) { background: var(--lc-list-stripe); }
 .lc-cmd-progs-list .lc-cmd-prog:hover { background: var(--dsw-alias-interactive-bg-hover); }

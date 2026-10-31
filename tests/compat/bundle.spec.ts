@@ -107,6 +107,15 @@ describe.skipIf(staging.artifactsMissing())('bundle smoke — the built lib/clie
     assert.ok(!css.includes('120ms ease'), 'lightningcss minified the sheet')
   })
 
+  test('command lists chain their scrolling to the page', () => {
+    const css = styleTags().map(tag => tag.textContent).join('\n')
+    for (const selector of ['.lc-cmd-list', '.lc-cmd-progs-list']) {
+      assert.ok(css.includes(selector + '{'), `styles carry a ${selector} rule`)
+      const contained = new RegExp(selector.replaceAll('.', '\\.') + '[^{}]*\\{[^{}]*overscroll-behavior')
+      assert.ok(!contained.test(css), `${selector} does not contain its scrolling`)
+    }
+  })
+
   test('registrations: bilingual dictionaries, six slots, the /context trigger source', () => {
     assert.ok(state.dicts.get('dsh-context')?.zh && state.dicts.get('dsh-context')?.en, 'bilingual dictionaries registered')
     assert.equal(state.slots.length, 6, 'view tabs + assistant action + input overlay + insight page and sidebar entry slots')
