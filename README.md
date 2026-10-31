@@ -65,10 +65,13 @@ Click **Context Insights / 上下文洞察** in the sidebar's panel list — the
 | --- | --- |
 | **KPI band** | How much am I using — sessions active in the picked range (7d / 30d / all), with billed tokens, estimated cost, cache-hit rate and turns folded by the day each step started; tool runs and active time cover those sessions and their subagents' whole lifetime, matching the timing card. |
 | **7-day usage chart** | When did I spend what — each of the last 7 days' billed tokens and estimated cost as a bar pair, folded per turn off the sessions' own request times (not the session's last-active day). |
-| **Activity heatmap** | When do I actually work — the last 8 weeks of daily billed tokens; click a day to filter the sessions that were active on it. |
-| **Settings entry** | One row under the heatmap — the same guarded jump to this plugin's preferences as the Context tab's Plugin Info card. |
+| **Activity heatmap** | When do I actually work — the last 8 weeks of daily billed tokens; click a day to filter the sessions and scope the three tally cards to that day. |
+| **Skill loads** | Which skills I loaded, how often, and how recently — the range's loads per skill; click one to filter the sessions that loaded it. |
+| **Tool calls** | Which tools ran, how often, and how recently — the range's runs per tool from the daily ledger; click one to filter the sessions that ran it. |
+| **Command executions** | Which programs ran, how often, and how recently — the range's command runs per program, counted on dispatch; click one to filter the sessions that ran it. |
+| **Settings entry** | The chip in the page head — the same guarded jump to this plugin's preferences as the Context tab's Plugin Info card. |
 | **Context Composition** | Where the picked range's billed tokens went, split by the Token card's billed categories (Tool Calls, Reasoning, Answers, …). |
-| **Session cards** | Each session's profile: composition ring, billed tokens, turns, cost, and its workspace-group / project breadcrumb — sorted by recency, tokens, or context size, searchable, grouped by workspace. A card click opens the session. |
+| **Session cards** | Each session's profile under the four cards: composition ring, billed tokens, turns, cost, and its workspace-group / project breadcrumb — sorted by recency, tokens, or context size, searchable, grouped by workspace. A card click opens the session. |
 
 
 ## 📊 The Context tab
