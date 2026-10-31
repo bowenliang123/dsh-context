@@ -2,12 +2,13 @@ import { Fragment, useEffect, useLayoutEffect, useRef, useState, type ReactEleme
 import { createPortal } from 'react-dom'
 import { dayKeyOf } from '../../shared/days'
 import type { SkillInfo } from '../../shared/types'
-import { relativeTime, type SkillLoadStat, type SkillSort } from '../overview'
+import { relativeTime, type SkillSort, type TallyStat } from '../overview'
 import { copySkillPath } from '../skills'
 import { nameColorOf } from '../nameColor'
 import { IconCheck, IconCopy, IconSkill } from '../primitives'
 import type { ViewKit } from '../viewkit'
 import { ClearableInput } from './clearableInput'
+import { TallyCard, TallyRow, shareOf } from './overviewTally'
 
 const MAX_ROWS = 20
 
@@ -37,22 +38,22 @@ function descriptionOf(info: SkillInfo): string {
   return flat.length > MAX_DESC ? flat.slice(0, MAX_DESC) + '…' : flat
 }
 
-function usageLineOf(kit: ViewKit, s: SkillLoadStat): string {
-  return `${kit.t('ov.skills.loads', { n: kit.fmt(s.loads) })} · ${kit.t('ov.skills.sessions', { n: kit.fmt(s.sessions) })}`
+function usageLineOf(kit: ViewKit, s: TallyStat): string {
+  return `${kit.t('ov.skills.loads', { n: kit.fmt(s.n) })} · ${kit.t('ov.skills.sessions', { n: kit.fmt(s.sessions) })}`
 }
 
-function lastLineOf(kit: ViewKit, s: SkillLoadStat): string {
+function lastLineOf(kit: ViewKit, s: TallyStat): string {
   return `${dayKeyOf(s.last) ?? ''} ${kit.fmtTime(s.last)}`.trim()
 }
 
-function statsLineOf(kit: ViewKit, s: SkillLoadStat): string {
+function statsLineOf(kit: ViewKit, s: TallyStat): string {
   return `${usageLineOf(kit, s)} · ${lastLineOf(kit, s)}`
 }
 
 function DetailHead(props: { name: string; origin: string }): ReactElement {
   return (
     <div className="lc-skilld-head">
-      <i className="lc-ov-skill-dot" style={{ background: skillColorOf(props.name) }} />
+      <i className="lc-ov-tally-dot" style={{ background: skillColorOf(props.name) }} />
       <span className="lc-skilld-name">{props.name}</span>
       {props.origin !== '' && <span className="lc-skilld-chip">{props.origin}</span>}
     </div>
@@ -65,7 +66,7 @@ interface HoverRow {
 }
 
 export interface OverviewSkillsProps {
-  stats: SkillLoadStat[]
+  stats: TallyStat[]
   day?: string | null
   selected?: string | null
   onSelect?: (name: string | null) => void
@@ -79,12 +80,12 @@ export function makeOverviewSkills(kit: ViewKit): (props: OverviewSkillsProps) =
   const { t, fmt } = kit
   return function OverviewSkills(props: OverviewSkillsProps): ReactElement {
     const { stats } = props
-    const max = stats.reduce((top, s) => Math.max(top, s.loads), 0)
+    const max = stats.reduce((top, s) => Math.max(top, s.n), 0)
 
     const [query, setQuery] = useState('')
     const needle = query.trim().toLowerCase()
     const visible = needle === '' ? stats : stats.filter(s => s.name.toLowerCase().includes(needle))
-    const visibleTotal = visible.reduce((sum, s) => sum + s.loads, 0)
+    const visibleTotal = visible.reduce((sum, s) => sum + s.n, 0)
 
     const [hoverRow, setHoverRow] = useState<HoverRow | null>(null)
     const [spot, setSpot] = useState<{ forRow: HoverRow; left: number; top: number } | null>(null)
@@ -212,92 +213,73 @@ export function makeOverviewSkills(kit: ViewKit): (props: OverviewSkillsProps) =
 
     const sort = props.sort ?? 'loads'
     return (
-      <div className="lc-card lc-ov-skills-card">
-        <div className="lc-card-title">
-          <span className="lc-card-title-text">
-            <IconSkill size={14} />
-            {t('stats.skills')}
-          </span>
-          {props.day !== null && props.day !== undefined && <span className="lc-card-sub">{props.day}</span>}
-          {stats.length > 1 && (
-            <div className="lc-gran" role="group" aria-label={t('ov.skills.sortLabel')}>
-              {SKILL_SORTS.map(so => (
-                <button
-                  key={so}
-                  type="button"
-                  className={'lc-gran-btn' + (sort === so ? ' lc-gran-on' : '')}
-                  aria-pressed={sort === so}
-                  onClick={() => { props.onSort?.(so) }}
-                >{t('ov.skills.sort.' + so)}</button>
-              ))}
-            </div>
-          )}
-        </div>
-        {stats.length > 0 && (
-          <div className="lc-ov-skills-sub">
-            <span className="lc-card-sub lc-ov-skills-sub-n">
-              {t('ov.skills.summary', { skills: fmt(visible.length), loads: fmt(visibleTotal) })}
-            </span>
-            {stats.length > 1 && (
-              <ClearableInput
-                className="lc-ov-search lc-ov-skills-search"
-                type="search"
-                value={query}
-                placeholder={t('ov.skills.search')}
-                clearLabel={t('field.clear')}
-                onChange={setQuery}
-              />
-            )}
+      <TallyCard
+        icon={<IconSkill size={14} />}
+        title={t('stats.skills')}
+        day={props.day}
+        summary={t('ov.skills.summary', { skills: fmt(visible.length), loads: fmt(visibleTotal) })}
+        search={stats.length > 1 ? (
+          <ClearableInput
+            className="lc-ov-search lc-ov-skills-search"
+            type="search"
+            value={query}
+            placeholder={t('ov.skills.search')}
+            clearLabel={t('field.clear')}
+            onChange={setQuery}
+          />
+        ) : undefined}
+        controls={stats.length > 1 ? (
+          <div className="lc-gran" role="group" aria-label={t('ov.skills.sortLabel')}>
+            {SKILL_SORTS.map(so => (
+              <button
+                key={so}
+                type="button"
+                className={'lc-gran-btn' + (sort === so ? ' lc-gran-on' : '')}
+                aria-pressed={sort === so}
+                onClick={() => { props.onSort?.(so) }}
+              >{t('ov.skills.sort.' + so)}</button>
+            ))}
           </div>
-        )}
+        ) : undefined}
+      >
+        {!pinnedRowVisible && detailBlock}
         {stats.length === 0 ? (
           <div className="lc-empty">{t('ov.skills.empty')}</div>
         ) : visible.length === 0 ? (
           <div className="lc-empty">{t('ov.skills.noMatch')}</div>
         ) : (
-          <div className="lc-ov-skills" role="group" aria-label={t('stats.skills')}>
+          <div className="lc-ov-tallies" role="group" aria-label={t('stats.skills')}>
             {visible.slice(0, MAX_ROWS).map((s) => {
               const color = skillColorOf(s.name)
               const pinned = props.selected === s.name
-              const share = Math.round(s.loads / Math.max(max, 1) * 100)
-              const bar = <i className="lc-ov-skill-bar" style={{ width: `calc(${share}% - ${Math.round(share * 12) / 100}px)`, background: color }} />
               const rowButton = (
-                <button
-                  type="button"
-                  className="lc-ov-skill"
-                  aria-pressed={pinned}
-                  aria-describedby={hoverRow?.name === s.name ? TIP_ID : undefined}
-                  onMouseEnter={(ev) => {
-                    const r = ev.currentTarget.getBoundingClientRect()
+                <TallyRow
+                  name={s.name}
+                  count={fmt(s.n)}
+                  share={shareOf(s.n, max)}
+                  color={color}
+                  last={relativeTime(t, s.last, props.now)}
+                  selected={pinned}
+                  describedBy={hoverRow?.name === s.name ? TIP_ID : undefined}
+                  onSelect={() => { props.onSelect?.(pinned ? null : s.name) }}
+                  onAnchor={(el) => {
+                    const r = el.getBoundingClientRect()
                     setHoverRow({ name: s.name, rect: { left: r.left, top: r.top, width: r.width, bottom: r.bottom } })
                   }}
-                  onMouseLeave={() => { setHoverRow(null) }}
-                  onFocus={(ev) => {
-                    const r = ev.currentTarget.getBoundingClientRect()
-                    setHoverRow({ name: s.name, rect: { left: r.left, top: r.top, width: r.width, bottom: r.bottom } })
-                  }}
-                  onBlur={() => { setHoverRow(null) }}
-                  onClick={() => { props.onSelect?.(pinned ? null : s.name) }}
-                >
-                  <i className="lc-ov-skill-dot" style={{ background: color }} />
-                  <span className="lc-ov-skill-name">{s.name}</span>
-                  <span className="lc-ov-skill-count">×{fmt(s.loads)}</span>
-                  <span className="lc-ov-skill-last">{relativeTime(t, s.last, props.now)}</span>
-                  {bar}
-                </button>
+                  onRelease={() => { setHoverRow(null) }}
+                />
               )
               return pinned
                 ? <div key={s.name} className="lc-ov-skill-unit">{rowButton}{detailBlock}</div>
                 : <Fragment key={s.name}>{rowButton}</Fragment>
             })}
             {visible.length > MAX_ROWS && (
-              <div className="lc-ov-skill-more">{t('ov.skills.more', { n: visible.length - MAX_ROWS })}</div>
+              <div className="lc-ov-tally-more">{t('ov.skills.more', { n: visible.length - MAX_ROWS })}</div>
             )}
           </div>
         )}
-        {!pinnedRowVisible && detailBlock}
         {hoverTip}
-      </div>
+      </TallyCard>
     )
   }
 }

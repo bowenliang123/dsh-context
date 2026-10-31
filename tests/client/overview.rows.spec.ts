@@ -144,14 +144,14 @@ describe('rowsOfSnapshot: the family fold', () => {
         displayTitle: 'root',
         projectionValues: {
           contextTimeline: billedHead(100, COST),
-          contextActivity: { days: { '2026-09-16': { tokens: 5, requests: 1, cost: COST, turns: 1, toolCalls: 1, toolsMs: 100, wallMs: 1_000 }, '2026-09-12': { tokens: 2, requests: 1 }, '2026-09-13': { tokens: 1, requests: 1 }, '2026-09-14': { tokens: 1, requests: 1, turns: 2 }, '2026-09-11': { tokens: 1, requests: 1 } } },
+          contextActivity: { days: { '2026-09-16': { tokens: 5, requests: 1, cost: COST, turns: 1, toolCalls: 1, toolsMs: 100, wallMs: 1_000, tools: { read: { n: 2, last: 10 }, bash: { n: 1, last: 20 } }, cmds: { git: { n: 1, last: 30 } } }, '2026-09-12': { tokens: 2, requests: 1 }, '2026-09-13': { tokens: 1, requests: 1 }, '2026-09-14': { tokens: 1, requests: 1, turns: 2 }, '2026-09-11': { tokens: 1, requests: 1 } } },
         },
       }],
       ['kid', {
         origin: 'subagent', parentId: 'root',
         projectionValues: {
           contextTimeline: billedHead(50, COST2),
-          contextActivity: { days: { '2026-09-16': { tokens: 7, requests: 2, cost: COST2, turns: 1, toolCalls: 2, toolsMs: 200, wallMs: 2_000 }, '2026-09-13': { tokens: 1, requests: 1 }, '2026-09-14': { tokens: 1, requests: 1 }, '2026-09-11': { tokens: 1, requests: 1, turns: 3 } } },
+          contextActivity: { days: { '2026-09-16': { tokens: 7, requests: 2, cost: COST2, turns: 1, toolCalls: 2, toolsMs: 200, wallMs: 2_000, tools: { read: { n: 3, last: 40 } }, cmds: { git: { n: 2, last: 50 }, pnpm: { n: 1, last: 60 } } }, '2026-09-13': { tokens: 1, requests: 1 }, '2026-09-14': { tokens: 1, requests: 1 }, '2026-09-11': { tokens: 1, requests: 1, turns: 3 } } },
         },
       }],
       ['grand', {
@@ -160,7 +160,7 @@ describe('rowsOfSnapshot: the family fold', () => {
           contextTimeline: billedHead(25),
           contextActivity: {
             days: {
-              '2026-09-16': { tokens: 4, requests: 1, turns: 1, toolCalls: 3, toolsMs: 300, wallMs: 3_000 },
+              '2026-09-16': { tokens: 4, requests: 1, turns: 1, toolCalls: 3, toolsMs: 300, wallMs: 3_000, tools: { grep: { n: 1, last: 70 } } },
               '2026-09-15': { tokens: 3, requests: 1, turns: 1, toolCalls: 4, toolsMs: 400, wallMs: 4_000 },
             },
           },
@@ -182,6 +182,15 @@ describe('rowsOfSnapshot: the family fold', () => {
     assert.equal(root.activity?.days['2026-09-16'].toolCalls, 6)
     assert.equal(root.activity?.days['2026-09-16'].toolsMs, 600)
     assert.equal(root.activity?.days['2026-09-16'].wallMs, 6_000)
+    assert.deepEqual(root.activity?.days['2026-09-16'].tools, {
+      read: { n: 5, last: 40 },
+      bash: { n: 1, last: 20 },
+      grep: { n: 1, last: 70 },
+    }, 'the family’s per-tool tallies sum by name and keep the latest instant')
+    assert.deepEqual(root.activity?.days['2026-09-16'].cmds, {
+      git: { n: 3, last: 50 },
+      pnpm: { n: 1, last: 60 },
+    }, 'the family’s per-program tallies sum the same way')
     assert.equal(root.activity?.days['2026-09-15'].tokens, 3)
     assert.equal(root.activity?.days['2026-09-15'].turns, 1)
     assert.equal(root.activity?.days['2026-09-15'].toolCalls, 4)

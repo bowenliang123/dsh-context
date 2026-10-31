@@ -7,7 +7,7 @@ import { estimateSessionCost, mergeCostUsage } from './cost'
 import type { CostCurrency, ModelBook } from './cost'
 import { agentRowOf, familyChildrenOf, type AgentRow } from './agentTree'
 import { activityOf, asRecord, costFullyQuantified, numOf, timelineOf, type ClientCtx, type SessionsFace } from './services'
-import type { ActivityDay, ContextActivity, ContextTimeline, DefaultOverviewRange, SessionCostUsage, TimingTotals, TokenUsage, ToolTimingTotals } from '../shared/types'
+import type { ActivityDay, ActivityTally, ContextActivity, ContextTimeline, DefaultOverviewRange, SessionCostUsage, TimingTotals, TokenUsage, ToolTimingTotals } from '../shared/types'
 
 export interface OverviewRow {
   id: string
@@ -265,6 +265,8 @@ function mergeActivity(members: (ContextActivity | null)[]): ContextActivity | n
           ...(entry.toolsMs !== undefined ? { toolsMs: entry.toolsMs } : {}),
           ...(entry.wallMs !== undefined ? { wallMs: entry.wallMs } : {}),
           ...(entry.skills !== undefined ? { skills: entry.skills } : {}),
+          ...(entry.tools !== undefined ? { tools: entry.tools } : {}),
+          ...(entry.cmds !== undefined ? { cmds: entry.cmds } : {}),
         }
       } else {
         prev.tokens += entry.tokens
@@ -281,21 +283,23 @@ function mergeActivity(members: (ContextActivity | null)[]): ContextActivity | n
           /* v8 ignore next 1 */
           prev.cost = mergeCostUsage(prev.cost, entry.cost) ?? entry.cost
         }
-        if (entry.skills !== undefined) prev.skills = mergeSkillTallies(prev.skills, entry.skills)
+        if (entry.skills !== undefined) prev.skills = mergeTallies(prev.skills, entry.skills)
+        if (entry.tools !== undefined) prev.tools = mergeTallies(prev.tools, entry.tools)
+        if (entry.cmds !== undefined) prev.cmds = mergeTallies(prev.cmds, entry.cmds)
       }
     }
   }
   return any ? { days } : null
 }
 
-function mergeSkillTallies(a: ActivityDay['skills'], b: NonNullable<ActivityDay['skills']>): NonNullable<ActivityDay['skills']> {
-  const out: Record<string, { n: number; last: number } | undefined> = { ...a }
+function mergeTallies(a: Record<string, ActivityTally> | undefined, b: Record<string, ActivityTally>): Record<string, ActivityTally> {
+  const out: Record<string, ActivityTally | undefined> = { ...a }
   for (const name of Object.keys(b)) {
     const tally = b[name]
     const prev = out[name]
     out[name] = prev === undefined ? tally : { n: prev.n + tally.n, last: Math.max(prev.last, tally.last) }
   }
-  return out as NonNullable<ActivityDay['skills']>
+  return out as Record<string, ActivityTally>
 }
 
 export type OverviewRange = DefaultOverviewRange
@@ -426,65 +430,76 @@ export function pageOf<T>(rows: readonly T[], page: number): { items: T[]; index
   return { items: rows.slice(index * OVERVIEW_PAGE_SIZE, (index + 1) * OVERVIEW_PAGE_SIZE), index, count }
 }
 
-export interface SkillLoadStat {
+export type TallyField = 'skills' | 'tools' | 'cmds'
+
+export interface TallyStat {
   name: string
-  loads: number
+  n: number
   sessions: number
   last: number
 }
 
 export type SkillSort = 'loads' | 'recent'
 
-function skillDayPredicate(opts: { scope: RangeWindow; day: string | null }): (key: string) => boolean {
+export type TallySort = 'count' | 'recent'
+
+function dayPredicate(opts: { scope: RangeWindow; day: string | null }): (key: string) => boolean {
   if (opts.day !== null) return key => key === opts.day
   return key => dayInScope(key, opts.scope)
+}
+
+export function tallyStatsOf(
+  rows: readonly OverviewRow[],
+  opts: { scope: RangeWindow; day: string | null; field: TallyField; sort?: TallySort },
+): TallyStat[] {
+  const admit = dayPredicate(opts)
+  const stats = new Map<string, TallyStat>()
+  for (const row of rows) {
+    const days = row.activity?.days
+    if (days === undefined) continue
+    const rowHas = new Set<string>()
+    for (const key of Object.keys(days)) {
+      if (!admit(key)) continue
+      const table = days[key][opts.field]
+      if (table === undefined) continue
+      for (const name of Object.keys(table)) {
+        const tally = table[name]
+        const prev = stats.get(name)
+        if (prev === undefined) stats.set(name, { name, n: tally.n, sessions: 1, last: tally.last })
+        else {
+          prev.n += tally.n
+          prev.last = Math.max(prev.last, tally.last)
+          if (!rowHas.has(name)) prev.sessions += 1
+        }
+        rowHas.add(name)
+      }
+    }
+  }
+  const byName = (a: TallyStat, b: TallyStat): number => (a.name < b.name ? -1 : 1)
+  const out = [...stats.values()]
+  return opts.sort === 'recent'
+    ? out.sort((a, b) => (b.last - a.last) || (b.n - a.n) || byName(a, b))
+    : out.sort((a, b) => (b.n - a.n) || (b.last - a.last) || byName(a, b))
 }
 
 export function skillLoadsOf(
   rows: readonly OverviewRow[],
   opts: { scope: RangeWindow; day: string | null; sort?: SkillSort },
-): SkillLoadStat[] {
-  const admit = skillDayPredicate(opts)
-  const stats = new Map<string, SkillLoadStat>()
-  for (const row of rows) {
-    const days = row.activity?.days
-    if (days === undefined) continue
-    const rowLoaded = new Set<string>()
-    for (const key of Object.keys(days)) {
-      if (!admit(key)) continue
-      const skills = days[key].skills
-      if (skills === undefined) continue
-      for (const name of Object.keys(skills)) {
-        const tally = skills[name]
-        const prev = stats.get(name)
-        if (prev === undefined) stats.set(name, { name, loads: tally.n, sessions: 1, last: tally.last })
-        else {
-          prev.loads += tally.n
-          prev.last = Math.max(prev.last, tally.last)
-          if (!rowLoaded.has(name)) prev.sessions += 1
-        }
-        rowLoaded.add(name)
-      }
-    }
-  }
-  const byName = (a: SkillLoadStat, b: SkillLoadStat): number => (a.name < b.name ? -1 : 1)
-  const out = [...stats.values()]
-  switch (opts.sort ?? 'loads') {
-    case 'recent': return out.sort((a, b) => (b.last - a.last) || (b.loads - a.loads) || byName(a, b))
-    default: return out.sort((a, b) => (b.loads - a.loads) || (b.last - a.last) || byName(a, b))
-  }
+): TallyStat[] {
+  return tallyStatsOf(rows, { ...opts, field: 'skills', sort: opts.sort === 'recent' ? 'recent' : 'count' })
 }
 
-export function rowLoadedSkill(
+export function rowHasTally(
   row: OverviewRow,
+  field: TallyField,
   name: string,
   opts: { scope: RangeWindow; day: string | null },
 ): boolean {
-  const admit = skillDayPredicate(opts)
+  const admit = dayPredicate(opts)
   const days = row.activity?.days
   if (days === undefined) return false
   for (const key of Object.keys(days)) {
-    if (admit(key) && days[key].skills?.[name] !== undefined) return true
+    if (admit(key) && days[key][field]?.[name] !== undefined) return true
   }
   return false
 }

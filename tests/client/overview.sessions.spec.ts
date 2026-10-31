@@ -7,9 +7,10 @@ import {
   projectOf,
   refreshSessions,
   requestActivityBackfill,
-  rowLoadedSkill,
+  rowHasTally,
   sessionGroupsOf,
   skillLoadsOf,
+  tallyStatsOf,
   UNGROUPED_KEY,
   workspacesSnapshotOf,
   type OverviewRow,
@@ -19,13 +20,14 @@ import { dayKeyOf } from '../../src/shared/days'
 import type { ContextActivity } from '../../src/shared/types'
 import { rowOf, win } from './overview.fixtures'
 
+const NOW = Date.UTC(2026, 8, 20, 12)
+const day = (back: number): string => {
+  const key = dayKeyOf(NOW - back * 86_400_000)
+  assert.ok(key !== null)
+  return key
+}
+
 describe('skillLoadsOf', () => {
-  const NOW = Date.UTC(2026, 8, 20, 12)
-  const day = (back: number): string => {
-    const key = dayKeyOf(NOW - back * 86_400_000)
-    assert.ok(key !== null)
-    return key
-  }
   function rowWith(id: string, days: ContextActivity['days']): OverviewRow {
     return rowOf({ id, activity: { days } })
   }
@@ -43,16 +45,16 @@ describe('skillLoadsOf', () => {
       }),
     ]
     assert.deepEqual(skillLoadsOf(rows, { scope: win('7d', NOW), day: null }), [
-      { name: 'tdd', loads: 5, sessions: 2, last: NOW - 1000 },
-      { name: 'grill', loads: 1, sessions: 1, last: NOW - 500 },
+      { name: 'tdd', n: 5, sessions: 2, last: NOW - 1000 },
+      { name: 'grill', n: 1, sessions: 1, last: NOW - 500 },
     ], 'the 10-days-ago entries fall below the floor')
     assert.deepEqual(skillLoadsOf(rows, { scope: win('today', NOW), day: null }), [
-      { name: 'tdd', loads: 2, sessions: 1, last: NOW - 1000 },
+      { name: 'tdd', n: 2, sessions: 1, last: NOW - 1000 },
     ], "today's floor admits this very day only")
     assert.deepEqual(skillLoadsOf(rows, { scope: win('all', NOW), day: null }), [
-      { name: 'tdd', loads: 10, sessions: 2, last: NOW - 1000 },
-      { name: 'grill', loads: 1, sessions: 1, last: NOW - 500 },
-      { name: 'stale', loads: 1, sessions: 1, last: NOW - 900_000 },
+      { name: 'tdd', n: 10, sessions: 2, last: NOW - 1000 },
+      { name: 'grill', n: 1, sessions: 1, last: NOW - 500 },
+      { name: 'stale', n: 1, sessions: 1, last: NOW - 900_000 },
     ])
     const ranged = [
       rowWith('a', {
@@ -64,8 +66,8 @@ describe('skillLoadsOf', () => {
     const scope = dayRangeWindow({ from: day(4), to: day(1) })
     assert.ok(scope !== null)
     assert.deepEqual(skillLoadsOf(ranged, { scope, day: null }).map(s => s.name), ['edge'], 'the end day counts whole; the day past it does not')
-    assert.equal(rowLoadedSkill(ranged[0], 'late', { scope, day: null }), false)
-    assert.equal(rowLoadedSkill(ranged[0], 'edge', { scope, day: null }), true)
+    assert.equal(rowHasTally(ranged[0], 'skills', 'late', { scope, day: null }), false)
+    assert.equal(rowHasTally(ranged[0], 'skills', 'edge', { scope, day: null }), true)
   })
 
   test('the loader tally counts a row once however many of its days carry the name', () => {
@@ -77,7 +79,7 @@ describe('skillLoadsOf', () => {
       rowWith('b', { [day(0)]: { tokens: 1, requests: 1, skills: { tdd: { n: 1, last: NOW - 500 } } } }),
     ]
     assert.deepEqual(skillLoadsOf(rows, { scope: win('all', NOW), day: null }), [
-      { name: 'tdd', loads: 3, sessions: 2, last: NOW - 500 },
+      { name: 'tdd', n: 3, sessions: 2, last: NOW - 500 },
     ])
   })
 
@@ -117,18 +119,12 @@ describe('skillLoadsOf', () => {
       }),
     ]
     assert.deepEqual(skillLoadsOf(rows, { scope: win('all', NOW), day: day(1) }), [
-      { name: 'grill', loads: 4, sessions: 1, last: NOW - 80_000 },
+      { name: 'grill', n: 4, sessions: 1, last: NOW - 80_000 },
     ])
   })
 })
 
-describe('rowLoadedSkill', () => {
-  const NOW = Date.UTC(2026, 8, 20, 12)
-  const day = (back: number): string => {
-    const key = dayKeyOf(NOW - back * 86_400_000)
-    assert.ok(key !== null)
-    return key
-  }
+describe('rowHasTally', () => {
 
   test('the scope’s day predicate decides — the range floor, the pinned day, and the skill-less days', () => {
     const row = rowOf({
@@ -141,13 +137,80 @@ describe('rowLoadedSkill', () => {
         },
       },
     })
-    assert.equal(rowLoadedSkill(row, 'tdd', { scope: win('today', NOW), day: null }), true, "loaded today — inside today's floor")
-    assert.equal(rowLoadedSkill(row, 'grill', { scope: win('today', NOW), day: null }), false, 'the 10-days-ago load falls below the floor')
-    assert.equal(rowLoadedSkill(row, 'grill', { scope: win('all', NOW), day: null }), true)
-    assert.equal(rowLoadedSkill(row, 'tdd', { scope: win('all', NOW), day: day(1) }), false, 'the pinned day admits only itself')
-    assert.equal(rowLoadedSkill(row, 'grill', { scope: win('all', NOW), day: day(10) }), true)
-    assert.equal(rowLoadedSkill(row, 'never', { scope: win('all', NOW), day: null }), false, 'a name no day carries')
-    assert.equal(rowLoadedSkill(rowOf({ id: 'bare' }), 'tdd', { scope: win('all', NOW), day: null }), false, 'no ledger at all')
+    assert.equal(rowHasTally(row, 'skills', 'tdd', { scope: win('today', NOW), day: null }), true, "loaded today — inside today's floor")
+    assert.equal(rowHasTally(row, 'skills', 'grill', { scope: win('today', NOW), day: null }), false, 'the 10-days-ago load falls below the floor')
+    assert.equal(rowHasTally(row, 'skills', 'grill', { scope: win('all', NOW), day: null }), true)
+    assert.equal(rowHasTally(row, 'skills', 'tdd', { scope: win('all', NOW), day: day(1) }), false, 'the pinned day admits only itself')
+    assert.equal(rowHasTally(row, 'skills', 'grill', { scope: win('all', NOW), day: day(10) }), true)
+    assert.equal(rowHasTally(row, 'skills', 'never', { scope: win('all', NOW), day: null }), false, 'a name no day carries')
+    assert.equal(rowHasTally(rowOf({ id: 'bare' }), 'skills', 'tdd', { scope: win('all', NOW), day: null }), false, 'no ledger at all')
+  })
+})
+
+describe('tallyStatsOf', () => {
+
+  test('the tool and command tables fold per field with the same scope rules; each row counts once per name', () => {
+    const rows = [
+      rowOf({
+        id: 'a',
+        activity: {
+          days: {
+            [day(0)]: {
+              tokens: 1,
+              requests: 1,
+              tools: { read: { n: 2, last: NOW - 1000 }, bash: { n: 1, last: NOW - 500 } },
+              cmds: { git: { n: 1, last: NOW - 900 } },
+            },
+            [day(1)]: {
+              tokens: 1,
+              requests: 1,
+              tools: { read: { n: 3, last: NOW - 2000 } },
+              cmds: { pnpm: { n: 2, last: NOW - 800 } },
+            },
+            [day(10)]: { tokens: 1, requests: 1, tools: { grep: { n: 4, last: NOW - 50 } } },
+          },
+        },
+      }),
+      rowOf({
+        id: 'b',
+        activity: {
+          days: {
+            [day(1)]: {
+              tokens: 1,
+              requests: 1,
+              tools: { read: { n: 1, last: NOW - 100 } },
+              cmds: { git: { n: 2, last: NOW - 700 } },
+            },
+          },
+        },
+      }),
+    ]
+    assert.deepEqual(tallyStatsOf(rows, { scope: win('7d', NOW), day: null, field: 'tools' }), [
+      { name: 'read', n: 6, sessions: 2, last: NOW - 100 },
+      { name: 'bash', n: 1, sessions: 1, last: NOW - 500 },
+    ], 'the 10-days-ago grep falls below the floor')
+    assert.deepEqual(
+      tallyStatsOf(rows, { scope: win('all', NOW), day: null, field: 'tools' }).map(s => s.name),
+      ['read', 'grep', 'bash'],
+      'count desc, then freshness',
+    )
+    assert.deepEqual(tallyStatsOf(rows, { scope: win('all', NOW), day: null, field: 'cmds' }), [
+      { name: 'git', n: 3, sessions: 2, last: NOW - 700 },
+      { name: 'pnpm', n: 2, sessions: 1, last: NOW - 800 },
+    ])
+    assert.deepEqual(tallyStatsOf(rows, { scope: win('all', NOW), day: day(0), field: 'cmds' }), [
+      { name: 'git', n: 1, sessions: 1, last: NOW - 900 },
+    ], 'the pinned day admits only itself')
+    assert.deepEqual(
+      tallyStatsOf(rows, { scope: win('all', NOW), day: null, field: 'cmds', sort: 'recent' }).map(s => s.name),
+      ['git', 'pnpm'],
+    )
+    assert.deepEqual(tallyStatsOf([rowOf({ id: 'bare' })], { scope: win('all', NOW), day: null, field: 'tools' }), [])
+
+    assert.equal(rowHasTally(rows[1], 'tools', 'read', { scope: win('all', NOW), day: null }), true)
+    assert.equal(rowHasTally(rows[1], 'tools', 'grep', { scope: win('7d', NOW), day: null }), false)
+    assert.equal(rowHasTally(rows[0], 'cmds', 'git', { scope: win('7d', NOW), day: day(1) }), false)
+    assert.equal(rowHasTally(rowOf({ id: 'bare' }), 'cmds', 'git', { scope: win('all', NOW), day: null }), false)
   })
 })
 

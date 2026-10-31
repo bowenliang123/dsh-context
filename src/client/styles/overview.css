@@ -62,14 +62,18 @@
   .lc-ov-stats { grid-template-columns: minmax(0, 1fr); }
 }
 
-.lc-ov-body { display: grid; grid-template-columns: minmax(0, 3fr) minmax(0, 7fr); gap: 10px; align-items: start; }
-.lc-ov-left { min-width: 0; display: flex; flex-direction: column; gap: 10px; }
-.lc-ov-right { min-width: 0; }
-@container lc-ov (max-width: 932px) {
-  .lc-ov-body { display: block; }
-  .lc-ov-left { margin-bottom: 12px; }
+.lc-ov-body { display: flex; flex-direction: column; gap: 10px; min-width: 0; }
+.lc-ov-tiles { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; align-items: stretch; }
+.lc-ov-tile { display: flex; flex-direction: column; height: 280px; min-width: 0; min-height: 0; margin-bottom: 0; box-sizing: border-box; overflow: hidden; }
+.lc-ov-tile-body { flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; overflow-y: auto; overscroll-behavior: contain; }
+.lc-ov-tile-body > .lc-empty { margin: auto 0; }
+.lc-ov-list { min-width: 0; }
+@container lc-ov (max-width: 1080px) {
+  .lc-ov-tiles { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
-.lc-ov-left > .lc-card { margin-bottom: 0; min-width: 0; box-sizing: border-box; }
+@container lc-ov (max-width: 560px) {
+  .lc-ov-tiles { grid-template-columns: minmax(0, 1fr); }
+}
 .lc-ov-heat-card { display: flex; flex-direction: column; }
 
 .lc-heat-wrap { display: flex; flex-direction: column; flex: 1; }
@@ -94,19 +98,19 @@ button.lc-heat-cell:hover { box-shadow: 0 0 0 1.5px color-mix(in srgb, var(--col
 .lc-heat-legend .lc-heat-cell { width: 10px; height: 10px; }
 .lc-heat-key { font-size: 9px; color: var(--dsw-alias-label-secondary); margin: 0 2px; }
 
-.lc-ov-skills { display: flex; flex-direction: column; gap: 2px; }
-.lc-ov-skills-sub { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin: -4px 0 8px; }
-.lc-ov-skills-sub-n { margin-left: 0; }
-.lc-ov-skill { position: relative; display: flex; align-items: baseline; gap: 7px; min-width: 0; width: 100%; border: 0; border-radius: 6px; padding: 2px 6px 4px; background: transparent; font: inherit; font-size: 12px; line-height: 1.7; color: inherit; text-align: left; cursor: pointer; transition: background-color var(--ds-transition-duration, 0.2s) var(--ds-ease-in-out, ease-in-out); }
-.lc-ov-skill:hover { background: var(--dsw-alias-interactive-bg-hover); }
+.lc-ov-tallies { display: flex; flex-direction: column; gap: 2px; }
+.lc-ov-tally-sub { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin: -4px 0 8px; }
+.lc-ov-tally-note { margin-left: 0; }
+.lc-ov-tally { position: relative; display: flex; align-items: baseline; gap: 7px; min-width: 0; width: 100%; border: 0; border-radius: 6px; padding: 2px 6px 4px; background: transparent; font: inherit; font-size: 12px; line-height: 1.7; color: inherit; text-align: left; cursor: pointer; transition: background-color var(--ds-transition-duration, 0.2s) var(--ds-ease-in-out, ease-in-out); }
+.lc-ov-tally:hover { background: var(--dsw-alias-interactive-bg-hover); }
 .lc-ov-skill-unit { background: var(--lc-subpanel-bg); border-radius: 8px; box-shadow: 0 0 0 1.5px color-mix(in srgb, var(--color-blue-500) 45%, transparent); }
 .lc-ov-skill-unit .lc-ov-skill-detail { margin-top: 0; padding: 4px 6px 8px; background: transparent; }
-.lc-ov-skill-dot { flex: none; width: 7px; height: 7px; border-radius: 50%; align-self: center; }
-.lc-ov-skill-name { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-family: var(--ds-font-family-code, ui-monospace, SFMono-Regular, Menlo, monospace); font-size: 11px; color: var(--dsw-alias-label-primary); }
-.lc-ov-skill-count { flex: none; font-variant-numeric: tabular-nums; color: var(--dsw-alias-label-primary); }
-.lc-ov-skill-last { flex: none; min-width: 56px; text-align: right; font-size: 11px; color: var(--dsw-alias-label-secondary); white-space: nowrap; }
-.lc-ov-skill-bar { position: absolute; left: 6px; bottom: 1px; height: 2px; border-radius: 1px; opacity: 0.45; pointer-events: none; }
-.lc-ov-skill-more { padding-top: 4px; font-size: 11px; color: var(--dsw-alias-label-secondary); }
+.lc-ov-tally-dot { flex: none; width: 7px; height: 7px; border-radius: 50%; align-self: center; }
+.lc-ov-tally-name { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-family: var(--ds-font-family-code, ui-monospace, SFMono-Regular, Menlo, monospace); font-size: 11px; color: var(--dsw-alias-label-primary); }
+.lc-ov-tally-count { flex: none; font-variant-numeric: tabular-nums; color: var(--dsw-alias-label-primary); }
+.lc-ov-tally-last { flex: none; min-width: 56px; text-align: right; font-size: 11px; color: var(--dsw-alias-label-secondary); white-space: nowrap; }
+.lc-ov-tally-bar { position: absolute; left: 6px; bottom: 1px; height: 2px; border-radius: 1px; opacity: 0.45; pointer-events: none; }
+.lc-ov-tally-more { padding-top: 4px; font-size: 11px; color: var(--dsw-alias-label-secondary); }
 .lc-skilltip { position: fixed; z-index: 300; max-width: min(300px, 60vw); padding: 10px 12px; border-radius: 10px; white-space: normal; line-height: 1.5; }
 .lc-skilld-head { display: flex; align-items: center; gap: 7px; }
 .lc-skilld-name { flex: 1 1 auto; min-width: 0; overflow-wrap: anywhere; font-family: var(--ds-font-family-code, ui-monospace, SFMono-Regular, Menlo, monospace); font-size: 12px; font-weight: 600; color: var(--dsw-alias-label-primary); }

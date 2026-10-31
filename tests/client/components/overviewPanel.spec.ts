@@ -55,9 +55,20 @@ function sessionsSnapshot(): { ids: string[]; byId: Record<string, Record<string
                 toolCalls: 4,
                 toolsMs: 10_000,
                 wallMs: 45_000,
+                tools: { read: { n: 3, last: NOW - 1000 }, bash: { n: 1, last: NOW - 2000 } },
+                cmds: { git: { n: 2, last: NOW - 1500 } },
                 cost: { deepseek: { 'deepseek-v4-flash': { peak: { uncached: 1000, cacheRead: 500, cacheWrite: 0, output: 250 } } } },
               },
-              [YESTERDAY]: { tokens: 50, requests: 1, turns: 1, toolCalls: 3, toolsMs: 10_000, wallMs: 45_000 },
+              [YESTERDAY]: {
+                tokens: 50,
+                requests: 1,
+                turns: 1,
+                toolCalls: 3,
+                toolsMs: 10_000,
+                wallMs: 45_000,
+                tools: { read: { n: 2, last: NOW - 3000 }, grep: { n: 1, last: NOW - 4000 } },
+                cmds: { pnpm: { n: 1, last: NOW - 5000 } },
+              },
             },
           },
         },
@@ -68,7 +79,20 @@ function sessionsSnapshot(): { ids: string[]; byId: Record<string, Record<string
         updatedAt: NOW - 10 * 86_400_000,
         projectionValues: {
           contextTimeline: timeline({ current: { system: 10, tools: 0, user: 0, inject: 0, skill: 0, assistant: 0, tool: 0, total: 10 }, cost: undefined }),
-          contextActivity: { days: { [YESTERDAY]: { tokens: 25, requests: 1, turns: 1, toolCalls: 3, toolsMs: 5_000, wallMs: 60_000 } } },
+          contextActivity: {
+            days: {
+              [YESTERDAY]: {
+                tokens: 25,
+                requests: 1,
+                turns: 1,
+                toolCalls: 3,
+                toolsMs: 5_000,
+                wallMs: 60_000,
+                tools: { grep: { n: 3, last: NOW - 6000 } },
+                cmds: { node: { n: 1, last: NOW - 7000 } },
+              },
+            },
+          },
         },
       },
       c: {
@@ -197,11 +221,67 @@ describe('OverviewPanel', () => {
     assert.ok(text(statsCards[1]).includes('14 runs'), 'the card’s tool row carries the same lifetime tally the band’s tool cells print')
     assert.ok(text(statsCards[1]).includes('LLM Gen'))
     assert.ok(queryAll(m.container, 'button.lc-heat-cell').length >= 2)
-    const cards = queryAll(m.container, '.lc-ov-grid > .lc-ov-session')
+    const tiles = queryAll(m.container, '.lc-ov-tiles > .lc-card')
+    assert.equal(tiles.length, 4, 'the heat, skills, tools, and commands cards share one row')
+    assert.ok(tiles[0].classList.contains('lc-ov-heat-card'))
+    assert.equal(queryAll(tiles[1], 'button.lc-ov-tally').length, 0, 'no skill loads in this fixture')
+    assert.equal(text(query(tiles[2], '.lc-ov-tally-sub')), '3 tools · 10 calls')
+    assert.deepEqual(queryAll(tiles[2], '.lc-ov-tally-name').map(el => text(el)), ['read', 'grep', 'bash'])
+    assert.equal(text(query(tiles[3], '.lc-ov-tally-sub')), '3 programs · 4 runs')
+    assert.deepEqual(queryAll(tiles[3], '.lc-ov-tally-name').map(el => text(el)), ['git', 'pnpm', 'node'])
+    const cards = queryAll(m.container, '.lc-ov-list .lc-ov-grid > .lc-ov-session')
     assert.equal(cards.length, 2)
     assert.ok(text(cards[0]).includes('alpha session'))
     assert.ok(text(cards[0]).includes('workspace-one'), 'the breadcrumb group joined')
     assert.ok(text(cards[0]).includes('alpha'), 'the project basename joined')
+    await m.unmount()
+  })
+
+  test('a tool or command row filters the session list and its chip releases the filter', async () => {
+    const { m } = await openPanel(makeCtx())
+    const tiles = queryAll(m.container, '.lc-ov-tiles > .lc-card')
+    const readRow = queryAll<HTMLButtonElement>(tiles[2], 'button.lc-ov-tally').find(row => text(row).includes('read'))
+    assert.ok(readRow !== undefined)
+    await click(readRow)
+    let cards = queryAll(m.container, '.lc-ov-list .lc-ov-grid > .lc-ov-session')
+    assert.equal(cards.length, 1, 'only the session that ran read in scope stays')
+    assert.ok(text(cards[0]).includes('alpha session'))
+    const chip = query<HTMLButtonElement>(m.container, '.lc-ov-day-chip[title="Clear the tool filter"]')
+    assert.ok(text(chip).includes('Tool · read'))
+    await click(readRow)
+    assert.equal(queryAll(m.container, '.lc-ov-list .lc-ov-grid > .lc-ov-session').length, 2, 'the pinned row releases its own filter')
+    await click(readRow)
+    assert.equal(queryAll(m.container, '.lc-ov-list .lc-ov-grid > .lc-ov-session').length, 1)
+    await click(query<HTMLButtonElement>(m.container, '.lc-ov-day-chip[title="Clear the tool filter"]'))
+    assert.equal(queryAll(m.container, '.lc-ov-list .lc-ov-grid > .lc-ov-session').length, 2)
+
+    const gitRow = queryAll<HTMLButtonElement>(tiles[3], 'button.lc-ov-tally').find(row => text(row).includes('git'))
+    assert.ok(gitRow !== undefined)
+    await click(gitRow)
+    cards = queryAll(m.container, '.lc-ov-list .lc-ov-grid > .lc-ov-session')
+    assert.equal(cards.length, 1)
+    assert.ok(text(cards[0]).includes('alpha session'))
+    assert.ok(text(query(m.container, '.lc-ov-day-chip[title="Clear the command filter"]')).includes('Command · git'))
+    await click(queryAll<HTMLButtonElement>(tiles[3], 'button.lc-ov-tally').find(row => text(row).includes('git'))!)
+    assert.equal(queryAll(m.container, '.lc-ov-list .lc-ov-grid > .lc-ov-session').length, 2, 'the pinned row releases its own filter')
+    await m.unmount()
+  })
+
+  test('an empty scope keeps the tally cards’ summary and body, never a lone placeholder', async () => {
+    const { m } = await openPanel(makeCtx(), {
+      useSessions: useHookOf({
+        ids: ['x'],
+        byId: { x: { displayTitle: 'quiet session', updatedAt: NOW - 40 * 86_400_000 } },
+        phase: 'ready',
+      }),
+    })
+    const tiles = queryAll(m.container, '.lc-ov-tiles > .lc-card')
+    assert.equal(tiles.length, 4)
+    assert.equal(text(query(tiles[1], '.lc-ov-tally-sub')), '0 skills · 0 loads')
+    assert.equal(text(query(tiles[2], '.lc-ov-tally-sub')), '0 tools · 0 calls')
+    assert.equal(text(query(tiles[3], '.lc-ov-tally-sub')), '0 programs · 0 runs')
+    assert.ok(text(tiles[2]).includes('No tool calls in this range'))
+    assert.ok(text(tiles[3]).includes('No commands in this range'))
     await m.unmount()
   })
 
@@ -431,7 +511,7 @@ describe('OverviewPanel', () => {
     const { m } = await openPanel(ctx, { useSessions: useHookOf(snap) })
     await flush()
     assert.deepEqual(skillPosts, [{ cwd: '/repo/alpha', sessionId: 'a' }], 'the catalog read anchors on the current session')
-    const skillRow = query<HTMLButtonElement>(m.container, 'button.lc-ov-skill')
+    const skillRow = query<HTMLButtonElement>(m.container, 'button.lc-ov-tally')
     assert.ok(text(skillRow).includes('tdd'))
     await hover(skillRow)
     assert.ok(text(document.querySelector('#lc-skilltip-bubble') as HTMLElement).includes('Test-driven.'), 'the catalog’s description joins the hover card')
@@ -446,9 +526,9 @@ describe('OverviewPanel', () => {
     await click(chip)
     assert.equal(queryAll(m.container, '.lc-ov-grid > .lc-ov-session').length, 2)
     assert.equal(queryAll(m.container, '.lc-ov-skill-detail').length, 0, 'the detail block leaves with the pin')
-    await click(query<HTMLButtonElement>(m.container, 'button.lc-ov-skill'))
+    await click(query<HTMLButtonElement>(m.container, 'button.lc-ov-tally'))
     assert.equal(queryAll(m.container, '.lc-ov-grid > .lc-ov-session').length, 1)
-    await click(query<HTMLButtonElement>(m.container, 'button.lc-ov-skill'))
+    await click(query<HTMLButtonElement>(m.container, 'button.lc-ov-tally'))
     assert.equal(queryAll(m.container, '.lc-ov-grid > .lc-ov-session').length, 2)
     await m.unmount()
   })
@@ -679,8 +759,8 @@ describe('OverviewPanel — progressive body', () => {
     vi.stubGlobal('IntersectionObserver', IdleObserver)
     const { m } = await openPanel(makeCtx())
     assert.equal(queryAll(m.container, '.lc-ov-grid').length, 0, 'the body has not mounted')
-    assert.equal(queryAll(m.container, '.lc-ov-left > .lc-deferred-skeleton').length, 2, 'the left column reserves its two cards')
-    assert.equal(queryAll(m.container, '.lc-ov-right > .lc-deferred-skeleton').length, 1, 'the right column reserves its grid card')
+    assert.equal(queryAll(m.container, '.lc-ov-tiles > .lc-deferred-skeleton').length, 4, 'the tile row reserves its four cards')
+    assert.equal(queryAll(m.container, '.lc-ov-body > .lc-deferred-skeleton').length, 1, 'the session list reserves its block')
     assert.ok(queryAll(m.container, '.lc-ov-first .lc-stat-value').length > 0, 'the KPI band is already live')
     await m.unmount()
   })
