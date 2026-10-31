@@ -4,7 +4,7 @@ import type { TimelineEvent } from '../../src/host/fold'
 import { buildTimelineDetail } from '../../src/host/fold'
 import { resolveBounds } from '../../src/host/config'
 import { codeDispatch, toolCall, toolResult } from './helpers/events'
-import { assertStatesPlainJson, driveTimeline, timelineDef } from './helpers/projection'
+import { assertStatesPlainJson, driveTimeline, fullDef, timelineDef } from './helpers/projection'
 
 function readMeta(path: string, offset: number, lines: number): unknown {
   return { path, offset, lines: Array.from({ length: lines }, (_, i) => ({ number: offset + i })), totalLines: 99 }
@@ -50,7 +50,7 @@ describe('the file-op log — call/result pairing', () => {
   })
 
   test('a non-file call saves no raw arguments; str_replace_editor keeps and kinds them', () => {
-    const def = timelineDef()
+    const def = fullDef()
     let state = def.apply(def.init(), toolCall(1, { callId: 'b1', name: 'bash', arguments: JSON.stringify({ command: 'ls' }) }))
     state = def.apply(state, toolCall(2, {
       callId: 's1', name: 'str_replace_editor', arguments: JSON.stringify({ command: 'view', path: 'a.ts', view_range: [1, 3] }),

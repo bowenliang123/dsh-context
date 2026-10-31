@@ -43,8 +43,8 @@ describe('createContextTimelineDefinition', () => {
   test('carries the pinned projection contract; the wire and state schemas accept a real fold', () => {
     const def = createContextTimelineDefinition({}, () => false)
     assert.equal(def.key, 'contextTimeline')
-    assert.equal(def.stateVersion, 36, 'pinned: the idle carve and per-step heartbeats cannot backfill from later events')
-    const drive = driveTimeline(realLog())
+    assert.equal(def.stateVersion, 37, 'pinned: the head-only retention shape cannot backfill from later events (issue #217)')
+    const drive = driveTimeline(realLog(), {}, true)
     assert.equal(def.wire.viewSchema.safeParse(drive.view).success, true, 'a real folded view validates')
     const view = drive.view
     assert.equal(view.ok, true)
@@ -52,9 +52,10 @@ describe('createContextTimelineDefinition', () => {
     assert.equal(view.provider, 'deepseek')
     assert.equal(view.contextWindow, 128000)
     assert.equal(view.humanInputs, 1, 'the canonical log\'s one user message')
-    assert.ok(view.nodes.length > 0)
-    assert.ok(view.requests.length > 0)
-    assert.ok(view.events.length > 0)
+    assert.equal(view.nodes.length, 4, 'the fallback wire serves the slim surface index')
+    assert.ok(view.nodes.every(node => !('text' in node)), 'the fallback surface carries no detail text')
+    assert.equal(view.requests.length, 0, 'slim request records stay off the fallback wire')
+    assert.ok(view.events.length > 0, 'the events window rides the fallback wire')
     for (const state of drive.states) {
       def.stateSchema.parse(structuredClone(state))
     }

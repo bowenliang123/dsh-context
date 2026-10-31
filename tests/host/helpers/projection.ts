@@ -1,12 +1,16 @@
 import assert from 'node:assert/strict'
 import type { Config } from '../../../src/host/config'
-import type { TimelineEvent, TimelineState } from '../../../src/host/fold'
+import { resolveBounds } from '../../../src/host/config'
+import { applyTimeline, type TimelineEvent, type TimelineState } from '../../../src/host/fold'
+import type { RequestRecord } from '../../../src/shared/types'
+import { buildTimelineView } from '../../../src/host/foldWire'
 import type { ContextTimeline } from '../../../src/shared/types'
+import { createTimelineState } from '../../../src/host/foldState'
 import { createContextTimelineDefinition } from '../../../src/host/timeline'
 
 export interface TimelineDefLike {
   key: string
-  stateSchema: { parse(value: unknown): unknown }
+  stateSchema: { parse(value: unknown): unknown; safeParse(value: unknown): { success: boolean; error?: { issues: unknown[] } } }
   init(): TimelineState
   apply(state: TimelineState, event: TimelineEvent): TimelineState
   wire: {
@@ -17,6 +21,17 @@ export interface TimelineDefLike {
 
 export function timelineDef(config?: Config, slim = false): TimelineDefLike {
   return createContextTimelineDefinition(config ?? {}, () => slim) as unknown as TimelineDefLike
+}
+
+export function fullDef(config?: Config, slim = false): TimelineDefLike {
+  const real = timelineDef(config, slim)
+  const bounds = resolveBounds(config)
+  return {
+    ...real,
+    init: () => createTimelineState(),
+    apply: (state: TimelineState, event: TimelineEvent) => applyTimeline(state, event, bounds),
+    wire: { ...real.wire, view: (state: TimelineState) => buildTimelineView(state, bounds) },
+  }
 }
 
 export function snapshotJson(value: unknown, ancestors: Set<object> = new Set()): unknown {
@@ -76,8 +91,8 @@ export interface TimelineDrive {
   view: ContextTimeline
 }
 
-export function driveTimeline(events: TimelineEvent[], config?: Config): TimelineDrive {
-  const def = timelineDef(config)
+export function driveTimeline(events: TimelineEvent[], config?: Config, headOnly = false): TimelineDrive {
+  const def = headOnly ? timelineDef(config) : fullDef(config)
   let state = def.init()
   assertNoAbsentMembers(state)
   const states = [state]
@@ -95,4 +110,8 @@ export function assertStatesPlainJson(drive: TimelineDrive): void {
 
 export function assertStable(state: TimelineState, event: TimelineEvent, def = timelineDef()): void {
   assert.equal(def.apply(state, event), state, 'uninteresting events must return the same reference')
+}
+
+export function requestsOf(state: TimelineState): RequestRecord[] {
+  return state.requests.filter((r): r is RequestRecord => typeof (r as { system?: unknown }).system === 'number')
 }

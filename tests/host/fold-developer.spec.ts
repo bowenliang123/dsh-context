@@ -2,7 +2,7 @@ import assert from 'node:assert/strict'
 import { describe, test } from 'vitest'
 import type { TimelineEvent } from '../../src/host/fold'
 import { assistantMessage, at, compaction, userMessage } from './helpers/events'
-import { assertStatesPlainJson, driveTimeline, timelineDef } from './helpers/projection'
+import { assertStatesPlainJson, driveTimeline, requestsOf, timelineDef } from './helpers/projection'
 
 const changes = [
   { type: 'tool-addition', toolName: 'read_file' },
@@ -40,7 +40,7 @@ describe('developer/message', () => {
     assert.equal(node.tokens, 35)
     assert.equal(node.name, 'tool-registry')
     assert.equal(result.state.humanInputs, 1)
-    assert.equal(result.state.requests[0].inject, 35)
+    assert.equal(requestsOf(result.state)[0].inject, 35)
     assert.equal(result.state.sums.inject, 35)
     assert.equal(result.view.nodes.some(n => n.seq === 2 && n.tokens === 35), true)
     assert.equal(result.state.events.find(e => e.seq === 2)?.kind, 'inject')
@@ -64,8 +64,8 @@ describe('developer/message', () => {
     const archived = result.state.archived.find(n => n.seq === 2)
     assert.equal(archived?.tokens, 35)
     assert.equal(archived?.gone, 5)
-    assert.equal(result.state.requests[0].inject, 35)
-    assert.equal(result.state.requests[1].inject, 10)
+    assert.equal(requestsOf(result.state)[0].inject, 35)
+    assert.equal(requestsOf(result.state)[1].inject, 10)
     assertStatesPlainJson(result)
   })
 

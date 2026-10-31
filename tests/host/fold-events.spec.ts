@@ -16,7 +16,7 @@ import {
   userMessage,
 } from './helpers/events'
 import { estimateToolsTotal } from '../../src/host/pricing'
-import { assertPlainJson, assertStable, driveTimeline, timelineDef } from './helpers/projection'
+import { assertPlainJson, assertStable, driveTimeline, requestsOf, timelineDef } from './helpers/projection'
 
 const text = (t: string) => [{ type: 'text', text: t }]
 
@@ -172,7 +172,7 @@ describe('tool/result skill tagging', () => {
     ])
     const node = state.surface.at(-2)
     assert.deepEqual([node?.tool, node?.skill, node?.cat], ['skill', 'pdf', 'skill'])
-    assert.deepEqual([state.sums.tool, state.sums.skill, state.requests.at(-1)?.skill], [0, node?.tokens, node?.tokens])
+    assert.deepEqual([state.sums.tool, state.sums.skill, requestsOf(state).at(-1)?.skill], [0, node?.tokens, node?.tokens])
     assert.ok((state.requests.at(-1)?.total ?? 0) >= (node?.tokens ?? 0))
     assert.deepEqual(state.events, [
       { seq: 2, time: state.events[0].time, kind: 'inject', form: 'instructions', sub: 'skill', name: 'pdf', tokens: node?.tokens },
@@ -245,14 +245,14 @@ describe('assistant/message request records', () => {
     assert.ok(!('prompt' in absent.requests[0]))
     assert.equal(absent.cost, undefined)
     const outputOnly = driveTimeline([assistantMessage(1, { usage: { outputTokens: 5 } })]).state
-    assert.deepEqual([outputOnly.requests[0].prompt, outputOnly.requests[0].output, outputOnly.cost], [0, 5, undefined])
+    assert.deepEqual([requestsOf(outputOnly)[0].prompt, requestsOf(outputOnly)[0].output, outputOnly.cost], [0, 5, undefined])
     assert.ok(!('cacheRead' in outputOnly.requests[0]))
-    const inputOnly = driveTimeline([assistantMessage(1, { usage: { inputTokens: 100 } })]).state.requests[0]
+    const inputOnly = requestsOf(driveTimeline([assistantMessage(1, { usage: { inputTokens: 100 } })]).state)[0]
     assert.equal(inputOnly.prompt, 100)
     assert.ok(!('cacheRead' in inputOnly) && !('output' in inputOnly))
-    const full = driveTimeline([
+    const full = requestsOf(driveTimeline([
       assistantMessage(1, { usage: { inputTokens: 10, cacheReadTokens: 20, cacheWriteTokens: 30, outputTokens: 40 } }),
-    ]).state.requests[0]
+    ]).state)[0]
     assert.deepEqual([full.prompt, full.cacheRead, full.output], [60, 20, 40])
   })
 
@@ -283,15 +283,15 @@ describe('the answers tally (assistant messages carrying text)', () => {
 
 describe('hostile provider usage (issue #44: stats must survive nonconforming figures)', () => {
   test('nonconforming buckets sanitize: fractional rounds, a negative clamps, string figures read, a readable minority bills', () => {
-    const fractional = driveTimeline([
+    const fractional = requestsOf(driveTimeline([
       assistantMessage(1, { usage: { inputTokens: 10.4, cacheReadTokens: 20.6, outputTokens: 3.5 } }),
-    ]).state.requests[0]
+    ]).state)[0]
     assert.equal(fractional.prompt, 31)
     assert.equal(fractional.cacheRead, 21)
     assert.equal(fractional.output, 4)
-    const negative = driveTimeline([
+    const negative = requestsOf(driveTimeline([
       assistantMessage(1, { usage: { inputTokens: -80, cacheReadTokens: 150, outputTokens: 22 } }),
-    ]).state.requests[0]
+    ]).state)[0]
     assert.equal(negative.prompt, 150, 'the cache bucket still bills')
     assert.equal(negative.cacheRead, 150)
     assert.equal(negative.output, 22)
@@ -301,7 +301,7 @@ describe('hostile provider usage (issue #44: stats must survive nonconforming fi
     assert.equal(strings.prompt, 107)
     assert.ok(!('cacheRead' in strings))
     assert.ok(!('output' in strings))
-    const minority = driveTimeline([assistantMessage(1, { usage: { inputTokens: 'n/a', outputTokens: 9 } })]).state.requests[0]
+    const minority = requestsOf(driveTimeline([assistantMessage(1, { usage: { inputTokens: 'n/a', outputTokens: 9 } })]).state)[0]
     assert.equal(minority.prompt, 0)
     assert.equal(minority.output, 9)
     const billed = driveTimeline([

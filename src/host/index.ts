@@ -15,6 +15,7 @@ import { watchPromptInjection } from './promptInjection'
 import { watchStepIdentity } from './stepIdentity'
 import { watchSkillCatalog } from './skills'
 import { watchRecomChannel } from './recoms'
+import { watchTimelineRowSweep } from './sweep'
 import { createContextTimelineDefinition } from './timeline'
 import { detectHarnessVersion } from './version'
 import { meetsBaseline } from '../shared/version'
@@ -45,6 +46,7 @@ export function apply(ctx: Context, config: Config): void {
   ctx.sessionProjections.register(createContextTimelineDefinition(config, () => gate.live))
   ctx.sessionProjections.register(createContextHeadersDefinition(name => attribution.ownerOf(name)))
   ctx.sessionProjections.register(createContextActivityDefinition())
+  watchTimelineRowSweep(ctx)
   watchActivityBackfill(ctx, coldReads)
   watchPromptInjection(ctx, config)
 }

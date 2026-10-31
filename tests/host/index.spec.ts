@@ -187,6 +187,16 @@ describe('dsh-context host plugin', () => {
     await ctx.plugin(SessionStore)
     await ctx.plugin(SessionProjectionRegistry)
     await ctx.plugin(plugin, noConfig)
+    ctx.provide('sessionQuery', {
+      observeSession: (id: string) => {
+        const target = ctx.sessions.get(id as never)
+        if (target === undefined) return Promise.resolve(null)
+        return Promise.resolve({
+          events: target.snapshotEvents(0 as never, target.seq),
+          [Symbol.dispose]: () => {},
+        })
+      },
+    })
     const session = ctx.sessions.create()
     appendRealEnvelopes(session)
     const call = session.append('tool/call', { turn: 1, step: 1, callId: 'c1', name: 'read', arguments: JSON.stringify({ file_path: 'src/a.ts' }) } as never)

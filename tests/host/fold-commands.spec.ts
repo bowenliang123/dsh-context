@@ -5,7 +5,7 @@ import { buildTimelineDetail } from '../../src/host/fold'
 import { resolveBounds } from '../../src/host/config'
 import type { CommandStateRecord } from '../../src/host/foldState'
 import { codeDispatch, codeDispatchStart, jobRegistered, jobSettled, toolCall, toolResult } from './helpers/events'
-import { assertStable, driveTimeline, timelineDef, assertStatesPlainJson } from './helpers/projection'
+import { assertStable, driveTimeline, fullDef, timelineDef, assertStatesPlainJson } from './helpers/projection'
 
 function bashCall(seq: number, callId: string, args: Record<string, unknown>, time?: number): TimelineEvent {
   return toolCall(seq, { callId, name: 'bash', arguments: JSON.stringify(args), turn: 1, step: 1, time })
@@ -158,7 +158,7 @@ describe('the command log — job events', () => {
   })
 
   test('a killed job reports its signal; job events for unknown calls return the same state', () => {
-    const def = timelineDef()
+    const def = fullDef()
     let state = def.init()
     assertStable(state, jobRegistered(1, { callId: 'ghost', startedAt: 1 }), def)
     assertStable(state, jobSettled(2, { callId: 'ghost', finishedAt: 2, status: 'completed' }), def)
@@ -171,7 +171,7 @@ describe('the command log — job events', () => {
   })
 
   test('a malformed job envelope drops whole', () => {
-    const def = timelineDef()
+    const def = fullDef()
     let state = def.init()
     state = def.apply(state, bashCall(1, 'c1', { command: 'x' }))
     const before = state
@@ -360,7 +360,7 @@ describe('the command log — Code Mode (PTC) sub-dispatches', () => {
   })
 
   test('job events skip buffers that do not hold the call (no buffer, a stale buffer, a multi-root scan)', () => {
-    const def = timelineDef()
+    const def = fullDef()
     const noBuffer = def.apply(def.init(), toolCall(1, { callId: 'rc1', name: 'run_code', arguments: JSON.stringify({ code: 'x' }) }))
     assert.equal(def.apply(noBuffer, jobSettled(2, { callId: 'rc1:ptc:9', finishedAt: 5, status: 'completed', detail: 'exit code: 0' })), noBuffer, 'no buffer at all')
     assert.equal(def.apply(noBuffer, jobRegistered(3, { callId: 'rc1:ptc:9', startedAt: 5 })), noBuffer)

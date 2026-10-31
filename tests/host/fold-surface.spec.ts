@@ -2,7 +2,7 @@ import assert from 'node:assert/strict'
 import { describe, test } from 'vitest'
 import type { TimelineEvent } from '../../src/host/fold'
 import { assistantMessage, at, compaction, toolCall, toolResult, userMessage } from './helpers/events'
-import { assertPlainJson, driveTimeline, timelineDef } from './helpers/projection'
+import { assertPlainJson, driveTimeline, fullDef } from './helpers/projection'
 
 const text = (t: string) => [{ type: 'text', text: t }]
 
@@ -245,7 +245,7 @@ describe('surfaceOp variants', () => {
   })
 
   test('restored state: a claim whose metering event cannot be rewritten skips the rewrite', () => {
-    const def = timelineDef({})
+    const def = fullDef({})
     const base = driveTimeline([userMessage(1, text(big))]).state
     const withoutSeq = def.apply(
       { ...base, pendingShadowedSeqs: [1] },

@@ -162,7 +162,7 @@ const gate = snapshotJsonValue(registry.checkpoint(session))
 const cold = registry.restore({}, log, 0, session.header)
 
 let developerTokens = null
-let developerRequestTokens = null
+let developerInjectCount = null
 let developerRestoreMatches = false
 const ctxC = new Context()
 const registryC = new SessionProjectionRegistry(ctxC)
@@ -180,7 +180,8 @@ drive(ctxC, sessionC, registryLog)
 const values = registryC.snapshot(sessionC).values
 const node = values.contextTimeline.nodes.find(n => n.seq === 2)
 developerTokens = node ? node.tokens : null
-developerRequestTokens = values.contextTimeline.requests[0].inject
+const developerState = registryC.checkpoint(sessionC).contextTimeline.val
+developerInjectCount = Array.isArray(developerState.events) ? developerState.events.filter(e => e.kind === 'inject').length : null
 const rows = snapshotJsonValue(registryC.checkpoint(sessionC))
 const warm = registryC.restore(rows, registryLog, 0, sessionC.header)
 const oldLog = registryLog.map(e => e.type === 'developer/message' ? { ...e, type: 'todo/write' } : e)
@@ -197,13 +198,11 @@ const hostile = [
 )]
 drive(ctx, session, hostile)
 let hostileSnapshotOk = true
-let hostilePrompt = null
-let hostileCacheRead = null
+let hostileSteps = null
 try {
-  const hostileSnap = registry.snapshot(session)
-  const rec = hostileSnap.values.contextTimeline.requests.find(r => r.seq === 13)
-  hostilePrompt = rec ? rec.prompt : null
-  hostileCacheRead = rec ? rec.cacheRead : null
+  registry.snapshot(session)
+  const hostileState = registry.checkpoint(session).contextTimeline.val
+  hostileSteps = Array.isArray(hostileState.requests) ? hostileState.requests.length : null
 } catch {
   hostileSnapshotOk = false
 }
@@ -253,11 +252,10 @@ process.stdout.write('DRIVER-JSON ' + JSON.stringify({
   gateOk: gate !== undefined,
   coldMatches: JSON.stringify(cold.snapshot.values) === JSON.stringify(snapshot.values),
   developerTokens,
-  developerRequestTokens,
+  developerInjectCount,
   developerRestoreMatches,
   hostileSnapshotOk,
-  hostilePrompt,
-  hostileCacheRead,
+  hostileSteps,
   poisonedEscapedDrive,
   poisonedStarves: beforePoison > 0 && notified.length === beforePoison,
   poisonedSnapshotThrows,

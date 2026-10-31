@@ -58,16 +58,16 @@ export function commandRecordOf(input: {
   step?: unknown
   codeMode?: true
   call: string
-}): CommandStateRecord {
+}, headOnly = false): CommandStateRecord {
   const { parsed } = input
-  return {
+  const record: CommandStateRecord = {
     seq: input.seq,
     time: input.time,
     tool: input.tool,
-    cmd: parsed.cmd,
-    ...(parsed.truncated === true ? { cmdTruncated: true as const } : {}),
-    ...(parsed.description !== undefined ? { description: parsed.description } : {}),
-    ...(parsed.cwd !== undefined ? { cwd: parsed.cwd } : {}),
+    ...(headOnly ? {} : { cmd: parsed.cmd }),
+    ...(headOnly || parsed.truncated !== true ? {} : { cmdTruncated: true as const }),
+    ...(headOnly ? {} : parsed.description !== undefined ? { description: parsed.description } : {}),
+    ...(headOnly ? {} : parsed.cwd !== undefined ? { cwd: parsed.cwd } : {}),
     ...(parsed.timeoutMs !== undefined ? { timeoutMs: parsed.timeoutMs } : {}),
     ...(parsed.background === true ? { background: true as const } : {}),
     ...(parsed.sandbox !== undefined ? { sandbox: parsed.sandbox } : {}),
@@ -79,6 +79,7 @@ export function commandRecordOf(input: {
     err: false,
     call: input.call,
   }
+  return record
 }
 
 export function jobCallIdOf(data: Record<string, unknown> | undefined): string | undefined {

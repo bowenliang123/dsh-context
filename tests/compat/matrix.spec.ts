@@ -51,7 +51,7 @@ describe.skipIf(reasons.length > 0)('compat matrix — real dsh sources per base
 
     test('host: developer messages contribute to requests and survive warm restore and v24 cache rebuild', () => {
       assert.equal(report.developerTokens, 35)
-      assert.equal(report.developerRequestTokens, 35)
+      assert.equal(report.developerInjectCount, 1)
       assert.equal(report.developerRestoreMatches, true)
     })
 
@@ -64,8 +64,7 @@ describe.skipIf(reasons.length > 0)('compat matrix — real dsh sources per base
 
     test('host: hostile gateway usage keeps the served view schema-valid (issue #44)', () => {
       assert.equal(report.hostileSnapshotOk, true)
-      assert.equal(report.hostilePrompt, 161)
-      assert.equal(report.hostileCacheRead, 151)
+      assert.equal(report.hostileSteps, 3, 'both hostile requests re-track in the head counts')
     })
 
     test('host: a poisoned upstream unit starves downstream units and throws the whole snapshot (dsh containment gap)', () => {

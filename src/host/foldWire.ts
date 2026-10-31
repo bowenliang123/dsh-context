@@ -1,4 +1,4 @@
-import type { CommandRecord, ContextTimelineDetail, Snapshot, ToolTimingTotals } from '../shared/types'
+import type { CommandRecord, ContextTimelineDetail, RequestRecord, Snapshot, ToolTimingTotals } from '../shared/types'
 import { copyCostUsage } from './foldMetering'
 import type { FoldBounds } from './config'
 import type { CommandStateRecord, TimelineState } from './foldState'
@@ -67,7 +67,9 @@ function headFieldsOf(state: TimelineState): Snapshot {
 
 function detailCollectionsOf(state: TimelineState, bounds: FoldBounds): Omit<ContextTimelineDetail, 'rev'> {
   const result: Omit<ContextTimelineDetail, 'rev'> = {
-    requests: state.requests.map(r => ({ ...r })),
+    requests: state.requests
+      .filter((r): r is RequestRecord => typeof (r as { system?: unknown }).system === 'number')
+      .map(r => ({ ...r })),
     events: state.events.map(e => ({ ...e })),
     nodes: [],
     droppedNodes: 0,

@@ -6,7 +6,7 @@ The rules dsh-context must hold on every supported `@deepseek-ai/dsh` release, a
 
 **Law.** Record only what no other artifact carries; delete what code, tests, or git history already say. Verify against the dsh sources before acting — source wins over this page. Less is ALWAYS better.
 
-Last verified: **2026-10-31** (dsh-context `0.78.2`, dsh `0.2.0-rc.2` / `0.2.1-rc.2` tag trees).
+Last verified: **2026-11-01** (dsh-context `0.78.2`, dsh `0.2.0-rc.2` / `0.2.1-rc.2` tag trees).
 
 ## 1 · Supported set
 
@@ -102,9 +102,11 @@ Last verified: **2026-10-31** (dsh-context `0.78.2`, dsh `0.2.0-rc.2` / `0.2.1-r
 *How fold-state changes reach existing installations.*
 
 1. **Bump a unit's `stateVersion` iff later events cannot backfill the change** — running totals, per-step collections flushed at `step/end`, materialized envelopes. Serve-time-derivable fields need no bump, and new wire fields are additive-optional: a pre-field row serves without them and the client degrades per §5's boundary rules. Current versions sit at each unit's `stateVersion` site; past bumps live in git history.
-2. **Stale rows refold from the durable log**; the warm-up probes BOTH `contextActivity` and `contextTimeline` and cold-refolds missing or stale rows on first page open, so idle sessions rebuild exactly. (`src/host/backfill.ts`)
-3. **Every cold read passes the host-wide gate** (issue #121) — FIFO, one at a time, only while the V8 heap sits below two-thirds of its ceiling; a skipped read takes the caller's designed no-data path, never a failure. (`src/host/coldRead.ts`)
-4. **The warm-up folds sessions over 2,000 events in in-memory slices** (issue #145) through `sessionProjections.restore`/`hydrate`, `sessions.prepare`, and `sessionProjectionCache.write`, with one write-back at the log end and byte-identical rows to a single-shot `coldSnapshot`; any face absent → the session stays on the single-shot path (the faces exist on every supported line, §8's matrix probes them). (`src/host/backfill.ts`)
+2. **Persist the `contextTimeline` head only** — the checkpointed state retains what the head view and the fold's own readbacks need: aggregates, slim surface/request/command records (no `text`/`cmd`), and the fold's working memory; `spans`/`fileOps`/`archived` stay empty. The detail collections refold from the durable log through the detail route; `stateVersion` 37 discards legacy rows, and a boot sweep rewrites ver-36 rows into the head-only shape through the table's atomic update (a pure derivation — no refold; other versions and malformed rows stay on the designed ver-mismatch discard). (`src/host/timeline.ts`, `src/host/fold.ts` `headOnly`, `src/host/foldState.ts` `deriveHeadState`, `src/host/sweep.ts`)
+3. **Live detail rides a per-session shadow fold** — the detail route serves a session's detail from a full fold seeded via `sessionQuery.observeSession` (`projectionMode: 'none'`) and advanced incrementally by committed events, bounded by an LRU and dropped at detach; events committed during a seed are buffered and replayed past the seeded cut. `head: true` reads serve from the live registry snapshot; cold sessions keep the revision-keyed payload cache. (`src/host/detail.ts`, `src/host/detailShadow.ts`)
+4. **Stale rows refold from the durable log**; the warm-up probes BOTH `contextActivity` and `contextTimeline` and cold-refolds missing or stale rows on first page open, so idle sessions rebuild exactly. (`src/host/backfill.ts`)
+5. **Every cold read passes the host-wide gate** (issue #121) — FIFO, one at a time, only while the V8 heap sits below two-thirds of its ceiling; a skipped read takes the caller's designed no-data path, never a failure. (`src/host/coldRead.ts`)
+6. **The warm-up folds sessions over 2,000 events in in-memory slices** (issue #145) through `sessionProjections.restore`/`hydrate`, `sessions.prepare`, and `sessionProjectionCache.write`, with one write-back at the log end and byte-identical rows to a single-shot `coldSnapshot`; any face absent → the session stays on the single-shot path (the faces exist on every supported line, §8's matrix probes them). (`src/host/backfill.ts`)
 
 - **Procedure — force one session's refold:** `rm ~/.dsh/storages/session_projcache/sessions/<session-id>.json` — a derived cache, rebuilt from the durable log.
 

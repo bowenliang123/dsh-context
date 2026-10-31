@@ -31,7 +31,7 @@ export function previewTextOf(cmd: string, workspace: string | undefined): strin
 }
 
 export function previewOf(rec: CommandRecord, workspace: string | undefined): string {
-  return previewTextOf(rec.cmd, workspace)
+  return previewTextOf(rec.cmd ?? '', workspace)
 }
 
 export interface CommandView {
@@ -43,10 +43,10 @@ export interface CommandView {
 }
 
 function viewOf(rec: CommandRecord, workspace: string | undefined): CommandView {
-  const programs = rec.tool === 'bash' || rec.tool === 'pwsh' ? programsOfCommand(rec.cmd, rec.tool) : []
+  const programs = rec.tool === 'bash' || rec.tool === 'pwsh' ? programsOfCommand(rec.cmd ?? '', rec.tool) : []
   const program = programs[0] ?? programOf(rec)
   const allPrograms = programs.length > 0 ? programs : [program]
-  return { rec, program, programs: allPrograms, preview: previewOf(rec, workspace), shape: shapeOfCmd(rec.cmd) }
+  return { rec, program, programs: allPrograms, preview: previewOf(rec, workspace), shape: shapeOfCmd(rec.cmd ?? '') }
 }
 
 export function resultTextOf(node: unknown): string | null {
@@ -84,7 +84,7 @@ export function matchesFilter(rec: CommandRecord, filter: CommandFilter): boolea
 export function matchesQuery(rec: CommandRecord, q: string, program: string | readonly string[] = programOf(rec)): boolean {
   if (q === '') return true
   const needle = q.toLowerCase()
-  if (rec.cmd.toLowerCase().includes(needle)) return true
+  if ((rec.cmd ?? '').toLowerCase().includes(needle)) return true
   if (rec.description !== undefined && rec.description.toLowerCase().includes(needle)) return true
   if (rec.cwd !== undefined && rec.cwd.toLowerCase().includes(needle)) return true
   const programs = typeof program === 'string' ? [program] : program
@@ -114,7 +114,7 @@ export function tallyOfCommands(records: readonly CommandRecord[]): CommandStats
 
 export function programOf(rec: CommandRecord): string {
   const tool = commandTool(rec.tool)
-  return tool === null ? rec.tool : programOfCommand(tool, rec.cmd)
+  return tool === null ? rec.tool : programOfCommand(tool, rec.cmd ?? '')
 }
 
 export interface ProgramCount {
@@ -162,13 +162,13 @@ export function attentionOf(views: readonly CommandView[]): CommandAttention {
     const rec = view.rec
     const d = durationOf(rec)
     if (rec.status !== 'running' && d !== undefined && d >= 1000 && (slowest === undefined || d > slowest.ms)) {
-      slowest = { cmd: rec.cmd, ms: d }
+      slowest = { cmd: rec.cmd ?? '', ms: d }
     }
     if (rec.status === 'failed' || rec.status === 'killed') {
       for (const program of new Set(view.programs)) failByProgram.set(program, (failByProgram.get(program) ?? 0) + 1)
     }
     if (rec.background === true) background++
-    if (rec.status !== 'running') repeats.set(rec.cmd, (repeats.get(rec.cmd) ?? 0) + 1)
+    if (rec.status !== 'running') repeats.set(rec.cmd ?? '', (repeats.get(rec.cmd ?? '') ?? 0) + 1)
   }
   if (slowest !== undefined) out.slowest = slowest
   let failing: { program: string; count: number } | undefined

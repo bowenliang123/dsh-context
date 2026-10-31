@@ -12,7 +12,9 @@ export const DEFAULT_BOUNDS = {
   maxCommandChars: 4096,
 }
 
-export type FoldBounds = typeof DEFAULT_BOUNDS
+export type FoldBounds = typeof DEFAULT_BOUNDS & {
+  headOnly?: boolean
+}
 
 export type Config = Partial<FoldBounds> & Partial<PluginSettings>
 

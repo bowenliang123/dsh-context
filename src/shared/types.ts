@@ -234,7 +234,7 @@ export interface CommandRecord {
   resultSeq?: number
   time: number
   tool: string
-  cmd: string
+  cmd?: string
   cmdTruncated?: true
   description?: string
   cwd?: string
@@ -374,23 +374,26 @@ export interface SurfaceNode {
   calls?: string[]
 }
 
-export interface RequestRecord {
+export interface SlimRequestRecord {
   turn?: number
   step?: number
   time: number
   seq: number
+  total: number
+  prompt?: number
+  activeMs?: number
+}
+
+export interface RequestRecord extends SlimRequestRecord {
   system: number
   tools: number
   user: number
   inject: number
   assistant: number
   tool: number
-  total: number
-  prompt?: number
   skill?: number
   cacheRead?: number
   output?: number
-  activeMs?: number
   stepCount?: number
   net?: number
 }

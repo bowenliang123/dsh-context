@@ -24,6 +24,7 @@ interface CtxSpec {
 function ctxOf(spec: CtxSpec): { ctx: Context; captured: { path?: string; fetch?: RouteFetch }; disposers: (() => void)[] } {
   const captured: { path?: string; fetch?: RouteFetch } = {}
   const disposers: (() => void)[] = []
+  const listeners = new Map<string, ((...args: unknown[]) => void)[]>()
   const services = new Map<string, unknown>()
   if ('connection' in spec) services.set('connection', spec.connection)
   if ('sessions' in spec) services.set('sessions', spec.sessions)
@@ -31,6 +32,14 @@ function ctxOf(spec: CtxSpec): { ctx: Context; captured: { path?: string; fetch?
   if ('sessionPersistence' in spec) services.set('sessionPersistence', spec.sessionPersistence)
   const ctx = {
     get: (name: string) => services.get(name),
+    on(event: string, listener: (...args: unknown[]) => void) {
+      const known = listeners.get(event) ?? []
+      known.push(listener)
+      listeners.set(event, known)
+    },
+    emit(event: string, ...args: unknown[]): void {
+      for (const listener of listeners.get(event) ?? []) listener(...args)
+    },
     sessionProjections: { stateOf: spec.stateOf ?? (() => undefined) },
     effect(fn: () => unknown, _label?: string) {
       const d = fn()
@@ -102,6 +111,7 @@ describe('watchDetailChannel gating', () => {
             ? sessionsWith(okSession())
             : undefined,
       sessionProjections: { stateOf: () => undefined },
+      on() {},
       effect(fn: () => unknown) {
         fn()
         return () => {}
@@ -127,11 +137,20 @@ describe('watchDetailChannel gating', () => {
 })
 
 describe('the detail route', () => {
-  function liveCtx(state: TimelineState | undefined): { ctx: Context; captured: { fetch?: RouteFetch } } {
+  const liveEvents = [
+    header(1, { model: 'deepseek-v4-flash', provider: 'deepseek' }),
+    userMessage(2, [{ type: 'text', text: 'hi' }], { kind: 'user' }),
+    assistantMessage(3, { turn: 1, step: 0, usage: { inputTokens: 10, outputTokens: 5 } }),
+  ]
+
+  function liveCtx(state: TimelineState | undefined, events: TimelineEvent[] | null = null): { ctx: Context; captured: { fetch?: RouteFetch } } {
     return ctxOf({
       connection: { fetch: { register: () => () => {} } },
       sessions: sessionsWith(okSession()),
       stateOf: () => state,
+      ...(events === null ? {} : {
+        sessionQuery: { observeSession: () => Promise.resolve({ events, [Symbol.dispose]: () => {} }) },
+      }),
     })
   }
 
@@ -227,7 +246,7 @@ describe('the detail route', () => {
     assert.equal(result.error.message, 'persistence down')
   })
 
-  test('the cold-read gate applies to cold reads only: a skipped read answers null, a live read never touches it', async () => {
+  test('the cold-read gate admits the live seed like any log fold: a skipped seed answers null', async () => {
     let observed = 0
     const { ctx, captured } = ctxOf({
       connection: { fetch: { register: () => () => {} } },
@@ -252,29 +271,28 @@ describe('the detail route', () => {
     assert.equal(observed, 0, 'a skipped read never touches the log')
 
     const { state } = driveTimeline([userMessage(1, [{ type: 'text', text: 'hi' }], { kind: 'user' })])
-    const live = liveCtx(state)
+    const live = liveCtx(state, [])
     watchDetailChannel(live.ctx, BOUNDS, {
-      admit: () => Promise.reject(new Error('the gate must not see a live read')),
+      admit: <T>(_read: () => Promise<T>): Promise<T | undefined> => Promise.resolve(undefined),
     })
-    const result = await call(live.captured, { sessionId: 's1' }) as { ok: boolean; value: { rev: number } | null }
-    assert.equal(result.ok, true)
-    assert.ok(result.value !== null, 'the live read served its detail without the gate')
+    const refused = await call(live.captured, { sessionId: 's1' }) as { ok: boolean; value: unknown }
+    assert.deepEqual(refused, { ok: true, value: null }, 'a refused live seed answers the typed null')
+
+    const admittedLive = liveCtx(state, liveEvents)
+    watchDetailChannel(admittedLive.ctx, BOUNDS)
+    const served = await call(admittedLive.captured, { sessionId: 's1' }) as { ok: boolean; value: { nodes: unknown[] } | null }
+    assert.equal(served.ok, true)
+    assert.equal(served.value?.nodes.length, 2, 'an admitted live seed folds the observed log')
   })
 
-  test('serves the fold state\'s detail payload with its revision', async () => {
-    const { state } = driveTimeline([
-      header(1, { model: 'deepseek-v4-flash', provider: 'deepseek' }),
-      userMessage(2, [{ type: 'text', text: 'hi' }], { kind: 'user' }),
-      assistantMessage(3, { turn: 1, step: 0, usage: { inputTokens: 10, outputTokens: 5 } }),
-    ])
-    const { ctx, captured } = liveCtx(state)
+  test('serves the observed log\'s detail payload for the open session', async () => {
+    const { state } = driveTimeline(liveEvents)
+    const { ctx, captured } = liveCtx(state, liveEvents)
     watchDetailChannel(ctx, BOUNDS)
     const result = await call(captured, { sessionId: 's1' }) as { ok: true; value: { rev: number; requests: unknown[]; nodes: unknown[]; head: { current: { total: number } } } }
     assert.equal(result.ok, true)
-    assert.equal(result.value.rev, 2, 'two detail-mutating folds')
-    assert.equal(result.value.requests.length, 1)
-    assert.equal(result.value.nodes.length, 2)
-    assert.ok(result.value.head.current.total > 0, 'the slim head rides the live read too')
+    const reference = buildTimelineDetail(driveTimeline(liveEvents).state, BOUNDS)
+    assert.deepStrictEqual(result.value, reference, 'the live detail is the full fold of the observed log')
   })
 
   test('a head read serves the envelope only, live and cold', async () => {
@@ -372,8 +390,8 @@ describe('the detail route', () => {
       stateOf: () => ({ requests: null }),
     })
     watchDetailChannel(junkState.ctx, BOUNDS)
-    const r3 = await call(junkState.captured, { sessionId: 's1' }) as { ok: boolean }
-    assert.equal(r3.ok, false)
+    const r3 = await call(junkState.captured, { sessionId: 's1', head: true }) as { ok: boolean }
+    assert.equal(r3.ok, false, 'a hostile unit state fails the head read it feeds')
 
     const stringThrow = ctxOf({
       connection: { fetch: { register: () => () => {} } },

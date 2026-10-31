@@ -1,12 +1,41 @@
 import assert from 'node:assert/strict'
 import { describe, test } from 'vitest'
 import { createTimelineState } from '../../src/host/fold'
+import { buildTimelineDetail } from '../../src/host/foldWire'
+import { resolveBounds } from '../../src/host/config'
 import type { CostBucketTotals, SessionCostUsage, SurfaceNode } from '../../src/shared/types'
 import { assistantMessage, header, planMode, requestContext, toolCall, toolResult, userMessage } from './helpers/events'
-import { assertPlainJson, driveTimeline, timelineDef } from './helpers/projection'
+import { assertPlainJson, driveTimeline, fullDef, timelineDef } from './helpers/projection'
+
+type ContentBlocks = { type: 'text'; text: string }[]
+
+function text(content: string): ContentBlocks {
+  return [{ type: 'text', text: content }]
+}
 
 const bucket = (uncached: number, cacheRead: number, cacheWrite: number, output: number): CostBucketTotals =>
   ({ uncached, cacheRead, cacheWrite, output })
+
+describe('buildTimelineDetail on a fresh state', () => {
+  test('an absent detailRev reads as rev 0 and the collections stay empty', () => {
+    const detail = buildTimelineDetail(createTimelineState(), resolveBounds({}))
+    assert.equal(detail.rev, 0)
+    assert.deepEqual(detail.requests, [])
+    assert.deepEqual(detail.nodes, [])
+    assert.equal(detail.head?.humanInputs, 0)
+  })
+
+  test('a slim state serves the detailCollections filter honestly', () => {
+    const def = fullDef({}, false)
+    let state = def.init()
+    state = def.apply(state, header(1, { model: 'm' }))
+    state = def.apply(state, userMessage(2, text('hi'), { kind: 'user' }))
+    const detail = buildTimelineDetail(state, resolveBounds({}))
+    assert.deepEqual(detail.requests, [], 'slim request records never pose as full ones')
+    assert.ok(detail.nodes.length > 0, 'the slim surface index still serves')
+  })
+
+})
 
 describe('buildTimelineView unknown-model shape', () => {
   test('optional scalars stay ABSENT keys until known, then ride their own keys (issue #29)', () => {

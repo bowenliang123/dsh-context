@@ -10,7 +10,7 @@ import {
   stepStart,
   userMessage,
 } from './helpers/events'
-import { assertStable, driveTimeline, timelineDef } from './helpers/projection'
+import { assertStable, driveTimeline, requestsOf, timelineDef } from './helpers/projection'
 
 const text = (t: string) => [{ type: 'text', text: t }]
 
@@ -28,7 +28,7 @@ describe('system/message — the system prompt as a surface node', () => {
     const price = estimateSystemContent(text(prompt))
     assert.equal(state.systemTokens, price)
     assert.deepEqual(state.systems, [{ seq: 2, time: 2000, tokens: price }])
-    assert.equal(state.requests[0].system, price, 'the request record snapshots the prompt in force')
+    assert.equal(requestsOf(state)[0].system, price, 'the request record snapshots the prompt in force')
     assert.deepEqual(view.systems, [{ seq: 2, time: 2000, tokens: price }], 'the wire carries the live prompt nodes')
     assert.equal(view.current.total, price + state.sums.user + state.sums.assistant, 'the prompt joins the composition total')
     const headerOnly = driveTimeline([

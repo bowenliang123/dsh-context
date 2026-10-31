@@ -425,7 +425,7 @@ export function makeCommandPanel(kit: ViewKit): ComponentType<CommandPanelProps>
         <div className="lc-cmd-detail">
           <FindCard
             label={t('cmds.kv.cmd')}
-            text={rec.cmd}
+            text={rec.cmd ?? ''}
             headNote={rec.description}
             meta={<span className="lc-ts-card-meta">{t('cmds.lines', { n: view.shape.lines })}</span>}
             leading={locatable ? (
@@ -439,7 +439,7 @@ export function makeCommandPanel(kit: ViewKit): ComponentType<CommandPanelProps>
             ) : undefined}
             trailing={resultCard === null ? factsEl : undefined}
           >
-            <pre className="lc-cmd-full"><CmdText text={rec.cmd} runs={runsOf(rec.tool, rec.cmd)} />{rec.cmdTruncated === true ? ' …' : ''}</pre>
+            <pre className="lc-cmd-full"><CmdText text={rec.cmd ?? ''} runs={runsOf(rec.tool, rec.cmd ?? '')} />{rec.cmdTruncated === true ? ' …' : ''}</pre>
           </FindCard>
           {resultCard}
         </div>
