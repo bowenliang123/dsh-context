@@ -83,6 +83,21 @@ describe('the head-only fold', () => {
     assert.equal(state.head.injects, 1)
   })
 
+  test('inherited Object property names keep numeric own-property counts', () => {
+    const state = headDrive([
+      userMessage(1, [{ type: 'text', text: 'a' }], { kind: 'skill-invocation', form: 'skill', name: 'constructor' }),
+      userMessage(2, [{ type: 'text', text: 'b' }], { kind: 'skill-invocation', form: 'skill', name: 'constructor' }),
+      userMessage(3, [{ type: 'text', text: 'c' }], { kind: 'skill-invocation', form: 'skill', name: 'toString' }),
+    ])
+    assert.deepEqual(state.head.skills, { constructor: 2, toString: 1 })
+    assert.equal(buildTimelineHead(state).counts?.skills, 2)
+    const evicted = driveTimeline([
+      userMessage(1, [{ type: 'text', text: 'a' }], { kind: 'skill-invocation', form: 'skill', name: 'constructor' }),
+      userMessage(2, [{ type: 'text', text: 'b' }], { kind: 'skill-invocation', form: 'skill', name: 'toString' }),
+    ], { maxEvents: 1 }).state
+    assert.deepEqual(evicted.head.skills, { toString: 1 }, 'evicting the own count removes the name')
+  })
+
   test('a head fold with a shadowed surface removes nodes without archiving', () => {
     const state = headDrive([
       userMessage(1, [{ type: 'text', text: 'gone' }], { kind: 'user' }),

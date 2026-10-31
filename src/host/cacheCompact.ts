@@ -52,10 +52,16 @@ async function migrate(table: KvTableLike, bounds: FoldBounds, pacing: CacheComp
   let compacted = 0
   let visited = 0
   for (const [key, record] of table.entries()) {
-    if (compactCacheRecord(record, bounds) !== record) {
+    const compactedRecord = compactCacheRecord(record, bounds)
+    if (compactedRecord !== record) {
+      const outcome = { changed: false }
       try {
-        await table.update(key, current => compactCacheRecord(current, bounds))
-        compacted++
+        await table.update(key, (current) => {
+          const next = current === record ? compactedRecord : compactCacheRecord(current, bounds)
+          outcome.changed = next !== current
+          return next
+        })
+        if (outcome.changed) compacted++
       } catch {}
     }
     if (++visited % pacing.yieldEvery === 0) await new Promise(resolve => setTimeout(resolve, 0))

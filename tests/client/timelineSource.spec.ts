@@ -305,6 +305,20 @@ describe('DetailStore', () => {
     assert.equal(calls.length, 3, 'the stale rev-2 answer burned one read before the rev-4 landing')
   })
 
+  test('a detail revision ahead of the head (legacy checkpoint) never suppresses later head bumps', async () => {
+    const { fetcher, calls } = scriptedFetcher([detail(5), detail(5), detail(6)])
+    const store = new DetailStore(fetcher, 0)
+    store.request(3)
+    await settle()
+    assert.equal(store.getSnapshot().detail?.rev, 5, 'the detail fold runs ahead of the legacy head')
+    store.request(4)
+    await settle()
+    assert.equal(calls.length, 2, 'a head revision below the served detail still refetches')
+    store.request(6)
+    await until(() => store.getSnapshot().detail?.rev === 6, 'the head eventually overtook the detail')
+    assert.equal(calls.length, 3)
+  })
+
   test('a rev DECREASE means the host refolded: the ledger resets and refetches', async () => {
     const { fetcher } = scriptedFetcher([detail(5), detail(2)])
     const store = new DetailStore(fetcher, 0)

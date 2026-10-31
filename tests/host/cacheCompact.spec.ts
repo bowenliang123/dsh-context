@@ -125,6 +125,27 @@ describe('watchCacheCompaction', () => {
     assert.equal(logger.info.mock.calls.length, 1)
   })
 
+  test('a concurrent replacement is recompacted only when it is still legacy', async () => {
+    const legacy = recordOf({ contextTimeline: { ver: 36, seq: 1, val: createTimelineState() } })
+    const compact = recordOf({ contextTimeline: { ver: 36, seq: 2, val: createTimelineState(false) } })
+    const records = new Map<string, unknown>([['legacy', legacy]])
+    let swapped = false
+    const table = {
+      entries: () => [...records.entries()][Symbol.iterator](),
+      async update(key: string, fn: (current: unknown) => unknown) {
+        if (!swapped) { swapped = true; records.set(key, compact) }
+        const next = fn(records.get(key))
+        records.set(key, next)
+        return next
+      },
+    }
+    const { ctx, logger } = ctxOf({ table })
+    watchCacheCompaction(ctx, BOUNDS, { delayMs: 0, yieldEvery: 1 })
+    await settle()
+    assert.equal(records.get('legacy'), compact)
+    assert.equal(logger.info.mock.calls.length, 0, 'a compact replacement never counts as a rewrite')
+  })
+
   test('a missing domain, a throwing storage lookup, or a throwing table stays silent', async () => {
     const missing = ctxOf({ storage: { get: () => undefined } })
     watchCacheCompaction(missing.ctx, BOUNDS, { delayMs: 0, yieldEvery: 1 })

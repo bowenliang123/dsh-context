@@ -179,14 +179,16 @@ export function noteEvent(head: TimelineHead, kind: number, name: string, maxEve
   if (kind === HEAD_KIND_INJECT) head.injects += 1
   else if (kind === HEAD_KIND_COMPACTION) head.compactions += 1
   else if (kind === HEAD_KIND_PRUNE) head.prunes += 1
-  if (name !== '' && name !== '__proto__') head.skills[name] = (head.skills[name] ?? 0) + 1
+  if (name !== '' && name !== '__proto__') {
+    head.skills[name] = (Object.hasOwn(head.skills, name) ? head.skills[name] : 0) + 1
+  }
   while (head.events.length > maxEvents) {
     const old = head.events[0]
     head.events.shift()
     if (old.kind === HEAD_KIND_INJECT) head.injects -= 1
     else if (old.kind === HEAD_KIND_COMPACTION) head.compactions -= 1
     else if (old.kind === HEAD_KIND_PRUNE) head.prunes -= 1
-    if (old.name !== '' && old.name !== '__proto__') {
+    if (old.name !== '' && old.name !== '__proto__' && Object.hasOwn(head.skills, old.name)) {
       const count = head.skills[old.name] - 1
       if (count > 0) head.skills[old.name] = count
       else Reflect.deleteProperty(head.skills, old.name)

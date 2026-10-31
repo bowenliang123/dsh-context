@@ -100,7 +100,7 @@ export class DetailStore {
       this.catchUpTarget = -1
     }
     this.lastHeadRev = rev
-    if (rev <= this.acceptedRev || rev <= this.wantedRev) return
+    if (rev <= this.wantedRev) return
     this.wantedRev = rev
     this.schedule()
   }
