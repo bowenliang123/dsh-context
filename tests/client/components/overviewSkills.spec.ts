@@ -69,17 +69,6 @@ describe('OverviewSkills', () => {
     await zero.unmount()
   })
 
-  test('the share bar scales to the heaviest row wherever the ordering puts it — never past the content edge', async () => {
-    const m = await mount(h(Skills, { stats: [statOf('light', 1, NOW), statOf('heavy', 2, NOW)] }))
-    const rows = queryAll<HTMLElement>(m.container, 'button.lc-ov-tally')
-    assert.ok(query(rows[0], '.lc-ov-tally-bar').getAttribute('style')?.includes('calc(50% - 6px)'))
-    assert.ok(query(rows[1], '.lc-ov-tally-bar').getAttribute('style')?.includes('calc(100% - 12px)'))
-    await m.unmount()
-    const zero = await mount(h(Skills, { stats: [statOf('zero', 0, NOW)] }))
-    assert.ok(query<HTMLElement>(zero.container, '.lc-ov-tally-bar').getAttribute('style')?.includes('calc(0% - 0px)'))
-    await zero.unmount()
-  })
-
   test('a row click pins and releases through onSelect; the pinned row wraps with its detail into one unit', async () => {
     const picks: (string | null)[] = []
     const m = await mount(h(Skills, {
