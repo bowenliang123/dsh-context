@@ -27,7 +27,7 @@ body:not([data-ds-dark-theme]) .lc-root .lc-card { padding: 8px 9px; margin-bott
 body:not([data-ds-dark-theme]) .lc-root .lc-cols { gap: 9px; margin-bottom: 9px; }
 body:not([data-ds-dark-theme]) .lc-root .lc-cols > .lc-card { margin-bottom: 0; }
 body:not([data-ds-dark-theme]) .lc-root .lc-col > .lc-card:last-child { margin-bottom: 0; }
-.lc-card-title { font-weight: 600; margin-bottom: 10px; display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; }
+.lc-card-title { font-weight: 600; margin-bottom: 10px; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 body:not([data-ds-dark-theme]) .lc-card-title { padding-bottom: 7px; margin-bottom: 9px; border-bottom: var(--lc-line-strong); }
 body:not([data-ds-dark-theme]) .lc-stat { box-shadow: var(--lc-shadow-tile); }
 .lc-card-title:not(:has(.lc-gran, .lc-kinds)) { flex-wrap: nowrap; }
