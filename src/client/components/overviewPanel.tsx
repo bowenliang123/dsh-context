@@ -7,7 +7,7 @@ import {
   pageOf, rangeWindowOf, refreshSessions, requestActivityBackfill, rowsOfSnapshot,
   rowHasTally, sessionGroupsOf, sessionsSnapshotOf, skillLoadsOf, sortRows,
   tallyStatsOf, UNGROUPED_KEY, workspacesSnapshotOf,
-  type DayRange, type OverviewCoverage, type OverviewRange, type OverviewRow, type OverviewSort, type SkillSort,
+  type DayRange, type OverviewCoverage, type OverviewRange, type OverviewRow, type OverviewSort,
   type TallyField, type TallyStat,
 } from '../overview'
 import { openPluginSettings, openSessionVia, activeMsOf, type ClientCtx } from '../services'
@@ -90,7 +90,6 @@ export function makeOverviewPanel(
     const [query, setQuery] = useState('')
     const [group, setGroup] = useState<string | null>(null)
     const [pick, setPick] = useState<{ field: TallyField; name: string } | null>(null)
-    const [skillSort, setSkillSort] = useState<SkillSort>('loads')
     const [sort, setSort] = useState<OverviewSort>('recent')
     const [metric, setMetric] = useState<HeatMetric>('tokens')
     const [page, setPage] = useState(0)
@@ -149,7 +148,7 @@ export function makeOverviewPanel(
       () => (dayAggregator.current ??= new DayAggregator()).aggregate(covered, book, currency),
       [covered, book, currency],
     )
-    const skillStats = useMemo(() => skillLoadsOf(ranged, { scope, day, sort: skillSort }), [ranged, scope, day, skillSort])
+    const skillStats = useMemo(() => skillLoadsOf(ranged, { scope, day }), [ranged, scope, day])
     const toolStats = useMemo(() => tallyStatsOf(ranged, { scope, day, field: 'tools' }), [ranged, scope, day])
     const commandStats = useMemo(() => tallyStatsOf(ranged, { scope, day, field: 'cmds' }), [ranged, scope, day])
     const tallyCards: readonly { kind: TallyCardKind; field: TallyField; stats: TallyStat[] }[] = [
@@ -276,10 +275,7 @@ export function makeOverviewPanel(
                         day={day}
                         selected={pick?.field === 'skills' ? pick.name : null}
                         onSelect={(name) => { setPick(name === null ? null : { field: 'skills', name }) }}
-                        sort={skillSort}
-                        onSort={setSkillSort}
                         catalog={catalog}
-                        now={nowForCards}
                       />
                       {tallyCards.map(card => (
                         <OverviewTally
@@ -289,7 +285,6 @@ export function makeOverviewPanel(
                           day={day}
                           selected={pick?.field === card.field ? pick.name : null}
                           onSelect={(name) => { setPick(name === null ? null : { field: card.field, name }) }}
-                          now={nowForCards}
                         />
                       ))}
                     </div>

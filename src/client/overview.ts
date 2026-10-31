@@ -439,10 +439,6 @@ export interface TallyStat {
   last: number
 }
 
-export type SkillSort = 'loads' | 'recent'
-
-export type TallySort = 'count' | 'recent'
-
 function dayPredicate(opts: { scope: RangeWindow; day: string | null }): (key: string) => boolean {
   if (opts.day !== null) return key => key === opts.day
   return key => dayInScope(key, opts.scope)
@@ -450,7 +446,7 @@ function dayPredicate(opts: { scope: RangeWindow; day: string | null }): (key: s
 
 export function tallyStatsOf(
   rows: readonly OverviewRow[],
-  opts: { scope: RangeWindow; day: string | null; field: TallyField; sort?: TallySort },
+  opts: { scope: RangeWindow; day: string | null; field: TallyField },
 ): TallyStat[] {
   const admit = dayPredicate(opts)
   const stats = new Map<string, TallyStat>()
@@ -476,17 +472,14 @@ export function tallyStatsOf(
     }
   }
   const byName = (a: TallyStat, b: TallyStat): number => (a.name < b.name ? -1 : 1)
-  const out = [...stats.values()]
-  return opts.sort === 'recent'
-    ? out.sort((a, b) => (b.last - a.last) || (b.n - a.n) || byName(a, b))
-    : out.sort((a, b) => (b.n - a.n) || (b.last - a.last) || byName(a, b))
+  return [...stats.values()].sort((a, b) => (b.n - a.n) || (b.last - a.last) || byName(a, b))
 }
 
 export function skillLoadsOf(
   rows: readonly OverviewRow[],
-  opts: { scope: RangeWindow; day: string | null; sort?: SkillSort },
+  opts: { scope: RangeWindow; day: string | null },
 ): TallyStat[] {
-  return tallyStatsOf(rows, { ...opts, field: 'skills', sort: opts.sort === 'recent' ? 'recent' : 'count' })
+  return tallyStatsOf(rows, { ...opts, field: 'skills' })
 }
 
 export function rowHasTally(

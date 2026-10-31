@@ -1,6 +1,6 @@
 import type { ReactElement, ReactNode } from 'react'
 import { nameColorOf } from '../nameColor'
-import { relativeTime, type TallyStat } from '../overview'
+import type { TallyStat } from '../overview'
 import { IconApi, IconInspect, type IconComponent } from '../primitives'
 import type { ViewKit } from '../viewkit'
 
@@ -41,7 +41,6 @@ export interface TallyRowProps {
   count: string
   share: number
   color: string
-  last?: string
   selected?: boolean
   title?: string
   describedBy?: string
@@ -71,7 +70,6 @@ export function TallyRow(props: TallyRowProps): ReactElement {
       <i className="lc-ov-tally-dot" style={{ background: props.color }} />
       <span className="lc-ov-tally-name">{props.name}</span>
       <span className="lc-ov-tally-count">×{props.count}</span>
-      {props.last !== undefined && <span className="lc-ov-tally-last">{props.last}</span>}
       <i
         className="lc-ov-tally-bar"
         style={{ width: `calc(${props.share}% - ${Math.round(props.share * 12) / 100}px)`, background: props.color }}
@@ -123,7 +121,6 @@ export interface OverviewTallyProps {
   day?: string | null
   selected?: string | null
   onSelect?: (name: string | null) => void
-  now: number
 }
 
 export function makeOverviewTally(kit: ViewKit): (props: OverviewTallyProps) => ReactElement {
@@ -157,7 +154,6 @@ export function makeOverviewTally(kit: ViewKit): (props: OverviewTallyProps) => 
                   count={fmt(s.n)}
                   share={shareOf(s.n, max)}
                   color={nameColorOf(s.name)}
-                  last={relativeTime(t, s.last, props.now)}
                   selected={pinned}
                   title={`${t(face.count, { n: fmt(s.n) })} · ${t(face.sessions, { n: fmt(s.sessions) })}`}
                   onSelect={() => { props.onSelect?.(pinned ? null : s.name) }}

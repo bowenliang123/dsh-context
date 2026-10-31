@@ -2,7 +2,7 @@ import { Fragment, useEffect, useLayoutEffect, useRef, useState, type ReactEleme
 import { createPortal } from 'react-dom'
 import { dayKeyOf } from '../../shared/days'
 import type { SkillInfo } from '../../shared/types'
-import { relativeTime, type SkillSort, type TallyStat } from '../overview'
+import type { TallyStat } from '../overview'
 import { copySkillPath } from '../skills'
 import { nameColorOf } from '../nameColor'
 import { IconCheck, IconCopy, IconSkill } from '../primitives'
@@ -20,8 +20,6 @@ const TIP_GAP = 6
 const TIP_MARGIN = 8
 
 const TIP_ID = 'lc-skilltip-bubble'
-
-const SKILL_SORTS: readonly SkillSort[] = ['loads', 'recent']
 
 export const skillColorOf = nameColorOf
 
@@ -70,10 +68,7 @@ export interface OverviewSkillsProps {
   day?: string | null
   selected?: string | null
   onSelect?: (name: string | null) => void
-  sort?: SkillSort
-  onSort?: (sort: SkillSort) => void
   catalog?: ReadonlyMap<string, SkillInfo> | null
-  now: number
 }
 
 export function makeOverviewSkills(kit: ViewKit): (props: OverviewSkillsProps) => ReactElement {
@@ -211,7 +206,6 @@ export function makeOverviewSkills(kit: ViewKit): (props: OverviewSkillsProps) =
       )
     })()
 
-    const sort = props.sort ?? 'loads'
     return (
       <TallyCard
         icon={<IconSkill size={14} />}
@@ -227,19 +221,6 @@ export function makeOverviewSkills(kit: ViewKit): (props: OverviewSkillsProps) =
             clearLabel={t('field.clear')}
             onChange={setQuery}
           />
-        ) : undefined}
-        controls={stats.length > 1 ? (
-          <div className="lc-gran" role="group" aria-label={t('ov.skills.sortLabel')}>
-            {SKILL_SORTS.map(so => (
-              <button
-                key={so}
-                type="button"
-                className={'lc-gran-btn' + (sort === so ? ' lc-gran-on' : '')}
-                aria-pressed={sort === so}
-                onClick={() => { props.onSort?.(so) }}
-              >{t('ov.skills.sort.' + so)}</button>
-            ))}
-          </div>
         ) : undefined}
       >
         {!pinnedRowVisible && detailBlock}
@@ -258,7 +239,6 @@ export function makeOverviewSkills(kit: ViewKit): (props: OverviewSkillsProps) =
                   count={fmt(s.n)}
                   share={shareOf(s.n, max)}
                   color={color}
-                  last={relativeTime(t, s.last, props.now)}
                   selected={pinned}
                   describedBy={hoverRow?.name === s.name ? TIP_ID : undefined}
                   onSelect={() => { props.onSelect?.(pinned ? null : s.name) }}

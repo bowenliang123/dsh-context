@@ -83,7 +83,7 @@ describe('skillLoadsOf', () => {
     ])
   })
 
-  test('the sort keys reorder; ties fall to the next key, then the name', () => {
+  test('the loads order breaks ties on freshness, then the name', () => {
     const rows = [
       rowWith('a', {
         [day(0)]: {
@@ -100,11 +100,11 @@ describe('skillLoadsOf', () => {
       }),
       rowWith('b', { [day(0)]: { tokens: 1, requests: 1, skills: { beta: { n: 1, last: NOW - 2000 } } } }),
     ]
-    const names = (sort?: 'loads' | 'recent'): string[] =>
-      skillLoadsOf(rows, { scope: win('all', NOW), day: null, sort }).map(s => s.name)
-    assert.deepEqual(names(), ['alpha', 'gamma', 'beta', 'delta', 'epsilon'], 'loads (the default): loads desc, then recent — the gamma/beta tie breaks on freshness')
-    assert.deepEqual(names('loads'), ['alpha', 'gamma', 'beta', 'delta', 'epsilon'], 'the explicit key matches the omission')
-    assert.deepEqual(names('recent'), ['gamma', 'delta', 'epsilon', 'beta', 'alpha'], 'recent: the freshest first')
+    assert.deepEqual(
+      skillLoadsOf(rows, { scope: win('all', NOW), day: null }).map(s => s.name),
+      ['alpha', 'gamma', 'beta', 'delta', 'epsilon'],
+      'loads desc, then recent — the gamma/beta tie breaks on freshness',
+    )
     const tied = [rowWith('t', {
       [day(0)]: { tokens: 1, requests: 1, skills: { zeta: { n: 1, last: NOW }, eta: { n: 1, last: NOW } } },
     })]
@@ -201,10 +201,6 @@ describe('tallyStatsOf', () => {
     assert.deepEqual(tallyStatsOf(rows, { scope: win('all', NOW), day: day(0), field: 'cmds' }), [
       { name: 'git', n: 1, sessions: 1, last: NOW - 900 },
     ], 'the pinned day admits only itself')
-    assert.deepEqual(
-      tallyStatsOf(rows, { scope: win('all', NOW), day: null, field: 'cmds', sort: 'recent' }).map(s => s.name),
-      ['git', 'pnpm'],
-    )
     assert.deepEqual(tallyStatsOf([rowOf({ id: 'bare' })], { scope: win('all', NOW), day: null, field: 'tools' }), [])
 
     assert.equal(rowHasTally(rows[1], 'tools', 'read', { scope: win('all', NOW), day: null }), true)

@@ -34,12 +34,12 @@ body:not([data-ds-dark-theme]) .lc-stat { box-shadow: var(--lc-shadow-tile); }
 .lc-card-title-text { flex: none; white-space: nowrap; }
 .lc-card-sub, .lc-card-rate { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .lc-gran, .lc-kinds { margin-left: auto; display: flex; gap: 2px; background: var(--lc-control-track); border: var(--lc-line-fine, 1px solid var(--dsw-alias-border-l2)); border-radius: 6px; padding: 1px; }
-.lc-trend-ctl, .lc-heat-ctl { margin-left: auto; display: flex; gap: 6px; align-items: center; }
+.lc-trend-ctl, .lc-heat-ctl { margin-left: auto; display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
 .lc-trend-ctl .lc-gran, .lc-heat-ctl .lc-gran { margin-left: 0; }
 .lc-heat-ctl .lc-card-sub { margin-left: 0; }
 .lc-card.lc-deferred-skeleton { background: var(--dsw-alias-bg-layer-2); }
 .lc-trend-mods { margin-left: 0; flex: none; }
-.lc-gran-btn { border: 0; background: transparent; color: var(--dsw-alias-label-secondary); font-size: 11px; line-height: 1; padding: 3px 8px; border-radius: 5px; cursor: pointer; font-family: inherit; transition: background-color var(--ds-transition-duration, 0.2s) var(--ds-ease-in-out, ease-in-out), color var(--ds-transition-duration, 0.2s) var(--ds-ease-in-out, ease-in-out); }
+.lc-gran-btn { border: 0; background: transparent; color: var(--dsw-alias-label-secondary); font-size: 11px; line-height: 1; padding: 3px 8px; border-radius: 5px; cursor: pointer; font-family: inherit; white-space: nowrap; transition: background-color var(--ds-transition-duration, 0.2s) var(--ds-ease-in-out, ease-in-out), color var(--ds-transition-duration, 0.2s) var(--ds-ease-in-out, ease-in-out); }
 .lc-gran-btn:hover { background: var(--dsw-alias-interactive-bg-hover); color: var(--dsw-alias-label-primary); }
 .lc-gran-btn:disabled { opacity: 0.4; cursor: not-allowed; }
 .lc-gran-btn:disabled:hover { color: var(--dsw-alias-label-secondary); }
