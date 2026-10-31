@@ -409,7 +409,11 @@ describe('OverviewPanel', () => {
     const calendar = await openPanel(ctx)
     const calendarButtons = queryAll<HTMLButtonElement>(calendar.m.container, '.lc-ov-range .lc-gran-btn')
     await click(query(calendar.m.container, '.lc-dp-trigger'))
+    const spansMonths = YESTERDAY.slice(0, 7) !== TODAY.slice(0, 7)
+    const navbtns = () => queryAll(document.body, '.lc-dp-navbtn')
+    if (spansMonths) await click(navbtns()[0])
     await click(calendarDay(YESTERDAY))
+    if (spansMonths) await click(navbtns()[1])
     await click(calendarDay(TODAY))
     assert.ok(query(calendar.m.container, '.lc-dp-trigger').className.includes('lc-dp-trigger-on'), 'the chip carries the picked range')
     assert.deepEqual(
@@ -431,6 +435,7 @@ describe('OverviewPanel', () => {
     const back = await openPanel(ctx)
     await click(query(back.m.container, '.lc-dp-trigger'))
     await click(calendarDay(TODAY))
+    if (spansMonths) await click(queryAll(document.body, '.lc-dp-navbtn')[0])
     await click(calendarDay(YESTERDAY))
     assert.deepEqual(
       queryAll(back.m.container, '.lc-dp-trigger .lc-dp-half').map(el => el.textContent),
