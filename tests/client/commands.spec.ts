@@ -157,6 +157,18 @@ describe('the rail derivations', () => {
     assert.equal(programOf(cmd(7, { tool: 'read', cmd: '' })), 'read', 'a non-command tool names itself')
   })
 
+  test('a record without cmd names its tool and still matches and tallies', () => {
+    assert.equal(programOf(cmd(1, { cmd: undefined })), 'shell', 'a cmd-less shell record reads as shell')
+    assert.equal(matchesQuery(cmd(2, { cmd: undefined, description: 'list files' }), 'files'), true)
+    assert.equal(matchesQuery(cmd(3, { cmd: undefined }), 'zzz'), false)
+    const attention = attentionOf(viewsOf([
+      cmd(4, { cmd: undefined, status: 'failed', exit: 1 }),
+      cmd(5, { cmd: undefined, start: 0, end: 90_000 }),
+    ], undefined))
+    assert.equal(attention.slowest?.cmd, '', 'the slowest card names the blank command')
+    assert.deepEqual(attention.failing, { program: 'shell', count: 1 })
+  })
+
   test('programsOf ranks every program by count with a stable name tie-break', () => {
     const records = [
       cmd(1, { cmd: 'git status' }),

@@ -84,6 +84,11 @@ describe('CommandPanel — command coloring', () => {
       await single.unmount()
     }
 
+    const blank = await mount(h(Panel, { commands: [cmd(1, { cmd: undefined, resultSeq: 51 })] }))
+    await click(query(blank.container, '.lc-cmd-row'))
+    assert.equal(text(query(blank.container, '.lc-cmd-full')), '', 'a cmd-less record renders an empty command body')
+    await blank.unmount()
+
     const source = "cd /repo && python3 - <<'PY'\nprint('hi')\nPY"
     const m = await mount(h(Panel, { commands: [cmd(1, { cmd: source, resultSeq: 51 })] }))
     await click(query(m.container, '.lc-cmd-row'))
