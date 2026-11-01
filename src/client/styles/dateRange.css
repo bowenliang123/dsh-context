@@ -16,10 +16,10 @@
 .lc-dp-navbtn:disabled:hover { background: transparent; color: var(--dsw-alias-label-secondary); }
 
 .lc-dp-wds, .lc-dp-week { display: flex; }
-.lc-dp-wd { flex: 0 0 28px; text-align: center; font-size: 10px; line-height: 18px; color: var(--dsw-alias-label-tertiary); }
+.lc-dp-wd { flex: none; width: 28px; text-align: center; font-size: 10px; line-height: 18px; color: var(--dsw-alias-label-tertiary); }
 .lc-dp-grid { display: flex; flex-direction: column; outline: none; }
 .lc-dp-grid:focus-visible { outline: 1px solid var(--dsw-alias-brand-primary); border-radius: 6px; }
-.lc-dp-cell { flex: 0 0 28px; height: 26px; display: flex; align-items: center; justify-content: center; box-sizing: border-box; border-radius: 5px; font-size: 11px; line-height: 1; color: var(--dsw-alias-label-primary); font-variant-numeric: tabular-nums; user-select: none; cursor: pointer; }
+.lc-dp-cell { flex: none; width: 28px; height: 26px; display: flex; align-items: center; justify-content: center; box-sizing: border-box; border-radius: 5px; font-size: 11px; line-height: 1; color: var(--dsw-alias-label-primary); font-variant-numeric: tabular-nums; user-select: none; cursor: pointer; }
 .lc-dp-cell:hover { background: var(--dsw-alias-interactive-bg-hover); }
 .lc-dp-in { background: color-mix(in srgb, var(--dsw-alias-brand-primary) 16%, transparent); border-radius: 0; }
 .lc-dp-in:hover { background: color-mix(in srgb, var(--dsw-alias-brand-primary) 24%, transparent); }
