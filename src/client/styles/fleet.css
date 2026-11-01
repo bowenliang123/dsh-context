@@ -11,7 +11,11 @@
 :is(.lc-col-graph .lc-agents, .lc-members, .lc-tasks) .lc-card-title { flex-wrap: wrap; }
 :is(.lc-col-graph .lc-agents, .lc-members, .lc-tasks) .lc-card-sub { white-space: normal; overflow-wrap: anywhere; }
 :is(.lc-col-graph .lc-agent-card, .lc-member-card, .lc-team-task) {
-  background: var(--lc-fleet-tile-bg);
+  --lc-fleet-tint: linear-gradient(118deg,
+    color-mix(in srgb, var(--lc-member-hue, var(--dsw-alias-border-l2)) 9%, transparent),
+    transparent 52%,
+    color-mix(in srgb, var(--lc-member-hue, var(--dsw-alias-border-l2)) 10%, transparent));
+  background: var(--lc-fleet-tint), var(--lc-fleet-tile-bg);
   border-top: 2px solid var(--lc-member-hue, var(--dsw-alias-border-l2));
   transition: border-color var(--ds-transition-duration, 0.2s) var(--ds-ease-in-out, ease-in-out),
     box-shadow var(--ds-transition-duration, 0.2s) var(--ds-ease-in-out, ease-in-out),
@@ -20,7 +24,7 @@
     opacity var(--ds-transition-duration, 0.2s) var(--ds-ease-in-out, ease-in-out);
 }
 :is(.lc-col-graph .lc-agent-card, .lc-member-card, .lc-team-task):hover {
-  background: var(--lc-fleet-tile-hover);
+  background: var(--lc-fleet-tint), var(--lc-fleet-tile-hover);
   border-color: var(--lc-fleet-hover-border);
   border-top-color: var(--lc-member-hue, var(--lc-fleet-hover-border));
   box-shadow: var(--lc-shadow-hover, 0 2px 10px color-mix(in srgb, var(--color-neutral-500) 18%, transparent));
@@ -28,7 +32,7 @@
 }
 .lc-col-graph .lc-agent-card:focus-visible,
 :is(.lc-col-graph .lc-agent-hover, .lc-member-hover, .lc-team-task-hover) {
-  background: var(--lc-fleet-tile-hover);
+  background: var(--lc-fleet-tint), var(--lc-fleet-tile-hover);
   border-color: var(--lc-fleet-hover-border);
   border-top-color: var(--lc-member-hue, var(--lc-fleet-hover-border));
   box-shadow: none;
@@ -39,13 +43,13 @@
   outline-offset: 1px;
 }
 :is(.lc-col-graph .lc-agent-card, .lc-member-card):is(.lc-agent-pinned, .lc-member-pinned) {
-  background: var(--lc-fleet-tile-selected);
+  background: var(--lc-fleet-tint), var(--lc-fleet-tile-selected);
   border-color: var(--lc-fleet-selected-border);
   border-top-color: var(--lc-member-hue, var(--lc-fleet-selected-border));
   box-shadow: 0 0 0 1px color-mix(in srgb, var(--dsw-alias-state-business-primary) 30%, transparent);
 }
 .lc-team-task.lc-team-task-related {
-  background: var(--lc-fleet-tile-hover);
+  background: var(--lc-fleet-tint), var(--lc-fleet-tile-hover);
   border-color: var(--lc-fleet-hover-border);
   border-top-color: var(--lc-member-hue, var(--lc-fleet-hover-border));
 }
@@ -372,8 +376,8 @@
 .lc-team-task-open { border-color: var(--dsw-alias-border-l4); border-top-color: var(--lc-member-hue, var(--dsw-alias-border-l4)); }
 .lc-team-task-chevron { flex: none; display: inline-flex; align-items: center; color: var(--dsw-alias-label-tertiary); transition: transform var(--ds-transition-duration, 0.2s) var(--ds-ease-in-out, ease-in-out), color var(--ds-transition-duration, 0.2s) var(--ds-ease-in-out, ease-in-out); }
 .lc-team-task-open .lc-team-task-chevron { color: var(--dsw-alias-state-business-primary); transform: rotate(180deg); }
-.lc-team-task.lc-team-task-focus { background: var(--lc-fleet-tile-selected); border-color: var(--lc-fleet-selected-border); box-shadow: 0 0 0 2px color-mix(in srgb, var(--dsw-alias-state-business-primary) 25%, transparent); }
-.lc-team-task.lc-team-task-chain { border-color: color-mix(in srgb, var(--dsw-alias-state-business-primary) 40%, transparent); background: color-mix(in srgb, var(--dsw-alias-state-business-primary) 5%, var(--lc-fleet-tile-bg)); }
+.lc-team-task.lc-team-task-focus { background: var(--lc-fleet-tint), var(--lc-fleet-tile-selected); border-color: var(--lc-fleet-selected-border); box-shadow: 0 0 0 2px color-mix(in srgb, var(--dsw-alias-state-business-primary) 25%, transparent); }
+.lc-team-task.lc-team-task-chain { border-color: color-mix(in srgb, var(--dsw-alias-state-business-primary) 40%, transparent); background: var(--lc-fleet-tint), color-mix(in srgb, var(--dsw-alias-state-business-primary) 5%, var(--lc-fleet-tile-bg)); }
 .lc-team-task-head { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; }
 .lc-team-task-subject { flex: 1; min-width: 0; font-size: 12px; color: var(--dsw-alias-label-primary); overflow-wrap: anywhere; }
 .lc-team-task-subject-clamp { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; }
