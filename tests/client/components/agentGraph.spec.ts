@@ -443,7 +443,7 @@ describe('AgentGraph — the Fleet seat', () => {
     assert.ok(query(m.container, '[data-agent="worker"]').className.includes('lc-agent-pinned'))
     const worker = query(m.container, '[data-agent="worker"]')
     assert.ok(worker.getAttribute('style')?.includes('--lc-member-hue'))
-    assert.equal(text(query(worker, '.lc-agent-member')), 'architect')
+    assert.equal(text(query(worker, '.lc-agent-label')), 'architect')
     assert.equal(text(query(worker, '.lc-agent-duty')), 'worker-bee')
     assert.equal(text(query(worker, '.lc-comms-avatar')), 'AR', 'the card wears the roster initials')
     const self = query(m.container, '.lc-agent-card.lc-agent-self')

@@ -381,18 +381,10 @@ function AgentCard(props: CardProps): ReactElement {
         {node.running || node.completed
           ? <StateDot state={node.running ? 'ongoing' : 'done'} size={11} className="lc-agent-state" />
           : null}
-        <div className="lc-agent-label">
-          {props.memberName === undefined
-            ? node.label
-            : (
-              <>
-                <b className="lc-agent-member">{props.memberName}</b>
-                <span className="lc-agent-duty" title={node.label}>{node.label}</span>
-              </>
-            )}
-        </div>
+        <div className="lc-agent-label" title={props.memberName ?? node.label}>{props.memberName ?? node.label}</div>
         {node.isCurrent ? <span className="lc-agents-badge lc-agent-self-badge">{props.t('agents.self')}</span> : null}
       </div>
+      {props.memberName !== undefined ? <div className="lc-agent-duty" title={node.label}>{node.label}</div> : null}
       <div className="lc-agent-metric">
         <span className="lc-agent-tokens">{metricBits.length > 0 ? metricBits.join(' · ') : '—'}</span>
       </div>
