@@ -79,31 +79,31 @@ describe('commsAgentsOf — team branch', () => {
       kit.t,
     )
     assert.deepEqual(agents.get('root'), {
-      id: 'root', name: 'Lead', role: 'lead', self: true, hue: BRAND_HUE, description: 'Main Agent',
+      id: 'root', name: 'Lead', role: 'lead', self: true, hue: BRAND_HUE, initials: 'LE2', description: 'Main Agent',
     })
     assert.deepEqual(agents.get('w1'), {
-      id: 'w1', name: 'worker-bee', role: 'teammate', self: false, hue: familyHue(1), description: 'schema duty',
+      id: 'w1', name: 'worker-bee', role: 'teammate', self: false, hue: familyHue(1), initials: 'WB', description: 'schema duty',
     })
     assert.deepEqual(agents.get('w2'), {
-      id: 'w2', name: 'side-quest', role: 'teammate', self: false, hue: familyHue(2),
+      id: 'w2', name: 'side-quest', role: 'teammate', self: false, hue: familyHue(2), initials: 'SQ',
     })
     assert.deepEqual(agents.get('w3'), {
-      id: 'w3', name: 'tests-a', role: 'teammate', self: false, hue: familyHue(2),
+      id: 'w3', name: 'tests-a', role: 'teammate', self: false, hue: familyHue(2), initials: 'TA',
     })
     assert.deepEqual(agents.get('w4'), {
-      id: 'w4', name: 'cold-scout', role: 'subagent', self: false, hue: familyHue(4),
+      id: 'w4', name: 'cold-scout', role: 'subagent', self: false, hue: familyHue(4), initials: 'CS',
     })
     assert.deepEqual(agents.get('w6'), {
-      id: 'w6', name: 'w6', role: 'teammate', self: false, hue: familyHue(5),
+      id: 'w6', name: 'w6', role: 'teammate', self: false, hue: familyHue(5), initials: 'W6',
     })
     assert.deepEqual(agents.get('w9'), {
-      id: 'w9', name: 'ghost-nine', role: 'teammate', self: false, hue: familyHue(3), description: 'ghost duty',
+      id: 'w9', name: 'ghost-nine', role: 'teammate', self: false, hue: familyHue(3), initials: 'GN', description: 'ghost duty',
     })
     assert.deepEqual(agents.get('w10'), {
-      id: 'w10', name: 'ghost-plain', role: 'teammate', self: false, hue: familyHue(4),
+      id: 'w10', name: 'ghost-plain', role: 'teammate', self: false, hue: familyHue(4), initials: 'GP',
     })
     assert.deepEqual(agents.get('remote-lead'), {
-      id: 'remote-lead', name: 'Lead', role: 'lead', self: false, hue: BRAND_HUE,
+      id: 'remote-lead', name: 'Lead', role: 'lead', self: false, hue: BRAND_HUE, initials: 'LE1',
     })
   })
 })
@@ -128,19 +128,19 @@ describe('commsAgentsOf — no team', () => {
       kit.t,
     )
     assert.deepEqual(agents.get('root'), {
-      id: 'root', name: 'Lead', role: 'lead', self: true, hue: BRAND_HUE, description: 'Main Agent',
+      id: 'root', name: 'Lead', role: 'lead', self: true, hue: BRAND_HUE, initials: 'LE', description: 'Main Agent',
     })
     assert.deepEqual(agents.get('w2'), {
-      id: 'w2', name: 'scout', role: 'teammate', self: false, hue: familyHue(2), description: 'side-quest',
+      id: 'w2', name: 'scout', role: 'teammate', self: false, hue: familyHue(2), initials: 'SC', description: 'side-quest',
     })
     assert.deepEqual(agents.get('w3'), {
-      id: 'w3', name: 'side-quest', role: 'teammate', self: false, hue: familyHue(3),
+      id: 'w3', name: 'side-quest', role: 'teammate', self: false, hue: familyHue(3), initials: 'SQ',
     })
     assert.deepEqual(agents.get('w4'), {
-      id: 'w4', name: 'cold-scout', role: 'subagent', self: false, hue: familyHue(4),
+      id: 'w4', name: 'cold-scout', role: 'subagent', self: false, hue: familyHue(4), initials: 'CS',
     })
     assert.deepEqual(agents.get('solo'), {
-      id: 'solo', name: 'Solo session', role: 'agent', self: true, hue: BRAND_HUE,
+      id: 'solo', name: 'Solo session', role: 'agent', self: true, hue: BRAND_HUE, initials: 'SS',
     })
   })
 })

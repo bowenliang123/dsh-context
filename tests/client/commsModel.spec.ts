@@ -6,6 +6,7 @@ import {
   fromPartyOf,
   includesAgent,
   initialsOf,
+  avatarLabelsOf,
   kindGroupOf,
   nameOfParty,
   NAME_PARTY_PREFIX,
@@ -99,9 +100,29 @@ describe('display helpers', () => {
     assert.equal(long.length, 601)
     assert.ok(long.endsWith('…'))
 
-    assert.equal(initialsOf('分析 Agent'), '分')
+    assert.equal(initialsOf('分析 Agent'), '分析')
+    assert.equal(initialsOf('修复会话耗时占比统计'), '修复')
+    assert.equal(initialsOf('主 Agent'), '主A')
+    assert.equal(initialsOf('standard-axis options'), 'SA')
+    assert.equal(initialsOf('Review Code'), 'RC')
     assert.equal(initialsOf('host-cleaner'), 'HC')
-    assert.equal(initialsOf('lead'), 'L')
+    assert.equal(initialsOf('lead'), 'LE')
+    assert.equal(initialsOf('a'), 'A')
     assert.equal(initialsOf('  '), '?')
+    assert.equal(initialsOf(' - '), '?')
+  })
+
+  test('avatar labels keep the plain initials until two agents collide, then digits split them', () => {
+    const labels = avatarLabelsOf([
+      { id: 'a', name: 'Spec review of timing fix' },
+      { id: 'b', name: 'Standards review of diff' },
+      { id: 'c', name: '修复会话耗时占比统计' },
+      { id: 'd', name: 'worker-bee' },
+      { id: 'a', name: 'Spec review of timing fix' },
+    ])
+    assert.deepEqual([...labels.entries()], [['a', 'SR1'], ['b', 'SR2'], ['c', '修复'], ['d', 'WB']])
+    assert.deepEqual([...avatarLabelsOf([]).entries()], [])
+    const solo = avatarLabelsOf([{ id: 'a', name: 'Spec review of timing fix' }])
+    assert.deepEqual([...solo.entries()], [['a', 'SR']])
   })
 })

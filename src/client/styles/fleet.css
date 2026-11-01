@@ -83,12 +83,6 @@
 .lc-members:has(.lc-member-hover) .lc-member-card:not(.lc-member-hover):not(.lc-member-pinned) { opacity: 0.7; }
 .lc-member-failed { opacity: 0.7; }
 .lc-member-head { display: flex; align-items: center; gap: 7px; min-width: 0; }
-.lc-member-icon {
-  flex: none; display: inline-flex; align-items: center; justify-content: center; width: 20px; height: 20px;
-  border-radius: 6px; color: var(--lc-member-hue, var(--dsw-alias-label-secondary));
-  background: color-mix(in srgb, var(--lc-member-hue, var(--dsw-alias-label-secondary)) 14%, transparent);
-  border: 1px solid color-mix(in srgb, var(--lc-member-hue, var(--dsw-alias-border-l2)) 35%, transparent);
-}
 .lc-member-name { flex: 1; min-width: 0; font-size: 12.5px; color: var(--dsw-alias-label-primary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .lc-member-name-wrap { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; white-space: normal; line-height: 1.25; }
 .lc-member-dot { flex: none; }

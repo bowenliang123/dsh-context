@@ -1,12 +1,15 @@
 import { memo, useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type MouseEvent, type ReactElement } from 'react'
-import { IconChecklistOutlineRegular, IconUserOutlineRegular, IconUsersOutlineRegular, StateDot } from '@deepseek-ai/dsh-client-ui-primitives'
+import { IconChecklistOutlineRegular, StateDot } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { AgentForest, AgentNode } from '../agentTree'
 import { BRAND_HUE, familyHue } from '../agentTree'
+import { avatarNameOf } from '../commsModel'
 import { fmtTime } from '../format'
+import { boardAvatarLabelsOf } from '../fleetAgents'
 import { familyOthersOf, memberIdByName, type FleetTeam, type FleetTeamTask } from '../fleetTeam'
 import type { FleetDetail } from '../../shared/types'
 import { alignRowInCard, scrollIntoViewIfPossible } from '../revealScroll'
 import { ClearableInput } from './clearableInput'
+import { AgentAvatar } from './commsAgent'
 import { Section } from './section'
 import { memberStyle, runMetaOf } from './memberBoard'
 import type { RichKit } from './richText'
@@ -123,6 +126,7 @@ export function TaskBoard(props: TaskBoardProps): ReactElement {
   const teamTasks = useMemo(() => team?.tasks ?? [], [team])
   const byId = useMemo(() => new Map(teamTasks.map(task => [task.id, task])), [teamTasks])
   const agentNodes = useMemo(() => familyOthersOf(forest, team), [forest, team])
+  const avatarLabels = useMemo(() => boardAvatarLabelsOf(team, agentNodes, t), [team, agentNodes, t])
   const rows = useMemo(() => [...teamTasks.map(rowOfTask), ...agentNodes.map(rowOfAgent)], [teamTasks, agentNodes])
 
   const focused = props.focusTaskId
@@ -331,12 +335,22 @@ export function TaskBoard(props: TaskBoardProps): ReactElement {
     const id = ownerSessionId(row)
     if (id === undefined) return null
     const node = forest?.nodes.find(n => n.id === id)
+    const owner = team?.members.find(member => member.id === id)
     return (
       <Section label={t('fleet.tasks.agent')}>
         <div className="lc-team-task-box-agent">
-          <span className="lc-member-icon" style={memberStyle(hue)}>
-            <IconUserOutlineRegular size={13} />
-          </span>
+          <AgentAvatar
+            agent={{
+              id,
+              name: avatarNameOf(owner?.name ?? row.subject, owner?.role ?? 'subagent', t),
+              role: owner?.role ?? 'subagent',
+              self: false,
+              hue,
+              initials: avatarLabels.get(id),
+            }}
+            size="md"
+            t={t}
+          />
           <button
             type="button"
             className="lc-team-task-owner"
@@ -378,9 +392,18 @@ export function TaskBoard(props: TaskBoardProps): ReactElement {
         onMouseLeave={() => { hoverOwner(null) }}
       >
         <div className="lc-team-task-head">
-          <span className="lc-member-icon" style={memberStyle(hue)}>
-            <IconUserOutlineRegular size={13} />
-          </span>
+          <AgentAvatar
+            agent={{
+              id: node.id,
+              name: node.label,
+              role: 'subagent',
+              self: false,
+              hue,
+              initials: avatarLabels.get(node.id),
+            }}
+            size="md"
+            t={t}
+          />
           <StateDot state={row.dot} size={9} />
           <b className="lc-team-task-subject lc-team-task-subject-clamp" title={`${row.subject} · ${node.id}`}>{row.subject}</b>
           <span className="lc-agents-badge">{t(`fleet.task.${row.status}`)}</span>
@@ -481,39 +504,51 @@ export function TaskBoard(props: TaskBoardProps): ReactElement {
     )
   }
 
-  const renderGroup = (group: OwnerGroup): ReactElement => (
-    <div key={group.key} className="lc-tasks-group lc-tasks-group-owner">
-      {group.role !== 'agent' ? (
-        <div className="lc-tasks-group-head">
-          {group.label !== null ? (
-            <>
-              {group.role !== 'stray' ? (
-                <span className="lc-member-icon lc-tasks-group-icon" style={memberStyle(group.hue)}>
-                  {group.role === 'lead' ? <IconUsersOutlineRegular size={13} /> : <IconUserOutlineRegular size={13} />}
-                </span>
-              ) : null}
-              <button
-                type="button"
-                className="lc-team-task-owner"
-                title={t('fleet.tasks.ownerTip')}
-                onClick={() => {
-                  if (group.nodeId !== undefined) props.onPinMember(group.nodeId)
-                }}
-              >
-                {group.label}
-              </button>
-            </>
-          ) : (
-            <span className="lc-agents-badge">{t('fleet.taskUnowned')}</span>
-          )}
-          <span className="lc-kind-n">{group.rows.length}</span>
-        </div>
-      ) : null}
-      <ul className="lc-tasks-rows">
-        {group.rows.map(row => (row.kind === 'team' ? renderTeamRow(row, group.hue) : renderAgentRow(row, group.hue)))}
-      </ul>
-    </div>
-  )
+  const renderGroup = (group: OwnerGroup): ReactElement => {
+    const avatarRole = group.role === 'lead' ? 'lead' : 'teammate'
+    return (
+      <div key={group.key} className="lc-tasks-group lc-tasks-group-owner">
+        {group.role !== 'agent' ? (
+          <div className="lc-tasks-group-head">
+            {group.label !== null ? (
+              <>
+                {group.role !== 'stray' && group.nodeId !== undefined ? (
+                  <AgentAvatar
+                    agent={{
+                      id: group.nodeId,
+                      name: avatarNameOf(group.label, avatarRole, t),
+                      role: avatarRole,
+                      self: false,
+                      hue: group.hue,
+                      initials: avatarLabels.get(group.nodeId),
+                    }}
+                    size="md"
+                    t={t}
+                  />
+                ) : null}
+                <button
+                  type="button"
+                  className="lc-team-task-owner"
+                  title={t('fleet.tasks.ownerTip')}
+                  onClick={() => {
+                    if (group.nodeId !== undefined) props.onPinMember(group.nodeId)
+                  }}
+                >
+                  {group.label}
+                </button>
+              </>
+            ) : (
+              <span className="lc-agents-badge">{t('fleet.taskUnowned')}</span>
+            )}
+            <span className="lc-kind-n">{group.rows.length}</span>
+          </div>
+        ) : null}
+        <ul className="lc-tasks-rows">
+          {group.rows.map(row => (row.kind === 'team' ? renderTeamRow(row, group.hue) : renderAgentRow(row, group.hue)))}
+        </ul>
+      </div>
+    )
+  }
 
   const bare = query === '' && status === 'all'
   const showToolbar = rows.length > 1 || !bare

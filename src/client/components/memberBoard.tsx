@@ -1,11 +1,14 @@
 import { useMemo, useState, type CSSProperties, type ReactElement } from 'react'
-import { IconPanelLeftOutlineRegular, IconRightUpOutlineRegular, IconUserOutlineRegular, IconUsersOutlineRegular, StateDot } from '@deepseek-ai/dsh-client-ui-primitives'
+import { IconPanelLeftOutlineRegular, IconRightUpOutlineRegular, IconUsersOutlineRegular, StateDot } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { AgentForest, AgentNode } from '../agentTree'
 import { BRAND_HUE, familyHue, fmtDurationCompact, modelLabelOf } from '../agentTree'
+import { avatarNameOf } from '../commsModel'
+import { boardAvatarLabelsOf } from '../fleetAgents'
 import { familyOthersOf, tasksOfOwner, type FleetTeam } from '../fleetTeam'
 import type { FleetDetail, FleetMemberInfo } from '../../shared/types'
 import type { ViewKit } from '../viewkit'
 import { ClearableInput } from './clearableInput'
+import { AgentAvatar } from './commsAgent'
 
 export interface MemberBoardProps {
   team: FleetTeam | null
@@ -71,6 +74,7 @@ export function MemberBoard(props: MemberBoardProps): ReactElement {
   for (const info of props.leadDetail?.roster ?? []) roster.set(info.name, info)
 
   const othersAll = useMemo(() => familyOthersOf(forest, team), [forest, team])
+  const avatarLabels = useMemo(() => boardAvatarLabelsOf(team, othersAll, t), [team, othersAll, t])
   const others = useMemo(() => {
     const needle = query.trim().toLowerCase()
     const out = othersAll.filter((node) => {
@@ -199,6 +203,7 @@ export function MemberBoard(props: MemberBoardProps): ReactElement {
               const owned = tasksOfOwner(team, member.name)
               const activeTasks = owned.filter(task => task.status !== 'completed')
               const isCurrent = node?.isCurrent === true
+              const hue = member.role === 'lead' ? BRAND_HUE : familyHue(team.members.indexOf(member))
               return (
                 <div
                   key={member.id}
@@ -208,7 +213,7 @@ export function MemberBoard(props: MemberBoardProps): ReactElement {
                       + (props.hoverId === member.id ? ' lc-member-hover' : '')
                       + (member.phase === 'failed' ? ' lc-member-failed' : '')
                   }
-                  style={memberStyle(member.role === 'lead' ? BRAND_HUE : familyHue(team.members.indexOf(member)))}
+                  style={memberStyle(hue)}
                   role="button"
                   tabIndex={0}
                   aria-pressed={props.pinnedId === member.id}
@@ -222,9 +227,18 @@ export function MemberBoard(props: MemberBoardProps): ReactElement {
                   onMouseLeave={() => { props.onHover(null) }}
                 >
                   <div className="lc-member-head">
-                    <span className="lc-member-icon">
-                      {member.role === 'lead' ? <IconUsersOutlineRegular size={13} /> : <IconUserOutlineRegular size={13} />}
-                    </span>
+                    <AgentAvatar
+                      agent={{
+                        id: member.id,
+                        name: avatarNameOf(member.name, member.role, t),
+                        role: member.role,
+                        self: isCurrent,
+                        hue,
+                        initials: avatarLabels.get(member.id),
+                      }}
+                      size="md"
+                      t={t}
+                    />
                     <b className="lc-member-name">{member.name}</b>
                     {isCurrent ? <span className="lc-agents-badge">{t('agents.self')}</span> : null}
                     <span className="lc-agents-badge">{t(member.role === 'lead' ? 'fleet.role.lead' : 'fleet.role.teammate')}</span>
@@ -314,9 +328,18 @@ export function MemberBoard(props: MemberBoardProps): ReactElement {
                   onMouseLeave={() => { props.onHover(null) }}
                 >
                   <div className="lc-member-head">
-                    <span className="lc-member-icon">
-                      <IconUserOutlineRegular size={13} />
-                    </span>
+                    <AgentAvatar
+                      agent={{
+                        id: node.id,
+                        name: node.label,
+                        role: 'subagent',
+                        self: false,
+                        hue: familyHue(node.family),
+                        initials: avatarLabels.get(node.id),
+                      }}
+                      size="md"
+                      t={t}
+                    />
                     <b className="lc-member-name lc-member-name-wrap" title={node.label}>{node.label}</b>
                     <StateDot
                       state={node.running ? 'ongoing' : node.completed ? 'done' : 'idle'}

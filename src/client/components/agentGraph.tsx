@@ -4,6 +4,7 @@ import { CATS } from '../categories'
 import type { AgentHeads } from '../agentHeads'
 import { makeAgentHeads } from '../agentHeads'
 import { billedTokensOf, displayCurrencyOf, estimateSessionCost, formatCost, type CostCurrency, type ModelBook } from '../cost'
+import { avatarLabelsOf, avatarNameOf, type CommsAgent, type CommsRole } from '../commsModel'
 import { useModelPrices } from '../modelPrices'
 import { containHorizontalOverscroll } from '../overscroll'
 import { scrollIntoViewIfPossible } from '../revealScroll'
@@ -23,6 +24,7 @@ import {
   pressureColorOf,
 } from '../agentTree'
 import { AgentInspector } from './agentInspector'
+import { AgentAvatar } from './commsAgent'
 import { memberStyle } from './memberBoard'
 
 export interface AgentGraphProps {
@@ -44,6 +46,12 @@ const STAGE_H = 560
 function linkPath(x1: number, y1: number, x2: number, y2: number): string {
   const k = Math.min(96, Math.max(24, (y2 - y1) * 0.5))
   return `M ${x1} ${y1} C ${x1} ${y1 + k}, ${x2} ${y2 - k}, ${x2} ${y2}`
+}
+
+function avatarIdentityOf(team: FleetTeam | null, node: AgentNode, t: ViewKit['t']): { name: string; role: CommsRole } {
+  const member = teamMemberOf(team, node.id)
+  const role: CommsRole = member === null ? (node.isCurrent ? 'agent' : 'subagent') : member.role
+  return { name: avatarNameOf(member === null ? node.label : member.name, role, t), role }
 }
 
 export function makeAgentGraph(
@@ -99,6 +107,12 @@ export function makeAgentGraph(
     }, [])
 
     const layout = useMemo(() => (forest !== null ? layoutForest(forest, stageWidth) : null), [forest, stageWidth])
+    const avatarLabels = useMemo(
+      () => forest === null
+        ? null
+        : avatarLabelsOf(forest.nodes.map(node => ({ id: node.id, name: avatarIdentityOf(team, node, t).name }))),
+      [forest, team, t],
+    )
 
     if (forest === null || layout === null) return null
     const tallFamily = layout.height > STAGE_H
@@ -266,6 +280,13 @@ export function makeAgentGraph(
                       book={book}
                       currency={currency}
                       memberName={teammateNameOf(team, node)}
+                      avatar={{
+                        id: node.id,
+                        ...avatarIdentityOf(team, node, t),
+                        self: node.isCurrent,
+                        hue: hueOf(node),
+                        initials: avatarLabels?.get(node.id),
+                      }}
                       t={t}
                       fmt={fmt}
                     />
@@ -312,6 +333,7 @@ interface CardProps {
   book: ModelBook | null
   currency: CostCurrency
   memberName?: string
+  avatar: CommsAgent
   t: ViewKit['t']
   fmt: ViewKit['fmt']
 }
@@ -355,6 +377,7 @@ function AgentCard(props: CardProps): ReactElement {
       onBlur={() => { props.onHover(null) }}
     >
       <div className="lc-agent-card-head">
+        <AgentAvatar agent={props.avatar} size="sm" t={props.t} />
         {node.running || node.completed
           ? <StateDot state={node.running ? 'ongoing' : 'done'} size={11} className="lc-agent-state" />
           : null}

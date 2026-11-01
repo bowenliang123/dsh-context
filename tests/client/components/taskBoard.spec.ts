@@ -82,17 +82,17 @@ describe('TaskBoard — the owner-grouped board', () => {
     const heads = queryAll(m.container, '.lc-tasks-group-head')
     assert.deepEqual(
       heads.map(el => text(el)),
-      ['worker-bee1', 'ghost1', `${DICT_EN['fleet.taskUnowned']}3`],
+      ['WBworker-bee1', 'ghost1', `${DICT_EN['fleet.taskUnowned']}3`],
     )
-    assert.equal(queryAll(m.container, '.lc-tasks-group-head .lc-member-icon').length, 1)
-    assert.equal(queryAll(m.container, '.lc-team-task-head .lc-member-icon').length, 3)
+    assert.equal(queryAll(m.container, '.lc-tasks-group-head .lc-comms-avatar').length, 1)
+    assert.equal(queryAll(m.container, '.lc-team-task-head .lc-comms-avatar').length, 3)
     await m.unmount()
 
     const lead = teamOf({
       tasks: [{ id: 'task-9', subject: 'steer', description: '', status: 'in_progress', ownerName: 'lead', blockedBy: [], writeScopes: [], ready: false, warnings: [] }],
     })
     const leadMount = await mount(h(TaskBoard, propsOf({ team: lead, forest: null })))
-    assert.ok(query(leadMount.container, '.lc-tasks-group-head .lc-member-icon')?.getAttribute('style')?.includes('--lc-member-hue: var(--dsw-alias-brand-primary'))
+    assert.ok(query(leadMount.container, '.lc-tasks-group-head .lc-comms-avatar')?.getAttribute('style')?.includes('--lc-comms-hue: var(--dsw-alias-brand-primary'))
     await leadMount.unmount()
   })
 
@@ -102,7 +102,7 @@ describe('TaskBoard — the owner-grouped board', () => {
     assert.ok(text(scout).includes('in progress'))
     assert.ok(text(scout).includes('42s · 5 steps'))
     assert.ok(query(scout, '.lc-team-task-subject').className.includes('lc-team-task-subject-clamp'))
-    assert.ok(query(scout, '.lc-team-task-head .lc-member-icon') !== null, 'the row wears the agent hue')
+    assert.ok(query(scout, '.lc-team-task-head .lc-comms-avatar') !== null, 'the row wears the agent hue')
     assert.ok(text(query(m.container, '[data-task="s2"]')).includes('completed'))
     const idler = query(m.container, '[data-task="s3"]')
     assert.ok(text(idler).includes('pending'))

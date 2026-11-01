@@ -106,12 +106,17 @@ describe('MemberBoard — team cards', () => {
     assert.ok(text(lead).includes('deepseek-v4'))
     assert.ok(text(lead).includes('running'))
     assert.equal(queryAll(lead, '.lc-member-opens').length, 0)
+    const leadAvatar = query(lead, '.lc-comms-avatar')
+    assert.equal(text(leadAvatar), 'LE')
+    assert.ok(leadAvatar?.className.includes('lc-comms-avatar-self'), 'the current member wears the self ring')
+    assert.ok(leadAvatar?.getAttribute('style')?.includes('--lc-comms-hue'))
 
     const worker = cards[1]
     assert.ok(worker.className.includes('lc-member-pinned'))
     assert.ok(text(worker).includes('维度2：代码质量'))
     assert.ok(text(worker).includes('schema parser landed'))
     assert.ok(text(worker).includes('1 active tasks'))
+    assert.equal(text(query(worker, '.lc-comms-avatar')), 'WB')
 
     const flaky = cards[2]
     assert.ok(flaky.className.includes('lc-member-failed'))

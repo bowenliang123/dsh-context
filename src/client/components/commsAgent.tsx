@@ -36,7 +36,7 @@ export function AgentAvatar(props: {
       title={`${props.agent.name} · ${roleLabelOf(props.agent, props.t)}`}
       aria-hidden="true"
     >
-      {initialsOf(props.agent.name)}
+      {props.agent.initials ?? initialsOf(props.agent.name)}
     </span>
   )
 }
