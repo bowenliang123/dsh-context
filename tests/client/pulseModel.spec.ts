@@ -122,14 +122,15 @@ describe('pulse lane visibility', () => {
     active: index === 1,
   }))
 
-  test('keeps active, communicating, selected, and search-matching lanes when quiet lanes fold', () => {
+  test('folds quiet lanes around active traffic, and a search matches across every lane', () => {
     const rows = [row(1, 'traffic', 'a2', 'a3')]
     assert.deepEqual(pulseVisibleLaneIds(lanes, rows, null, '', false), ['a1', 'a2', 'a3'])
-    assert.deepEqual(pulseVisibleLaneIds(lanes, rows, 'a4', 'agent 5', false), ['a1', 'a2', 'a3', 'a4', 'a5'])
+    assert.deepEqual(pulseVisibleLaneIds(lanes, rows, 'a4', '', false), ['a1', 'a2', 'a3', 'a4'])
     assert.deepEqual(pulseVisibleLaneIds(lanes, rows, null, '', true), lanes.map(lane => lane.agent.id))
     const described = lanes.map(lane => ({ ...lane, agent: { ...lane.agent } }))
     described[8].agent.description = 'special duty'
-    assert.deepEqual(pulseVisibleLaneIds(described, rows, null, 'special', false), ['a1', 'a2', 'a3', 'a8'])
+    assert.deepEqual(pulseVisibleLaneIds(described, rows, null, 'special', false), ['a8'])
+    assert.deepEqual(pulseVisibleLaneIds(described, rows, null, 'agent 5', false), ['a5'])
   })
 
   test('small fleets never lose quiet lanes', () => {

@@ -235,7 +235,7 @@ describe('MissionPulse boundary parties', () => {
     assert.deepEqual(enter.mock.calls, [['child']])
     await click(events[0])
     assert.ok(text(query(mounted.container, '.lc-pulse-inspector')).includes(kit.t('fleet.pulse.selectEvent')))
-    const search = query<HTMLInputElement>(mounted.container, '.lc-pulse-search')
+    const search = query<HTMLInputElement>(mounted.container, '.lc-pulse-event-tools .lc-pulse-search')
     await typeText(search, 'peer duty')
     assert.equal(queryAll(mounted.container, '.lc-pulse-event').length, 1)
     assert.equal(query(mounted.container, '.lc-pulse-event').dataset.eventKey, 'other:2:peer')
@@ -333,5 +333,92 @@ describe('MissionPulse boundary parties', () => {
     await click(query(mounted.container, '[data-agent="root"]'))
     assert.ok(text(query(mounted.container, '.lc-pulse-tasks')).includes(kit.t('fleet.tasks.noMatch')))
     await mounted.unmount()
+  })
+
+  test('the collaboration and work-queue headers search their own content', async () => {
+    const team: FleetTeam = {
+      members: [
+        { id: 'root', name: 'lead', role: 'lead', phase: 'active' },
+        { id: 'child', name: 'child', role: 'teammate', phase: 'active' },
+      ],
+      tasks: [
+        { id: 'task-1', subject: 'Parse schema', description: '', status: 'in_progress', ownerName: 'child', blockedBy: [], writeScopes: [], ready: true, warnings: [] },
+        { id: 'task-2', subject: 'Ship docs', description: '', status: 'pending', ownerName: 'root', blockedBy: [], writeScopes: [], ready: true, warnings: [] },
+      ],
+    }
+    const rows: CommsRow[] = [
+      { key: 'child:1:1000:relay', to: 'child', seq: 1, time: 1000, kind: 'relay', from: 'root', text: 'go' },
+      { key: 'root:2:2000:relay', to: 'root', seq: 2, time: 2000, kind: 'relay', from: 'child', text: 'done' },
+    ]
+    const agents = new Map([
+      ['root', { id: 'root', name: 'Lead', role: 'lead' as const, self: true, hue: 'red' }],
+      ['child', { id: 'child', name: 'child', role: 'teammate' as const, self: false, hue: 'blue' }],
+    ])
+    const mounted = await mount(h(MissionPulse, {
+      forest: null,
+      team,
+      details: makeDetails(),
+      landedDetails: new Map(),
+      comms: rows,
+      delegations: [],
+      agents,
+      titles: new Map(),
+      attested: new Map(),
+      focusMember: null,
+      onOpen: () => {},
+      onEnter: () => {},
+      rich: makeRichText(kit),
+      t: kit.t,
+    }))
+    const laneSearch = query<HTMLInputElement>(mounted.container, '.lc-pulse-timeline .lc-pulse-search')
+    await typeText(laneSearch, 'child')
+    assert.deepEqual(
+      queryAll<HTMLElement>(mounted.container, '.lc-pulse-lane-label').map(el => el.dataset.laneLabel),
+      ['child'],
+    )
+    assert.ok(text(query(mounted.container, '.lc-pulse-timeline')).includes(
+      kit.t('fleet.pulse.timelineSub', { shown: 1, total: 2, lanes: 1 }),
+    ))
+    assert.equal(queryAll(mounted.container, '.lc-pulse-work-item').length, 2)
+    await typeText(laneSearch, 'no such agent')
+    assert.equal(queryAll(mounted.container, '.lc-pulse-lane-label').length, 0)
+    assert.ok(text(query(mounted.container, '.lc-pulse-timeline')).includes(kit.t('fleet.pulse.noLaneMatch')))
+    await typeText(laneSearch, '')
+    assert.equal(queryAll(mounted.container, '.lc-pulse-lane-label').length, 2)
+    const workSearch = query<HTMLInputElement>(mounted.container, '.lc-pulse-tasks .lc-pulse-search')
+    await typeText(workSearch, 'ship')
+    assert.equal(queryAll(mounted.container, '.lc-pulse-work-item').length, 1)
+    assert.ok(text(query(mounted.container, '.lc-pulse-work-item')).includes('Ship docs'))
+    await typeText(workSearch, 'no such task')
+    assert.equal(queryAll(mounted.container, '.lc-pulse-work-item').length, 0)
+    assert.ok(text(query(mounted.container, '.lc-pulse-tasks')).includes(kit.t('fleet.tasks.noMatch')))
+    await click(query(mounted.container, '[data-task-chip="task-1"]'))
+    assert.equal(queryAll(mounted.container, '.lc-pulse-work-item').length, 2)
+    assert.ok(query(mounted.container, '.lc-pulse-work-item').className.includes('lc-pulse-work-focused'))
+    await typeText(workSearch, '')
+    assert.equal(queryAll(mounted.container, '.lc-pulse-work-item').length, 2)
+    await mounted.unmount()
+
+    const quiet = await mount(h(MissionPulse, {
+      forest: null,
+      team: null,
+      details: makeDetails(),
+      landedDetails: new Map(),
+      comms: [],
+      delegations: [],
+      agents,
+      titles: new Map(),
+      attested: new Map(),
+      focusMember: null,
+      onOpen: () => {},
+      onEnter: () => {},
+      rich: makeRichText(kit),
+      t: kit.t,
+    }))
+    await typeText(query<HTMLInputElement>(quiet.container, '.lc-pulse-timeline .lc-pulse-search'), 'child')
+    const quietTimeline = text(query(quiet.container, '.lc-pulse-timeline'))
+    assert.ok(quietTimeline.includes(kit.t('fleet.comms.empty')))
+    assert.ok(!quietTimeline.includes(kit.t('fleet.pulse.noLaneMatch')))
+    await quiet.unmount()
   })
 })

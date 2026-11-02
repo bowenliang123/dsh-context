@@ -33,6 +33,7 @@ import { containHorizontalOverscroll } from '../overscroll'
 import { scrollIntoViewIfPossible } from '../revealScroll'
 import type { ViewKit } from '../viewkit'
 import { useColumnWindow } from './useRowWindow'
+import { ClearableInput } from './clearableInput'
 import { AgentAvatar, channelStyle, roleTextOf } from './commsAgent'
 
 interface PulseTimelineProps {
@@ -54,6 +55,7 @@ interface PulseTimelineProps {
   onSelectDelegation: (delegation: FleetDelegationRow) => void
   onHoverTask: (id: string | null) => void
   onRevealTask: (id: string) => void
+  onQuery: (query: string) => void
   onOpen: (id: string) => void
   onEnter: (id: string) => void
   t: ViewKit['t']
@@ -118,8 +120,14 @@ export function PulseTimeline(props: PulseTimelineProps): ReactElement {
     }
     return map
   }, [props.scopedRows])
-  const hidden = props.lanes.length - visibleIds.length
+  const searching = props.query.trim() !== ''
+  const hidden = searching ? 0 : props.lanes.length - visibleIds.length
   const recordTotal = props.scopedRows.length + props.scopedDelegations.length
+  const shownRecords = useMemo(() => {
+    if (visibleIds.length === props.lanes.length) return timelineItems.length
+    const ids = new Set(visibleIds)
+    return timelineItems.reduce((count, item) => count + (ids.has(item.to) ? 1 : 0), 0)
+  }, [props.lanes.length, timelineItems, visibleIds])
   useEffect(() => {
     const el = scrollerRef.current
     if (el === null) return undefined
@@ -168,10 +176,18 @@ export function PulseTimeline(props: PulseTimelineProps): ReactElement {
       <div className="lc-card-title">
         <span className="lc-card-title-text"><IconWorkspaceTreeOutlineRegular size={14} />{t('fleet.pulse.timeline')}</span>
         <span className="lc-card-sub">
-          {t('fleet.pulse.timelineSub', { shown: timelineItems.length, total: recordTotal, lanes: visibleIds.length })}
+          {t('fleet.pulse.timelineSub', { shown: shownRecords, total: recordTotal, lanes: visibleIds.length })}
         </span>
+        <ClearableInput
+          type="search"
+          className="lc-fleet-search lc-pulse-search"
+          placeholder={t('fleet.pulse.searchLanes')}
+          clearLabel={t('field.clear')}
+          value={props.query}
+          onChange={props.onQuery}
+        />
         <span className="lc-pulse-title-actions">
-          {props.lanes.length > 8 && (showQuiet || hidden > 0) ? (
+          {!searching && props.lanes.length > 8 && (showQuiet || hidden > 0) ? (
             <button type="button" className="lc-pulse-quiet" aria-pressed={showQuiet} onClick={() => { setShowQuiet(value => !value) }}>
               {showQuiet ? t('fleet.pulse.hideQuiet') : t('fleet.pulse.showQuiet', { n: hidden })}
             </button>
@@ -414,9 +430,11 @@ export function PulseTimeline(props: PulseTimelineProps): ReactElement {
       ) : null}
       {visibleIds.length === 0 || timelineItems.length === 0 ? (
         <div className="lc-empty lc-pulse-timeline-empty">
-          {recordTotal === 0 && props.pending
-            ? t('fleet.comms.loading')
-            : recordTotal === 0 ? t('fleet.comms.empty') : t('fleet.pulse.emptyTimeline')}
+          {searching && visibleIds.length === 0
+            ? t('fleet.pulse.noLaneMatch')
+            : recordTotal === 0 && props.pending
+              ? t('fleet.comms.loading')
+              : recordTotal === 0 ? t('fleet.comms.empty') : t('fleet.pulse.emptyTimeline')}
         </div>
       ) : null}
     </section>

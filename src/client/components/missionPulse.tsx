@@ -99,11 +99,13 @@ interface PulseTasksProps {
   selectedAgent: string | null
   focusedTaskKey: string | null
   hoveredTaskId: string | null
+  query: string
   agentOf: (party: string) => CommsAgent
   onFocus: (item: PulseWorkItem) => void
   onFocusDependency: (id: string) => void
   onHoverTask: (id: string | null) => void
   onSelectAgent: (id: string) => void
+  onQuery: (query: string) => void
   onOpen: (id: string) => void
   onEnter: (id: string) => void
   rich: RichKit
@@ -122,6 +124,14 @@ function PulseTasks(props: PulseTasksProps): ReactElement {
       <div className="lc-card-title">
         <span className="lc-card-title-text"><IconChecklistOutlineRegular size={14} />{t('fleet.pulse.work')}</span>
         <span className="lc-card-sub">{t('fleet.pulse.workSub', { shown: props.visibleItems.length, total: props.items.length })}</span>
+        <ClearableInput
+          type="search"
+          className="lc-fleet-search lc-pulse-search"
+          placeholder={t('fleet.pulse.searchTasks')}
+          clearLabel={t('field.clear')}
+          value={props.query}
+          onChange={props.onQuery}
+        />
       </div>
       {props.teamFailure !== undefined ? <div className="lc-pulse-work-warning">{t('fleet.team.failureShort')} · {props.teamFailure}</div> : null}
       {props.visibleItems.length > 0 ? (
@@ -454,6 +464,8 @@ export function MissionPulse(props: MissionPulseProps): ReactElement {
   const [hoveredTaskId, setHoveredTaskId] = useState<string | null>(null)
   const [kind, setKind] = useState<CommsKindFilter>('all')
   const [query, setQuery] = useState('')
+  const [laneQuery, setLaneQuery] = useState('')
+  const [workQuery, setWorkQuery] = useState('')
   const agentOf = useMemo(
     () => agentResolverOf(props.agents, props.titles, props.attested, t),
     [props.agents, props.attested, props.titles, t],
@@ -513,10 +525,16 @@ export function MissionPulse(props: MissionPulseProps): ReactElement {
       active: running.has(agent.id) || communicating.has(agent.id) || structural.has(agent.id),
     }))
   }, [agentOf, props.agents, props.comms, props.delegations, props.forest])
-  const visibleWork = useMemo(
-    () => selectedAgent === null ? workItems : workItems.filter(item => item.ownerId === selectedAgent),
-    [selectedAgent, workItems],
-  )
+  const visibleWork = useMemo(() => {
+    const scoped = selectedAgent === null ? workItems : workItems.filter(item => item.ownerId === selectedAgent)
+    const needle = workQuery.trim().toLowerCase()
+    if (needle === '') return scoped
+    return scoped.filter((item) => {
+      const owner = item.ownerId !== undefined ? agentOf(item.ownerId).name : undefined
+      return [item.id, item.subject, item.ownerName, owner, item.description]
+        .some(value => value !== undefined && value.toLowerCase().includes(needle))
+    })
+  }, [agentOf, selectedAgent, workItems, workQuery])
   const selectedRow = selectedEventKey === null ? undefined : visibleRows.find(row => row.key === selectedEventKey)
   const selectedDelegation = selectedDelegationKey === null
     ? undefined
@@ -559,6 +577,7 @@ export function MissionPulse(props: MissionPulseProps): ReactElement {
     const item = workItems.find(work => work.key === `team:${id}`)
     if (item === undefined) return
     setSelectedAgent(null)
+    setWorkQuery('')
     setFocusedTaskKey(item.key)
     if (item.ownerId !== undefined) props.details.requestFull(item.ownerId)
   }
@@ -585,7 +604,7 @@ export function MissionPulse(props: MissionPulseProps): ReactElement {
         selectedAgent={selectedAgent}
         selectedEventKey={selectedEventKey}
         selectedDelegationKey={selectedDelegationKey}
-        query={query}
+        query={laneQuery}
         pending={props.details.pending.size > 0 || props.details.historyPending.size > 0}
         agentOf={agentOf}
         onSelectAgent={selectAgent}
@@ -593,6 +612,7 @@ export function MissionPulse(props: MissionPulseProps): ReactElement {
         onSelectDelegation={selectDelegation}
         onHoverTask={setHoveredTaskId}
         onRevealTask={focusTaskId}
+        onQuery={setLaneQuery}
         onOpen={props.onOpen}
         onEnter={props.onEnter}
         t={t}
@@ -605,11 +625,13 @@ export function MissionPulse(props: MissionPulseProps): ReactElement {
         selectedAgent={selectedAgent}
         focusedTaskKey={focusedTaskKey}
         hoveredTaskId={hoveredTaskId}
+        query={workQuery}
         agentOf={agentOf}
         onFocus={focusTask}
         onFocusDependency={focusTaskId}
         onHoverTask={setHoveredTaskId}
         onSelectAgent={selectAgent}
+        onQuery={setWorkQuery}
         onOpen={props.onOpen}
         onEnter={props.onEnter}
         rich={props.rich}

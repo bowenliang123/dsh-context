@@ -119,20 +119,21 @@ export function pulseVisibleLaneIds(
   query: string,
   showQuiet: boolean,
 ): string[] {
-  if (showQuiet || lanes.length <= 8) return lanes.map(lane => lane.agent.id)
   const needle = query.trim().toLowerCase()
+  if (needle !== '') {
+    return lanes
+      .filter(lane => lane.agent.name.toLowerCase().includes(needle)
+        || (lane.agent.description ?? '').toLowerCase().includes(needle))
+      .map(lane => lane.agent.id)
+  }
+  if (showQuiet || lanes.length <= 8) return lanes.map(lane => lane.agent.id)
   const communicating = new Set<string>()
   for (const row of rows) {
     communicating.add(fromPartyOf(row))
     communicating.add(row.to)
   }
   return lanes
-    .filter((lane) => {
-      if (lane.active || lane.agent.id === selectedAgent || communicating.has(lane.agent.id)) return true
-      if (needle === '') return false
-      return lane.agent.name.toLowerCase().includes(needle)
-        || (lane.agent.description ?? '').toLowerCase().includes(needle)
-    })
+    .filter(lane => lane.active || lane.agent.id === selectedAgent || communicating.has(lane.agent.id))
     .map(lane => lane.agent.id)
 }
 
