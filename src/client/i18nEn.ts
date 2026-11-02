@@ -438,6 +438,8 @@ export const DICT_EN = {
   'fleet.comms.detail.noReport': 'This settlement carried no closing report',
   'fleet.comms.detail.noBody': 'This message has no text',
   'fleet.comms.detail.participants': 'Participants',
+  'fleet.comms.detail.sender': 'Sender',
+  'fleet.comms.detail.recipient': 'Recipient',
   'fleet.comms.detail.filter': 'Filter to this agent',
   'fleet.comms.detail.unfilter': 'Clear filter',
   'loading': 'Reading the session log…',

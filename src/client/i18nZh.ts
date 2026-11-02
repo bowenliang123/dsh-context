@@ -436,6 +436,8 @@ export const DICT_ZH = {
   'fleet.comms.detail.noReport': '这条结算记录没有附带完成报告',
   'fleet.comms.detail.noBody': '这条消息没有正文',
   'fleet.comms.detail.participants': '参与者',
+  'fleet.comms.detail.sender': '发送方',
+  'fleet.comms.detail.recipient': '接收方',
   'fleet.comms.detail.filter': '只看该 Agent',
   'fleet.comms.detail.unfilter': '取消筛选',
   'loading': '正在读取会话日志…',

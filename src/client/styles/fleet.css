@@ -173,13 +173,23 @@
   font-family: var(--ds-font-family-code, ui-monospace, SFMono-Regular, Menlo, monospace);
   font-size: 11px; line-height: 1.45; white-space: pre-wrap; overflow-wrap: anywhere;
 }
-.lc-comms-people { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(240px, 100%), 1fr)); gap: 6px; }
+.lc-comms-participants { container: lc-comms-participants / inline-size; }
+.lc-comms-people { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 26px; }
+.lc-comms-people-self { grid-template-columns: minmax(0, 1fr); }
 .lc-comms-person {
+  position: relative;
   display: flex; flex-wrap: wrap; align-items: center; gap: 6px 8px; min-width: 0;
   padding: 7px 8px; border-radius: 8px;
   border: var(--lc-line-fine, 1px solid var(--dsw-alias-border-l2));
   background: var(--dsw-alias-bg-layer-1);
 }
+.lc-comms-party-from { border-top: 2px solid var(--lc-ch-a); }
+.lc-comms-party-to { border-top: 2px solid var(--lc-ch-b); }
+.lc-comms-party-to::before {
+  content: '→'; position: absolute; left: -24px; top: 50%; transform: translateY(-50%);
+  color: var(--lc-ch-a); font-size: 19px; font-weight: 650; line-height: 1;
+}
+.lc-comms-person-direction { margin-bottom: 2px; color: var(--dsw-alias-label-tertiary, var(--dsw-alias-label-secondary)); font-size: 8.5px; font-weight: 750; letter-spacing: .08em; text-transform: uppercase; }
 .lc-comms-person-main { flex: 1; min-width: 0; }
 .lc-comms-person-name { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; font-size: 11.5px; color: var(--dsw-alias-label-primary); }
 .lc-comms-person-desc {
@@ -193,6 +203,11 @@
   background: color-mix(in srgb, var(--dsw-alias-brand-primary, var(--color-blue-500)) 12%, transparent);
 }
 .lc-comms-notes { display: flex; flex-wrap: wrap; gap: 3px 12px; font-size: 10.5px; color: var(--dsw-alias-label-tertiary, var(--dsw-alias-label-secondary)); }
+
+@container lc-comms-participants (max-width: 520px) {
+  .lc-comms-people { grid-template-columns: minmax(0, 1fr); gap: 16px; }
+  .lc-comms-party-to::before { content: '↓'; left: 50%; top: -15px; transform: translateX(-50%); }
+}
 
 @container lc-card (max-width: 620px) {
   .lc-comms-time { order: 1; }
