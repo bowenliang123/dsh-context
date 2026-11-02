@@ -82,17 +82,6 @@ export function commsAgentsOf(
   return map
 }
 
-export function boardAvatarLabelsOf(
-  team: FleetTeam | null,
-  others: readonly AgentNode[],
-  t: ViewKit['t'],
-): ReadonlyMap<string, string> {
-  return avatarLabelsOf([
-    ...(team?.members ?? []).map(member => ({ id: member.id, name: avatarNameOf(member.name, member.role, t) })),
-    ...others.map(node => ({ id: node.id, name: node.label })),
-  ])
-}
-
 function shortIdOf(id: string): string {
   return id.length > 12 ? id.slice(0, 8) + '…' : id
 }

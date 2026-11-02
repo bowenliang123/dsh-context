@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import { describe, test } from 'vitest'
-import { alignRowInCard, revealInScrollParent, revealRowInCard, scrollIntoViewIfPossible } from '../../src/client/revealScroll'
+import { revealInScrollParent, revealRowInCard, scrollIntoViewIfPossible } from '../../src/client/revealScroll'
 
 const top = (t: number): DOMRect => ({ top: t }) as DOMRect
 
@@ -111,27 +111,6 @@ describe('revealRowInCard', () => {
     stranger.remove()
   })
 
-  test('alignRowInCard puts the row top at the region top (honoring an inset) and ignores non-overflow, null, and outside cases', () => {
-    const { card, region, row } = mounted(250, 280)
-    alignRowInCard(card, row)
-    assert.equal(region.scrollTop, 280, 'the row top lands at the region top: 30 + (250 − 0)')
-    const above = mounted(-10, 20)
-    alignRowInCard(above.card, above.row)
-    assert.equal(above.region.scrollTop, 20)
-    const inset = mounted(250, 280)
-    alignRowInCard(inset.card, inset.row, 30)
-    assert.equal(inset.region.scrollTop, 250, 'the inset leaves room for a sticky group head: 30 + (250 − 0 − 30)')
-
-    const still = mounted(250, 280, false)
-    alignRowInCard(still.card, still.row)
-    assert.equal(still.region.scrollTop, 30)
-    const stranger = document.createElement('div')
-    assert.doesNotThrow(() => {
-      alignRowInCard(card, null)
-      alignRowInCard(card, stranger)
-      alignRowInCard(null, row)
-    })
-  })
 })
 
 describe('scrollIntoViewIfPossible', () => {

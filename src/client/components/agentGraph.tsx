@@ -25,7 +25,9 @@ import {
 } from '../agentTree'
 import { AgentInspector } from './agentInspector'
 import { AgentAvatar } from './commsAgent'
-import { memberStyle } from './memberBoard'
+function memberStyle(hue: string): CSSProperties {
+  return { '--lc-member-hue': hue } as CSSProperties
+}
 
 export interface AgentGraphProps {
   sessionId?: string

@@ -95,13 +95,14 @@ export function fleetDetailOf(value: unknown): FleetDetail | null {
 export function makeFleetDetailFetcher(
   sessionId: string,
   full = false,
+  history = false,
 ): (() => Promise<FleetDetail | null>) | undefined {
   if (sessionId === '') return undefined
   return async () => {
     const response = await fetch(FLEET_ROUTE, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ ...(full ? { full: true } : {}), sessionId }),
+      body: JSON.stringify({ ...(full ? { full: true } : {}), ...(history ? { history: true } : {}), sessionId }),
     })
     if (!response.ok) throw new Error(`dsh-context: fleet route HTTP ${response.status}`)
     const r = asRecord(await response.json())
@@ -124,6 +125,7 @@ const FULL_LEDGER_MAX = 4
 export class FleetDetailCache {
   private readonly entries = new Map<string, FleetDetailEntry>()
   private readonly fullEntries = new Map<string, FleetDetailEntry>()
+  private readonly historyEntries = new Map<string, FleetDetailEntry>()
 
   fetch(id: string, updatedAt: number, full = false): Promise<FleetDetail | null> {
     const ledger = full ? this.fullEntries : this.entries
@@ -138,6 +140,21 @@ export class FleetDetailCache {
       : Promise.resolve(null)
     ledger.set(id, { updatedAt, pending })
     lruTrim(ledger, full ? FULL_LEDGER_MAX : FLEET_LEDGER_MAX)
+    return pending
+  }
+
+  fetchHistory(id: string, updatedAt: number): Promise<FleetDetail | null> {
+    const known = this.historyEntries.get(id)
+    if (known !== undefined && known.updatedAt >= updatedAt) {
+      lruTouch(this.historyEntries, id)
+      return known.pending
+    }
+    const fetcher = makeFleetDetailFetcher(id, false, true)
+    const pending = fetcher !== undefined
+      ? fetcher().catch((): FleetDetail | null => null)
+      : Promise.resolve(null)
+    this.historyEntries.set(id, { updatedAt, pending })
+    lruTrim(this.historyEntries, FLEET_LEDGER_MAX)
     return pending
   }
 }

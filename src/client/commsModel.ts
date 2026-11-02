@@ -19,29 +19,12 @@ export interface CommsAgent {
 
 export type CommsKindFilter = 'all' | 'message' | 'report'
 
-export interface CommsChannel {
-  key: string
-  a: string
-  b: string
-  rows: CommsRow[]
-  out: number
-  back: number
-  lastTime: number
-  kinds: Record<CommsRow['kind'], number>
-}
-
 const PREVIEW_MAX = 600
-const CHANNEL_SEP = '\u0000'
 
 export function fromPartyOf(row: CommsRow): string {
   if (row.from !== undefined) return row.from
   if (row.fromName !== undefined) return NAME_PARTY_PREFIX + row.fromName
   return UNKNOWN_PARTY
-}
-
-export function channelKeyOf(row: CommsRow): string {
-  const from = fromPartyOf(row)
-  return from <= row.to ? `${from}${CHANNEL_SEP}${row.to}` : `${row.to}${CHANNEL_SEP}${from}`
 }
 
 export function nameOfParty(party: string): string | undefined {
@@ -117,49 +100,4 @@ export function avatarLabelsOf(entries: Iterable<{ id: string; name: string }>):
     else ids.sort().forEach((id, index) => labels.set(id, `${base}${index + 1}`))
   }
   return labels
-}
-
-export function channelsOf(rows: readonly CommsRow[], anchorId?: string): CommsChannel[] {
-  const groups = new Map<string, CommsRow[]>()
-  for (const row of rows) {
-    const key = channelKeyOf(row)
-    const group = groups.get(key)
-    if (group === undefined) groups.set(key, [row])
-    else group.push(row)
-  }
-  const channels: CommsChannel[] = []
-  for (const [key, group] of groups) {
-    const sep = key.indexOf(CHANNEL_SEP)
-    const p1 = key.slice(0, sep)
-    const p2 = key.slice(sep + CHANNEL_SEP.length)
-    const sent1 = group.filter(row => fromPartyOf(row) === p1).length
-    const sent2 = group.filter(row => fromPartyOf(row) === p2).length
-    const preferP1 = anchorId === p1
-      || (anchorId !== p2 && (sent1 > sent2 || (sent1 === sent2 && p1 <= p2)))
-    const a = preferP1 ? p1 : p2
-    const b = preferP1 ? p2 : p1
-    group.sort((x, y) => y.time - x.time)
-    let out = 0
-    let back = 0
-    const kinds: Record<CommsRow['kind'], number> = { relay: 0, mailbox: 0, settled: 0 }
-    for (const row of group) {
-      const from = fromPartyOf(row)
-      if (from === a) out += 1
-      else back += 1
-      kinds[row.kind] += 1
-    }
-    const lastTime = Math.max(...group.map(row => row.time))
-    channels.push({
-      key,
-      a,
-      b,
-      rows: group,
-      out,
-      back,
-      lastTime,
-      kinds,
-    })
-  }
-  channels.sort((x, y) => y.lastTime - x.lastTime)
-  return channels
 }

@@ -75,6 +75,9 @@ describe('useRowWindow', () => {
       const node = query<HTMLElement>(m.container, 'div')
       assert.equal(node.dataset.from, '0')
       assert.equal(node.dataset.to, '39')
+      await m.update(h(Probe, { count: 40, enabled: true, attachRef: false, overscan: 5 }))
+      assert.equal(node.dataset.from, '0')
+      assert.equal(node.dataset.to, '39')
     } finally {
       await m.unmount()
     }

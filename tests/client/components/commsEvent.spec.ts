@@ -1,0 +1,131 @@
+import { createElement as h } from 'react'
+import assert from 'node:assert/strict'
+import { describe, test, vi } from 'vitest'
+import { CommsEvent, CommsEventDetail } from '../../../src/client/components/commsEvent'
+import { makeRichText } from '../../../src/client/components/richText'
+import type { CommsAgent } from '../../../src/client/commsModel'
+import type { CommsRow } from '../../../src/client/fleetDetail'
+import type { FleetMessage } from '../../../src/shared/types'
+import { makeKit, mount, query, queryAll, text } from '../helpers/kit'
+
+const kit = makeKit()
+const rich = makeRichText(kit)
+const SUMMARY = 'Background subagent w1 finished and will do no further work unless you send it more.'
+const AGENTS = new Map<string, CommsAgent>([
+  ['root', { id: 'root', name: 'Lead', role: 'lead', self: true, hue: 'blue' }],
+  ['w1', { id: 'w1', name: 'worker-bee', role: 'teammate', self: false, hue: 'green' }],
+])
+
+function agentOf(id: string): CommsAgent {
+  return AGENTS.get(id) ?? { id, name: id, role: 'other', self: false, hue: 'gray' }
+}
+
+function mountEvent(row: CommsRow, options: { full?: FleetMessage | null; fullPending?: boolean } = {}) {
+  const full = options.full ?? null
+  return mount(h(CommsEvent, {
+    row,
+    agentOf,
+    open: true,
+    onToggle: vi.fn(),
+    full,
+    t: kit.t,
+  }, h(CommsEventDetail, {
+    row,
+    agentOf,
+    full,
+    fullPending: options.fullPending === true,
+    pinnedId: null,
+    onSelect: vi.fn(),
+    onOpen: vi.fn(),
+    onEnter: vi.fn(),
+    onClose: vi.fn(),
+    rich,
+    t: kit.t,
+  })))
+}
+
+describe('CommsEvent and detail', () => {
+  test('a recognized settlement exposes its outcome, report, structured result and diagnostic', async () => {
+    const row: CommsRow = {
+      key: 'root:8:6000:settled', to: 'root', seq: 8, time: 6000, kind: 'settled', from: 'w1',
+      text: `${SUMMARY}Its closing message:All gates green.`,
+      summary: SUMMARY,
+      report: 'All gates green.\n\n- check passed',
+      structured: '{"ok":true}',
+      diagnostic: 'provider warning',
+    }
+    const mounted = await mountEvent(row)
+    assert.ok(text(query(mounted.container, '.lc-comms-preview')).includes(kit.t('fleet.settledShort.finished')))
+    assert.ok(text(query(mounted.container, '.lc-comms-preview')).includes('All gates green.'))
+    const detail = query(mounted.container, '.lc-comms-detail')
+    assert.ok(text(detail).includes(kit.t('fleet.comms.detail.settledNote')))
+    assert.ok(text(detail).includes(kit.t('fleet.settled.finished')))
+    assert.ok(text(detail).includes('check passed'))
+    assert.ok(text(detail).includes(kit.t('fleet.comms.detail.structured')))
+    assert.ok(text(detail).includes('provider warning'))
+    assert.equal(queryAll(detail, '.lc-comms-person').length, 2)
+    await mounted.unmount()
+  })
+
+  test('unknown settlements and empty bodies degrade without hiding the raw record', async () => {
+    const future: CommsRow = {
+      key: 'root:20:9000:settled', to: 'root', seq: 20, time: 9000, kind: 'settled', from: 'w1',
+      text: 'a future summary', summary: 'a future summary', structured: 'not-json',
+    }
+    const mounted = await mountEvent(future)
+    assert.ok(text(query(mounted.container, '.lc-comms-preview')).includes('a future summary'))
+    const detail = query(mounted.container, '.lc-comms-detail')
+    assert.ok(text(detail).includes('a future summary'))
+    assert.ok(text(detail).includes('not-json'))
+    assert.ok(text(detail).includes(kit.t('fleet.comms.detail.noReport')))
+    assert.ok(!text(detail).includes(kit.t('fleet.settled.finished')))
+    await mounted.unmount()
+
+    const raw: CommsRow = { key: 'root:21:9100:settled', to: 'root', seq: 21, time: 9100, kind: 'settled', from: 'w1', text: 'a brand-new phrasing' }
+    const rawMount = await mountEvent(raw)
+    assert.equal(queryAll(rawMount.container, '.lc-comms-preview-text').length, 0)
+    assert.ok(text(query(rawMount.container, '.lc-comms-detail-body')).includes('a brand-new phrasing'))
+    assert.ok(!text(rawMount.container).includes(kit.t('fleet.comms.detail.noReport')))
+    await rawMount.unmount()
+
+    const empty: CommsRow = { key: 'root:22:9200:relay', to: 'root', seq: 22, time: 9200, kind: 'relay', from: 'w1', text: '' }
+    const emptyMount = await mountEvent(empty)
+    assert.ok(text(query(emptyMount.container, '.lc-comms-detail-body')).includes(kit.t('fleet.comms.detail.noBody')))
+    await emptyMount.unmount()
+  })
+
+  test('a settlement without a report uses the summary for copying and explains the missing body', async () => {
+    const row: CommsRow = {
+      key: 'root:23:9300:settled', to: 'root', seq: 23, time: 9300, kind: 'settled', from: 'w1', text: SUMMARY, summary: SUMMARY,
+    }
+    const mounted = await mountEvent(row)
+    assert.ok(text(query(mounted.container, '.lc-comms-detail-body')).includes(kit.t('fleet.comms.detail.noReport')))
+    assert.ok(text(query(mounted.container, '.lc-comms-detail')).includes(kit.t('fleet.settled.finished')))
+    await mounted.unmount()
+  })
+
+  test('self messages show one participant and clipped records disclose excerpt-only content', async () => {
+    const row: CommsRow = {
+      key: 'root:4:2000:relay', to: 'root', seq: 4, time: 2000, kind: 'relay', from: 'root', text: 'note to self', clipped: true,
+    }
+    const mounted = await mountEvent(row)
+    assert.equal(queryAll(mounted.container, '.lc-comms-person').length, 1)
+    assert.equal(queryAll(mounted.container, '.lc-comms-role').length, 0)
+    assert.ok(text(query(mounted.container, '.lc-comms-detail')).includes(kit.t('fleet.comms.detail.excerptOnly')))
+    await mounted.unmount()
+  })
+
+  test('full content replaces the excerpt and pending state names the read', async () => {
+    const row: CommsRow = {
+      key: 'root:5:2500:relay', to: 'root', seq: 5, time: 2500, kind: 'relay', from: 'w1', text: 'excerpt…', clipped: true,
+    }
+    const full: FleetMessage = { seq: 5, time: 2500, kind: 'relay', from: 'w1', text: 'complete body' }
+    const mounted = await mountEvent(row, { full })
+    assert.ok(text(query(mounted.container, '.lc-comms-detail-body')).includes('complete body'))
+    assert.ok(!text(query(mounted.container, '.lc-comms-detail')).includes(kit.t('fleet.comms.detail.excerptOnly')))
+    await mounted.unmount()
+    const pending = await mountEvent(row, { fullPending: true })
+    assert.ok(text(query(pending.container, '.lc-comms-detail')).includes(kit.t('fleet.comms.detail.loading')))
+    await pending.unmount()
+  })
+})

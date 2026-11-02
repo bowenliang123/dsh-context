@@ -147,6 +147,14 @@ describe('watchFleetChannel gating', () => {
     assert.equal(junk.value.lastReply.text.length, 301)
   })
 
+  test('a history body uses the complete-event mode rather than full text mode', async () => {
+    const long = { type: 'assistant/message', seq: 1, time: 1, data: { message: { content: [{ type: 'text', text: 'z'.repeat(400) }] } } }
+    const { captured } = armed({ sessionQuery: observing([long]) })
+    const history = await call(captured, { sessionId: 's1', history: true }) as { value: { lastReply: { text: string }; truncated: boolean } }
+    assert.equal(history.value.lastReply.text.length, 301)
+    assert.equal(history.value.truncated, true)
+  })
+
   test('an observation without a dispose method still serves', async () => {
     const { captured } = armed({
       sessionQuery: {
@@ -225,7 +233,7 @@ describe('fleetDetailOfEvents — the delegation prompt', () => {
     assert.equal(detail.initialPrompt, 'build it')
   })
 
-  test('the full read lifts the prompt and reply caps to the hostile-payload bounds', () => {
+  test('the full read removes prompt and reply caps while previews stay bounded', () => {
     const events = [
       { type: 'user/message', seq: 1, time: 1, data: { content: [{ type: 'text', text: 'x'.repeat(80_000) }] } },
       { type: 'assistant/message', seq: 2, time: 2, data: { message: { content: [{ type: 'text', text: 'z'.repeat(120_000) }] } } },
@@ -234,10 +242,10 @@ describe('fleetDetailOfEvents — the delegation prompt', () => {
     assert.equal(excerpt.initialPrompt?.length, 1601)
     assert.equal(excerpt.lastReply?.text.length, 301)
     assert.equal(excerpt.truncated, true)
-    const full = fleetDetailOfEvents(events, true)
+    const full = fleetDetailOfEvents(events, 'full')
     assert.equal(full.initialPrompt?.length, 80_000)
-    assert.equal(full.lastReply?.text.length, 100_001, 'the bound stands even in full mode')
-    assert.equal(full.truncated, true)
+    assert.equal(full.lastReply?.text.length, 120_000)
+    assert.equal(full.truncated, false)
   })
 })
 
@@ -383,12 +391,18 @@ describe('fleetDetailOfEvents — inter-agent messages', () => {
     assert.equal(detail.messages[0].clipped, true)
     assert.equal(detail.messagesTotal, 85)
     assert.equal(detail.truncated, true)
-    const full = fleetDetailOfEvents(events, true)
+    const full = fleetDetailOfEvents(events, 'full')
     assert.equal(full.messages.length, 85)
     assert.equal(full.messages[0].text.length, 500)
     assert.equal(full.messages[0].clipped, undefined)
     assert.equal(full.messagesTotal, undefined)
     assert.equal(full.truncated, false)
+    const history = fleetDetailOfEvents(events, 'history')
+    assert.equal(history.messages.length, 85)
+    assert.equal(history.messages[0].text.length, 401)
+    assert.equal(history.messages[0].clipped, true)
+    assert.equal(history.messagesTotal, undefined)
+    assert.equal(history.truncated, true)
   })
 
   test('hostile rows drop or zero out instead of rejecting: non-finite seq/time, no content array, non-text blocks', () => {

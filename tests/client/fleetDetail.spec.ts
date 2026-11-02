@@ -98,7 +98,8 @@ describe('makeFleetDetailFetcher', () => {
     })
     await makeFleetDetailFetcher('s1', true)!()
     await makeFleetDetailFetcher('s1')!()
-    assert.deepEqual(bodies, [{ full: true, sessionId: 's1' }, { sessionId: 's1' }])
+    await makeFleetDetailFetcher('s1', false, true)!()
+    assert.deepEqual(bodies, [{ full: true, sessionId: 's1' }, { sessionId: 's1' }, { history: true, sessionId: 's1' }])
 
     assert.equal(makeFleetDetailFetcher(''), undefined)
     vi.stubGlobal('fetch', () => Promise.resolve({ ok: false, status: 503 } as Response))
@@ -176,6 +177,29 @@ describe('FleetDetailCache', () => {
     assert.equal(routes.length, 2)
     await Promise.all([cache.fetch('s1', 6), cache.fetch('s1', 6, true)])
     assert.equal(routes.length, 4, 'a newer stamp refreshes each ledger on its own')
+  })
+
+  test('history has an independent complete-event ledger and empty ids stay offline', async () => {
+    const bodies: Record<string, unknown>[] = []
+    vi.stubGlobal('fetch', (_url: unknown, init: { body: string }) => {
+      const body = JSON.parse(init.body) as Record<string, unknown>
+      bodies.push(body)
+      return Promise.resolve({ ok: true, json: () => Promise.resolve({ ok: true, value: null }) } as Response)
+    })
+    const cache = new FleetDetailCache()
+    assert.equal(await cache.fetchHistory('', 1), null)
+    assert.equal(bodies.length, 0)
+    await Promise.all([cache.fetchHistory('s1', 2), cache.fetchHistory('s1', 2)])
+    assert.equal(bodies.length, 1)
+    await cache.fetchHistory('s1', 1)
+    assert.equal(bodies.length, 1)
+    await cache.fetchHistory('s1', 3)
+    assert.equal(bodies.length, 2)
+    assert.ok(bodies.every(body => body.history === true))
+    await cache.fetch('s1', 3)
+    assert.equal(bodies.length, 3)
+    assert.equal(bodies[2].full, undefined)
+    assert.equal(bodies[2].history, undefined)
   })
 })
 

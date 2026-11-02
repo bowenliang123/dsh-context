@@ -127,7 +127,7 @@ describe('useFleetModel', () => {
   })
 })
 
-function probeDetails(cache: FleetDetailCache, options?: { concurrency?: number; refreshDelayMs?: number }): { box: { current: FleetDetailState | null }; Probe: () => null } {
+function probeDetails(cache: FleetDetailCache, options?: { concurrency?: number; refreshDelayMs?: number; scopeKey?: string }): { box: { current: FleetDetailState | null }; Probe: () => null } {
   const box: { current: FleetDetailState | null } = { current: null }
   function Probe(): null {
     box.current = useFleetDetails(cache, options)
@@ -325,6 +325,73 @@ describe('useFleetDetails', () => {
     await m.unmount()
   })
 
+})
+
+describe('useFleetDetails history and scope', () => {
+  test('complete history lands once, dedupes, refreshes and resets by scope', async () => {
+    const reads: number[] = []
+    const cache = new FleetDetailCache()
+    vi.spyOn(cache, 'fetchHistory').mockImplementation((_id: string, stamp: number) => {
+      reads.push(stamp)
+      return Promise.resolve({ messages: [{ seq: stamp, time: stamp, kind: 'relay', text: `history ${stamp}` }], truncated: false })
+    })
+    const options = { scopeKey: 'one', refreshDelayMs: 10 }
+    const { box, Probe } = probeDetails(cache, options)
+    const mounted = await mount(h(Probe))
+    const state = box.current as FleetDetailState
+    vi.useFakeTimers()
+    act(() => { state.requestHistory('a', 1) })
+    assert.equal(box.current?.historyPending.has('a'), true)
+    await act(async () => {})
+    assert.equal(box.current?.historyLanded.get('a')?.detail?.messages[0]?.text, 'history 1')
+    assert.equal(box.current?.historyPending.size, 0)
+    act(() => { state.requestHistory('a', 1) })
+    assert.deepEqual(reads, [1])
+    act(() => { (box.current as FleetDetailState).requestHistory('a', 2) })
+    await act(async () => { await vi.advanceTimersByTimeAsync(5) })
+    act(() => { (box.current as FleetDetailState).requestHistory('a', 3) })
+    await act(async () => { await vi.advanceTimersByTimeAsync(15) })
+    assert.deepEqual(reads, [1, 3])
+    act(() => { state.request('a', 2) })
+    act(() => { state.requestFull('a') })
+    await act(async () => {})
+    act(() => { (box.current as FleetDetailState).requestHistory('a', 4) })
+    options.scopeKey = 'two'
+    await mounted.update(h(Probe))
+    await act(async () => { await vi.advanceTimersByTimeAsync(20) })
+    assert.ok(!reads.includes(4))
+    assert.equal(box.current?.landed.size, 0)
+    assert.equal(box.current?.historyLanded.size, 0)
+    assert.equal(box.current?.fullLanded.size, 0)
+    await mounted.unmount()
+    vi.useRealTimers()
+  })
+
+  test('history landing after unmount is inert', async () => {
+    let release: (detail: FleetDetail | null) => void = () => {}
+    const cache = new FleetDetailCache()
+    vi.spyOn(cache, 'fetchHistory').mockImplementation(() => new Promise((resolve) => { release = resolve }))
+    const { box, Probe } = probeDetails(cache)
+    const mounted = await mount(h(Probe))
+    const state = box.current as FleetDetailState
+    act(() => { state.requestHistory('a', 1) })
+    await mounted.unmount()
+    release({ messages: [], truncated: false })
+    await flush()
+    assert.equal(box.current?.historyLanded.size, 0)
+  })
+  test('a rejected history read settles pending without landing', async () => {
+    const cache = new FleetDetailCache()
+    vi.spyOn(cache, 'fetchHistory').mockRejectedValue(new Error('offline'))
+    const { box, Probe } = probeDetails(cache)
+    const mounted = await mount(h(Probe))
+    const state = box.current as FleetDetailState
+    act(() => { state.requestHistory('a', 1) })
+    await act(async () => {})
+    assert.equal(box.current?.historyPending.size, 0)
+    assert.equal(box.current?.historyLanded.size, 0)
+    await mounted.unmount()
+  })
 })
 
 describe('useFleetDetails scheduling', () => {

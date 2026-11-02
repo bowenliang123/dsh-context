@@ -24,13 +24,6 @@ function scrollerInCard(card: Element, row: Element): HTMLElement | null {
   return scroller === null || scroller === card ? null : scroller
 }
 
-export function alignRowInCard(card: Element | null, row: Element | null, inset = 0): void {
-  if (card === null || row === null || !card.contains(row)) return
-  const scroller = scrollerInCard(card, row)
-  if (scroller === null) return
-  scroller.scrollTop += row.getBoundingClientRect().top - scroller.getBoundingClientRect().top - inset
-}
-
 export function revealRowInCard(card: Element | null, row: Element | null): void {
   if (card === null || row === null || !card.contains(row)) return
   const scroller = scrollerInCard(card, row)

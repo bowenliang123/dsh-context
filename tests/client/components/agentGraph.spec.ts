@@ -1,10 +1,10 @@
 import { act, createElement as h } from 'react'
 import assert from 'node:assert/strict'
-import { afterEach, beforeEach, describe, test, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest'
 import { makeAgentGraph } from '../../../src/client/components/agentGraph'
 import { DICT_EN } from '../../../src/client/i18n'
 import { resetModelPrices, setModelPricesLoader } from '../../../src/client/modelPrices'
-import { familyHue, type AgentSelfStats } from '../../../src/client/agentTree'
+import { agentForestOf, familyHue, type AgentSelfStats } from '../../../src/client/agentTree'
 import { TestClientCtx, asClientCtx } from '../helpers/harness'
 import { blur, click, flush, focus, hover, makeKit, mount, query, queryAll, text, unhover, until, wheel } from '../helpers/kit'
 
@@ -474,6 +474,22 @@ describe('AgentGraph — the Fleet seat', () => {
     const targetHues = ['worker', 'done'].map(id => query(m.container, `[data-agent="${id}"]`).style.getPropertyValue('--lc-member-hue'))
     assert.deepEqual(queryAll(m.container, 'path.lc-agents-link').map(el => el.getAttribute('stroke')), targetHues)
     await m.unmount()
+  })
+
+  test('a controlled forest and hover stay independent of the internal model', async () => {
+    const face = new FakeSessions(family())
+    const View = makeView(face)
+    const forest = agentForestOf({ byId: family() }, 'root', selfStats())
+    const onHover = vi.fn()
+    const m = await mount(h(View, { sessionId: 'root', forest, hoverId: 'done', onHover, inspector: false }))
+    assert.ok(query(m.container, '[data-agent="done"]').className.includes('lc-agent-hover'))
+    await hover(query(m.container, '[data-agent="worker"]'))
+    expect(onHover).toHaveBeenCalledWith('worker')
+    assert.ok(query(m.container, '[data-agent="done"]').className.includes('lc-agent-hover'))
+    await m.unmount()
+    const hidden = await mount(h(View, { sessionId: 'root', forest: null }))
+    assert.equal(text(hidden.container), '')
+    await hidden.unmount()
   })
 
   test('select mode highlights instead of jumping, while open mode keeps the jump copy and the inert current card', async () => {

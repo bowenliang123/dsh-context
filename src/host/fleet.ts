@@ -9,12 +9,10 @@ const MESSAGES_MAX = 80
 const MESSAGE_TEXT_MAX = 400
 const PROMPT_TEXT_MAX = 1600
 const REPLY_TEXT_MAX = 300
-const FULL_MESSAGES_MAX = 120
-const FULL_MESSAGE_TEXT_MAX = 24_000
-const FULL_TEXT_MAX = 100_000
 
-function fullOf(body: unknown): boolean {
-  return asRecord(body)?.full === true
+function detailModeOf(body: unknown): FleetDetailMode {
+  if (asRecord(body)?.full === true) return 'full'
+  return asRecord(body)?.history === true ? 'history' : 'preview'
 }
 
 interface SessionQueryFace {
@@ -200,6 +198,8 @@ function rosterMemberOf(data: Record<string, unknown>): FleetMemberInfo | null {
   return out
 }
 
+export type FleetDetailMode = 'preview' | 'history' | 'full'
+
 interface FleetCaps {
   promptMax: number
   replyMax: number
@@ -207,10 +207,19 @@ interface FleetCaps {
   listMax: number
 }
 
-function capsOf(full: boolean): FleetCaps {
-  return full
-    ? { promptMax: FULL_TEXT_MAX, replyMax: FULL_TEXT_MAX, messageMax: FULL_MESSAGE_TEXT_MAX, listMax: FULL_MESSAGES_MAX }
-    : { promptMax: PROMPT_TEXT_MAX, replyMax: REPLY_TEXT_MAX, messageMax: MESSAGE_TEXT_MAX, listMax: MESSAGES_MAX }
+function capsOf(mode: FleetDetailMode): FleetCaps {
+  if (mode === 'full') {
+    return {
+      promptMax: Number.POSITIVE_INFINITY,
+      replyMax: Number.POSITIVE_INFINITY,
+      messageMax: Number.POSITIVE_INFINITY,
+      listMax: Number.POSITIVE_INFINITY,
+    }
+  }
+  if (mode === 'history') {
+    return { promptMax: PROMPT_TEXT_MAX, replyMax: REPLY_TEXT_MAX, messageMax: MESSAGE_TEXT_MAX, listMax: Number.POSITIVE_INFINITY }
+  }
+  return { promptMax: PROMPT_TEXT_MAX, replyMax: REPLY_TEXT_MAX, messageMax: MESSAGE_TEXT_MAX, listMax: MESSAGES_MAX }
 }
 
 export class FleetFold {
@@ -282,18 +291,16 @@ export class FleetFold {
   }
 
   private insert(message: FleetMessage): void {
-    let at = 0
-    while (at < this.messages.length && this.messages[at].seq >= message.seq) at++
-    this.messages.splice(at, 0, message)
+    this.messages.push(message)
     if (this.messages.length > this.caps.listMax) {
-      this.messages.pop()
+      this.messages.shift()
       this.truncated = true
     }
     if (message.clipped === true) this.truncated = true
   }
 
   serve(): FleetDetail {
-    const messages = this.messages.slice()
+    const messages = this.messages.slice().sort((a, b) => b.seq - a.seq)
     return {
       ...(this.descriptor !== undefined ? { descriptor: this.descriptor } : {}),
       ...(this.initialPrompt !== undefined ? { initialPrompt: this.initialPrompt } : {}),
@@ -306,8 +313,8 @@ export class FleetFold {
   }
 }
 
-export function fleetDetailOfEvents(events: readonly unknown[], full = false): FleetDetail {
-  const fold = new FleetFold(capsOf(full))
+export function fleetDetailOfEvents(events: readonly unknown[], mode: FleetDetailMode = 'preview'): FleetDetail {
+  const fold = new FleetFold(capsOf(mode))
   fold.apply(events)
   return fold.serve()
 }
@@ -369,7 +376,7 @@ function foldOf(
     cache.set(sessionId, entry)
     return entry.fold
   }
-  const fold = new FleetFold(capsOf(false))
+  const fold = new FleetFold(capsOf('preview'))
   fold.apply(events)
   if (!live && revision === undefined) return fold
   cache.set(sessionId, {
@@ -392,11 +399,11 @@ export function watchFleetChannel(ctx: Context, coldReads: ColdReadGate = makeCo
   ctx.inject(['connection'], (c) => {
     const handler = async (request: Request): Promise<Response> => {
       let sessionId: unknown
-      let full = false
+      let mode: FleetDetailMode = 'preview'
       try {
         const body: unknown = await request.json()
         sessionId = asRecord(body)?.sessionId
-        full = fullOf(body)
+        mode = detailModeOf(body)
       } catch {
         return failure('dsh-context/bad-request', 'body is not JSON')
       }
@@ -415,7 +422,7 @@ export function watchFleetChannel(ctx: Context, coldReads: ColdReadGate = makeCo
           const events = observation?.events
           if (!Array.isArray(events)) return null
           try {
-            if (full) return fleetDetailOfEvents(events, true)
+            if (mode !== 'preview') return fleetDetailOfEvents(events, mode)
             const isLive = observation?.source === 'live'
             return foldOf(
               cache,

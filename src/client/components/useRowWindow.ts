@@ -37,7 +37,7 @@ export function useRowWindow(
       setRange(null)
       return
     }
-    if (el === null || el.clientHeight <= 0) {
+    if (el === null) {
       setRange(current => (current !== null && current.from === full.from && current.to === full.to ? current : full))
       return
     }
