@@ -19,6 +19,10 @@
 - **Context panel** — the same dashboard as a right-sidebar tab: pick **Context** on the sidebar's guide page and the panel opens beside the chat, agent network included.
 - **`/context` command** — the slash command shows the context model for current context composition and recent context evolution.
 
+▶️ **4-minute video walkthrough** — [watch on Bilibili](https://www.bilibili.com/video/BV1bn4K6TEEV/) (in Chinese).
+
+[![dsh-context and DeepSeek Harness: context composition, evolution, and multi-agent teams](https://raw.githubusercontent.com/bowenliang123/dsh-context/main/docs/video-cover.jpg)](https://www.bilibili.com/video/BV1bn4K6TEEV/)
+
 ## Install / Update
 
 ### Install on DeepSeek Harness web or desktop

@@ -19,6 +19,10 @@
 - **Context 面板** — 同一仪表板也可作为右侧边栏标签页：在侧边栏指南页面选择 **Context**，面板便会在聊天旁打开，并包含 Agent 网络。
 - **`/context` 命令** — 斜杠命令会显示当前上下文组成模型和近期上下文演变。
 
+▶️ **4 分钟视频导览** — [在 Bilibili 观看](https://www.bilibili.com/video/BV1bn4K6TEEV/)。
+
+[![dsh-context 与 DeepSeek Harness：上下文组成、演进与多 Agent 团队](https://raw.githubusercontent.com/bowenliang123/dsh-context/main/docs/video-cover.jpg)](https://www.bilibili.com/video/BV1bn4K6TEEV/)
+
 ## 安装 / 更新
 
 ### 在 DeepSeek Harness 网页版或桌面版中安装
