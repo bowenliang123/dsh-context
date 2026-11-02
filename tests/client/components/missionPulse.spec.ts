@@ -87,12 +87,12 @@ describe('MissionPulse boundary parties', () => {
       ['root', { id: 'root', name: 'Lead', role: 'lead' as const, self: true, hue: 'red' }],
       ['child', { id: 'child', name: 'Child', role: 'subagent' as const, self: false, hue: 'blue' }],
     ])
-    const mounted = await mount(h(MissionPulse, {
+    const pulse = (comms: CommsRow[]) => h(MissionPulse, {
       forest: null,
       team: null,
       details: makeDetails(),
       landedDetails: new Map(),
-      comms: rows,
+      comms,
       delegations: [delegation],
       agents,
       titles: new Map(),
@@ -102,7 +102,31 @@ describe('MissionPulse boundary parties', () => {
       onEnter: () => {},
       rich: makeRichText(kit),
       t: kit.t,
-    }))
+    })
+    const mounted = await mount(pulse(rows))
+    const scroller = query<HTMLElement>(mounted.container, '[data-sequence-scroller]')
+    Object.defineProperties(scroller, {
+      clientWidth: { configurable: true, value: 200 },
+      scrollWidth: { configurable: true, value: 1000 },
+      scrollTop: { configurable: true, value: 120, writable: true },
+    })
+    assert.equal(scroller.scrollLeft, 0)
+    await act(async () => { scroller.dispatchEvent(new Event('scroll')) })
+    assert.equal(query<HTMLElement>(mounted.container, '.lc-pulse-lane-labels-rows').style.transform, 'translateY(-120px)')
+    const laneButton = query<HTMLButtonElement>(mounted.container, '[data-agent="child"]')
+    scroller.scrollTop = 0
+    await act(async () => { laneButton.dispatchEvent(new FocusEvent('focusin', { bubbles: true })) })
+    assert.equal(scroller.scrollTop, 112)
+    Object.defineProperty(scroller, 'clientHeight', { configurable: true, value: 1000 })
+    scroller.scrollTop = 120
+    await act(async () => { laneButton.dispatchEvent(new FocusEvent('focusin', { bubbles: true })) })
+    assert.equal(scroller.scrollTop, 56)
+    scroller.scrollTop = 0
+    await act(async () => { laneButton.dispatchEvent(new FocusEvent('focusin', { bubbles: true })) })
+    assert.equal(scroller.scrollTop, 0)
+    scroller.scrollLeft = 300
+    await mounted.update(pulse([...rows]))
+    assert.equal(scroller.scrollLeft, 300)
     const events = queryAll<HTMLElement>(mounted.container, '.lc-pulse-event')
     assert.deepEqual(events.map(event => event.dataset.eventKey), ['root:4:child', 'child:1:1000:relay', 'child:2:2000:relay'])
     assert.equal(events[0].dataset.record, 'delegation')
@@ -157,11 +181,6 @@ describe('MissionPulse boundary parties', () => {
     assert.ok(text(query(mounted.container, '.lc-pulse-inspector')).includes(kit.t('fleet.pulse.selectEvent')))
     await act(async () => { edge.dispatchEvent(new KeyboardEvent('keydown', { key: ' ', bubbles: true })) })
     assert.ok(text(query(mounted.container, '.lc-pulse-inspector')).includes('first'))
-    const scroller = query<HTMLElement>(mounted.container, '[data-sequence-scroller]')
-    Object.defineProperties(scroller, {
-      clientWidth: { configurable: true, value: 200 },
-      scrollWidth: { configurable: true, value: 1000 },
-    })
     await click(queryAll<HTMLButtonElement>(mounted.container, '.lc-pulse-sequence-actions button')[0])
     assert.equal(scroller.scrollLeft, 0)
     await click(queryAll<HTMLButtonElement>(mounted.container, '.lc-pulse-sequence-actions button')[1])

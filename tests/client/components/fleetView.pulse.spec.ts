@@ -272,6 +272,8 @@ describe('Multi-Agent Network', () => {
     await click(query(m.container, '.lc-pulse-quiet'))
     assert.equal(queryAll(m.container, '.lc-pulse-lane-label[data-lane-label]').length, 3)
     assert.equal(queryAll(m.container, '[data-quiet-lane]').length, 1)
+    await act(async () => { query(query(m.container, '[data-quiet-lane]'), 'button').dispatchEvent(new FocusEvent('focusin', { bubbles: true })) })
+    assert.ok(query<HTMLElement>(m.container, '[data-sequence-scroller]').scrollTop > 0)
     await typeText(query<HTMLInputElement>(m.container, '.lc-pulse-search'), 'Agent 8')
     assert.ok(query(m.container, '[data-lane-label="q8"]') !== null)
     assert.equal(query(m.container, '[data-pulse-stat="agents"]').textContent, '10')
