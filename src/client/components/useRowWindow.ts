@@ -22,12 +22,13 @@ export function rowWindowFor(
 
 const UNMEASURED: RowRange = { from: 0, to: -1 }
 
-export function useRowWindow(
+function useScrollWindow(
   ref: RefObject<HTMLElement | null>,
   count: number,
-  rowHeight: number,
+  size: number,
   enabled: boolean,
-  overscan: number = ROW_WINDOW_OVERSCAN,
+  axis: 'row' | 'column',
+  overscan: number,
 ): RowRange {
   const full: RowRange = { from: 0, to: Math.max(0, count - 1) }
   const [range, setRange] = useState<RowRange | null>(null)
@@ -44,7 +45,13 @@ export function useRowWindow(
     let frame = 0
     const update = (): void => {
       frame = 0
-      const next = rowWindowFor(el.scrollTop, el.clientHeight, rowHeight, count, overscan)
+      const next = rowWindowFor(
+        axis === 'row' ? el.scrollTop : el.scrollLeft,
+        axis === 'row' ? el.clientHeight : el.clientWidth,
+        size,
+        count,
+        overscan,
+      )
       setRange(current => (current !== null && current.from === next.from && current.to === next.to ? current : next))
     }
     const schedule = (): void => {
@@ -62,6 +69,26 @@ export function useRowWindow(
       /* v8 ignore next */
       observer?.disconnect()
     }
-  }, [ref, count, rowHeight, enabled, overscan, full.from, full.to])
+  }, [ref, count, size, enabled, axis, overscan, full.from, full.to])
   return enabled ? (range ?? UNMEASURED) : full
+}
+
+export function useRowWindow(
+  ref: RefObject<HTMLElement | null>,
+  count: number,
+  rowHeight: number,
+  enabled: boolean,
+  overscan: number = ROW_WINDOW_OVERSCAN,
+): RowRange {
+  return useScrollWindow(ref, count, rowHeight, enabled, 'row', overscan)
+}
+
+export function useColumnWindow(
+  ref: RefObject<HTMLElement | null>,
+  count: number,
+  pitch: number,
+  enabled: boolean,
+  overscan: number = ROW_WINDOW_OVERSCAN,
+): RowRange {
+  return useScrollWindow(ref, count, pitch, enabled, 'column', overscan)
 }

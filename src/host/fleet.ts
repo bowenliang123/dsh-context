@@ -1,5 +1,5 @@
 import type { Context } from '@deepseek-ai/cordis'
-import type { FleetDescriptor, FleetDetail, FleetMemberInfo, FleetMessage } from '../shared/types'
+import type { FleetDelegation, FleetDescriptor, FleetDetail, FleetMemberInfo, FleetMessage } from '../shared/types'
 import { type ColdReadGate, makeColdReadGate } from './coldRead'
 import { type ConnectionHostFace, registerPostRoute } from './connection'
 
@@ -198,6 +198,35 @@ function rosterMemberOf(data: Record<string, unknown>): FleetMemberInfo | null {
   return out
 }
 
+function delegationOf(seq: number, data: Record<string, unknown>): FleetDelegation | null {
+  if (typeof data.childId !== 'string' || data.childId === '') return null
+  if (typeof data.childCreatedAt !== 'number' || !Number.isFinite(data.childCreatedAt)) return null
+  const mode = data.mode
+  if (mode !== 'one-shot' && mode !== 'continuable' && mode !== 'external') return null
+  if (mode === 'external' ? data.version !== 2 : data.version !== 0 && data.version !== 1) return null
+  if (mode === 'continuable' && (typeof data.label !== 'string' || data.label === '')) return null
+  return {
+    seq,
+    time: data.childCreatedAt,
+    to: data.childId,
+    mode,
+    ...(typeof data.label === 'string' && data.label !== '' ? { label: data.label } : {}),
+  }
+}
+
+function teamDelegationOf(seq: number, time: number, data: Record<string, unknown>): FleetDelegation | null {
+  const member = asRecord(data.member)
+  if (member === null || member.phase !== 'active') return null
+  if (typeof member.id !== 'string' || member.id === '' || member.id === data.teamId) return null
+  return {
+    seq,
+    time,
+    to: member.id,
+    mode: 'continuable',
+    ...(typeof member.description === 'string' && member.description !== '' ? { label: member.description } : {}),
+  }
+}
+
 export type FleetDetailMode = 'preview' | 'history' | 'full'
 
 interface FleetCaps {
@@ -228,16 +257,17 @@ export class FleetFold {
   private truncated = false
   private total = 0
   private readonly messages: FleetMessage[] = []
+  private readonly delegationAt = new Map<string, FleetDelegation>()
   private readonly roster = new Map<string, FleetMemberInfo>()
   private lastReply: { time: number; text: string } | null = null
 
   constructor(private readonly caps: FleetCaps) {}
 
-  apply(events: readonly unknown[]): void {
-    for (const entry of events) this.applyEvent(entry)
+  apply(events: readonly unknown[], inheritedEventCount = 0): void {
+    for (const entry of events) this.applyEvent(entry, inheritedEventCount)
   }
 
-  private applyEvent(entry: unknown): void {
+  private applyEvent(entry: unknown, inheritedEventCount: number): void {
     const ev = asRecord(entry)
     if (ev === null) return
     const type = ev.type
@@ -246,12 +276,20 @@ export class FleetFold {
     const time = typeof ev.time === 'number' && Number.isFinite(ev.time) ? ev.time : 0
     const data = asRecord(ev.data)
     if (data === null) return
+    if ((type === 'subagent/catalog' || type === 'team/member') && seq < inheritedEventCount) return
+    if (type === 'subagent/catalog') {
+      const delegation = delegationOf(seq, data)
+      if (delegation !== null) this.delegationAt.set(delegation.to, delegation)
+      return
+    }
     if (type === 'subagent/descriptor') {
       const next = descriptorOf(data)
       if (next !== null) this.descriptor = next
       return
     }
     if (type === 'team/member') {
+      const delegation = teamDelegationOf(seq, time, data)
+      if (delegation !== null && !this.delegationAt.has(delegation.to)) this.delegationAt.set(delegation.to, delegation)
       const member = rosterMemberOf(data)
       if (member !== null) this.roster.set(member.name, member)
       return
@@ -306,6 +344,7 @@ export class FleetFold {
       ...(this.initialPrompt !== undefined ? { initialPrompt: this.initialPrompt } : {}),
       ...(this.lastReply !== null ? { lastReply: this.lastReply } : {}),
       ...(this.roster.size > 0 ? { roster: [...this.roster.values()] } : {}),
+      ...(this.delegationAt.size > 0 ? { delegations: [...this.delegationAt.values()].sort((a, b) => a.seq - b.seq) } : {}),
       messages,
       ...(this.total > messages.length ? { messagesTotal: this.total } : {}),
       truncated: this.truncated,
@@ -313,9 +352,9 @@ export class FleetFold {
   }
 }
 
-export function fleetDetailOfEvents(events: readonly unknown[], mode: FleetDetailMode = 'preview'): FleetDetail {
+export function fleetDetailOfEvents(events: readonly unknown[], mode: FleetDetailMode = 'preview', inheritedEventCount = 0): FleetDetail {
   const fold = new FleetFold(capsOf(mode))
-  fold.apply(events)
+  fold.apply(events, inheritedEventCount)
   return fold.serve()
 }
 
@@ -325,6 +364,7 @@ interface FoldEntry {
   revision?: string
   cursor: number
   count: number
+  inheritedEventCount: number
   fold: FleetFold
 }
 
@@ -338,6 +378,7 @@ function revisionOf(observation: unknown): string | undefined {
 interface ObservationLike {
   source?: unknown
   revision?: unknown
+  inheritedEventCount?: unknown
   events?: unknown
   [Symbol.dispose]?: unknown
 }
@@ -365,11 +406,12 @@ function foldOf(
   revision: string | undefined,
   persistence: unknown,
   cursor: number,
+  inheritedEventCount: number,
 ): FleetFold {
   const entry = cache.get(sessionId)
   if (entry !== undefined && reusable(entry, live, revision, persistence, events, cursor)) {
     const from = live ? entry.count : events.length
-    if (from < events.length) entry.fold.apply(events.slice(from))
+    if (from < events.length) entry.fold.apply(events.slice(from), entry.inheritedEventCount)
     entry.count = events.length
     entry.cursor = cursor
     cache.delete(sessionId)
@@ -377,7 +419,7 @@ function foldOf(
     return entry.fold
   }
   const fold = new FleetFold(capsOf('preview'))
-  fold.apply(events)
+  fold.apply(events, inheritedEventCount)
   if (!live && revision === undefined) return fold
   cache.set(sessionId, {
     live,
@@ -385,6 +427,7 @@ function foldOf(
     ...(persistence === undefined ? {} : { persistence }),
     cursor,
     count: events.length,
+    inheritedEventCount,
     fold,
   })
   for (const oldest of cache.keys()) {
@@ -421,8 +464,11 @@ export function watchFleetChannel(ctx: Context, coldReads: ColdReadGate = makeCo
           const observation = await observe(sessionId, { projectionMode: 'none' }) as ObservationLike | null
           const events = observation?.events
           if (!Array.isArray(events)) return null
+          const inheritedEventCount = typeof observation?.inheritedEventCount === 'number' && Number.isFinite(observation.inheritedEventCount)
+            ? Math.max(0, observation.inheritedEventCount)
+            : 0
           try {
-            if (mode !== 'preview') return fleetDetailOfEvents(events, mode)
+            if (mode !== 'preview') return fleetDetailOfEvents(events, mode, inheritedEventCount)
             const isLive = observation?.source === 'live'
             return foldOf(
               cache,
@@ -432,6 +478,7 @@ export function watchFleetChannel(ctx: Context, coldReads: ColdReadGate = makeCo
               isLive ? undefined : revisionOf(observation),
               persistence,
               cursorOfEvents(events),
+              inheritedEventCount,
             ).serve()
           } finally {
             const dispose = observation?.[Symbol.dispose]

@@ -100,11 +100,20 @@ export interface FleetMemberInfo {
   context?: 'fresh' | 'fork'
 }
 
+export interface FleetDelegation {
+  seq: number
+  time: number
+  to: string
+  mode: 'one-shot' | 'continuable' | 'external'
+  label?: string
+}
+
 export interface FleetDetail {
   descriptor?: FleetDescriptor
   initialPrompt?: string
   lastReply?: { time: number; text: string }
   roster?: FleetMemberInfo[]
+  delegations?: FleetDelegation[]
   messages: FleetMessage[]
   messagesTotal?: number
   truncated: boolean

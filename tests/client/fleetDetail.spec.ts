@@ -5,6 +5,7 @@ import {
   fleetDetailOf,
   makeFleetDetailFetcher,
   mergeComms,
+  mergeDelegations,
   settledVariantOf,
 } from '../../src/client/fleetDetail'
 import type { FleetDetail } from '../../src/shared/types'
@@ -72,6 +73,27 @@ describe('fleetDetailOf — the sanitizing parse', () => {
     assert.equal(fleetDetailOf({ lastReply: { text: 1 } })?.lastReply, undefined)
     assert.equal(fleetDetailOf({ lastReply: 'nope' })?.lastReply, undefined)
     assert.equal(fleetDetailOf({ roster: 'nope' })?.roster, undefined)
+  })
+
+  test('delegations sanitize without becoming messages', () => {
+    const detail = fleetDetailOf({
+      delegations: [
+        null,
+        { seq: 1, time: 10, to: 'one', mode: 'one-shot', label: 'Inspect' },
+        { seq: 2, time: 20, to: 'continuable', mode: 'continuable' },
+        { seq: 3, time: 30, to: 'external', mode: 'external' },
+        { seq: 4, time: 40, to: 'unknown', mode: 'unknown' },
+        { seq: 5, time: 50, to: 'bad', mode: 'mystery' },
+        { seq: 6, time: 60, to: '', mode: 'one-shot' },
+      ],
+    })
+    assert.deepEqual(detail?.delegations, [
+      { seq: 1, time: 10, to: 'one', mode: 'one-shot', label: 'Inspect' },
+      { seq: 2, time: 20, to: 'continuable', mode: 'continuable' },
+      { seq: 3, time: 30, to: 'external', mode: 'external' },
+    ])
+    assert.deepEqual(detail?.messages, [])
+    assert.equal(fleetDetailOf({ delegations: 'nope' })?.delegations, undefined)
   })
 })
 
@@ -212,6 +234,20 @@ describe('settledVariantOf', () => {
     assert.equal(settledVariantOf('Background subagent x declined the task.'), 'declined')
     assert.equal(settledVariantOf('Background subagent x failed before it finished.'), 'failed')
     assert.equal(settledVariantOf('some future phrasing'), null)
+  })
+})
+
+describe('mergeDelegations', () => {
+  test('keeps the parent log owner as the delegation source', () => {
+    const rows = mergeDelegations(new Map<string, FleetDetail>([
+      ['root', {
+        delegations: [{ seq: 4, time: 100, to: 'child', mode: 'continuable', label: 'Inspect' }],
+        messages: [],
+        truncated: false,
+      }],
+      ['child', { messages: [], truncated: false }],
+    ]))
+    assert.deepEqual(rows, [{ key: 'root:4:child', seq: 4, time: 100, from: 'root', to: 'child', mode: 'continuable', label: 'Inspect' }])
   })
 })
 

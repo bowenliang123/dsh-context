@@ -1,9 +1,10 @@
-import { useEffect, useMemo, useRef, useState, type ReactElement } from 'react'
+import { useEffect, useMemo, useRef, useState, type KeyboardEvent, type ReactElement } from 'react'
 import {
   IconChecklistOutlineRegular,
   IconPanelLeftOutlineRegular,
   IconRightUpOutlineRegular,
   IconSendOutlineRegular,
+  IconWorkspaceTreeOutlineRegular,
   StateDot,
 } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { AgentForest } from '../agentTree'
@@ -17,24 +18,29 @@ import {
   type CommsKindFilter,
 } from '../commsModel'
 import { agentResolverOf } from '../fleetAgents'
-import { settledVariantOf, type CommsRow } from '../fleetDetail'
+import { settledVariantOf, type CommsRow, type FleetDelegationRow } from '../fleetDetail'
 import type { FleetDetailState } from '../fleetModel'
 import type { FleetTeam } from '../fleetTeam'
 import { fmtDateTime, fmtTime } from '../format'
-import { IconChevronDown, IconChevronUp, IconClock } from '../primitives'
+import { IconChevronDown, IconChevronUp } from '../primitives'
 import {
   layoutPulse,
-  pulseTimelineRowsOf,
+  PULSE_LANE_HEIGHT,
+  PULSE_POINT_PITCH,
+  PULSE_TRACK_PADDING,
+  pulseTimelineItemsOf,
   pulseVisibleLaneIds,
   pulseWorkItemsOf,
   type PulseLaneInput,
+  type PulseTimelineItem,
   type PulseWorkItem,
 } from '../pulseModel'
+import { containHorizontalOverscroll } from '../overscroll'
 import { scrollIntoViewIfPossible } from '../revealScroll'
 import type { ViewKit } from '../viewkit'
 import type { FleetDetail, FleetMessage } from '../../shared/types'
 import { ClearableInput } from './clearableInput'
-import { useRowWindow } from './useRowWindow'
+import { useColumnWindow, useRowWindow } from './useRowWindow'
 import { AgentAvatar, channelStyle, roleTextOf } from './commsAgent'
 import { CommsEvent, CommsEventDetail } from './commsEvent'
 import type { RichKit } from './richText'
@@ -102,14 +108,18 @@ function PulseHeader(props: PulseHeaderProps): ReactElement {
 interface PulseTimelineProps {
   lanes: PulseLaneInput[]
   rows: readonly CommsRow[]
+  delegations: readonly FleetDelegationRow[]
   scopedRows: readonly CommsRow[]
+  scopedDelegations: readonly FleetDelegationRow[]
   selectedAgent: string | null
   selectedEventKey: string | null
+  selectedDelegationKey: string | null
   query: string
   pending: boolean
   agentOf: (party: string) => CommsAgent
   onSelectAgent: (id: string) => void
   onSelectEvent: (row: CommsRow) => void
+  onSelectDelegation: (delegation: FleetDelegationRow) => void
   onOpen: (id: string) => void
   onEnter: (id: string) => void
   t: ViewKit['t']
@@ -118,27 +128,33 @@ interface PulseTimelineProps {
 function PulseTimeline(props: PulseTimelineProps): ReactElement {
   const { t } = props
   const [showQuiet, setShowQuiet] = useState(false)
-  const [selectedBinStart, setSelectedBinStart] = useState<number | 'all' | null>(null)
+  const [hoveredKey, setHoveredKey] = useState<string | null>(null)
+  const scrollerRef = useRef<HTMLDivElement | null>(null)
   const visibleIds = useMemo(
     () => pulseVisibleLaneIds(props.lanes, props.scopedRows, props.selectedAgent, props.query, showQuiet),
     [props.lanes, props.query, props.scopedRows, props.selectedAgent, showQuiet],
   )
-  const fullLayout = useMemo(() => layoutPulse(props.rows, visibleIds), [props.rows, visibleIds])
-  const activeBin = typeof selectedBinStart === 'number'
-    ? fullLayout.bins.find(bin => bin.start === selectedBinStart)
-    : selectedBinStart === null && props.rows.length > 200 ? [...fullLayout.bins].reverse().find(bin => bin.count > 0) : undefined
-  const timelineRows = useMemo(
-    () => pulseTimelineRowsOf(props.rows, fullLayout.bins, selectedBinStart, props.selectedEventKey),
-    [props.rows, fullLayout.bins, selectedBinStart, props.selectedEventKey],
+  const timelineItems = useMemo(
+    () => pulseTimelineItemsOf(props.rows, props.delegations),
+    [props.rows, props.delegations],
   )
-  const layout = useMemo(() => layoutPulse(timelineRows, visibleIds, 24, fullLayout.domain), [timelineRows, visibleIds, fullLayout.domain])
+  const windowed = timelineItems.length >= 60
+  const recordRange = useColumnWindow(scrollerRef, timelineItems.length, PULSE_POINT_PITCH, windowed, 12)
+  const lastRecord = Math.max(0, timelineItems.length - 1)
+  const windowFrom = Math.min(recordRange.from, lastRecord)
+  const windowTo = Math.min(recordRange.to, lastRecord)
+  const visibleItems = windowed ? timelineItems.slice(windowFrom, windowTo + 1) : timelineItems
+  const layout = useMemo(
+    () => layoutPulse(visibleItems, visibleIds, timelineItems.length, windowFrom),
+    [visibleItems, visibleIds, timelineItems.length, windowFrom],
+  )
   const laneAt = useMemo(() => new Map(layout.lanes.map(lane => [lane.id, lane])), [layout.lanes])
   const agentAt = useMemo(() => new Map(props.lanes.map(lane => [lane.agent.id, lane.agent])), [props.lanes])
   const pointsAt = useMemo(() => {
     const map = new Map<string, typeof layout.points>()
     for (const point of layout.points) {
-      const points = map.get(point.row.to)
-      if (points === undefined) map.set(point.row.to, [point])
+      const points = map.get(point.item.to)
+      if (points === undefined) map.set(point.item.to, [point])
       else points.push(point)
     }
     return map
@@ -153,17 +169,46 @@ function PulseTimeline(props: PulseTimelineProps): ReactElement {
     return map
   }, [props.scopedRows])
   const hidden = props.lanes.length - visibleIds.length
-  const maxBin = Math.max(1, ...fullLayout.bins.map(bin => bin.count))
+  const recordTotal = props.scopedRows.length + props.scopedDelegations.length
+  useEffect(() => {
+    const el = scrollerRef.current
+    if (el === null) return undefined
+    return containHorizontalOverscroll(el)
+  }, [])
+  useEffect(() => {
+    const el = scrollerRef.current
+    if (el !== null) el.scrollLeft = el.scrollWidth
+  }, [timelineItems])
+  useEffect(() => {
+    const key = props.selectedEventKey ?? props.selectedDelegationKey
+    if (key === null) return
+    const index = timelineItems.findIndex(item => item.key === key)
+    if (index < 0) return
+    const el = scrollerRef.current as HTMLDivElement
+    el.scrollLeft = Math.max(0, PULSE_TRACK_PADDING + index * PULSE_POINT_PITCH - el.clientWidth / 2)
+    const target = el.querySelector(`[data-event-key="${CSS.escape(key)}"]`)
+    scrollIntoViewIfPossible(target ?? null, { block: 'nearest', inline: 'center' })
+  }, [props.selectedEventKey, props.selectedDelegationKey, timelineItems, layout.points])
+  const selectItem = (item: PulseTimelineItem): void => {
+    if (item.kind === 'message') props.onSelectEvent(item.row)
+    else props.onSelectDelegation(item.delegation)
+  }
+  const keySelect = (item: PulseTimelineItem, ev: KeyboardEvent<SVGGElement>): void => {
+    if (ev.key !== 'Enter' && ev.key !== ' ') return
+    ev.preventDefault()
+    selectItem(item)
+  }
+  const jumpTo = (latest: boolean): void => {
+    const el = scrollerRef.current as HTMLDivElement
+    el.scrollLeft = latest ? el.scrollWidth : 0
+  }
   return (
     <section className="lc-card lc-pulse-timeline" aria-busy={props.pending}>
       <div className="lc-card-title">
-        <span className="lc-card-title-text"><IconClock size={14} />{t('fleet.pulse.timeline')}</span>
+        <span className="lc-card-title-text"><IconWorkspaceTreeOutlineRegular size={14} />{t('fleet.pulse.timeline')}</span>
         <span className="lc-card-sub">
-          {t('fleet.pulse.timelineSub', { shown: timelineRows.length, total: props.scopedRows.length, lanes: visibleIds.length })}
+          {t('fleet.pulse.timelineSub', { shown: timelineItems.length, total: recordTotal, lanes: visibleIds.length })}
         </span>
-        {activeBin !== undefined ? (
-          <button type="button" className="lc-pulse-quiet" onClick={() => { setSelectedBinStart('all') }}>{t('fleet.pulse.allActivity')}</button>
-        ) : null}
         {props.lanes.length > 8 && (showQuiet || hidden > 0) ? (
           <button type="button" className="lc-pulse-quiet" aria-pressed={showQuiet} onClick={() => { setShowQuiet(value => !value) }}>
             {showQuiet ? t('fleet.pulse.hideQuiet') : t('fleet.pulse.showQuiet', { n: hidden })}
@@ -215,7 +260,7 @@ function PulseTimeline(props: PulseTimelineProps): ReactElement {
               )
             })}
             {hidden > 0 ? (
-              <div className="lc-pulse-lane-label lc-pulse-quiet-lane" style={{ height: 40 }} data-quiet-lane>
+              <div className="lc-pulse-lane-label lc-pulse-quiet-lane" style={{ height: PULSE_LANE_HEIGHT }} data-quiet-lane>
                 <button type="button" onClick={() => { setShowQuiet(true) }}>
                   <span>{t('fleet.pulse.quietGroup', { n: hidden })}</span>
                   <IconChevronDown size={11} />
@@ -223,114 +268,146 @@ function PulseTimeline(props: PulseTimelineProps): ReactElement {
               </div>
             ) : null}
           </div>
-          <div className="lc-pulse-time-column">
-            <div className="lc-pulse-ruler" data-start={layout.domain?.start} data-end={layout.domain?.end}>
-              {layout.domain !== null ? (
-                <>
-                  <div className="lc-pulse-histogram" role="img" aria-label={t('fleet.pulse.histogram')}>
-                    {fullLayout.bins.map(bin => (
-                      <button
-                        key={bin.index}
-                        type="button"
-                        className={activeBin?.start === bin.start ? 'lc-pulse-bin-on' : ''}
-                        aria-pressed={activeBin?.start === bin.start}
-                        data-count={bin.count}
-                        title={t('fleet.pulse.bin', { n: bin.count })}
-                        style={{ height: `${Math.max(4, (bin.count / maxBin) * 32)}px` }}
-                        onClick={() => { setSelectedBinStart(activeBin?.start === bin.start ? 'all' : bin.start) }}
-                      />
-                    ))}
-                  </div>
-                  <div className="lc-pulse-ruler-times">
-                    <time>{fmtTime(layout.domain.start)}</time>
-                    {layout.domain.end !== layout.domain.start ? <time>{fmtTime(layout.domain.end)}</time> : null}
-                  </div>
-                </>
-              ) : <span className="lc-pulse-awaiting">{t('fleet.pulse.noActivity')}</span>}
+          <div className="lc-pulse-sequence-column">
+            <div className="lc-pulse-sequence-toolbar">
+              <span>{t('fleet.pulse.sequence')}</span>
+              <span className="lc-pulse-sequence-actions">
+                <button type="button" onClick={() => { jumpTo(false) }}>{t('fleet.pulse.first')}</button>
+                <button type="button" onClick={() => { jumpTo(true) }}>{t('fleet.pulse.latestRecord')}</button>
+              </span>
             </div>
-            <div className="lc-pulse-track-stack" style={{ height: layout.height }}>
-              <svg
-                className="lc-pulse-arrows"
-                viewBox={`0 0 1000 ${Math.max(1, layout.height)}`}
-                preserveAspectRatio="none"
-                aria-hidden="true"
-              >
-                {layout.points.map((point) => {
-                  const from = fromPartyOf(point.row)
-                  const source = laneAt.get(from)
-                  if (point.row.kind === 'settled' || source === undefined || from === point.row.to) return null
-                  const x = point.x * 10
-                  const direction = point.y >= source.center ? 1 : -1
-                  const tipY = point.y - direction * 5
-                  const baseY = tipY - direction * 7
-                  return (
-                    <g key={point.key} className={`lc-pulse-arrow lc-pulse-kind-${point.row.kind}`}>
-                      <line x1={x} y1={source.center} x2={x} y2={baseY} vectorEffect="non-scaling-stroke" />
-                      <path d={`M ${x} ${tipY} L ${x - 4} ${baseY} L ${x + 4} ${baseY} Z`} vectorEffect="non-scaling-stroke" />
+            <div className="lc-pulse-sequence-scroller" ref={scrollerRef} data-sequence-scroller tabIndex={0} aria-label={t('fleet.pulse.sequence')}>
+              <div className="lc-pulse-track-stack" style={{ height: layout.height, width: `max(100%, ${layout.width}px)` }}>
+                <svg
+                  className="lc-pulse-arrows"
+                  viewBox={`0 0 ${layout.width} ${Math.max(1, layout.height)}`}
+                  preserveAspectRatio="none"
+                  style={{ width: layout.width }}
+                >
+                  <defs>
+                    <pattern id="lc-pulse-slot-pattern" width={PULSE_POINT_PITCH} height={PULSE_LANE_HEIGHT} patternUnits="userSpaceOnUse">
+                      <rect x={PULSE_TRACK_PADDING + PULSE_POINT_PITCH / 2 - 5} y={PULSE_LANE_HEIGHT / 2 - 5} width="10" height="10" rx="3" className="lc-pulse-slot" />
+                    </pattern>
+                  </defs>
+                  {layout.lanes.map(lane => (
+                    <g key={lane.id}>
+                      <rect x="0" y={lane.top} width={layout.width} height={lane.height} fill="url(#lc-pulse-slot-pattern)" />
+                      <line className="lc-pulse-lane-baseline" x1="0" x2={layout.width} y1={lane.center} y2={lane.center} />
                     </g>
-                  )
-                })}
-              </svg>
-              {layout.points.map((point) => {
-                const from = fromPartyOf(point.row)
-                const source = laneAt.get(from)
-                if (point.row.kind === 'settled' || source === undefined || from === point.row.to) return null
-                return (
-                  <i
-                    key={`source-${point.key}`}
-                    className={`lc-pulse-source lc-pulse-kind-${point.row.kind}`}
-                    style={{ left: `${point.x}%`, top: source.center }}
-                    aria-hidden="true"
-                  />
-                )
-              })}
-              {layout.lanes.map(lane => (
-                <div key={lane.id} className="lc-pulse-lane-track" style={{ height: lane.height }} data-lane={lane.id}>
-                  {(pointsAt.get(lane.id) ?? []).map((point) => {
-                    const row = point.row
-                    const from = props.agentOf(fromPartyOf(row))
-                    const to = props.agentOf(row.to)
-                    const selected = props.selectedEventKey === row.key
-                    const variant = row.kind === 'settled' && row.summary !== undefined ? settledVariantOf(row.summary) : null
-                    const tone = settledToneOf(variant)
+                  ))}
+                  {layout.points.map((point) => {
+                    const item = point.item
+                    const source = laneAt.get(item.from)
+                    if (source === undefined || item.from === item.to || (item.kind === 'message' && item.row.kind === 'settled')) return null
+                    const from = props.agentOf(item.from)
+                    const to = props.agentOf(item.to)
+                    const x = point.x
+                    const direction = point.y >= source.center ? 1 : -1
+                    const tipY = point.y - direction * 10
+                    const baseY = tipY - direction * 7
+                    const label = item.kind === 'delegation'
+                      ? t('fleet.pulse.delegationLabel', { time: fmtTime(item.time), from: from.name, to: to.name })
+                      : t('fleet.pulse.eventLabel', {
+                        time: fmtTime(item.time),
+                        from: from.name,
+                        to: to.name,
+                        kind: t(`fleet.kind.${item.row.kind}`),
+                      })
                     return (
-                      <button
+                      <g
                         key={point.key}
-                        type="button"
-                        className={`lc-pulse-event lc-pulse-kind-${row.kind} lc-pulse-tone-${tone}` + (point.x > 50 ? ' lc-pulse-event-late' : '') + (point.x === 0 ? ' lc-pulse-event-start' : point.x === 100 ? ' lc-pulse-event-end' : '') + (selected ? ' lc-pulse-event-selected' : '')}
-                        style={{ ...channelStyle(from.hue, to.hue), left: `${point.x}%`, top: point.y - lane.top }}
-                        data-event-key={row.key}
-                        data-time={row.time}
-                        data-from={fromPartyOf(row)}
-                        data-to={row.to}
-                        aria-label={row.kind === 'settled'
-                          ? t('fleet.pulse.settledLabel', { time: fmtTime(row.time), name: to.name })
-                          : t('fleet.pulse.eventLabel', {
-                            time: fmtTime(row.time),
-                            from: from.name,
-                            to: to.name,
-                            kind: t(`fleet.kind.${row.kind}`),
-                          })}
-                        aria-pressed={selected}
-                        onClick={() => { props.onSelectEvent(row) }}
+                        className={`lc-pulse-arrow lc-pulse-record-${item.kind}` + (hoveredKey === item.key ? ' lc-pulse-arrow-hover' : '')}
+                        data-edge-key={item.key}
+                        role="button"
+                        tabIndex={0}
+                        aria-label={label}
+                        onClick={() => { selectItem(item) }}
+                        onKeyDown={(ev) => { keySelect(item, ev) }}
+                        onMouseEnter={() => { setHoveredKey(item.key) }}
+                        onMouseLeave={() => { setHoveredKey(current => current === item.key ? null : current) }}
+                        onFocus={() => { setHoveredKey(item.key) }}
+                        onBlur={() => { setHoveredKey(current => current === item.key ? null : current) }}
                       >
-                        <span className="lc-pulse-event-dot" aria-hidden="true" />
-                        <span className="lc-pulse-event-label">{fmtTime(row.time)} · {previewOf(row.report ?? row.text)}</span>
-                      </button>
+                        <line className="lc-pulse-edge-line" x1={x} y1={source.center} x2={x} y2={baseY} stroke={from.hue} vectorEffect="non-scaling-stroke" />
+                        <path d={`M ${x} ${tipY} L ${x - 5} ${baseY} L ${x + 5} ${baseY} Z`} fill={from.hue} vectorEffect="non-scaling-stroke" />
+                        <line className="lc-pulse-edge-hit" x1={x} y1={source.center} x2={x} y2={point.y} stroke="transparent" vectorEffect="non-scaling-stroke" />
+                      </g>
                     )
                   })}
-                </div>
-              ))}
-              {hidden > 0 ? <div className="lc-pulse-lane-track lc-pulse-quiet-track" style={{ height: 40 }} data-quiet-track /> : null}
+                </svg>
+                {layout.points.map((point) => {
+                  const item = point.item
+                  const source = laneAt.get(item.from)
+                  if (source === undefined || item.from === item.to || (item.kind === 'message' && item.row.kind === 'settled')) return null
+                  return (
+                    <i
+                      key={`source-${point.key}`}
+                      className={`lc-pulse-source lc-pulse-record-${item.kind}` + (hoveredKey === item.key ? ' lc-pulse-source-hover' : '')}
+                      style={{ left: point.x, top: source.center, background: props.agentOf(item.from).hue }}
+                      aria-hidden="true"
+                    />
+                  )
+                })}
+                {layout.lanes.map(lane => (
+                  <div key={lane.id} className="lc-pulse-lane-track" style={{ height: lane.height }} data-lane={lane.id}>
+                    {(pointsAt.get(lane.id) ?? []).map((point) => {
+                      const item = point.item
+                      const from = props.agentOf(item.from)
+                      const to = props.agentOf(item.to)
+                      const selected = item.kind === 'message'
+                        ? props.selectedEventKey === item.key
+                        : props.selectedDelegationKey === item.key
+                      const variant = item.kind === 'message' && item.row.kind === 'settled' && item.row.summary !== undefined
+                        ? settledVariantOf(item.row.summary)
+                        : null
+                      const tone = item.kind === 'delegation' ? 'done' : settledToneOf(variant)
+                      const kind = item.kind === 'message' ? item.row.kind : 'delegation'
+                      return (
+                        <button
+                          key={point.key}
+                          type="button"
+                          className={`lc-pulse-event lc-pulse-kind-${kind} lc-pulse-tone-${tone}` + (point.x > layout.width * 0.65 ? ' lc-pulse-event-late' : '') + (selected ? ' lc-pulse-event-selected' : '') + (hoveredKey === item.key ? ' lc-pulse-event-hover' : '')}
+                          style={{ ...channelStyle(from.hue, to.hue), left: point.x, top: point.y - lane.top }}
+                          data-event-key={item.key}
+                          data-record={item.kind}
+                          data-time={item.time}
+                          data-from={item.from}
+                          data-to={item.to}
+                          aria-label={item.kind === 'delegation'
+                            ? t('fleet.pulse.delegationLabel', { time: fmtTime(item.time), from: from.name, to: to.name })
+                            : item.row.kind === 'settled'
+                              ? t('fleet.pulse.settledLabel', { time: fmtTime(item.time), name: to.name })
+                              : t('fleet.pulse.eventLabel', {
+                                time: fmtTime(item.time),
+                                from: from.name,
+                                to: to.name,
+                                kind: t(`fleet.kind.${item.row.kind}`),
+                              })}
+                          aria-pressed={selected}
+                          onClick={() => { selectItem(item) }}
+                        >
+                          <span className="lc-pulse-event-dot" aria-hidden="true">{item.kind === 'delegation' ? '+' : item.row.kind === 'settled' ? '✓' : ''}</span>
+                          <span className="lc-pulse-event-label">
+                            {item.kind === 'delegation'
+                              ? `${to.name} · ${item.delegation.label ?? t('fleet.pulse.delegation')}`
+                              : `${fmtTime(item.time)} · ${previewOf(item.row.report ?? item.row.text)}`}
+                          </span>
+                        </button>
+                      )
+                    })}
+                  </div>
+                ))}
+                {hidden > 0 ? <div className="lc-pulse-lane-track lc-pulse-quiet-track" style={{ height: PULSE_LANE_HEIGHT }} data-quiet-track /> : null}
+              </div>
             </div>
           </div>
         </div>
       ) : null}
-      {visibleIds.length === 0 || props.rows.length === 0 ? (
+      {visibleIds.length === 0 || timelineItems.length === 0 ? (
         <div className="lc-empty lc-pulse-timeline-empty">
-          {props.scopedRows.length === 0 && props.pending
+          {recordTotal === 0 && props.pending
             ? t('fleet.comms.loading')
-            : props.scopedRows.length === 0 ? t('fleet.comms.empty') : t('fleet.pulse.emptyTimeline')}
+            : recordTotal === 0 ? t('fleet.comms.empty') : t('fleet.pulse.emptyTimeline')}
         </div>
       ) : null}
     </section>
@@ -467,6 +544,66 @@ function hiddenMessagesOf(details: FleetDetailState, rows: readonly CommsRow[]):
   return hidden
 }
 
+interface PulseDelegationDetailProps {
+  delegation: FleetDelegationRow
+  agentOf: (party: string) => CommsAgent
+  pinnedId: string | null
+  onSelect: (id: string) => void
+  onOpen: (id: string) => void
+  onEnter: (id: string) => void
+  onClose: () => void
+  t: ViewKit['t']
+}
+
+function PulseDelegationDetail(props: PulseDelegationDetailProps): ReactElement {
+  const { delegation, t } = props
+  const from = props.agentOf(delegation.from)
+  const to = props.agentOf(delegation.to)
+  return (
+    <div className="lc-comms-detail lc-pulse-delegation-detail" style={channelStyle(from.hue, to.hue)}>
+      <div className="lc-comms-detail-meta">
+        <span className="lc-agents-badge">{t('fleet.pulse.delegation')}</span>
+        <span className="lc-comms-detail-time">{fmtDateTime(delegation.time)}</span>
+        <span className="lc-comms-detail-seq">{t('fleet.comms.detail.seq', { n: delegation.seq })}</span>
+        <span className="lc-comms-detail-actions">
+          <button type="button" className="lc-inspector-btn lc-comms-detail-close" aria-label={t('fleet.collapse')} onClick={props.onClose}>×</button>
+        </span>
+      </div>
+      <div className="lc-comms-detail-note">{t('fleet.pulse.delegationNote')}</div>
+      <div className="lc-pulse-delegation-route">
+        <span><AgentAvatar agent={from} size="lg" t={t} /><b>{from.name}</b></span>
+        <i>→</i>
+        <span><AgentAvatar agent={to} size="lg" t={t} /><b>{to.name}</b></span>
+      </div>
+      {delegation.label !== undefined ? (
+        <section className="lc-comms-detail-section">
+          <div className="lc-comms-detail-caption">{t('fleet.pulse.delegationDuty')}</div>
+          <div className="lc-pulse-delegation-label">{delegation.label}</div>
+        </section>
+      ) : null}
+      <section className="lc-comms-detail-section">
+        <div className="lc-comms-detail-caption">{t('fleet.pulse.delegationMode')}</div>
+        <div>{t(`fleet.pulse.mode.${delegation.mode}`)}</div>
+      </section>
+      <div className="lc-pulse-delegation-actions">
+        <button type="button" className="lc-inspector-btn" onClick={() => { props.onSelect(to.id) }}>
+          {t(props.pinnedId === to.id ? 'fleet.comms.detail.unfilter' : 'fleet.comms.detail.filter')}
+        </button>
+        {delegation.mode !== 'external' ? (
+          <>
+            <button type="button" className="lc-inspector-btn" aria-label={t('fleet.openSidebar')} onClick={() => { props.onOpen(to.id) }}>
+              <IconPanelLeftOutlineRegular size={11} />
+            </button>
+            <button type="button" className="lc-inspector-btn" aria-label={t('fleet.open')} onClick={() => { props.onEnter(to.id) }}>
+              <IconRightUpOutlineRegular size={11} />
+            </button>
+          </>
+        ) : null}
+      </div>
+    </div>
+  )
+}
+
 interface PulseEventsProps {
   rows: readonly CommsRow[]
   scopedRows: readonly CommsRow[]
@@ -475,6 +612,7 @@ interface PulseEventsProps {
   query: string
   selectedAgent: string | null
   selectedRow: CommsRow | undefined
+  selectedDelegation: FleetDelegationRow | undefined
   agentOf: (party: string) => CommsAgent
   onKind: (kind: CommsKindFilter) => void
   onQuery: (query: string) => void
@@ -503,8 +641,10 @@ function PulseEvents(props: PulseEventsProps): ReactElement {
   const clipped = props.scopedRows.filter(row => row.clipped === true).length
   const hidden = hiddenMessagesOf(props.details, props.scopedRows)
   useEffect(() => {
-    if (props.selectedRow !== undefined) scrollIntoViewIfPossible(inspectorRef.current, { block: 'nearest' })
-  }, [props.selectedRow])
+    if (props.selectedRow !== undefined || props.selectedDelegation !== undefined) {
+      scrollIntoViewIfPossible(inspectorRef.current, { block: 'nearest' })
+    }
+  }, [props.selectedRow, props.selectedDelegation])
   return (
     <section className="lc-card lc-pulse-events">
       <div className="lc-card-title">
@@ -554,7 +694,18 @@ function PulseEvents(props: PulseEventsProps): ReactElement {
           </ul>
         </div>
         <div className="lc-pulse-inspector" ref={inspectorRef}>
-          {props.selectedRow !== undefined ? (
+          {props.selectedDelegation !== undefined ? (
+            <PulseDelegationDetail
+              delegation={props.selectedDelegation}
+              agentOf={props.agentOf}
+              pinnedId={props.selectedAgent}
+              onSelect={props.onSelectAgent}
+              onOpen={props.onOpen}
+              onEnter={props.onEnter}
+              onClose={props.onClose}
+              t={t}
+            />
+          ) : props.selectedRow !== undefined ? (
             <CommsEventDetail
               row={props.selectedRow}
               agentOf={props.agentOf}
@@ -589,6 +740,7 @@ export interface MissionPulseProps {
   details: FleetDetailState
   landedDetails: ReadonlyMap<string, FleetDetail>
   comms: readonly CommsRow[]
+  delegations: readonly FleetDelegationRow[]
   agents: ReadonlyMap<string, CommsAgent>
   titles: ReadonlyMap<string, string>
   attested: ReadonlyMap<string, string>
@@ -603,6 +755,7 @@ export function MissionPulse(props: MissionPulseProps): ReactElement {
   const { t } = props
   const [selectedAgent, setSelectedAgent] = useState<string | null>(null)
   const [selectedEventKey, setSelectedEventKey] = useState<string | null>(null)
+  const [selectedDelegationKey, setSelectedDelegationKey] = useState<string | null>(null)
   const [focusedTaskKey, setFocusedTaskKey] = useState<string | null>(null)
   const [kind, setKind] = useState<CommsKindFilter>('all')
   const [query, setQuery] = useState('')
@@ -626,6 +779,22 @@ export function MissionPulse(props: MissionPulseProps): ReactElement {
         .some(value => value !== undefined && value.toLowerCase().includes(needle))
     })
   }, [agentOf, kind, query, scopedRows])
+  const scopedDelegations = useMemo(
+    () => selectedAgent === null
+      ? [...props.delegations]
+      : props.delegations.filter(delegation => delegation.from === selectedAgent || delegation.to === selectedAgent),
+    [props.delegations, selectedAgent],
+  )
+  const visibleDelegations = useMemo(() => {
+    const needle = query.trim().toLowerCase()
+    if (needle === '') return scopedDelegations
+    return scopedDelegations.filter((delegation) => {
+      const from = agentOf(delegation.from)
+      const to = agentOf(delegation.to)
+      return [delegation.label, from.name, to.name]
+        .some(value => value !== undefined && value.toLowerCase().includes(needle))
+    })
+  }, [agentOf, query, scopedDelegations])
   const lanes = useMemo(() => {
     const map = new Map(props.agents)
     const communicating = new Set<string>()
@@ -636,23 +805,40 @@ export function MissionPulse(props: MissionPulseProps): ReactElement {
       if (!map.has(from)) map.set(from, agentOf(from))
       if (!map.has(row.to)) map.set(row.to, agentOf(row.to))
     }
+    const structural = new Set<string>()
+    for (const delegation of props.delegations) {
+      structural.add(delegation.from)
+      structural.add(delegation.to)
+      if (!map.has(delegation.from)) map.set(delegation.from, agentOf(delegation.from))
+      if (!map.has(delegation.to)) map.set(delegation.to, agentOf(delegation.to))
+    }
     const running = new Set((props.forest?.nodes ?? []).filter(node => node.running).map(node => node.id))
     return [...map.values()].map(agent => ({
       agent,
-      active: running.has(agent.id) || communicating.has(agent.id),
+      active: running.has(agent.id) || communicating.has(agent.id) || structural.has(agent.id),
     }))
-  }, [agentOf, props.agents, props.comms, props.forest])
+  }, [agentOf, props.agents, props.comms, props.delegations, props.forest])
   const visibleWork = useMemo(
     () => selectedAgent === null ? workItems : workItems.filter(item => item.ownerId === selectedAgent),
     [selectedAgent, workItems],
   )
   const selectedRow = selectedEventKey === null ? undefined : visibleRows.find(row => row.key === selectedEventKey)
+  const selectedDelegation = selectedDelegationKey === null
+    ? undefined
+    : visibleDelegations.find(delegation => delegation.key === selectedDelegationKey)
   const selected = selectedAgent !== null ? agentOf(selectedAgent) : null
   const messageTotal = useMemo(() => {
     let total = 0
     for (const detail of props.landedDetails.values()) total += detail.messagesTotal ?? detail.messages.length
     return total
   }, [props.landedDetails])
+  const latestRecordTime = useMemo(() => {
+    const latestMessage = props.comms.length === 0 ? undefined : props.comms[0].time
+    return props.delegations.reduce<number | undefined>(
+      (latest, delegation) => Math.max(latest ?? delegation.time, delegation.time),
+      latestMessage,
+    )
+  }, [props.comms, props.delegations])
   useEffect(() => {
     if (props.focusMember !== null) setSelectedAgent(props.focusMember)
   }, [props.focusMember])
@@ -662,7 +848,12 @@ export function MissionPulse(props: MissionPulseProps): ReactElement {
   const selectEvent = (row: CommsRow): void => {
     const opening = selectedEventKey !== row.key
     setSelectedEventKey(opening ? row.key : null)
+    setSelectedDelegationKey(null)
     if (opening && row.clipped === true) props.details.requestFull(row.to)
+  }
+  const selectDelegation = (delegation: FleetDelegationRow): void => {
+    setSelectedDelegationKey(current => current === delegation.key ? null : delegation.key)
+    setSelectedEventKey(null)
   }
   const focusTask = (item: PulseWorkItem): void => {
     const opening = focusedTaskKey !== item.key
@@ -683,7 +874,7 @@ export function MissionPulse(props: MissionPulseProps): ReactElement {
         running={props.forest === null ? null : props.forest.nodes.filter(node => node.running).length}
         tasks={workItems.length}
         messages={messageTotal}
-        latest={props.comms[0]?.time}
+        latest={latestRecordTime}
         selected={selected}
         onClear={() => { setSelectedAgent(null) }}
         t={t}
@@ -691,14 +882,18 @@ export function MissionPulse(props: MissionPulseProps): ReactElement {
       <PulseTimeline
         lanes={lanes}
         rows={visibleRows}
+        delegations={visibleDelegations}
         scopedRows={scopedRows}
+        scopedDelegations={scopedDelegations}
         selectedAgent={selectedAgent}
         selectedEventKey={selectedEventKey}
+        selectedDelegationKey={selectedDelegationKey}
         query={query}
         pending={props.details.pending.size > 0 || props.details.historyPending.size > 0}
         agentOf={agentOf}
         onSelectAgent={selectAgent}
         onSelectEvent={selectEvent}
+        onSelectDelegation={selectDelegation}
         onOpen={props.onOpen}
         onEnter={props.onEnter}
         t={t}
@@ -727,11 +922,12 @@ export function MissionPulse(props: MissionPulseProps): ReactElement {
         query={query}
         selectedAgent={selectedAgent}
         selectedRow={selectedRow}
+        selectedDelegation={selectedDelegation}
         agentOf={agentOf}
         onKind={setKind}
         onQuery={setQuery}
         onSelectEvent={selectEvent}
-        onClose={() => { setSelectedEventKey(null) }}
+        onClose={() => { setSelectedEventKey(null); setSelectedDelegationKey(null) }}
         onSelectAgent={selectAgent}
         onOpen={props.onOpen}
         onEnter={props.onEnter}

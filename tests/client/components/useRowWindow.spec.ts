@@ -2,7 +2,7 @@ import assert from 'node:assert/strict'
 import { createElement as h, useRef } from 'react'
 import { act } from 'react'
 import { describe, test, vi } from 'vitest'
-import { ROW_WINDOW_OVERSCAN, rowWindowFor, useRowWindow } from '../../../src/client/components/useRowWindow'
+import { ROW_WINDOW_OVERSCAN, rowWindowFor, useColumnWindow, useRowWindow } from '../../../src/client/components/useRowWindow'
 import { mount, query, until } from '../helpers/kit'
 
 describe('rowWindowFor', () => {
@@ -32,6 +32,12 @@ function Probe(props: { count: number; enabled: boolean; attachRef?: boolean; ov
 function NoRefProbe(props: { count: number }) {
   const range = useRowWindow(useRef<HTMLDivElement | null>(null), props.count, 20, true)
   return h('div', { 'data-from': range.from, 'data-to': range.to })
+}
+
+function ColumnProbe(props: { count: number }) {
+  const ref = useRef<HTMLDivElement | null>(null)
+  const range = useColumnWindow(ref, props.count, 20, true)
+  return h('div', { ref, 'data-from': range.from, 'data-to': range.to })
 }
 
 describe('useRowWindow', () => {
@@ -137,6 +143,23 @@ describe('useRowWindow', () => {
       assert.ok(cancel.mock.calls.length > 0)
     } finally {
       vi.unstubAllGlobals()
+    }
+  })
+
+  test('tracks horizontal scroll windows with the same bounded ranges', async () => {
+    const m = await mount(h(ColumnProbe, { count: 50 }))
+    try {
+      const el = query<HTMLElement>(m.container, 'div')
+      Object.defineProperty(el, 'clientWidth', { configurable: true, value: 100 })
+      await m.update(h(ColumnProbe, { count: 51 }))
+      await until(() => query<HTMLElement>(m.container, 'div').dataset.to !== '50', 'column window measured')
+      assert.equal(el.dataset.to, String(5 + ROW_WINDOW_OVERSCAN))
+      el.scrollLeft = 200
+      await act(async () => { el.dispatchEvent(new Event('scroll')) })
+      await until(() => query<HTMLElement>(m.container, 'div').dataset.from !== '0', 'column window follows scroll')
+      assert.equal(el.dataset.from, String(10 - ROW_WINDOW_OVERSCAN))
+    } finally {
+      await m.unmount()
     }
   })
 })

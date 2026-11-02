@@ -2,20 +2,21 @@ import assert from 'node:assert/strict'
 import { describe, test } from 'vitest'
 import type { AgentNode } from '../../src/client/agentTree'
 import type { CommsAgent } from '../../src/client/commsModel'
-import type { CommsRow } from '../../src/client/fleetDetail'
+import type { CommsRow, FleetDelegationRow } from '../../src/client/fleetDetail'
 import type { FleetTeam } from '../../src/client/fleetTeam'
 import {
   layoutPulse,
-  pulseBinsOf,
-  pulseDomainOf,
-  pulsePositionOf,
-  pulseTimelineRowsOf,
+  pulseTimelineItemsOf,
   pulseVisibleLaneIds,
   pulseWorkItemsOf,
 } from '../../src/client/pulseModel'
 
 function row(time: number, key = `event-${time}`, to = 'bee', from = 'lead'): CommsRow {
   return { seq: time, time, kind: 'relay', from, text: key, key, to }
+}
+
+function delegation(time: number, key: string, to = 'bee', from = 'lead'): FleetDelegationRow {
+  return { key, time, seq: time, to, from, mode: 'continuable', label: `Initial ${key}` }
 }
 
 function agent(id: string, name = id): CommsAgent {
@@ -43,76 +44,75 @@ function node(id: string, over: Partial<AgentNode> = {}): AgentNode {
   }
 }
 
-describe('pulse time model', () => {
-  test('positions real timestamps across the domain and centers a single instant', () => {
-    const rows = [row(400), row(100), row(250)]
-    const domain = pulseDomainOf(rows)
-    assert.deepEqual(domain, { start: 100, end: 400 })
-    assert.equal(pulsePositionOf(100, domain!), 0)
-    assert.equal(pulsePositionOf(250, domain!), 50)
-    assert.equal(pulsePositionOf(400, domain!), 100)
-    assert.equal(pulsePositionOf(100, pulseDomainOf([row(100)])!), 50)
-    assert.equal(pulsePositionOf(100, null), 50)
-    assert.equal(pulseDomainOf([]), null)
+describe('pulse timeline records', () => {
+  test('orders messages and durable delegations naturally without inventing records', () => {
+    const items = pulseTimelineItemsOf(
+      [row(400), row(100), row(250)],
+      [delegation(150, 'create-side', 'side'), delegation(100, 'create-bee')],
+    )
+    assert.deepEqual(items.map(item => [item.key, item.kind]), [
+      ['create-bee', 'delegation'],
+      ['event-100', 'message'],
+      ['create-side', 'delegation'],
+      ['event-250', 'message'],
+      ['event-400', 'message'],
+    ])
+    assert.equal(items[0].from, 'lead')
+    assert.equal(items[0].to, 'bee')
+    assert.deepEqual(pulseTimelineItemsOf([], []), [])
   })
 
-  test('bins expose bursts without inventing event timestamps', () => {
-    const domain = pulseDomainOf([row(0), row(100)])!
-    const bins = pulseBinsOf([row(0), row(10), row(11), row(89), row(100)], domain, 5)
-    assert.deepEqual(bins.map(bin => bin.count), [3, 0, 0, 0, 2])
-    assert.deepEqual(bins.map(bin => [bin.start, bin.end]), [
-      [0, 20], [20, 40], [40, 60], [60, 80], [80, 100],
-    ])
-    assert.deepEqual(pulseBinsOf([row(25)], pulseDomainOf([row(25)])!, 5), [
-      { index: 0, start: 25, end: 25, count: 1 },
-    ])
-    assert.deepEqual(pulseBinsOf([], null), [])
-    assert.equal(pulseBinsOf([row(-10), row(50)], domain, 0)[0].count, 2)
+  test('uses deterministic ordering within equal timestamps and record kinds', () => {
+    const items = pulseTimelineItemsOf(
+      [row(100, 'event-b'), row(100, 'event-a')],
+      [delegation(100, 'create-b'), delegation(100, 'create-a')],
+    )
+    assert.deepEqual(items.map(item => item.key), ['create-a', 'create-b', 'event-a', 'event-b'])
+    assert.deepEqual(pulseTimelineItemsOf([row(50, 'early')], [delegation(100, 'later')]).map(item => item.key), ['early', 'later'])
   })
 })
 
 describe('pulse lane layout', () => {
-  test('uses chronological positions and stacks collisions within the recipient lane', () => {
-    const layout = layoutPulse([
+  test('uses fixed natural-order slots and one baseline per lane', () => {
+    const items = pulseTimelineItemsOf([
       row(0, 'a', 'bee'),
       row(1, 'b', 'bee'),
       row(100, 'c', 'bee'),
       row(50, 'd', 'lead', 'bee'),
-    ], ['lead', 'bee'], 4)
-    assert.deepEqual(layout.lanes.map(lane => [lane.id, lane.top, lane.height]), [
-      ['lead', 0, 40],
-      ['bee', 40, 54],
+    ], [])
+    const layout = layoutPulse(items, ['lead', 'bee'])
+    assert.deepEqual(layout.lanes.map(lane => [lane.id, lane.top, lane.height, lane.center]), [
+      ['lead', 0, 56, 28],
+      ['bee', 56, 56, 84],
     ])
-    assert.equal(layout.height, 94)
-    assert.deepEqual(layout.points.map(point => [point.key, point.x, point.y, point.level]), [
-      ['d', 50, 20, 0],
-      ['a', 0, 60, 0],
-      ['b', 1, 74, 1],
-      ['c', 100, 60, 0],
+    assert.equal(layout.height, 112)
+    assert.equal(layout.width, 168)
+    assert.deepEqual(layout.points.map(point => [point.key, point.x, point.y]), [
+      ['a', 36, 84],
+      ['b', 68, 84],
+      ['d', 100, 28],
+      ['c', 132, 84],
     ])
-    assert.deepEqual(layout.bins.map(bin => bin.count), [2, 0, 1, 1])
-    assert.deepEqual(layoutPulse([], ['lead']).lanes, [
-      { id: 'lead', top: 0, height: 40, center: 20 },
-    ])
-    const stacked = layoutPulse([
-      row(0, 'b'), row(0, 'a'), row(0.5, 'c'), row(1, 'd'), row(100, 'e'),
-    ], ['bee', 'quiet'], 4)
-    assert.deepEqual(stacked.points.map(point => [point.key, point.level]), [['a', 0], ['b', 1], ['c', 2], ['d', 3], ['e', 0]])
-    assert.deepEqual(stacked.lanes.map(lane => [lane.id, lane.height]), [['bee', 82], ['quiet', 40]])
+    assert.deepEqual(layoutPulse([], ['lead']), {
+      width: 40,
+      lanes: [{ id: 'lead', top: 0, height: 56, center: 28 }],
+      points: [],
+      height: 56,
+    })
+    assert.equal(layoutPulse(pulseTimelineItemsOf([row(1, 'hidden', 'outside')], []), ['bee']).points.length, 0)
   })
-})
 
-describe('pulse timeline bounds', () => {
-  test('defaults to the latest burst, filters by stable starts, and keeps the selected event', () => {
-    const rows = Array.from({ length: 250 }, (_, index) => row(index, `event-${index}`))
-    const bins = pulseBinsOf(rows, pulseDomainOf(rows), 4)
-    const latest = pulseTimelineRowsOf(rows, bins, null, null)
-    assert.equal(latest.length, bins[bins.length - 1].count)
-    assert.ok(latest.length < rows.length)
-    const first = pulseTimelineRowsOf(rows, bins, bins[0].start, 'event-249', 2)
-    assert.deepEqual(first.map(row => row.key), ['event-0', 'event-1', 'event-249'])
-    const layout = layoutPulse(rows.slice(0, 2), ['bee'], 4, { start: 0, end: 249 })
-    assert.deepEqual(layout.domain, { start: 0, end: 249 })
+  test('keeps the complete sequence available for horizontal scrolling', () => {
+    const rows = Array.from({ length: 500 }, (_, index) => row(index, `event-${index}`))
+    const layout = layoutPulse(pulseTimelineItemsOf(rows, []), ['bee'])
+    assert.equal(layout.points.length, 500)
+    assert.equal(layout.width, 16_040)
+    assert.equal(layout.points[499].x, 16_004)
+    const window = layoutPulse(pulseTimelineItemsOf(rows.slice(490), []), ['bee'], 500, 490)
+    assert.equal(window.points.length, 10)
+    assert.equal(window.points[0].x, 15_716)
+    assert.equal(window.points[9].x, 16_004)
+    assert.equal(window.width, 16_040)
   })
 })
 

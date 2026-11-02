@@ -71,7 +71,7 @@ afterEach(() => {
 })
 
 describe('Mission Pulse', () => {
-  test('replaces the spatial boards with full-fleet statistics and a real-time lane layout', async () => {
+  test('replaces the spatial boards with full-fleet statistics and a natural-order lane layout', async () => {
     stubFleetRoute()
     const ctx = new TestClientCtx({ services: { sessions: familySessions() } })
     const View = makeView(ctx)
@@ -85,19 +85,52 @@ describe('Mission Pulse', () => {
     await settleEvents(m)
     const events = queryAll<HTMLElement>(m.container, '.lc-pulse-event')
     assert.deepEqual(events.map(event => event.dataset.time).sort(), ['1000', '2000'])
-    assert.equal(events.find(event => event.dataset.time === '1000')!.style.left, '0%')
-    assert.ok(events.find(event => event.dataset.time === '1000')!.className.includes('lc-pulse-event-start'))
-    assert.equal(events.find(event => event.dataset.time === '2000')!.style.left, '100%')
-    assert.ok(events.find(event => event.dataset.time === '2000')!.className.includes('lc-pulse-event-end'))
+    assert.equal(events.find(event => event.dataset.time === '1000')!.style.left, '36px')
+    assert.equal(events.find(event => event.dataset.time === '2000')!.style.left, '68px')
     assert.ok(events.every(event => event.dataset.from === 'root' && event.dataset.to === 'w1'))
-    assert.equal(queryAll(m.container, '.lc-pulse-arrow line').length, 1)
+    assert.equal(queryAll(m.container, '.lc-pulse-edge-line').length, 1)
     assert.ok(events.find(event => event.dataset.time === '2000')!.getAttribute('aria-label')!.includes('runtime settlement notice'))
     assert.equal(query(m.container, '.lc-pulse-header [data-pulse-latest]').getAttribute('data-pulse-latest'), '2000')
-    assert.ok(Number(query(m.container, '.lc-pulse-histogram button').getAttribute('data-count')) >= 1)
+    assert.ok(query(m.container, '[data-sequence-scroller]') !== null)
+    assert.equal(query(m.container, '.lc-pulse-slot').getAttribute('x'), '31')
     assert.equal(queryAll(m.container, '.lc-agents, .lc-members, .lc-summary, .lc-comms-channels').length, 0)
     assert.ok(!text(m.container).includes('tokens in context'))
     assert.ok(query(m.container, '[data-task="task-1"]') !== null)
     assert.ok(query(m.container, '[data-task="w2"]') !== null)
+    await m.unmount()
+    ctx.dispose()
+  })
+
+  test('merges durable parent delegations without counting them as messages', async () => {
+    vi.stubGlobal('fetch', (_url: unknown, init: { body: string }) => {
+      const { sessionId } = JSON.parse(init.body) as { sessionId: string }
+      const value = sessionId === 'catalog-root'
+        ? {
+          messages: [],
+          delegations: [{ seq: 9, time: 500, to: 'catalog-child', mode: 'continuable', label: 'Explore the host' }],
+          truncated: false,
+        }
+        : { messages: [], truncated: false }
+      return Promise.resolve({ ok: true, json: () => Promise.resolve({ ok: true, value }) } as Response)
+    })
+    const snapshot = {
+      byId: {
+        'catalog-root': { displayTitle: 'Main Agent', running: false, updatedAt: 10 },
+        'catalog-child': {
+          parentId: 'catalog-root', origin: 'subagent', running: false, updatedAt: 8,
+          projectionValues: { subagent: { mode: 'continuable', label: 'catalog-worker' } },
+        },
+      },
+    }
+    const ctx = new TestClientCtx({ services: { sessions: { list: { getSnapshot: () => snapshot, subscribe: () => () => {} } } } })
+    const View = makeView(ctx)
+    const m = await mount(h(View, { sessionId: 'catalog-root', useProjection: projectionsFor(richTimeline()) }))
+    await until(() => queryAll(m.container, '.lc-pulse-event').length === 1, 'delegation never landed')
+    assert.equal(query(m.container, '[data-pulse-stat="messages"]').textContent, '0')
+    assert.equal(query(m.container, '[data-pulse-latest]').getAttribute('data-pulse-latest'), '500')
+    assert.ok(text(query(m.container, '.lc-pulse-timeline .lc-card-sub')).includes('1/1'))
+    await click(query(m.container, '[data-event-key="catalog-root:9:catalog-child"]'))
+    assert.ok(text(query(m.container, '.lc-pulse-delegation-detail')).includes('Explore the host'))
     await m.unmount()
     ctx.dispose()
   })
@@ -187,18 +220,22 @@ describe('Mission Pulse', () => {
     ctx.dispose()
   })
 
-  test('time bins narrow the timeline and all activity restores it', async () => {
+  test('scrolls the natural sequence to its earliest and latest records', async () => {
     stubFleetRoute()
     const ctx = new TestClientCtx({ services: { sessions: familySessions() } })
     const View = makeView(ctx)
     const m = await mount(h(View, { sessionId: 'root', useProjection: projectionsFor(richTimeline()) }))
     await settleEvents(m)
-    const bin = query(m.container, '.lc-pulse-histogram button')
-    await click(bin)
-    assert.equal(bin.getAttribute('aria-pressed'), 'true')
-    assert.equal(queryAll(m.container, '.lc-pulse-event').length, 1)
-    await click(query(m.container, '.lc-pulse-timeline .lc-card-title .lc-pulse-quiet'))
-    assert.equal(queryAll(m.container, '.lc-pulse-event').length, 2)
+    const scroller = query<HTMLElement>(m.container, '[data-sequence-scroller]')
+    Object.defineProperties(scroller, {
+      clientWidth: { configurable: true, value: 200 },
+      scrollWidth: { configurable: true, value: 1000 },
+    })
+    const actions = queryAll<HTMLButtonElement>(m.container, '.lc-pulse-sequence-actions button')
+    await click(actions[0])
+    assert.equal(scroller.scrollLeft, 0)
+    await click(actions[1])
+    assert.equal(scroller.scrollLeft, 1000)
     await m.unmount()
     ctx.dispose()
   })
@@ -414,6 +451,13 @@ describe('Mission Pulse', () => {
     const m = await mount(h(View, { sessionId: 'hist-root', useProjection: projectionsFor(richTimeline()) }))
     await until(() => queryAll(m.container, '.lc-pulse-event').length === 85, 'complete history never backfilled')
     assert.equal(query(m.container, '[data-pulse-stat="messages"]').textContent, '85')
+    vi.stubGlobal('requestAnimationFrame', (callback: FrameRequestCallback) => { callback(0); return 1 })
+    const sequence = query<HTMLElement>(m.container, '[data-sequence-scroller]')
+    Object.defineProperty(sequence, 'clientWidth', { configurable: true, value: 256 })
+    sequence.scrollLeft = 640
+    await act(async () => { sequence.dispatchEvent(new Event('scroll')) })
+    await until(() => queryAll(m.container, '.lc-pulse-event').length < 85, 'sequence window never bounded the DOM')
+    assert.ok(query(m.container, '.lc-pulse-track-stack').style.width.includes('2760px'))
     const list = query(m.container, '.lc-pulse-event-list')
     Object.defineProperty(list, 'clientHeight', { configurable: true, value: 256 })
     vi.stubGlobal('requestAnimationFrame', (callback: FrameRequestCallback) => { callback(0); return 1 })
@@ -423,6 +467,8 @@ describe('Mission Pulse', () => {
     await click(query(m.container, '.lc-pulse-event-list .lc-comms-hit'))
     assert.ok(query(m.container, '.lc-pulse-inspector .lc-comms-detail') !== null)
     assert.ok(queryAll(m.container, '.lc-comms-event').length < 85)
+    assert.ok(queryAll(m.container, '.lc-pulse-event').length < 85)
+    assert.ok(sequence.scrollLeft > 0)
     assert.equal(query(m.container, '[data-pulse-stat="messages"]').textContent, '85')
     await m.unmount()
     ctx.dispose()

@@ -1,72 +1,57 @@
 import type { AgentForest } from './agentTree'
 import { fromPartyOf, type CommsAgent } from './commsModel'
-import type { CommsRow } from './fleetDetail'
+import type { CommsRow, FleetDelegationRow } from './fleetDetail'
 import { familyOthersOf, memberIdByName, type FleetTeam } from './fleetTeam'
 
-export interface PulseDomain {
-  start: number
-  end: number
+interface PulseTimelineBase {
+  key: string
+  time: number
+  from: string
+  to: string
 }
 
-export function pulseDomainOf(rows: readonly CommsRow[]): PulseDomain | null {
-  if (rows.length === 0) return null
-  let start = rows[0].time
-  let end = rows[0].time
-  for (const row of rows) {
-    start = Math.min(start, row.time)
-    end = Math.max(end, row.time)
-  }
-  return { start, end }
+export interface PulseMessageItem extends PulseTimelineBase {
+  kind: 'message'
+  row: CommsRow
 }
 
-export function pulsePositionOf(time: number, domain: PulseDomain | null): number {
-  if (domain === null || domain.end === domain.start) return 50
-  return ((time - domain.start) / (domain.end - domain.start)) * 100
+export interface PulseDelegationItem extends PulseTimelineBase {
+  kind: 'delegation'
+  delegation: FleetDelegationRow
 }
 
-export interface PulseBin extends PulseDomain {
-  index: number
-  count: number
-}
+export type PulseTimelineItem = PulseMessageItem | PulseDelegationItem
 
-export function pulseBinsOf(rows: readonly CommsRow[], domain: PulseDomain | null, count = 24): PulseBin[] {
-  if (domain === null) return []
-  if (domain.start === domain.end) {
-    return [{ index: 0, start: domain.start, end: domain.end, count: rows.length }]
-  }
-  const size = Math.max(1, Math.floor(count))
-  const bins: PulseBin[] = Array.from({ length: size }, (_, index) => ({
-    index,
-    start: domain.start + ((domain.end - domain.start) * index) / size,
-    end: domain.start + ((domain.end - domain.start) * (index + 1)) / size,
-    count: 0,
-  }))
-  for (const row of rows) {
-    const position = pulsePositionOf(row.time, domain)
-    const index = Math.min(size - 1, Math.floor((position / 100) * size))
-    bins[Math.max(0, index)].count += 1
-  }
-  return bins
-}
-
-export function pulseTimelineRowsOf(
+export function pulseTimelineItemsOf(
   rows: readonly CommsRow[],
-  bins: readonly PulseBin[],
-  selectedStart: number | 'all' | null,
-  selectedKey: string | null,
-  limit = 400,
-): CommsRow[] {
-  const active = typeof selectedStart === 'number'
-    ? bins.find(bin => bin.start === selectedStart)
-    : selectedStart === null && rows.length > 200 ? [...bins].reverse().find(bin => bin.count > 0) : undefined
-  const filtered = active === undefined
-    ? [...rows]
-    : rows.filter(row => row.time >= active.start && (active.index === bins.length - 1 ? row.time <= active.end : row.time < active.end))
-  const bounded = filtered.length > limit ? filtered.slice(0, limit) : filtered
-  const selected = selectedKey !== null ? rows.find(row => row.key === selectedKey) : undefined
-  if (selected !== undefined && !bounded.some(row => row.key === selected.key)) bounded.push(selected)
-  return bounded
+  delegations: readonly FleetDelegationRow[],
+): PulseTimelineItem[] {
+  const items: PulseTimelineItem[] = [
+    ...rows.map(row => ({
+      kind: 'message' as const,
+      key: row.key,
+      time: row.time,
+      from: fromPartyOf(row),
+      to: row.to,
+      row,
+    })),
+    ...delegations.map(delegation => ({
+      kind: 'delegation' as const,
+      key: delegation.key,
+      time: delegation.time,
+      from: delegation.from,
+      to: delegation.to,
+      delegation,
+    })),
+  ]
+  return items.sort((a, b) => (a.time - b.time)
+    || ((a.kind === 'delegation' ? 0 : 1) - (b.kind === 'delegation' ? 0 : 1))
+    || a.key.localeCompare(b.key))
 }
+
+export const PULSE_LANE_HEIGHT = 56
+export const PULSE_POINT_PITCH = 32
+export const PULSE_TRACK_PADDING = 20
 
 export interface PulseLaneLayout {
   id: string
@@ -77,65 +62,48 @@ export interface PulseLaneLayout {
 
 export interface PulsePointLayout {
   key: string
-  row: CommsRow
+  item: PulseTimelineItem
   x: number
   y: number
-  level: number
 }
 
 export interface PulseLayout {
-  domain: PulseDomain | null
+  width: number
   lanes: PulseLaneLayout[]
   points: PulsePointLayout[]
-  bins: PulseBin[]
   height: number
 }
 
 export function layoutPulse(
-  rows: readonly CommsRow[],
+  items: readonly PulseTimelineItem[],
   laneIds: readonly string[],
-  binCount = 24,
-  domainOverride?: PulseDomain | null,
+  totalCount = items.length,
+  offset = 0,
 ): PulseLayout {
-  const domain = domainOverride === undefined ? pulseDomainOf(rows) : domainOverride
-  const lanes: PulseLaneLayout[] = []
+  const lanes = laneIds.map((id, index) => ({
+    id,
+    top: index * PULSE_LANE_HEIGHT,
+    height: PULSE_LANE_HEIGHT,
+    center: index * PULSE_LANE_HEIGHT + PULSE_LANE_HEIGHT / 2,
+  }))
+  const laneAt = new Map(lanes.map(lane => [lane.id, lane]))
   const points: PulsePointLayout[] = []
-  const rowsAt = new Map<string, CommsRow[]>()
-  for (const row of rows) {
-    const laneRows = rowsAt.get(row.to)
-    if (laneRows === undefined) rowsAt.set(row.to, [row])
-    else laneRows.push(row)
+  items.forEach((item, index) => {
+    const lane = laneAt.get(item.to)
+    if (lane === undefined) return
+    points.push({
+      key: item.key,
+      item,
+      x: PULSE_TRACK_PADDING + (offset + index) * PULSE_POINT_PITCH + PULSE_POINT_PITCH / 2,
+      y: lane.center,
+    })
+  })
+  return {
+    width: PULSE_TRACK_PADDING * 2 + totalCount * PULSE_POINT_PITCH,
+    lanes,
+    points,
+    height: lanes.length * PULSE_LANE_HEIGHT,
   }
-  let top = 0
-  for (const id of laneIds) {
-    const laneRows = (rowsAt.get(id) ?? [])
-      .sort((a, b) => (a.time - b.time) || a.key.localeCompare(b.key))
-    const placed: Array<{ row: CommsRow; x: number; level: number }> = []
-    let previousX = Number.NEGATIVE_INFINITY
-    let level = 0
-    let maxLevel = 0
-    for (const row of laneRows) {
-      const x = pulsePositionOf(row.time, domain)
-      level = x - previousX < 2 ? level + 1 : 0
-      previousX = x
-      maxLevel = Math.max(maxLevel, level)
-      placed.push({ row, x, level })
-    }
-    const height = 40 + maxLevel * 14
-    const lane = { id, top, height, center: top + height / 2 }
-    lanes.push(lane)
-    for (const entry of placed) {
-      points.push({
-        key: entry.row.key,
-        row: entry.row,
-        x: entry.x,
-        y: top + 20 + entry.level * 14,
-        level: entry.level,
-      })
-    }
-    top += height
-  }
-  return { domain, lanes, points, bins: pulseBinsOf(rows, domain, binCount), height: top }
 }
 
 export interface PulseLaneInput {

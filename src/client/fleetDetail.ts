@@ -1,4 +1,4 @@
-import type { FleetDetail, FleetDescriptor, FleetMemberInfo, FleetMessage } from '../shared/types'
+import type { FleetDelegation, FleetDetail, FleetDescriptor, FleetMemberInfo, FleetMessage } from '../shared/types'
 import { FLEET_ROUTE } from './apiRoutes'
 import { asRecord, numOf } from './services'
 import { lruTouch, lruTrim } from './lru'
@@ -60,6 +60,23 @@ function rosterMemberOf(value: unknown): FleetMemberInfo | null {
   }
 }
 
+function delegationOf(value: unknown): FleetDelegation | null {
+  const rec = asRecord(value)
+  if (rec === null) return null
+  const to = strings(rec.to)
+  if (to === undefined) return null
+  const mode = rec.mode
+  if (mode !== 'one-shot' && mode !== 'continuable' && mode !== 'external') return null
+  const label = strings(rec.label)
+  return {
+    seq: numOf(rec.seq),
+    time: numOf(rec.time),
+    to,
+    mode,
+    ...(label !== undefined ? { label } : {}),
+  }
+}
+
 export function fleetDetailOf(value: unknown): FleetDetail | null {
   const rec = asRecord(value)
   if (rec === null) return null
@@ -81,11 +98,19 @@ export function fleetDetailOf(value: unknown): FleetDetail | null {
       if (member !== null) roster.push(member)
     }
   }
+  const delegations: FleetDelegation[] = []
+  if (Array.isArray(rec.delegations)) {
+    for (const entry of rec.delegations) {
+      const delegation = delegationOf(entry)
+      if (delegation !== null) delegations.push(delegation)
+    }
+  }
   return {
     ...(descriptor !== undefined ? { descriptor } : {}),
     ...(initialPrompt !== undefined ? { initialPrompt } : {}),
     ...(replyText !== undefined ? { lastReply: { time: numOf(reply?.time), text: replyText } } : {}),
     ...(roster.length > 0 ? { roster } : {}),
+    ...(delegations.length > 0 ? { delegations } : {}),
     messages,
     ...(numOf(rec.messagesTotal) > messages.length ? { messagesTotal: numOf(rec.messagesTotal) } : {}),
     truncated: rec.truncated === true,
@@ -162,6 +187,21 @@ export class FleetDetailCache {
 export interface CommsRow extends FleetMessage {
   key: string
   to: string
+}
+
+export interface FleetDelegationRow extends FleetDelegation {
+  key: string
+  from: string
+}
+
+export function mergeDelegations(details: ReadonlyMap<string, FleetDetail>): FleetDelegationRow[] {
+  const rows: FleetDelegationRow[] = []
+  for (const [from, detail] of details) {
+    for (const delegation of detail.delegations ?? []) {
+      rows.push({ ...delegation, key: `${from}:${delegation.seq}:${delegation.to}`, from })
+    }
+  }
+  return rows
 }
 
 export type SettledVariant = 'finished' | 'finishedFinal' | 'stopped' | 'outOfRoom' | 'declined' | 'failed'

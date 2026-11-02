@@ -1,7 +1,7 @@
 import { createElement as h, useEffect, useLayoutEffect, useMemo, useRef, type ReactElement } from 'react'
 import type { AgentHeads } from '../agentHeads'
 import { agentSelfOf } from '../agentTree'
-import { mergeComms } from '../fleetDetail'
+import { mergeComms, mergeDelegations } from '../fleetDetail'
 import { attestedNamesOf, commsAgentsOf } from '../fleetAgents'
 import { useFleetDetails, useFleetModel } from '../fleetModel'
 import { teamOf } from '../fleetTeam'
@@ -77,6 +77,7 @@ export function makeFleetView(
       return map
     }, [detailNodes, details.landed, details.historyLanded])
     const comms = useMemo(() => mergeComms(landedDetails), [landedDetails])
+    const delegations = useMemo(() => mergeDelegations(landedDetails), [landedDetails])
     const attestedNames = useMemo(() => attestedNamesOf(comms), [comms])
     const leadDetail = leadId !== undefined ? landedDetails.get(leadId) ?? null : null
     const agents = useMemo(
@@ -116,6 +117,7 @@ export function makeFleetView(
           details={details}
           landedDetails={landedDetails}
           comms={comms}
+          delegations={delegations}
           agents={agents}
           titles={titles}
           attested={attestedNames}
