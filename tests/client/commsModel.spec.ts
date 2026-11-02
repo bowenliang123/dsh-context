@@ -5,6 +5,7 @@ import {
   includesAgent,
   initialsOf,
   avatarLabelsOf,
+  avatarLabelOf,
   kindGroupOf,
   nameOfParty,
   NAME_PARTY_PREFIX,
@@ -60,6 +61,16 @@ describe('display helpers', () => {
     assert.equal(initialsOf('a'), 'A')
     assert.equal(initialsOf('  '), '?')
     assert.equal(initialsOf(' - '), '?')
+  })
+
+  test('avatar labels stay on one line up to three glyphs, then fold onto two', () => {
+    assert.deepEqual(avatarLabelOf('CB'), { lines: ['CB'], condensed: false })
+    assert.deepEqual(avatarLabelOf('主控'), { lines: ['主控'], condensed: false })
+    assert.deepEqual(avatarLabelOf('DS1'), { lines: ['DS1'], condensed: true })
+    assert.deepEqual(avatarLabelOf('修复1'), { lines: ['修复1'], condensed: true })
+    assert.deepEqual(avatarLabelOf('DS45'), { lines: ['DS', '45'], condensed: false })
+    assert.deepEqual(avatarLabelOf('DS108'), { lines: ['DS', '108'], condensed: false })
+    assert.deepEqual(avatarLabelOf('ABCD'), { lines: ['AB', 'CD'], condensed: false })
   })
 
   test('avatar labels keep the plain initials until two agents collide, then digits split them', () => {

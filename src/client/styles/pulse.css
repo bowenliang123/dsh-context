@@ -100,7 +100,7 @@
 .lc-pulse-lane-selected { background: linear-gradient(90deg, color-mix(in srgb, var(--lc-pulse-violet) 13%, transparent), transparent); box-shadow: inset 2px 0 var(--lc-pulse-violet); }
 .lc-pulse-lane-agent { display: flex; align-items: center; gap: 5px; width: 100%; min-width: 0; padding: 0; border: 0; background: transparent; color: inherit; font: inherit; text-align: left; cursor: pointer; }
 .lc-pulse-lane-name { min-width: 0; font-size: 10.5px; font-weight: 650; line-height: 1.1; overflow-wrap: anywhere; }
-.lc-pulse-lane-meta { display: flex; flex-wrap: wrap; gap: 0 5px; padding-left: 27px; color: var(--dsw-alias-label-secondary); font-size: 8.5px; line-height: 1.15; }
+.lc-pulse-lane-meta { display: flex; flex-wrap: wrap; gap: 0 5px; padding-left: 31px; color: var(--dsw-alias-label-secondary); font-size: 8.5px; line-height: 1.15; }
 .lc-pulse-lane-actions { position: absolute; right: 4px; top: 3px; display: inline-flex; gap: 1px; opacity: 0; transition: opacity var(--ds-transition-duration, 0.2s) ease; }
 .lc-pulse-lane-label:hover .lc-pulse-lane-actions, .lc-pulse-lane-label:focus-within .lc-pulse-lane-actions { opacity: 1; }
 .lc-pulse-lane-label:hover .lc-pulse-lane-agent, .lc-pulse-lane-label:focus-within .lc-pulse-lane-agent { padding-right: 42px; }
@@ -225,7 +225,7 @@
   .lc-pulse-event-tools .lc-fleet-filters { flex: 1 1 100%; }
   .lc-pulse-event-tools .lc-gran-btn { flex: 1; justify-content: center; }
   .lc-pulse-inspector .lc-comms-person { flex-wrap: wrap; }
-  .lc-pulse-inspector .lc-comms-person-actions { margin-left: 34px; }
+  .lc-pulse-inspector .lc-comms-person-actions { margin-left: 36px; }
 }
 
 @container pulse (max-width: 240px) {

@@ -14,6 +14,8 @@ const SUMMARY = 'Background subagent w1 finished and will do no further work unl
 const AGENTS = new Map<string, CommsAgent>([
   ['root', { id: 'root', name: 'Lead', role: 'lead', self: true, hue: 'blue' }],
   ['w1', { id: 'w1', name: 'worker-bee', role: 'teammate', self: false, hue: 'green' }],
+  ['w2', { id: 'w2', name: 'dsh-source-map child 45', role: 'subagent', self: false, hue: 'red', initials: 'DS45' }],
+  ['w3', { id: 'w3', name: 'dsh-source-map child 1', role: 'subagent', self: false, hue: 'teal', initials: 'DS1' }],
 ])
 
 function agentOf(id: string): CommsAgent {
@@ -121,6 +123,24 @@ describe('CommsEvent and detail', () => {
     assert.equal(queryAll(mounted.container, '.lc-comms-role').length, 0)
     assert.ok(text(query(mounted.container, '.lc-comms-detail')).includes(kit.t('fleet.comms.detail.excerptOnly')))
     await mounted.unmount()
+  })
+
+  test('long labels stack into stem and digits inside the badge', async () => {
+    const row: CommsRow = {
+      key: 'root:30:10000:relay', to: 'root', seq: 30, time: 10000, kind: 'relay', from: 'w2', text: 'note',
+    }
+    const mounted = await mountEvent(row)
+    const avatar = query(mounted.container, '.lc-comms-avatar')
+    assert.ok(avatar.className.includes('lc-comms-avatar-stack'))
+    assert.deepEqual(queryAll(avatar, '.lc-comms-avatar-text').map(node => text(node)), ['DS', '45'])
+    assert.equal(text(avatar), 'DS45')
+    await mounted.unmount()
+
+    const short = await mountEvent({ ...row, from: 'w3' })
+    const three = query(short.container, '.lc-comms-avatar')
+    assert.ok(three.className.includes('lc-comms-avatar-condensed'))
+    assert.deepEqual(queryAll(three, '.lc-comms-avatar-text').map(node => text(node)), ['DS1'])
+    await short.unmount()
   })
 
   test('full content replaces the excerpt and pending state names the read', async () => {

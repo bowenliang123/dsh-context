@@ -82,6 +82,24 @@ export function initialsOf(name: string): string {
   return Array.from(word).slice(0, 2).join('').toUpperCase()
 }
 
+const AVATAR_LINE_MAX = 3
+
+export interface AvatarLabel {
+  lines: readonly string[]
+  condensed: boolean
+}
+
+export function avatarLabelOf(label: string): AvatarLabel {
+  const glyphs = Array.from(label)
+  if (glyphs.length <= AVATAR_LINE_MAX) {
+    return { lines: [label], condensed: glyphs.length === AVATAR_LINE_MAX }
+  }
+  const parts = /^(\D+)(\d+)$/.exec(label)
+  if (parts !== null) return { lines: [parts[1], parts[2]], condensed: false }
+  const breakAt = Math.ceil(glyphs.length / 2)
+  return { lines: [glyphs.slice(0, breakAt).join(''), glyphs.slice(breakAt).join('')], condensed: false }
+}
+
 export function avatarNameOf(name: string, role: CommsRole, t: ViewKit['t']): string {
   return role === 'lead' ? t('fleet.role.lead') : name
 }
