@@ -2,241 +2,239 @@
 
 # dsh-context
 
-[中文](README_zh.md)
+[English](README_en.md)
 
 [![npm version](https://img.shields.io/npm/v/dsh-context)](https://www.npmjs.com/package/dsh-context)
 [![GitHub stars](https://img.shields.io/github/stars/bowenliang123/dsh-context?style=social)](https://github.com/bowenliang123/dsh-context)
 [![dshfind](https://dshfind.com/api/badge/bowenliang123/dsh-context)](https://dshfind.com/en/plugins/bowenliang123/dsh-context?ref=badge)
 
-**The best [DeepSeek Harness plugin](https://www.deepseek.com/harness/) for Agent's context insights and management.**
+**适用于 Agent 上下文洞察与管理的最佳 [DeepSeek Harness 插件](https://www.deepseek.com/harness/)。**
 
-> Recommended and starred by DeepSeek Harness staff [@tianyicui](https://github.com/tianyicui) and [@turtle1999](https://github.com/turtle1999) — see [this post on X](https://x.com/tianyi/status/2105256532657267119).
+> 获得 DeepSeek Harness 团队成员 [@tianyicui](https://github.com/tianyicui) 和 [@turtle1999](https://github.com/turtle1999) 推荐并加星——参见 [X 上的这条帖子](https://x.com/tianyi/status/2105256532657267119)。
 
-[`dsh-context`](https://www.npmjs.com/package/dsh-context) provides full context lifecycle management features.
-- **Context Insights page** — the cross-session overview as a first-level sidebar panel (beside Plugins and Automation tasks): KPI band with a 7-day token/cost usage chart, activity heatmap, aggregate composition ring, and filterable session cards that jump straight into any session.
-- **Context tab** — a UI context dashboard for DeepSeek Harness's context stats, composition, trend, events, messages, and commands.
-- **Fleet tab** — the agent family's own page: the current agent, its parents, and every subagent as one live card each.
-- **Context panel** — the same dashboard as a right-sidebar tab: pick **Context** on the sidebar's guide page and the panel opens beside the chat, agent network included.
-- **`/context` command** — the slash command shows the context model for current context composition and recent context evolution.
+[`dsh-context`](https://www.npmjs.com/package/dsh-context) 提供完整的上下文生命周期管理功能。
+- **上下文洞察页面** — 跨会话总览，作为一级侧边栏面板（与 Plugins 和 Automation tasks 并列）：包含 7 天 Token/成本使用图表的 KPI 栏、活动热力图、汇总组成环形图，以及可筛选并可直接跳转至任一会话的会话卡片。
+- **Context 标签页** — DeepSeek Harness 上下文统计、组成、趋势、事件、消息和命令执行的 UI 上下文仪表板。
+- **Fleet 标签页** — Agent 家族专属页面：当前 Agent、它的父级，以及每个子 Agent 各自显示为一张实时卡片。
+- **Context 面板** — 同一仪表板也可作为右侧边栏标签页：在侧边栏指南页面选择 **Context**，面板便会在聊天旁打开，并包含 Agent 网络。
+- **`/context` 命令** — 斜杠命令会显示当前上下文组成模型和近期上下文演变。
 
-▶️ **4-minute video walkthrough** — [watch on Bilibili](https://www.bilibili.com/video/BV1bn4K6TEEV/) (in Chinese).
+▶️ **4 分钟视频导览** — [在 Bilibili 观看](https://www.bilibili.com/video/BV1bn4K6TEEV/)。
 
-[![dsh-context and DeepSeek Harness: context composition, evolution, and multi-agent teams](https://raw.githubusercontent.com/bowenliang123/dsh-context/main/docs/video-cover.jpg)](https://www.bilibili.com/video/BV1bn4K6TEEV/)
+[![dsh-context 与 DeepSeek Harness：上下文组成、演进与多 Agent 团队](https://raw.githubusercontent.com/bowenliang123/dsh-context/main/docs/video-cover.jpg)](https://www.bilibili.com/video/BV1bn4K6TEEV/)
 
-## Install / Update
+## 安装 / 更新
 
-### Install on DeepSeek Harness web or desktop
+### 在 DeepSeek Harness 网页版或桌面版中安装
 
-Fill `dsh-context` in the **Add plugin** wizard's search box, and click **Install**:
+在 **Add plugin** 向导的搜索框中填写 `dsh-context`，然后点击 **Install**：
 
 ![Add_plugin_wizard](https://raw.githubusercontent.com/bowenliang123/dsh-context/main/docs/add-plugin-wizard.png)
 
-### Install with `dsh` cli
+### 使用 `dsh` CLI 安装
 
-Install [`dsh-context`](https://www.npmjs.com/package/dsh-context) plugin from [DeepSeek Harness](https://www.npmjs.com/package/@deepseek-ai/dsh):
+从 [DeepSeek Harness](https://www.npmjs.com/package/@deepseek-ai/dsh) 安装 [`dsh-context`](https://www.npmjs.com/package/dsh-context) 插件：
 
 ```sh
 dsh plugin --profile web add dsh-context
 ```
 
-Or update the `dsh-context` plugin:
+或更新 `dsh-context` 插件：
 
 ```sh
 dsh plugin --profile web update dsh-context@latest
 ```
 
-Then start the web UI with `dsh web`. No build step, no restart.
+然后使用 `dsh web` 启动 Web UI。无需构建，也无需重启。
 
-## Use it
+## 使用方法
 
-Five surfaces, one story — what your agent is carrying, how it got there, and what it did with it:
+五种入口，讲述同一件事——你的 Agent 正在携带什么、它如何获得这些内容，以及它如何使用这些内容：
 
-| Where | What you get |
+| 入口 | 功能 |
 | --- | --- |
-| **Context Insights page** | Every session at a glance: usage, cost, cache hit, daily activity, and per-session context profiles — filtered by range, day, group, or search, one click to jump in. |
-| **Context tab** | The full dashboard: stats, composition, per-request trend, events, file activity, and command executions — in every session. |
-| **Fleet tab** | The agent network: the current agent, its parents, and every subagent, live. |
-| **`/context` command** | A centered modal with the same composition and context browser, without leaving the chat. |
-| **Preferences card** | Per-user defaults: the panel entry, Insights range, trend and sort defaults, and the system prompt prefix/suffix joined around every session. |
+| **上下文洞察页面** | 一览所有会话：使用量、成本、缓存命中率、每日活动以及每个会话的上下文概况；可按时间范围、日期、分组或搜索筛选，并一键跳转。 |
+| **Context 标签页** | 完整仪表板：统计、组成、逐请求趋势、事件、文件活动和命令执行——适用于每个会话。 |
+| **Fleet 标签页** | Agent 网络：当前 Agent、它的父级以及所有子 Agent，实时呈现。 |
+| **`/context` 命令** | 居中弹窗，提供相同的组成信息和上下文浏览器，无需离开聊天。 |
+| **Preferences 卡片** | 每位用户的默认设置：面板入口、洞察时间范围、趋势与排序默认值，以及拼接在每个会话系统提示词前后的前缀/后缀。 |
 
-## 🗂️ The Context Insights page
+## 🗂️ 上下文洞察页面
 
-Click **Context Insights / 上下文洞察** in the sidebar's panel list — the same row level as **Plugins** and **Automation tasks** — and the page opens as a full center-column panel:
+点击侧边栏面板列表中的 **Context Insights / 上下文洞察**（与 **Plugins** 和 **Automation tasks** 位于同一层级），页面便会作为完整的中央栏面板打开：
 
 ![The Context Insights page](https://raw.githubusercontent.com/bowenliang123/dsh-context/main/docs/context-dashboard.png)
 
-| Section | The question it answers |
+| 区块 | 解答的问题 |
 | --- | --- |
-| **KPI band** | How much am I using — sessions active in the picked range (7d / 30d / all), with billed tokens, estimated cost, cache-hit rate and turns folded by the day each step started; tool runs and active time cover those sessions and their subagents' whole lifetime, matching the timing card. |
-| **7-day usage chart** | When did I spend what — each of the last 7 days' billed tokens and estimated cost as a bar pair, folded per turn off the sessions' own request times (not the session's last-active day). |
-| **Activity heatmap** | When do I actually work — the last 8 weeks of daily billed tokens; click a day to filter the sessions and scope the three tally cards to that day. |
-| **Skill loads** | Which skills I loaded, how often, and how recently — the range's loads per skill; click one to filter the sessions that loaded it. |
-| **Tool calls** | Which tools ran, how often, and how recently — the range's runs per tool from the daily ledger; click one to filter the sessions that ran it. |
-| **Command executions** | Which programs ran, how often, and how recently — the range's command runs per program, counted on dispatch; click one to filter the sessions that ran it. |
-| **Settings entry** | The chip in the page head — the same guarded jump to this plugin's preferences as the Context tab's Plugin Info card. |
-| **Context Composition** | Where the picked range's billed tokens went, split by the Token card's billed categories (Tool Calls, Reasoning, Answers, …). |
-| **Session cards** | Each session's profile under the four cards: composition ring, billed tokens, turns, cost, and its workspace-group / project breadcrumb — sorted by recency, tokens, or context size, searchable, grouped by workspace. A card click opens the session. |
+| **KPI 栏** | 我的使用量如何——所选时间范围（7 天 / 30 天 / 全部）内活跃的会话，其计费 Token、预估成本、缓存命中率和轮次按 step 发起日归因；工具执行与活跃时长则统计这些会话及其子 Agent 的全部生命周期，与耗时统计卡片一致。 |
+| **7 天使用量图表** | 每天的花费和用量如何——最近 7 天每天的计费 Token 和预估成本以成对柱状图展示，按会话自身各请求的时间汇总（而不是按会话最后活跃日期）。 |
+| **活动热力图** | 我实际在什么时候工作——最近 8 周每日的计费 Token；点击某天即可筛选当天活跃的会话，并让三个统计卡片只看当天。 |
+| **技能加载** | 加载了哪些技能、各多少次、最近何时——所选时间范围内按技能汇总的加载次数；点击可筛选加载过它的会话。 |
+| **工具调用** | 运行了哪些工具、各多少次、最近何时——按日账本汇总的工具执行次数；点击可筛选运行过它的会话。 |
+| **命令执行** | 运行了哪些程序、各多少次、最近何时——按程序汇总的命令执行次数（按派发计）；点击可筛选执行过它的会话。 |
+| **设置入口** | 页面标题栏中的按钮——与 Context 标签页 Plugin Info 卡片中通往此插件偏好设置的受保护跳转相同。 |
+| **Context Composition** | 所选时间范围内的计费 Token 用在了哪里，按 Token 卡片的计费分类（Tool Calls、Reasoning、Answers……）拆分。 |
+| **会话卡片** | 四个卡片下方每个会话的概况：组成环形图、计费 Token、轮次、成本以及工作区分组 / 项目路径；可按最近活动、Token 数或上下文大小排序、搜索、按工作区分组。点击卡片即可打开会话。 |
 
+## 📊 Context 标签页
 
-## 📊 The Context tab
-
-Open any session and click the **Context / 上下文** tab:
+打开任意会话并点击 **Context / 上下文** 标签页：
 
 ![Context panel overview](https://raw.githubusercontent.com/bowenliang123/dsh-context/main/docs/context-overview.png)
 
-| Card | The question it answers |
+| 卡片 | 解答的问题 |
 | --- | --- |
-| **Context Stats** | Turns, steps, human inputs, live tool calls — plus a cost estimated from the models.dev list prices (hover the `?` for per-1M rates; only DeepSeek splits peak/off-peak: its listed rates are the off-peak tier, and peak windows bill at 2×). |
-| **Token Stats** | Where the billed tokens went — the same total as the chat stats line under the composer, split into System Prompt, Tool Schemas, User Messages, Injected Context, Skill Injections, Tool Calls, Reasoning, and Answers. Tool Calls folds the tool-call names and arguments (replayed in the prompt plus generated in the output) together with the results those tools returned; Answers splits the model's reply prose out of the same assistant content and output; Reasoning splits its thinking the same way; the session's cache-hit rate sits in the corner. |
-| **Timing Stats** | How active time split across model calls, tool runs, and overhead. |
-| **Current Context** | What's in the window *right now*. |
-| **Context Trend** | Every request's size — and its story. |
-| **Context Browser** | What any request was *actually* assembled from. |
-| **Context Events** | When and why the window changed. |
-| **File Activity** | What the agent *did* to your files. |
-| **Command Executions** | What the agent ran, how each run ended, and which programs it leaned on. |
+| **Context Stats** | 轮次、步骤、用户输入、实时工具调用——以及根据 models.dev 价格列表估算的成本（将鼠标悬停在 `?` 上可查看每百万 Token 单价；仅 DeepSeek 区分高峰 / 非高峰：其挂牌价为谷时价，高峰时段按 2 倍计费）。 |
+| **Token Stats** | 计费 Token 用在了哪里——总量与输入框下方聊天统计行相同，拆分为系统提示词、工具定义、用户消息、注入上下文、技能注入、工具调用、推理和回答。工具调用把工具名称与参数（提示词中重放的部分，加上输出中生成的部分）与这些工具返回的结果一并计入；回答从同一份助手内容与输出中拆出模型的回复正文；推理以同样方式拆出其思考内容；会话的缓存命中率显示在角落。 |
+| **Timing Stats** | 活跃时间如何分布在模型调用、工具运行和开销之间。 |
+| **Current Context** | 此刻窗口中的内容。 |
+| **Context Trend** | 每个请求的大小及其变化过程。 |
+| **Context Browser** | 任意请求实际由哪些内容组成。 |
+| **Context Events** | 上下文窗口何时以及为何发生变化。 |
+| **File Activity** | Agent 对你的文件做了什么。 |
+| **命令执行** | Agent 执行了哪些命令、每次运行如何结束、主要用到了哪些程序。 |
 
-The cost estimate follows one documented rule set: [How model pricing is mapped](docs/model-pricing-mapping.md).
+成本估算遵循一套有文档记录的规则：[模型定价如何映射](docs/model-pricing-mapping.md)。
 
-The headline occupancy and composition read the **same official token-meter projections as the chat composer's context ring** (`contextPressure` / `contextBreakdown`), so the figures always match what the ring tells you — the card's percentage is that same occupancy, printed with one decimal.
+标题中的占用率和组成数据读取的都是与聊天输入框上下文环形图相同的**官方 Token 计量投影**（`contextPressure` / `contextBreakdown`），因此数值始终与环形图一致——卡片中的百分比就是同一占用率，精确显示到小数点后一位。
 
-The **Context Stats** card's Agent Network cell (the billed tokens and estimated cost of the whole family) jumps to the **Fleet** tab. Its Input / Output pills are jump links too: **Human Inputs** opens the **Context Browser** on your messages, and **Read / Written / Searched / Images** land on the **File Activity** card with that kind picked.
+**Context Stats** 卡片中的 Agent Network 单元格（整个 Agent 家族的计费 Token 和预估成本）会跳转至 **Fleet** 标签页。输入输出一行的胶囊同样是跳转链接：**用户输入** 打开上下文浏览器的用户消息，**读取 / 写入 / 搜索 / 图片** 落到文件活动卡片并选中对应筛选。
 
 ### Context Stats
 
-#### Token Stats and Timing Stats
+#### Token Stats 和 Timing Stats
 ![Token_Stats_and_Timing_Stats](https://raw.githubusercontent.com/bowenliang123/dsh-context/main/docs/token-stats-and-timing-stats.png)
 
 #### Context Stats
 ![Context_Stats](https://raw.githubusercontent.com/bowenliang123/dsh-context/main/docs/context-stats.png)
 
-
-### 🧱 Current Context — what's in the context window now
+### 🧱 当前上下文 — 此刻上下文窗口中的内容
 
 ![Current Context card](https://raw.githubusercontent.com/bowenliang123/dsh-context/main/docs/current-context.png)
 
-A six-color stacked bar against the model's full window (the two hatched masks at the end = auto-compaction's reserve: its headroom, then the request's reserved output window): system prompt, tool schemas, user messages, injected context, assistant replies, tool results — each with its ≈token figure and share. When a conversation starts degrading, this is where you see *which part* is responsible.
+六种颜色的堆叠条，以模型的完整窗口为基准（末尾两个带斜线的区域 = 自动压缩预留空间：先是其余量，再是请求预留的输出窗口）：系统提示词、工具定义、用户消息、注入上下文、助手回复、工具结果——每项都显示约略 Token 数和占比。当对话开始退化时，可以在这里看到*具体是哪部分*导致的。
 
-### 📈 Context Trend — how the context grew and evolved by turn or steps
+### 📈 上下文趋势 — 按轮次或步骤查看上下文的增长与演变
 
 ![Context Trend with the step brief](https://raw.githubusercontent.com/bowenliang123/dsh-context/main/docs/context-trend.png)
 
-One stacked bar per model request — finer than per-message — so you watch the window grow turn by turn:
+每个模型请求对应一根堆叠柱——比按消息划分更细，因此可以逐轮观察窗口的增长：
 
-- **✨ Step brief** — three plain-language rows under the chart: **User** recalls the message that opened the turn, **In** lists what newly entered (usually the previous tool results), **Response** shows the reply and/or tools called. Click a row to open that exact message in the Context browser.
-- **✂ marks the events** — compactions and prunes are pinned to the bar where they happened, so the drops explain themselves.
-- **Read it your way** — **Step / Turn** granularity, **Total** (cumulative makeup) or **Delta** (each request's signed change), and sideways scrolling through the whole session. In Delta mode, growth piles up above the baseline and a compaction dives below it:
+- **✨ 步骤摘要** — 图表下方有三行通俗摘要：**User** 回顾开启该轮的消息，**In** 列出新加入的内容（通常是先前的工具结果），**Response** 显示回复和/或调用的工具。点击某行即可在 Context 浏览器中打开对应消息。
+- **✂ 标记事件** — 压缩和清理事件会标记在发生时对应的柱上，因此下降的原因一目了然。
+- **按你的方式阅读** — 可选择 **Step / Turn** 粒度、**Total**（累计组成）或 **Delta**（每个请求的有符号变化），并可横向滚动查看整个会话。在 Delta 模式中，增长会堆叠在基线上方，压缩则会向下延伸：
 
 ![Context Trend in Delta mode](https://raw.githubusercontent.com/bowenliang123/dsh-context/main/docs/history-delta.png)
 
-- **Overview** — one toggle squashes the whole session (steps or turns) into the pane's width as a continuous stacked ribbon: every compaction drop and composition shift at a glance, no sideways scrolling, nothing extra to load. Flags mark the quartiles and the full span; hover to scrub, hover a band to light that category across the whole ribbon; click pins the step and opens that band's category in the browser (exclusive with DNA mode and Adaptive).
-- **Hover & pin** — scrub for an instant tooltip; click to pin the full breakdown, with provider-reported **Actual Prompt / Output / Cache** next to the estimates.
-- **Live linkage** — hovering a bar previews that step's assembled context in the Context browser beside the chart; leaving the chart returns to your own pick.
+- **总览** — 一个开关即可将整个会话（步骤或轮次）压缩到面板宽度内，形成连续的堆叠带：一眼查看每次压缩造成的下降和组成变化，无需横向滚动，也无需额外加载内容。标记显示四分位点和完整范围；悬停可浏览读数，悬停某条分类带可将该分类整条点亮，点击会固定步骤并在上下文浏览器中展开该分类（与 DNA 模式和 Adaptive 互斥）。
+- **悬停和固定** — 悬停可即时查看提示信息；点击可固定完整明细，并在估算值旁显示服务商报告的 **Actual Prompt / Output / Cache**。
+- **实时联动** — 将鼠标悬停在柱上，可在图表旁的 Context 浏览器中预览该步骤组装的上下文；离开图表后恢复你自己的选择。
 
-### 🧭 Context Browser — open the box of any request
+### 🧭 上下文浏览器 — 查看任意请求的内容
 
-Pick **Live (next request)** or any retained step, and browse what that request was assembled from: seven collapsible categories expand into one row per element with its token price, and every element expands again into its **actual content** — the system prompt, each tool's JSON schema, message text, reasoning, tool arguments, and tool outputs. Skill content (the available-skills catalog, `/skill` invocations, and `skill`-tool loads) has its own **Skill Injections** category, so a stealthy skill's context footprint can't hide inside the injected-context and tool-result buckets.
+选择 **Live（下一个请求）** 或任一保留的步骤，即可浏览该请求由哪些内容组成：七个可折叠类别可展开为逐项列表，每项都显示 Token 开销；每项还可再次展开，查看其**实际内容**——系统提示词、每个工具的 JSON schema、消息文本、推理内容、工具参数和工具输出。技能内容（可用技能目录、`/skill` 调用和 `skill` 工具加载）有独立的 **Skill Injections** 类别，因此隐蔽技能的上下文占用不会藏在注入上下文或工具结果类别中。
 
-- **Who provides each tool** — every tool-schema row carries a best-effort source chip: `tool-*` first-party packages, `dsh-*` capability packages, `mcp:<server>` proxies, or the exact plugin watched live from `tools.register()`. Sort by **size / name**, and filter every category by its own searchable fields:
+- **每种工具由谁提供** — 每行工具定义都带有尽力识别的来源标签：`tool-*` 表示一方软件包，`dsh-*` 表示功能软件包，`mcp:<server>` 表示代理，或显示由 `tools.register()` 实时监控的确切插件。可按**大小 / 名称**排序，并通过每个类别各自的可搜索字段进行筛选：
 
 ![Tool schemas with source chips, filter, and sort](https://raw.githubusercontent.com/bowenliang123/dsh-context/main/docs/context-browser-tools.png)
 
-- **Filter assistant replies by kind** — the assistant category's search box carries **Thinking / Tools / Answer** chips, each counting the replies of that kind in the current search results (one reply can carry several); click one to keep only the matching replies, click again to clear:
+- **按类型筛选助手回复** — 助手类别的搜索框包含 **Thinking / Tools / Answer** 标签，每个标签显示当前搜索结果中该类型的回复数（一次回复可包含多种类型）；点击某个标签即可只保留匹配的回复，再次点击可清除筛选：
 
 ![Assistant replies with kind filter chips](https://raw.githubusercontent.com/bowenliang123/dsh-context/main/docs/context-browser-assistant-kinds.png)
 
-- **Tool results open into the full call** — the tool name and arguments with its **OK/error** status, the result body with line count and a **Raw / Markdown** toggle:
+- **展开工具结果可查看完整调用** — 工具名称、参数及其 **OK/error** 状态，以及带行数和 **Raw / Markdown** 切换的结果正文：
 
 ![A tool result expanded with Raw/Markdown toggle](https://raw.githubusercontent.com/bowenliang123/dsh-context/main/docs/context-browser-tool-result.png)
 
-- **Attachments render as ordered cards** — a message's `image` and `file` blocks sit together in the order the message carries them, one card each: images with a thumbnail plus their dimensions, stored size, and the official DeepSeek image-token estimate; other files with their type glyph, extension, and stored size. One click opens the attachment in dsh's own preview column (markdown, code, PDF, office, and image viewers), under the file's real name:
+- **附件按顺序显示为卡片** — 消息中的 `image` 和 `file` 区块会按消息中的顺序排列在一起，每个区块对应一张卡片：图片显示缩略图、尺寸、存储大小和 DeepSeek 官方图像 Token 估算；其他文件显示类型图标、扩展名和存储大小。点击一次即可在 dsh 自带的预览栏中打开附件（支持 Markdown、代码、PDF、Office 和图片查看器），并使用文件的真实名称：
 
 ![Image attachment cards with their dimensions, stored size, and token estimate](https://raw.githubusercontent.com/bowenliang123/dsh-context/main/docs/context-browser-images.png)
 
-- **Diff against the previous turn** — signed delta badges per category (`+N` items, `±Nk` tokens) tell you what a turn added or reclaimed at one glance. Steps older than a compaction are reconstructed from the removed-message archive — and the card says so when a step's makeup is only approximate.
+- **与上一轮对比** — 各类别的有符号差异徽标（`+N` 项、`±Nk` Token）让你一眼看出某轮新增或回收了什么。压缩前的旧步骤会从已移除消息存档中重建；若某步骤的组成仅为近似值，卡片会明确说明。
 
-- **DNA mode lays the whole context out flat** — the bar draws one band per item in the model's reading order, and below it the same items become one flat list with the newest message on top (the model reads oldest-first, so the list runs that order bottom-up): every row carries its prompt position (`#12`), category, introducing step, and token price, and expands into the same full content; the tool schemas and the system prompt close the list as two group rows. The card ends flush with the composition + trend cards beside it — a fully flattened session scrolls inside instead of flooding the page.
+- **DNA 模式将上下文平铺展开** — 条形图按模型读取顺序逐项绘制色带，下方把同样的内容铺成一张平铺列表，最新的消息在最上（模型按从旧到新读取，列表即该顺序的倒排）：每行带有其在提示词中的位置（`#12`）、类别、引入步骤和 Token 开销，展开后可见同样的完整内容；工具定义与系统提示词作为两个分组行收尾。卡片与旁边的组成卡片、趋势卡片等高收尾——完整平铺的会话在卡片内滚动，而不会淹没整个页面。
 
-### ⚡ Context Events — when and why the window changed
+### ⚡ 上下文事件 — 上下文窗口何时以及为何发生变化
 
 ![Context Events with a compaction](https://raw.githubusercontent.com/bowenliang123/dsh-context/main/docs/context-events.png)
 
-Every injection, compaction, prune, model switch, and plan-mode toggle — labeled with its producer (instruction file, plugin id, skill name), its net token delta (compactions show what they reclaimed), turn/step, and time. The **Inject / Compact / Prune / Switch / Mode** chips filter the log by kind, each carrying its whole-session event tally.
+每次注入、压缩、清理、模型切换和计划模式切换都会记录，并标注其来源（指令文件、插件 ID、技能名称）、Token 净变化量（压缩事件会显示回收量）、轮次 / 步骤和时间。**Inject / Compact / Prune / Switch / Mode** 标签可按类型筛选日志，每个标签都显示整个会话的对应事件总数。
 
-### 📁 File Activity — what the agent did to your files
+### 📁 文件活动 — Agent 对文件做了什么
 
 ![File Activity](https://raw.githubusercontent.com/bowenliang123/dsh-context/main/docs/file-activity.png)
 
-One row per touched file — read, written, or searched — aggregated up to whichever step you pick on the trend chart:
+每个被操作的文件显示一行——读取、写入或搜索；数据会汇总至趋势图中所选的步骤：
 
-- **Per-purpose counts** with header chips doubling as filters (**Read / Written / Searched / Images**) and a path search box.
-- **Line deltas** — every `edit`/`write` contributes its estimated `+added / −removed` footprint, per file and summed.
-- **Every mode counts** — native tools, the Minimal preset's `str_replace_editor`, and the nested calls inside PTC `run_code` programs are all folded into per-tool rows.
-- **Searches land on real files** — matched files get their own ops rows with hit counts.
-- **Click a row** to expand its full operation log — every op jumps straight to the exact tool result in the Context browser.
-- **Click a file name** to open its preview in the right Sidebar, exactly as the built-in Files sidebar does — the same viewer, the same tab-per-file behavior. On a harness without that column the name opens on your system as before.
+- **按用途统计数量**，标题栏标签也可用作筛选器（**Read / Written / Searched / Images**），并提供路径搜索框。
+- **行数变化** — 每个 `edit` / `write` 操作都会计入估算的 `+新增 / −删除` 行数，可查看单个文件及汇总值。
+- **所有模式均计入** — 原生工具、Minimal 预设的 `str_replace_editor`，以及 PTC `run_code` 程序中的嵌套调用，都会汇总到各工具对应的行中。
+- **搜索结果对应实际文件** — 匹配的文件会有自己的操作行，并显示命中次数。
+- **点击一行**可展开完整操作日志——每个操作都可直接跳转到 Context 浏览器中对应的工具结果。
+- **点击文件名**可在右侧 Sidebar 中打开文件预览，与内置 Files 侧边栏的行为完全相同——使用相同的查看器和每个文件独立的标签页。如果 Harness 没有该栏，则文件名仍会像以前一样在系统中打开。
 
-### 🖥️ Command Executions — what the agent ran
+### 🖥️ 命令执行 — Agent 跑了什么
 
 ![Command Executions](https://raw.githubusercontent.com/bowenliang123/dsh-context/main/docs/command-executions.png)
 
-Every shell and code run with its status, wall time, and step stamp, plus a session summary, attention shortcuts, and a program ranking. The attention facts and the ranking stay session-wide while the search and status chips narrow the list. Every rail click writes its lens into the search box — a program click fills in and highlights the program, and clicking it again clears both — so the box always shows what is filtering the list.
+每次 Shell 和代码执行的状态、墙钟耗时与步骤定位，附带会话摘要、值得注意的快捷入口和程序分布。值得注意的事项与程序分布始终保持全局，只有搜索与状态筛选在收窄右侧列表。左侧每次点击都会把对应视角写入过滤框：点击程序会填入名称并高亮该行，再次点击则同时清除两者——过滤框始终反映当前生效的筛选。
 
-## 🚢 The Fleet tab
+## 🚢 Fleet 标签页
 
-Open any session and click the **Fleet / 编队** tab (right of **Context**) — the agent family on a page of its own, with room for the collaboration surfaces that follow:
+打开任意会话并点击 **Fleet / 编队** 标签页（位于 **Context** 右侧）——Agent 家族拥有自己的页面，为后续协作功能留出空间：
 
-![The Fleet page for an eleven-agent team: summary, Agent Network, Fleet Members, and Tasks](https://raw.githubusercontent.com/bowenliang123/dsh-context/main/docs/fleet-overview.png)
+![11 个 Agent 的编队总览：摘要、Agent 网络、编队成员与任务](https://raw.githubusercontent.com/bowenliang123/dsh-context/main/docs/fleet-overview.png)
 
-A one-line summary opens the page — agents and their status, live context, estimated cost, and task progress — then hands the same family to four linked surfaces: **Agent Network**, **Fleet Members**, **Tasks**, and **Agent Comms**. Picking an agent on the graph or the member board narrows the tasks and channels to that agent, so the page answers for one member at a time.
+页面顶部的编队摘要先给出 Agent 数量与状态、实时上下文、预估成本和任务进度，再把同一个家族交给四个联动区域：**Agent 网络**、**编队成员**、**任务**与**通讯记录**。在图谱或成员板上选中某个 Agent，任务与通讯通道会一并收窄到该 Agent，整页一次只回答一个成员的情况。
 
-### 🕸 Agent Network — the family portrait
+### 🕸 Agent Network — 家族全景
 
-The current agent, its parents, and every subagent — one card per agent: its title, live context size and window occupancy, a composition bar, and how long it has run for and how many steps it has taken. Edges fan out from each parent in the lineage's color — hover a card to light its whole chain and read the full breakdown in the detail strip; click to jump into that session's own Context tab. Running agents breathe with a green pulse on their incoming edge and turn over the harness's own rolling spinner beside their title, which settles into the same green dot the header's subagent list uses once the work is done; narrow panes fold the family into tidy rows — never a horizontal scrollbar.
+当前 Agent、它的父级以及所有子 Agent——每个 Agent 一张卡片，显示标题、实时上下文大小和窗口占用率、组成条，以及运行时长和已执行的步骤数。连线以各自血缘关系的颜色从父级展开；悬停在卡片上可高亮其整条关系链，并在详情栏查看完整明细；点击卡片可跳转至该会话自己的 Context 标签页。运行中的 Agent 会通过入边上的绿色脉冲和标题旁 Harness 自带的滚动指示器显示活动状态；任务完成后，指示器会变成与标题子 Agent 列表相同的绿色圆点。面板较窄时，家族会折叠成整齐的行——不会出现横向滚动条。
 
-### 👥 Fleet Members & Tasks — who is doing what
+### 👥 编队成员与任务 — 谁在做什么
 
-Each roster member's card carries its role (lead or teammate), model, latest reply, run time and steps, and active task count; the family's other agents sit below in the same card shape. A card's buttons open that agent's chat in the sidebar or the whole view, search and the status chips narrow both sections, and the sort menu orders the other agents by spawn order, tokens, duration, steps, or recency. The **Tasks** board puts team tasks and subagent delegations in the same place — owner groups, status filters, and blocked-by links that light the whole prerequisite chain when you focus a task. Click a task to open its full description in place, raw or rendered, and the board scrolls it to the front under a sticky owner header.
+每张团队成员卡显示角色（主控或队友）、运行模型、最新回复、运行时长与步数，以及进行中的任务数；其余 Agent 以同样的卡片列在下方。卡片上的按钮可把该 Agent 的聊天打开到侧边栏或整页；搜索和状态筛选同时收窄两段名单，排序菜单可把其余 Agent 按派生顺序、Token、时长、步数或最近活动排序。下方的 **任务** 板把团队任务与子 Agent 派发放在同一处：按负责人分组、可按状态筛选；聚焦某个任务时，整条阻塞前置链会一起点亮。点击任务即可原地展开完整描述（原文 / Markdown），任务板会把它滚动到最前，分组标题固定在顶部。
 
-### 📡 Agent Comms — who said what to whom
+### 📡 通讯记录 — 谁在和谁说什么
 
-The comms card reads the family's session logs automatically — no scan step. Team relays, mailbox deliveries, and the runtime's settlement notices merge into channels: each card pairs the lead or current agent with one counterpart, labels both sides, and shows how many messages each side sent. The timeline names both parties and their roles. Clicking any message opens the full record inline below it — the session log it came from and its sequence, a notice when the runtime wrote the settlement rather than the child, the complete closing report (with its structured result or diagnostic), and participant cards that open that agent's chat in the sidebar or the whole view. Filter by message kind or text, flip the order, and the shared agent pick from the graph or member board narrows the whole hub; older history and clipped excerpts are disclosed instead of silently truncated.
+通讯卡片会自动读取编队的会话日志，不再需要手动扫描。团队私信、邮箱投递与运行时的结算通知会合并成一条条通道：每张通道卡把主控（或当前 Agent）与一个对话方配对，写明双方身份，并显示双方各发了多少条消息。时间线同样标明双方与角色。点击任意一条消息，完整记录会在它下方内联展开——来源会话日志与序号、对运行时结算记录（而非子 Agent 直接消息）的提示、完整的完成报告（含结构化结果或诊断），以及可直接打开对方聊天（侧边栏或整页）的参与者卡片。可以按消息类型或文本搜索、切换排序；图谱和成员板上的共享选择也会收窄整个通讯区域。较早的历史与被截断的摘录会明确标注，而不是悄悄省略。
 
-![Agent Comms with a settlement record expanded inline](https://raw.githubusercontent.com/bowenliang123/dsh-context/main/docs/fleet-comms.png)
+![展开一条结算记录的通讯记录](https://raw.githubusercontent.com/bowenliang123/dsh-context/main/docs/fleet-comms.png)
 
-The right Sidebar's **Context** panel keeps the same card inline, so the family stays one click away while you read the chat. Don't want the tab at all? Turn **Fleet tab** off in the preferences card — the card then lives on in that panel, and the Context tab's family cell opens it there whenever a Sidebar is served.
+右侧 Sidebar 的 **Context** 面板会内嵌相同的卡片，因此你阅读聊天时，Agent 家族始终只需点击一次即可查看。如果不需要该标签页，可在 Preferences 卡片中关闭 **Fleet tab**——卡片仍会保留在该面板中；只要 Harness 提供 Sidebar，Context 标签页中的家族单元格也会在此处打开它。
 
-## ⌨️ `/context` command
+## ⌨️ `/context` 命令
 
-Type `/context` (or pick it from the `/` menu) and press Enter:
+输入 `/context`（或从 `/` 菜单中选择），然后按 Enter：
 
 ![Slash menu with the context command](https://raw.githubusercontent.com/bowenliang123/dsh-context/main/docs/context-command-entry.png)
 
-A centered dialog opens with the **Current Composition** card and the **Context browser** — the same composition bar, per-step picker, and `vs previous turn` diff badges as the tab:
+居中对话框会显示 **Current Composition** 卡片和 **Context browser**——与标签页相同的组成条、逐步选择器和 `vs previous turn` 差异徽标：
 
 ![The /context modal](https://raw.githubusercontent.com/bowenliang123/dsh-context/main/docs/context-command.png)
 
-## ⚙️ Settings
+## ⚙️ 设置
 
-The **Context** preferences card holds this plugin's per-user settings — the **Context panel entry** (the **Context** conversation tab, the right Sidebar panel, both, or Hide for neither — the reply-row jump goes with it), the **Fleet** tab's own Show/Hide switch (the panel entry never gates it), the **Context Insights** default range (Today / Last 7 days / Last 30 days / All, Last 30 days unless changed; picking a preset on the page writes it back), trend granularity (Step/Turn), trend mode (Total/Delta), the trend duration curve (shown by default), the trend auto-overview step threshold, the Context Browser diff baseline, tool and File Activity sort, and the Context Insights Show/Hide switch. It lives on the **Plugins** page: the sidebar **Plugins** entry → the **dsh-context** bundle's page → its **Configuration** section (the card is served by the entry's live Config form).
+**Context** 偏好设置卡片保存此插件的用户级设置——**上下文面板入口**（**Context** 会话标签页、右侧 Sidebar 面板、两者，或隐藏——隐藏后回复行的跳转按钮也随之隐藏）、**Fleet** 标签页自身的显示 / 隐藏开关（不受上下文面板入口影响）、**上下文洞察**页面的默认时间范围（今天 / 近 7 天 / 近 30 天 / 全部，默认近 30 天；在页面上点击时间范围预设会写回此项）、趋势粒度（Step/Turn）、趋势模式（Total/Delta）、默认显示的趋势时长曲线、趋势自动总览阈值、Context Browser 对比基线、工具和 File Activity 排序，以及上下文洞察的显示 / 隐藏开关。该卡片位于 **Plugins** 页面：侧边栏的 **Plugins** 入口 → **dsh-context** 插件包页面 → **Configuration** 区域（卡片由该入口的实时 Config 表单提供）。
 
-The **System Prompt · Prefix / Suffix** rows hold free text joined at the very start / end of every session's system prompt, for all agents (subagents included) — a per-deployment persona or behavioral rule that rides the harness's own prompt assembly. Edits apply from the next turn; leave a row empty to disable it.
+**System Prompt · Prefix / Suffix** 行用于填写自由文本，并将其拼接到每个会话系统提示词的最前面 / 最后面，对所有 Agent（包括子 Agent）生效——它们是随 Harness 自身提示词组装流程一同应用的部署级角色设定或行为规则。修改从下一轮开始生效；将某行留空即可停用对应设置。
 
-The Context Insights preset buttons write the pick back as the stored default; every other in-chart and in-card toggle stays per-view and never overwrites the stored preference.
+上下文洞察的时间范围预设按钮会把选择写回为默认值；其余图表和卡片中的切换项仅对当前视图生效，不会覆盖已保存的偏好设置。
 
 ![The Context settings card](https://raw.githubusercontent.com/bowenliang123/dsh-context/main/docs/settings.png)
 
-## Good to know
+## 注意事项
 
-- **Cache footprint** — the plugin checkpoints only a compact per-session summary (composition, counts, cost/timing, model info) into dsh's projection cache; the heavy per-event details (surface text, request breakdowns, file ops, command programs, spans) are refolded from the durable log when a panel needs them, so the cache stays small even on long sessions. Detail views are bounded (steps 1500 · turns 300 · events 400 · surface nodes 2000 · archive 400 · file ops 400 · commands 400).
-- **Estimates vs actuals** — category figures use dsh's own fixed-density heuristic (the same one as its built-in token meter); the pinned trend details show provider-reported actuals next to them, and the Token card pairs its ≈-estimated composition shares with the provider-exact billed total.
-- **Compatibility** — works on `@deepseek-ai/dsh` from **0.2.0-rc.2** (the `0.2.0` and `0.2.1` lines; verified on their rc.2 releases), the V4 session-log generation, from one shape-driven code path. The per-release matrix and how it is verified: [docs/compatibility.md](docs/compatibility.md).
-- **I18n** — UI in English and 简体中文.
+- **缓存占用** — 插件只把每个会话的精简摘要（组成、计数、成本/耗时、模型信息）写入 dsh 的投影缓存；体量较大的逐事件明细（surface 文本、请求拆分、文件操作、命令程序、span）会在面板需要时从持久日志重新汇总，因此即使会话很长，缓存也能保持很小。明细视图均有上限（步骤 1500 · 轮次 300 · 事件 400 · surface 节点 2000 · 存档 400 · 文件操作 400 · 命令 400）。
+- **估算值与实际值** — 各类别数值采用 dsh 自身的固定密度启发式算法（与内置 Token 计量器相同）；在趋势图中固定某一步后，其明细会在估算值旁显示服务商报告的实际值，而 Token 卡片则将 ≈ 估算的组成占比与服务商精确报告的计费总量并列呈现。
+- **兼容性** — 通过同一条由数据形状驱动的代码路径，支持 V4 会话日志格式的 `@deepseek-ai/dsh` **0.2.0-rc.2 及更高版本**（`0.2.0` 与 `0.2.1` 系列，已在各自的 rc.2 版本上验证）。各版本支持情况及验证方式见：[docs/compatibility.md](docs/compatibility.md)。
+- **国际化** — UI 支持英文和简体中文。
 
-## Like it?
+## 喜欢它？
 
-If `dsh-context` helped you understand what your agent is carrying around, a ⭐ on [GitHub](https://github.com/bowenliang123/dsh-context) is much appreciated — and issues/PRs are welcome!
+如果 `dsh-context` 帮你了解 Agent 正在携带哪些内容，欢迎在 [GitHub](https://github.com/bowenliang123/dsh-context) 点亮 ⭐——也欢迎提交 issue / PR！
 
-## License
+## 许可证
 
 [Apache-2.0](https://www.apache.org/licenses/LICENSE-2.0)
