@@ -1,4 +1,4 @@
-import { BRAND_HUE, familyHue, type AgentNode } from './agentTree'
+import { LEAD_HUE, familyHue, type AgentNode } from './agentTree'
 import {
   NEUTRAL_HUE,
   UNKNOWN_PARTY,
@@ -47,7 +47,7 @@ export function commsAgentsOf(
         name: shown,
         role,
         self: node.isCurrent,
-        hue: role === 'lead' || node.isCurrent ? BRAND_HUE : familyHue(node.family),
+        hue: role === 'lead' || node.isCurrent ? LEAD_HUE : familyHue(node.family),
         ...(name !== undefined && node.label !== shown ? { description: node.label } : {}),
       })
       continue
@@ -60,7 +60,7 @@ export function commsAgentsOf(
       name: shown,
       role,
       self: node.isCurrent,
-      hue: role === 'lead' ? BRAND_HUE : familyHue(entry.index),
+      hue: role === 'lead' ? LEAD_HUE : familyHue(entry.index),
       ...(description !== '' && description !== shown ? { description } : {}),
     })
   }
@@ -73,7 +73,7 @@ export function commsAgentsOf(
       name: avatarNameOf(member.name, role, t),
       role,
       self: false,
-      hue: role === 'lead' ? BRAND_HUE : familyHue(index),
+      hue: role === 'lead' ? LEAD_HUE : familyHue(index),
       ...(description !== undefined && description !== '' ? { description } : {}),
     })
   }

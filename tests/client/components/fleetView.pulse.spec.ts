@@ -3,7 +3,7 @@ import assert from 'node:assert/strict'
 import { afterEach, describe, test, vi } from 'vitest'
 import { makeFleetView } from '../../../src/client/components/fleetView'
 import { makeAgentHeads } from '../../../src/client/agentHeads'
-import { DICT_EN } from '../../../src/client/i18n'
+import { DICT_EN, DICT_ZH } from '../../../src/client/i18n'
 import { resetTimelineDetailStores } from '../../../src/client/timelineSource'
 import { TestClientCtx, asClientCtx } from '../helpers/harness'
 import { click, makeKit, mount, query, queryAll, text, typeText, until } from '../helpers/kit'
@@ -70,14 +70,14 @@ afterEach(() => {
   resetTimelineDetailStores()
 })
 
-describe('Mission Pulse', () => {
+describe('Multi-Agent Network', () => {
   test('replaces the spatial boards with full-fleet statistics and a natural-order lane layout', async () => {
     stubFleetRoute()
     const ctx = new TestClientCtx({ services: { sessions: familySessions() } })
     const View = makeView(ctx)
     const m = await mount(h(View, { sessionId: 'root', useProjection: projectionsFor(richTimeline()) }))
 
-    assert.ok(text(query(m.container, '.lc-pulse-header')).includes('Mission Pulse'))
+    assert.ok(text(query(m.container, '.lc-pulse-header')).includes(DICT_EN['fleet.pulse.title']))
     assert.equal(query(m.container, '[data-pulse-stat="agents"]').textContent, '4')
     assert.equal(query(m.container, '[data-pulse-stat="running"]').textContent, '2')
     assert.equal(query(m.container, '[data-pulse-stat="tasks"]').textContent, '3')
@@ -92,7 +92,7 @@ describe('Mission Pulse', () => {
     assert.ok(events.find(event => event.dataset.time === '2000')!.getAttribute('aria-label')!.includes('runtime settlement notice'))
     assert.equal(query(m.container, '.lc-pulse-header [data-pulse-latest]').getAttribute('data-pulse-latest'), '2000')
     assert.ok(query(m.container, '[data-sequence-scroller]') !== null)
-    assert.equal(query(m.container, '.lc-pulse-slot').getAttribute('x'), '31')
+    assert.equal(query(m.container, '.lc-pulse-slot').getAttribute('cx'), '36')
     assert.equal(queryAll(m.container, '.lc-agents, .lc-members, .lc-summary, .lc-comms-channels').length, 0)
     assert.ok(!text(m.container).includes('tokens in context'))
     assert.ok(query(m.container, '[data-task="task-1"]') !== null)
@@ -374,6 +374,10 @@ describe('Mission Pulse', () => {
     assert.ok(query(m.container, '[data-task="w2"]') !== null)
     assert.ok(text(query(m.container, '[data-task="w2"]')).includes(DICT_EN['fleet.pulse.latestTurn']))
     assert.ok(!text(query(m.container, '[data-task="w2"]')).includes(DICT_EN['fleet.task.completed']))
+    const agentItem = query<HTMLElement>(m.container, '[data-task="w2"]')
+    await act(async () => { agentItem.dispatchEvent(new MouseEvent('mouseover', { bubbles: true })) })
+    assert.ok(!agentItem.className.includes('lc-pulse-work-task-hover'))
+    await act(async () => { agentItem.dispatchEvent(new MouseEvent('mouseout', { bubbles: true })) })
     assert.equal(queryAll(m.container, '.lc-member-card').length, 0)
     await click(query(m.container, '[data-task="w2"] .lc-pulse-work-focus'))
     assert.ok(text(query(m.container, '[data-task="w2"]')).includes(DICT_EN['fleet.pulse.delegation']))
@@ -526,7 +530,7 @@ describe('Mission Pulse', () => {
     const ctx = new TestClientCtx({ services: {} })
     const View = makeView(ctx, 'zh')
     const m = await mount(h(View, { sessionId: 'root', useProjection: projectionsFor(richTimeline(), { agentTeam: TEAM }) }))
-    assert.ok(text(query(m.container, '.lc-pulse-header')).includes('任务脉冲'))
+    assert.ok(text(query(m.container, '.lc-pulse-header')).includes(DICT_ZH['fleet.pulse.title']))
     assert.equal(query(m.container, '[data-pulse-stat="agents"]').textContent, '3')
     assert.equal(query(m.container, '[data-pulse-stat="tasks"]').textContent, '2')
     assert.equal(queryAll(m.container, '.lc-pulse-work-item').length, 2)

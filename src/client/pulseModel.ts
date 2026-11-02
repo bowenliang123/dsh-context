@@ -1,7 +1,7 @@
 import type { AgentForest } from './agentTree'
 import { fromPartyOf, type CommsAgent } from './commsModel'
 import type { CommsRow, FleetDelegationRow } from './fleetDetail'
-import { familyOthersOf, memberIdByName, type FleetTeam } from './fleetTeam'
+import { familyOthersOf, memberIdByName, tasksOfOwner, type FleetTeam, type FleetTeamTask } from './fleetTeam'
 
 interface PulseTimelineBase {
   key: string
@@ -50,6 +50,7 @@ export function pulseTimelineItemsOf(
 }
 
 export const PULSE_LANE_HEIGHT = 56
+export const PULSE_TASK_LANE_HEIGHT = 40
 export const PULSE_POINT_PITCH = 32
 export const PULSE_TRACK_PADDING = 20
 
@@ -133,6 +134,28 @@ export function pulseVisibleLaneIds(
         || (lane.agent.description ?? '').toLowerCase().includes(needle)
     })
     .map(lane => lane.agent.id)
+}
+
+export function pulseTaskBadgeOf(id: string): string {
+  return id.startsWith('task-') ? `#${id.slice(5)}` : id
+}
+
+export function pulseTasksByAgent(team: FleetTeam | null): Map<string, readonly FleetTeamTask[]> {
+  const map = new Map<string, readonly FleetTeamTask[]>()
+  if (team === null) return map
+  for (const member of team.members) {
+    const tasks = tasksOfOwner(team, member.name)
+    if (tasks.length > 0) map.set(member.id, tasks)
+  }
+  return map
+}
+
+export function pulseTaskOf(
+  item: PulseTimelineItem,
+  tasksByAgent: ReadonlyMap<string, readonly FleetTeamTask[]>,
+): FleetTeamTask | null {
+  const tasks = tasksByAgent.get(item.to) ?? tasksByAgent.get(item.from) ?? []
+  return tasks.length === 0 ? null : tasks[0]
 }
 
 export interface PulseWorkItem {

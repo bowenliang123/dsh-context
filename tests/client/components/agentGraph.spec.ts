@@ -4,7 +4,7 @@ import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest'
 import { makeAgentGraph } from '../../../src/client/components/agentGraph'
 import { DICT_EN } from '../../../src/client/i18n'
 import { resetModelPrices, setModelPricesLoader } from '../../../src/client/modelPrices'
-import { agentForestOf, familyHue, type AgentSelfStats } from '../../../src/client/agentTree'
+import { LEAD_HUE, agentForestOf, familyHue, type AgentSelfStats } from '../../../src/client/agentTree'
 import { TestClientCtx, asClientCtx } from '../helpers/harness'
 import { blur, click, flush, focus, hover, makeKit, mount, query, queryAll, text, unhover, until, wheel } from '../helpers/kit'
 
@@ -447,7 +447,7 @@ describe('AgentGraph — the Fleet seat', () => {
     assert.equal(text(query(worker, '.lc-agent-duty')), 'worker-bee')
     assert.equal(text(query(worker, '.lc-comms-avatar')), 'AR', 'the card wears the roster initials')
     const self = query(m.container, '.lc-agent-card.lc-agent-self')
-    assert.ok(self.getAttribute('style')?.includes('--lc-member-hue: var(--dsw-alias-brand-primary'))
+    assert.ok(self.getAttribute('style')?.includes(`--lc-member-hue: ${LEAD_HUE}`))
     assert.equal(queryAll(self, '.lc-agent-duty').length, 0)
     assert.equal(text(query(self, '.lc-comms-avatar')), 'LE', 'the lead card wears the shared role initials')
     assert.ok(query(self, '.lc-comms-avatar')?.className.includes('lc-comms-avatar-self'), 'the self card rings its avatar')

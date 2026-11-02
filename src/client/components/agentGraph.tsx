@@ -15,7 +15,7 @@ import { useFleetModel } from '../fleetModel'
 import { teammateNameOf, teamMemberOf, type FleetTeam } from '../fleetTeam'
 import type { AgentForest, AgentNode, AgentSelfStats } from '../agentTree'
 import {
-  BRAND_HUE,
+  LEAD_HUE,
   barSegments,
   familyHue,
   fmtDurationCompact,
@@ -122,9 +122,9 @@ export function makeAgentGraph(
     const byId = new Map(forest.nodes.map(n => [n.id, n]))
     const hueOf = (node: AgentNode): string => {
       const member = teamMemberOf(team, node.id)
-      return member?.role === 'lead' ? BRAND_HUE
+      return member?.role === 'lead' ? LEAD_HUE
         : member !== null ? familyHue(members.indexOf(member))
-          : node.isCurrent ? BRAND_HUE : familyHue(node.family)
+          : node.isCurrent ? LEAD_HUE : familyHue(node.family)
     }
     const hues = new Map(forest.nodes.map(node => [node.id, hueOf(node)]))
     /* v8 ignore next 1 */

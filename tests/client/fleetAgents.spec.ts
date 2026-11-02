@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import { describe, test } from 'vitest'
-import { BRAND_HUE, familyHue, type AgentNode } from '../../src/client/agentTree'
+import { LEAD_HUE, familyHue, type AgentNode } from '../../src/client/agentTree'
 import { agentResolverOf, attestedNamesOf, commsAgentsOf, fallbackAgentOf } from '../../src/client/fleetAgents'
 import { NAME_PARTY_PREFIX, NEUTRAL_HUE, UNKNOWN_PARTY } from '../../src/client/commsModel'
 import type { CommsRow } from '../../src/client/fleetDetail'
@@ -79,7 +79,7 @@ describe('commsAgentsOf — team branch', () => {
       kit.t,
     )
     assert.deepEqual(agents.get('root'), {
-      id: 'root', name: 'Lead', role: 'lead', self: true, hue: BRAND_HUE, initials: 'LE2', description: 'Main Agent',
+      id: 'root', name: 'Lead', role: 'lead', self: true, hue: LEAD_HUE, initials: 'LE2', description: 'Main Agent',
     })
     assert.deepEqual(agents.get('w1'), {
       id: 'w1', name: 'worker-bee', role: 'teammate', self: false, hue: familyHue(1), initials: 'WB', description: 'schema duty',
@@ -103,7 +103,7 @@ describe('commsAgentsOf — team branch', () => {
       id: 'w10', name: 'ghost-plain', role: 'teammate', self: false, hue: familyHue(4), initials: 'GP',
     })
     assert.deepEqual(agents.get('remote-lead'), {
-      id: 'remote-lead', name: 'Lead', role: 'lead', self: false, hue: BRAND_HUE, initials: 'LE1',
+      id: 'remote-lead', name: 'Lead', role: 'lead', self: false, hue: LEAD_HUE, initials: 'LE1',
     })
   })
 })
@@ -128,7 +128,7 @@ describe('commsAgentsOf — no team', () => {
       kit.t,
     )
     assert.deepEqual(agents.get('root'), {
-      id: 'root', name: 'Lead', role: 'lead', self: true, hue: BRAND_HUE, initials: 'LE', description: 'Main Agent',
+      id: 'root', name: 'Lead', role: 'lead', self: true, hue: LEAD_HUE, initials: 'LE', description: 'Main Agent',
     })
     assert.deepEqual(agents.get('w2'), {
       id: 'w2', name: 'scout', role: 'teammate', self: false, hue: familyHue(2), initials: 'SC', description: 'side-quest',
@@ -140,7 +140,7 @@ describe('commsAgentsOf — no team', () => {
       id: 'w4', name: 'cold-scout', role: 'subagent', self: false, hue: familyHue(4), initials: 'CS',
     })
     assert.deepEqual(agents.get('solo'), {
-      id: 'solo', name: 'Solo session', role: 'agent', self: true, hue: BRAND_HUE, initials: 'SS',
+      id: 'solo', name: 'Solo session', role: 'agent', self: true, hue: LEAD_HUE, initials: 'SS',
     })
   })
 })
@@ -166,7 +166,7 @@ describe('fallback identity', () => {
     assert.deepEqual(fallbackAgentOf('deadbeef-0000-1111-2222-333333333333', titles, attested, kit.t), {
       id: 'deadbeef-0000-1111-2222-333333333333', name: kit.t('fleet.comms.agentId', { id: 'deadbeef…' }), role: 'other', self: false, hue: NEUTRAL_HUE,
     })
-    const known = new Map([['root', { id: 'root', name: 'Lead', role: 'lead' as const, self: true, hue: BRAND_HUE }]])
+    const known = new Map([['root', { id: 'root', name: 'Lead', role: 'lead' as const, self: true, hue: LEAD_HUE }]])
     const resolve = agentResolverOf(known, titles, attested, kit.t)
     assert.equal(resolve('root').name, 'Lead')
     assert.equal(resolve('session-attested').name, 'legacy-worker')

@@ -512,7 +512,7 @@ export function familyHue(index: number): string {
   return `hsl(${Math.round(index * 137.508) % 360} 58% 52%)`
 }
 
-export const BRAND_HUE = 'var(--dsw-alias-brand-primary, var(--color-blue-500))'
+export const LEAD_HUE = 'var(--dsw-alias-state-business-primary, rgb(65, 118, 230))'
 
 function linksOf(forest: AgentForest, points: AgentPoint[]): AgentLink[] {
   const pointOf = new Map(points.map(p => [p.id, p]))

@@ -20,14 +20,18 @@ import {
 import { agentResolverOf } from '../fleetAgents'
 import { settledVariantOf, type CommsRow, type FleetDelegationRow } from '../fleetDetail'
 import type { FleetDetailState } from '../fleetModel'
-import type { FleetTeam } from '../fleetTeam'
+import type { FleetTeam, FleetTeamTask } from '../fleetTeam'
 import { fmtDateTime, fmtTime } from '../format'
 import { IconChevronDown, IconChevronUp } from '../primitives'
 import {
   layoutPulse,
   PULSE_LANE_HEIGHT,
   PULSE_POINT_PITCH,
+  PULSE_TASK_LANE_HEIGHT,
   PULSE_TRACK_PADDING,
+  pulseTaskBadgeOf,
+  pulseTaskOf,
+  pulseTasksByAgent,
   pulseTimelineItemsOf,
   pulseVisibleLaneIds,
   pulseWorkItemsOf,
@@ -111,6 +115,8 @@ interface PulseTimelineProps {
   delegations: readonly FleetDelegationRow[]
   scopedRows: readonly CommsRow[]
   scopedDelegations: readonly FleetDelegationRow[]
+  team: FleetTeam | null
+  hoveredTaskId: string | null
   selectedAgent: string | null
   selectedEventKey: string | null
   selectedDelegationKey: string | null
@@ -120,6 +126,8 @@ interface PulseTimelineProps {
   onSelectAgent: (id: string) => void
   onSelectEvent: (row: CommsRow) => void
   onSelectDelegation: (delegation: FleetDelegationRow) => void
+  onHoverTask: (id: string | null) => void
+  onRevealTask: (id: string) => void
   onOpen: (id: string) => void
   onEnter: (id: string) => void
   t: ViewKit['t']
@@ -129,6 +137,7 @@ function PulseTimeline(props: PulseTimelineProps): ReactElement {
   const { t } = props
   const [showQuiet, setShowQuiet] = useState(false)
   const [hoveredKey, setHoveredKey] = useState<string | null>(null)
+  const [hoveredLane, setHoveredLane] = useState<string | null>(null)
   const scrollerRef = useRef<HTMLDivElement | null>(null)
   const visibleIds = useMemo(
     () => pulseVisibleLaneIds(props.lanes, props.scopedRows, props.selectedAgent, props.query, showQuiet),
@@ -138,6 +147,16 @@ function PulseTimeline(props: PulseTimelineProps): ReactElement {
     () => pulseTimelineItemsOf(props.rows, props.delegations),
     [props.rows, props.delegations],
   )
+  const tasksByAgent = useMemo(() => pulseTasksByAgent(props.team), [props.team])
+  const taskAt = useMemo(() => {
+    const map = new Map<string, FleetTeamTask>()
+    for (const item of timelineItems) {
+      const task = pulseTaskOf(item, tasksByAgent)
+      if (task !== null) map.set(item.key, task)
+    }
+    return map
+  }, [timelineItems, tasksByAgent])
+  const hasTaskLane = taskAt.size > 0
   const windowed = timelineItems.length >= 60
   const recordRange = useColumnWindow(scrollerRef, timelineItems.length, PULSE_POINT_PITCH, windowed, 12)
   const lastRecord = Math.max(0, timelineItems.length - 1)
@@ -209,16 +228,27 @@ function PulseTimeline(props: PulseTimelineProps): ReactElement {
         <span className="lc-card-sub">
           {t('fleet.pulse.timelineSub', { shown: timelineItems.length, total: recordTotal, lanes: visibleIds.length })}
         </span>
-        {props.lanes.length > 8 && (showQuiet || hidden > 0) ? (
-          <button type="button" className="lc-pulse-quiet" aria-pressed={showQuiet} onClick={() => { setShowQuiet(value => !value) }}>
-            {showQuiet ? t('fleet.pulse.hideQuiet') : t('fleet.pulse.showQuiet', { n: hidden })}
-          </button>
-        ) : null}
+        <span className="lc-pulse-title-actions">
+          {props.lanes.length > 8 && (showQuiet || hidden > 0) ? (
+            <button type="button" className="lc-pulse-quiet" aria-pressed={showQuiet} onClick={() => { setShowQuiet(value => !value) }}>
+              {showQuiet ? t('fleet.pulse.hideQuiet') : t('fleet.pulse.showQuiet', { n: hidden })}
+            </button>
+          ) : null}
+          <span className="lc-pulse-sequence-actions">
+            <button type="button" onClick={() => { jumpTo(false) }}>{t('fleet.pulse.first')}</button>
+            <button type="button" onClick={() => { jumpTo(true) }}>{t('fleet.pulse.latestRecord')}</button>
+          </span>
+        </span>
       </div>
       {visibleIds.length > 0 || hidden > 0 ? (
         <div className="lc-pulse-waterfall">
           <div className="lc-pulse-lane-labels">
-            <div className="lc-pulse-lane-corner">{t('fleet.pulse.agentLane')}</div>
+            {hasTaskLane ? (
+              <div className="lc-pulse-task-lane-label" title={t('fleet.pulse.taskLaneTip')}>
+                <IconChecklistOutlineRegular size={12} />
+                <span>{t('fleet.pulse.taskLane')}</span>
+              </div>
+            ) : null}
             {layout.lanes.map((lane) => {
               /* v8 ignore next 1 */
               const agent = agentAt.get(lane.id) ?? props.agentOf(lane.id)
@@ -228,9 +258,11 @@ function PulseTimeline(props: PulseTimelineProps): ReactElement {
               return (
                 <div
                   key={lane.id}
-                  className={'lc-pulse-lane-label' + (props.selectedAgent === lane.id ? ' lc-pulse-lane-selected' : '')}
+                  className={'lc-pulse-lane-label' + (props.selectedAgent === lane.id ? ' lc-pulse-lane-selected' : '') + (hoveredLane === lane.id ? ' lc-pulse-lane-hover' : '')}
                   style={{ height: lane.height }}
                   data-lane-label={lane.id}
+                  onMouseEnter={() => { setHoveredLane(lane.id) }}
+                  onMouseLeave={() => { setHoveredLane(current => current === lane.id ? null : current) }}
                 >
                   <button
                     type="button"
@@ -269,135 +301,162 @@ function PulseTimeline(props: PulseTimelineProps): ReactElement {
             ) : null}
           </div>
           <div className="lc-pulse-sequence-column">
-            <div className="lc-pulse-sequence-toolbar">
-              <span>{t('fleet.pulse.sequence')}</span>
-              <span className="lc-pulse-sequence-actions">
-                <button type="button" onClick={() => { jumpTo(false) }}>{t('fleet.pulse.first')}</button>
-                <button type="button" onClick={() => { jumpTo(true) }}>{t('fleet.pulse.latestRecord')}</button>
-              </span>
-            </div>
-            <div className="lc-pulse-sequence-scroller" ref={scrollerRef} data-sequence-scroller tabIndex={0} aria-label={t('fleet.pulse.sequence')}>
-              <div className="lc-pulse-track-stack" style={{ height: layout.height, width: `max(100%, ${layout.width}px)` }}>
-                <svg
-                  className="lc-pulse-arrows"
-                  viewBox={`0 0 ${layout.width} ${Math.max(1, layout.height)}`}
-                  preserveAspectRatio="none"
-                  style={{ width: layout.width }}
-                >
-                  <defs>
-                    <pattern id="lc-pulse-slot-pattern" width={PULSE_POINT_PITCH} height={PULSE_LANE_HEIGHT} patternUnits="userSpaceOnUse">
-                      <rect x={PULSE_TRACK_PADDING + PULSE_POINT_PITCH / 2 - 5} y={PULSE_LANE_HEIGHT / 2 - 5} width="10" height="10" rx="3" className="lc-pulse-slot" />
-                    </pattern>
-                  </defs>
-                  {layout.lanes.map(lane => (
-                    <g key={lane.id}>
-                      <rect x="0" y={lane.top} width={layout.width} height={lane.height} fill="url(#lc-pulse-slot-pattern)" />
-                      <line className="lc-pulse-lane-baseline" x1="0" x2={layout.width} y1={lane.center} y2={lane.center} />
-                    </g>
-                  ))}
-                  {layout.points.map((point) => {
-                    const item = point.item
-                    const source = laneAt.get(item.from)
-                    if (source === undefined || item.from === item.to || (item.kind === 'message' && item.row.kind === 'settled')) return null
-                    const from = props.agentOf(item.from)
-                    const to = props.agentOf(item.to)
-                    const x = point.x
-                    const direction = point.y >= source.center ? 1 : -1
-                    const tipY = point.y - direction * 10
-                    const baseY = tipY - direction * 7
-                    const label = item.kind === 'delegation'
-                      ? t('fleet.pulse.delegationLabel', { time: fmtTime(item.time), from: from.name, to: to.name })
-                      : t('fleet.pulse.eventLabel', {
-                        time: fmtTime(item.time),
-                        from: from.name,
-                        to: to.name,
-                        kind: t(`fleet.kind.${item.row.kind}`),
-                      })
-                    return (
-                      <g
-                        key={point.key}
-                        className={`lc-pulse-arrow lc-pulse-record-${item.kind}` + (hoveredKey === item.key ? ' lc-pulse-arrow-hover' : '')}
-                        data-edge-key={item.key}
-                        role="button"
-                        tabIndex={0}
-                        aria-label={label}
-                        onClick={() => { selectItem(item) }}
-                        onKeyDown={(ev) => { keySelect(item, ev) }}
-                        onMouseEnter={() => { setHoveredKey(item.key) }}
-                        onMouseLeave={() => { setHoveredKey(current => current === item.key ? null : current) }}
-                        onFocus={() => { setHoveredKey(item.key) }}
-                        onBlur={() => { setHoveredKey(current => current === item.key ? null : current) }}
-                      >
-                        <line className="lc-pulse-edge-line" x1={x} y1={source.center} x2={x} y2={baseY} stroke={from.hue} vectorEffect="non-scaling-stroke" />
-                        <path d={`M ${x} ${tipY} L ${x - 5} ${baseY} L ${x + 5} ${baseY} Z`} fill={from.hue} vectorEffect="non-scaling-stroke" />
-                        <line className="lc-pulse-edge-hit" x1={x} y1={source.center} x2={x} y2={point.y} stroke="transparent" vectorEffect="non-scaling-stroke" />
-                      </g>
-                    )
-                  })}
-                </svg>
-                {layout.points.map((point) => {
-                  const item = point.item
-                  const source = laneAt.get(item.from)
-                  if (source === undefined || item.from === item.to || (item.kind === 'message' && item.row.kind === 'settled')) return null
-                  return (
-                    <i
-                      key={`source-${point.key}`}
-                      className={`lc-pulse-source lc-pulse-record-${item.kind}` + (hoveredKey === item.key ? ' lc-pulse-source-hover' : '')}
-                      style={{ left: point.x, top: source.center, background: props.agentOf(item.from).hue }}
-                      aria-hidden="true"
-                    />
-                  )
-                })}
-                {layout.lanes.map(lane => (
-                  <div key={lane.id} className="lc-pulse-lane-track" style={{ height: lane.height }} data-lane={lane.id}>
-                    {(pointsAt.get(lane.id) ?? []).map((point) => {
-                      const item = point.item
-                      const from = props.agentOf(item.from)
-                      const to = props.agentOf(item.to)
-                      const selected = item.kind === 'message'
-                        ? props.selectedEventKey === item.key
-                        : props.selectedDelegationKey === item.key
-                      const variant = item.kind === 'message' && item.row.kind === 'settled' && item.row.summary !== undefined
-                        ? settledVariantOf(item.row.summary)
-                        : null
-                      const tone = item.kind === 'delegation' ? 'done' : settledToneOf(variant)
-                      const kind = item.kind === 'message' ? item.row.kind : 'delegation'
+            <div className="lc-pulse-sequence-scroller" ref={scrollerRef} data-sequence-scroller tabIndex={0} aria-label={t('fleet.pulse.timeline')}>
+              <div className="lc-pulse-track-stack" style={{ height: (hasTaskLane ? PULSE_TASK_LANE_HEIGHT : 0) + layout.height, width: `max(100%, ${layout.width}px)` }}>
+                {hasTaskLane ? (
+                  <div className="lc-pulse-task-track" style={{ height: PULSE_TASK_LANE_HEIGHT }}>
+                    {layout.points.map((point) => {
+                      const task = taskAt.get(point.item.key)
+                      if (task === undefined) return null
+                      const tip = `${task.id} · ${task.subject}`
                       return (
                         <button
-                          key={point.key}
+                          key={`task-${point.key}`}
                           type="button"
-                          className={`lc-pulse-event lc-pulse-kind-${kind} lc-pulse-tone-${tone}` + (point.x > layout.width * 0.65 ? ' lc-pulse-event-late' : '') + (selected ? ' lc-pulse-event-selected' : '') + (hoveredKey === item.key ? ' lc-pulse-event-hover' : '')}
-                          style={{ ...channelStyle(from.hue, to.hue), left: point.x, top: point.y - lane.top }}
-                          data-event-key={item.key}
-                          data-record={item.kind}
-                          data-time={item.time}
-                          data-from={item.from}
-                          data-to={item.to}
-                          aria-label={item.kind === 'delegation'
-                            ? t('fleet.pulse.delegationLabel', { time: fmtTime(item.time), from: from.name, to: to.name })
-                            : item.row.kind === 'settled'
-                              ? t('fleet.pulse.settledLabel', { time: fmtTime(item.time), name: to.name })
-                              : t('fleet.pulse.eventLabel', {
-                                time: fmtTime(item.time),
-                                from: from.name,
-                                to: to.name,
-                                kind: t(`fleet.kind.${item.row.kind}`),
-                              })}
-                          aria-pressed={selected}
-                          onClick={() => { selectItem(item) }}
+                          className={'lc-pulse-task-chip' + (props.hoveredTaskId === task.id ? ' lc-pulse-task-chip-hover' : '')}
+                          style={{ left: point.x }}
+                          title={tip}
+                          aria-label={tip}
+                          data-task-chip={task.id}
+                          onClick={() => { props.onRevealTask(task.id) }}
+                          onMouseEnter={() => { props.onHoverTask(task.id) }}
+                          onMouseLeave={() => { props.onHoverTask(null) }}
+                          onFocus={() => { props.onHoverTask(task.id) }}
+                          onBlur={() => { props.onHoverTask(null) }}
                         >
-                          <span className="lc-pulse-event-dot" aria-hidden="true">{item.kind === 'delegation' ? '+' : item.row.kind === 'settled' ? '✓' : ''}</span>
-                          <span className="lc-pulse-event-label">
-                            {item.kind === 'delegation'
-                              ? `${to.name} · ${item.delegation.label ?? t('fleet.pulse.delegation')}`
-                              : `${fmtTime(item.time)} · ${previewOf(item.row.report ?? item.row.text)}`}
-                          </span>
+                          {pulseTaskBadgeOf(task.id)}
                         </button>
                       )
                     })}
                   </div>
-                ))}
-                {hidden > 0 ? <div className="lc-pulse-lane-track lc-pulse-quiet-track" style={{ height: PULSE_LANE_HEIGHT }} data-quiet-track /> : null}
+                ) : null}
+                <div className="lc-pulse-lane-tracks" style={{ height: layout.height }}>
+                  <svg
+                    className="lc-pulse-arrows"
+                    style={{ width: '100%' }}
+                  >
+                    <defs>
+                      <pattern id="lc-pulse-slot-pattern" width={PULSE_POINT_PITCH} height={PULSE_LANE_HEIGHT} patternUnits="userSpaceOnUse">
+                        <circle cx={PULSE_TRACK_PADDING + PULSE_POINT_PITCH / 2} cy={PULSE_LANE_HEIGHT / 2} r="3" className="lc-pulse-slot" />
+                      </pattern>
+                    </defs>
+                    {layout.lanes.map(lane => (
+                      <g key={lane.id}>
+                        <rect x="0" y={lane.top} width={layout.width} height={lane.height} fill="url(#lc-pulse-slot-pattern)" />
+                        <line className="lc-pulse-lane-baseline" x1="0" x2="100%" y1={lane.center} y2={lane.center} />
+                      </g>
+                    ))}
+                    {layout.points.map((point) => {
+                      const item = point.item
+                      const source = laneAt.get(item.from)
+                      if (source === undefined || item.from === item.to || (item.kind === 'message' && item.row.kind === 'settled')) return null
+                      const from = props.agentOf(item.from)
+                      const to = props.agentOf(item.to)
+                      const x = point.x
+                      const direction = point.y >= source.center ? 1 : -1
+                      const tipY = point.y - direction * 10
+                      const baseY = tipY - direction * 7
+                      const label = item.kind === 'delegation'
+                        ? t('fleet.pulse.delegationLabel', { time: fmtTime(item.time), from: from.name, to: to.name })
+                        : t('fleet.pulse.eventLabel', {
+                          time: fmtTime(item.time),
+                          from: from.name,
+                          to: to.name,
+                          kind: t(`fleet.kind.${item.row.kind}`),
+                        })
+                      return (
+                        <g
+                          key={point.key}
+                          className={`lc-pulse-arrow lc-pulse-record-${item.kind}` + (hoveredKey === item.key ? ' lc-pulse-arrow-hover' : '')}
+                          data-edge-key={item.key}
+                          role="button"
+                          tabIndex={0}
+                          aria-label={label}
+                          onClick={() => { selectItem(item) }}
+                          onKeyDown={(ev) => { keySelect(item, ev) }}
+                          onMouseEnter={() => { setHoveredKey(item.key) }}
+                          onMouseLeave={() => { setHoveredKey(current => current === item.key ? null : current) }}
+                          onFocus={() => { setHoveredKey(item.key) }}
+                          onBlur={() => { setHoveredKey(current => current === item.key ? null : current) }}
+                        >
+                          <line className="lc-pulse-edge-line" x1={x} y1={source.center} x2={x} y2={baseY} stroke={from.hue} vectorEffect="non-scaling-stroke" />
+                          <path d={`M ${x} ${tipY} L ${x - 5} ${baseY} L ${x + 5} ${baseY} Z`} fill={from.hue} vectorEffect="non-scaling-stroke" />
+                          <line className="lc-pulse-edge-hit" x1={x} y1={source.center} x2={x} y2={point.y} stroke="transparent" vectorEffect="non-scaling-stroke" />
+                        </g>
+                      )
+                    })}
+                  </svg>
+                  {layout.points.map((point) => {
+                    const item = point.item
+                    const source = laneAt.get(item.from)
+                    if (source === undefined || item.from === item.to || (item.kind === 'message' && item.row.kind === 'settled')) return null
+                    return (
+                      <i
+                        key={`source-${point.key}`}
+                        className={`lc-pulse-source lc-pulse-record-${item.kind}` + (hoveredKey === item.key ? ' lc-pulse-source-hover' : '')}
+                        style={{ left: point.x, top: source.center, background: props.agentOf(item.from).hue }}
+                        aria-hidden="true"
+                      />
+                    )
+                  })}
+                  {layout.lanes.map(lane => (
+                    <div
+                      key={lane.id}
+                      className={'lc-pulse-lane-track' + (hoveredLane === lane.id ? ' lc-pulse-lane-hover' : '')}
+                      style={{ height: lane.height }}
+                      data-lane={lane.id}
+                      onMouseEnter={() => { setHoveredLane(lane.id) }}
+                      onMouseLeave={() => { setHoveredLane(current => current === lane.id ? null : current) }}
+                    >
+                      {(pointsAt.get(lane.id) ?? []).map((point) => {
+                        const item = point.item
+                        const from = props.agentOf(item.from)
+                        const to = props.agentOf(item.to)
+                        const selected = item.kind === 'message'
+                          ? props.selectedEventKey === item.key
+                          : props.selectedDelegationKey === item.key
+                        const variant = item.kind === 'message' && item.row.kind === 'settled' && item.row.summary !== undefined
+                          ? settledVariantOf(item.row.summary)
+                          : null
+                        const tone = item.kind === 'delegation' ? 'done' : settledToneOf(variant)
+                        const kind = item.kind === 'message' ? item.row.kind : 'delegation'
+                        return (
+                          <button
+                            key={point.key}
+                            type="button"
+                            className={`lc-pulse-event lc-pulse-kind-${kind} lc-pulse-tone-${tone}` + (point.x > layout.width * 0.65 ? ' lc-pulse-event-late' : '') + (selected ? ' lc-pulse-event-selected' : '') + (hoveredKey === item.key ? ' lc-pulse-event-hover' : '')}
+                            style={{ ...channelStyle(from.hue, to.hue), left: point.x, top: point.y - lane.top }}
+                            data-event-key={item.key}
+                            data-record={item.kind}
+                            data-time={item.time}
+                            data-from={item.from}
+                            data-to={item.to}
+                            aria-label={item.kind === 'delegation'
+                              ? t('fleet.pulse.delegationLabel', { time: fmtTime(item.time), from: from.name, to: to.name })
+                              : item.row.kind === 'settled'
+                                ? t('fleet.pulse.settledLabel', { time: fmtTime(item.time), name: to.name })
+                                : t('fleet.pulse.eventLabel', {
+                                  time: fmtTime(item.time),
+                                  from: from.name,
+                                  to: to.name,
+                                  kind: t(`fleet.kind.${item.row.kind}`),
+                                })}
+                            aria-pressed={selected}
+                            onClick={() => { selectItem(item) }}
+                          >
+                            <span className="lc-pulse-event-dot" aria-hidden="true">{item.kind === 'delegation' ? '+' : item.row.kind === 'settled' ? '✓' : ''}</span>
+                            <span className="lc-pulse-event-label">
+                              {item.kind === 'delegation'
+                                ? `${to.name} · ${item.delegation.label ?? t('fleet.pulse.delegation')}`
+                                : `${fmtTime(item.time)} · ${previewOf(item.row.report ?? item.row.text)}`}
+                            </span>
+                          </button>
+                        )
+                      })}
+                    </div>
+                  ))}
+                  {hidden > 0 ? <div className="lc-pulse-lane-track lc-pulse-quiet-track" style={{ height: PULSE_LANE_HEIGHT }} data-quiet-track /> : null}
+                </div>
               </div>
             </div>
           </div>
@@ -421,9 +480,11 @@ interface PulseTasksProps {
   details: FleetDetailState
   selectedAgent: string | null
   focusedTaskKey: string | null
+  hoveredTaskId: string | null
   agentOf: (party: string) => CommsAgent
   onFocus: (item: PulseWorkItem) => void
   onFocusDependency: (id: string) => void
+  onHoverTask: (id: string | null) => void
   onSelectAgent: (id: string) => void
   onOpen: (id: string) => void
   onEnter: (id: string) => void
@@ -433,6 +494,11 @@ interface PulseTasksProps {
 
 function PulseTasks(props: PulseTasksProps): ReactElement {
   const { t } = props
+  const itemRefs = useRef(new Map<string, HTMLLIElement>())
+  useEffect(() => {
+    if (props.focusedTaskKey === null) return
+    scrollIntoViewIfPossible(itemRefs.current.get(props.focusedTaskKey) ?? null, { block: 'nearest' })
+  }, [props.focusedTaskKey, props.visibleItems])
   return (
     <section className="lc-card lc-pulse-tasks">
       <div className="lc-card-title">
@@ -458,13 +524,23 @@ function PulseTasks(props: PulseTasksProps): ReactElement {
             return (
               <li
                 key={item.key}
+                ref={(el) => {
+                  if (el !== null) itemRefs.current.set(item.key, el)
+                  else itemRefs.current.delete(item.key)
+                }}
                 className={'lc-pulse-work-item' + (focused ? ' lc-pulse-work-focused' : '')
-                  + (item.ownerId !== undefined && item.ownerId === props.selectedAgent ? ' lc-pulse-work-related' : '')}
+                  + (item.ownerId !== undefined && item.ownerId === props.selectedAgent ? ' lc-pulse-work-related' : '')
+                  + (item.kind === 'team' && props.hoveredTaskId === item.id ? ' lc-pulse-work-task-hover' : '')}
                 data-task={item.id}
+                onMouseEnter={() => { if (item.kind === 'team') props.onHoverTask(item.id) }}
+                onMouseLeave={() => { if (item.kind === 'team') props.onHoverTask(null) }}
               >
                 <div className="lc-pulse-work-row">
                   <button type="button" className="lc-pulse-work-focus" aria-expanded={focused} onClick={() => { props.onFocus(item) }}>
                     <StateDot state={dot} size={8} />
+                    {item.kind === 'team' ? (
+                      <span className="lc-pulse-work-id" title={`${item.id} · ${item.subject}`}>{pulseTaskBadgeOf(item.id)}</span>
+                    ) : null}
                     <span className="lc-pulse-work-subject" title={item.subject}>{item.subject}</span>
                     <span className="lc-pulse-work-status">
                       {item.kind === 'agent'
@@ -757,6 +833,7 @@ export function MissionPulse(props: MissionPulseProps): ReactElement {
   const [selectedEventKey, setSelectedEventKey] = useState<string | null>(null)
   const [selectedDelegationKey, setSelectedDelegationKey] = useState<string | null>(null)
   const [focusedTaskKey, setFocusedTaskKey] = useState<string | null>(null)
+  const [hoveredTaskId, setHoveredTaskId] = useState<string | null>(null)
   const [kind, setKind] = useState<CommsKindFilter>('all')
   const [query, setQuery] = useState('')
   const agentOf = useMemo(
@@ -860,7 +937,7 @@ export function MissionPulse(props: MissionPulseProps): ReactElement {
     setFocusedTaskKey(opening ? item.key : null)
     if (opening && item.ownerId !== undefined) props.details.requestFull(item.ownerId)
   }
-  const focusDependency = (id: string): void => {
+  const focusTaskId = (id: string): void => {
     const item = workItems.find(work => work.key === `team:${id}`)
     if (item === undefined) return
     setSelectedAgent(null)
@@ -885,6 +962,8 @@ export function MissionPulse(props: MissionPulseProps): ReactElement {
         delegations={visibleDelegations}
         scopedRows={scopedRows}
         scopedDelegations={scopedDelegations}
+        team={props.team}
+        hoveredTaskId={hoveredTaskId}
         selectedAgent={selectedAgent}
         selectedEventKey={selectedEventKey}
         selectedDelegationKey={selectedDelegationKey}
@@ -894,6 +973,8 @@ export function MissionPulse(props: MissionPulseProps): ReactElement {
         onSelectAgent={selectAgent}
         onSelectEvent={selectEvent}
         onSelectDelegation={selectDelegation}
+        onHoverTask={setHoveredTaskId}
+        onRevealTask={focusTaskId}
         onOpen={props.onOpen}
         onEnter={props.onEnter}
         t={t}
@@ -905,9 +986,11 @@ export function MissionPulse(props: MissionPulseProps): ReactElement {
         details={props.details}
         selectedAgent={selectedAgent}
         focusedTaskKey={focusedTaskKey}
+        hoveredTaskId={hoveredTaskId}
         agentOf={agentOf}
         onFocus={focusTask}
-        onFocusDependency={focusDependency}
+        onFocusDependency={focusTaskId}
+        onHoverTask={setHoveredTaskId}
         onSelectAgent={selectAgent}
         onOpen={props.onOpen}
         onEnter={props.onEnter}

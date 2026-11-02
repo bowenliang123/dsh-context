@@ -4,6 +4,7 @@ import { describe, test, vi } from 'vitest'
 import { MissionPulse } from '../../../src/client/components/missionPulse'
 import { makeRichText } from '../../../src/client/components/richText'
 import type { CommsRow } from '../../../src/client/fleetDetail'
+import type { FleetTeam } from '../../../src/client/fleetTeam'
 import { click, makeKit, mount, query, queryAll, text, typeText } from '../helpers/kit'
 
 const kit = makeKit()
@@ -108,6 +109,17 @@ describe('MissionPulse boundary parties', () => {
     assert.equal(events[0].style.getPropertyValue('--lc-ch-a'), 'red')
     assert.equal(events[0].style.getPropertyValue('--lc-ch-b'), 'blue')
     assert.equal(queryAll(mounted.container, '.lc-pulse-lane-baseline').length, 2)
+    const laneLabel = query<HTMLElement>(mounted.container, '[data-lane-label="root"]')
+    const laneTrack = query<HTMLElement>(mounted.container, '[data-lane="root"]')
+    await act(async () => { laneLabel.dispatchEvent(new MouseEvent('mouseover', { bubbles: true })) })
+    assert.ok(laneLabel.className.includes('lc-pulse-lane-hover'))
+    assert.ok(laneTrack.className.includes('lc-pulse-lane-hover'))
+    await act(async () => { laneLabel.dispatchEvent(new MouseEvent('mouseout', { bubbles: true })) })
+    assert.ok(!laneLabel.className.includes('lc-pulse-lane-hover'))
+    await act(async () => { laneTrack.dispatchEvent(new MouseEvent('mouseover', { bubbles: true })) })
+    assert.ok(laneTrack.className.includes('lc-pulse-lane-hover'))
+    await act(async () => { laneTrack.dispatchEvent(new MouseEvent('mouseout', { bubbles: true })) })
+    assert.ok(!laneTrack.className.includes('lc-pulse-lane-hover'))
     for (const line of queryAll(mounted.container, '.lc-pulse-edge-line')) {
       assert.equal(line.getAttribute('stroke'), 'red')
       assert.equal(line.getAttribute('stroke-dasharray'), null)
@@ -216,6 +228,89 @@ describe('MissionPulse boundary parties', () => {
     await typeText(search, 'no matching record')
     assert.equal(queryAll(mounted.container, '.lc-pulse-event').length, 0)
     assert.ok(text(query(mounted.container, '.lc-pulse-timeline')).includes(kit.t('fleet.pulse.emptyTimeline')))
+    await mounted.unmount()
+  })
+
+  test('marks each record with the team task owned by its recipient', async () => {
+    const team: FleetTeam = {
+      members: [
+        { id: 'root', name: 'lead', role: 'lead', phase: 'active' },
+        { id: 'child', name: 'child', role: 'teammate', phase: 'active' },
+      ],
+      tasks: [
+        { id: 'task-1', subject: 'Parse it', description: '', status: 'in_progress', ownerName: 'child', blockedBy: [], writeScopes: [], ready: true, warnings: [] },
+      ],
+    }
+    const rows: CommsRow[] = [
+      { key: 'child:1:1000:relay', to: 'child', seq: 1, time: 1000, kind: 'relay', from: 'root', text: 'go' },
+      { key: 'root:2:2000:relay', to: 'root', seq: 2, time: 2000, kind: 'relay', from: 'child', text: 'done' },
+      { key: 'root:3:3000:relay', to: 'root', seq: 3, time: 3000, kind: 'relay', from: 'root', text: 'note' },
+    ]
+    const agents = new Map([
+      ['root', { id: 'root', name: 'Lead', role: 'lead' as const, self: true, hue: 'red' }],
+      ['child', { id: 'child', name: 'child', role: 'teammate' as const, self: false, hue: 'blue' }],
+    ])
+    const mounted = await mount(h(MissionPulse, {
+      forest: null,
+      team,
+      details: makeDetails(),
+      landedDetails: new Map(),
+      comms: rows,
+      delegations: [],
+      agents,
+      titles: new Map(),
+      attested: new Map(),
+      focusMember: null,
+      onOpen: () => {},
+      onEnter: () => {},
+      rich: makeRichText(kit),
+      t: kit.t,
+    }))
+    assert.ok(text(query(mounted.container, '.lc-pulse-task-lane-label')).includes(kit.t('fleet.pulse.taskLane')))
+    const chips = queryAll<HTMLElement>(mounted.container, '[data-task-chip]')
+    assert.deepEqual(chips.map(chip => chip.dataset.taskChip), ['task-1', 'task-1'])
+    assert.deepEqual(chips.map(chip => chip.style.left), ['36px', '68px'])
+    assert.equal(text(chips[0]), '#1')
+    assert.ok(chips[0].title.includes('task-1 · Parse it'))
+    const workItem = query<HTMLElement>(mounted.container, '[data-task="task-1"]')
+    assert.equal(text(query(workItem, '.lc-pulse-work-id')), '#1')
+    const otherLabel = query<HTMLElement>(mounted.container, '[data-lane-label="child"]')
+    const otherTrack = query<HTMLElement>(mounted.container, '[data-lane="child"]')
+    const laneLabel = query<HTMLElement>(mounted.container, '[data-lane-label="root"]')
+    const laneTrack = query<HTMLElement>(mounted.container, '[data-lane="root"]')
+    await act(async () => { chips[0].dispatchEvent(new MouseEvent('mouseover', { bubbles: true })) })
+    assert.ok(workItem.className.includes('lc-pulse-work-task-hover'))
+    await act(async () => { chips[0].dispatchEvent(new MouseEvent('mouseout', { bubbles: true })) })
+    assert.ok(!workItem.className.includes('lc-pulse-work-task-hover'))
+    await act(async () => { workItem.dispatchEvent(new MouseEvent('mouseover', { bubbles: true })) })
+    assert.ok(chips[0].className.includes('lc-pulse-task-chip-hover'))
+    await act(async () => { workItem.dispatchEvent(new MouseEvent('mouseout', { bubbles: true })) })
+    assert.ok(!chips[0].className.includes('lc-pulse-task-chip-hover'))
+    await act(async () => { chips[0].dispatchEvent(new FocusEvent('focusin', { bubbles: true })) })
+    assert.ok(chips[0].className.includes('lc-pulse-task-chip-hover'))
+    await act(async () => { chips[0].dispatchEvent(new FocusEvent('focusout', { bubbles: true })) })
+    assert.ok(!chips[0].className.includes('lc-pulse-task-chip-hover'))
+    await act(async () => { laneLabel.dispatchEvent(new MouseEvent('mouseover', { bubbles: true })) })
+    await act(async () => {
+      otherLabel.dispatchEvent(new MouseEvent('mouseover', { bubbles: true }))
+      laneLabel.dispatchEvent(new MouseEvent('mouseout', { bubbles: true }))
+    })
+    assert.ok(otherLabel.className.includes('lc-pulse-lane-hover'))
+    assert.ok(!laneLabel.className.includes('lc-pulse-lane-hover'))
+    await act(async () => { otherLabel.dispatchEvent(new MouseEvent('mouseout', { bubbles: true })) })
+    await act(async () => { laneTrack.dispatchEvent(new MouseEvent('mouseover', { bubbles: true })) })
+    await act(async () => {
+      otherTrack.dispatchEvent(new MouseEvent('mouseover', { bubbles: true }))
+      laneTrack.dispatchEvent(new MouseEvent('mouseout', { bubbles: true }))
+    })
+    assert.ok(otherTrack.className.includes('lc-pulse-lane-hover'))
+    assert.ok(!laneTrack.className.includes('lc-pulse-lane-hover'))
+    await act(async () => { otherTrack.dispatchEvent(new MouseEvent('mouseout', { bubbles: true })) })
+    await click(chips[0])
+    assert.ok(workItem.className.includes('lc-pulse-work-focused'))
+    assert.equal(query(workItem, '.lc-pulse-work-focus').getAttribute('aria-expanded'), 'true')
+    await click(query(mounted.container, '[data-agent="root"]'))
+    assert.ok(text(query(mounted.container, '.lc-pulse-tasks')).includes(kit.t('fleet.tasks.noMatch')))
     await mounted.unmount()
   })
 })
