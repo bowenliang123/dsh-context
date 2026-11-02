@@ -135,6 +135,8 @@ describe('MissionPulse boundary parties', () => {
     assert.equal(queryAll(mounted.container, '.lc-pulse-lane-baseline').length, 2)
     const laneLabel = query<HTMLElement>(mounted.container, '[data-lane-label="root"]')
     const laneTrack = query<HTMLElement>(mounted.container, '[data-lane="root"]')
+    assert.equal(laneLabel.style.getPropertyValue('--lc-lane-hue'), 'red')
+    assert.equal(laneTrack.style.getPropertyValue('--lc-lane-hue'), 'red')
     await act(async () => { laneLabel.dispatchEvent(new MouseEvent('mouseover', { bubbles: true })) })
     assert.ok(laneLabel.className.includes('lc-pulse-lane-hover'))
     assert.ok(laneTrack.className.includes('lc-pulse-lane-hover'))

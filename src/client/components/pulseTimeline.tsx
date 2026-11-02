@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type KeyboardEvent, type ReactElement, type UIEvent } from 'react'
+import { useEffect, useMemo, useRef, useState, type CSSProperties, type KeyboardEvent, type ReactElement, type UIEvent } from 'react'
 import {
   IconChecklistOutlineRegular,
   IconPanelLeftOutlineRegular,
@@ -96,6 +96,10 @@ export function PulseTimeline(props: PulseTimelineProps): ReactElement {
   )
   const laneAt = useMemo(() => new Map(layout.lanes.map(lane => [lane.id, lane])), [layout.lanes])
   const agentAt = useMemo(() => new Map(props.lanes.map(lane => [lane.agent.id, lane.agent])), [props.lanes])
+  const hueOf = (id: string): string => {
+    /* v8 ignore next 1 */
+    return (agentAt.get(id) ?? props.agentOf(id)).hue
+  }
   const pointsAt = useMemo(() => {
     const map = new Map<string, typeof layout.points>()
     for (const point of layout.points) {
@@ -198,7 +202,7 @@ export function PulseTimeline(props: PulseTimelineProps): ReactElement {
                   <div
                     key={lane.id}
                     className={'lc-pulse-lane-label' + (props.selectedAgent === lane.id ? ' lc-pulse-lane-selected' : '') + (hoveredLane === lane.id ? ' lc-pulse-lane-hover' : '')}
-                    style={{ height: lane.height }}
+                    style={{ height: lane.height, '--lc-lane-hue': agent.hue } as CSSProperties}
                     data-lane-label={lane.id}
                     onMouseEnter={() => { setHoveredLane(lane.id) }}
                     onMouseLeave={() => { setHoveredLane(current => current === lane.id ? null : current) }}
@@ -349,7 +353,7 @@ export function PulseTimeline(props: PulseTimelineProps): ReactElement {
                     <div
                       key={lane.id}
                       className={'lc-pulse-lane-track' + (hoveredLane === lane.id ? ' lc-pulse-lane-hover' : '')}
-                      style={{ height: lane.height }}
+                      style={{ height: lane.height, '--lc-lane-hue': hueOf(lane.id) } as CSSProperties}
                       data-lane={lane.id}
                       onMouseEnter={() => { setHoveredLane(lane.id) }}
                       onMouseLeave={() => { setHoveredLane(current => current === lane.id ? null : current) }}
