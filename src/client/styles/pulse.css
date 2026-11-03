@@ -67,8 +67,9 @@
 .lc-pulse-selection span { overflow-wrap: anywhere; }
 .lc-pulse-selection b { color: var(--lc-pulse-violet); font-size: 14px; }
 
-.lc-pulse-timeline, .lc-pulse-tasks, .lc-pulse-events { min-width: 0; max-height: 620px; border-color: var(--dsw-alias-border-l2); background: var(--dsw-alias-bg-layer-1); }
-.lc-pulse-timeline, .lc-pulse-tasks { display: flex; flex-direction: column; }
+.lc-pulse-timeline, .lc-pulse-tasks, .lc-pulse-events { min-width: 0; border-color: var(--dsw-alias-border-l2); background: var(--dsw-alias-bg-layer-1); }
+.lc-pulse-events { max-height: 620px; }
+.lc-pulse-timeline, .lc-pulse-tasks { display: flex; flex-direction: column; max-height: 413px; }
 .lc-pulse-timeline > .lc-card-title, .lc-pulse-tasks > .lc-card-title, .lc-pulse-tasks > .lc-pulse-work-warning { flex: none; }
 .lc-pulse-timeline .lc-card-title, .lc-pulse-tasks .lc-card-title, .lc-pulse-events .lc-card-title { flex-wrap: wrap; gap: 5px 9px; }
 .lc-pulse-timeline .lc-card-title-text svg { color: var(--lc-pulse-violet); }
