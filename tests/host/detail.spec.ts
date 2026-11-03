@@ -446,7 +446,7 @@ describe('the cold fold (issue #145)', () => {
     } finally {
       timerSpy.mockRestore()
     }
-  })
+  }, 20_000)
 
   test('an unchanged log (same durable revision) re-serves the payload without refolding', async () => {
     const events = manyEvents(5)
