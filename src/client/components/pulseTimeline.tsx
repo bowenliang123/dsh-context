@@ -66,6 +66,7 @@ interface PulseTimelineProps {
 export function PulseTimeline(props: PulseTimelineProps): ReactElement {
   const { t } = props
   const [showQuiet, setShowQuiet] = useState(false)
+  const [anchor, setAnchor] = useState<'first' | 'latest'>('first')
   const [hoveredKey, setHoveredKey] = useState<string | null>(null)
   const [hoveredLane, setHoveredLane] = useState<string | null>(null)
   const scrollerRef = useRef<HTMLDivElement | null>(null)
@@ -139,6 +140,11 @@ export function PulseTimeline(props: PulseTimelineProps): ReactElement {
     const rows = labelRowsRef.current
     /* v8 ignore next */
     if (rows !== null) rows.style.transform = `translateY(${-ev.currentTarget.scrollTop}px)`
+    const el = ev.currentTarget
+    const max = el.scrollWidth - el.clientWidth
+    if (max <= 1) return
+    if (el.scrollLeft <= 0) setAnchor('first')
+    else if (el.scrollLeft >= max - 1) setAnchor('latest')
   }
   const taskOffset = hasTaskLane ? PULSE_TASK_LANE_HEIGHT : 0
   const revealRow = (top: number, height: number): void => {
@@ -169,9 +175,10 @@ export function PulseTimeline(props: PulseTimelineProps): ReactElement {
     ev.preventDefault()
     selectItem(item)
   }
-  const jumpTo = (latest: boolean): void => {
+  const jumpTo = (target: 'first' | 'latest'): void => {
+    setAnchor(target)
     const el = scrollerRef.current as HTMLDivElement
-    el.scrollLeft = latest ? el.scrollWidth : 0
+    el.scrollLeft = target === 'latest' ? el.scrollWidth : 0
   }
   return (
     <section className="lc-card lc-pulse-timeline" aria-busy={props.pending}>
@@ -195,8 +202,16 @@ export function PulseTimeline(props: PulseTimelineProps): ReactElement {
             </button>
           ) : null}
           <span className="lc-gran lc-pulse-sequence-actions" role="group">
-            <button type="button" className="lc-gran-btn" onClick={() => { jumpTo(false) }}>{t('fleet.pulse.first')}</button>
-            <button type="button" className="lc-gran-btn" onClick={() => { jumpTo(true) }}>{t('fleet.pulse.latestRecord')}</button>
+            <button
+              type="button"
+              className={'lc-gran-btn' + (anchor === 'first' ? ' lc-gran-on' : '')}
+              onClick={() => { jumpTo('first') }}
+            >{t('fleet.pulse.first')}</button>
+            <button
+              type="button"
+              className={'lc-gran-btn' + (anchor === 'latest' ? ' lc-gran-on' : '')}
+              onClick={() => { jumpTo('latest') }}
+            >{t('fleet.pulse.latestRecord')}</button>
           </span>
         </span>
       </div>
