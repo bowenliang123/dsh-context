@@ -194,9 +194,9 @@ export function PulseTimeline(props: PulseTimelineProps): ReactElement {
               {showQuiet ? t('fleet.pulse.hideQuiet') : t('fleet.pulse.showQuiet', { n: hidden })}
             </button>
           ) : null}
-          <span className="lc-pulse-sequence-actions">
-            <button type="button" onClick={() => { jumpTo(false) }}>{t('fleet.pulse.first')}</button>
-            <button type="button" onClick={() => { jumpTo(true) }}>{t('fleet.pulse.latestRecord')}</button>
+          <span className="lc-gran lc-pulse-sequence-actions" role="group">
+            <button type="button" className="lc-gran-btn" onClick={() => { jumpTo(false) }}>{t('fleet.pulse.first')}</button>
+            <button type="button" className="lc-gran-btn" onClick={() => { jumpTo(true) }}>{t('fleet.pulse.latestRecord')}</button>
           </span>
         </span>
       </div>
