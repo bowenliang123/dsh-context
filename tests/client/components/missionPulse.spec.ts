@@ -358,7 +358,7 @@ describe('MissionPulse boundary parties', () => {
     assert.ok(text(query(mounted.container, '.lc-pulse-task-lane-label')).includes(kit.t('fleet.pulse.taskLane')))
     const chips = queryAll<HTMLElement>(mounted.container, '[data-task-chip]')
     assert.deepEqual(chips.map(chip => chip.dataset.taskChip), ['task-1', 'task-1'])
-    assert.deepEqual(chips.map(chip => chip.style.left), ['36px', '68px'])
+    assert.deepEqual(chips.map(chip => chip.style.left), ['24px', '56px'])
     assert.equal(text(chips[0]), '1')
     assert.ok(chips[0].title.includes('task-1 · Parse it'))
     const workItem = query<HTMLElement>(mounted.container, '[data-task="task-1"]')
@@ -678,7 +678,7 @@ describe('MissionPulse boundary parties', () => {
     const laneSearch = query<HTMLInputElement>(mounted.container, '.lc-pulse-timeline .lc-pulse-search')
     assert.deepEqual(
       queryAll<HTMLElement>(mounted.container, '.lc-pulse-event').map(el => [el.dataset.to, el.style.left]),
-      [['root', '100px'], ['child', '36px'], ['delta', '68px']],
+      [['root', '88px'], ['child', '24px'], ['delta', '56px']],
     )
     await typeText(laneSearch, 'child')
     assert.deepEqual(
@@ -687,7 +687,7 @@ describe('MissionPulse boundary parties', () => {
     )
     assert.deepEqual(
       queryAll<HTMLElement>(mounted.container, '.lc-pulse-event').map(el => [el.dataset.to, el.style.left]),
-      [['root', '68px'], ['child', '36px']],
+      [['root', '56px'], ['child', '24px']],
     )
     const matchedLane = query<HTMLElement>(mounted.container, '[data-lane-label="child"]')
     assert.ok(matchedLane.className.includes('lc-pulse-lane-match'))

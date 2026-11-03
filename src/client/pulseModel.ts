@@ -53,7 +53,7 @@ export function pulseTimelineItemsOf(
 export const PULSE_LANE_HEIGHT = 68
 export const PULSE_TASK_LANE_HEIGHT = 40
 export const PULSE_POINT_PITCH = 32
-export const PULSE_TRACK_PADDING = 20
+export const PULSE_TRACK_PADDING = 8
 
 export interface PulseLaneLayout {
   id: string

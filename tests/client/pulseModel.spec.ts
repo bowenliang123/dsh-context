@@ -91,15 +91,15 @@ describe('pulse lane layout', () => {
       ['bee', 68, 68, 102],
     ])
     assert.equal(layout.height, 136)
-    assert.equal(layout.width, 168)
+    assert.equal(layout.width, 144)
     assert.deepEqual(layout.points.map(point => [point.key, point.x, point.y]), [
-      ['a', 36, 102],
-      ['b', 68, 102],
-      ['d', 100, 34],
-      ['c', 132, 102],
+      ['a', 24, 102],
+      ['b', 56, 102],
+      ['d', 88, 34],
+      ['c', 120, 102],
     ])
     assert.deepEqual(layoutPulse([], ['lead']), {
-      width: 40,
+      width: 16,
       lanes: [{ id: 'lead', top: 0, height: 68, center: 34 }],
       points: [],
       height: 68,
@@ -111,13 +111,13 @@ describe('pulse lane layout', () => {
     const rows = Array.from({ length: 500 }, (_, index) => row(index, `event-${index}`))
     const layout = layoutPulse(pulseTimelineItemsOf(rows, []), ['bee'])
     assert.equal(layout.points.length, 500)
-    assert.equal(layout.width, 16_040)
-    assert.equal(layout.points[499].x, 16_004)
+    assert.equal(layout.width, 16_016)
+    assert.equal(layout.points[499].x, 15_992)
     const window = layoutPulse(pulseTimelineItemsOf(rows.slice(490), []), ['bee'], 500, 490)
     assert.equal(window.points.length, 10)
-    assert.equal(window.points[0].x, 15_716)
-    assert.equal(window.points[9].x, 16_004)
-    assert.equal(window.width, 16_040)
+    assert.equal(window.points[0].x, 15_704)
+    assert.equal(window.points[9].x, 15_992)
+    assert.equal(window.width, 16_016)
   })
 })
 
