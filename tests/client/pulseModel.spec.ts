@@ -82,22 +82,22 @@ describe('pulse lane layout', () => {
     ], [])
     const layout = layoutPulse(items, ['lead', 'bee'])
     assert.deepEqual(layout.lanes.map(lane => [lane.id, lane.top, lane.height, lane.center]), [
-      ['lead', 0, 56, 28],
-      ['bee', 56, 56, 84],
+      ['lead', 0, 68, 34],
+      ['bee', 68, 68, 102],
     ])
-    assert.equal(layout.height, 112)
+    assert.equal(layout.height, 136)
     assert.equal(layout.width, 168)
     assert.deepEqual(layout.points.map(point => [point.key, point.x, point.y]), [
-      ['a', 36, 84],
-      ['b', 68, 84],
-      ['d', 100, 28],
-      ['c', 132, 84],
+      ['a', 36, 102],
+      ['b', 68, 102],
+      ['d', 100, 34],
+      ['c', 132, 102],
     ])
     assert.deepEqual(layoutPulse([], ['lead']), {
       width: 40,
-      lanes: [{ id: 'lead', top: 0, height: 56, center: 28 }],
+      lanes: [{ id: 'lead', top: 0, height: 68, center: 34 }],
       points: [],
-      height: 56,
+      height: 68,
     })
     assert.equal(layoutPulse(pulseTimelineItemsOf([row(1, 'hidden', 'outside')], []), ['bee']).points.length, 0)
   })

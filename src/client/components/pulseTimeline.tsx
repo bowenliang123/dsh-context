@@ -1,7 +1,6 @@
 import { useEffect, useMemo, useRef, useState, type CSSProperties, type KeyboardEvent, type ReactElement, type UIEvent } from 'react'
 import {
   IconChecklistOutlineRegular,
-  IconPanelLeftOutlineRegular,
   IconRightUpOutlineRegular,
   IconWorkspaceTreeOutlineRegular,
 } from '@deepseek-ai/dsh-client-ui-primitives'
@@ -13,7 +12,9 @@ import {
 } from '../commsModel'
 import { settledVariantOf, type CommsRow, type FleetDelegationRow } from '../fleetDetail'
 import type { FleetTeam, FleetTeamTask } from '../fleetTeam'
-import { fmtTime } from '../format'
+import { fmt, fmtTime } from '../format'
+import { formatCost, type CostCurrency } from '../cost'
+import { modelLabelOf } from '../agentTree'
 import { IconChevronDown } from '../primitives'
 import {
   layoutPulse,
@@ -28,6 +29,7 @@ import {
   pulseTimelineItemsOf,
   type PulseLaneInput,
   type PulseLaneLink,
+  type PulseLaneStats,
   type PulseTimelineItem,
 } from '../pulseModel'
 import { containHorizontalOverscroll } from '../overscroll'
@@ -50,6 +52,7 @@ interface PulseTimelineProps {
   selectedEventKey: string | null
   selectedDelegationKey: string | null
   query: string
+  currency: CostCurrency
   pending: boolean
   agentOf: (party: string) => CommsAgent
   onSelectAgent: (id: string) => void
@@ -58,7 +61,6 @@ interface PulseTimelineProps {
   onHoverTask: (id: string | null) => void
   onRevealTask: (id: string) => void
   onQuery: (query: string) => void
-  onOpen: (id: string) => void
   onEnter: (id: string) => void
   t: ViewKit['t']
 }
@@ -105,6 +107,11 @@ export function PulseTimeline(props: PulseTimelineProps): ReactElement {
   )
   const laneAt = useMemo(() => new Map(layout.lanes.map(lane => [lane.id, lane])), [layout.lanes])
   const agentAt = useMemo(() => new Map(props.lanes.map(lane => [lane.agent.id, lane.agent])), [props.lanes])
+  const statsAt = useMemo(() => {
+    const map = new Map<string, PulseLaneStats>()
+    for (const lane of props.lanes) if (lane.stats !== undefined) map.set(lane.agent.id, lane.stats)
+    return map
+  }, [props.lanes])
   const hueOf = (id: string): string => {
     /* v8 ignore next 1 */
     return (agentAt.get(id) ?? props.agentOf(id)).hue
@@ -231,6 +238,14 @@ export function PulseTimeline(props: PulseTimelineProps): ReactElement {
                 const count = trafficAt.get(lane.id) ?? 0
                 const role = roleTextOf(agent, t)
                 const navigable = !agent.self && agent.role !== 'other'
+                const stats = statsAt.get(lane.id)
+                const model = stats?.model !== undefined ? modelLabelOf(stats.model, stats.effort) : undefined
+                const usage = [
+                  stats !== undefined && stats.tokens > 0 ? t('fleet.pulse.laneTokens', { n: fmt(stats.tokens) }) : null,
+                  stats !== undefined && stats.cost !== null ? formatCost(stats.cost, props.currency) : null,
+                ].filter((part): part is string => part !== null).join(' · ')
+                const tasks = tasksByAgent.get(lane.id)?.length ?? 0
+                const counts = t('fleet.pulse.laneTasks', { n: tasks }) + ' · ' + t('fleet.pulse.traffic', { n: count })
                 return (
                   <div
                     key={lane.id}
@@ -246,27 +261,33 @@ export function PulseTimeline(props: PulseTimelineProps): ReactElement {
                       className="lc-pulse-lane-agent"
                       data-agent={lane.id}
                       aria-pressed={props.selectedAgent === lane.id}
+                      title={agent.name}
                       onClick={() => { props.onSelectAgent(lane.id) }}
                     >
                       <AgentAvatar agent={agent} size="md" t={t} />
-                      <span className="lc-pulse-lane-name" title={agent.name}>{agent.name}</span>
-                    </button>
-                    <span className="lc-pulse-lane-meta">
-                      {role !== '' ? <span>{role}</span> : null}
-                      {searching && !matchedIds.has(lane.id)
-                        ? <span className="lc-pulse-lane-linked">{t('fleet.pulse.linked')}</span>
-                        : null}
-                      <span>{t('fleet.pulse.traffic', { n: count })}</span>
-                    </span>
-                    {navigable ? (
-                      <span className="lc-pulse-lane-actions">
-                        <button type="button" aria-label={t('fleet.openSidebar')} title={t('fleet.openSidebar')} onClick={() => { props.onOpen(lane.id) }}>
-                          <IconPanelLeftOutlineRegular size={11} />
-                        </button>
-                        <button type="button" aria-label={t('fleet.open')} title={t('fleet.open')} onClick={() => { props.onEnter(lane.id) }}>
-                          <IconRightUpOutlineRegular size={11} />
-                        </button>
+                      <span className="lc-pulse-lane-copy">
+                        <span className="lc-pulse-lane-head">
+                          <span className="lc-pulse-lane-name">{agent.name}</span>
+                          {role !== '' ? <span className="lc-pulse-lane-role">{role}</span> : null}
+                          {searching && !matchedIds.has(lane.id)
+                            ? <span className="lc-pulse-lane-linked">{t('fleet.pulse.linked')}</span>
+                            : null}
+                        </span>
+                        {model !== undefined ? <span className="lc-pulse-lane-model" title={model}>{model}</span> : null}
+                        {usage !== '' ? <span className="lc-pulse-lane-usage" title={usage}>{usage}</span> : null}
+                        <span className="lc-pulse-lane-counts" title={counts}>{counts}</span>
                       </span>
+                    </button>
+                    {navigable ? (
+                      <button
+                        type="button"
+                        className="lc-pulse-lane-open"
+                        aria-label={t('fleet.open')}
+                        title={t('fleet.open')}
+                        onClick={() => { props.onEnter(lane.id) }}
+                      >
+                        <IconRightUpOutlineRegular size={11} />
+                      </button>
                     ) : null}
                   </div>
                 )

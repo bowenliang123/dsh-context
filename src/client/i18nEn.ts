@@ -354,6 +354,8 @@ export const DICT_EN = {
   'fleet.pulse.quietGroup': '{n} quiet agents · show',
   'fleet.pulse.hideQuiet': 'Hide quiet lanes',
   'fleet.pulse.traffic': '{n} events',
+  'fleet.pulse.laneTasks': '{n} tasks',
+  'fleet.pulse.laneTokens': '{n} tokens',
   'fleet.pulse.eventLabel': '{time} · {from} to {to} · {kind}',
   'fleet.pulse.delegationLabel': '{time} · {from} created and initially delegated to {to}',
   'fleet.pulse.delegationNote': 'A durable creation and initial-delegation record from the parent log; not counted as a message.',

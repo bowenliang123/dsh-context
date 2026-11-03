@@ -15,13 +15,15 @@ import {
   type CommsAgent,
   type CommsKindFilter,
 } from '../commsModel'
+import { billedTokensOf, estimateSessionCost, type CostCurrency } from '../cost'
 import { agentResolverOf } from '../fleetAgents'
 import type { CommsRow, FleetDelegationRow } from '../fleetDetail'
 import type { FleetDetailState } from '../fleetModel'
 import type { FleetTeam } from '../fleetTeam'
 import { fmtDateTime, fmtTime } from '../format'
+import { useModelPrices } from '../modelPrices'
 import { IconChevronDown, IconChevronUp } from '../primitives'
-import { pulseTaskBadgeOf, pulseWorkItemsOf, type PulseLaneLink, type PulseWorkItem } from '../pulseModel'
+import { pulseTaskBadgeOf, pulseWorkItemsOf, type PulseLaneLink, type PulseLaneStats, type PulseWorkItem } from '../pulseModel'
 import { scrollIntoViewIfPossible } from '../revealScroll'
 import type { ViewKit } from '../viewkit'
 import type { FleetDetail, FleetMessage } from '../../shared/types'
@@ -477,6 +479,7 @@ export interface MissionPulseProps {
   titles: ReadonlyMap<string, string>
   attested: ReadonlyMap<string, string>
   focusMember: string | null
+  currency: CostCurrency
   onOpen: (id: string) => void
   onEnter: (id: string) => void
   rich: RichKit
@@ -494,6 +497,7 @@ export function MissionPulse(props: MissionPulseProps): ReactElement {
   const [query, setQuery] = useState('')
   const [laneQuery, setLaneQuery] = useState('')
   const [workQuery, setWorkQuery] = useState('')
+  const { book } = useModelPrices()
   const agentOf = useMemo(
     () => agentResolverOf(props.agents, props.titles, props.attested, t),
     [props.agents, props.attested, props.titles, t],
@@ -533,6 +537,18 @@ export function MissionPulse(props: MissionPulseProps): ReactElement {
   const { lanes, links } = useMemo(() => {
     const map = new Map(props.agents)
     const links: PulseLaneLink[] = []
+    const nodeAt = new Map((props.forest?.nodes ?? []).map(node => [node.id, node]))
+    const statsOf = (id: string): PulseLaneStats | undefined => {
+      const node = nodeAt.get(id)
+      if (node === undefined) return undefined
+      const billed = node.billed ?? 0
+      return {
+        model: node.model,
+        effort: node.reasoningEffort,
+        tokens: billed > 0 ? billed : billedTokensOf(node.costUsage),
+        cost: estimateSessionCost(node.costUsage, book, props.currency),
+      }
+    }
     const communicating = new Set<string>()
     for (const row of props.comms) {
       const from = fromPartyOf(row)
@@ -552,13 +568,17 @@ export function MissionPulse(props: MissionPulseProps): ReactElement {
     }
     const running = new Set((props.forest?.nodes ?? []).filter(node => node.running).map(node => node.id))
     return {
-      lanes: [...map.values()].map(agent => ({
-        agent,
-        active: running.has(agent.id) || communicating.has(agent.id) || structural.has(agent.id),
-      })),
+      lanes: [...map.values()].map((agent) => {
+        const stats = statsOf(agent.id)
+        return {
+          agent,
+          active: running.has(agent.id) || communicating.has(agent.id) || structural.has(agent.id),
+          ...(stats !== undefined ? { stats } : {}),
+        }
+      }),
       links,
     }
-  }, [agentOf, props.agents, props.comms, props.delegations, props.forest])
+  }, [agentOf, book, props.agents, props.comms, props.currency, props.delegations, props.forest])
   const visibleWork = useMemo(() => {
     const scoped = selectedAgent === null ? workItems : workItems.filter(item => item.ownerId === selectedAgent)
     const needle = workQuery.trim().toLowerCase()
@@ -640,6 +660,7 @@ export function MissionPulse(props: MissionPulseProps): ReactElement {
         selectedEventKey={selectedEventKey}
         selectedDelegationKey={selectedDelegationKey}
         query={laneQuery}
+        currency={props.currency}
         pending={props.details.pending.size > 0 || props.details.historyPending.size > 0}
         agentOf={agentOf}
         onSelectAgent={selectAgent}
@@ -648,7 +669,6 @@ export function MissionPulse(props: MissionPulseProps): ReactElement {
         onHoverTask={setHoveredTaskId}
         onRevealTask={focusTaskId}
         onQuery={setLaneQuery}
-        onOpen={props.onOpen}
         onEnter={props.onEnter}
         t={t}
       />

@@ -549,16 +549,16 @@ describe('Multi-Agent Network', () => {
     ctx.dispose()
   })
 
-  test('opens agent sessions and sidebars from the same lanes used for selection', async () => {
+  test('opens the agent session from the lane jump button', async () => {
     stubFleetRoute()
     const opened: string[] = []
     const ctx = new TestClientCtx({ services: { sessions: familySessions(), uiWorkspace: { openSession: (id: string) => { opened.push(id) } } } })
     const View = makeView(ctx)
     const m = await mount(h(View, { sessionId: 'root', useProjection: projectionsFor(richTimeline()) }))
     const lane = query(m.container, '[data-lane-label="w2"]')
+    assert.equal(queryAll(lane, 'button').length, 2)
     await click(query(lane, '[aria-label="Open session"]'))
-    await click(query(lane, '[aria-label="Open in sidebar"]'))
-    assert.deepEqual(opened, ['w2', 'w2'])
+    assert.deepEqual(opened, ['w2'])
     await m.unmount()
     ctx.dispose()
 
@@ -571,7 +571,8 @@ describe('Multi-Agent Network', () => {
     })
     const SidebarView = makeView(sidebarCtx)
     const sidebarMount = await mount(h(SidebarView, { sessionId: 'root', useProjection: projectionsFor(richTimeline()) }))
-    await click(query(query(sidebarMount.container, '[data-lane-label="w2"]'), '[aria-label="Open in sidebar"]'))
+    await click(query(query(sidebarMount.container, '[data-task="w2"]'), '.lc-pulse-work-focus'))
+    await click(queryAll(sidebarMount.container, '[data-task="w2"] .lc-pulse-work-actions button')[0]!)
     assert.deepEqual(sidebar, [{
       address: 'dsh-resource://subagentchat/session/w2?parent=root&mode=one-shot',
       options: { kind: 'subagentchat', preferNewPane: true },

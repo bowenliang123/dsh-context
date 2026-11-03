@@ -352,6 +352,8 @@ export const DICT_ZH = {
   'fleet.pulse.quietGroup': '{n} 个安静 Agent · 展开',
   'fleet.pulse.hideQuiet': '隐藏安静泳道',
   'fleet.pulse.traffic': '{n} 个事件',
+  'fleet.pulse.laneTasks': '{n} 个任务',
+  'fleet.pulse.laneTokens': '{n} Token',
   'fleet.pulse.eventLabel': '{time} · {from} 发送至 {to} · {kind}',
   'fleet.pulse.delegationLabel': '{time} · {from} 创建并首次委派给 {to}',
   'fleet.pulse.delegationNote': '来自父会话日志的创建与首次委派记录，不计入消息数。',

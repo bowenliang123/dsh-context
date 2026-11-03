@@ -1,6 +1,7 @@
 import { createElement as h, useEffect, useLayoutEffect, useMemo, useRef, type ReactElement } from 'react'
 import type { AgentHeads } from '../agentHeads'
 import { agentSelfOf } from '../agentTree'
+import { displayCurrencyOf } from '../cost'
 import { mergeComms, mergeDelegations } from '../fleetDetail'
 import { attestedNamesOf, commsAgentsOf } from '../fleetAgents'
 import { useFleetDetails, useFleetModel } from '../fleetModel'
@@ -122,6 +123,7 @@ export function makeFleetView(
           titles={titles}
           attested={attestedNames}
           focusMember={focusMember}
+          currency={displayCurrencyOf(ctx.locale)}
           onOpen={open}
           onEnter={enter}
           rich={rich}

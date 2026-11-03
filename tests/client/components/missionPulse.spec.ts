@@ -3,6 +3,8 @@ import assert from 'node:assert/strict'
 import { describe, test, vi } from 'vitest'
 import { MissionPulse } from '../../../src/client/components/missionPulse'
 import { makeRichText } from '../../../src/client/components/richText'
+import type { AgentForest, AgentNode } from '../../../src/client/agentTree'
+import { resetModelPrices, setModelPricesLoader } from '../../../src/client/modelPrices'
 import type { CommsRow } from '../../../src/client/fleetDetail'
 import type { FleetTeam } from '../../../src/client/fleetTeam'
 import { click, makeKit, mount, query, queryAll, text, typeText, until } from '../helpers/kit'
@@ -23,9 +25,9 @@ function makeDetails(fullLanded = new Map()) {
   }
 }
 
-function pulseOf(comms: CommsRow[]) {
+function pulseOf(comms: CommsRow[], forest: AgentForest | null = null) {
   return h(MissionPulse, {
-    forest: null,
+    forest,
     team: null,
     details: makeDetails(),
     landedDetails: new Map(),
@@ -35,6 +37,7 @@ function pulseOf(comms: CommsRow[]) {
     titles: new Map(),
     attested: new Map(),
     focusMember: null,
+    currency: 'usd',
     onOpen: () => {},
     onEnter: () => {},
     rich: makeRichText(kit),
@@ -82,6 +85,7 @@ describe('MissionPulse boundary parties', () => {
       titles: new Map(),
       attested: new Map(),
       focusMember: null,
+      currency: 'usd',
       onOpen: () => {},
       onEnter: () => {},
       rich: makeRichText(kit),
@@ -124,6 +128,7 @@ describe('MissionPulse boundary parties', () => {
       titles: new Map(),
       attested: new Map(),
       focusMember: null,
+      currency: 'usd',
       onOpen: () => {},
       onEnter: () => {},
       rich: makeRichText(kit),
@@ -144,11 +149,11 @@ describe('MissionPulse boundary parties', () => {
     const laneButton = query<HTMLButtonElement>(mounted.container, '[data-agent="child"]')
     scroller.scrollTop = 0
     await act(async () => { laneButton.dispatchEvent(new FocusEvent('focusin', { bubbles: true })) })
-    assert.equal(scroller.scrollTop, 112)
+    assert.equal(scroller.scrollTop, 136)
     Object.defineProperty(scroller, 'clientHeight', { configurable: true, value: 1000 })
     scroller.scrollTop = 120
     await act(async () => { laneButton.dispatchEvent(new FocusEvent('focusin', { bubbles: true })) })
-    assert.equal(scroller.scrollTop, 56)
+    assert.equal(scroller.scrollTop, 68)
     scroller.scrollTop = 0
     await act(async () => { laneButton.dispatchEvent(new FocusEvent('focusin', { bubbles: true })) })
     assert.equal(scroller.scrollTop, 0)
@@ -259,6 +264,7 @@ describe('MissionPulse boundary parties', () => {
       titles: new Map(),
       attested: new Map(),
       focusMember: null,
+      currency: 'usd',
       onOpen: open,
       onEnter: enter,
       rich: makeRichText(kit),
@@ -335,6 +341,7 @@ describe('MissionPulse boundary parties', () => {
       titles: new Map(),
       attested: new Map(),
       focusMember: null,
+      currency: 'usd',
       onOpen: () => {},
       onEnter: () => {},
       rich: makeRichText(kit),
@@ -420,6 +427,7 @@ describe('MissionPulse boundary parties', () => {
       titles: new Map(),
       attested: new Map(),
       focusMember: null,
+      currency: 'usd',
       onOpen: () => {},
       onEnter: () => {},
       rich: makeRichText(kit),
@@ -481,6 +489,7 @@ describe('MissionPulse boundary parties', () => {
       titles: new Map(),
       attested: new Map(),
       focusMember: null,
+      currency: 'usd',
       onOpen: () => {},
       onEnter: () => {},
       rich: makeRichText(kit),
@@ -535,5 +544,57 @@ describe('MissionPulse boundary parties', () => {
     await click(query(mounted.container, '[data-event-key="child:41:41000:relay"]'))
     assert.equal(list.scrollTop, 40 * 64)
     await mounted.unmount()
+  })
+
+  test('stacks the model, usage and work counts under each agent name', async () => {
+    resetModelPrices()
+    setModelPricesLoader(() => Promise.resolve({
+      deepseek: { models: { 'deepseek-flash': { cost: { input: 0.15, output: 0.6, cache_read: 0.003 } } } },
+    }))
+    const node = (id: string, over: Partial<AgentNode>): AgentNode => ({
+      id,
+      label: id,
+      depth: 1,
+      family: 1,
+      isCurrent: false,
+      running: true,
+      completed: false,
+      subagent: true,
+      updatedAt: 1,
+      head: null,
+      requests: 3,
+      billed: null,
+      costUsage: null,
+      durationMs: null,
+      identity: null,
+      ...over,
+    })
+    const forest: AgentForest = {
+      nodes: [
+        node('child', {
+          model: 'deepseek-flash',
+          reasoningEffort: 'high',
+          billed: 12_300,
+          costUsage: { deepseek: { 'deepseek-flash': { off: { uncached: 1_000_000, cacheRead: 0, cacheWrite: 0, output: 0 } } } },
+        }),
+        node('plain', {}),
+      ],
+      edges: [],
+      solo: false,
+    }
+    const mounted = await mount(pulseOf([
+      { key: 'child:1:1000:relay', to: 'child', seq: 1, time: 1000, kind: 'relay', from: 'root', text: 'go' },
+      { key: 'plain:2:2000:relay', to: 'plain', seq: 2, time: 2000, kind: 'relay', from: 'root', text: 'note' },
+    ], forest))
+    await until(() => text(query(mounted.container, '[data-lane-label="child"]')).includes('$0.15'), 'lane cost never priced')
+    const child = text(query(mounted.container, '[data-lane-label="child"]'))
+    assert.ok(child.includes('deepseek-flash (high)'))
+    assert.ok(child.includes('12.3k tokens'))
+    assert.ok(child.includes('0 tasks · 1 events'))
+    const plain = text(query(mounted.container, '[data-lane-label="plain"]'))
+    assert.ok(!plain.includes('tokens'))
+    assert.ok(plain.includes('0 tasks · 1 events'))
+    await mounted.unmount()
+    resetModelPrices()
   })
 })

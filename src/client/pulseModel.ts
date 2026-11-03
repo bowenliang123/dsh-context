@@ -49,7 +49,7 @@ export function pulseTimelineItemsOf(
     || a.key.localeCompare(b.key))
 }
 
-export const PULSE_LANE_HEIGHT = 56
+export const PULSE_LANE_HEIGHT = 68
 export const PULSE_TASK_LANE_HEIGHT = 40
 export const PULSE_POINT_PITCH = 32
 export const PULSE_TRACK_PADDING = 20
@@ -107,9 +107,17 @@ export function layoutPulse(
   }
 }
 
+export interface PulseLaneStats {
+  model?: string
+  effort?: string
+  tokens: number
+  cost: number | null
+}
+
 export interface PulseLaneInput {
   agent: CommsAgent
   active: boolean
+  stats?: PulseLaneStats
 }
 
 export interface PulseLaneLink {
