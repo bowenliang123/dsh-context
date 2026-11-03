@@ -4,7 +4,7 @@ import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest'
 import { makeAgentGraph } from '../../../src/client/components/agentGraph'
 import { DICT_EN } from '../../../src/client/i18n'
 import { resetModelPrices, setModelPricesLoader } from '../../../src/client/modelPrices'
-import { LEAD_HUE, agentForestOf, familyHue, type AgentSelfStats } from '../../../src/client/agentTree'
+import { LEAD_HUE, agentForestOf, familyHue, type AgentNode, type AgentSelfStats } from '../../../src/client/agentTree'
 import { TestClientCtx, asClientCtx } from '../helpers/harness'
 import { blur, click, flush, focus, hover, makeKit, mount, query, queryAll, text, unhover, until, wheel } from '../helpers/kit'
 
@@ -695,5 +695,64 @@ describe('AgentGraph — cold-relative composition fetch', () => {
     assert.equal(composed.querySelectorAll('.lc-agent-bar-seg').length, 6, 'six category segments (no pressure fill)')
     assert.ok(text(composed).includes('60%'), 'the fold total prices against the head window')
     await m.unmount()
+  })
+})
+
+describe('AgentGraph — viewport windowing', () => {
+  function chain(count: number): { nodes: AgentNode[]; edges: { from: string; to: string }[] } {
+    const nodes: AgentNode[] = []
+    const edges: { from: string; to: string }[] = []
+    for (let index = 0; index < count; index++) {
+      const id = `step-${index}`
+      nodes.push({
+        id,
+        label: id,
+        ...(index > 0 ? { parentId: `step-${index - 1}` } : {}),
+        depth: index,
+        family: 0,
+        isCurrent: index === 0,
+        running: false,
+        completed: true,
+        subagent: index > 0,
+        updatedAt: index,
+        head: null,
+        requests: 0,
+        billed: null,
+        costUsage: null,
+        durationMs: null,
+        identity: null,
+      })
+      if (index > 0) edges.push({ from: `step-${index - 1}`, to: id })
+    }
+    return { nodes, edges }
+  }
+
+  test('renders only the cards in the stage band and reveals deeper cards on scroll', async () => {
+    const frames: FrameRequestCallback[] = []
+    vi.stubGlobal('requestAnimationFrame', (callback: FrameRequestCallback) => { frames.push(callback); return frames.length })
+    try {
+      const { nodes, edges } = chain(70)
+      const Graph = makeAgentGraph(asClientCtx(new TestClientCtx()), kit)
+      const m = await mount(h(Graph, { forest: { nodes, edges, solo: false }, team: null }))
+      assert.equal(queryAll(m.container, '.lc-agent-card').length, 70, 'an unmeasured stage keeps every card')
+      const stage = query<HTMLElement>(m.container, '.lc-agents-stage')
+      Object.defineProperty(stage, 'clientHeight', { configurable: true, value: 560 })
+      let scrollTop = 0
+      Object.defineProperty(stage, 'scrollTop', { configurable: true, get: () => scrollTop, set: (next: number) => { scrollTop = next } })
+      await act(async () => { stage.dispatchEvent(new Event('scroll')) })
+      await act(async () => { for (const frame of frames.splice(0)) frame(0) })
+      const visible = queryAll(m.container, '.lc-agent-card').length
+      assert.ok(visible < 70, 'the measured stage bounds the cards')
+      assert.ok(query(m.container, '[data-agent="step-0"]') !== null)
+      assert.equal(queryAll(m.container, '[data-agent="step-60"]').length, 0)
+      scrollTop = 10600
+      await act(async () => { stage.dispatchEvent(new Event('scroll')) })
+      await act(async () => { for (const frame of frames.splice(0)) frame(0) })
+      assert.ok(query(m.container, '[data-agent="step-60"]') !== null, 'a deep card appears after scrolling')
+      assert.equal(queryAll(m.container, '[data-agent="step-0"]').length, 0)
+      await m.unmount()
+    } finally {
+      vi.unstubAllGlobals()
+    }
   })
 })

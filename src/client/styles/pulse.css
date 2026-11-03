@@ -150,9 +150,9 @@
 .lc-pulse-work-filters .lc-gran-btn { font-size: 10px; padding: 3px 7px; }
 .lc-pulse-work-body { position: relative; flex: 1; min-height: 0; overflow-y: auto; overscroll-behavior: contain; scrollbar-width: thin; scroll-padding-top: 36px; }
 .lc-pulse-work-body::after { content: ''; position: sticky; bottom: 0; display: block; height: 30px; margin-top: -30px; pointer-events: none; background: linear-gradient(transparent, color-mix(in srgb, var(--dsw-alias-bg-layer-1) 92%, transparent)); }
-.lc-pulse-work-group { min-width: 0; margin-top: 10px; }
-.lc-pulse-work-group:first-child { margin-top: 2px; }
-.lc-pulse-work-group-agent { margin-top: 4px; }
+.lc-pulse-work-group { min-width: 0; padding-top: 10px; }
+.lc-pulse-work-group:first-child { padding-top: 2px; }
+.lc-pulse-work-group-agent { padding-top: 4px; }
 .lc-pulse-work-group-head { position: sticky; top: 0; z-index: 2; display: flex; flex-wrap: wrap; align-items: center; gap: 4px 7px; min-width: 0; margin-bottom: 5px; padding: 2px 1px 7px; border-bottom: 2px solid var(--dsw-alias-border-l2); background: var(--dsw-alias-bg-layer-1); }
 .lc-pulse-work-group-owner { display: inline-flex; align-items: center; gap: 5px; min-width: 0; max-width: 100%; padding: 0; border: 0; background: transparent; color: var(--dsw-alias-label-primary); font: inherit; font-size: 11px; font-weight: 650; cursor: pointer; }
 .lc-pulse-work-group-owner span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

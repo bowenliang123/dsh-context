@@ -69,6 +69,15 @@ export async function mount(el: ReactElement): Promise<Mounted> {
   return handle
 }
 
+export function pinScroll(el: HTMLElement, initial = 0): void {
+  let value = initial
+  Object.defineProperty(el, 'scrollTop', {
+    configurable: true,
+    get: () => value,
+    set: (next: number) => { value = next },
+  })
+}
+
 export async function flush(): Promise<void> {
   await act(async () => {})
 }

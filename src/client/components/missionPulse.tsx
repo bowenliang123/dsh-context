@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type CSSProperties, type ReactElement } from 'react'
+import { memo, useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type ReactElement } from 'react'
 import {
   IconChecklistOutlineRegular,
   IconPanelLeftOutlineRegular,
@@ -30,7 +30,7 @@ import type { FleetDetail, FleetMessage } from '../../shared/types'
 import type { AgentGraphProps } from './agentGraph'
 import { ClearableInput } from './clearableInput'
 import { PulseTimeline } from './pulseTimeline'
-import { useRowWindow } from './useRowWindow'
+import { useMeasuredWindow, useRowWindow } from './useRowWindow'
 import { AgentAvatar, channelStyle, roleTextOf } from './commsAgent'
 import { CommsEvent, CommsEventDetail } from './commsEvent'
 import type { RichKit } from './richText'
@@ -47,7 +47,7 @@ interface PulseHeaderProps {
   t: ViewKit['t']
 }
 
-function PulseHeader(props: PulseHeaderProps): ReactElement {
+const PulseHeader = memo(function PulseHeader(props: PulseHeaderProps): ReactElement {
   const { t } = props
   const stats = [
     ['agents', props.agentCount, t('fleet.pulse.agents')],
@@ -94,7 +94,7 @@ function PulseHeader(props: PulseHeaderProps): ReactElement {
       ) : null}
     </header>
   )
-}
+})
 
 const WORK_SUBJECT_MAX = 60
 const EVENT_ROW_PITCH = 64
@@ -166,14 +166,56 @@ interface PulseTasksProps {
   t: ViewKit['t']
 }
 
-function PulseTasks(props: PulseTasksProps): ReactElement {
+const WORK_GROUP_HEAD_H = 34
+const WORK_ROW_H = 74
+const WORK_SEGMENT_MAX = 10
+
+interface WorkSegment {
+  key: string
+  group: PulseWorkGroup
+  from: number
+  to: number
+}
+
+function workSegmentsOf(groups: readonly PulseWorkGroup[]): WorkSegment[] {
+  const segments: WorkSegment[] = []
+  for (const group of groups) {
+    if (group.items.length <= WORK_SEGMENT_MAX) {
+      segments.push({ key: group.key, group, from: 0, to: group.items.length - 1 })
+      continue
+    }
+    for (let from = 0; from < group.items.length; from += WORK_SEGMENT_MAX) {
+      segments.push({
+        key: `${group.key}#${from}`,
+        group,
+        from,
+        to: Math.min(from + WORK_SEGMENT_MAX, group.items.length) - 1,
+      })
+    }
+  }
+  return segments
+}
+
+const PulseTasks = memo(function PulseTasks(props: PulseTasksProps): ReactElement {
   const { t } = props
   const [phase, setPhase] = useState<'all' | PulseWorkPhase>('all')
   const itemRefs = useRef(new Map<string, HTMLLIElement>())
-  const shownItems = phase === 'all'
-    ? props.visibleItems
-    : props.visibleItems.filter(item => pulseWorkPhaseOf(item) === phase)
-  const groups: readonly PulseWorkGroup[] = pulseWorkGroupsOf(shownItems)
+  const bodyRef = useRef<HTMLDivElement | null>(null)
+  const revealedRef = useRef<string | null>(null)
+  const pendingRevealRef = useRef<string | null>(null)
+  const shownItems = useMemo(
+    () => (phase === 'all' ? props.visibleItems : props.visibleItems.filter(item => pulseWorkPhaseOf(item) === phase)),
+    [phase, props.visibleItems],
+  )
+  const groups: readonly PulseWorkGroup[] = useMemo(() => pulseWorkGroupsOf(shownItems), [shownItems])
+  const segments = useMemo(() => workSegmentsOf(groups), [groups])
+  const segmentKeys = useMemo(() => segments.map(segment => segment.key), [segments])
+  const estimateOf = useCallback((index: number): number => {
+    const segment = segments[index]
+    return (segment.from === 0 ? WORK_GROUP_HEAD_H : 0) + (segment.to - segment.from + 1) * WORK_ROW_H
+  }, [segments])
+  const scope = useMeasuredWindow(bodyRef, segmentKeys, estimateOf, shownItems.length)
+  const shownSegments = segments.slice(scope.from, scope.to + 1)
   const taskById = new Map(props.items.filter(item => item.kind === 'team').map(item => [item.id, item]))
   const focusedItem = props.focusedTaskKey === null
     ? undefined
@@ -193,9 +235,26 @@ function PulseTasks(props: PulseTasksProps): ReactElement {
     setPhase('all')
   }, [focusedItem, props.focusedTaskKey, props.revealVersion])
   useEffect(() => {
-    if (props.focusedTaskKey === null) return
-    scrollIntoViewIfPossible(itemRefs.current.get(props.focusedTaskKey) ?? null, { block: 'nearest' })
-  }, [phase, props.focusedTaskKey, props.visibleItems])
+    const key = props.focusedTaskKey
+    if (key === null) {
+      revealedRef.current = null
+      pendingRevealRef.current = null
+      return
+    }
+    const el = itemRefs.current.get(key)
+    if (el !== undefined) {
+      if (revealedRef.current === key) return
+      revealedRef.current = key
+      pendingRevealRef.current = null
+      scrollIntoViewIfPossible(el, { block: 'nearest' })
+      return
+    }
+    if (revealedRef.current === key || pendingRevealRef.current === key) return
+    const segment = segments.find(entry => entry.group.items.slice(entry.from, entry.to + 1).some(item => item.key === key))
+    if (segment === undefined) return
+    pendingRevealRef.current = key
+    scope.scrollToKey(segment.key)
+  }, [props.focusedTaskKey, scope, segments])
   return (
     <section className="lc-card lc-pulse-tasks">
       <div className="lc-card-title">
@@ -240,21 +299,25 @@ function PulseTasks(props: PulseTasksProps): ReactElement {
         })}
       </div>
       {shownItems.length > 0 ? (
-        <div className="lc-pulse-work-body">
-          {groups.map((group) => {
+        <div className="lc-pulse-work-body" ref={bodyRef}>
+          {scope.topPad > 0 ? <div aria-hidden="true" style={{ height: scope.topPad }} /> : null}
+          {shownSegments.map((segment) => {
+            const group = segment.group
             const owner = group.ownerId !== undefined ? props.agentOf(group.ownerId) : null
             const ownerName = group.ownerName ?? owner?.name
             const ownerState = group.items.find(item => item.ownerState !== undefined)?.ownerState
             const agentOnly = group.items.every(item => item.kind === 'agent')
             const hue = owner?.hue ?? 'var(--dsw-alias-border-l2)'
+            const headed = segment.from === 0
             return (
               <section
-                key={group.key}
+                key={segment.key}
+                ref={scope.measure(segment.key)}
                 className={'lc-pulse-work-group' + (agentOnly ? ' lc-pulse-work-group-agent' : '')}
                 data-owner-group={group.key}
                 style={{ '--lc-owner-hue': hue } as CSSProperties}
               >
-                {agentOnly ? null : (
+                {agentOnly || !headed ? null : (
                   <div className="lc-pulse-work-group-head">
                     {owner !== null ? (
                       <button
@@ -276,7 +339,7 @@ function PulseTasks(props: PulseTasksProps): ReactElement {
                   </div>
                 )}
                 <ol className="lc-pulse-work-list">
-                  {group.items.map((item) => {
+                  {group.items.slice(segment.from, segment.to + 1).map((item) => {
                     const focused = props.focusedTaskKey === item.key
                     const ownerSelected = item.ownerId !== undefined && item.ownerId === props.selectedAgent
                     const ownerLinked = item.ownerId !== undefined && item.ownerId === props.hoveredAgent
@@ -444,11 +507,12 @@ function PulseTasks(props: PulseTasksProps): ReactElement {
               </section>
             )
           })}
+          {scope.bottomPad > 0 ? <div aria-hidden="true" style={{ height: scope.bottomPad }} /> : null}
         </div>
       ) : <div className="lc-empty">{t(props.items.length === 0 ? 'fleet.tasks.noTeam' : 'fleet.tasks.noMatch')}</div>}
     </section>
   )
-}
+})
 
 function fullMessageOf(details: FleetDetailState, row: CommsRow | undefined): FleetMessage | null {
   if (row === undefined) return null
@@ -547,7 +611,7 @@ interface PulseEventsProps {
   t: ViewKit['t']
 }
 
-function PulseEvents(props: PulseEventsProps): ReactElement {
+const PulseEvents = memo(function PulseEvents(props: PulseEventsProps): ReactElement {
   const { t } = props
   const inspectorRef = useRef<HTMLDivElement | null>(null)
   const listRef = useRef<HTMLUListElement | null>(null)
@@ -682,7 +746,7 @@ function PulseEvents(props: PulseEventsProps): ReactElement {
       ) : null}
     </section>
   )
-}
+})
 
 export interface MissionPulseProps {
   sessionId?: string
@@ -706,7 +770,6 @@ export interface MissionPulseProps {
 
 export function MissionPulse(props: MissionPulseProps): ReactElement {
   const { t } = props
-  const AgentGraph = props.graph
   const [selectedAgent, setSelectedAgent] = useState<string | null>(null)
   const [hoveredAgent, setHoveredAgent] = useState<string | null>(null)
   const [selectedEventKey, setSelectedEventKey] = useState<string | null>(null)
@@ -836,25 +899,25 @@ export function MissionPulse(props: MissionPulseProps): ReactElement {
     if (props.forest !== null && props.forest.nodes.some(node => node.id === hoveredAgent)) return
     setHoveredAgent(null)
   }, [hoveredAgent, props.forest])
-  const selectAgent = (id: string): void => {
+  const selectAgent = useCallback((id: string): void => {
     setSelectedAgent(current => current === id ? null : id)
-  }
-  const selectEvent = (row: CommsRow): void => {
+  }, [])
+  const selectEvent = useCallback((row: CommsRow): void => {
     const opening = selectedEventKey !== row.key
     setSelectedEventKey(opening ? row.key : null)
     setSelectedDelegationKey(null)
     if (opening && row.clipped === true) props.details.requestFull(row.to)
-  }
-  const selectDelegation = (delegation: FleetDelegationRow): void => {
+  }, [props.details, selectedEventKey])
+  const selectDelegation = useCallback((delegation: FleetDelegationRow): void => {
     setSelectedDelegationKey(current => current === delegation.key ? null : delegation.key)
     setSelectedEventKey(null)
-  }
-  const focusTask = (item: PulseWorkItem): void => {
+  }, [])
+  const focusTask = useCallback((item: PulseWorkItem): void => {
     const opening = focusedTaskKey !== item.key
     setFocusedTaskKey(opening ? item.key : null)
     if (opening && item.ownerId !== undefined) props.details.requestFull(item.ownerId)
-  }
-  const focusTaskId = (id: string): void => {
+  }, [focusedTaskKey, props.details])
+  const focusTaskId = useCallback((id: string): void => {
     const item = workItems.find(work => work.key === `team:${id}`)
     if (item === undefined) return
     setSelectedAgent(null)
@@ -862,7 +925,10 @@ export function MissionPulse(props: MissionPulseProps): ReactElement {
     setFocusedTaskKey(item.key)
     setTaskRevealVersion(current => current + 1)
     if (item.ownerId !== undefined) props.details.requestFull(item.ownerId)
-  }
+  }, [props.details, workItems])
+  const clearSelection = useCallback(() => { setSelectedAgent(null) }, [])
+  const closeDetail = useCallback(() => { setSelectedEventKey(null); setSelectedDelegationKey(null) }, [])
+  const Graph = useMemo(() => memo(props.graph), [props.graph])
   return (
     <div className="lc-pulse">
       <PulseHeader
@@ -872,13 +938,13 @@ export function MissionPulse(props: MissionPulseProps): ReactElement {
         messages={messageTotal}
         latest={latestRecordTime}
         selected={selected}
-        onClear={() => { setSelectedAgent(null) }}
+        onClear={clearSelection}
         t={t}
       />
       <div className={'lc-pulse-main' + (props.forest !== null ? ' lc-pulse-main-graph' : '')}>
         {props.forest !== null ? (
           <div className="lc-col-graph">
-            <AgentGraph
+            <Graph
               compact
               sessionId={props.sessionId}
               forest={props.forest}
@@ -956,7 +1022,7 @@ export function MissionPulse(props: MissionPulseProps): ReactElement {
         onKind={setKind}
         onQuery={setQuery}
         onSelectEvent={selectEvent}
-        onClose={() => { setSelectedEventKey(null); setSelectedDelegationKey(null) }}
+        onClose={closeDetail}
         onSelectAgent={selectAgent}
         onOpen={props.onOpen}
         onEnter={props.onEnter}

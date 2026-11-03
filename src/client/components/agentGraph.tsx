@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type CSSProperties, type KeyboardEvent, type ReactElement } from 'react'
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type KeyboardEvent, type ReactElement } from 'react'
 import { IconWorkspaceTreeOutlineRegular, StateDot } from '@deepseek-ai/dsh-client-ui-primitives'
 import { CATS } from '../categories'
 import type { AgentHeads } from '../agentHeads'
@@ -12,9 +12,11 @@ import { openSessionVia, type ClientCtx } from '../services'
 import type { ViewKit } from '../viewkit'
 import type { FleetDetail } from '../../shared/types'
 import { useFleetModel } from '../fleetModel'
-import { teammateNameOf, teamMemberOf, type FleetTeam } from '../fleetTeam'
+import { teammateNameOf, teamMemberOf, type FleetTeam, type FleetTeamMember } from '../fleetTeam'
 import type { AgentForest, AgentNode, AgentSelfStats } from '../agentTree'
 import {
+  AGENT_CARD_COMPACT_H,
+  AGENT_CARD_H,
   LEAD_HUE,
   barSegments,
   familyHue,
@@ -45,6 +47,15 @@ export interface AgentGraphProps {
 
 const STAGGER_CAP = 8
 const STAGE_H = 560
+const GRAPH_OVERSCAN = 320
+const GRAPH_WINDOW_SEED = 60
+
+function hueOf(node: AgentNode, team: FleetTeam | null, members: readonly FleetTeamMember[]): string {
+  const member = teamMemberOf(team, node.id)
+  return member?.role === 'lead' ? LEAD_HUE
+    : member !== null ? familyHue(members.indexOf(member))
+      : node.isCurrent ? LEAD_HUE : familyHue(node.family)
+}
 
 function linkPath(x1: number, y1: number, x2: number, y2: number): string {
   const k = Math.min(96, Math.max(24, (y2 - y1) * 0.5))
@@ -82,12 +93,6 @@ export function makeAgentGraph(
 
     const stageRef = useRef<HTMLDivElement | null>(null)
     const heardFocus = props.focusId ?? null
-    useEffect(() => {
-      if (heardFocus === null) return
-      /* v8 ignore next 1 */
-      const card = stageRef.current?.querySelector<HTMLElement>(`[data-agent="${CSS.escape(heardFocus)}"]`) ?? null
-      scrollIntoViewIfPossible(card, { block: 'center', behavior: 'smooth' })
-    }, [heardFocus])
     const [stageWidth, setStageWidth] = useState(0)
     const [stageHeight, setStageHeight] = useState(0)
     useEffect(() => {
@@ -119,18 +124,74 @@ export function makeAgentGraph(
         : avatarLabelsOf(forest.nodes.map(node => ({ id: node.id, name: avatarIdentityOf(team, node, t).name }))),
       [forest, team, t],
     )
+    const [stageView, setStageView] = useState<{ top: number; height: number; measured: boolean }>({ top: 0, height: 0, measured: false })
+    useLayoutEffect(() => {
+      /* v8 ignore start */
+      const el = stageRef.current
+      if (el === null) return undefined
+      let frame = 0
+      const update = (): void => {
+        frame = 0
+        setStageView(current => (current.top === el.scrollTop && current.height === el.clientHeight && current.measured
+          ? current
+          : { top: el.scrollTop, height: el.clientHeight, measured: true }))
+      }
+      const schedule = (): void => { if (frame === 0) frame = requestAnimationFrame(update) }
+      update()
+      el.addEventListener('scroll', schedule, { passive: true })
+      const observer = typeof ResizeObserver === 'function' ? new ResizeObserver(schedule) : null
+      observer?.observe(el)
+      return () => {
+        el.removeEventListener('scroll', schedule)
+        if (frame !== 0) cancelAnimationFrame(frame)
+        observer?.disconnect()
+      }
+      /* v8 ignore stop */
+    }, [layout?.height, showAll])
+    const cardHeight = props.compact === true ? AGENT_CARD_COMPACT_H : AGENT_CARD_H
+    const seededHeight = !stageView.measured && forest !== null && forest.nodes.length > GRAPH_WINDOW_SEED ? STAGE_H : 0
+    const viewportHeight = stageView.height > 0 ? stageView.height : seededHeight
+    const band = viewportHeight > 0
+      ? { from: stageView.top - GRAPH_OVERSCAN, to: stageView.top + viewportHeight + GRAPH_OVERSCAN }
+      : null
+    const graph = useMemo(() => {
+      if (forest === null || layout === null) return null
+      const points = new Map(layout.points.map(point => [point.id, point]))
+      const nodes = new Map(forest.nodes.map(node => [node.id, node]))
+      const entries = forest.nodes.map(node => ({ node, hue: hueOf(node, team, members) }))
+      const hues = new Map(entries.map(entry => [entry.node.id, entry.hue]))
+      const visible = band === null ? entries : entries.filter(({ node }) => {
+        const point = points.get(node.id)
+        return point !== undefined && point.y <= band.to && point.y + cardHeight >= band.from
+      })
+      return {
+        points,
+        nodes,
+        hues,
+        visible,
+        lit: lineageOf(forest, focusId),
+        links: band === null
+          ? layout.links
+          : layout.links.filter(link => Math.min(link.y1, link.y2) - cardHeight <= band.to && Math.max(link.y1, link.y2) >= band.from),
+      }
+    }, [band?.from, band?.to, cardHeight, focusId, forest, layout, members, team])
+    useEffect(() => {
+      if (heardFocus === null || graph === null) return
+      const point = graph.points.get(heardFocus)
+      const el = stageRef.current
+      /* v8 ignore next 1 */
+      if (point !== undefined && el !== null && (point.y < el.scrollTop || point.y + cardHeight > el.scrollTop + el.clientHeight)) {
+        el.scrollTop = Math.max(0, point.y - 24)
+      }
+      /* v8 ignore next 1 */
+      const card = stageRef.current?.querySelector<HTMLElement>(`[data-agent="${CSS.escape(heardFocus)}"]`) ?? null
+      scrollIntoViewIfPossible(card, { block: 'center', behavior: 'smooth' })
+    }, [cardHeight, graph, heardFocus])
 
-    if (forest === null || layout === null) return null
+    if (forest === null || layout === null || graph === null) return null
     const tallFamily = layout.height > STAGE_H
     const overflowsStage = showAll || (tallFamily && layout.height > stageHeight)
-    const byId = new Map(forest.nodes.map(n => [n.id, n]))
-    const hueOf = (node: AgentNode): string => {
-      const member = teamMemberOf(team, node.id)
-      return member?.role === 'lead' ? LEAD_HUE
-        : member !== null ? familyHue(members.indexOf(member))
-          : node.isCurrent ? LEAD_HUE : familyHue(node.family)
-    }
-    const hues = new Map(forest.nodes.map(node => [node.id, hueOf(node)]))
+    const byId = graph.nodes
     /* v8 ignore next 1 */
     const current = forest.nodes.find(n => n.isCurrent) ?? forest.nodes[0]
     const pinnedId = props.pinnedId ?? null
@@ -141,7 +202,7 @@ export function makeAgentGraph(
     let totalTokens = 0
     for (const n of forest.nodes) totalTokens += n.head !== null ? n.head.tokens : 0
 
-    const lit = lineageOf(forest, focusId)
+    const lit = graph.lit
 
     const open = (id: string): void => {
       if (id === current.id) return
@@ -242,10 +303,10 @@ export function makeAgentGraph(
                   height={layout.height}
                   viewBox={`0 0 ${layout.width} ${layout.height}`}
                 >
-                  {layout.links.map((link) => {
+                  {graph.links.map((link) => {
                     const d = linkPath(link.x1, link.y1, link.x2, link.y2)
                     const on = lit !== null && lit.has(link.to)
-                    const color = hues.get(link.to)
+                    const color = graph.hues.get(link.to)
                     return (
                       <g key={link.to} className={on ? 'lc-agents-on' : undefined}>
                         <path
@@ -263,8 +324,8 @@ export function makeAgentGraph(
                     )
                   })}
                 </svg>
-                {forest.nodes.map((node, index) => {
-                  const point = layout.points.find(p => p.id === node.id)
+                {graph.visible.map(({ node, hue }, index) => {
+                  const point = graph.points.get(node.id)
                   /* v8 ignore next 2 */
                   if (point === undefined) return null
                   return (
@@ -274,7 +335,7 @@ export function makeAgentGraph(
                       x={point.x}
                       y={point.y}
                       width={layout.cardW}
-                      hue={hueOf(node)}
+                      hue={hue}
                       index={index}
                       hovered={focusId === node.id}
                       on={lit !== null && lit.has(node.id)}
@@ -290,7 +351,7 @@ export function makeAgentGraph(
                         id: node.id,
                         ...avatarIdentityOf(team, node, t),
                         self: node.isCurrent,
-                        hue: hueOf(node),
+                        hue,
                         initials: avatarLabels?.get(node.id),
                       }}
                       t={t}

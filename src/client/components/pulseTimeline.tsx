@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type CSSProperties, type KeyboardEvent, type ReactElement, type UIEvent } from 'react'
+import { memo, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type KeyboardEvent, type ReactElement, type UIEvent } from 'react'
 import {
   IconChecklistOutlineRegular,
   IconRightUpOutlineRegular,
@@ -35,7 +35,7 @@ import {
 import { containHorizontalOverscroll } from '../overscroll'
 import { scrollIntoViewIfPossible } from '../revealScroll'
 import type { ViewKit } from '../viewkit'
-import { useColumnWindow } from './useRowWindow'
+import { rowWindowFor, useColumnWindow, type RowRange } from './useRowWindow'
 import { ClearableInput } from './clearableInput'
 import { AgentAvatar, channelStyle } from './commsAgent'
 
@@ -66,12 +66,22 @@ interface PulseTimelineProps {
   t: ViewKit['t']
 }
 
-export function PulseTimeline(props: PulseTimelineProps): ReactElement {
+const LANE_OVERSCAN = 2
+const LANE_WINDOW_INIT = 12
+const LANE_WINDOW_MIN = 30
+
+function laneWindowFor(scrollTop: number, viewport: number, count: number, offset: number): RowRange | null {
+  if (viewport <= 0 || count <= 0) return null
+  return rowWindowFor(scrollTop - offset, viewport, PULSE_LANE_HEIGHT, count, LANE_OVERSCAN)
+}
+
+export const PulseTimeline = memo(function PulseTimeline(props: PulseTimelineProps): ReactElement {
   const { t } = props
   const [showQuiet, setShowQuiet] = useState(false)
   const [anchor, setAnchor] = useState<'first' | 'latest'>('first')
   const [hoveredKey, setHoveredKey] = useState<string | null>(null)
   const [hoveredLane, setHoveredLane] = useState<string | null>(null)
+  const [laneScopeState, setLaneScopeState] = useState<{ from: number; to: number } | null>(null)
   const laneHovered = (id: string): boolean => props.hoveredAgent === id || hoveredLane === id
   const scrollerRef = useRef<HTMLDivElement | null>(null)
   const labelRowsRef = useRef<HTMLDivElement | null>(null)
@@ -108,6 +118,30 @@ export function PulseTimeline(props: PulseTimelineProps): ReactElement {
     [visibleItems, visibleIds, laneItems.length, windowFrom],
   )
   const laneAt = useMemo(() => new Map(layout.lanes.map(lane => [lane.id, lane])), [layout.lanes])
+  const laneCount = layout.lanes.length
+  const taskOffset = hasTaskLane ? PULSE_TASK_LANE_HEIGHT : 0
+  const laneWrapped = laneCount > LANE_WINDOW_MIN
+  const laneScope = !laneWrapped
+    ? { from: 0, to: laneCount - 1 }
+    : (laneScopeState ?? { from: 0, to: Math.min(LANE_WINDOW_INIT, laneCount) - 1 })
+  const shownLanes = layout.lanes.slice(laneScope.from, laneScope.to + 1)
+  const shownLaneIds = new Set(shownLanes.map(lane => lane.id))
+  const laneTopPad = laneScope.from * PULSE_LANE_HEIGHT
+  const laneBottomPad = Math.max(0, (laneCount - laneScope.to - 1) * PULSE_LANE_HEIGHT)
+  useLayoutEffect(() => {
+    if (!laneWrapped) return
+    const el = scrollerRef.current as HTMLDivElement
+    const sync = (): void => {
+      const next = laneWindowFor(el.scrollTop, el.clientHeight, laneCount, taskOffset) ?? { from: 0, to: laneCount - 1 }
+      setLaneScopeState(current => (current !== null && current.from === next.from && current.to === next.to ? current : next))
+    }
+    sync()
+    /* v8 ignore start */
+    const observer = typeof ResizeObserver === 'function' ? new ResizeObserver(sync) : null
+    observer?.observe(el)
+    return () => { observer?.disconnect() }
+    /* v8 ignore stop */
+  }, [laneCount, laneWrapped, taskOffset])
   const agentAt = useMemo(() => new Map(props.lanes.map(lane => [lane.agent.id, lane.agent])), [props.lanes])
   const statsAt = useMemo(() => {
     const map = new Map<string, PulseLaneStats>()
@@ -151,12 +185,15 @@ export function PulseTimeline(props: PulseTimelineProps): ReactElement {
     /* v8 ignore next */
     if (rows !== null) rows.style.transform = `translateY(${-ev.currentTarget.scrollTop}px)`
     const el = ev.currentTarget
+    const next = laneWrapped ? laneWindowFor(el.scrollTop, el.clientHeight, laneCount, taskOffset) : null
+    if (next !== null) {
+      setLaneScopeState(current => (current !== null && current.from === next.from && current.to === next.to ? current : next))
+    }
     const max = el.scrollWidth - el.clientWidth
     if (max <= 1) return
     if (el.scrollLeft <= 0) setAnchor('first')
     else if (el.scrollLeft >= max - 1) setAnchor('latest')
   }
-  const taskOffset = hasTaskLane ? PULSE_TASK_LANE_HEIGHT : 0
   const revealRow = (top: number, height: number): void => {
     const el = scrollerRef.current
     /* v8 ignore next */
@@ -172,10 +209,15 @@ export function PulseTimeline(props: PulseTimelineProps): ReactElement {
     const index = laneItems.findIndex(item => item.key === key)
     if (index < 0) return
     const el = scrollerRef.current as HTMLDivElement
+    const lane = layout.lanes[visibleIds.indexOf(laneItems[index].to)]
+    const start = lane.top + taskOffset
+    const end = start + lane.height
+    if (start < el.scrollTop) el.scrollTop = start
+    else if (end > el.scrollTop + el.clientHeight) el.scrollTop = end - el.clientHeight
     el.scrollLeft = Math.max(0, PULSE_TRACK_PADDING + index * PULSE_POINT_PITCH - el.clientWidth / 2)
     const target = el.querySelector(`[data-event-key="${CSS.escape(key)}"]`)
     scrollIntoViewIfPossible(target ?? null, { block: 'nearest', inline: 'center' })
-  }, [props.selectedEventKey, props.selectedDelegationKey, laneItems, layout.points])
+  }, [props.selectedEventKey, props.selectedDelegationKey, laneItems, taskOffset, visibleIds])
   const selectItem = (item: PulseTimelineItem): void => {
     if (item.kind === 'message') props.onSelectEvent(item.row)
     else props.onSelectDelegation(item.delegation)
@@ -237,7 +279,8 @@ export function PulseTimeline(props: PulseTimelineProps): ReactElement {
                   <span>{t('fleet.pulse.taskLane')}</span>
                 </div>
               ) : null}
-              {layout.lanes.map((lane) => {
+              {laneTopPad > 0 ? <div aria-hidden="true" style={{ height: laneTopPad }} /> : null}
+              {shownLanes.map((lane) => {
                 /* v8 ignore next 1 */
                 const agent = agentAt.get(lane.id) ?? props.agentOf(lane.id)
                 const count = trafficAt.get(lane.id) ?? 0
@@ -295,6 +338,7 @@ export function PulseTimeline(props: PulseTimelineProps): ReactElement {
                   </div>
                 )
               })}
+              {laneBottomPad > 0 ? <div aria-hidden="true" style={{ height: laneBottomPad }} /> : null}
               {hidden > 0 ? (
                 <div
                   className="lc-pulse-lane-label lc-pulse-quiet-lane"
@@ -341,6 +385,7 @@ export function PulseTimeline(props: PulseTimelineProps): ReactElement {
                   </div>
                 ) : null}
                 <div className="lc-pulse-lane-tracks" style={{ height: layout.height }}>
+                  {laneTopPad > 0 ? <div aria-hidden="true" style={{ height: laneTopPad }} /> : null}
                   <svg
                     className="lc-pulse-arrows"
                     style={{ width: '100%' }}
@@ -350,13 +395,13 @@ export function PulseTimeline(props: PulseTimelineProps): ReactElement {
                         <circle cx={PULSE_TRACK_PADDING + PULSE_POINT_PITCH / 2} cy={PULSE_LANE_HEIGHT / 2} r="3" className="lc-pulse-slot" />
                       </pattern>
                     </defs>
-                    {layout.lanes.map(lane => (
+                    {shownLanes.map(lane => (
                       <g key={lane.id}>
                         <rect x="0" y={lane.top} width={layout.width} height={lane.height} fill="url(#lc-pulse-slot-pattern)" />
                         <line className="lc-pulse-lane-baseline" x1="0" x2="100%" y1={lane.center} y2={lane.center} />
                       </g>
                     ))}
-                    {layout.points.map((point) => {
+                    {layout.points.filter(point => shownLaneIds.has(point.item.to)).map((point) => {
                       const item = point.item
                       const source = laneAt.get(item.from)
                       if (source === undefined || item.from === item.to || (item.kind === 'message' && item.row.kind === 'settled')) return null
@@ -396,7 +441,7 @@ export function PulseTimeline(props: PulseTimelineProps): ReactElement {
                       )
                     })}
                   </svg>
-                  {layout.points.map((point) => {
+                  {layout.points.filter(point => shownLaneIds.has(point.item.to)).map((point) => {
                     const item = point.item
                     const source = laneAt.get(item.from)
                     if (source === undefined || item.from === item.to || (item.kind === 'message' && item.row.kind === 'settled')) return null
@@ -409,7 +454,7 @@ export function PulseTimeline(props: PulseTimelineProps): ReactElement {
                       />
                     )
                   })}
-                  {layout.lanes.map(lane => (
+                  {shownLanes.map(lane => (
                     <div
                       key={lane.id}
                       className={'lc-pulse-lane-track' + (laneHovered(lane.id) ? ' lc-pulse-lane-hover' : '') + (matchedIds.has(lane.id) ? ' lc-pulse-lane-track-match' : '')}
@@ -483,4 +528,4 @@ export function PulseTimeline(props: PulseTimelineProps): ReactElement {
       ) : null}
     </section>
   )
-}
+})

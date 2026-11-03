@@ -67,6 +67,7 @@ export interface AgentForest {
 }
 
 export const AGENT_CARD_H = 116
+export const AGENT_CARD_COMPACT_H = 92
 const SLOT_MAX = 276
 const SLOT_MIN = 190
 const CARD_GUTTER = 12
@@ -416,7 +417,7 @@ export interface AgentLayout {
 }
 
 export function layoutForest(forest: AgentForest, stageWidth = 0, compact = false): AgentLayout {
-  const cardH = compact ? 92 : AGENT_CARD_H
+  const cardH = compact ? AGENT_CARD_COMPACT_H : AGENT_CARD_H
   const slotMax = compact ? 232 : SLOT_MAX
   const slotMin = compact ? 160 : SLOT_MIN
   const gutter = compact ? 10 : CARD_GUTTER

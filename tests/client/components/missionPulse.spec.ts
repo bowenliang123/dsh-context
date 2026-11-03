@@ -7,8 +7,9 @@ import { makeRichText } from '../../../src/client/components/richText'
 import type { AgentForest, AgentNode } from '../../../src/client/agentTree'
 import { resetModelPrices, setModelPricesLoader } from '../../../src/client/modelPrices'
 import type { CommsRow } from '../../../src/client/fleetDetail'
+import type { CommsAgent } from '../../../src/client/commsModel'
 import type { FleetTeam } from '../../../src/client/fleetTeam'
-import { click, makeKit, mount, query, queryAll, text, typeText, until } from '../helpers/kit'
+import { click, makeKit, mount, pinScroll, query, queryAll, text, typeText, until } from '../helpers/kit'
 
 const kit = makeKit()
 const graph = () => null
@@ -847,5 +848,180 @@ describe('MissionPulse boundary parties', () => {
     assert.ok(plain.includes('0 tasks · 1 events'))
     await mounted.unmount()
     resetModelPrices()
+  })
+})
+
+describe('Fleet pane virtualization', () => {
+  function manyAgents(count: number): { agents: Map<string, CommsAgent>; comms: CommsRow[] } {
+    const agents = new Map<string, CommsAgent>()
+    const comms: CommsRow[] = []
+    for (let index = 0; index < count; index++) {
+      const id = `agent-${index}`
+      agents.set(id, { id, name: `Worker ${index}`, role: 'subagent', self: false, hue: `hsl(${index} 50% 50%)` })
+      comms.push({ key: `${id}:1:${1000 + index}:relay`, to: id, seq: 1, time: 1000 + index, kind: 'relay', from: 'root', text: `note ${index}` })
+    }
+    return { agents, comms }
+  }
+
+  function pinViewport(el: HTMLElement, height: number): void {
+    Object.defineProperty(el, 'clientHeight', { configurable: true, value: height })
+  }
+
+
+  async function flushFrames(frames: FrameRequestCallback[]): Promise<void> {
+    await act(async () => { for (const frame of frames.splice(0)) frame(0) })
+  }
+
+  test('windows collaboration lanes and keeps a distant lane reachable by scrolling', async () => {
+    const frames: FrameRequestCallback[] = []
+    vi.stubGlobal('requestAnimationFrame', (callback: FrameRequestCallback) => { frames.push(callback); return frames.length })
+    try {
+      const { agents, comms } = manyAgents(40)
+      const mounted = await mount(h(MissionPulse, {
+        graph, forest: null, team: null, details: makeDetails(), landedDetails: new Map(),
+        comms, delegations: [], agents, titles: new Map(), attested: new Map(), focusMember: null,
+        currency: 'usd', onOpen: () => {}, onEnter: () => {}, rich: makeRichText(kit), t: kit.t,
+      }))
+      const initial = queryAll(mounted.container, '[data-lane-label]').length
+      assert.ok(initial >= 40, 'an unmeasured pane keeps every lane')
+      const scroller = query<HTMLElement>(mounted.container, '[data-sequence-scroller]')
+      pinViewport(scroller, 200)
+      scroller.scrollTop = 0
+      await act(async () => { scroller.dispatchEvent(new Event('scroll')) })
+      await flushFrames(frames)
+      const shown = queryAll(mounted.container, '[data-lane-label]').length
+      assert.ok(shown < initial, 'the measured pane bounds the lane list')
+      assert.ok(query<HTMLElement>(mounted.container, '[data-lane-label="agent-0"]') !== null)
+      scroller.scrollTop = 1900
+      await act(async () => { scroller.dispatchEvent(new Event('scroll')) })
+      await flushFrames(frames)
+      assert.ok(queryAll(mounted.container, '[data-lane-label]').length < initial)
+      assert.ok(query(mounted.container, '[data-lane-label="agent-30"]') !== null, 'a later lane appears after scrolling')
+      await act(async () => { scroller.dispatchEvent(new Event('scroll')) })
+      await flushFrames(frames)
+      assert.ok(query(mounted.container, '[data-lane-label="agent-30"]') !== null, 'a still scroll keeps the same lane window')
+      const grown = manyAgents(41)
+      await mounted.update(h(MissionPulse, {
+        graph, forest: null, team: null, details: makeDetails(), landedDetails: new Map(),
+        comms: grown.comms, delegations: [], agents: grown.agents, titles: new Map(), attested: new Map(), focusMember: null,
+        currency: 'usd', onOpen: () => {}, onEnter: () => {}, rich: makeRichText(kit), t: kit.t,
+      }))
+      await flushFrames(frames)
+      assert.ok(query(mounted.container, '[data-lane-label="agent-30"]') !== null, 'an off-window lane leaves the visible window alone')
+      await mounted.unmount()
+    } finally {
+      vi.unstubAllGlobals()
+    }
+  })
+
+  test('windows the work board and scrolls a task revealed from another lane into view', async () => {
+    const frames: FrameRequestCallback[] = []
+    vi.stubGlobal('requestAnimationFrame', (callback: FrameRequestCallback) => { frames.push(callback); return frames.length })
+    try {
+      const { agents, comms } = manyAgents(40)
+      const team: FleetTeam = {
+        members: [{ id: 'root', name: 'Lead', role: 'lead', phase: 'active' }],
+        tasks: Array.from({ length: 40 }, (_, index) => ({
+          id: `task-${index}`,
+          subject: `task ${index}`,
+          description: 'work',
+          status: index === 39 ? 'completed' as const : 'pending' as const,
+          ownerId: `agent-${index}`,
+          blockedBy: [],
+          writeScopes: [],
+          ready: true,
+          warnings: [],
+        })),
+      }
+      const mounted = await mount(h(MissionPulse, {
+        graph, forest: null, team, details: makeDetails(), landedDetails: new Map(),
+        comms, delegations: [], agents, titles: new Map(), attested: new Map(), focusMember: null,
+        currency: 'usd', onOpen: () => {}, onEnter: () => {}, rich: makeRichText(kit), t: kit.t,
+      }))
+      const body = query<HTMLElement>(mounted.container, '.lc-pulse-work-body')
+      pinScroll(body)
+      pinViewport(body, 200)
+      body.scrollTop = 0
+      await act(async () => { body.dispatchEvent(new Event('scroll')) })
+      await flushFrames(frames)
+      assert.ok(queryAll(mounted.container, '.lc-pulse-work-item').length < 40, 'the measured board bounds its rows')
+      assert.equal(queryAll(mounted.container, '[data-task="task-39"]').length, 0, 'the trailing task starts outside the window')
+      const scroller = query<HTMLElement>(mounted.container, '[data-sequence-scroller]')
+      pinViewport(scroller, 200)
+      scroller.scrollTop = 2500
+      await act(async () => { scroller.dispatchEvent(new Event('scroll')) })
+      await flushFrames(frames)
+      const chip = query<HTMLElement>(mounted.container, '[data-task-chip="task-39"]')
+      await act(async () => { chip.click() })
+      await act(async () => { body.dispatchEvent(new Event('scroll')) })
+      await flushFrames(frames)
+      assert.ok(query(mounted.container, '[data-task="task-39"]') !== null, 'the revealed task renders')
+      assert.ok(body.scrollTop > 0, 'the board scrolls itself to the revealed task')
+      const scrolled = body.scrollTop
+      const owner = queryAll<HTMLElement>(mounted.container, '.lc-pulse-work-item [data-owner]')[0]
+      await act(async () => { owner.click() })
+      await act(async () => { body.dispatchEvent(new Event('scroll')) })
+      await flushFrames(frames)
+      assert.equal(body.scrollTop, scrolled, 'a focus the filters hide leaves the board where it is')
+      await mounted.unmount()
+    } finally {
+      vi.unstubAllGlobals()
+    }
+  })
+})
+
+describe('Fleet work board — large owner groups', () => {
+  test('splits one owner’s long task list into windowed segments that still reach the last task', async () => {
+    const frames: FrameRequestCallback[] = []
+    vi.stubGlobal('requestAnimationFrame', (callback: FrameRequestCallback) => { frames.push(callback); return frames.length })
+    try {
+      const agents = new Map<string, CommsAgent>()
+      const comms: CommsRow[] = []
+      for (let index = 0; index < 40; index++) {
+        const id = `agent-${index}`
+        agents.set(id, { id, name: `Worker ${index}`, role: 'subagent', self: false, hue: `hsl(${index} 50% 50%)` })
+        comms.push({ key: `${id}:1:${1000 + index}:relay`, to: id, seq: 1, time: 1000 + index, kind: 'relay', from: 'root', text: `note ${index}` })
+      }
+      const team: FleetTeam = {
+        members: [{ id: 'root', name: 'Lead', role: 'lead', phase: 'active' }],
+        tasks: Array.from({ length: 40 }, (_, index) => ({
+          id: `task-${index}`,
+          subject: `owned ${index}`,
+          description: '',
+          status: 'pending' as const,
+          ownerId: 'agent-0',
+          blockedBy: [],
+          writeScopes: [],
+          ready: true,
+          warnings: [],
+        })),
+      }
+      const mounted = await mount(h(MissionPulse, {
+        graph, forest: null, team, details: makeDetails(), landedDetails: new Map(),
+        comms, delegations: [], agents, titles: new Map(), attested: new Map(), focusMember: null,
+        currency: 'usd', onOpen: () => {}, onEnter: () => {}, rich: makeRichText(kit), t: kit.t,
+      }))
+      const body = query<HTMLElement>(mounted.container, '.lc-pulse-work-body')
+      pinScroll(body)
+      Object.defineProperty(body, 'clientHeight', { configurable: true, value: 200 })
+      await act(async () => { body.dispatchEvent(new Event('scroll')) })
+      await act(async () => { for (const frame of frames.splice(0)) frame(0) })
+      assert.ok(queryAll(mounted.container, '.lc-pulse-work-item').length < 40, 'one long owner list is windowed too')
+      body.scrollTop = 4000
+      await act(async () => { body.dispatchEvent(new Event('scroll')) })
+      await act(async () => { for (const frame of frames.splice(0)) frame(0) })
+      assert.ok(queryAll(mounted.container, '[data-task="task-39"]').length > 0, 'the last task is reachable by scrolling')
+      body.scrollTop = 0
+      await act(async () => { body.dispatchEvent(new Event('scroll')) })
+      await act(async () => { for (const frame of frames.splice(0)) frame(0) })
+      await act(async () => { query<HTMLElement>(mounted.container, '[data-work-phase="completed"]').click() })
+      await act(async () => { query<HTMLElement>(mounted.container, '[data-task-chip="task-0"]').click() })
+      await act(async () => { body.dispatchEvent(new Event('scroll')) })
+      await act(async () => { for (const frame of frames.splice(0)) frame(0) })
+      assert.ok(queryAll(mounted.container, '[data-task="task-0"]').length > 0, 'a phase reset restores the focused task')
+      await mounted.unmount()
+    } finally {
+      vi.unstubAllGlobals()
+    }
   })
 })
