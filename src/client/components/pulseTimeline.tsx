@@ -192,34 +192,36 @@ export function PulseTimeline(props: PulseTimelineProps): ReactElement {
     <section className="lc-card lc-pulse-timeline" aria-busy={props.pending}>
       <div className="lc-card-title">
         <span className="lc-card-title-text"><IconWorkspaceTreeOutlineRegular size={14} />{t('fleet.pulse.timeline')}</span>
-        <span className="lc-card-sub">
-          {t('fleet.pulse.timelineSub', { shown: shownRecords, total: recordTotal, lanes: visibleIds.length })}
-        </span>
-        <ClearableInput
-          type="search"
-          className="lc-fleet-search lc-pulse-search"
-          placeholder={t('fleet.pulse.searchLanes')}
-          clearLabel={t('field.clear')}
-          value={props.query}
-          onChange={props.onQuery}
-        />
-        <span className="lc-pulse-title-actions">
-          {!searching && !agentSelected && props.lanes.length > 8 && (showQuiet || hidden > 0) ? (
-            <button type="button" className="lc-pulse-quiet" aria-pressed={showQuiet} onClick={() => { setShowQuiet(value => !value) }}>
-              {showQuiet ? t('fleet.pulse.hideQuiet') : t('fleet.pulse.showQuiet', { n: hidden })}
-            </button>
-          ) : null}
-          <span className="lc-gran lc-pulse-sequence-actions" role="group">
-            <button
-              type="button"
-              className={'lc-gran-btn' + (anchor === 'first' ? ' lc-gran-on' : '')}
-              onClick={() => { jumpTo('first') }}
-            >{t('fleet.pulse.first')}</button>
-            <button
-              type="button"
-              className={'lc-gran-btn' + (anchor === 'latest' ? ' lc-gran-on' : '')}
-              onClick={() => { jumpTo('latest') }}
-            >{t('fleet.pulse.latestRecord')}</button>
+        <span className="lc-pulse-card-tools">
+          <span className="lc-card-sub">
+            {t('fleet.pulse.timelineSub', { shown: shownRecords, total: recordTotal, lanes: visibleIds.length })}
+          </span>
+          <ClearableInput
+            type="search"
+            className="lc-fleet-search lc-pulse-search"
+            placeholder={t('fleet.pulse.searchLanes')}
+            clearLabel={t('field.clear')}
+            value={props.query}
+            onChange={props.onQuery}
+          />
+          <span className="lc-pulse-title-actions">
+            {!searching && !agentSelected && props.lanes.length > 8 && (showQuiet || hidden > 0) ? (
+              <button type="button" className="lc-pulse-quiet" aria-pressed={showQuiet} onClick={() => { setShowQuiet(value => !value) }}>
+                {showQuiet ? t('fleet.pulse.hideQuiet') : t('fleet.pulse.showQuiet', { n: hidden })}
+              </button>
+            ) : null}
+            <span className="lc-gran lc-pulse-sequence-actions" role="group">
+              <button
+                type="button"
+                className={'lc-gran-btn' + (anchor === 'first' ? ' lc-gran-on' : '')}
+                onClick={() => { jumpTo('first') }}
+              >{t('fleet.pulse.first')}</button>
+              <button
+                type="button"
+                className={'lc-gran-btn' + (anchor === 'latest' ? ' lc-gran-on' : '')}
+                onClick={() => { jumpTo('latest') }}
+              >{t('fleet.pulse.latestRecord')}</button>
+            </span>
           </span>
         </span>
       </div>

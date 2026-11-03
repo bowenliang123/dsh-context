@@ -72,6 +72,8 @@
 .lc-pulse-timeline, .lc-pulse-tasks { display: flex; flex-direction: column; max-height: 413px; }
 .lc-pulse-timeline > .lc-card-title, .lc-pulse-tasks > .lc-card-title, .lc-pulse-tasks > .lc-pulse-work-warning { flex: none; }
 .lc-pulse-timeline .lc-card-title, .lc-pulse-tasks .lc-card-title, .lc-pulse-events .lc-card-title { flex-wrap: wrap; gap: 5px 9px; }
+.lc-pulse-card-tools { display: flex; flex: 1 1 auto; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: 5px 9px; min-width: 0; }
+.lc-pulse-card-tools .lc-card-sub { margin-left: 0; }
 .lc-pulse-timeline .lc-card-title-text svg { color: var(--lc-pulse-violet); }
 .lc-pulse-tasks .lc-card-title-text svg, .lc-pulse-events .lc-card-title-text svg { color: var(--lc-pulse-cyan); }
 .lc-pulse-quiet { padding: 3px 8px; border: 1px dashed var(--lc-pulse-line); border-radius: 999px; background: transparent; color: var(--dsw-alias-label-secondary); font: inherit; font-size: 10px; cursor: pointer; }
@@ -87,7 +89,7 @@
 .lc-pulse-task-chip { position: absolute; top: 50%; display: inline-flex; align-items: center; justify-content: center; min-width: 18px; height: 18px; padding: 0 4px; transform: translate(-50%, -50%); border: 1px solid color-mix(in srgb, var(--lc-pulse-violet) 30%, var(--dsw-alias-border-l2)); border-radius: 999px; background: color-mix(in srgb, var(--lc-pulse-violet) 8%, var(--dsw-alias-bg-layer-1)); color: color-mix(in srgb, var(--lc-pulse-violet) 80%, var(--dsw-alias-label-primary)); font: inherit; font-size: 8.5px; font-weight: 700; line-height: 1; font-variant-numeric: tabular-nums; cursor: pointer; }
 .lc-pulse-task-chip:hover, .lc-pulse-task-chip-hover { border-color: var(--lc-pulse-violet); background: color-mix(in srgb, var(--lc-pulse-violet) 14%, var(--dsw-alias-bg-layer-1)); }
 .lc-pulse-lane-tracks { position: relative; min-width: 0; }
-.lc-pulse-title-actions { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 5px 8px; margin-left: auto; }
+.lc-pulse-title-actions { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 5px 8px; }
 .lc-pulse-sequence-actions { flex: none; margin-left: 0; }
 .lc-pulse-sequence-scroller { flex: 1; min-height: 0; overflow: auto; overscroll-behavior-x: contain; scrollbar-gutter: stable; }
 .lc-pulse-sequence-scroller:focus-visible { outline: 2px solid var(--lc-pulse-cyan); outline-offset: -2px; }

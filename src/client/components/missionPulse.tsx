@@ -142,15 +142,17 @@ function PulseTasks(props: PulseTasksProps): ReactElement {
     <section className="lc-card lc-pulse-tasks">
       <div className="lc-card-title">
         <span className="lc-card-title-text"><IconChecklistOutlineRegular size={14} />{t('fleet.pulse.work')}</span>
-        <span className="lc-card-sub">{t('fleet.pulse.workSub', { shown: props.visibleItems.length, total: props.items.length })}</span>
-        <ClearableInput
-          type="search"
-          className="lc-fleet-search lc-pulse-search"
-          placeholder={t('fleet.pulse.searchTasks')}
-          clearLabel={t('field.clear')}
-          value={props.query}
-          onChange={props.onQuery}
-        />
+        <span className="lc-pulse-card-tools">
+          <span className="lc-card-sub">{t('fleet.pulse.workSub', { shown: props.visibleItems.length, total: props.items.length })}</span>
+          <ClearableInput
+            type="search"
+            className="lc-fleet-search lc-pulse-search"
+            placeholder={t('fleet.pulse.searchTasks')}
+            clearLabel={t('field.clear')}
+            value={props.query}
+            onChange={props.onQuery}
+          />
+        </span>
       </div>
       {props.teamFailure !== undefined ? <div className="lc-pulse-work-warning">{t('fleet.team.failureShort')} · {props.teamFailure}</div> : null}
       {props.visibleItems.length > 0 ? (
