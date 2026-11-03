@@ -10,6 +10,7 @@ import type { FleetTeam } from '../../../src/client/fleetTeam'
 import { click, makeKit, mount, query, queryAll, text, typeText, until } from '../helpers/kit'
 
 const kit = makeKit()
+const graph = () => null
 
 function makeDetails(fullLanded = new Map()) {
   return {
@@ -27,6 +28,7 @@ function makeDetails(fullLanded = new Map()) {
 
 function pulseOf(comms: CommsRow[], forest: AgentForest | null = null) {
   return h(MissionPulse, {
+    graph,
     forest,
     team: null,
     details: makeDetails(),
@@ -75,6 +77,7 @@ describe('MissionPulse boundary parties', () => {
     }
     const details = makeDetails(new Map([['unknown-target', { messages: [{ seq: 99, time: 2000, kind: 'relay' as const, text: 'unrelated' }], truncated: false }]]))
     const mounted = await mount(h(MissionPulse, {
+      graph,
       forest: null,
       team: null,
       details,
@@ -118,6 +121,7 @@ describe('MissionPulse boundary parties', () => {
       ['child', { id: 'child', name: 'Child', role: 'subagent' as const, self: false, hue: 'blue' }],
     ])
     const pulse = (comms: CommsRow[]) => h(MissionPulse, {
+      graph,
       forest: null,
       team: null,
       details: makeDetails(),
@@ -254,6 +258,7 @@ describe('MissionPulse boundary parties', () => {
       { key: 'other:2:peer', time: 600, seq: 2, from: 'other', to: 'peer', mode: 'external' as const, label: 'Peer duty' },
     ]
     const mounted = await mount(h(MissionPulse, {
+      graph,
       forest: null,
       team: null,
       details: makeDetails(),
@@ -331,6 +336,7 @@ describe('MissionPulse boundary parties', () => {
       ['child', { id: 'child', name: 'child', role: 'teammate' as const, self: false, hue: 'blue' }],
     ])
     const mounted = await mount(h(MissionPulse, {
+      graph,
       forest: null,
       team,
       details: makeDetails(),
@@ -422,6 +428,7 @@ describe('MissionPulse boundary parties', () => {
       ['delta', { id: 'delta', name: 'Delta', role: 'teammate' as const, self: false, hue: 'gold' }],
     ])
     const mounted = await mount(h(MissionPulse, {
+      graph,
       forest: null,
       team,
       details: makeDetails(),
@@ -484,6 +491,7 @@ describe('MissionPulse boundary parties', () => {
     await mounted.unmount()
 
     const quiet = await mount(h(MissionPulse, {
+      graph,
       forest: null,
       team: null,
       details: makeDetails(),

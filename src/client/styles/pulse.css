@@ -67,6 +67,11 @@
 .lc-pulse-selection span { overflow-wrap: anywhere; }
 .lc-pulse-selection b { color: var(--lc-pulse-violet); font-size: 14px; }
 
+.lc-pulse-main { display: grid; grid-template-columns: minmax(0, 1fr); gap: 10px; min-width: 0; }
+.lc-pulse-boards { container: pulse / inline-size; display: flex; flex-direction: column; gap: 10px; min-width: 0; }
+.lc-pulse-main .lc-col-graph, .lc-pulse-boards > .lc-card { min-width: 0; }
+.lc-pulse-main .lc-col-graph > .lc-card, .lc-pulse-boards > .lc-card { margin-bottom: 0; }
+
 .lc-pulse-timeline, .lc-pulse-tasks, .lc-pulse-events { min-width: 0; border-color: var(--dsw-alias-border-l2); background: var(--dsw-alias-bg-layer-1); }
 .lc-pulse-events { max-height: 620px; }
 .lc-pulse-timeline, .lc-pulse-tasks { display: flex; flex-direction: column; max-height: 413px; }
@@ -205,6 +210,10 @@
 .lc-pulse-quiet-track { border-bottom-style: dashed; }
 .lc-pulse-work-readiness { padding: 0 8px 4px 25px; color: var(--dsw-alias-label-secondary); font-size: 9px; }
 .lc-pulse-work-warning { flex: 1 1 100%; color: var(--color-amber-500); font-size: 9px; overflow-wrap: anywhere; }
+
+@container pulse (min-width: 900px) {
+  .lc-pulse-main-graph { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
 
 @container pulse (max-width: 850px) {
   .lc-pulse-events { max-height: 720px; }

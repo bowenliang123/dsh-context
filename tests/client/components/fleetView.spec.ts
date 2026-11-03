@@ -35,7 +35,7 @@ function makeView(ctx: TestClientCtx) {
 }
 
 describe('FleetView Mission Pulse states', () => {
-  test('a solo session keeps an empty timeline and work queue without the retired boards', async () => {
+  test('a solo session keeps its tree, an empty timeline, and an empty work queue without the retired boards', async () => {
     emptyFleetRoute()
     const ctx = new TestClientCtx({ services: { sessions: selfOnly('sv-fleet') } })
     const View = makeView(ctx)
@@ -47,7 +47,9 @@ describe('FleetView Mission Pulse states', () => {
     assert.equal(queryAll(m.container, '.lc-pulse-lane-label').length, 1)
     assert.ok(text(query(m.container, '.lc-pulse-tasks')).includes(DICT_EN['fleet.tasks.noTeam']))
     await until(() => text(query(m.container, '.lc-pulse-events')).includes(DICT_EN['fleet.comms.empty']), 'the empty stream never settled')
-    assert.equal(queryAll(m.container, '.lc-agents, .lc-members, .lc-summary, .lc-comms-channels').length, 0)
+    assert.ok(query(m.container, '.lc-pulse-main-graph .lc-agents.lc-agents-compact') !== null)
+    assert.equal(queryAll(m.container, '.lc-col-graph .lc-agent-card').length, 1)
+    assert.equal(queryAll(m.container, '.lc-members, .lc-summary, .lc-comms-channels').length, 0)
     assert.equal(queryAll(m.container, '.lc-foot').length, 0)
     await m.unmount()
     ctx.dispose()
@@ -113,7 +115,8 @@ describe('FleetView Mission Pulse states', () => {
     const View = makeView(ctx)
     const m = await mount(h(View, { sessionId: id, useProjection: projectionsFor(richTimeline()) }))
     await act(async () => { requestFleetMemberFocus(id, 'worker') })
-    await until(() => query(m.container, '[data-agent="worker"]').getAttribute('aria-pressed') === 'true', 'the relay never selected the lane')
+    await until(() => query(m.container, '.lc-pulse-lane-agent[data-agent="worker"]').getAttribute('aria-pressed') === 'true', 'the relay never selected the lane')
+    assert.equal(query(m.container, '.lc-agent-card[data-agent="worker"]').getAttribute('aria-pressed'), 'true')
     assert.ok(query(m.container, '[data-task="worker"]').className.includes('lc-pulse-work-related'))
     assert.equal(currentFleetMemberFocus(id), 'worker')
     await m.unmount()

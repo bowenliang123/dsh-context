@@ -59,6 +59,17 @@
 .lc-agent-meta { display: flex; align-items: baseline; justify-content: space-between; gap: 6px; margin-top: auto; padding-top: 5px; font-size: 10px; line-height: 1.3; color: var(--dsw-alias-label-secondary); font-variant-numeric: tabular-nums; }
 .lc-agent-meta-text { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
+.lc-agents-compact .lc-agent-card { height: 92px; padding: 5px 7px; border-radius: 8px; }
+.lc-agents-compact .lc-agent-card-head { align-items: center; gap: 4px; }
+.lc-agents-compact .lc-agent-state { margin-top: 0; }
+.lc-agents-compact .lc-agent-label { font-size: 10.5px; }
+.lc-agents-compact .lc-agent-duty { margin-top: 1px; font-size: 10px; line-height: 1.2; -webkit-line-clamp: 1; }
+.lc-agents-compact .lc-agent-metric { margin-top: 3px; }
+.lc-agents-compact .lc-agent-tokens { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 11px; }
+.lc-agents-compact .lc-agent-bar { height: 4px; margin-top: 5px; }
+.lc-agents-compact .lc-agent-meta { padding-top: 3px; font-size: 9px; }
+.lc-agents-compact .lc-agents-badge { padding: 0 4px; font-size: 9px; }
+
 .lc-agents-solo { padding: 4px 0 10px; }
 .lc-agents-split { display: flex; gap: 10px; align-items: flex-start; }
 .lc-agents-main { flex: 1 1 0; min-width: 0; }

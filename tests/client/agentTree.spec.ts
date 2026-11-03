@@ -786,6 +786,33 @@ describe('layoutForest', () => {
     assert.equal(partial.links.find(l => l.to === 'k2a')?.color, familyHue(1))
     assert.equal(partial.links.find(l => l.to === 'k1')?.color, familyHue(0))
   })
+
+  test('compact geometry tightens cards and links without changing parent centering or band placement', () => {
+    const natural = layoutForest(forestOf([['root'], ['a', 'root'], ['b', 'root'], ['g', 'a']]), 0, true)
+    const naturalPoint = new Map(natural.points.map(p => [p.id, p]))
+    assert.equal(natural.width, 464)
+    assert.equal(natural.cardW, 222)
+    assert.equal(naturalPoint.get('root')?.x, 232)
+    assert.equal(naturalPoint.get('a')?.x, 116)
+    assert.equal(naturalPoint.get('b')?.x, 348)
+    assert.equal(naturalPoint.get('root')?.y, 32)
+    assert.equal(naturalPoint.get('a')?.y, 168)
+    assert.equal(naturalPoint.get('g')?.y, 304)
+    assert.equal(natural.links.find(l => l.to === 'g')?.y1, 260)
+    assert.equal(natural.height, 420)
+
+    const band = layoutForest(forestOf([['root'], ['a', 'root'], ['b', 'root'], ['c', 'root']]), 400, true)
+    const bandPoint = new Map(band.points.map(p => [p.id, p]))
+    assert.equal(band.cardW, 190)
+    assert.equal(bandPoint.get('root')?.x, 200)
+    assert.equal(bandPoint.get('a')?.x, 100)
+    assert.equal(bandPoint.get('b')?.x, 300)
+    assert.equal(bandPoint.get('c')?.x, 200)
+    assert.equal(bandPoint.get('a')?.y, 168)
+    assert.equal(bandPoint.get('c')?.y, 304)
+    assert.equal(band.links.find(l => l.to === 'c')?.y1, 124)
+    assert.equal(band.height, 420)
+  })
 })
 
 describe('lineageOf', () => {

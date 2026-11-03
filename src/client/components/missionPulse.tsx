@@ -27,6 +27,7 @@ import { pulseTaskBadgeOf, pulseWorkItemsOf, type PulseLaneLink, type PulseLaneS
 import { scrollIntoViewIfPossible } from '../revealScroll'
 import type { ViewKit } from '../viewkit'
 import type { FleetDetail, FleetMessage } from '../../shared/types'
+import type { AgentGraphProps } from './agentGraph'
 import { ClearableInput } from './clearableInput'
 import { PulseTimeline } from './pulseTimeline'
 import { useRowWindow } from './useRowWindow'
@@ -501,6 +502,8 @@ function PulseEvents(props: PulseEventsProps): ReactElement {
 }
 
 export interface MissionPulseProps {
+  sessionId?: string
+  graph: (props: AgentGraphProps) => ReactElement | null
   forest: AgentForest | null
   team: FleetTeam | null
   details: FleetDetailState
@@ -520,6 +523,7 @@ export interface MissionPulseProps {
 
 export function MissionPulse(props: MissionPulseProps): ReactElement {
   const { t } = props
+  const AgentGraph = props.graph
   const [selectedAgent, setSelectedAgent] = useState<string | null>(null)
   const [selectedEventKey, setSelectedEventKey] = useState<string | null>(null)
   const [selectedDelegationKey, setSelectedDelegationKey] = useState<string | null>(null)
@@ -680,51 +684,69 @@ export function MissionPulse(props: MissionPulseProps): ReactElement {
         onClear={() => { setSelectedAgent(null) }}
         t={t}
       />
-      <PulseTimeline
-        lanes={lanes}
-        links={links}
-        rows={visibleRows}
-        delegations={visibleDelegations}
-        scopedRows={scopedRows}
-        scopedDelegations={scopedDelegations}
-        team={props.team}
-        hoveredTaskId={hoveredTaskId}
-        selectedAgent={selectedAgent}
-        selectedEventKey={selectedEventKey}
-        selectedDelegationKey={selectedDelegationKey}
-        query={laneQuery}
-        currency={props.currency}
-        pending={props.details.pending.size > 0 || props.details.historyPending.size > 0}
-        agentOf={agentOf}
-        onSelectAgent={selectAgent}
-        onSelectEvent={selectEvent}
-        onSelectDelegation={selectDelegation}
-        onHoverTask={setHoveredTaskId}
-        onRevealTask={focusTaskId}
-        onQuery={setLaneQuery}
-        onEnter={props.onEnter}
-        t={t}
-      />
-      <PulseTasks
-        items={workItems}
-        teamFailure={props.team?.failure}
-        visibleItems={visibleWork}
-        details={props.details}
-        selectedAgent={selectedAgent}
-        focusedTaskKey={focusedTaskKey}
-        hoveredTaskId={hoveredTaskId}
-        query={workQuery}
-        agentOf={agentOf}
-        onFocus={focusTask}
-        onFocusDependency={focusTaskId}
-        onHoverTask={setHoveredTaskId}
-        onSelectAgent={selectAgent}
-        onQuery={setWorkQuery}
-        onOpen={props.onOpen}
-        onEnter={props.onEnter}
-        rich={props.rich}
-        t={t}
-      />
+      <div className={'lc-pulse-main' + (props.forest !== null ? ' lc-pulse-main-graph' : '')}>
+        {props.forest !== null ? (
+          <div className="lc-col-graph">
+            <AgentGraph
+              compact
+              sessionId={props.sessionId}
+              forest={props.forest}
+              team={props.team}
+              pinnedId={selectedAgent}
+              focusId={props.focusMember}
+              onSelect={selectAgent}
+              inspector={false}
+            />
+          </div>
+        ) : null}
+        <div className="lc-pulse-boards">
+          <PulseTimeline
+            lanes={lanes}
+            links={links}
+            rows={visibleRows}
+            delegations={visibleDelegations}
+            scopedRows={scopedRows}
+            scopedDelegations={scopedDelegations}
+            team={props.team}
+            hoveredTaskId={hoveredTaskId}
+            selectedAgent={selectedAgent}
+            selectedEventKey={selectedEventKey}
+            selectedDelegationKey={selectedDelegationKey}
+            query={laneQuery}
+            currency={props.currency}
+            pending={props.details.pending.size > 0 || props.details.historyPending.size > 0}
+            agentOf={agentOf}
+            onSelectAgent={selectAgent}
+            onSelectEvent={selectEvent}
+            onSelectDelegation={selectDelegation}
+            onHoverTask={setHoveredTaskId}
+            onRevealTask={focusTaskId}
+            onQuery={setLaneQuery}
+            onEnter={props.onEnter}
+            t={t}
+          />
+          <PulseTasks
+            items={workItems}
+            teamFailure={props.team?.failure}
+            visibleItems={visibleWork}
+            details={props.details}
+            selectedAgent={selectedAgent}
+            focusedTaskKey={focusedTaskKey}
+            hoveredTaskId={hoveredTaskId}
+            query={workQuery}
+            agentOf={agentOf}
+            onFocus={focusTask}
+            onFocusDependency={focusTaskId}
+            onHoverTask={setHoveredTaskId}
+            onSelectAgent={selectAgent}
+            onQuery={setWorkQuery}
+            onOpen={props.onOpen}
+            onEnter={props.onEnter}
+            rich={props.rich}
+            t={t}
+          />
+        </div>
+      </div>
       <PulseEvents
         rows={visibleRows}
         scopedRows={scopedRows}

@@ -73,7 +73,7 @@ afterEach(() => {
 })
 
 describe('Multi-Agent Network', () => {
-  test('replaces the spatial boards with full-fleet statistics and a natural-order lane layout', async () => {
+  test('combines the spatial tree with full-fleet statistics and a natural-order lane layout', async () => {
     stubFleetRoute()
     const ctx = new TestClientCtx({ services: { sessions: familySessions() } })
     const View = makeView(ctx)
@@ -95,8 +95,13 @@ describe('Multi-Agent Network', () => {
     assert.equal(query(m.container, '.lc-pulse-header [data-pulse-latest]').getAttribute('data-pulse-latest'), '2000')
     assert.ok(query(m.container, '[data-sequence-scroller]') !== null)
     assert.equal(query(m.container, '.lc-pulse-slot').getAttribute('cx'), '36')
-    assert.equal(queryAll(m.container, '.lc-agents, .lc-members, .lc-summary, .lc-comms-channels').length, 0)
-    assert.ok(!text(m.container).includes('tokens in context'))
+    assert.equal(queryAll(m.container, '.lc-members, .lc-summary, .lc-comms-channels').length, 0)
+    const main = query(m.container, '.lc-pulse-main-graph')
+    assert.ok(main.children[0].classList.contains('lc-col-graph'))
+    assert.ok(main.children[1].classList.contains('lc-pulse-boards'))
+    assert.ok(query(main, '.lc-col-graph > .lc-agents.lc-agents-compact') !== null)
+    assert.equal(queryAll(main, '.lc-pulse-boards > .lc-card').length, 2)
+    assert.equal(queryAll(main, '.lc-col-graph .lc-agent-card').length, 3)
     assert.ok(query(m.container, '[data-task="task-1"]') !== null)
     assert.ok(query(m.container, '[data-task="w2"]') !== null)
     await m.unmount()
@@ -153,7 +158,8 @@ describe('Multi-Agent Network', () => {
     await click(peerActions[1])
     await click(peerActions[2])
     assert.deepEqual(opened, ['w1', 'w1'])
-    assert.equal(query(m.container, '[data-agent="w1"]').getAttribute('aria-pressed'), 'true')
+    assert.equal(query(m.container, '.lc-agent-card[data-agent="w1"]').getAttribute('aria-pressed'), 'true')
+    assert.equal(query(m.container, '.lc-pulse-lane-agent[data-agent="w1"]').getAttribute('aria-pressed'), 'true')
     assert.deepEqual(
       queryAll<HTMLElement>(m.container, '.lc-pulse-lane-label[data-lane-label]').map(el => el.dataset.laneLabel),
       ['root', 'w1'],
@@ -163,7 +169,8 @@ describe('Multi-Agent Network', () => {
     assert.equal(queryAll(m.container, '.lc-comms-event').length, 2)
 
     await click(query(m.container, '.lc-pulse-selection'))
-    assert.equal(query(m.container, '[data-agent="w1"]').getAttribute('aria-pressed'), 'false')
+    assert.equal(query(m.container, '.lc-agent-card[data-agent="w1"]').getAttribute('aria-pressed'), 'false')
+    assert.equal(query(m.container, '.lc-pulse-lane-agent[data-agent="w1"]').getAttribute('aria-pressed'), 'false')
     assert.deepEqual(
       queryAll<HTMLElement>(m.container, '.lc-pulse-lane-label[data-lane-label]').map(el => el.dataset.laneLabel),
       ['root', 'w1', 'w2', 'w9'],
@@ -186,7 +193,8 @@ describe('Multi-Agent Network', () => {
     assert.ok(text(query(m.container, '[data-task="task-1"]')).includes(DICT_EN['fleet.taskBlocked']))
     assert.ok(text(query(m.container, '.lc-pulse-tasks')).includes('invalid revision'))
     await click(query(m.container, '[data-dependency="task-0"]'))
-    assert.equal(query(m.container, '[data-agent="w1"]').getAttribute('aria-pressed'), 'false')
+    assert.equal(query(m.container, '.lc-agent-card[data-agent="w1"]').getAttribute('aria-pressed'), 'false')
+    assert.equal(query(m.container, '.lc-pulse-lane-agent[data-agent="w1"]').getAttribute('aria-pressed'), 'false')
     assert.equal(query(m.container, '[data-task="task-0"] .lc-pulse-work-focus').getAttribute('aria-expanded'), 'true')
     assert.ok(text(query(m.container, '[data-task="task-0"]')).includes('Research it.'))
     await click(query(m.container, '[data-task="task-1"] .lc-pulse-work-focus'))
@@ -199,13 +207,15 @@ describe('Multi-Agent Network', () => {
     await click(query(m.container, '[data-task="task-1"] .lc-pulse-work-focus'))
     await click(query(m.container, '[data-dependency="task-0"]'))
     assert.equal(query(m.container, '[data-task="task-0"] .lc-pulse-work-focus').getAttribute('aria-expanded'), 'true')
-    await click(query(m.container, '[data-agent="w1"]'))
-    assert.equal(query(m.container, '[data-agent="w1"]').getAttribute('aria-pressed'), 'true')
+    await click(query(m.container, '.lc-agent-card[data-agent="w1"]'))
+    assert.equal(query(m.container, '.lc-agent-card[data-agent="w1"]').getAttribute('aria-pressed'), 'true')
+    assert.equal(query(m.container, '.lc-pulse-lane-agent[data-agent="w1"]').getAttribute('aria-pressed'), 'true')
     assert.equal(queryAll(m.container, '.lc-pulse-work-item').length, 1)
     await click(query(m.container, '[data-owner="w1"]'))
-    assert.equal(query(m.container, '[data-agent="w1"]').getAttribute('aria-pressed'), 'false')
+    assert.equal(query(m.container, '.lc-agent-card[data-agent="w1"]').getAttribute('aria-pressed'), 'false')
+    assert.equal(query(m.container, '.lc-pulse-lane-agent[data-agent="w1"]').getAttribute('aria-pressed'), 'false')
     assert.equal(queryAll(m.container, '.lc-pulse-work-item').length, 3)
-    await click(query(m.container, '[data-agent="w9"]'))
+    await click(query(m.container, '.lc-pulse-lane-agent[data-agent="w9"]'))
     assert.ok(text(query(m.container, '.lc-pulse-tasks')).includes(DICT_EN['fleet.tasks.noMatch']))
     await m.unmount()
     ctx.dispose()

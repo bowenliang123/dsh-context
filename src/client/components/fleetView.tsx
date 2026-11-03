@@ -12,6 +12,7 @@ import { useFleetMemberFocus } from '../viewFocus'
 import { useContextSession } from '../sessionData'
 import type { ViewKit } from '../viewkit'
 import type { FleetDetail } from '../../shared/types'
+import { makeAgentGraph } from './agentGraph'
 import { makeDetailNote } from './detailNote'
 import { makeRichText } from './richText'
 import { makeErrorBoundary } from './errorBoundary'
@@ -26,6 +27,7 @@ export function makeFleetView(
 ): (props: SessionStandardProps) => ReactElement {
   const { t } = kit
   const UpgradeGate = makeUpgradeGate(kit)
+  const AgentGraph = makeAgentGraph(ctx, kit, heads)
   const DetailNote = makeDetailNote(kit)
   const ErrorBoundary = makeErrorBoundary(t)
   const rich = makeRichText(kit)
@@ -113,6 +115,8 @@ export function makeFleetView(
       <div className="lc-root" ref={rootRef}>
         <MissionPulse
           key={sessionId ?? ''}
+          sessionId={sessionId}
+          graph={AgentGraph}
           forest={forest}
           team={team}
           details={details}

@@ -31,6 +31,7 @@ function memberStyle(hue: string): CSSProperties {
 
 export interface AgentGraphProps {
   sessionId?: string
+  compact?: boolean
   self?: AgentSelfStats
   forest?: AgentForest | null
   team?: FleetTeam | null
@@ -108,7 +109,10 @@ export function makeAgentGraph(
       return containHorizontalOverscroll(el)
     }, [])
 
-    const layout = useMemo(() => (forest !== null ? layoutForest(forest, stageWidth) : null), [forest, stageWidth])
+    const layout = useMemo(
+      () => (forest !== null ? layoutForest(forest, stageWidth, props.compact === true) : null),
+      [forest, props.compact, stageWidth],
+    )
     const avatarLabels = useMemo(
       () => forest === null
         ? null
@@ -170,7 +174,7 @@ export function makeAgentGraph(
     )
 
     return (
-      <div className="lc-card lc-agents">
+      <div className={'lc-card lc-agents' + (props.compact === true ? ' lc-agents-compact' : '')}>
         <div className="lc-card-title">
           <span className="lc-card-title-text">
             <IconWorkspaceTreeOutlineRegular size={14} />

@@ -438,7 +438,8 @@ describe('AgentGraph — the Fleet seat', () => {
     const face = new FakeSessions(family())
     const View = makeView(face)
     const team = { ...TEAM, members: [...TEAM.members, { id: 'worker', name: 'architect', role: 'teammate' as const, phase: 'active' as const }] }
-    const m = await mount(h(View, { sessionId: 'root', self: selfStats(), team, pinnedId: 'worker', inspector: false }))
+    const m = await mount(h(View, { sessionId: 'root', self: selfStats(), team, pinnedId: 'worker', inspector: false, compact: true }))
+    assert.ok(query(m.container, '.lc-agents').classList.contains('lc-agents-compact'))
     assert.ok(text(m.container).includes('2 members'))
     assert.ok(query(m.container, '[data-agent="worker"]').className.includes('lc-agent-pinned'))
     const worker = query(m.container, '[data-agent="worker"]')
@@ -459,6 +460,7 @@ describe('AgentGraph — the Fleet seat', () => {
     await m.unmount()
 
     const m2 = await mount(h(View, { sessionId: 'root', self: selfStats(), team: null }))
+    assert.ok(!query(m2.container, '.lc-agents').classList.contains('lc-agents-compact'))
     assert.ok(!text(m2.container).includes('members ·'))
     assert.ok(query(m2.container, '.lc-inspector') !== null)
     await m2.unmount()
