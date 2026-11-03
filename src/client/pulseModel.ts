@@ -130,6 +130,15 @@ export interface PulseLaneView {
   matched: ReadonlySet<string>
 }
 
+function relatedLanesOf(seed: string, links: readonly PulseLaneLink[]): Set<string> {
+  const related = new Set<string>([seed])
+  for (const link of links) {
+    if (link.from === seed) related.add(link.to)
+    else if (link.to === seed) related.add(link.from)
+  }
+  return related
+}
+
 export function pulseLaneVisibility(
   lanes: readonly PulseLaneInput[],
   rows: readonly CommsRow[],
@@ -139,23 +148,31 @@ export function pulseLaneVisibility(
   showQuiet: boolean,
 ): PulseLaneView {
   const needle = query.trim().toLowerCase()
+  const related = selectedAgent === null ? null : relatedLanesOf(selectedAgent, links)
   if (needle !== '') {
     const matched = new Set(
       lanes
-        .filter(lane => lane.agent.name.toLowerCase().includes(needle)
-          || (lane.agent.description ?? '').toLowerCase().includes(needle))
+        .filter(lane => (related === null || related.has(lane.agent.id))
+          && (lane.agent.name.toLowerCase().includes(needle)
+            || (lane.agent.description ?? '').toLowerCase().includes(needle)))
         .map(lane => lane.agent.id),
     )
     const linked = new Set<string>()
     for (const link of links) {
-      if (matched.has(link.from)) linked.add(link.to)
-      else if (matched.has(link.to)) linked.add(link.from)
+      if (matched.has(link.from) && (related === null || related.has(link.to))) linked.add(link.to)
+      else if (matched.has(link.to) && (related === null || related.has(link.from))) linked.add(link.from)
     }
     return {
       visible: lanes
         .filter(lane => matched.has(lane.agent.id) || linked.has(lane.agent.id))
         .map(lane => lane.agent.id),
       matched,
+    }
+  }
+  if (related !== null) {
+    return {
+      visible: lanes.filter(lane => related.has(lane.agent.id)).map(lane => lane.agent.id),
+      matched: new Set(),
     }
   }
   if (showQuiet || lanes.length <= 8) return { visible: lanes.map(lane => lane.agent.id), matched: new Set() }
@@ -166,7 +183,7 @@ export function pulseLaneVisibility(
   }
   return {
     visible: lanes
-      .filter(lane => lane.active || lane.agent.id === selectedAgent || communicating.has(lane.agent.id))
+      .filter(lane => lane.active || communicating.has(lane.agent.id))
       .map(lane => lane.agent.id),
     matched: new Set(),
   }

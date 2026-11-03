@@ -135,7 +135,8 @@ export function PulseTimeline(props: PulseTimelineProps): ReactElement {
     return map
   }, [props.scopedRows])
   const searching = props.query.trim() !== ''
-  const hidden = searching ? 0 : props.lanes.length - visibleIds.length
+  const agentSelected = props.selectedAgent !== null
+  const hidden = searching || agentSelected ? 0 : props.lanes.length - visibleIds.length
   const recordTotal = props.scopedRows.length + props.scopedDelegations.length
   const shownRecords = laneItems.length
   useEffect(() => {
@@ -203,7 +204,7 @@ export function PulseTimeline(props: PulseTimelineProps): ReactElement {
           onChange={props.onQuery}
         />
         <span className="lc-pulse-title-actions">
-          {!searching && props.lanes.length > 8 && (showQuiet || hidden > 0) ? (
+          {!searching && !agentSelected && props.lanes.length > 8 && (showQuiet || hidden > 0) ? (
             <button type="button" className="lc-pulse-quiet" aria-pressed={showQuiet} onClick={() => { setShowQuiet(value => !value) }}>
               {showQuiet ? t('fleet.pulse.hideQuiet') : t('fleet.pulse.showQuiet', { n: hidden })}
             </button>
@@ -473,7 +474,7 @@ export function PulseTimeline(props: PulseTimelineProps): ReactElement {
             ? t('fleet.pulse.noLaneMatch')
             : recordTotal === 0 && props.pending
               ? t('fleet.comms.loading')
-              : recordTotal === 0 ? t('fleet.comms.empty') : t('fleet.pulse.emptyTimeline')}
+              : recordTotal > 0 || agentSelected ? t('fleet.pulse.emptyTimeline') : t('fleet.comms.empty')}
         </div>
       ) : null}
     </section>

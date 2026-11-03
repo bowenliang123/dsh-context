@@ -154,12 +154,20 @@ describe('Multi-Agent Network', () => {
     await click(peerActions[2])
     assert.deepEqual(opened, ['w1', 'w1'])
     assert.equal(query(m.container, '[data-agent="w1"]').getAttribute('aria-pressed'), 'true')
+    assert.deepEqual(
+      queryAll<HTMLElement>(m.container, '.lc-pulse-lane-label[data-lane-label]').map(el => el.dataset.laneLabel),
+      ['root', 'w1'],
+    )
     assert.ok(query(m.container, '[data-task="task-1"]').className.includes('lc-pulse-work-related'))
     assert.equal(queryAll(m.container, '.lc-pulse-work-item').length, 1)
     assert.equal(queryAll(m.container, '.lc-comms-event').length, 2)
 
     await click(query(m.container, '.lc-pulse-selection'))
     assert.equal(query(m.container, '[data-agent="w1"]').getAttribute('aria-pressed'), 'false')
+    assert.deepEqual(
+      queryAll<HTMLElement>(m.container, '.lc-pulse-lane-label[data-lane-label]').map(el => el.dataset.laneLabel),
+      ['root', 'w1', 'w2', 'w9'],
+    )
     assert.equal(queryAll(m.container, '.lc-pulse-work-item').length, 3)
     const subjectOf = (): string => text(query(m.container, '[data-task="w2"] .lc-pulse-work-subject'))
     await until(() => subjectOf().startsWith('Scan the package namespace apps/web'), 'delegation prompt never reached the work header')
