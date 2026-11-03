@@ -39,11 +39,45 @@ export function dshHasString(tag: string, pattern: string, pathspec: string): bo
 }
 
 export function stageFile(baseline: Baseline, tagPath: string, localName: string): string {
+  return stageSource(baseline, localName, dshShow(baseline.tag, tagPath))
+}
+
+function stageSource(baseline: Baseline, localName: string, source: string): string {
   const dir = join(STAGE, baseline.id, dirname(localName))
   mkdirSync(dir, { recursive: true })
   const file = join(STAGE, baseline.id, localName)
-  writeFileSync(file, dshShow(baseline.tag, tagPath))
+  writeFileSync(file, source)
   return file
+}
+
+function constEnumMembers(tag: string, tagPath: string, name: string): Map<string, number> | undefined {
+  const match = new RegExp(`export const enum ${name}\\s*\\{([^}]*)\\}`).exec(dshShow(tag, tagPath))
+  if (match === null) return undefined
+  const members = new Map<string, number>()
+  let value = 0
+  for (const entry of match[1].split(',')) {
+    const [key, assigned] = entry.split('=').map(part => part.trim())
+    if (key === '') continue
+    if (assigned !== undefined) {
+      const parsed = Number(assigned)
+      if (!Number.isFinite(parsed)) throw new Error(`dsh-context compat: ${name}.${key} has a non-numeric initializer`)
+      value = parsed
+    }
+    members.set(key, value)
+    value += 1
+  }
+  return members
+}
+
+function inlineConstEnum(source: string, name: string, members: ReadonlyMap<string, number>): string {
+  const inlined = source.replace(new RegExp(`\\b${name}\\.([A-Za-z_$][\\w$]*)`, 'g'), (whole, member: string) => {
+    const value = members.get(member)
+    return value === undefined ? whole : String(value)
+  })
+  return inlined.replace(/(import\s*\{)([^}]*)(\}\s*from\s*'@deepseek-ai\/cordis')/g, (_whole, open: string, names: string, close: string) => {
+    const kept = names.split(',').map(part => part.trim()).filter(part => part !== name)
+    return `${open} ${kept.join(', ')} ${close}`
+  })
 }
 
 function stageFileIfPresent(baseline: Baseline, tagPath: string, localName: string): boolean {
@@ -265,7 +299,14 @@ process.stdout.write('DRIVER-JSON ' + JSON.stringify({
 
 export function runDriver(baseline: Baseline): DriverReport {
   ensureHostDeps(baseline)
-  stageFile(baseline, 'packages/session/session-projection/src/index.ts', join('registry', 'index.ts'))
+  const registryFile = 'packages/session/session-projection/src/index.ts'
+  const fiberState = constEnumMembers(baseline.tag, 'vendor/cordis/src/fiber.ts', 'FiberState')
+  const registry = dshShow(baseline.tag, registryFile)
+  stageSource(
+    baseline,
+    join('registry', 'index.ts'),
+    fiberState === undefined ? registry : inlineConstEnum(registry, 'FiberState', fiberState),
+  )
   stageFile(baseline, 'packages/session/session-projection/src/types.ts', join('registry', 'types.ts'))
   stageFile(baseline, 'packages/util/values/src/index.ts', join('dsh', 'index.ts'))
   stageFileIfPresent(baseline, 'packages/util/values/src/partial-json.ts', join('dsh', 'partial-json.ts'))

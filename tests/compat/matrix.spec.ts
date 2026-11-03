@@ -175,11 +175,17 @@ describe.skipIf(reasons.length > 0)('compat matrix — real dsh sources per base
       )
     })
 
-    test('detail channel: the Connection RPC faces and the registry stateOf exist', () => {
+    test('detail channel: the Connection RPC faces and the registry state read faces exist', () => {
       const dc = baseline.client.detailChannel
       assert.equal(staging.dshHasString(baseline.tag, dc.hostRpcNeedle, dc.hostRpcFile), true, 'host RPC registry face')
       assert.equal(staging.dshHasString(baseline.tag, dc.clientRpcNeedle, dc.clientRpcFile), true, 'browser RPC caller face')
       assert.equal(staging.dshHasString(baseline.tag, dc.registryNeedle, dc.registryFile), true, 'registry stateOf face')
+      assert.equal(staging.dshHasString(baseline.tag, dc.fallbackStateOfNeedle, dc.registryFile), true, 'registry keyed stateOf fallback')
+      assert.equal(
+        staging.dshHasString(baseline.tag, 'Promise<ProjectionHandle<S>>', dc.registryFile),
+        dc.awaitableRegister,
+        'the registration return the gate retains a handle from',
+      )
     })
 
     test('client: the right Sidebar tab seam', () => {

@@ -15,7 +15,7 @@
   "type": "module",
   "engines": {
     "node": "^22.19.0 || >=24.0.0",
-    "dsh": ">=0.2.0-rc.2 || >=0.2.1-rc.2"
+    "dsh": ">=0.2.0-rc.2 || >=0.2.1-rc.2 || >=0.2.2-alpha.3"
   },
   "main": "lib/index.js",
   "types": "lib/index.d.ts",
@@ -71,7 +71,8 @@
     "compatibility": {
       "dshReleases": {
         "0.2.0-rc.2": "compatible",
-        "0.2.1-rc.2": "compatible"
+        "0.2.1-rc.2": "compatible",
+        "0.2.2-alpha.3": "compatible"
       }
     }
   },
@@ -86,13 +87,13 @@
   ],
   "license": "Apache-2.0",
   "dependencies": {
-    "zod": "^4.6.7"
+    "zod": "4.4.3"
   },
   "peerDependencies": {
-    "@deepseek-ai/cordis": "^4.0.4",
-    "@deepseek-ai/dsh-client-ui-primitives": ">=0.2.0-rc.2 || >=0.2.1-rc.2",
-    "@deepseek-ai/dsh-session": ">=0.2.0-rc.2 || >=0.2.1-rc.2",
-    "@deepseek-ai/schemastery": "^3.18.2",
+    "@deepseek-ai/cordis": "^4.0.4 || >=4.0.6-alpha.2 <5.0.0",
+    "@deepseek-ai/dsh-client-ui-primitives": ">=0.2.0-rc.2 || >=0.2.1-rc.2 || >=0.2.2-alpha.3",
+    "@deepseek-ai/dsh-session": ">=0.2.0-rc.2 || >=0.2.1-rc.2 || >=0.2.2-alpha.3",
+    "@deepseek-ai/schemastery": "^3.18.2 || >=3.18.6-alpha.2 <4.0.0",
     "react": "^18.3.1",
     "react-dom": "^18.3.1"
   },
@@ -108,14 +109,14 @@
     }
   },
   "devDependencies": {
-    "@deepseek-ai/cordis": "^4.0.5",
+    "@deepseek-ai/cordis": "4.0.6-alpha.2",
     "@deepseek-ai/dsh-client-store": "0.2.0-rc.2",
     "@deepseek-ai/dsh-client-ui-primitives": "0.2.0-rc.2",
     "@deepseek-ai/dsh-session": "0.2.0-rc.2",
     "@deepseek-ai/dsh-session-projection": "0.2.0-rc.2",
     "@deepseek-ai/dsh-util-code-language": "0.2.0-rc.2",
     "@deepseek-ai/dsh-util-workspace-path": "0.2.0-rc.2",
-    "@deepseek-ai/schemastery": "^3.18.5",
+    "@deepseek-ai/schemastery": "3.18.6-alpha.2",
     "@opencode-ai/models": "^0.0.87",
     "@shikijs/langs": "^4.5.0",
     "@stylistic/eslint-plugin": "^5.10.0",

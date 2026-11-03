@@ -1,4 +1,4 @@
-export type BaselineId = 'v0.2.0-rc.2' | 'v0.2.1-rc.2'
+export type BaselineId = 'v0.2.0-rc.2' | 'v0.2.1-rc.2' | 'v0.2.2-alpha.3'
 
 export interface ClientSeam {
   imageFaceMethod: string
@@ -15,6 +15,8 @@ export interface ClientSeam {
     clientRpcNeedle: string
     registryFile: string
     registryNeedle: string
+    fallbackStateOfNeedle: string
+    awaitableRegister: boolean
   }
   sessionNav: {
     workspaceFile: string
@@ -124,6 +126,9 @@ function baseline(id: BaselineId, tag: string, session: string, line: {
   stockIds?: readonly string[]
   extraFoldEvents?: readonly string[]
   platformModules?: readonly string[]
+  stateOfNeedle?: string
+  fallbackStateOfNeedle?: string
+  awaitableRegister?: boolean
 } = {}): Baseline {
   return {
     id,
@@ -153,7 +158,9 @@ function baseline(id: BaselineId, tag: string, session: string, line: {
         clientRpcFile: 'packages/client/connection/src/client/rpc.ts',
         clientRpcNeedle: 'call(channel, endpoint, payload',
         registryFile: 'packages/session/session-projection/src/index.ts',
-        registryNeedle: 'stateOf<',
+        registryNeedle: line.stateOfNeedle ?? 'stateOf<',
+        fallbackStateOfNeedle: line.fallbackStateOfNeedle ?? 'stateOf<',
+        awaitableRegister: line.awaitableRegister ?? false,
       },
       sidebar: {
         serviceFile: 'packages/client/ui-sidebar-right/src/client/index.ts',
@@ -190,15 +197,15 @@ function baseline(id: BaselineId, tag: string, session: string, line: {
       subagentAddress: {
         file: 'packages/api/session-controller/src/client/sessions/manager.ts',
         needle: 'subagentAddress',
-        summaryFallback: id === 'v0.2.1-rc.2',
+        summaryFallback: id !== 'v0.2.0-rc.2',
         summaryNeedle: 'summary?.origin',
       },
       pluginsNav: {
         file: 'packages/client/ui-plugin-manager/src/client/index.ts',
         needle: "'pluginNavigation', {",
-        tabReset: id === 'v0.2.1-rc.2',
+        tabReset: id !== 'v0.2.0-rc.2',
         tabResetNeedle: 'instance.actions.setTab',
-        tabsSlot: id === 'v0.2.1-rc.2',
+        tabsSlot: id !== 'v0.2.0-rc.2',
         tabsSlotFile: 'packages/client/ui-plugin-manager/src/client/slot-contract.ts',
         tabsSlotNeedle: "'plugins.tab'",
       },
@@ -278,5 +285,14 @@ export const BASELINES: readonly Baseline[] = [
     stockIds: ['llm-deepseek', 'web-search-deepseek', 'web-deepseek-api'],
     platformModules: [...DEFAULT_PLATFORM_MODULES, 'zod', '@tanstack/react-virtual'],
     extraFoldEvents: ['job/registered', 'job/settled'],
+  }),
+  baseline('v0.2.2-alpha.3', 'dsh-v0.2.2-alpha.3', '0.2.2-alpha.3', {
+    cordis: '4.0.6-alpha.2',
+    stockIds: ['llm-deepseek', 'web-search-deepseek', 'web-deepseek-api'],
+    platformModules: [...DEFAULT_PLATFORM_MODULES, 'zod', '@tanstack/react-virtual'],
+    extraFoldEvents: ['job/registered', 'job/settled'],
+    stateOfNeedle: 'stateOf(session: Session): S',
+    fallbackStateOfNeedle: 'stateOf(session: Session, key: string): unknown',
+    awaitableRegister: true,
   }),
 ]

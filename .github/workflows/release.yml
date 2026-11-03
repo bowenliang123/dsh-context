@@ -18,7 +18,7 @@ jobs:
       - uses: actions/checkout@v7
 
       - name: Check the DeeSeek Harness plugin
-        # `dshVersion` defaults to `latest`, which serves the newest supported release (0.2.1-rc.2).
+        # `dshVersion` defaults to `latest`, which serves the 0.2.1 line (0.2.1-rc.5); the 0.2.2 previews publish under `alpha`.
         uses: bowenliang123/dsh-plugin-checker@v1
 
       # No `packageManager` field in this plugin's package.json, so both workflows pin the version explicitly.
@@ -54,7 +54,8 @@ jobs:
           git remote add origin https://github.com/deepseek-ai/deepseek-harness.git
           git fetch --depth 1 -q origin \
             refs/tags/dsh-v0.2.0-rc.2:refs/tags/dsh-v0.2.0-rc.2 \
-            refs/tags/dsh-v0.2.1-rc.2:refs/tags/dsh-v0.2.1-rc.2
+            refs/tags/dsh-v0.2.1-rc.2:refs/tags/dsh-v0.2.1-rc.2 \
+            refs/tags/dsh-v0.2.2-alpha.3:refs/tags/dsh-v0.2.2-alpha.3
 
       - name: Test
         run: DSH_REPO="$PWD/.tmp/dsh-repo" pnpm test

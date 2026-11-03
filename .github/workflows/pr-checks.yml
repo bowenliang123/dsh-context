@@ -49,7 +49,8 @@ jobs:
           git remote add origin https://github.com/deepseek-ai/deepseek-harness.git
           git fetch --depth 1 -q origin \
             refs/tags/dsh-v0.2.0-rc.2:refs/tags/dsh-v0.2.0-rc.2 \
-            refs/tags/dsh-v0.2.1-rc.2:refs/tags/dsh-v0.2.1-rc.2
+            refs/tags/dsh-v0.2.1-rc.2:refs/tags/dsh-v0.2.1-rc.2 \
+            refs/tags/dsh-v0.2.2-alpha.3:refs/tags/dsh-v0.2.2-alpha.3
 
       # `pnpm test` is the vitest run only: all three projects plus the per-file coverage thresholds; typecheck is its own step above.
       - name: Test
