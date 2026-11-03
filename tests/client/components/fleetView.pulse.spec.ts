@@ -92,7 +92,6 @@ describe('Multi-Agent Network', () => {
     assert.ok(events.every(event => event.dataset.from === 'root' && event.dataset.to === 'w1'))
     assert.equal(queryAll(m.container, '.lc-pulse-edge-line').length, 1)
     assert.ok(events.find(event => event.dataset.time === '2000')!.getAttribute('aria-label')!.includes('runtime settlement notice'))
-    assert.equal(query(m.container, '.lc-pulse-header [data-pulse-latest]').getAttribute('data-pulse-latest'), '2000')
     assert.ok(query(m.container, '[data-sequence-scroller]') !== null)
     assert.equal(query(m.container, '.lc-pulse-slot').getAttribute('cx'), '36')
     assert.equal(queryAll(m.container, '.lc-members, .lc-summary, .lc-comms-channels').length, 0)
@@ -134,7 +133,6 @@ describe('Multi-Agent Network', () => {
     const m = await mount(h(View, { sessionId: 'catalog-root', useProjection: projectionsFor(richTimeline()) }))
     await until(() => queryAll(m.container, '.lc-pulse-event').length === 1, 'delegation never landed')
     assert.equal(query(m.container, '[data-pulse-stat="messages"]').textContent, '0')
-    assert.equal(query(m.container, '[data-pulse-latest]').getAttribute('data-pulse-latest'), '500')
     assert.ok(text(query(m.container, '.lc-pulse-timeline .lc-card-sub')).includes('1/1'))
     await click(query(m.container, '[data-event-key="catalog-root:9:catalog-child"]'))
     assert.ok(text(query(m.container, '.lc-pulse-delegation-detail')).includes('Explore the host'))
@@ -235,8 +233,21 @@ describe('Multi-Agent Network', () => {
     assert.ok(query(m.container, '[data-task="task-1"]').className.includes('lc-pulse-work-related'))
     assert.equal(queryAll(m.container, '.lc-pulse-work-item').length, 1)
     assert.equal(queryAll(m.container, '.lc-comms-event').length, 2)
+    assert.deepEqual(
+      queryAll<HTMLElement>(m.container, '.lc-agent-card.lc-agent-on').map(el => el.dataset.agent).sort(),
+      ['root', 'w1'],
+    )
+    const selectionPill = text(query(m.container, '.lc-pulse-title-row .lc-pulse-selection'))
+    assert.ok(selectionPill.includes(DICT_EN['fleet.pulse.selectedPrefix']))
+    assert.ok(selectionPill.includes('worker-bee'))
+    assert.ok(text(query(m.container, '.lc-pulse-event-tools .lc-pulse-selection')).includes('worker-bee'))
 
-    await click(query(m.container, '.lc-pulse-selection'))
+    await click(query(m.container, '.lc-pulse-title-row .lc-pulse-selection'))
+    assert.equal(queryAll(m.container, '.lc-pulse-selection').length, 0)
+    await click(query(m.container, '[data-owner="w1"]'))
+    assert.equal(queryAll(m.container, '.lc-pulse-selection').length, 2)
+    await click(query(m.container, '.lc-pulse-event-tools .lc-pulse-selection'))
+    assert.equal(queryAll(m.container, '.lc-pulse-selection').length, 0)
     assert.equal(query(m.container, '.lc-agent-card[data-agent="w1"]').getAttribute('aria-pressed'), 'false')
     assert.equal(query(m.container, '.lc-pulse-lane-agent[data-agent="w1"]').getAttribute('aria-pressed'), 'false')
     assert.deepEqual(

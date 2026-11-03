@@ -42,9 +42,9 @@
 
 .lc-pulse-heading { min-width: 0; }
 .lc-pulse-eyebrow { color: var(--lc-pulse-violet); font-size: 9px; font-weight: 750; letter-spacing: 0.18em; }
-.lc-pulse-title-row { display: flex; align-items: center; gap: 9px; margin-top: 3px; }
-.lc-pulse-title-row h2 { margin: 0; font-size: 21px; line-height: 1.2; letter-spacing: -0.025em; }
-.lc-pulse-heading p { margin: 5px 0 0; max-width: 58ch; color: var(--dsw-alias-label-secondary); font-size: 11px; line-height: 1.45; overflow-wrap: anywhere; }
+.lc-pulse-title-row { display: flex; align-items: center; gap: 9px; min-width: 0; margin-top: 3px; }
+.lc-pulse-title-row h2 { flex: none; margin: 0; font-size: 21px; line-height: 1.2; letter-spacing: -0.025em; }
+.lc-pulse-heading p { margin: 5px 0 0; color: var(--dsw-alias-label-secondary); font-size: 11px; line-height: 1.45; overflow-wrap: anywhere; }
 
 .lc-pulse-beacon { display: inline-flex; align-items: center; gap: 2px; height: 20px; }
 .lc-pulse-beacon i { display: block; width: 3px; border-radius: 3px; background: linear-gradient(var(--lc-pulse-cyan), var(--lc-pulse-violet)); animation: lc-pulse-beacon 1.8s ease-in-out infinite; }
@@ -60,12 +60,12 @@
 .lc-pulse-stat-running dd { color: var(--lc-pulse-cyan); }
 .lc-pulse-stat-messages dd { color: var(--lc-pulse-violet); }
 
-.lc-pulse-latest { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 8px; min-width: 0; color: var(--dsw-alias-label-secondary); font-size: 10px; }
-.lc-pulse-latest time { color: var(--dsw-alias-label-primary); font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
-.lc-pulse-latest-empty { color: var(--dsw-alias-label-tertiary, var(--dsw-alias-label-secondary)); }
-.lc-pulse-selection { justify-self: end; display: inline-flex; align-items: center; gap: 5px; max-width: 100%; padding: 3px 7px; border: 1px solid color-mix(in srgb, var(--lc-pulse-violet) 38%, var(--dsw-alias-border-l2)); border-radius: 999px; background: color-mix(in srgb, var(--lc-pulse-violet) 8%, var(--dsw-alias-bg-layer-1)); color: var(--dsw-alias-label-primary); font: inherit; font-size: 10px; cursor: pointer; }
-.lc-pulse-selection span { overflow-wrap: anywhere; }
-.lc-pulse-selection b { color: var(--lc-pulse-violet); font-size: 14px; }
+.lc-pulse-selection { display: inline-flex; flex: 0 1 auto; align-items: center; gap: 5px; min-width: 0; height: 24px; padding: 0 8px 0 2px; border: 1px solid color-mix(in srgb, var(--lc-pulse-violet) 38%, var(--dsw-alias-border-l2)); border-radius: 999px; background: color-mix(in srgb, var(--lc-pulse-violet) 8%, var(--dsw-alias-bg-layer-1)); color: var(--dsw-alias-label-primary); font: inherit; font-size: 10px; cursor: pointer; }
+.lc-pulse-selection .lc-comms-avatar { flex: none; }
+.lc-pulse-selection-label { flex: 0 1 auto; display: inline-flex; align-items: baseline; gap: 4px; min-width: 0; }
+.lc-pulse-selection-prefix { flex: none; color: var(--dsw-alias-label-secondary); }
+.lc-pulse-selection-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.lc-pulse-selection b { flex: none; color: var(--lc-pulse-violet); font-size: 14px; }
 
 .lc-pulse-main { display: grid; grid-template-columns: minmax(0, 1fr); gap: 10px; min-width: 0; }
 .lc-pulse-boards { container: pulse / inline-size; display: flex; flex-direction: column; gap: 10px; min-width: 0; }
@@ -274,7 +274,6 @@
 @container pulse (max-width: 700px) {
   .lc-pulse-header { grid-template-columns: minmax(0, 1fr); gap: 10px; }
   .lc-pulse-stats { width: 100%; }
-  .lc-pulse-selection { justify-self: start; }
   .lc-pulse-waterfall { grid-template-columns: minmax(148px, 182px) minmax(0, 1fr); }
   .lc-pulse-work-filters { width: 100%; }
   .lc-pulse-work-filters .lc-gran-btn { flex: 1 1 auto; justify-content: center; }
@@ -284,6 +283,7 @@
 
 @container pulse (max-width: 470px) {
   .lc-pulse-header { padding: 12px 11px; }
+  .lc-pulse-title-row { min-height: 24px; }
   .lc-pulse-title-row h2 { font-size: 19px; }
   .lc-pulse-stats { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .lc-pulse-waterfall { grid-template-columns: minmax(132px, 152px) minmax(0, 1fr); }
@@ -299,6 +299,10 @@
   .lc-pulse-event-tools .lc-gran-btn { flex: 1; justify-content: center; }
   .lc-pulse-inspector .lc-comms-person { flex-wrap: wrap; }
   .lc-pulse-inspector .lc-comms-person-actions { margin-left: 36px; }
+}
+
+@container pulse (max-width: 430px) {
+  .lc-pulse-selection-prefix { display: none; }
 }
 
 @container pulse (max-width: 240px) {
