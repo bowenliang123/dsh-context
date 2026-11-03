@@ -76,7 +76,7 @@ Complete ALL of these before ANY commit:
 - Load the [code-review](https://github.com/mattpocock/skills/blob/main/skills/engineering/code-review/SKILL.md) skill, run it to review all the changes.
   - Independently verify or follow each of its suggestions after its multi-axis analysis done. 
   - Tell its subagents to skip typecheck, lint, and test coverage, which the main agent covers.
-  - Pass its subagents the relevant filenames and line number ranges during the work.
+  - Tell its subagent about background information and related files (and line numbers if collected), in order to skip time for re-collecting them.
 - Run `pnpm run check`: it runs `pnpm run lint`, `pnpm run typecheck` and `pnpm run coverage` concurrently, prints each tool's COMPLETE output, and fails when any of them does (the same logs stay in `.tmp/check-logs/`).
   - Fix every lint and type error, and ensure 100% per-file coverage. Please capture the ALL content of the full output without truncation or tailing.
     - Example for per-file 100% coverage output:
