@@ -1,11 +1,10 @@
-import { useEffect, useRef, type ReactElement, type ReactNode } from 'react'
+import { type ReactElement, type ReactNode } from 'react'
 import { StateDot } from '@deepseek-ai/dsh-client-ui-primitives'
 import { IconPanelLeftOutlineRegular, IconRightUpOutlineRegular } from '@deepseek-ai/dsh-client-ui-primitives'
 import { fromPartyOf, previewOf, settledToneOf, type CommsAgent } from '../commsModel'
 import { settledVariantOf, type CommsRow } from '../fleetDetail'
 import { fmtDateTime, fmtTime } from '../format'
 import { IconChevronDown, IconChevronUp, IconClose } from '../primitives'
-import { scrollIntoViewIfPossible } from '../revealScroll'
 import type { ViewKit } from '../viewkit'
 import type { FleetMessage } from '../../shared/types'
 import { AgentAvatar, channelStyle, roleTextOf } from './commsAgent'
@@ -39,16 +38,9 @@ export function CommsEvent(props: CommsEventProps): ReactElement {
     ? row.report !== undefined ? previewOf(row.report) : ''
     : previewOf(props.full?.text ?? row.text)
   const kindClass = `lc-comms-kind-${row.kind}` + (variant !== null ? ` lc-comms-tone-${tone}` : '')
-  const itemRef = useRef<HTMLLIElement | null>(null)
-
-  useEffect(() => {
-    if (!props.open) return
-    scrollIntoViewIfPossible(itemRef.current, { block: 'nearest', behavior: 'smooth' })
-  }, [props.open])
 
   return (
     <li
-      ref={itemRef}
       className={`lc-comms-event ${kindClass}` + (props.open ? ' lc-comms-event-open' : '')}
       style={channelStyle(from.hue, to.hue)}
       data-comms-key={row.key}

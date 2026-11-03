@@ -346,6 +346,7 @@ function PulseEvents(props: PulseEventsProps): ReactElement {
   const inspectorRef = useRef<HTMLDivElement | null>(null)
   const listRef = useRef<HTMLUListElement | null>(null)
   const alignedRef = useRef<string | null>(null)
+  const listClickRef = useRef<string | null>(null)
   const counts = { all: props.scopedRows.length, message: 0, report: 0 }
   for (const row of props.scopedRows) counts[kindGroupOf(row)] += 1
   const shownRow = props.selectedRow ?? (props.rows.length > 0 ? props.rows[0] : undefined)
@@ -365,6 +366,11 @@ function PulseEvents(props: PulseEventsProps): ReactElement {
       return
     }
     if (alignedRef.current === selectedKey) return
+    if (listClickRef.current === selectedKey) {
+      listClickRef.current = null
+      alignedRef.current = selectedKey
+      return
+    }
     const list = listRef.current as HTMLUListElement
     const row = list.querySelector<HTMLElement>(`[data-comms-key="${CSS.escape(selectedKey)}"]`)
     if (row === null) {
@@ -419,7 +425,10 @@ function PulseEvents(props: PulseEventsProps): ReactElement {
                 row={row}
                 agentOf={props.agentOf}
                 open={shownRow?.key === row.key}
-                onToggle={() => { props.onSelectEvent(row) }}
+                onToggle={() => {
+                  listClickRef.current = row.key
+                  props.onSelectEvent(row)
+                }}
                 full={shownRow?.key === row.key ? full : null}
                 t={t}
               />

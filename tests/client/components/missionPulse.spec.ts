@@ -521,6 +521,12 @@ describe('MissionPulse boundary parties', () => {
     await click(query(mounted.container, '[data-event-key="child:2:2000:relay"]'))
     await click(query(mounted.container, '[data-event-key="child:2:2000:relay"]'))
     assert.equal(list.scrollTop, 620)
+    const first = query<HTMLElement>(mounted.container, '[data-comms-key="child:1:1000:relay"]')
+    pinBox(first, 500, 40)
+    list.scrollTop = 0
+    await click(query(first, '.lc-comms-hit'))
+    assert.equal(list.scrollTop, 0)
+    assert.ok(first.className.includes('lc-comms-event-open'))
     await mounted.unmount()
   })
 
