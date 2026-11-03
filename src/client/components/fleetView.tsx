@@ -61,10 +61,7 @@ export function makeFleetView(
     )
     const detailStamp = detailNodes.map(node => `${node.id}@${node.updatedAt}`).join(',')
     useEffect(() => {
-      for (const node of detailNodes) {
-        details.request(node.id, node.updatedAt)
-        details.requestHistory(node.id, node.updatedAt)
-      }
+      for (const node of detailNodes) details.request(node.id, node.updatedAt)
     }, [detailNodes, detailStamp])
     const landedDetails = useMemo(() => {
       const map = new Map<string, FleetDetail>()

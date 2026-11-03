@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { lruTrim } from './lru'
 import { asRecord, type ClientCtx } from './services'
 import { SIDEBAR_CONTEXT_KIND } from './sidebar'
 
@@ -25,10 +26,13 @@ export function takeContextFocus(sessionId: string): number | null {
 
 const memberFocus = new Map<string, string>()
 
+const MEMBER_FOCUS_MAX = 8
+
 const memberListeners = new Set<() => void>()
 
 export function requestFleetMemberFocus(sessionId: string, memberId: string): void {
   memberFocus.set(sessionId, memberId)
+  lruTrim(memberFocus, MEMBER_FOCUS_MAX)
   for (const listener of memberListeners) listener()
 }
 

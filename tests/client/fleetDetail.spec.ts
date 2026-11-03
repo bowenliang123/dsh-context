@@ -223,6 +223,51 @@ describe('FleetDetailCache', () => {
     assert.equal(bodies[2].full, undefined)
     assert.equal(bodies[2].history, undefined)
   })
+
+  test('a failing history read resolves null and stays cached at its stamp', async () => {
+    let reads = 0
+    vi.stubGlobal('fetch', () => {
+      reads += 1
+      return Promise.resolve({ ok: false, status: 503 } as Response)
+    })
+    const cache = new FleetDetailCache()
+    assert.equal(await cache.fetchHistory('s1', 1), null)
+    assert.equal(await cache.fetchHistory('s1', 1), null)
+    assert.equal(reads, 1, 'the failed read replays from the ledger')
+    assert.equal(await cache.fetchHistory('s1', 2), null)
+    assert.equal(reads, 2)
+  })
+
+  test('clear drops every ledger so a reused instance reads fresh', async () => {
+    let reads = 0
+    vi.stubGlobal('fetch', () => {
+      reads += 1
+      return Promise.resolve({ ok: true, json: () => Promise.resolve({ ok: true, value: null }) } as Response)
+    })
+    const cache = new FleetDetailCache()
+    await Promise.all([cache.fetch('s1', 5), cache.fetch('s1', 5, true), cache.fetchHistory('s1', 5)])
+    assert.equal(reads, 3)
+    cache.clear()
+    await Promise.all([cache.fetch('s1', 5), cache.fetch('s1', 5, true), cache.fetchHistory('s1', 5)])
+    assert.equal(reads, 6)
+  })
+
+  test('the byte budget evicts the oldest oversized entries and keeps the newest read', async () => {
+    const reads: string[] = []
+    const text = 'x'.repeat(600_000)
+    vi.stubGlobal('fetch', (_url: unknown, init: { body: string }) => {
+      const id = String((JSON.parse(init.body) as { sessionId: string }).sessionId)
+      reads.push(id)
+      const value = { messages: [{ seq: 1, time: 1, kind: 'relay', text }], truncated: false }
+      return Promise.resolve({ ok: true, json: () => Promise.resolve({ ok: true, value }) } as Response)
+    })
+    const cache = new FleetDetailCache()
+    for (let i = 0; i < 20; i++) await cache.fetch(`s${i}`, 1)
+    await cache.fetch('s19', 1)
+    assert.equal(reads.length, 20, 'the newest entry replays from the ledger')
+    await cache.fetch('s0', 1)
+    assert.equal(reads.length, 21, 'an entry evicted by bytes refetches')
+  })
 })
 
 describe('settledVariantOf', () => {

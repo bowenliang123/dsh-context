@@ -544,7 +544,7 @@ describe('Multi-Agent Network', () => {
     vi.stubGlobal('fetch', (_url: unknown, init: { body: string }) => {
       const body = JSON.parse(init.body) as { sessionId: string; history?: boolean }
       const value = body.sessionId === 'hist-w1'
-        ? { messages: body.history === true ? messages : messages.slice(0, 80), truncated: true }
+        ? { messages: body.history === true ? messages : messages.slice(0, 80), messagesTotal: 85, truncated: true }
         : { messages: [], truncated: false }
       return Promise.resolve({ ok: true, json: () => Promise.resolve({ ok: true, value }) } as Response)
     })
@@ -624,7 +624,19 @@ describe('Multi-Agent Network', () => {
   })
 
   test('serves a direct team projection without a family forest and localizes the mission header', async () => {
-    vi.stubGlobal('fetch', () => new Promise(() => {}))
+    vi.stubGlobal('fetch', (_url: unknown, init: { body: string }) => {
+      const body = JSON.parse(init.body) as { sessionId: string }
+      const value = body.sessionId === 'w1'
+        ? {
+          messages: [
+            { seq: 1, time: 1000, kind: 'relay', from: 'root', text: 'first note' },
+            { seq: 2, time: 2000, kind: 'relay', from: 'root', text: 'second note' },
+          ],
+          truncated: false,
+        }
+        : { messages: [], truncated: false }
+      return Promise.resolve({ ok: true, json: () => Promise.resolve({ ok: true, value }) } as Response)
+    })
     const ctx = new TestClientCtx({ services: {} })
     const View = makeView(ctx, 'zh')
     const m = await mount(h(View, { sessionId: 'root', useProjection: projectionsFor(richTimeline(), { agentTeam: TEAM }) }))
@@ -632,7 +644,7 @@ describe('Multi-Agent Network', () => {
     assert.equal(query(m.container, '[data-pulse-stat="agents"]').textContent, '3')
     assert.equal(query(m.container, '[data-pulse-stat="tasks"]').textContent, '2')
     assert.equal(queryAll(m.container, '.lc-pulse-work-item').length, 2)
-    assert.equal(queryAll(m.container, '.lc-pulse-event').length, 2)
+    await until(() => queryAll(m.container, '.lc-pulse-event').length === 2, 'direct projection events never landed')
     assert.equal(query(m.container, '[data-pulse-stat="running"]').textContent, '—')
     assert.ok(text(query(m.container, '[data-owner-group="id:w1"] .lc-pulse-work-group-head')).includes(DICT_ZH['fleet.pulse.statusUnknown']))
     assert.ok(text(query(m.container, '[data-task="task-1"] .lc-pulse-work-identity')).includes(DICT_ZH['fleet.pulse.statusUnknown']))

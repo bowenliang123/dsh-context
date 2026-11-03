@@ -82,9 +82,6 @@ export interface FleetDetailState {
   requestFull(id: string): void
 }
 
-const sharedCache = new FleetDetailCache()
-const FULL_STATE_MAX = 8
-
 export interface FleetDetailOptions {
   concurrency?: number
   refreshDelayMs?: number
@@ -97,7 +94,11 @@ interface QueueTask {
   history: boolean
 }
 
-export function useFleetDetails(cache: FleetDetailCache = sharedCache, options: FleetDetailOptions = {}): FleetDetailState {
+const FULL_STATE_MAX = 8
+
+export function useFleetDetails(cache?: FleetDetailCache, options: FleetDetailOptions = {}): FleetDetailState {
+  const owned = useMemo(() => (cache === undefined ? new FleetDetailCache() : null), [cache])
+  const ledger = cache ?? owned as FleetDetailCache
   const maxInflight = options.concurrency ?? Number.POSITIVE_INFINITY
   const refreshDelay = options.refreshDelayMs ?? 0
   const scopeKey = options.scopeKey
@@ -119,14 +120,18 @@ export function useFleetDetails(cache: FleetDetailCache = sharedCache, options: 
       /* v8 ignore next 1 */
       if (!valid) continue
       active.current++
-      const pending = task.history ? cache.fetchHistory(task.id, task.stamp) : cache.fetch(task.id, task.stamp)
+      const pending = task.history ? ledger.fetchHistory(task.id, task.stamp) : ledger.fetch(task.id, task.stamp)
       void pending.then((detail) => {
         const currentValid = task.history
           ? historyRequested.current.get(task.id) === task.stamp
           : requested.current.get(task.id) === task.stamp
         if (!mounted.current || !currentValid) return
         if (task.history) setHistoryLanded(prev => new Map(prev).set(task.id, { detail, updatedAt: task.stamp }))
-        else setLanded(prev => new Map(prev).set(task.id, { detail, updatedAt: task.stamp }))
+        else {
+          setLanded(prev => new Map(prev).set(task.id, { detail, updatedAt: task.stamp }))
+          /* v8 ignore next 1 */
+          if (detail !== null && detail.messagesTotal !== undefined) requestHistory(task.id, task.stamp)
+        }
         const clear = task.history ? setHistoryPending : setPending
         clear((prev) => {
           const next = new Set(prev)
@@ -208,6 +213,7 @@ export function useFleetDetails(cache: FleetDetailCache = sharedCache, options: 
     queue.current = []
     requested.current.clear()
     historyRequested.current.clear()
+    owned?.clear()
     fullRequested.current.clear()
     fullKnown.current = new Set()
     fullInFlight.current.clear()
@@ -244,7 +250,7 @@ export function useFleetDetails(cache: FleetDetailCache = sharedCache, options: 
     fullRequested.current.set(id, stamp)
     fullInFlight.current.add(id)
     setFullPending(prev => prev.has(id) ? prev : new Set(prev).add(id))
-    void cache.fetch(id, stamp, true).then((detail) => {
+    void ledger.fetch(id, stamp, true).then((detail) => {
       if (!mounted.current || fullRequested.current.get(id) !== stamp) return
       fullInFlight.current.delete(id)
       setFullLanded((prev) => {

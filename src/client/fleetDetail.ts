@@ -142,15 +142,30 @@ export function makeFleetDetailFetcher(
 interface FleetDetailEntry {
   updatedAt: number
   pending: Promise<FleetDetail | null>
+  size: number
 }
 
 const FLEET_LEDGER_MAX = 64
 const FULL_LEDGER_MAX = 4
+const LEDGER_BYTES_MAX = 4 * 1024 * 1024
+
+function detailBytes(detail: FleetDetail | null): number {
+  if (detail === null) return 0
+  let bytes = (detail.initialPrompt?.length ?? 0) + (detail.lastReply?.text.length ?? 0)
+  for (const message of detail.messages) bytes += message.text.length + (message.report?.length ?? 0) + (message.summary?.length ?? 0)
+  return bytes
+}
 
 export class FleetDetailCache {
   private readonly entries = new Map<string, FleetDetailEntry>()
   private readonly fullEntries = new Map<string, FleetDetailEntry>()
   private readonly historyEntries = new Map<string, FleetDetailEntry>()
+
+  clear(): void {
+    this.entries.clear()
+    this.fullEntries.clear()
+    this.historyEntries.clear()
+  }
 
   fetch(id: string, updatedAt: number, full = false): Promise<FleetDetail | null> {
     const ledger = full ? this.fullEntries : this.entries
@@ -163,8 +178,13 @@ export class FleetDetailCache {
     const pending = fetcher !== undefined
       ? fetcher().catch((): FleetDetail | null => null)
       : Promise.resolve(null)
-    ledger.set(id, { updatedAt, pending })
-    lruTrim(ledger, full ? FULL_LEDGER_MAX : FLEET_LEDGER_MAX)
+    const entry: FleetDetailEntry = { updatedAt, pending, size: 0 }
+    ledger.set(id, entry)
+    void pending.then((detail) => {
+      entry.size = detailBytes(detail)
+      this.trim(ledger, full ? FULL_LEDGER_MAX : FLEET_LEDGER_MAX)
+    })
+    this.trim(ledger, full ? FULL_LEDGER_MAX : FLEET_LEDGER_MAX)
     return pending
   }
 
@@ -178,9 +198,26 @@ export class FleetDetailCache {
     const pending = fetcher !== undefined
       ? fetcher().catch((): FleetDetail | null => null)
       : Promise.resolve(null)
-    this.historyEntries.set(id, { updatedAt, pending })
-    lruTrim(this.historyEntries, FLEET_LEDGER_MAX)
+    const entry: FleetDetailEntry = { updatedAt, pending, size: 0 }
+    this.historyEntries.set(id, entry)
+    void pending.then((detail) => {
+      entry.size = detailBytes(detail)
+      this.trim(this.historyEntries, FLEET_LEDGER_MAX)
+    })
+    this.trim(this.historyEntries, FLEET_LEDGER_MAX)
     return pending
+  }
+
+  private trim(ledger: Map<string, FleetDetailEntry>, max: number): void {
+    lruTrim(ledger, max)
+    let total = 0
+    for (const entry of ledger.values()) total += entry.size
+    if (total <= LEDGER_BYTES_MAX) return
+    for (const [key, entry] of ledger) {
+      if (total <= LEDGER_BYTES_MAX || ledger.size <= 1) return
+      ledger.delete(key)
+      total -= entry.size
+    }
   }
 }
 
