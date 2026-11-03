@@ -191,7 +191,7 @@ export function pulseLaneVisibility(
 }
 
 export function pulseTaskBadgeOf(id: string): string {
-  return /^task-\d+$/.test(id) ? `#${id.slice(5)}` : id
+  return /^task-\d+$/.test(id) ? id.slice(5) : id
 }
 
 export function pulseTasksByAgent(team: FleetTeam | null): Map<string, readonly FleetTeamTask[]> {

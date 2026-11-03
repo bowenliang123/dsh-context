@@ -317,7 +317,7 @@ describe('pulse work queue', () => {
     assert.equal(pulseWorkPhaseOf(items.find(item => item.id === 'task-1')!), 'pending')
     assert.equal(pulseWorkPhaseOf(items.find(item => item.id === 'task-2')!), 'completed')
     assert.deepEqual([...pulseDependencyChainOf(items, 'task-1')].sort(), ['task-2', 'task-3'])
-    assert.equal(pulseTaskBadgeOf('task-12'), '#12')
+    assert.equal(pulseTaskBadgeOf('task-12'), '12')
     assert.equal(pulseTaskBadgeOf('task-alpha'), 'task-alpha')
     assert.equal(pulseTaskBadgeOf('free'), 'free')
   })

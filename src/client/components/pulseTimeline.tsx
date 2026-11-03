@@ -1,4 +1,4 @@
-import { memo, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type KeyboardEvent, type ReactElement, type UIEvent } from 'react'
+import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type KeyboardEvent, type ReactElement, type UIEvent } from 'react'
 import {
   IconChecklistOutlineRegular,
   IconRightUpOutlineRegular,
@@ -82,6 +82,7 @@ export const PulseTimeline = memo(function PulseTimeline(props: PulseTimelinePro
   const [showQuiet, setShowQuiet] = useState(false)
   const [anchor, setAnchor] = useState<'first' | 'latest'>('first')
   const [hoveredKey, setHoveredKey] = useState<string | null>(null)
+  const [taskFilterId, setTaskFilterId] = useState<string | null>(null)
   const [hoveredLane, setHoveredLane] = useState<string | null>(null)
   const [laneScopeState, setLaneScopeState] = useState<{ from: number; to: number } | null>(null)
   const laneHovered = (id: string): boolean => props.hoveredAgent === id || hoveredLane === id
@@ -98,16 +99,20 @@ export const PulseTimeline = memo(function PulseTimeline(props: PulseTimelinePro
     [props.rows, props.delegations],
   )
   const laneIds = useMemo(() => new Set(visibleIds), [visibleIds])
-  const laneItems = useMemo(() => timelineItems.filter(item => laneIds.has(item.to)), [laneIds, timelineItems])
+  const laneRecords = useMemo(() => timelineItems.filter(item => laneIds.has(item.to)), [laneIds, timelineItems])
   const tasksByAgent = useMemo(() => pulseTasksByAgent(props.team), [props.team])
   const taskAt = useMemo(() => {
     const map = new Map<string, FleetTeamTask>()
-    for (const item of laneItems) {
+    for (const item of laneRecords) {
       const task = pulseTaskOf(item, tasksByAgent)
       if (task !== null) map.set(item.key, task)
     }
     return map
-  }, [laneItems, tasksByAgent])
+  }, [laneRecords, tasksByAgent])
+  const laneItems = useMemo(
+    () => taskFilterId === null ? laneRecords : laneRecords.filter(item => taskAt.get(item.key)?.id === taskFilterId),
+    [laneRecords, taskAt, taskFilterId],
+  )
   const hasTaskLane = taskAt.size > 0
   const windowed = laneItems.length > RECORD_FULL_MAX
   const recordRange = useColumnWindow(scrollerRef, laneItems.length, PULSE_POINT_PITCH, windowed, RECORD_OVERSCAN)
@@ -150,10 +155,17 @@ export const PulseTimeline = memo(function PulseTimeline(props: PulseTimelinePro
     for (const lane of props.lanes) if (lane.stats !== undefined) map.set(lane.agent.id, lane.stats)
     return map
   }, [props.lanes])
-  const hueOf = (id: string): string => {
+  const hueOf = useCallback((id: string): string => {
     /* v8 ignore next 1 */
     return (agentAt.get(id) ?? props.agentOf(id)).hue
-  }
+  }, [agentAt, props.agentOf])
+  const taskHueAt = useMemo(() => {
+    const map = new Map<string, string>()
+    for (const [ownerId, tasks] of tasksByAgent) {
+      for (const task of tasks) map.set(task.id, hueOf(ownerId))
+    }
+    return map
+  }, [hueOf, tasksByAgent])
   const pointsAt = useMemo(() => {
     const map = new Map<string, typeof layout.points>()
     for (const point of layout.points) {
@@ -224,6 +236,27 @@ export const PulseTimeline = memo(function PulseTimeline(props: PulseTimelinePro
     if (item.kind === 'message') props.onSelectEvent(item.row)
     else props.onSelectDelegation(item.delegation)
   }
+  const clearTaskFilter = (): void => {
+    setTaskFilterId(null)
+    const el = scrollerRef.current as HTMLDivElement
+    el.focus()
+  }
+  const toggleTask = (id: string): void => {
+    if (taskFilterId === id) {
+      setTaskFilterId(null)
+      return
+    }
+    setTaskFilterId(id)
+    props.onRevealTask(id)
+  }
+  const hoverRecord = (item: PulseTimelineItem): void => {
+    setHoveredKey(item.key)
+    props.onHoverTask(taskAt.get(item.key)?.id ?? null)
+  }
+  const unhoverRecord = (item: PulseTimelineItem): void => {
+    setHoveredKey(current => current === item.key ? null : current)
+    props.onHoverTask(null)
+  }
   const keySelect = (item: PulseTimelineItem, ev: KeyboardEvent<SVGGElement>): void => {
     if (ev.key !== 'Enter' && ev.key !== ' ') return
     ev.preventDefault()
@@ -242,6 +275,18 @@ export const PulseTimeline = memo(function PulseTimeline(props: PulseTimelinePro
           <span className="lc-card-sub">
             {t('fleet.pulse.timelineSub', { shown: shownRecords, total: recordTotal, lanes: visibleIds.length })}
           </span>
+          {taskFilterId !== null ? (
+            <button
+              type="button"
+              className="lc-pulse-task-filter"
+              style={{ '--lc-task-hue': taskHueAt.get(taskFilterId) } as CSSProperties}
+              aria-label={t('fleet.pulse.clearTaskFilter')}
+              title={t('fleet.pulse.clearTaskFilter')}
+              onClick={clearTaskFilter}
+            >
+              {t('fleet.pulse.taskFilter', { id: pulseTaskBadgeOf(taskFilterId) })} ×
+            </button>
+          ) : null}
           <ClearableInput
             type="search"
             className="lc-fleet-search lc-pulse-search"
@@ -369,18 +414,19 @@ export const PulseTimeline = memo(function PulseTimeline(props: PulseTimelinePro
                         <button
                           key={`task-${point.key}`}
                           type="button"
-                          className={'lc-pulse-task-chip' + (props.hoveredTaskId === task.id ? ' lc-pulse-task-chip-hover' : '')}
-                          style={{ left: point.x }}
+                          className={'lc-pulse-task-chip' + (props.hoveredTaskId === task.id ? ' lc-pulse-task-chip-hover' : '') + (hoveredKey === point.item.key ? ' lc-pulse-task-chip-current' : '') + (taskFilterId === task.id ? ' lc-pulse-task-chip-selected' : '')}
+                          style={{ left: point.x, '--lc-task-hue': taskHueAt.get(task.id) } as CSSProperties}
                           title={tip}
                           aria-label={tip}
                           data-task-chip={task.id}
-                          onClick={() => { props.onRevealTask(task.id) }}
-                          onMouseEnter={() => { props.onHoverTask(task.id) }}
-                          onMouseLeave={() => { props.onHoverTask(null) }}
-                          onFocus={() => { props.onHoverTask(task.id) }}
-                          onBlur={() => { props.onHoverTask(null) }}
+                          aria-pressed={taskFilterId === task.id}
+                          onClick={() => { toggleTask(task.id) }}
+                          onMouseEnter={() => { hoverRecord(point.item) }}
+                          onMouseLeave={() => { unhoverRecord(point.item) }}
+                          onFocus={() => { hoverRecord(point.item) }}
+                          onBlur={() => { unhoverRecord(point.item) }}
                         >
-                          {pulseTaskBadgeOf(task.id)}
+                          <span>{pulseTaskBadgeOf(task.id)}</span>
                         </button>
                       )
                     })}
@@ -431,10 +477,10 @@ export const PulseTimeline = memo(function PulseTimeline(props: PulseTimelinePro
                           aria-label={label}
                           onClick={() => { selectItem(item) }}
                           onKeyDown={(ev) => { keySelect(item, ev) }}
-                          onMouseEnter={() => { setHoveredKey(item.key) }}
-                          onMouseLeave={() => { setHoveredKey(current => current === item.key ? null : current) }}
-                          onFocus={() => { setHoveredKey(item.key) }}
-                          onBlur={() => { setHoveredKey(current => current === item.key ? null : current) }}
+                          onMouseEnter={() => { hoverRecord(item) }}
+                          onMouseLeave={() => { unhoverRecord(item) }}
+                          onFocus={() => { hoverRecord(item) }}
+                          onBlur={() => { unhoverRecord(item) }}
                         >
                           <line className="lc-pulse-edge-line" x1={x} y1={source.center} x2={x} y2={baseY} stroke={from.hue} vectorEffect="non-scaling-stroke" />
                           <path d={`M ${x} ${tipY} L ${x - 5} ${baseY} L ${x + 5} ${baseY} Z`} fill={from.hue} vectorEffect="non-scaling-stroke" />
@@ -500,6 +546,10 @@ export const PulseTimeline = memo(function PulseTimeline(props: PulseTimelinePro
                                 })}
                             aria-pressed={selected}
                             onClick={() => { selectItem(item) }}
+                            onMouseEnter={() => { hoverRecord(item) }}
+                            onMouseLeave={() => { unhoverRecord(item) }}
+                            onFocus={() => { hoverRecord(item) }}
+                            onBlur={() => { unhoverRecord(item) }}
                           >
                             <span className="lc-pulse-event-dot" aria-hidden="true">{item.kind === 'delegation' ? '+' : item.row.kind === 'settled' ? '✓' : ''}</span>
                             <span className="lc-pulse-event-label">
