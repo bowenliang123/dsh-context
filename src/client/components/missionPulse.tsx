@@ -97,6 +97,19 @@ function PulseHeader(props: PulseHeaderProps): ReactElement {
 const WORK_SUBJECT_MAX = 60
 const EVENT_ROW_PITCH = 64
 
+function agentPromptOf(details: FleetDetailState, id: string): string | undefined {
+  const entry = details.landed.get(id)?.detail
+  return (!details.fullPending.has(id)
+    ? details.fullLanded.get(id)?.initialPrompt ?? entry?.initialPrompt
+    : entry?.initialPrompt)
+}
+
+function workSubjectOf(prompt: string | undefined, fallback: string): string {
+  return prompt !== undefined && prompt !== ''
+    ? previewOf(prompt.length > WORK_SUBJECT_MAX ? prompt.slice(0, WORK_SUBJECT_MAX) + '…' : prompt)
+    : fallback
+}
+
 interface PulseTasksProps {
   items: readonly PulseWorkItem[]
   teamFailure?: string
@@ -148,13 +161,11 @@ function PulseTasks(props: PulseTasksProps): ReactElement {
             const entry = item.ownerId !== undefined ? props.details.landed.get(item.ownerId)?.detail : null
             const full = item.ownerId !== undefined ? props.details.fullLanded.get(item.ownerId) : null
             const fullPending = item.ownerId !== undefined && props.details.fullPending.has(item.ownerId)
-            const prompt = item.kind === 'agent'
-              ? (!fullPending ? full?.initialPrompt ?? entry?.initialPrompt : entry?.initialPrompt)
+            const prompt = item.kind === 'agent' && item.ownerId !== undefined
+              ? agentPromptOf(props.details, item.ownerId)
               : item.description
             const reply = !fullPending ? full?.lastReply ?? entry?.lastReply : entry?.lastReply
-            const subject = item.kind === 'agent' && prompt !== undefined && prompt !== ''
-              ? previewOf(prompt.length > WORK_SUBJECT_MAX ? prompt.slice(0, WORK_SUBJECT_MAX) + '…' : prompt)
-              : item.subject
+            const subject = item.kind === 'agent' ? workSubjectOf(prompt, item.subject) : item.subject
             const dot = item.status === 'completed' || item.status === 'latest_complete'
               ? 'done'
               : item.status === 'in_progress' ? 'ongoing' : item.status === 'idle' || item.ready ? 'idle' : 'warning'
@@ -372,6 +383,7 @@ function PulseEvents(props: PulseEventsProps): ReactElement {
   useEffect(() => {
     if (selectedKey === null) {
       alignedRef.current = null
+      listClickRef.current = null
       return
     }
     if (alignedRef.current === selectedKey) return
@@ -427,7 +439,7 @@ function PulseEvents(props: PulseEventsProps): ReactElement {
         <div className="lc-pulse-event-stream">
           {props.rows.length === 0 ? <div className="lc-empty">{t(props.scopedRows.length === 0 ? 'fleet.comms.empty' : 'fleet.comms.noMatch')}</div> : null}
           <ul className="lc-comms-list lc-pulse-event-list" ref={listRef} hidden={props.rows.length === 0}>
-            {windowed && windowFrom > 0 ? <li aria-hidden="true" style={{ height: windowFrom * 64 }} /> : null}
+            {windowed && windowFrom > 0 ? <li aria-hidden="true" style={{ height: windowFrom * EVENT_ROW_PITCH }} /> : null}
             {shownRows.map(row => (
               <CommsEvent
                 key={row.key}
@@ -442,7 +454,7 @@ function PulseEvents(props: PulseEventsProps): ReactElement {
                 t={t}
               />
             ))}
-            {windowed && windowTo < lastRow ? <li aria-hidden="true" style={{ height: (lastRow - windowTo) * 64 }} /> : null}
+            {windowed && windowTo < lastRow ? <li aria-hidden="true" style={{ height: (lastRow - windowTo) * EVENT_ROW_PITCH }} /> : null}
           </ul>
         </div>
         <div className="lc-pulse-inspector" ref={inspectorRef}>
@@ -603,10 +615,11 @@ export function MissionPulse(props: MissionPulseProps): ReactElement {
     if (needle === '') return scoped
     return scoped.filter((item) => {
       const owner = item.ownerId !== undefined ? agentOf(item.ownerId).name : undefined
-      return [item.id, item.subject, item.ownerName, owner, item.description]
+      const prompt = item.kind === 'agent' && item.ownerId !== undefined ? agentPromptOf(props.details, item.ownerId) : undefined
+      return [item.id, item.subject, item.ownerName, owner, item.description, workSubjectOf(prompt, item.subject)]
         .some(value => value !== undefined && value.toLowerCase().includes(needle))
     })
-  }, [agentOf, selectedAgent, workItems, workQuery])
+  }, [agentOf, props.details, selectedAgent, workItems, workQuery])
   const selectedRow = selectedEventKey === null ? undefined : visibleRows.find(row => row.key === selectedEventKey)
   const selectedDelegation = selectedDelegationKey === null
     ? undefined

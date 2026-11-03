@@ -532,6 +532,9 @@ describe('MissionPulse boundary parties', () => {
     await click(query(first, '.lc-comms-hit'))
     assert.equal(list.scrollTop, 0)
     assert.ok(first.className.includes('lc-comms-event-open'))
+    await click(query(first, '.lc-comms-hit'))
+    await click(query(mounted.container, '[data-event-key="child:1:1000:relay"]'))
+    assert.equal(list.scrollTop, 500)
     await mounted.unmount()
   })
 
