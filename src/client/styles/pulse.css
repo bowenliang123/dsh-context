@@ -88,7 +88,7 @@
 .lc-pulse-lane-tracks { position: relative; min-width: 0; }
 .lc-pulse-title-actions { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 5px 8px; margin-left: auto; }
 .lc-pulse-sequence-actions { flex: none; margin-left: 0; }
-.lc-pulse-sequence-scroller { flex: 1; min-height: 0; overflow: auto; scrollbar-width: thin; }
+.lc-pulse-sequence-scroller { flex: 1; min-height: 0; overflow: auto; overscroll-behavior-x: contain; scrollbar-gutter: stable; }
 .lc-pulse-sequence-scroller:focus-visible { outline: 2px solid var(--lc-pulse-cyan); outline-offset: -2px; }
 .lc-pulse-lane-label { position: relative; display: flex; flex-direction: column; justify-content: center; gap: 1px; min-width: 0; padding: 3px 7px; border-bottom: var(--lc-line-fine, 1px solid var(--dsw-alias-border-l2)); }
 .lc-pulse-lane-label:last-child, .lc-pulse-lane-track:last-child { border-bottom: 0; }
