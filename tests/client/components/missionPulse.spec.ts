@@ -235,6 +235,15 @@ describe('MissionPulse boundary parties', () => {
     assert.deepEqual(enter.mock.calls, [['child']])
     await click(events[0])
     assert.ok(text(query(mounted.container, '.lc-pulse-inspector')).includes(kit.t('fleet.pulse.selectEvent')))
+    const laneSearch = query<HTMLInputElement>(mounted.container, '.lc-pulse-timeline .lc-pulse-search')
+    await typeText(laneSearch, 'peer')
+    assert.deepEqual(
+      queryAll<HTMLElement>(mounted.container, '[data-lane-label]').map(el => el.dataset.laneLabel),
+      ['other', 'peer'],
+    )
+    assert.ok(query(mounted.container, '[data-lane-label="peer"]').className.includes('lc-pulse-lane-match'))
+    assert.ok(text(query(mounted.container, '[data-lane-label="other"]')).includes(kit.t('fleet.pulse.linked')))
+    await typeText(laneSearch, '')
     const search = query<HTMLInputElement>(mounted.container, '.lc-pulse-event-tools .lc-pulse-search')
     await typeText(search, 'peer duty')
     assert.equal(queryAll(mounted.container, '.lc-pulse-event').length, 1)
@@ -353,6 +362,7 @@ describe('MissionPulse boundary parties', () => {
     const agents = new Map([
       ['root', { id: 'root', name: 'Lead', role: 'lead' as const, self: true, hue: 'red' }],
       ['child', { id: 'child', name: 'child', role: 'teammate' as const, self: false, hue: 'blue' }],
+      ['delta', { id: 'delta', name: 'Delta', role: 'teammate' as const, self: false, hue: 'gold' }],
     ])
     const mounted = await mount(h(MissionPulse, {
       forest: null,
@@ -374,17 +384,25 @@ describe('MissionPulse boundary parties', () => {
     await typeText(laneSearch, 'child')
     assert.deepEqual(
       queryAll<HTMLElement>(mounted.container, '.lc-pulse-lane-label').map(el => el.dataset.laneLabel),
-      ['child'],
+      ['root', 'child'],
     )
+    const matchedLane = query<HTMLElement>(mounted.container, '[data-lane-label="child"]')
+    assert.ok(matchedLane.className.includes('lc-pulse-lane-match'))
+    assert.ok(!text(matchedLane).includes(kit.t('fleet.pulse.linked')))
+    assert.ok(query<HTMLElement>(mounted.container, '[data-lane="child"]').className.includes('lc-pulse-lane-track-match'))
+    const linkedLane = query<HTMLElement>(mounted.container, '[data-lane-label="root"]')
+    assert.ok(!linkedLane.className.includes('lc-pulse-lane-match'))
+    assert.ok(text(linkedLane).includes(kit.t('fleet.pulse.linked')))
+    assert.ok(!query<HTMLElement>(mounted.container, '[data-lane="root"]').className.includes('lc-pulse-lane-track-match'))
     assert.ok(text(query(mounted.container, '.lc-pulse-timeline')).includes(
-      kit.t('fleet.pulse.timelineSub', { shown: 1, total: 2, lanes: 1 }),
+      kit.t('fleet.pulse.timelineSub', { shown: 2, total: 2, lanes: 2 }),
     ))
     assert.equal(queryAll(mounted.container, '.lc-pulse-work-item').length, 2)
     await typeText(laneSearch, 'no such agent')
     assert.equal(queryAll(mounted.container, '.lc-pulse-lane-label').length, 0)
     assert.ok(text(query(mounted.container, '.lc-pulse-timeline')).includes(kit.t('fleet.pulse.noLaneMatch')))
     await typeText(laneSearch, '')
-    assert.equal(queryAll(mounted.container, '.lc-pulse-lane-label').length, 2)
+    assert.equal(queryAll(mounted.container, '.lc-pulse-lane-label').length, 3)
     const workSearch = query<HTMLInputElement>(mounted.container, '.lc-pulse-tasks .lc-pulse-search')
     await typeText(workSearch, 'ship')
     assert.equal(queryAll(mounted.container, '.lc-pulse-work-item').length, 1)

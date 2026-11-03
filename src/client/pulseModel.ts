@@ -112,29 +112,56 @@ export interface PulseLaneInput {
   active: boolean
 }
 
-export function pulseVisibleLaneIds(
+export interface PulseLaneLink {
+  from: string
+  to: string
+}
+
+export interface PulseLaneView {
+  visible: string[]
+  matched: ReadonlySet<string>
+}
+
+export function pulseLaneVisibility(
   lanes: readonly PulseLaneInput[],
   rows: readonly CommsRow[],
+  links: readonly PulseLaneLink[],
   selectedAgent: string | null,
   query: string,
   showQuiet: boolean,
-): string[] {
+): PulseLaneView {
   const needle = query.trim().toLowerCase()
   if (needle !== '') {
-    return lanes
-      .filter(lane => lane.agent.name.toLowerCase().includes(needle)
-        || (lane.agent.description ?? '').toLowerCase().includes(needle))
-      .map(lane => lane.agent.id)
+    const matched = new Set(
+      lanes
+        .filter(lane => lane.agent.name.toLowerCase().includes(needle)
+          || (lane.agent.description ?? '').toLowerCase().includes(needle))
+        .map(lane => lane.agent.id),
+    )
+    const linked = new Set<string>()
+    for (const link of links) {
+      if (matched.has(link.from)) linked.add(link.to)
+      else if (matched.has(link.to)) linked.add(link.from)
+    }
+    return {
+      visible: lanes
+        .filter(lane => matched.has(lane.agent.id) || linked.has(lane.agent.id))
+        .map(lane => lane.agent.id),
+      matched,
+    }
   }
-  if (showQuiet || lanes.length <= 8) return lanes.map(lane => lane.agent.id)
+  if (showQuiet || lanes.length <= 8) return { visible: lanes.map(lane => lane.agent.id), matched: new Set() }
   const communicating = new Set<string>()
   for (const row of rows) {
     communicating.add(fromPartyOf(row))
     communicating.add(row.to)
   }
-  return lanes
-    .filter(lane => lane.active || lane.agent.id === selectedAgent || communicating.has(lane.agent.id))
-    .map(lane => lane.agent.id)
+  return {
+    visible: lanes
+      .filter(lane => lane.active || lane.agent.id === selectedAgent || communicating.has(lane.agent.id))
+      .map(lane => lane.agent.id),
+    matched: new Set(),
+  }
 }
 
 export function pulseTaskBadgeOf(id: string): string {

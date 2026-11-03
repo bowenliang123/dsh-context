@@ -20,7 +20,7 @@ import type { FleetDetailState } from '../fleetModel'
 import type { FleetTeam } from '../fleetTeam'
 import { fmtDateTime, fmtTime } from '../format'
 import { IconChevronDown, IconChevronUp } from '../primitives'
-import { pulseTaskBadgeOf, pulseWorkItemsOf, type PulseWorkItem } from '../pulseModel'
+import { pulseTaskBadgeOf, pulseWorkItemsOf, type PulseLaneLink, type PulseWorkItem } from '../pulseModel'
 import { scrollIntoViewIfPossible } from '../revealScroll'
 import type { ViewKit } from '../viewkit'
 import type { FleetDetail, FleetMessage } from '../../shared/types'
@@ -502,13 +502,15 @@ export function MissionPulse(props: MissionPulseProps): ReactElement {
         .some(value => value !== undefined && value.toLowerCase().includes(needle))
     })
   }, [agentOf, query, scopedDelegations])
-  const lanes = useMemo(() => {
+  const { lanes, links } = useMemo(() => {
     const map = new Map(props.agents)
+    const links: PulseLaneLink[] = []
     const communicating = new Set<string>()
     for (const row of props.comms) {
       const from = fromPartyOf(row)
       communicating.add(from)
       communicating.add(row.to)
+      links.push({ from, to: row.to })
       if (!map.has(from)) map.set(from, agentOf(from))
       if (!map.has(row.to)) map.set(row.to, agentOf(row.to))
     }
@@ -516,14 +518,18 @@ export function MissionPulse(props: MissionPulseProps): ReactElement {
     for (const delegation of props.delegations) {
       structural.add(delegation.from)
       structural.add(delegation.to)
+      links.push({ from: delegation.from, to: delegation.to })
       if (!map.has(delegation.from)) map.set(delegation.from, agentOf(delegation.from))
       if (!map.has(delegation.to)) map.set(delegation.to, agentOf(delegation.to))
     }
     const running = new Set((props.forest?.nodes ?? []).filter(node => node.running).map(node => node.id))
-    return [...map.values()].map(agent => ({
-      agent,
-      active: running.has(agent.id) || communicating.has(agent.id) || structural.has(agent.id),
-    }))
+    return {
+      lanes: [...map.values()].map(agent => ({
+        agent,
+        active: running.has(agent.id) || communicating.has(agent.id) || structural.has(agent.id),
+      })),
+      links,
+    }
   }, [agentOf, props.agents, props.comms, props.delegations, props.forest])
   const visibleWork = useMemo(() => {
     const scoped = selectedAgent === null ? workItems : workItems.filter(item => item.ownerId === selectedAgent)
@@ -595,6 +601,7 @@ export function MissionPulse(props: MissionPulseProps): ReactElement {
       />
       <PulseTimeline
         lanes={lanes}
+        links={links}
         rows={visibleRows}
         delegations={visibleDelegations}
         scopedRows={scopedRows}

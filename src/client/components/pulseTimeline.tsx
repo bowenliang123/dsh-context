@@ -21,12 +21,13 @@ import {
   PULSE_POINT_PITCH,
   PULSE_TASK_LANE_HEIGHT,
   PULSE_TRACK_PADDING,
+  pulseLaneVisibility,
   pulseTaskBadgeOf,
   pulseTaskOf,
   pulseTasksByAgent,
   pulseTimelineItemsOf,
-  pulseVisibleLaneIds,
   type PulseLaneInput,
+  type PulseLaneLink,
   type PulseTimelineItem,
 } from '../pulseModel'
 import { containHorizontalOverscroll } from '../overscroll'
@@ -38,6 +39,7 @@ import { AgentAvatar, channelStyle, roleTextOf } from './commsAgent'
 
 interface PulseTimelineProps {
   lanes: PulseLaneInput[]
+  links: readonly PulseLaneLink[]
   rows: readonly CommsRow[]
   delegations: readonly FleetDelegationRow[]
   scopedRows: readonly CommsRow[]
@@ -68,10 +70,12 @@ export function PulseTimeline(props: PulseTimelineProps): ReactElement {
   const [hoveredLane, setHoveredLane] = useState<string | null>(null)
   const scrollerRef = useRef<HTMLDivElement | null>(null)
   const labelRowsRef = useRef<HTMLDivElement | null>(null)
-  const visibleIds = useMemo(
-    () => pulseVisibleLaneIds(props.lanes, props.scopedRows, props.selectedAgent, props.query, showQuiet),
-    [props.lanes, props.query, props.scopedRows, props.selectedAgent, showQuiet],
+  const laneView = useMemo(
+    () => pulseLaneVisibility(props.lanes, props.scopedRows, props.links, props.selectedAgent, props.query, showQuiet),
+    [props.lanes, props.links, props.query, props.scopedRows, props.selectedAgent, showQuiet],
   )
+  const visibleIds = laneView.visible
+  const matchedIds = laneView.matched
   const timelineItems = useMemo(
     () => pulseTimelineItemsOf(props.rows, props.delegations),
     [props.rows, props.delegations],
@@ -217,7 +221,7 @@ export function PulseTimeline(props: PulseTimelineProps): ReactElement {
                 return (
                   <div
                     key={lane.id}
-                    className={'lc-pulse-lane-label' + (props.selectedAgent === lane.id ? ' lc-pulse-lane-selected' : '') + (hoveredLane === lane.id ? ' lc-pulse-lane-hover' : '')}
+                    className={'lc-pulse-lane-label' + (props.selectedAgent === lane.id ? ' lc-pulse-lane-selected' : '') + (hoveredLane === lane.id ? ' lc-pulse-lane-hover' : '') + (matchedIds.has(lane.id) ? ' lc-pulse-lane-match' : '')}
                     style={{ height: lane.height, '--lc-lane-hue': agent.hue } as CSSProperties}
                     data-lane-label={lane.id}
                     onMouseEnter={() => { setHoveredLane(lane.id) }}
@@ -236,6 +240,9 @@ export function PulseTimeline(props: PulseTimelineProps): ReactElement {
                     </button>
                     <span className="lc-pulse-lane-meta">
                       {role !== '' ? <span>{role}</span> : null}
+                      {searching && !matchedIds.has(lane.id)
+                        ? <span className="lc-pulse-lane-linked">{t('fleet.pulse.linked')}</span>
+                        : null}
                       <span>{t('fleet.pulse.traffic', { n: count })}</span>
                     </span>
                     {navigable ? (
@@ -368,7 +375,7 @@ export function PulseTimeline(props: PulseTimelineProps): ReactElement {
                   {layout.lanes.map(lane => (
                     <div
                       key={lane.id}
-                      className={'lc-pulse-lane-track' + (hoveredLane === lane.id ? ' lc-pulse-lane-hover' : '')}
+                      className={'lc-pulse-lane-track' + (hoveredLane === lane.id ? ' lc-pulse-lane-hover' : '') + (matchedIds.has(lane.id) ? ' lc-pulse-lane-track-match' : '')}
                       style={{ height: lane.height, '--lc-lane-hue': hueOf(lane.id) } as CSSProperties}
                       data-lane={lane.id}
                       onMouseEnter={() => { setHoveredLane(lane.id) }}

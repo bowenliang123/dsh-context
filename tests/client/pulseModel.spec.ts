@@ -6,8 +6,8 @@ import type { CommsRow, FleetDelegationRow } from '../../src/client/fleetDetail'
 import type { FleetTeam } from '../../src/client/fleetTeam'
 import {
   layoutPulse,
+  pulseLaneVisibility,
   pulseTimelineItemsOf,
-  pulseVisibleLaneIds,
   pulseWorkItemsOf,
 } from '../../src/client/pulseModel'
 
@@ -122,20 +122,37 @@ describe('pulse lane visibility', () => {
     active: index === 1,
   }))
 
-  test('folds quiet lanes around active traffic, and a search matches across every lane', () => {
+  test('folds quiet lanes around active traffic', () => {
     const rows = [row(1, 'traffic', 'a2', 'a3')]
-    assert.deepEqual(pulseVisibleLaneIds(lanes, rows, null, '', false), ['a1', 'a2', 'a3'])
-    assert.deepEqual(pulseVisibleLaneIds(lanes, rows, 'a4', '', false), ['a1', 'a2', 'a3', 'a4'])
-    assert.deepEqual(pulseVisibleLaneIds(lanes, rows, null, '', true), lanes.map(lane => lane.agent.id))
+    assert.deepEqual(pulseLaneVisibility(lanes, rows, [], null, '', false).visible, ['a1', 'a2', 'a3'])
+    assert.deepEqual(pulseLaneVisibility(lanes, rows, [], 'a4', '', false).visible, ['a1', 'a2', 'a3', 'a4'])
+    assert.deepEqual(pulseLaneVisibility(lanes, rows, [], null, '', true).visible, lanes.map(lane => lane.agent.id))
+    assert.equal(pulseLaneVisibility(lanes, rows, [], null, '', false).matched.size, 0)
+    assert.equal(pulseLaneVisibility(lanes, rows, [], null, '', true).matched.size, 0)
+  })
+
+  test('a search keeps the matched lanes and the lanes linked to them', () => {
     const described = lanes.map(lane => ({ ...lane, agent: { ...lane.agent } }))
     described[8].agent.description = 'special duty'
-    assert.deepEqual(pulseVisibleLaneIds(described, rows, null, 'special', false), ['a8'])
-    assert.deepEqual(pulseVisibleLaneIds(described, rows, null, 'agent 5', false), ['a5'])
+    const links = [
+      { from: 'a8', to: 'a6' },
+      { from: 'a3', to: 'a8' },
+      { from: 'a0', to: 'a1' },
+    ]
+    const special = pulseLaneVisibility(described, [], links, null, 'special', false)
+    assert.deepEqual(special.visible, ['a3', 'a6', 'a8'])
+    assert.deepEqual([...special.matched], ['a8'])
+    const byName = pulseLaneVisibility(described, [], links, null, 'agent 5', false)
+    assert.deepEqual(byName.visible, ['a5'])
+    assert.deepEqual([...byName.matched], ['a5'])
+    const unmatched = pulseLaneVisibility(described, [], links, null, 'nobody', false)
+    assert.deepEqual(unmatched.visible, [])
+    assert.equal(unmatched.matched.size, 0)
   })
 
   test('small fleets never lose quiet lanes', () => {
     const small = lanes.slice(0, 3)
-    assert.deepEqual(pulseVisibleLaneIds(small, [], null, '', false), ['a0', 'a1', 'a2'])
+    assert.deepEqual(pulseLaneVisibility(small, [], [], null, '', false).visible, ['a0', 'a1', 'a2'])
   })
 })
 

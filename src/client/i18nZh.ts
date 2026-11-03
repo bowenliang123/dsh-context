@@ -343,6 +343,7 @@ export const DICT_ZH = {
   'fleet.pulse.timelineSub': '{shown}/{total} 条记录 · {lanes} 条泳道',
   'fleet.pulse.searchLanes': '搜索 Agent…',
   'fleet.pulse.noLaneMatch': '没有匹配的 Agent',
+  'fleet.pulse.linked': '联动',
   'fleet.pulse.taskLane': '团队任务',
   'fleet.pulse.taskLaneTip': '按每条消息收件人负责的团队任务关联；点击标记定位到工作队列。',
   'fleet.pulse.first': '最早',

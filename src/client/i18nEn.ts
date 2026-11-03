@@ -345,6 +345,7 @@ export const DICT_EN = {
   'fleet.pulse.timelineSub': '{shown}/{total} records · {lanes} lanes',
   'fleet.pulse.searchLanes': 'Search agents…',
   'fleet.pulse.noLaneMatch': 'No agents match this search',
+  'fleet.pulse.linked': 'linked',
   'fleet.pulse.taskLane': 'Team tasks',
   'fleet.pulse.taskLaneTip': 'Each record links to the team task owned by its recipient; click a marker to reveal it in the work queue.',
   'fleet.pulse.first': 'Earliest',

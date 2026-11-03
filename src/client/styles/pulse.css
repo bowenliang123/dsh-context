@@ -95,12 +95,16 @@
 .lc-pulse-sequence-scroller:focus-visible { outline: 2px solid var(--lc-pulse-cyan); outline-offset: -2px; }
 .lc-pulse-lane-label { position: relative; display: flex; flex-direction: column; justify-content: center; gap: 1px; min-width: 0; padding: 3px 7px; border-bottom: 1px solid color-mix(in srgb, var(--lc-pulse-violet) 12%, var(--dsw-alias-border-l2)); background: linear-gradient(90deg, color-mix(in srgb, var(--lc-pulse-violet) 3%, transparent), transparent); }
 .lc-pulse-lane-label:last-child, .lc-pulse-lane-track:last-child { border-bottom: 0; }
+.lc-pulse-lane-match { background: linear-gradient(90deg, color-mix(in srgb, var(--lc-pulse-cyan) 15%, transparent), transparent 82%); box-shadow: inset 2px 0 var(--lc-pulse-cyan); }
+.lc-pulse-lane-track-match { background: color-mix(in srgb, var(--lc-pulse-cyan) 5%, transparent); }
 .lc-pulse-lane-hover { background: color-mix(in srgb, var(--lc-lane-hue, var(--lc-pulse-violet)) 6%, transparent); }
 .lc-pulse-lane-hover .lc-pulse-lane-name { color: var(--lc-lane-hue, var(--lc-pulse-violet)); }
+.lc-pulse-lane-match .lc-pulse-lane-name { color: var(--lc-pulse-cyan); }
 .lc-pulse-lane-selected { background: linear-gradient(90deg, color-mix(in srgb, var(--lc-pulse-violet) 13%, transparent), transparent); box-shadow: inset 2px 0 var(--lc-pulse-violet); }
 .lc-pulse-lane-agent { display: flex; align-items: center; gap: 5px; width: 100%; min-width: 0; padding: 0; border: 0; background: transparent; color: inherit; font: inherit; text-align: left; cursor: pointer; }
 .lc-pulse-lane-name { min-width: 0; font-size: 10.5px; font-weight: 650; line-height: 1.1; overflow-wrap: anywhere; }
 .lc-pulse-lane-meta { display: flex; flex-wrap: wrap; gap: 0 5px; padding-left: 31px; color: var(--dsw-alias-label-secondary); font-size: 8.5px; line-height: 1.15; }
+.lc-pulse-lane-linked { color: var(--lc-pulse-violet); font-weight: 650; }
 .lc-pulse-lane-actions { position: absolute; right: 4px; top: 3px; display: inline-flex; gap: 1px; opacity: 0; transition: opacity var(--ds-transition-duration, 0.2s) ease; }
 .lc-pulse-lane-label:hover .lc-pulse-lane-actions, .lc-pulse-lane-label:focus-within .lc-pulse-lane-actions { opacity: 1; }
 .lc-pulse-lane-label:hover .lc-pulse-lane-agent, .lc-pulse-lane-label:focus-within .lc-pulse-lane-agent { padding-right: 42px; }
