@@ -23,7 +23,7 @@ import type { FleetTeam } from '../fleetTeam'
 import { fmtDateTime, fmtTime } from '../format'
 import { useModelPrices } from '../modelPrices'
 import { IconChevronDown, IconChevronUp } from '../primitives'
-import { pulseTaskBadgeOf, pulseWorkItemsOf, type PulseLaneLink, type PulseLaneStats, type PulseWorkItem } from '../pulseModel'
+import { pulseDependencyChainOf, pulseTaskBadgeOf, pulseWorkGroupsOf, pulseWorkItemsOf, pulseWorkPhaseOf, type PulseLaneLink, type PulseLaneStats, type PulseWorkGroup, type PulseWorkItem, type PulseWorkPhase } from '../pulseModel'
 import { scrollIntoViewIfPossible } from '../revealScroll'
 import type { ViewKit } from '../viewkit'
 import type { FleetDetail, FleetMessage } from '../../shared/types'
@@ -31,9 +31,10 @@ import type { AgentGraphProps } from './agentGraph'
 import { ClearableInput } from './clearableInput'
 import { PulseTimeline } from './pulseTimeline'
 import { useRowWindow } from './useRowWindow'
-import { AgentAvatar, channelStyle } from './commsAgent'
+import { AgentAvatar, channelStyle, roleTextOf } from './commsAgent'
 import { CommsEvent, CommsEventDetail } from './commsEvent'
 import type { RichKit } from './richText'
+import { Section } from './section'
 
 interface PulseHeaderProps {
   agentCount: number
@@ -111,6 +112,37 @@ function workSubjectOf(prompt: string | undefined, fallback: string): string {
     : fallback
 }
 
+const WORK_PHASES: readonly PulseWorkPhase[] = ['in_progress', 'pending', 'completed']
+
+function taskDotOf(item: PulseWorkItem): 'done' | 'ongoing' | 'idle' | 'warning' {
+  if (item.status === 'completed' || item.status === 'latest_complete') return 'done'
+  if (item.status === 'in_progress') return 'ongoing'
+  return item.status === 'idle' || item.ready ? 'idle' : 'warning'
+}
+
+function phaseLabelOf(phase: PulseWorkPhase, t: ViewKit['t']): string {
+  return t(phase === 'in_progress' ? 'fleet.tasks.filterInProgress'
+    : phase === 'pending' ? 'fleet.tasks.filterPending' : 'fleet.tasks.filterCompleted')
+}
+
+function agentStateDotOf(state: NonNullable<PulseWorkItem['ownerState']>): 'ongoing' | 'done' | 'idle' {
+  return state === 'running' ? 'ongoing' : state === 'latest_complete' ? 'done' : 'idle'
+}
+
+function agentStateLabelOf(state: NonNullable<PulseWorkItem['ownerState']>, t: ViewKit['t']): string {
+  return t(state === 'running' ? 'agents.running' : state === 'latest_complete' ? 'fleet.pulse.latestTurn' : 'fleet.pulse.idle')
+}
+
+function AgentStatePill(props: { state: PulseWorkItem['ownerState']; t: ViewKit['t'] }): ReactElement {
+  const { state, t } = props
+  return (
+    <span className={'lc-pulse-work-agent-state lc-pulse-work-agent-state-' + (state ?? 'unknown')}>
+      <StateDot state={state !== undefined ? agentStateDotOf(state) : 'idle'} size={8} />
+      <span>{state !== undefined ? agentStateLabelOf(state, t) : t('fleet.pulse.statusUnknown')}</span>
+    </span>
+  )
+}
+
 interface PulseTasksProps {
   items: readonly PulseWorkItem[]
   teamFailure?: string
@@ -118,6 +150,7 @@ interface PulseTasksProps {
   details: FleetDetailState
   selectedAgent: string | null
   focusedTaskKey: string | null
+  revealVersion: number
   hoveredTaskId: string | null
   query: string
   agentOf: (party: string) => CommsAgent
@@ -134,17 +167,40 @@ interface PulseTasksProps {
 
 function PulseTasks(props: PulseTasksProps): ReactElement {
   const { t } = props
+  const [phase, setPhase] = useState<'all' | PulseWorkPhase>('all')
   const itemRefs = useRef(new Map<string, HTMLLIElement>())
+  const shownItems = phase === 'all'
+    ? props.visibleItems
+    : props.visibleItems.filter(item => pulseWorkPhaseOf(item) === phase)
+  const groups: readonly PulseWorkGroup[] = pulseWorkGroupsOf(shownItems)
+  const taskById = new Map(props.items.filter(item => item.kind === 'team').map(item => [item.id, item]))
+  const focusedItem = props.focusedTaskKey === null
+    ? undefined
+    : props.items.find(item => item.key === props.focusedTaskKey)
+  const dependencyChain = focusedItem?.kind === 'team'
+    ? pulseDependencyChainOf(props.items, focusedItem.id)
+    : new Set<string>()
+  const counts: Record<'all' | PulseWorkPhase, number> = {
+    all: props.visibleItems.length,
+    in_progress: 0,
+    pending: 0,
+    completed: 0,
+  }
+  for (const item of props.visibleItems) counts[pulseWorkPhaseOf(item)] += 1
+  useEffect(() => {
+    if (focusedItem === undefined || phase === 'all' || pulseWorkPhaseOf(focusedItem) === phase) return
+    setPhase('all')
+  }, [focusedItem, props.focusedTaskKey, props.revealVersion])
   useEffect(() => {
     if (props.focusedTaskKey === null) return
     scrollIntoViewIfPossible(itemRefs.current.get(props.focusedTaskKey) ?? null, { block: 'nearest' })
-  }, [props.focusedTaskKey, props.visibleItems])
+  }, [phase, props.focusedTaskKey, props.visibleItems])
   return (
     <section className="lc-card lc-pulse-tasks">
       <div className="lc-card-title">
         <span className="lc-card-title-text"><IconChecklistOutlineRegular size={14} />{t('fleet.pulse.work')}</span>
         <span className="lc-pulse-card-tools">
-          <span className="lc-card-sub">{t('fleet.pulse.workSub', { shown: props.visibleItems.length, total: props.items.length })}</span>
+          <span className="lc-card-sub">{t('fleet.pulse.workSub', { shown: shownItems.length, total: props.items.length })}</span>
           <ClearableInput
             type="search"
             className="lc-fleet-search lc-pulse-search"
@@ -156,112 +212,235 @@ function PulseTasks(props: PulseTasksProps): ReactElement {
         </span>
       </div>
       {props.teamFailure !== undefined ? <div className="lc-pulse-work-warning">{t('fleet.team.failureShort')} · {props.teamFailure}</div> : null}
-      {props.visibleItems.length > 0 ? (
-        <ol className="lc-pulse-work-list">
-          {props.visibleItems.map((item) => {
-            const focused = props.focusedTaskKey === item.key
-            const owner = item.ownerId !== undefined ? props.agentOf(item.ownerId) : null
-            const entry = item.ownerId !== undefined ? props.details.landed.get(item.ownerId)?.detail : null
-            const full = item.ownerId !== undefined ? props.details.fullLanded.get(item.ownerId) : null
-            const fullPending = item.ownerId !== undefined && props.details.fullPending.has(item.ownerId)
-            const prompt = item.kind === 'agent' && item.ownerId !== undefined
-              ? agentPromptOf(props.details, item.ownerId)
-              : item.description
-            const reply = !fullPending ? full?.lastReply ?? entry?.lastReply : entry?.lastReply
-            const subject = item.kind === 'agent' ? workSubjectOf(prompt, item.subject) : item.subject
-            const dot = item.status === 'completed' || item.status === 'latest_complete'
-              ? 'done'
-              : item.status === 'in_progress' ? 'ongoing' : item.status === 'idle' || item.ready ? 'idle' : 'warning'
+      <div className="lc-pulse-work-filters" role="group" aria-label={t('fleet.tasks.filterLabel')}>
+        <button
+          type="button"
+          className={'lc-gran-btn' + (phase === 'all' ? ' lc-gran-on' : '')}
+          data-work-phase="all"
+          aria-pressed={phase === 'all'}
+          onClick={() => { setPhase('all') }}
+        >
+          {t('fleet.tasks.filterAll')}<span className="lc-kind-n">{counts.all}</span>
+        </button>
+        {WORK_PHASES.map((entry) => {
+          const on = phase === entry
+          return (
+            <button
+              key={entry}
+              type="button"
+              className={'lc-gran-btn' + (on ? ' lc-gran-on' : '')}
+              data-work-phase={entry}
+              aria-pressed={on}
+              onClick={() => { setPhase(entry) }}
+            >
+              {phaseLabelOf(entry, t)}<span className="lc-kind-n">{counts[entry]}</span>
+            </button>
+          )
+        })}
+      </div>
+      {shownItems.length > 0 ? (
+        <div className="lc-pulse-work-body">
+          {groups.map((group) => {
+            const owner = group.ownerId !== undefined ? props.agentOf(group.ownerId) : null
+            const ownerName = group.ownerName ?? owner?.name
+            const ownerState = group.items.find(item => item.ownerState !== undefined)?.ownerState
+            const agentOnly = group.items.every(item => item.kind === 'agent')
+            const hue = owner?.hue ?? 'var(--dsw-alias-border-l2)'
             return (
-              <li
-                key={item.key}
-                ref={(el) => {
-                  if (el !== null) itemRefs.current.set(item.key, el)
-                  else itemRefs.current.delete(item.key)
-                }}
-                className={'lc-pulse-work-item' + (focused ? ' lc-pulse-work-focused' : '')
-                  + (item.ownerId !== undefined && item.ownerId === props.selectedAgent ? ' lc-pulse-work-related' : '')
-                  + (item.kind === 'team' && props.hoveredTaskId === item.id ? ' lc-pulse-work-task-hover' : '')}
-                data-task={item.id}
-                onMouseEnter={() => { if (item.kind === 'team') props.onHoverTask(item.id) }}
-                onMouseLeave={() => { if (item.kind === 'team') props.onHoverTask(null) }}
+              <section
+                key={group.key}
+                className={'lc-pulse-work-group' + (agentOnly ? ' lc-pulse-work-group-agent' : '')}
+                data-owner-group={group.key}
+                style={{ '--lc-owner-hue': hue } as CSSProperties}
               >
-                <div className="lc-pulse-work-row">
-                  <button type="button" className="lc-pulse-work-focus" aria-expanded={focused} onClick={() => { props.onFocus(item) }}>
-                    <StateDot state={dot} size={8} />
-                    {item.kind === 'team' ? (
-                      <span className="lc-pulse-work-id" title={`${item.id} · ${item.subject}`}>{pulseTaskBadgeOf(item.id)}</span>
-                    ) : null}
-                    <span
-                      className={'lc-pulse-work-subject' + (item.kind === 'agent' ? ' lc-pulse-work-subject-agent' : '')}
-                      title={subject}
-                    >{subject}</span>
-                  </button>
-                  {owner !== null ? (
-                    <button
-                      type="button"
-                      className="lc-pulse-work-owner"
-                      data-owner={owner.id}
-                      aria-pressed={props.selectedAgent === owner.id}
-                      title={t('fleet.tasks.ownerTip')}
-                      style={{ '--lc-owner-hue': owner.hue } as CSSProperties}
-                      onClick={() => { props.onSelectAgent(owner.id) }}
-                    >
-                      <AgentAvatar agent={owner} size="sm" t={t} />
-                      <span title={item.ownerName}>{item.ownerName}</span>
-                    </button>
-                  ) : <span className="lc-pulse-work-unowned">{t('fleet.taskUnowned')}</span>}
-                  <span className="lc-pulse-work-status">
-                    {item.kind === 'agent'
-                      ? t(item.status === 'in_progress' ? 'agents.running' : item.status === 'latest_complete' ? 'fleet.pulse.latestTurn' : 'fleet.pulse.idle')
-                      : t(`fleet.task.${item.status}`)}
-                  </span>
-                  <button
-                    type="button"
-                    className="lc-pulse-work-chev"
-                    aria-expanded={focused}
-                    aria-label={t(focused ? 'fleet.collapse' : 'fleet.expand')}
-                    onClick={() => { props.onFocus(item) }}
-                  >
-                    {focused ? <IconChevronUp size={11} /> : <IconChevronDown size={11} />}
-                  </button>
-                </div>
-                {item.kind === 'team' && item.status === 'pending' ? (
-                  <div className="lc-pulse-work-readiness">{t(item.ready ? 'fleet.taskReady' : 'fleet.taskBlocked')}</div>
-                ) : null}
-                {item.blockedBy.length > 0 ? (
-                  <div className="lc-pulse-work-deps">
-                    <span>{t('fleet.tasks.dependsOn')}</span>
-                    {item.blockedBy.map(id => (
-                      <button key={id} type="button" data-dependency={id} onClick={() => { props.onFocusDependency(id) }}>{id}</button>
-                    ))}
+                {agentOnly ? null : (
+                  <div className="lc-pulse-work-group-head">
+                    {owner !== null ? (
+                      <button
+                        type="button"
+                        className="lc-pulse-work-group-owner"
+                        data-owner={owner.id}
+                        aria-pressed={props.selectedAgent === owner.id}
+                        title={t('fleet.tasks.ownerTip')}
+                        onClick={() => { props.onSelectAgent(owner.id) }}
+                      >
+                        <AgentAvatar agent={owner} size="sm" t={t} />
+                        <span>{ownerName}</span>
+                      </button>
+                    ) : (
+                      <span className="lc-pulse-work-group-name">{ownerName ?? t('fleet.taskUnowned')}</span>
+                    )}
+                    {ownerName !== undefined ? <AgentStatePill state={ownerState} t={t} /> : null}
+                    <span className="lc-pulse-work-group-count">{t('fleet.tasks.groupCount', { n: group.items.length })}</span>
                   </div>
-                ) : null}
-                {focused ? (
-                  <div className="lc-pulse-work-detail">
-                    <span className="lc-pulse-work-kind">{t(item.kind === 'team' ? 'fleet.pulse.teamTask' : 'fleet.pulse.delegation')}</span>
-                    {fullPending ? <span className="lc-pulse-work-loading">{t('fleet.tasks.replyFull')}</span> : null}
-                    {prompt !== undefined && prompt !== '' ? <props.rich.RichText text={prompt} mode="md" /> : null}
-                    {reply !== undefined ? (
-                      <div className="lc-pulse-work-reply">
-                        <span>{t('fleet.tasks.reply')} · {fmtTime(reply.time)}</span>
-                        <props.rich.RichText text={reply.text} mode="md" />
-                      </div>
-                    ) : null}
-                    {item.writeScopes.length > 0 ? <div>{t('fleet.taskScopes')} {item.writeScopes.join(' · ')}</div> : null}
-                    {item.warnings.map(warning => <div className="lc-pulse-work-warning" key={warning}>{warning}</div>)}
-                    {owner !== null && !owner.self && owner.role !== 'other' ? (
-                      <div className="lc-pulse-work-actions">
-                        <button type="button" onClick={() => { props.onOpen(owner.id) }}><IconPanelLeftOutlineRegular size={11} />{t('fleet.openSidebar')}</button>
-                        <button type="button" onClick={() => { props.onEnter(owner.id) }}><IconRightUpOutlineRegular size={11} />{t('fleet.open')}</button>
-                      </div>
-                    ) : null}
-                  </div>
-                ) : null}
-              </li>
+                )}
+                <ol className="lc-pulse-work-list">
+                  {group.items.map((item) => {
+                    const focused = props.focusedTaskKey === item.key
+                    const owner = item.ownerId !== undefined ? props.agentOf(item.ownerId) : null
+                    const ownerName = item.ownerName ?? owner?.name
+                    const ownerRole = owner !== null ? roleTextOf(owner, t) : ''
+                    const entry = item.ownerId !== undefined ? props.details.landed.get(item.ownerId)?.detail : null
+                    const full = item.ownerId !== undefined ? props.details.fullLanded.get(item.ownerId) : null
+                    const fullPending = item.ownerId !== undefined && props.details.fullPending.has(item.ownerId)
+                    const prompt = item.kind === 'agent' && item.ownerId !== undefined
+                      ? agentPromptOf(props.details, item.ownerId)
+                      : item.description
+                    const reply = !fullPending ? full?.lastReply ?? entry?.lastReply : entry?.lastReply
+                    const subject = item.kind === 'agent' ? workSubjectOf(prompt, item.subject) : item.subject
+                    const dot = taskDotOf(item)
+                    const kindLabel = t(item.kind === 'team' ? 'fleet.pulse.teamTask' : 'fleet.pulse.delegation')
+                    const showOwnerActions = owner !== null && !owner.self && owner.role !== 'other'
+                    return (
+                      <li
+                        key={item.key}
+                        ref={(el) => {
+                          if (el !== null) itemRefs.current.set(item.key, el)
+                          else itemRefs.current.delete(item.key)
+                        }}
+                        className={'lc-pulse-work-item' + (focused ? ' lc-pulse-work-focused' : '')
+                          + (item.kind === 'team' && dependencyChain.has(item.id) ? ' lc-pulse-work-chain' : '')
+                          + (item.ownerId !== undefined && item.ownerId === props.selectedAgent ? ' lc-pulse-work-related' : '')
+                          + (item.kind === 'team' && props.hoveredTaskId === item.id ? ' lc-pulse-work-task-hover' : '')}
+                        data-task={item.id}
+                        style={{ '--lc-owner-hue': owner?.hue ?? 'var(--dsw-alias-border-l2)' } as CSSProperties}
+                        onMouseEnter={() => { if (item.kind === 'team') props.onHoverTask(item.id) }}
+                        onMouseLeave={() => { if (item.kind === 'team') props.onHoverTask(null) }}
+                      >
+                        <div className="lc-pulse-work-identity">
+                          {owner !== null ? (
+                            <button
+                              type="button"
+                              className="lc-pulse-work-owner"
+                              data-owner={owner.id}
+                              aria-pressed={props.selectedAgent === owner.id}
+                              title={t('fleet.tasks.ownerTip')}
+                              onClick={() => { props.onSelectAgent(owner.id) }}
+                            >
+                              <AgentAvatar agent={owner} size="sm" t={t} />
+                              <span title={item.ownerName}>{ownerName}</span>
+                              {ownerRole !== '' ? <em>{ownerRole}</em> : null}
+                            </button>
+                          ) : ownerName !== undefined ? (
+                            <span className="lc-pulse-work-owner-name">{ownerName}</span>
+                          ) : <span className="lc-pulse-work-unowned">{t('fleet.taskUnowned')}</span>}
+                          {ownerName !== undefined ? <AgentStatePill state={item.ownerState} t={t} /> : null}
+                        </div>
+                        <div className="lc-pulse-work-titleline">
+                          <button type="button" className="lc-pulse-work-focus" aria-expanded={focused} onClick={() => { props.onFocus(item) }}>
+                            {item.kind === 'team'
+                              ? <span className="lc-pulse-work-id" title={`${item.id} · ${item.subject}`}>{pulseTaskBadgeOf(item.id)}</span>
+                              : <span className="lc-pulse-work-kind-badge" title={item.id}>{t('fleet.pulse.delegationShort')}</span>}
+                            <span
+                              className={'lc-pulse-work-subject' + (item.kind === 'agent' ? ' lc-pulse-work-subject-agent' : '')}
+                              title={subject}
+                            >{subject}</span>
+                          </button>
+                          <span className="lc-pulse-work-tail">
+                            {item.kind === 'team' ? (
+                              <span className="lc-pulse-work-status">
+                                <StateDot state={dot} size={8} />
+                                <span>{t(`fleet.task.${item.status}`)}</span>
+                              </span>
+                            ) : null}
+                            <button
+                              type="button"
+                              className="lc-pulse-work-chev"
+                              aria-expanded={focused}
+                              aria-label={t(focused ? 'fleet.collapse' : 'fleet.expand')}
+                              onClick={() => { props.onFocus(item) }}
+                            >
+                              {focused ? <IconChevronUp size={11} /> : <IconChevronDown size={11} />}
+                            </button>
+                          </span>
+                        </div>
+                        {!focused && item.kind === 'team' && item.description !== undefined ? (
+                          <div className="lc-pulse-work-desc">{item.description}</div>
+                        ) : null}
+                        {item.kind === 'team' && item.status === 'pending' ? (
+                          <div className="lc-pulse-work-readiness">{t(item.ready ? 'fleet.taskReady' : 'fleet.taskBlocked')}</div>
+                        ) : null}
+                        {item.blockedBy.length > 0 ? (
+                          <div className="lc-pulse-work-deps">
+                            <span>{t('fleet.tasks.dependsOn')}</span>
+                            {item.blockedBy.map((id) => {
+                              const blocker = taskById.get(id)
+                              return (
+                                <button key={id} type="button" data-dependency={id} onClick={() => { props.onFocusDependency(id) }}>
+                                  {blocker !== undefined ? <StateDot state={taskDotOf(blocker)} size={7} /> : null}
+                                  {pulseTaskBadgeOf(id)}
+                                </button>
+                              )
+                            })}
+                          </div>
+                        ) : null}
+                        {item.kind === 'team' ? (
+                          <div className="lc-pulse-work-meta">
+                            <span className="lc-pulse-work-raw-id" title={item.id}>{item.id}</span>
+                            {item.writeScopes.length > 0 ? <span>{t('fleet.taskScopes')} {item.writeScopes.join(' · ')}</span> : null}
+                          </div>
+                        ) : null}
+                        {item.warnings.map(warning => <div className="lc-pulse-work-warning" key={warning}>{warning}</div>)}
+                        {focused ? (
+                          <div className="lc-pulse-work-detail">
+                            <div className="lc-pulse-work-detail-kind">
+                              <span className="lc-pulse-work-kind">{kindLabel}</span>
+                              {fullPending ? <span className="lc-pulse-work-loading">{t('fleet.tasks.replyFull')}</span> : null}
+                            </div>
+                            {prompt !== undefined && prompt !== '' ? (
+                              <Section label={t('fleet.tasks.brief')}>
+                                <props.rich.RichText text={prompt} mode="md" />
+                              </Section>
+                            ) : null}
+                            {ownerName !== undefined ? (
+                              <Section
+                                label={t('fleet.tasks.agentBox')}
+                                actions={showOwnerActions ? (
+                                  <div className="lc-pulse-work-actions">
+                                    <button type="button" onClick={() => { props.onOpen(owner.id) }}><IconPanelLeftOutlineRegular size={11} />{t('fleet.openSidebar')}</button>
+                                    <button type="button" onClick={() => { props.onEnter(owner.id) }}><IconRightUpOutlineRegular size={11} />{t('fleet.open')}</button>
+                                  </div>
+                                ) : undefined}
+                              >
+                                <div className="lc-pulse-work-agentbox">
+                                  {owner !== null ? <AgentAvatar agent={owner} size="md" t={t} /> : null}
+                                  <div className="lc-pulse-work-agent-copy">
+                                    <b>{ownerName}</b>
+                                    <div className="lc-pulse-work-agent-meta">
+                                      {ownerRole !== '' ? <span>{ownerRole}</span> : null}
+                                      <AgentStatePill state={item.ownerState} t={t} />
+                                      {item.ownerModel !== undefined ? <span className="lc-pulse-work-agent-model">{item.ownerModel}</span> : null}
+                                    </div>
+                                  </div>
+                                </div>
+                              </Section>
+                            ) : null}
+                            {reply !== undefined ? (
+                              <div className="lc-pulse-work-reply">
+                                <Section
+                                  label={t('fleet.tasks.reply')}
+                                  meta={fullPending ? t('fleet.tasks.replyFull') : fmtTime(reply.time)}
+                                >
+                                  <props.rich.RichText text={reply.text} mode="md" />
+                                </Section>
+                              </div>
+                            ) : fullPending ? (
+                              <div className="lc-pulse-work-reply">
+                                <Section label={t('fleet.tasks.reply')} meta={t('fleet.tasks.replyFull')}>
+                                  {null}
+                                </Section>
+                              </div>
+                            ) : null}
+                          </div>
+                        ) : null}
+                      </li>
+                    )
+                  })}
+                </ol>
+              </section>
             )
           })}
-        </ol>
+        </div>
       ) : <div className="lc-empty">{t(props.items.length === 0 ? 'fleet.tasks.noTeam' : 'fleet.tasks.noMatch')}</div>}
     </section>
   )
@@ -528,6 +707,7 @@ export function MissionPulse(props: MissionPulseProps): ReactElement {
   const [selectedEventKey, setSelectedEventKey] = useState<string | null>(null)
   const [selectedDelegationKey, setSelectedDelegationKey] = useState<string | null>(null)
   const [focusedTaskKey, setFocusedTaskKey] = useState<string | null>(null)
+  const [taskRevealVersion, setTaskRevealVersion] = useState(0)
   const [hoveredTaskId, setHoveredTaskId] = useState<string | null>(null)
   const [kind, setKind] = useState<CommsKindFilter>('all')
   const [query, setQuery] = useState('')
@@ -670,6 +850,7 @@ export function MissionPulse(props: MissionPulseProps): ReactElement {
     setSelectedAgent(null)
     setWorkQuery('')
     setFocusedTaskKey(item.key)
+    setTaskRevealVersion(current => current + 1)
     if (item.ownerId !== undefined) props.details.requestFull(item.ownerId)
   }
   return (
@@ -732,6 +913,7 @@ export function MissionPulse(props: MissionPulseProps): ReactElement {
             details={props.details}
             selectedAgent={selectedAgent}
             focusedTaskKey={focusedTaskKey}
+            revealVersion={taskRevealVersion}
             hoveredTaskId={hoveredTaskId}
             query={workQuery}
             agentOf={agentOf}

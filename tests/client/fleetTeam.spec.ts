@@ -2,8 +2,9 @@ import assert from 'node:assert/strict'
 import { describe, test } from 'vitest'
 import {
   memberIdByName,
+  taskOwnerIdOf,
+  tasksOfOwnerId,
   teammateNameOf,
-  tasksOfOwner,
   teamMemberOf,
   teamOf,
   type FleetTeam,
@@ -40,6 +41,17 @@ describe('teamOf — the sanitizing parse', () => {
     assert.equal(bare.members[0].error, undefined)
     assert.equal(bare.failure, undefined)
     assert.deepEqual(bare.tasks, [])
+
+    const modern = teamOf({
+      enabled: true,
+      tasks: [{ id: 'task-7', subject: 'modern', description: '', status: 'pending', ownerId: 'w1', blockedBy: [], writeScopes: [], ready: true }],
+    })
+    assert.ok(modern !== null)
+    assert.deepEqual(modern.members, [])
+    assert.equal(modern.tasks[0].ownerId, 'w1')
+    assert.equal(modern.tasks[0].subject, 'modern')
+    assert.deepEqual(teamOf({ tasks: [] })?.tasks, [])
+    assert.equal(teamOf({ enabled: false, tasks: [] }), null)
 
     assert.equal(teamOf(undefined), null)
     assert.equal(teamOf(null), null)
@@ -101,9 +113,9 @@ describe('fleetTeam helpers', () => {
     assert.equal(memberIdByName(team, 'ghost'), undefined)
     assert.equal(memberIdByName(team, undefined), undefined)
     assert.equal(memberIdByName(null, 'worker-bee'), undefined)
-    assert.deepEqual(tasksOfOwner(team, 'worker-bee').map(task => task.id), ['task-1', 'task-2'])
-    assert.deepEqual(tasksOfOwner(team, 'lead'), [])
-    assert.deepEqual(tasksOfOwner(team, undefined), [])
-    assert.deepEqual(tasksOfOwner(null, 'worker-bee'), [])
+    assert.equal(taskOwnerIdOf(team, team.tasks[0]), 'w1')
+    assert.deepEqual(tasksOfOwnerId(team, 'w1').map(task => task.id), ['task-1', 'task-2'])
+    assert.deepEqual(tasksOfOwnerId(team, 'nobody'), [])
+    assert.deepEqual(tasksOfOwnerId(null, 'w1'), [])
   })
 })

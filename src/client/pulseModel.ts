@@ -1,7 +1,8 @@
-import type { AgentForest } from './agentTree'
+import type { AgentForest, AgentNode } from './agentTree'
+import { modelLabelOf } from './agentTree'
 import { fromPartyOf, type CommsAgent } from './commsModel'
 import type { CommsRow, FleetDelegationRow } from './fleetDetail'
-import { familyOthersOf, memberIdByName, tasksOfOwner, type FleetTeam, type FleetTeamTask } from './fleetTeam'
+import { familyOthersOf, taskOwnerIdOf, type FleetTeam, type FleetTeamTask } from './fleetTeam'
 
 interface PulseTimelineBase {
   key: string
@@ -190,15 +191,18 @@ export function pulseLaneVisibility(
 }
 
 export function pulseTaskBadgeOf(id: string): string {
-  return id.startsWith('task-') ? `#${id.slice(5)}` : id
+  return /^task-\d+$/.test(id) ? `#${id.slice(5)}` : id
 }
 
 export function pulseTasksByAgent(team: FleetTeam | null): Map<string, readonly FleetTeamTask[]> {
-  const map = new Map<string, readonly FleetTeamTask[]>()
+  const map = new Map<string, FleetTeamTask[]>()
   if (team === null) return map
-  for (const member of team.members) {
-    const tasks = tasksOfOwner(team, member.name)
-    if (tasks.length > 0) map.set(member.id, tasks)
+  for (const task of team.tasks) {
+    const ownerId = taskOwnerIdOf(team, task)
+    if (ownerId === undefined) continue
+    const tasks = map.get(ownerId) ?? []
+    tasks.push(task)
+    map.set(ownerId, tasks)
   }
   return map
 }
@@ -211,6 +215,8 @@ export function pulseTaskOf(
   return tasks.length === 0 ? null : tasks[0]
 }
 
+export type PulseWorkAgentState = 'running' | 'latest_complete' | 'idle'
+
 export interface PulseWorkItem {
   key: string
   id: string
@@ -219,6 +225,8 @@ export interface PulseWorkItem {
   status: 'pending' | 'in_progress' | 'completed' | 'idle' | 'latest_complete'
   ownerId?: string
   ownerName?: string
+  ownerState?: PulseWorkAgentState
+  ownerModel?: string
   description?: string
   blockedBy: string[]
   writeScopes: string[]
@@ -226,9 +234,23 @@ export interface PulseWorkItem {
   ready: boolean
 }
 
+function agentStateOf(node: AgentNode): PulseWorkAgentState
+function agentStateOf(node: AgentNode | undefined): PulseWorkAgentState | undefined
+function agentStateOf(node: AgentNode | undefined): PulseWorkAgentState | undefined {
+  if (node === undefined) return undefined
+  if (node.running) return 'running'
+  if (node.subagent && node.completed) return 'latest_complete'
+  return 'idle'
+}
+
 export function pulseWorkItemsOf(forest: AgentForest | null, team: FleetTeam | null): PulseWorkItem[] {
+  const nodeOf = new Map((forest?.nodes ?? []).map(node => [node.id, node]))
   const teamRows: PulseWorkItem[] = (team?.tasks ?? []).map((task) => {
-    const ownerId = memberIdByName(team, task.ownerName)
+    const ownerId = taskOwnerIdOf(team, task)
+    const ownerNode = ownerId !== undefined ? nodeOf.get(ownerId) : undefined
+    const ownerState = agentStateOf(ownerNode)
+    const ownerModel = ownerNode !== undefined ? modelLabelOf(ownerNode.model, ownerNode.reasoningEffort) : undefined
+    const ownerName = task.ownerName ?? ownerNode?.label
     return {
       key: `team:${task.id}`,
       id: task.id,
@@ -236,7 +258,9 @@ export function pulseWorkItemsOf(forest: AgentForest | null, team: FleetTeam | n
       subject: task.subject,
       status: task.status,
       ...(ownerId !== undefined ? { ownerId } : {}),
-      ...(task.ownerName !== undefined ? { ownerName: task.ownerName } : {}),
+      ...(ownerName !== undefined ? { ownerName } : {}),
+      ...(ownerState !== undefined ? { ownerState } : {}),
+      ...(ownerModel !== undefined ? { ownerModel } : {}),
       ...(task.description !== '' ? { description: task.description } : {}),
       blockedBy: task.blockedBy,
       writeScopes: task.writeScopes,
@@ -244,19 +268,74 @@ export function pulseWorkItemsOf(forest: AgentForest | null, team: FleetTeam | n
       ready: task.ready,
     }
   })
-  const agentRows: PulseWorkItem[] = familyOthersOf(forest, team).map(node => ({
-    key: `agent:${node.id}`,
-    id: node.id,
-    kind: 'agent',
-    subject: node.label,
-    status: node.running ? 'in_progress' : node.completed ? 'latest_complete' : 'idle',
-    ownerId: node.id,
-    ownerName: node.label,
-    blockedBy: [],
-    writeScopes: [],
-    warnings: [],
-    ready: false,
-  }))
+  const agentRows: PulseWorkItem[] = familyOthersOf(forest, team).map((node) => {
+    const ownerState = agentStateOf(node)
+    const ownerModel = modelLabelOf(node.model, node.reasoningEffort)
+    return {
+      key: `agent:${node.id}`,
+      id: node.id,
+      kind: 'agent',
+      subject: node.label,
+      status: ownerState === 'running' ? 'in_progress' : ownerState,
+      ownerId: node.id,
+      ownerName: node.label,
+      ownerState,
+      ...(ownerModel !== undefined ? { ownerModel } : {}),
+      blockedBy: [],
+      writeScopes: [],
+      warnings: [],
+      ready: false,
+    }
+  })
   const order: Record<PulseWorkItem['status'], number> = { in_progress: 0, pending: 1, idle: 2, latest_complete: 3, completed: 4 }
   return [...teamRows, ...agentRows].sort((a, b) => order[a.status] - order[b.status])
+}
+
+export interface PulseWorkGroup {
+  key: string
+  ownerId?: string
+  ownerName?: string
+  items: PulseWorkItem[]
+}
+
+export function pulseWorkGroupsOf(items: readonly PulseWorkItem[]): PulseWorkGroup[] {
+  const groups = new Map<string, PulseWorkGroup>()
+  for (const item of items) {
+    const key = item.ownerId !== undefined ? `id:${item.ownerId}`
+      : item.ownerName !== undefined ? `name:${item.ownerName}` : 'unowned'
+    const group = groups.get(key) ?? {
+      key,
+      ...(item.ownerId !== undefined ? { ownerId: item.ownerId } : {}),
+      ...(item.ownerName !== undefined ? { ownerName: item.ownerName } : {}),
+      items: [],
+    }
+    group.items.push(item)
+    groups.set(key, group)
+  }
+  const unowned = groups.get('unowned')
+  groups.delete('unowned')
+  if (unowned !== undefined) groups.set('unowned', unowned)
+  return [...groups.values()]
+}
+
+export type PulseWorkPhase = 'pending' | 'in_progress' | 'completed'
+
+export function pulseWorkPhaseOf(item: PulseWorkItem): PulseWorkPhase {
+  if (item.kind === 'team') return item.status as PulseWorkPhase
+  if (item.status === 'in_progress') return 'in_progress'
+  if (item.status === 'latest_complete') return 'completed'
+  return 'pending'
+}
+
+export function pulseDependencyChainOf(items: readonly PulseWorkItem[], taskId: string): Set<string> {
+  const blockers = new Map(items.filter(item => item.kind === 'team').map(item => [item.id, item.blockedBy]))
+  const chain = new Set<string>()
+  const queue = [...(blockers.get(taskId) ?? [])]
+  for (let index = 0; index < queue.length; index++) {
+    const id = queue[index]
+    if (chain.has(id)) continue
+    chain.add(id)
+    queue.push(...(blockers.get(id) ?? []))
+  }
+  return chain
 }

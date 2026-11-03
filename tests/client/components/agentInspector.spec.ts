@@ -139,6 +139,21 @@ describe('AgentInspector — team membership', () => {
     await m.unmount()
   })
 
+  test('a modern ownerId team without a roster still lists the agent’s tasks', async () => {
+    const focused = new Array<string | null>()
+    const team: FleetTeam = {
+      members: [],
+      tasks: [{ id: 'task-7', subject: 'modern task', description: '', status: 'in_progress', ownerId: 'w1', blockedBy: [], writeScopes: [], ready: false, warnings: [] }],
+    }
+    const m = await mount(h(AgentInspector, propsOf({ node: nodeOf('w1'), team, onFocusTask: id => { focused.push(id) } })))
+    const tasks = queryAll(query(m.container, '.lc-inspector'), '.lc-inspector-task')
+    assert.equal(tasks.length, 1)
+    assert.ok(text(tasks[0]).includes('modern task'))
+    await click(query(tasks[0], '.lc-inspector-task-link'))
+    assert.deepEqual([...focused], ['task-7'])
+    await m.unmount()
+  })
+
   test('the lead row, a failed member with its error, and a provisioning member', async () => {
     for (const [id, marker] of [['root', 'lead'], ['w2', 'provider blew up'], ['w3', 'provisioning']] as const) {
       const m = await mount(h(AgentInspector, propsOf({ node: nodeOf(id), team: TEAM })))

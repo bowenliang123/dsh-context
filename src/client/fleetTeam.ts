@@ -14,6 +14,7 @@ export interface FleetTeamTask {
   subject: string
   description: string
   status: 'pending' | 'in_progress' | 'completed'
+  ownerId?: string
   ownerName?: string
   blockedBy: string[]
   writeScopes: string[]
@@ -59,6 +60,7 @@ function taskOf(value: unknown): FleetTeamTask | null {
     subject: rec.subject,
     description: typeof rec.description === 'string' ? rec.description : '',
     status: rec.status,
+    ...(typeof rec.ownerId === 'string' && rec.ownerId !== '' ? { ownerId: rec.ownerId } : {}),
     ...(typeof rec.ownerName === 'string' && rec.ownerName !== '' ? { ownerName: rec.ownerName } : {}),
     blockedBy: stringsOf(rec.blockedBy),
     writeScopes: stringsOf(rec.writeScopes),
@@ -69,11 +71,14 @@ function taskOf(value: unknown): FleetTeamTask | null {
 
 export function teamOf(value: unknown): FleetTeam | null {
   const rec = asRecord(value)
-  if (rec === null || !Array.isArray(rec.members)) return null
+  if (rec === null || rec.enabled === false) return null
+  if (!Array.isArray(rec.members) && !Array.isArray(rec.tasks)) return null
   const members: FleetTeamMember[] = []
-  for (const entry of rec.members) {
-    const member = memberOf(entry)
-    if (member !== null) members.push(member)
+  if (Array.isArray(rec.members)) {
+    for (const entry of rec.members) {
+      const member = memberOf(entry)
+      if (member !== null) members.push(member)
+    }
   }
   const tasks: FleetTeamTask[] = []
   if (Array.isArray(rec.tasks)) {
@@ -111,12 +116,21 @@ export function memberIdByName(team: FleetTeam | null, name: string | undefined)
   return undefined
 }
 
-export function tasksOfOwner(team: FleetTeam | null, ownerName: string | undefined): FleetTeamTask[] {
-  if (team === null || ownerName === undefined) return []
-  return team.tasks.filter(task => task.ownerName === ownerName)
+export function taskOwnerIdOf(team: FleetTeam | null, task: FleetTeamTask): string | undefined {
+  return task.ownerId ?? memberIdByName(team, task.ownerName)
+}
+
+export function tasksOfOwnerId(team: FleetTeam | null, ownerId: string): FleetTeamTask[] {
+  if (team === null) return []
+  return team.tasks.filter(task => taskOwnerIdOf(team, task) === ownerId)
 }
 
 export function familyOthersOf(forest: AgentForest | null, team: FleetTeam | null): AgentNode[] {
   if (forest === null) return []
-  return forest.nodes.filter(n => !n.isCurrent && teamMemberOf(team, n.id) === null)
+  const owners = new Set<string>()
+  for (const task of team?.tasks ?? []) {
+    const ownerId = taskOwnerIdOf(team, task)
+    if (ownerId !== undefined) owners.add(ownerId)
+  }
+  return forest.nodes.filter(n => !n.isCurrent && teamMemberOf(team, n.id) === null && !owners.has(n.id))
 }

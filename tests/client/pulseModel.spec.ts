@@ -6,9 +6,14 @@ import type { CommsRow, FleetDelegationRow } from '../../src/client/fleetDetail'
 import type { FleetTeam } from '../../src/client/fleetTeam'
 import {
   layoutPulse,
+  pulseDependencyChainOf,
   pulseLaneVisibility,
+  pulseTaskBadgeOf,
+  pulseTasksByAgent,
   pulseTimelineItemsOf,
+  pulseWorkGroupsOf,
   pulseWorkItemsOf,
+  pulseWorkPhaseOf,
 } from '../../src/client/pulseModel'
 
 function row(time: number, key = `event-${time}`, to = 'bee', from = 'lead'): CommsRow {
@@ -218,6 +223,7 @@ describe('pulse work queue', () => {
         status: 'in_progress',
         ownerId: 'bee',
         ownerName: 'worker-bee',
+        ownerState: 'running',
         description: 'All of it',
         blockedBy: ['task-0'],
         writeScopes: [],
@@ -232,6 +238,7 @@ describe('pulse work queue', () => {
         status: 'latest_complete',
         ownerId: 'side',
         ownerName: 'side-quest',
+        ownerState: 'latest_complete',
         blockedBy: [],
         writeScopes: [],
         warnings: [],
@@ -254,5 +261,77 @@ describe('pulse work queue', () => {
     assert.equal(items[0].ownerId, undefined)
     assert.equal(items[0].description, undefined)
     assert.deepEqual(pulseWorkItemsOf(null, null), [])
+  })
+
+  test('modern ownerId tasks need no roster, keep one row per owner, and do not promote ordinary sessions to completed', () => {
+    const team: FleetTeam = {
+      members: [],
+      tasks: [{
+        id: 'task-7',
+        subject: 'Modern owner',
+        description: '',
+        status: 'in_progress',
+        ownerId: 'bee',
+        blockedBy: [],
+        writeScopes: [],
+        ready: false,
+        warnings: [],
+      }],
+    }
+    const forest = {
+      solo: false,
+      edges: [],
+      nodes: [
+        node('root', { isCurrent: false, subagent: false, completed: true, label: 'root' }),
+        node('bee', { running: true, label: 'worker-bee', model: 'deepseek-flash', reasoningEffort: 'low' }),
+        node('idle', { label: 'idle-one' }),
+      ],
+    }
+    const items = pulseWorkItemsOf(forest, team)
+    assert.deepEqual(items.map(item => [item.key, item.ownerId, item.ownerState]), [
+      ['team:task-7', 'bee', 'running'],
+      ['agent:root', 'root', 'idle'],
+      ['agent:idle', 'idle', 'idle'],
+    ])
+    assert.equal(items[0].ownerName, 'worker-bee')
+    assert.equal(items[0].ownerModel, 'deepseek-flash (low)')
+    assert.deepEqual([...pulseTasksByAgent(team).keys()], ['bee'])
+    assert.deepEqual(pulseTasksByAgent(team).get('bee')?.map(task => task.id), ['task-7'])
+  })
+
+  test('groups owners in first-seen order with unowned last, normalizes phases, and walks the full dependency chain', () => {
+    const team: FleetTeam = {
+      members: [],
+      tasks: [
+        { id: 'task-1', subject: 'A', description: '', status: 'pending', ownerId: 'a', blockedBy: ['task-2'], writeScopes: [], ready: false, warnings: [] },
+        { id: 'task-2', subject: 'B', description: '', status: 'completed', ownerId: 'b', blockedBy: ['task-3'], writeScopes: [], ready: false, warnings: [] },
+        { id: 'task-3', subject: 'C', description: '', status: 'completed', blockedBy: [], writeScopes: [], ready: false, warnings: [] },
+      ],
+    }
+    const items = pulseWorkItemsOf({ solo: false, edges: [], nodes: [] }, team)
+    assert.deepEqual(pulseWorkGroupsOf(items).map(group => [group.key, group.items.length]), [
+      ['id:a', 1],
+      ['id:b', 1],
+      ['unowned', 1],
+    ])
+    assert.equal(pulseWorkPhaseOf(items.find(item => item.id === 'task-1')!), 'pending')
+    assert.equal(pulseWorkPhaseOf(items.find(item => item.id === 'task-2')!), 'completed')
+    assert.deepEqual([...pulseDependencyChainOf(items, 'task-1')].sort(), ['task-2', 'task-3'])
+    assert.equal(pulseTaskBadgeOf('task-12'), '#12')
+    assert.equal(pulseTaskBadgeOf('task-alpha'), 'task-alpha')
+    assert.equal(pulseTaskBadgeOf('free'), 'free')
+  })
+
+  test('dependency walk tolerates missing blockers and cycles without inventing nodes', () => {
+    const team: FleetTeam = {
+      members: [],
+      tasks: [
+        { id: 'task-c', subject: 'C', description: '', status: 'pending', blockedBy: ['task-d'], writeScopes: [], ready: false, warnings: [] },
+        { id: 'task-d', subject: 'D', description: '', status: 'pending', blockedBy: ['task-c', 'ghost'], writeScopes: [], ready: false, warnings: [] },
+      ],
+    }
+    const items = pulseWorkItemsOf(null, team)
+    assert.deepEqual([...pulseDependencyChainOf(items, 'task-c')].sort(), ['ghost', 'task-c', 'task-d'])
+    assert.deepEqual([...pulseDependencyChainOf(items, 'missing')], [])
   })
 })

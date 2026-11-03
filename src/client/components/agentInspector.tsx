@@ -4,7 +4,7 @@ import type { AgentNode } from '../agentTree'
 import { fmtDurationCompact, modelLabelOf } from '../agentTree'
 import { type CommsRow } from '../fleetDetail'
 import { CommsParties, commsTextOf } from './commsRow'
-import { tasksOfOwner, teamMemberOf, type FleetTeam } from '../fleetTeam'
+import { tasksOfOwnerId, teamMemberOf, type FleetTeam } from '../fleetTeam'
 import { fmtTime } from '../format'
 import type { FleetDetail, FleetMemberInfo } from '../../shared/types'
 import type { ViewKit } from '../viewkit'
@@ -37,7 +37,7 @@ export function AgentInspector(props: AgentInspectorProps): ReactElement {
     setPromptClamped(el !== null && el.scrollHeight > el.clientHeight + 1)
   }, [prompt])
   const member = teamMemberOf(team, node.id)
-  const owned = member !== null ? tasksOfOwner(team, member.name) : []
+  const owned = tasksOfOwnerId(team, node.id)
   const detail = props.detail?.detail ?? null
   const memberInfo = member !== null ? props.roster.find(r => r.name === member.name) : undefined
 
@@ -115,21 +115,23 @@ export function AgentInspector(props: AgentInspectorProps): ReactElement {
         </div>
       ) : null}
 
-      {member !== null ? (
+      {member !== null || owned.length > 0 ? (
         <div className="lc-inspector-section">
-          <div className="lc-inspector-caption">{t('fleet.membership')}</div>
-          <div className="lc-inspector-member">
-            <span className="lc-agents-badge lc-inspector-member-name">{member.name}</span>
-            <span className="lc-agents-badge">{t(member.role === 'lead' ? 'fleet.role.lead' : 'fleet.role.teammate')}</span>
-            {member.phase !== 'active'
-              ? (
-                <span className={'lc-agents-badge' + (member.phase === 'failed' ? ' lc-agents-badge-err' : '')}>
-                  {t(member.phase === 'failed' ? 'fleet.phase.failed' : 'fleet.phase.provisioning')}
-                </span>
-              )
-              : null}
-            {member.error !== undefined ? <span className="lc-inspector-error">{member.error}</span> : null}
-          </div>
+          <div className="lc-inspector-caption">{t(member !== null ? 'fleet.membership' : 'fleet.pulse.tasks')}</div>
+          {member !== null ? (
+            <div className="lc-inspector-member">
+              <span className="lc-agents-badge lc-inspector-member-name">{member.name}</span>
+              <span className="lc-agents-badge">{t(member.role === 'lead' ? 'fleet.role.lead' : 'fleet.role.teammate')}</span>
+              {member.phase !== 'active'
+                ? (
+                  <span className={'lc-agents-badge' + (member.phase === 'failed' ? ' lc-agents-badge-err' : '')}>
+                    {t(member.phase === 'failed' ? 'fleet.phase.failed' : 'fleet.phase.provisioning')}
+                  </span>
+                )
+                : null}
+              {member.error !== undefined ? <span className="lc-inspector-error">{member.error}</span> : null}
+            </div>
+          ) : null}
           {memberInfo !== undefined && memberInfo.description !== '' ? (
             <div className="lc-inspector-member-desc">{memberInfo.description}</div>
           ) : null}

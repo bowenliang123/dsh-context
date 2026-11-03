@@ -406,6 +406,182 @@ describe('MissionPulse boundary parties', () => {
     await mounted.unmount()
   })
 
+  test('groups tasks by owning agent with status, task number, filters, dependency chain, and boxed detail', async () => {
+    const team: FleetTeam = {
+      members: [],
+      tasks: [
+        { id: 'task-3', subject: 'Build the board', description: 'Restore the old board.', status: 'in_progress', ownerId: 'child', blockedBy: ['task-4'], writeScopes: ['src/client'], ready: false, warnings: [] },
+        { id: 'task-4', subject: 'Prepare data', description: '', status: 'pending', ownerId: 'child', blockedBy: ['task-9'], writeScopes: [], ready: false, warnings: [] },
+        { id: 'task-9', subject: 'Research layout', description: '', status: 'completed', ownerId: 'child', blockedBy: [], writeScopes: [], ready: true, warnings: [] },
+      ],
+    }
+    const forest: AgentForest = {
+      solo: false,
+      edges: [],
+      nodes: [{
+        id: 'child',
+        label: 'worker-bee',
+        depth: 1,
+        family: 0,
+        isCurrent: false,
+        running: true,
+        completed: false,
+        subagent: true,
+        updatedAt: 1,
+        head: null,
+        billed: null,
+        costUsage: null,
+        durationMs: null,
+        identity: null,
+        requests: 0,
+        model: 'deepseek-flash',
+        reasoningEffort: 'low',
+      }],
+    }
+    const details = makeDetails()
+    details.landed.set('child', {
+      updatedAt: 1,
+      detail: {
+        messages: [],
+        truncated: false,
+        initialPrompt: 'Restore the old board.',
+        lastReply: { time: 3000, text: 'Board restored.' },
+      },
+    })
+    details.fullLanded.set('child', {
+      messages: [],
+      truncated: false,
+      initialPrompt: 'Restore the old board.',
+      lastReply: { time: 3000, text: 'Board restored.' },
+    })
+    const mounted = await mount(h(MissionPulse, {
+      graph,
+      forest,
+      team,
+      details,
+      landedDetails: new Map(),
+      comms: [{ key: 'child:1:1000:relay', to: 'child', seq: 1, time: 1000, kind: 'relay', from: 'root', text: 'go' }],
+      delegations: [],
+      agents: new Map([['child', { id: 'child', name: 'worker-bee', role: 'teammate' as const, self: false, hue: 'blue' }]]),
+      titles: new Map(),
+      attested: new Map(),
+      focusMember: null,
+      currency: 'usd',
+      onOpen: () => {},
+      onEnter: () => {},
+      rich: makeRichText(kit),
+      t: kit.t,
+    }))
+    const group = query(mounted.container, '[data-owner-group="id:child"]')
+    assert.ok(text(query(group, '.lc-pulse-work-group-head')).includes('worker-bee'))
+    assert.ok(text(query(group, '.lc-pulse-work-group-head')).includes(kit.t('agents.running')))
+    assert.ok(text(query(group, '.lc-pulse-work-group-head')).includes('3'))
+    const workItem = query<HTMLElement>(group, '[data-task="task-3"]')
+    assert.equal(text(query(workItem, '.lc-pulse-work-id')), '#3')
+    assert.equal(text(query(workItem, '.lc-pulse-work-subject')), 'Build the board')
+    assert.ok(text(query(workItem, '.lc-pulse-work-identity')).includes('worker-bee'))
+    assert.ok(text(query(workItem, '.lc-pulse-work-identity')).includes(kit.t('agents.running')))
+    assert.deepEqual(
+      queryAll<HTMLElement>(mounted.container, '[data-work-phase]').map(button => [button.dataset.workPhase, text(button)]),
+      [
+        ['all', kit.t('fleet.tasks.filterAll') + '3'],
+        ['in_progress', kit.t('fleet.tasks.filterInProgress') + '1'],
+        ['pending', kit.t('fleet.tasks.filterPending') + '1'],
+        ['completed', kit.t('fleet.tasks.filterCompleted') + '1'],
+      ],
+    )
+    await click(query(workItem, '.lc-pulse-work-focus'))
+    assert.ok(workItem.className.includes('lc-pulse-work-focused'))
+    assert.ok(query(group, '[data-task="task-4"]').className.includes('lc-pulse-work-chain'))
+    assert.ok(query(group, '[data-task="task-9"]').className.includes('lc-pulse-work-chain'))
+    assert.ok(text(query(workItem, '.lc-pulse-work-deps')).includes('#4'))
+    const detail = query(workItem, '.lc-pulse-work-detail')
+    assert.ok(text(detail).includes(kit.t('fleet.tasks.brief')))
+    assert.ok(text(detail).includes(kit.t('fleet.tasks.agentBox')))
+    assert.ok(text(detail).includes(kit.t('fleet.tasks.reply')))
+    assert.ok(text(detail).includes('Restore the old board.'))
+    assert.ok(text(detail).includes('Board restored.'))
+    assert.ok(text(detail).includes('deepseek-flash (low)'))
+    await click(query(mounted.container, '[data-work-phase="completed"]'))
+    assert.equal(queryAll(mounted.container, '.lc-pulse-work-item').length, 1)
+    await click(query(mounted.container, '[data-task-chip]'))
+    assert.equal(query(mounted.container, '[data-work-phase="all"]').getAttribute('aria-pressed'), 'true')
+    assert.ok(query(mounted.container, '[data-task="task-3"]').className.includes('lc-pulse-work-focused'))
+    await click(query(mounted.container, '[data-task="task-3"] .lc-pulse-work-owner'))
+    assert.equal(query(mounted.container, '[data-task="task-3"] .lc-pulse-work-owner').getAttribute('aria-pressed'), 'true')
+    await click(query(mounted.container, '[data-work-phase="all"]'))
+    assert.equal(queryAll(mounted.container, '.lc-pulse-work-item').length, 3)
+    await mounted.unmount()
+  })
+
+  test('keeps an off-roster owner name visible without inventing a selectable agent', async () => {
+    const team: FleetTeam = {
+      members: [{ id: 'root', name: 'lead', role: 'lead', phase: 'active' }],
+      tasks: [{ id: 'task-5', subject: 'Ghost task', description: '', status: 'pending', ownerName: 'ghost', blockedBy: [], writeScopes: [], ready: true, warnings: [] }],
+    }
+    const mounted = await mount(h(MissionPulse, {
+      graph,
+      forest: null,
+      team,
+      details: makeDetails(),
+      landedDetails: new Map(),
+      comms: [],
+      delegations: [],
+      agents: new Map(),
+      titles: new Map(),
+      attested: new Map(),
+      focusMember: null,
+      currency: 'usd',
+      onOpen: () => {},
+      onEnter: () => {},
+      rich: makeRichText(kit),
+      t: kit.t,
+    }))
+    assert.equal(text(query(mounted.container, '.lc-pulse-work-group-name')), 'ghost')
+    const task = query<HTMLElement>(mounted.container, '[data-task="task-5"]')
+    assert.equal(text(query(task, '.lc-pulse-work-owner-name')), 'ghost')
+    assert.equal(queryAll(task, '.lc-pulse-work-owner').length, 0)
+    assert.ok(text(query(task, '.lc-pulse-work-agent-state')).includes(kit.t('fleet.pulse.statusUnknown')))
+    await click(query(task, '.lc-pulse-work-focus'))
+    assert.ok(text(query(task, '.lc-pulse-work-agentbox')).includes('ghost'))
+    assert.equal(queryAll(task, '.lc-pulse-work-agentbox .lc-comms-avatar').length, 0)
+    await mounted.unmount()
+  })
+
+  test('resolves a nameless modern owner through the shared agent map and reports a pending full reply', async () => {
+    const team: FleetTeam = {
+      members: [],
+      tasks: [{ id: 'task-6', subject: 'Modern unnamed owner', description: '', status: 'in_progress', ownerId: 'child', blockedBy: [], writeScopes: [], ready: false, warnings: [] }],
+    }
+    const details = makeDetails()
+    details.fullPending.add('child')
+    const mounted = await mount(h(MissionPulse, {
+      graph,
+      forest: null,
+      team,
+      details,
+      landedDetails: new Map(),
+      comms: [],
+      delegations: [],
+      agents: new Map([['child', { id: 'child', name: 'worker-bee', role: 'teammate' as const, self: false, hue: 'blue' }]]),
+      titles: new Map(),
+      attested: new Map(),
+      focusMember: null,
+      currency: 'usd',
+      onOpen: () => {},
+      onEnter: () => {},
+      rich: makeRichText(kit),
+      t: kit.t,
+    }))
+    const task = query<HTMLElement>(mounted.container, '[data-task="task-6"]')
+    assert.ok(text(query(mounted.container, '.lc-pulse-work-group-owner')).includes('worker-bee'))
+    assert.ok(text(query(task, '.lc-pulse-work-owner')).includes('worker-bee'))
+    assert.ok(text(query(task, '.lc-pulse-work-identity')).includes(kit.t('fleet.pulse.statusUnknown')))
+    await click(query(task, '.lc-pulse-work-focus'))
+    assert.ok(text(query(task, '.lc-pulse-work-reply')).includes(kit.t('fleet.tasks.replyFull')))
+    await mounted.unmount()
+  })
+
   test('the collaboration and work-queue headers search their own content', async () => {
     const team: FleetTeam = {
       members: [

@@ -142,6 +142,40 @@ describe('Multi-Agent Network', () => {
     ctx.dispose()
   })
 
+  test('modern ownerId team projections keep team tasks, their agent status, and one work item per owner', async () => {
+    stubFleetRoute()
+    const modernTeam = {
+      enabled: true,
+      tasks: [{
+        id: 'task-7',
+        subject: 'Modern task',
+        description: 'Rendered without a roster.',
+        status: 'in_progress',
+        ownerId: 'w1',
+        blockedBy: [],
+        writeScopes: [],
+        ready: false,
+        writeScopeWarnings: [],
+      }],
+    }
+    const ctx = new TestClientCtx({ services: { sessions: familySessions(modernTeam) } })
+    const View = makeView(ctx)
+    const m = await mount(h(View, { sessionId: 'root', useProjection: projectionsFor(richTimeline()) }))
+    const group = query(m.container, '[data-owner-group="id:w1"]')
+    assert.ok(text(query(group, '.lc-pulse-work-group-head')).includes('worker-bee'))
+    assert.ok(text(query(group, '.lc-pulse-work-group-head')).includes(DICT_EN['agents.running']))
+    const task = query<HTMLElement>(group, '[data-task="task-7"]')
+    assert.equal(text(query(task, '.lc-pulse-work-id')), '#7')
+    assert.equal(text(query(task, '.lc-pulse-work-subject')), 'Modern task')
+    assert.ok(text(query(task, '.lc-pulse-work-identity')).includes('worker-bee'))
+    assert.equal(queryAll(m.container, '[data-task="w1"]').length, 0)
+    assert.equal(queryAll(m.container, '.lc-pulse-work-item').length, 2)
+    await click(query(group, '.lc-pulse-work-group-owner'))
+    assert.equal(queryAll(m.container, '.lc-pulse-work-item').length, 1)
+    await m.unmount()
+    ctx.dispose()
+  })
+
   test('links event participants, lanes, owners, and focused dependencies through one agent selection', async () => {
     stubFleetRoute()
     const opened: string[] = []
@@ -188,8 +222,8 @@ describe('Multi-Agent Network', () => {
     assert.equal(queryAll(m.container, '.lc-pulse-work-item').length, 1)
     await click(query(m.container, '[data-task="task-1"] .lc-pulse-work-focus'))
     assert.ok(text(query(m.container, '[data-task="task-1"] .lc-pulse-work-detail')).includes('Parse it.'))
-    assert.ok(text(query(m.container, '[data-task="task-1"] .lc-pulse-work-detail')).includes('overlap warning'))
-    assert.ok(text(query(m.container, '[data-task="task-1"] .lc-pulse-work-detail')).includes('src/'))
+    assert.ok(text(query(m.container, '[data-task="task-1"]')).includes('overlap warning'))
+    assert.ok(text(query(m.container, '[data-task="task-1"]')).includes('src/'))
     assert.ok(text(query(m.container, '[data-task="task-1"]')).includes(DICT_EN['fleet.taskBlocked']))
     assert.ok(text(query(m.container, '.lc-pulse-tasks')).includes('invalid revision'))
     await click(query(m.container, '[data-dependency="task-0"]'))
@@ -566,6 +600,10 @@ describe('Multi-Agent Network', () => {
     assert.equal(queryAll(m.container, '.lc-pulse-work-item').length, 2)
     assert.equal(queryAll(m.container, '.lc-pulse-event').length, 2)
     assert.equal(query(m.container, '[data-pulse-stat="running"]').textContent, '—')
+    assert.ok(text(query(m.container, '[data-owner-group="id:w1"] .lc-pulse-work-group-head')).includes(DICT_ZH['fleet.pulse.statusUnknown']))
+    assert.ok(text(query(m.container, '[data-task="task-1"] .lc-pulse-work-identity')).includes(DICT_ZH['fleet.pulse.statusUnknown']))
+    await click(query(m.container, '[data-task="task-1"] .lc-pulse-work-focus'))
+    assert.ok(text(query(m.container, '[data-task="task-1"] .lc-pulse-work-detail')).includes(DICT_ZH['fleet.pulse.statusUnknown']))
     await m.unmount()
     ctx.dispose()
   })
