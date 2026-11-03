@@ -32,7 +32,44 @@ function headPayloadOf(state: TimelineState): { rev: number; head: Snapshot } {
 }
 
 export interface DetailChannelGate {
-  readonly live: boolean
+  live: boolean
+  retain(key: string, registration: unknown): void
+  stateOf(session: unknown, key: string): unknown
+}
+
+interface ProjectionHandleLike {
+  stateOf(session: unknown): unknown
+}
+
+function handleOf(value: unknown): ProjectionHandleLike | undefined {
+  if (value === null || typeof value !== 'object') return undefined
+  const stateOf = (value as { stateOf?: unknown }).stateOf
+  return typeof stateOf === 'function' ? value as ProjectionHandleLike : undefined
+}
+
+export function createDetailGate(ctx: Context): DetailChannelGate {
+  const handles = new Map<string, ProjectionHandleLike>()
+  return {
+    live: false,
+    retain(key: string, registration: unknown): void {
+      if (registration === null || (typeof registration !== 'object' && typeof registration !== 'function')) return
+      const then = (registration as { then?: unknown }).then
+      if (typeof then !== 'function') return
+      void Promise.resolve(registration as Promise<unknown>).then(
+        (handle) => {
+          const retained = handleOf(handle)
+          if (retained !== undefined) handles.set(key, retained)
+        },
+        (error: unknown) => { ctx.logger.error(error) },
+      )
+    },
+    stateOf(session: unknown, key: string): unknown {
+      const handle = handles.get(key)
+      if (handle !== undefined) return handle.stateOf(session)
+      const projections = ctx.sessionProjections as unknown as { stateOf?(session: unknown, key: string): unknown } | undefined
+      return typeof projections?.stateOf === 'function' ? projections.stateOf(session, key) : undefined
+    },
+  }
 }
 
 interface SessionsHostFace {
@@ -47,15 +84,18 @@ function failure(code: string, message: string): Response {
   return reply({ ok: false, error: { code, message } })
 }
 
-export function watchDetailChannel(ctx: Context, bounds: FoldBounds, coldReads: ColdReadGate = makeColdReadGate()): DetailChannelGate {
-  const gate = { live: false }
+export function watchDetailChannel(
+  ctx: Context,
+  bounds: FoldBounds,
+  coldReads: ColdReadGate = makeColdReadGate(),
+  gate: DetailChannelGate = createDetailGate(ctx),
+): DetailChannelGate {
   const payloads = new Map<string, ColdPayload>()
   const shadow = new DetailShadow(ctx, bounds, coldReads, () => observeFaceOf(ctx))
   ctx.inject(['connection', 'sessions'], (c) => {
     const sessions = c.get('sessions') as SessionsHostFace | undefined
     const getSession = typeof sessions?.get === 'function' ? sessions.get.bind(sessions) : undefined
     if (getSession === undefined) return
-    const projections = ctx.sessionProjections
 
     const handler = async (request: Request): Promise<Response> => {
       let sessionId: unknown
@@ -75,7 +115,7 @@ export function watchDetailChannel(ctx: Context, bounds: FoldBounds, coldReads: 
       try {
         const session = getSession(sessionId)
         if (session !== undefined && session !== null) {
-          const state = projections.stateOf(session as never, 'contextTimeline')
+          const state = gate.stateOf(session, 'contextTimeline') as TimelineState | undefined
           if (state === undefined) return reply({ ok: true, value: null })
           if (headOnly) return reply({ ok: true, value: headPayloadOf(state) })
           const detailState = await shadow.stateOf(sessionId)

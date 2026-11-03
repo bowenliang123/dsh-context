@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import { describe, test, vi } from 'vitest'
 import type { Context } from '@deepseek-ai/cordis'
-import { DETAIL_ROUTE, watchDetailChannel } from '../../src/host/detail'
+import { DETAIL_ROUTE, createDetailGate, watchDetailChannel } from '../../src/host/detail'
 import { resolveBounds } from '../../src/host/config'
 import type { TimelineState } from '../../src/host/fold'
 import { buildTimelineDetail } from '../../src/host/foldWire'
@@ -19,6 +19,7 @@ interface CtxSpec {
   sessionQuery?: unknown
   sessionPersistence?: unknown
   stateOf?: (session: unknown, key: string) => unknown
+  logger?: { error(error: unknown): void }
 }
 
 function ctxOf(spec: CtxSpec): { ctx: Context; captured: { path?: string; fetch?: RouteFetch }; disposers: (() => void)[] } {
@@ -41,6 +42,7 @@ function ctxOf(spec: CtxSpec): { ctx: Context; captured: { path?: string; fetch?
       for (const listener of listeners.get(event) ?? []) listener(...args)
     },
     sessionProjections: { stateOf: spec.stateOf ?? (() => undefined) },
+    logger: spec.logger ?? { error: () => {} },
     effect(fn: () => unknown, _label?: string) {
       const d = fn()
       if (typeof d === 'function') disposers.push(d as () => void)
@@ -541,5 +543,72 @@ describe('the cold fold (issue #145)', () => {
     watchDetailChannel(ctx, BOUNDS)
     await call(captured, { sessionId: 'cold1' })
     assert.equal(remountReads, 2, 'the remounted route folds against its own cache')
+  })
+})
+
+describe('createDetailGate projection reads', () => {
+  const flush = (): Promise<void> => new Promise(resolve => setTimeout(resolve, 0))
+
+  test('a retained handle outranks the registry read', async () => {
+    const registry = vi.fn(() => 'registry')
+    const gate = createDetailGate(ctxOf({ stateOf: registry }).ctx)
+    const session = {}
+    gate.retain('contextTimeline', Promise.resolve({ stateOf: (s: unknown) => (s === session ? 'handle' : 'other') }))
+    await flush()
+    assert.equal(gate.stateOf(session, 'contextTimeline'), 'handle')
+    assert.equal(registry.mock.calls.length, 0)
+  })
+
+  test('without a handle the registry read answers, and an absent face answers undefined', () => {
+    const gate = createDetailGate(ctxOf({ stateOf: (_session, key) => key }).ctx)
+    assert.equal(gate.stateOf({}, 'contextTimeline'), 'contextTimeline')
+    const bare = ctxOf({}).ctx as unknown as Record<string, unknown>
+    bare.sessionProjections = {}
+    assert.equal(createDetailGate(bare as unknown as Context).stateOf({}, 'contextTimeline'), undefined)
+    delete bare.sessionProjections
+    assert.equal(createDetailGate(bare as unknown as Context).stateOf({}, 'contextTimeline'), undefined)
+  })
+
+  test('non-thenable registrations, non-handle resolutions, and hostile values keep the fallback', async () => {
+    const gate = createDetailGate(ctxOf({ stateOf: () => 'registry' }).ctx)
+    gate.retain('contextTimeline', () => {})
+    gate.retain('contextTimeline', null)
+    gate.retain('contextTimeline', {})
+    gate.retain('contextTimeline', Promise.resolve(null))
+    gate.retain('contextTimeline', Promise.resolve({ stateOf: 42 }))
+    await flush()
+    assert.equal(gate.stateOf({}, 'contextTimeline'), 'registry')
+  })
+
+  test('a callable thenable registration is retained', async () => {
+    const gate = createDetailGate(ctxOf({ stateOf: () => 'registry' }).ctx)
+    const registration = Object.assign(() => {}, {
+      then<T>(onFulfilled: (value: { stateOf(): string }) => T): Promise<T> {
+        return Promise.resolve({ stateOf: () => 'handle' }).then(onFulfilled)
+      },
+    })
+    gate.retain('contextTimeline', registration)
+    await flush()
+    assert.equal(gate.stateOf({}, 'contextTimeline'), 'handle')
+  })
+
+  test('a rejected registration is logged and keeps the fallback', async () => {
+    const error = vi.fn()
+    const gate = createDetailGate(ctxOf({ stateOf: () => 'registry', logger: { error } }).ctx)
+    const rejected = new Error('registration failed')
+    gate.retain('contextTimeline', Promise.reject(rejected))
+    await flush()
+    assert.deepEqual(error.mock.calls, [[rejected]])
+    assert.equal(gate.stateOf({}, 'contextTimeline'), 'registry')
+  })
+
+  test('a thenable that throws on assimilation is logged and keeps the fallback', async () => {
+    const error = vi.fn()
+    const gate = createDetailGate(ctxOf({ stateOf: () => 'registry', logger: { error } }).ctx)
+    const rejected = new Error('hostile then')
+    gate.retain('contextTimeline', { then() { throw rejected } })
+    await flush()
+    assert.deepEqual(error.mock.calls, [[rejected]])
+    assert.equal(gate.stateOf({}, 'contextTimeline'), 'registry')
   })
 })

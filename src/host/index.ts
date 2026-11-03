@@ -7,7 +7,7 @@ import { watchActivityBackfill } from './backfill'
 import { makeColdReadGate } from './coldRead'
 import { watchCommandPageChannel } from './commandPages'
 import { Config, resolveBounds } from './config'
-import { watchDetailChannel } from './detail'
+import { watchDetailChannel, createDetailGate } from './detail'
 import { createFallbackActivityDefinition, createFallbackHeadersDefinition, createFallbackTimelineDefinition } from './fallback'
 import { watchFleetChannel } from './fleet'
 import { createContextHeadersDefinition } from './headers'
@@ -41,9 +41,10 @@ export function apply(ctx: Context, config: Config): void {
   }
   const attribution = createToolAttribution(ctx)
   watchStepIdentity(ctx)
-  const gate = watchDetailChannel(ctx, resolveBounds(config), coldReads)
+  const gate = createDetailGate(ctx)
+  watchDetailChannel(ctx, resolveBounds(config), coldReads, gate)
   watchCommandPageChannel(ctx, resolveBounds(config), coldReads)
-  ctx.sessionProjections.register(createContextTimelineDefinition(config, () => gate.live))
+  gate.retain('contextTimeline', ctx.sessionProjections.register(createContextTimelineDefinition(config, () => gate.live)))
   ctx.sessionProjections.register(createContextHeadersDefinition(name => attribution.ownerOf(name)))
   ctx.sessionProjections.register(createContextActivityDefinition())
   watchTimelineRowSweep(ctx)
