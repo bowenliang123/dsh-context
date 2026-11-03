@@ -92,7 +92,7 @@ function PulseHeader(props: PulseHeaderProps): ReactElement {
   )
 }
 
-const WORK_SUBJECT_MAX = 200
+const WORK_SUBJECT_MAX = 60
 
 interface PulseTasksProps {
   items: readonly PulseWorkItem[]
@@ -150,7 +150,7 @@ function PulseTasks(props: PulseTasksProps): ReactElement {
               : item.description
             const reply = !fullPending ? full?.lastReply ?? entry?.lastReply : entry?.lastReply
             const subject = item.kind === 'agent' && prompt !== undefined && prompt !== ''
-              ? previewOf(prompt.slice(0, WORK_SUBJECT_MAX))
+              ? previewOf(prompt.length > WORK_SUBJECT_MAX ? prompt.slice(0, WORK_SUBJECT_MAX) + '…' : prompt)
               : item.subject
             const dot = item.status === 'completed' || item.status === 'latest_complete'
               ? 'done'
