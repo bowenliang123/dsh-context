@@ -80,25 +80,27 @@ export function PulseTimeline(props: PulseTimelineProps): ReactElement {
     () => pulseTimelineItemsOf(props.rows, props.delegations),
     [props.rows, props.delegations],
   )
+  const laneIds = useMemo(() => new Set(visibleIds), [visibleIds])
+  const laneItems = useMemo(() => timelineItems.filter(item => laneIds.has(item.to)), [laneIds, timelineItems])
   const tasksByAgent = useMemo(() => pulseTasksByAgent(props.team), [props.team])
   const taskAt = useMemo(() => {
     const map = new Map<string, FleetTeamTask>()
-    for (const item of timelineItems) {
+    for (const item of laneItems) {
       const task = pulseTaskOf(item, tasksByAgent)
       if (task !== null) map.set(item.key, task)
     }
     return map
-  }, [timelineItems, tasksByAgent])
+  }, [laneItems, tasksByAgent])
   const hasTaskLane = taskAt.size > 0
-  const windowed = timelineItems.length >= 60
-  const recordRange = useColumnWindow(scrollerRef, timelineItems.length, PULSE_POINT_PITCH, windowed, 12)
-  const lastRecord = Math.max(0, timelineItems.length - 1)
+  const windowed = laneItems.length >= 60
+  const recordRange = useColumnWindow(scrollerRef, laneItems.length, PULSE_POINT_PITCH, windowed, 12)
+  const lastRecord = Math.max(0, laneItems.length - 1)
   const windowFrom = Math.min(recordRange.from, lastRecord)
   const windowTo = Math.min(recordRange.to, lastRecord)
-  const visibleItems = windowed ? timelineItems.slice(windowFrom, windowTo + 1) : timelineItems
+  const visibleItems = windowed ? laneItems.slice(windowFrom, windowTo + 1) : laneItems
   const layout = useMemo(
-    () => layoutPulse(visibleItems, visibleIds, timelineItems.length, windowFrom),
-    [visibleItems, visibleIds, timelineItems.length, windowFrom],
+    () => layoutPulse(visibleItems, visibleIds, laneItems.length, windowFrom),
+    [visibleItems, visibleIds, laneItems.length, windowFrom],
   )
   const laneAt = useMemo(() => new Map(layout.lanes.map(lane => [lane.id, lane])), [layout.lanes])
   const agentAt = useMemo(() => new Map(props.lanes.map(lane => [lane.agent.id, lane.agent])), [props.lanes])
@@ -127,11 +129,7 @@ export function PulseTimeline(props: PulseTimelineProps): ReactElement {
   const searching = props.query.trim() !== ''
   const hidden = searching ? 0 : props.lanes.length - visibleIds.length
   const recordTotal = props.scopedRows.length + props.scopedDelegations.length
-  const shownRecords = useMemo(() => {
-    if (visibleIds.length === props.lanes.length) return timelineItems.length
-    const ids = new Set(visibleIds)
-    return timelineItems.reduce((count, item) => count + (ids.has(item.to) ? 1 : 0), 0)
-  }, [props.lanes.length, timelineItems, visibleIds])
+  const shownRecords = laneItems.length
   useEffect(() => {
     const el = scrollerRef.current
     if (el === null) return undefined
@@ -155,13 +153,13 @@ export function PulseTimeline(props: PulseTimelineProps): ReactElement {
   useEffect(() => {
     const key = props.selectedEventKey ?? props.selectedDelegationKey
     if (key === null) return
-    const index = timelineItems.findIndex(item => item.key === key)
+    const index = laneItems.findIndex(item => item.key === key)
     if (index < 0) return
     const el = scrollerRef.current as HTMLDivElement
     el.scrollLeft = Math.max(0, PULSE_TRACK_PADDING + index * PULSE_POINT_PITCH - el.clientWidth / 2)
     const target = el.querySelector(`[data-event-key="${CSS.escape(key)}"]`)
     scrollIntoViewIfPossible(target ?? null, { block: 'nearest', inline: 'center' })
-  }, [props.selectedEventKey, props.selectedDelegationKey, timelineItems, layout.points])
+  }, [props.selectedEventKey, props.selectedDelegationKey, laneItems, layout.points])
   const selectItem = (item: PulseTimelineItem): void => {
     if (item.kind === 'message') props.onSelectEvent(item.row)
     else props.onSelectDelegation(item.delegation)
@@ -435,7 +433,7 @@ export function PulseTimeline(props: PulseTimelineProps): ReactElement {
           </div>
         </div>
       ) : null}
-      {visibleIds.length === 0 || timelineItems.length === 0 ? (
+      {visibleIds.length === 0 || laneItems.length === 0 ? (
         <div className="lc-empty lc-pulse-timeline-empty">
           {searching && visibleIds.length === 0
             ? t('fleet.pulse.noLaneMatch')

@@ -358,6 +358,7 @@ describe('MissionPulse boundary parties', () => {
     const rows: CommsRow[] = [
       { key: 'child:1:1000:relay', to: 'child', seq: 1, time: 1000, kind: 'relay', from: 'root', text: 'go' },
       { key: 'root:2:2000:relay', to: 'root', seq: 2, time: 2000, kind: 'relay', from: 'child', text: 'done' },
+      { key: 'delta:3:1500:relay', to: 'delta', seq: 3, time: 1500, kind: 'relay', from: 'root', text: 'aside' },
     ]
     const agents = new Map([
       ['root', { id: 'root', name: 'Lead', role: 'lead' as const, self: true, hue: 'red' }],
@@ -381,10 +382,18 @@ describe('MissionPulse boundary parties', () => {
       t: kit.t,
     }))
     const laneSearch = query<HTMLInputElement>(mounted.container, '.lc-pulse-timeline .lc-pulse-search')
+    assert.deepEqual(
+      queryAll<HTMLElement>(mounted.container, '.lc-pulse-event').map(el => [el.dataset.to, el.style.left]),
+      [['root', '100px'], ['child', '36px'], ['delta', '68px']],
+    )
     await typeText(laneSearch, 'child')
     assert.deepEqual(
       queryAll<HTMLElement>(mounted.container, '.lc-pulse-lane-label').map(el => el.dataset.laneLabel),
       ['root', 'child'],
+    )
+    assert.deepEqual(
+      queryAll<HTMLElement>(mounted.container, '.lc-pulse-event').map(el => [el.dataset.to, el.style.left]),
+      [['root', '68px'], ['child', '36px']],
     )
     const matchedLane = query<HTMLElement>(mounted.container, '[data-lane-label="child"]')
     assert.ok(matchedLane.className.includes('lc-pulse-lane-match'))
@@ -395,7 +404,7 @@ describe('MissionPulse boundary parties', () => {
     assert.ok(text(linkedLane).includes(kit.t('fleet.pulse.linked')))
     assert.ok(!query<HTMLElement>(mounted.container, '[data-lane="root"]').className.includes('lc-pulse-lane-track-match'))
     assert.ok(text(query(mounted.container, '.lc-pulse-timeline')).includes(
-      kit.t('fleet.pulse.timelineSub', { shown: 2, total: 2, lanes: 2 }),
+      kit.t('fleet.pulse.timelineSub', { shown: 2, total: 3, lanes: 2 }),
     ))
     assert.equal(queryAll(mounted.container, '.lc-pulse-work-item').length, 2)
     await typeText(laneSearch, 'no such agent')
