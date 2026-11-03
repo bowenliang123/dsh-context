@@ -76,7 +76,7 @@
 .lc-pulse-quiet { padding: 3px 8px; border: 1px dashed var(--lc-pulse-line); border-radius: 999px; background: transparent; color: var(--dsw-alias-label-secondary); font: inherit; font-size: 10px; cursor: pointer; }
 .lc-pulse-quiet:hover, .lc-pulse-quiet[aria-pressed='true'] { color: var(--lc-pulse-violet); border-style: solid; background: color-mix(in srgb, var(--lc-pulse-violet) 7%, transparent); }
 
-.lc-pulse-waterfall { display: grid; grid-template-columns: minmax(118px, 154px) minmax(0, 1fr); grid-template-rows: minmax(0, 1fr); flex: 1; min-height: 0; min-width: 0; margin-top: 8px; overflow: hidden; }
+.lc-pulse-waterfall { display: grid; grid-template-columns: minmax(118px, 154px) minmax(0, 1fr); grid-template-rows: minmax(0, 1fr); flex: 1; min-height: 0; min-width: 0; overflow: hidden; }
 .lc-pulse-lane-labels, .lc-pulse-sequence-column { min-width: 0; }
 .lc-pulse-lane-labels { overflow: clip; border-right: var(--lc-line-fine, 1px solid var(--dsw-alias-border-l2)); }
 .lc-pulse-sequence-column { display: flex; flex-direction: column; min-height: 0; }
