@@ -146,15 +146,17 @@
 .lc-pulse-work-focused { border-color: color-mix(in srgb, var(--lc-pulse-violet) 35%, var(--dsw-alias-border-l2)); }
 .lc-pulse-work-task-hover { border-color: color-mix(in srgb, var(--lc-pulse-violet) 35%, var(--dsw-alias-border-l2)); background: color-mix(in srgb, var(--lc-pulse-violet) 5%, var(--dsw-alias-bg-layer-1)); }
 .lc-pulse-work-id { flex: none; display: inline-flex; align-items: center; height: 16px; padding: 0 4px; border: 1px solid color-mix(in srgb, var(--lc-pulse-violet) 30%, var(--dsw-alias-border-l2)); border-radius: 999px; background: color-mix(in srgb, var(--lc-pulse-violet) 8%, transparent); color: color-mix(in srgb, var(--lc-pulse-violet) 80%, var(--dsw-alias-label-primary)); font-size: 8.5px; font-weight: 700; font-variant-numeric: tabular-nums; }
-.lc-pulse-work-row { display: flex; align-items: center; gap: 5px; min-width: 0; padding: 3px 5px 3px 3px; }
+.lc-pulse-work-row { display: flex; align-items: center; gap: 7px; min-width: 0; padding: 3px 5px 3px 3px; }
 .lc-pulse-work-focus { display: flex; flex: 1; align-items: center; gap: 6px; min-width: 140px; padding: 3px 4px; border: 0; background: transparent; color: inherit; font: inherit; text-align: left; cursor: pointer; }
 .lc-pulse-work-subject { flex: 1; min-width: 0; font-size: 11px; font-weight: 620; overflow-wrap: anywhere; }
 .lc-pulse-work-subject-agent { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.lc-pulse-work-status { flex: none; color: var(--dsw-alias-label-secondary); font-size: 9px; }
-.lc-pulse-work-owner { display: inline-flex; align-items: center; gap: 4px; max-width: 42%; padding: 2px 5px; border: 1px solid transparent; border-radius: 999px; background: transparent; color: var(--lc-pulse-violet); font: inherit; font-size: 9.5px; cursor: pointer; }
-.lc-pulse-work-owner span { overflow-wrap: anywhere; }
+.lc-pulse-work-status { flex: none; min-width: 5.5em; text-align: right; white-space: nowrap; color: var(--dsw-alias-label-secondary); font-size: 9.5px; }
+.lc-pulse-work-chev { display: inline-flex; align-items: center; justify-content: center; width: 16px; height: 16px; padding: 0; border: 0; border-radius: 4px; background: transparent; color: var(--dsw-alias-label-secondary); cursor: pointer; }
+.lc-pulse-work-chev:hover { background: var(--dsw-alias-bg-layer-2); color: var(--dsw-alias-label-primary); }
+.lc-pulse-work-owner { display: inline-flex; flex: none; align-items: center; gap: 4px; max-width: 34%; padding: 2px 5px; border: 1px solid transparent; border-radius: 999px; background: transparent; color: color-mix(in srgb, var(--lc-owner-hue, var(--dsw-alias-label-secondary)) 58%, var(--dsw-alias-label-primary)); font: inherit; font-size: 9.5px; cursor: pointer; }
+.lc-pulse-work-owner span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .lc-pulse-work-owner:hover, .lc-pulse-work-owner[aria-pressed='true'] { border-color: var(--lc-pulse-line); background: color-mix(in srgb, var(--lc-pulse-violet) 8%, transparent); }
-.lc-pulse-work-unowned { color: var(--dsw-alias-label-secondary); font-size: 9px; }
+.lc-pulse-work-unowned { flex: none; color: var(--dsw-alias-label-secondary); font-size: 9px; }
 .lc-pulse-work-deps { display: flex; flex-wrap: wrap; align-items: center; gap: 3px 5px; padding: 0 8px 5px 25px; color: var(--dsw-alias-label-secondary); font-size: 9px; }
 .lc-pulse-work-deps button { padding: 1px 5px; border: 1px dashed var(--lc-pulse-line); border-radius: 4px; background: transparent; color: var(--lc-pulse-violet); font: inherit; cursor: pointer; overflow-wrap: anywhere; }
 .lc-pulse-work-detail { display: flex; flex-wrap: wrap; align-items: baseline; gap: 5px 9px; padding: 7px 9px; border-top: 1px solid var(--lc-pulse-line); color: var(--dsw-alias-label-secondary); font-size: 10px; overflow-wrap: anywhere; }
@@ -214,7 +216,8 @@
   .lc-pulse-waterfall { grid-template-columns: minmax(148px, 182px) minmax(0, 1fr); }
   .lc-pulse-work-row { flex-wrap: wrap; }
   .lc-pulse-work-focus { flex-basis: 100%; }
-  .lc-pulse-work-owner { max-width: 100%; margin-left: 23px; }
+  .lc-pulse-work-owner { max-width: calc(100% - 9em); margin-left: 23px; }
+  .lc-pulse-work-status { margin-left: auto; }
 }
 
 @container pulse (max-width: 470px) {

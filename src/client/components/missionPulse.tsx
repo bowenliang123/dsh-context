@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type ReactElement } from 'react'
+import { useEffect, useMemo, useRef, useState, type CSSProperties, type ReactElement } from 'react'
 import {
   IconChecklistOutlineRegular,
   IconPanelLeftOutlineRegular,
@@ -182,12 +182,6 @@ function PulseTasks(props: PulseTasksProps): ReactElement {
                       className={'lc-pulse-work-subject' + (item.kind === 'agent' ? ' lc-pulse-work-subject-agent' : '')}
                       title={subject}
                     >{subject}</span>
-                    <span className="lc-pulse-work-status">
-                      {item.kind === 'agent'
-                        ? t(item.status === 'in_progress' ? 'agents.running' : item.status === 'latest_complete' ? 'fleet.pulse.latestTurn' : 'fleet.pulse.idle')
-                        : t(`fleet.task.${item.status}`)}
-                    </span>
-                    {focused ? <IconChevronUp size={11} /> : <IconChevronDown size={11} />}
                   </button>
                   {owner !== null ? (
                     <button
@@ -196,12 +190,27 @@ function PulseTasks(props: PulseTasksProps): ReactElement {
                       data-owner={owner.id}
                       aria-pressed={props.selectedAgent === owner.id}
                       title={t('fleet.tasks.ownerTip')}
+                      style={{ '--lc-owner-hue': owner.hue } as CSSProperties}
                       onClick={() => { props.onSelectAgent(owner.id) }}
                     >
                       <AgentAvatar agent={owner} size="sm" t={t} />
-                      <span>{item.ownerName}</span>
+                      <span title={item.ownerName}>{item.ownerName}</span>
                     </button>
                   ) : <span className="lc-pulse-work-unowned">{t('fleet.taskUnowned')}</span>}
+                  <span className="lc-pulse-work-status">
+                    {item.kind === 'agent'
+                      ? t(item.status === 'in_progress' ? 'agents.running' : item.status === 'latest_complete' ? 'fleet.pulse.latestTurn' : 'fleet.pulse.idle')
+                      : t(`fleet.task.${item.status}`)}
+                  </span>
+                  <button
+                    type="button"
+                    className="lc-pulse-work-chev"
+                    aria-expanded={focused}
+                    aria-label={t(focused ? 'fleet.collapse' : 'fleet.expand')}
+                    onClick={() => { props.onFocus(item) }}
+                  >
+                    {focused ? <IconChevronUp size={11} /> : <IconChevronDown size={11} />}
+                  </button>
                 </div>
                 {item.kind === 'team' && item.status === 'pending' ? (
                   <div className="lc-pulse-work-readiness">{t(item.ready ? 'fleet.taskReady' : 'fleet.taskBlocked')}</div>
