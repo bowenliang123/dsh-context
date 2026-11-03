@@ -51,7 +51,9 @@ function stubFleetRoute(): void {
         messagesTotal: 6,
         truncated: false,
       }
-      : { messages: [], truncated: false }
+      : sessionId === 'w2'
+        ? { messages: [], truncated: false, initialPrompt: 'Scan the package namespace apps/web.' }
+        : { messages: [], truncated: false }
     return Promise.resolve({ ok: true, json: () => Promise.resolve({ ok: true, value }) } as Response)
   })
 }
@@ -159,6 +161,8 @@ describe('Multi-Agent Network', () => {
     await click(query(m.container, '.lc-pulse-selection'))
     assert.equal(query(m.container, '[data-agent="w1"]').getAttribute('aria-pressed'), 'false')
     assert.equal(queryAll(m.container, '.lc-pulse-work-item').length, 3)
+    await until(() => text(query(m.container, '.lc-pulse-tasks')).includes('Scan the package namespace apps/web.'), 'delegation prompt never reached the work header')
+    assert.ok(text(query(m.container, '[data-task="w2"] .lc-pulse-work-owner')).includes('side-quest'))
     await click(query(m.container, '[data-owner="w1"]'))
     assert.equal(queryAll(m.container, '.lc-pulse-work-item').length, 1)
     await click(query(m.container, '[data-task="task-1"] .lc-pulse-work-focus'))

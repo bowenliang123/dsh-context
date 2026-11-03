@@ -11,6 +11,7 @@ import {
   fromPartyOf,
   includesAgent,
   kindGroupOf,
+  previewOf,
   type CommsAgent,
   type CommsKindFilter,
 } from '../commsModel'
@@ -91,6 +92,8 @@ function PulseHeader(props: PulseHeaderProps): ReactElement {
   )
 }
 
+const WORK_SUBJECT_MAX = 200
+
 interface PulseTasksProps {
   items: readonly PulseWorkItem[]
   teamFailure?: string
@@ -146,6 +149,9 @@ function PulseTasks(props: PulseTasksProps): ReactElement {
               ? (!fullPending ? full?.initialPrompt ?? entry?.initialPrompt : entry?.initialPrompt)
               : item.description
             const reply = !fullPending ? full?.lastReply ?? entry?.lastReply : entry?.lastReply
+            const subject = item.kind === 'agent' && prompt !== undefined && prompt !== ''
+              ? previewOf(prompt.slice(0, WORK_SUBJECT_MAX))
+              : item.subject
             const dot = item.status === 'completed' || item.status === 'latest_complete'
               ? 'done'
               : item.status === 'in_progress' ? 'ongoing' : item.status === 'idle' || item.ready ? 'idle' : 'warning'
@@ -169,7 +175,10 @@ function PulseTasks(props: PulseTasksProps): ReactElement {
                     {item.kind === 'team' ? (
                       <span className="lc-pulse-work-id" title={`${item.id} · ${item.subject}`}>{pulseTaskBadgeOf(item.id)}</span>
                     ) : null}
-                    <span className="lc-pulse-work-subject" title={item.subject}>{item.subject}</span>
+                    <span
+                      className={'lc-pulse-work-subject' + (item.kind === 'agent' ? ' lc-pulse-work-subject-agent' : '')}
+                      title={subject}
+                    >{subject}</span>
                     <span className="lc-pulse-work-status">
                       {item.kind === 'agent'
                         ? t(item.status === 'in_progress' ? 'agents.running' : item.status === 'latest_complete' ? 'fleet.pulse.latestTurn' : 'fleet.pulse.idle')

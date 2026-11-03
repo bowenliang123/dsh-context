@@ -147,6 +147,7 @@
 .lc-pulse-work-row { display: flex; align-items: center; gap: 5px; min-width: 0; padding: 3px 5px 3px 3px; }
 .lc-pulse-work-focus { display: flex; flex: 1; align-items: center; gap: 6px; min-width: 140px; padding: 3px 4px; border: 0; background: transparent; color: inherit; font: inherit; text-align: left; cursor: pointer; }
 .lc-pulse-work-subject { flex: 1; min-width: 0; font-size: 11px; font-weight: 620; overflow-wrap: anywhere; }
+.lc-pulse-work-subject-agent { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .lc-pulse-work-status { flex: none; color: var(--dsw-alias-label-secondary); font-size: 9px; }
 .lc-pulse-work-owner { display: inline-flex; align-items: center; gap: 4px; max-width: 42%; padding: 2px 5px; border: 1px solid transparent; border-radius: 999px; background: transparent; color: var(--lc-pulse-violet); font: inherit; font-size: 9.5px; cursor: pointer; }
 .lc-pulse-work-owner span { overflow-wrap: anywhere; }
