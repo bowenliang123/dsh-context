@@ -2,7 +2,6 @@
   --lc-pulse-violet: var(--color-violet-500, var(--dsw-alias-state-business-primary));
   --lc-pulse-cyan: var(--color-teal-500, var(--dsw-alias-brand-primary));
   --lc-pulse-line: color-mix(in srgb, var(--lc-pulse-violet) 22%, var(--dsw-alias-border-l2));
-  --lc-pulse-panel: color-mix(in srgb, var(--lc-pulse-violet) 3%, var(--dsw-alias-bg-layer-1));
   container: pulse / inline-size;
   display: flex;
   flex-direction: column;
@@ -68,7 +67,7 @@
 .lc-pulse-selection span { overflow-wrap: anywhere; }
 .lc-pulse-selection b { color: var(--lc-pulse-violet); font-size: 14px; }
 
-.lc-pulse-timeline, .lc-pulse-tasks, .lc-pulse-events { min-width: 0; max-height: 620px; border-color: var(--lc-pulse-line); background: var(--lc-pulse-panel); }
+.lc-pulse-timeline, .lc-pulse-tasks, .lc-pulse-events { min-width: 0; max-height: 620px; border-color: var(--dsw-alias-border-l2); background: var(--dsw-alias-bg-layer-1); }
 .lc-pulse-timeline, .lc-pulse-tasks { display: flex; flex-direction: column; }
 .lc-pulse-timeline > .lc-card-title, .lc-pulse-tasks > .lc-card-title, .lc-pulse-tasks > .lc-pulse-work-warning { flex: none; }
 .lc-pulse-timeline .lc-card-title, .lc-pulse-tasks .lc-card-title, .lc-pulse-events .lc-card-title { flex-wrap: wrap; gap: 5px 9px; }
@@ -79,11 +78,11 @@
 
 .lc-pulse-waterfall { display: grid; grid-template-columns: minmax(118px, 154px) minmax(0, 1fr); grid-template-rows: minmax(0, 1fr); flex: 1; min-height: 0; min-width: 0; margin-top: 8px; overflow: hidden; }
 .lc-pulse-lane-labels, .lc-pulse-sequence-column { min-width: 0; }
-.lc-pulse-lane-labels { overflow: clip; border-right: 1px solid var(--lc-pulse-line); }
+.lc-pulse-lane-labels { overflow: clip; border-right: var(--lc-line-fine, 1px solid var(--dsw-alias-border-l2)); }
 .lc-pulse-sequence-column { display: flex; flex-direction: column; min-height: 0; }
-.lc-pulse-task-lane-label { display: flex; align-items: center; gap: 5px; height: 40px; padding: 0 9px; border-bottom: 1px solid var(--lc-pulse-line); background: color-mix(in srgb, var(--lc-pulse-violet) 4%, transparent); color: var(--dsw-alias-label-secondary); font-size: 9px; font-weight: 650; letter-spacing: 0.04em; }
+.lc-pulse-task-lane-label { display: flex; align-items: center; gap: 5px; height: 40px; padding: 0 9px; border-bottom: var(--lc-line-fine, 1px solid var(--dsw-alias-border-l2)); background: var(--dsw-alias-bg-layer-2); color: var(--dsw-alias-label-secondary); font-size: 9px; font-weight: 650; letter-spacing: 0.04em; }
 .lc-pulse-task-lane-label svg { color: var(--lc-pulse-violet); }
-.lc-pulse-task-track { position: relative; border-bottom: 1px solid var(--lc-pulse-line); background: color-mix(in srgb, var(--lc-pulse-violet) 2%, transparent); }
+.lc-pulse-task-track { position: relative; border-bottom: var(--lc-line-fine, 1px solid var(--dsw-alias-border-l2)); }
 .lc-pulse-task-chip { position: absolute; top: 50%; display: inline-flex; align-items: center; justify-content: center; min-width: 18px; height: 18px; padding: 0 4px; transform: translate(-50%, -50%); border: 1px solid color-mix(in srgb, var(--lc-pulse-violet) 30%, var(--dsw-alias-border-l2)); border-radius: 999px; background: color-mix(in srgb, var(--lc-pulse-violet) 8%, var(--dsw-alias-bg-layer-1)); color: color-mix(in srgb, var(--lc-pulse-violet) 80%, var(--dsw-alias-label-primary)); font: inherit; font-size: 8.5px; font-weight: 700; line-height: 1; font-variant-numeric: tabular-nums; cursor: pointer; }
 .lc-pulse-task-chip:hover, .lc-pulse-task-chip-hover { border-color: var(--lc-pulse-violet); background: color-mix(in srgb, var(--lc-pulse-violet) 14%, var(--dsw-alias-bg-layer-1)); }
 .lc-pulse-lane-tracks { position: relative; min-width: 0; }
@@ -93,7 +92,7 @@
 .lc-pulse-sequence-actions button:hover { background: color-mix(in srgb, var(--lc-pulse-violet) 7%, transparent); color: var(--lc-pulse-violet); }
 .lc-pulse-sequence-scroller { flex: 1; min-height: 0; overflow: auto; scrollbar-width: thin; }
 .lc-pulse-sequence-scroller:focus-visible { outline: 2px solid var(--lc-pulse-cyan); outline-offset: -2px; }
-.lc-pulse-lane-label { position: relative; display: flex; flex-direction: column; justify-content: center; gap: 1px; min-width: 0; padding: 3px 7px; border-bottom: 1px solid color-mix(in srgb, var(--lc-pulse-violet) 12%, var(--dsw-alias-border-l2)); background: linear-gradient(90deg, color-mix(in srgb, var(--lc-pulse-violet) 3%, transparent), transparent); }
+.lc-pulse-lane-label { position: relative; display: flex; flex-direction: column; justify-content: center; gap: 1px; min-width: 0; padding: 3px 7px; border-bottom: var(--lc-line-fine, 1px solid var(--dsw-alias-border-l2)); }
 .lc-pulse-lane-label:last-child, .lc-pulse-lane-track:last-child { border-bottom: 0; }
 .lc-pulse-lane-match { background: linear-gradient(90deg, color-mix(in srgb, var(--lc-pulse-cyan) 15%, transparent), transparent 82%); box-shadow: inset 2px 0 var(--lc-pulse-cyan); }
 .lc-pulse-lane-track-match { background: color-mix(in srgb, var(--lc-pulse-cyan) 5%, transparent); }
@@ -112,7 +111,7 @@
 .lc-pulse-lane-actions button:hover { color: var(--lc-pulse-violet); }
 
 .lc-pulse-track-stack { position: relative; min-width: 0; overflow: hidden; }
-.lc-pulse-lane-track { position: relative; min-width: 0; border-bottom: 1px solid color-mix(in srgb, var(--lc-pulse-violet) 12%, var(--dsw-alias-border-l2)); }
+.lc-pulse-lane-track { position: relative; min-width: 0; border-bottom: var(--lc-line-fine, 1px solid var(--dsw-alias-border-l2)); }
 .lc-pulse-arrows { position: absolute; inset: 0; z-index: 1; height: 100%; pointer-events: none; }
 .lc-pulse-slot { fill: color-mix(in srgb, var(--dsw-alias-border-l2) 68%, transparent); }
 .lc-pulse-lane-baseline { stroke: color-mix(in srgb, var(--dsw-alias-border-l2) 72%, transparent); stroke-width: 1; }
@@ -192,7 +191,7 @@
 .lc-pulse-quiet-lane { display: flex; align-items: center; justify-content: center; padding: 0; border-style: dashed; }
 .lc-pulse-quiet-lane > button { display: flex; align-items: center; justify-content: center; gap: 5px; width: 100%; height: 100%; padding: 0 5px; border: 0; background: transparent; color: var(--dsw-alias-label-secondary); font: inherit; font-size: 8.5px; cursor: pointer; }
 .lc-pulse-quiet-lane > button:hover { color: var(--lc-pulse-violet); }
-.lc-pulse-quiet-track { border-bottom-style: dashed; background: color-mix(in srgb, var(--lc-pulse-violet) 2%, transparent); }
+.lc-pulse-quiet-track { border-bottom-style: dashed; }
 .lc-pulse-work-readiness { padding: 0 8px 4px 25px; color: var(--dsw-alias-label-secondary); font-size: 9px; }
 .lc-pulse-work-warning { flex: 1 1 100%; color: var(--color-amber-500); font-size: 9px; overflow-wrap: anywhere; }
 
