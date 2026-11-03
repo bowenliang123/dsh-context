@@ -66,9 +66,11 @@ interface PulseTimelineProps {
   t: ViewKit['t']
 }
 
-const LANE_OVERSCAN = 2
-const LANE_WINDOW_INIT = 12
-const LANE_WINDOW_MIN = 30
+const LANE_OVERSCAN = 8
+const LANE_WINDOW_INIT = 32
+const LANE_FULL_MAX = 200
+const RECORD_FULL_MAX = 240
+const RECORD_OVERSCAN = 24
 
 function laneWindowFor(scrollTop: number, viewport: number, count: number, offset: number): RowRange | null {
   if (viewport <= 0 || count <= 0) return null
@@ -107,8 +109,8 @@ export const PulseTimeline = memo(function PulseTimeline(props: PulseTimelinePro
     return map
   }, [laneItems, tasksByAgent])
   const hasTaskLane = taskAt.size > 0
-  const windowed = laneItems.length >= 60
-  const recordRange = useColumnWindow(scrollerRef, laneItems.length, PULSE_POINT_PITCH, windowed, 12)
+  const windowed = laneItems.length > RECORD_FULL_MAX
+  const recordRange = useColumnWindow(scrollerRef, laneItems.length, PULSE_POINT_PITCH, windowed, RECORD_OVERSCAN)
   const lastRecord = Math.max(0, laneItems.length - 1)
   const windowFrom = Math.min(recordRange.from, lastRecord)
   const windowTo = Math.min(recordRange.to, lastRecord)
@@ -120,7 +122,7 @@ export const PulseTimeline = memo(function PulseTimeline(props: PulseTimelinePro
   const laneAt = useMemo(() => new Map(layout.lanes.map(lane => [lane.id, lane])), [layout.lanes])
   const laneCount = layout.lanes.length
   const taskOffset = hasTaskLane ? PULSE_TASK_LANE_HEIGHT : 0
-  const laneWrapped = laneCount > LANE_WINDOW_MIN
+  const laneWrapped = laneCount > LANE_FULL_MAX
   const laneScope = !laneWrapped
     ? { from: 0, to: laneCount - 1 }
     : (laneScopeState ?? { from: 0, to: Math.min(LANE_WINDOW_INIT, laneCount) - 1 })

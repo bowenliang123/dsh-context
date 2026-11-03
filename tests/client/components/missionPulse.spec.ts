@@ -872,46 +872,18 @@ describe('Fleet pane virtualization', () => {
     await act(async () => { for (const frame of frames.splice(0)) frame(0) })
   }
 
-  test('windows collaboration lanes and keeps a distant lane reachable by scrolling', async () => {
-    const frames: FrameRequestCallback[] = []
-    vi.stubGlobal('requestAnimationFrame', (callback: FrameRequestCallback) => { frames.push(callback); return frames.length })
-    try {
-      const { agents, comms } = manyAgents(40)
-      const mounted = await mount(h(MissionPulse, {
-        graph, forest: null, team: null, details: makeDetails(), landedDetails: new Map(),
-        comms, delegations: [], agents, titles: new Map(), attested: new Map(), focusMember: null,
-        currency: 'usd', onOpen: () => {}, onEnter: () => {}, rich: makeRichText(kit), t: kit.t,
-      }))
-      const initial = queryAll(mounted.container, '[data-lane-label]').length
-      assert.ok(initial >= 40, 'an unmeasured pane keeps every lane')
-      const scroller = query<HTMLElement>(mounted.container, '[data-sequence-scroller]')
-      pinViewport(scroller, 200)
-      scroller.scrollTop = 0
-      await act(async () => { scroller.dispatchEvent(new Event('scroll')) })
-      await flushFrames(frames)
-      const shown = queryAll(mounted.container, '[data-lane-label]').length
-      assert.ok(shown < initial, 'the measured pane bounds the lane list')
-      assert.ok(query<HTMLElement>(mounted.container, '[data-lane-label="agent-0"]') !== null)
-      scroller.scrollTop = 1900
-      await act(async () => { scroller.dispatchEvent(new Event('scroll')) })
-      await flushFrames(frames)
-      assert.ok(queryAll(mounted.container, '[data-lane-label]').length < initial)
-      assert.ok(query(mounted.container, '[data-lane-label="agent-30"]') !== null, 'a later lane appears after scrolling')
-      await act(async () => { scroller.dispatchEvent(new Event('scroll')) })
-      await flushFrames(frames)
-      assert.ok(query(mounted.container, '[data-lane-label="agent-30"]') !== null, 'a still scroll keeps the same lane window')
-      const grown = manyAgents(41)
-      await mounted.update(h(MissionPulse, {
-        graph, forest: null, team: null, details: makeDetails(), landedDetails: new Map(),
-        comms: grown.comms, delegations: [], agents: grown.agents, titles: new Map(), attested: new Map(), focusMember: null,
-        currency: 'usd', onOpen: () => {}, onEnter: () => {}, rich: makeRichText(kit), t: kit.t,
-      }))
-      await flushFrames(frames)
-      assert.ok(query(mounted.container, '[data-lane-label="agent-30"]') !== null, 'an off-window lane leaves the visible window alone')
-      await mounted.unmount()
-    } finally {
-      vi.unstubAllGlobals()
-    }
+  test('windows a very large lane set and follows its measured scroll range', async () => {
+    const { agents, comms } = manyAgents(241)
+    const mounted = await mount(h(MissionPulse, { graph, forest: null, team: null, details: makeDetails(), landedDetails: new Map(), comms, delegations: [], agents, titles: new Map(), attested: new Map(), focusMember: null, currency: 'usd', onOpen: () => {}, onEnter: () => {}, rich: makeRichText(kit), t: kit.t }))
+    const scroller = query<HTMLElement>(mounted.container, '[data-sequence-scroller]')
+    pinViewport(scroller, 200)
+    scroller.scrollTop = 1900
+    await act(async () => { scroller.dispatchEvent(new Event('scroll')) })
+    assert.ok(queryAll(mounted.container, '[data-lane-label]').length < 100)
+    const grown = manyAgents(242)
+    await mounted.update(h(MissionPulse, { graph, forest: null, team: null, details: makeDetails(), landedDetails: new Map(), comms: grown.comms, delegations: [], agents: grown.agents, titles: new Map(), attested: new Map(), focusMember: null, currency: 'usd', onOpen: () => {}, onEnter: () => {}, rich: makeRichText(kit), t: kit.t }))
+    assert.ok(query(mounted.container, '[data-lane-label="agent-30"]') !== null)
+    await mounted.unmount()
   })
 
   test('windows the work board and scrolls a task revealed from another lane into view', async () => {

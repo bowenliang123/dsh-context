@@ -545,44 +545,45 @@ describe('Multi-Agent Network', () => {
   })
 
   test('complete history backfills beyond the preview cap without any user action', async () => {
+    const total = 245
     const snapshot = {
       byId: {
         'hist-root': { displayTitle: 'Main Agent', running: false, updatedAt: 10 },
         'hist-w1': { parentId: 'hist-root', origin: 'subagent', running: false, updatedAt: 8, projectionValues: { subagent: { mode: 'continuable', label: 'history-worker' } } },
       },
     }
-    const messages = Array.from({ length: 85 }, (_, index) => ({ seq: index + 1, time: 1000 + index, kind: 'relay', from: 'hist-root', text: `event ${index + 1}` }))
+    const messages = Array.from({ length: total }, (_, index) => ({ seq: index + 1, time: 1000 + index, kind: 'relay', from: 'hist-root', text: `event ${index + 1}` }))
     vi.stubGlobal('fetch', (_url: unknown, init: { body: string }) => {
       const body = JSON.parse(init.body) as { sessionId: string; history?: boolean }
       const value = body.sessionId === 'hist-w1'
-        ? { messages: body.history === true ? messages : messages.slice(0, 80), messagesTotal: 85, truncated: true }
+        ? { messages: body.history === true ? messages : messages.slice(0, 80), messagesTotal: total, truncated: true }
         : { messages: [], truncated: false }
       return Promise.resolve({ ok: true, json: () => Promise.resolve({ ok: true, value }) } as Response)
     })
     const ctx = new TestClientCtx({ services: { sessions: { list: { getSnapshot: () => snapshot, subscribe: () => () => {} } } } })
     const View = makeView(ctx)
     const m = await mount(h(View, { sessionId: 'hist-root', useProjection: projectionsFor(richTimeline()) }))
-    await until(() => queryAll(m.container, '.lc-pulse-event').length === 85, 'complete history never backfilled')
-    assert.equal(query(m.container, '[data-pulse-stat="messages"]').textContent, '85')
+    await until(() => queryAll(m.container, '.lc-pulse-event').length === total, 'complete history never backfilled')
+    assert.equal(query(m.container, '[data-pulse-stat="messages"]').textContent, String(total))
     vi.stubGlobal('requestAnimationFrame', (callback: FrameRequestCallback) => { callback(0); return 1 })
     const sequence = query<HTMLElement>(m.container, '[data-sequence-scroller]')
     Object.defineProperty(sequence, 'clientWidth', { configurable: true, value: 256 })
     sequence.scrollLeft = 640
     await act(async () => { sequence.dispatchEvent(new Event('scroll')) })
-    await until(() => queryAll(m.container, '.lc-pulse-event').length < 85, 'sequence window never bounded the DOM')
-    assert.ok(query(m.container, '.lc-pulse-track-stack').style.width.includes('2760px'))
+    await until(() => queryAll(m.container, '.lc-pulse-event').length < total, 'sequence window never bounded the DOM')
+    assert.ok(query(m.container, '.lc-pulse-track-stack').style.width.includes('7880px'))
     const list = query(m.container, '.lc-pulse-event-list')
     Object.defineProperty(list, 'clientHeight', { configurable: true, value: 256 })
     vi.stubGlobal('requestAnimationFrame', (callback: FrameRequestCallback) => { callback(0); return 1 })
     list.scrollTop = 640
     await act(async () => { list.dispatchEvent(new Event('scroll')) })
-    await until(() => queryAll(m.container, '.lc-comms-event').length < 85, 'event window never bounded the DOM')
+    await until(() => queryAll(m.container, '.lc-comms-event').length < total, 'event window never bounded the DOM')
     await click(query(m.container, '.lc-pulse-event-list .lc-comms-hit'))
     assert.ok(query(m.container, '.lc-pulse-inspector .lc-comms-detail') !== null)
-    assert.ok(queryAll(m.container, '.lc-comms-event').length < 85)
-    assert.ok(queryAll(m.container, '.lc-pulse-event').length < 85)
+    assert.ok(queryAll(m.container, '.lc-comms-event').length < total)
+    assert.ok(queryAll(m.container, '.lc-pulse-event').length < total)
     assert.ok(sequence.scrollLeft > 0)
-    assert.equal(query(m.container, '[data-pulse-stat="messages"]').textContent, '85')
+    assert.equal(query(m.container, '[data-pulse-stat="messages"]').textContent, String(total))
     await m.unmount()
     ctx.dispose()
   })
@@ -661,6 +662,78 @@ describe('Multi-Agent Network', () => {
     assert.ok(text(query(m.container, '[data-task="task-1"] .lc-pulse-work-identity')).includes(DICT_ZH['fleet.pulse.statusUnknown']))
     await click(query(m.container, '[data-task="task-1"] .lc-pulse-work-focus'))
     assert.ok(text(query(m.container, '[data-task="task-1"] .lc-pulse-work-detail')).includes(DICT_ZH['fleet.pulse.statusUnknown']))
+    await m.unmount()
+    ctx.dispose()
+  })
+
+  test('keeps moderate fleets complete and measures windows only for very large lane sets', async () => {
+    const observers: { callback: ResizeObserverCallback; elements: Set<Element> }[] = []
+    vi.stubGlobal('ResizeObserver', class {
+      readonly elements = new Set<Element>()
+      constructor(readonly callback: ResizeObserverCallback) { observers.push(this) }
+      observe(el: Element): void { this.elements.add(el) }
+      unobserve(el: Element): void { this.elements.delete(el) }
+      disconnect(): void { this.elements.clear() }
+    })
+    const snapshotOf = (count: number): unknown => ({
+      byId: Object.fromEntries(Array.from({ length: count }, (_, index) => {
+        const id = index === 0 ? 'root' : `large-${index}`
+        return [id, {
+          ...(index > 0 ? { parentId: 'root', origin: 'subagent' } : {}),
+          displayTitle: `Agent ${index}`,
+          running: true,
+          updatedAt: 300 - index,
+          projectionValues: index > 0 ? { subagent: { mode: 'one-shot', label: `Agent ${index}` } } : {},
+        }]
+      })),
+    })
+    vi.stubGlobal('fetch', (_url: unknown, init: { body: string }) => {
+      const { sessionId } = JSON.parse(init.body) as { sessionId: string }
+      const index = Number(sessionId.slice(6))
+      const value = Number.isInteger(index) && index > 0
+        ? { messages: [], delegations: [{ seq: 1, time: 1000 + index, to: sessionId, mode: 'continuable', label: `Task ${index}` }], truncated: false }
+        : { messages: [], truncated: false }
+      return Promise.resolve({ ok: true, json: () => Promise.resolve({ ok: true, value }) } as Response)
+    })
+    let snapshot = snapshotOf(148)
+    const listeners = new Set<() => void>()
+    const face = {
+      list: {
+        getSnapshot: (): unknown => snapshot,
+        subscribe: (fn: () => void): (() => void) => {
+          listeners.add(fn)
+          return () => { listeners.delete(fn) }
+        },
+      },
+    }
+    const ctx = new TestClientCtx({ services: { sessions: face } })
+    const View = makeView(ctx)
+    const m = await mount(h(View, { sessionId: 'root', useProjection: projectionsFor(richTimeline()) }))
+    await until(() => queryAll(m.container, '.lc-pulse-event').length === 147, 'moderate history never landed')
+    const scroller = query<HTMLElement>(m.container, '[data-sequence-scroller]')
+    Object.defineProperties(scroller, {
+      clientHeight: { configurable: true, value: 200 },
+      clientWidth: { configurable: true, value: 200 },
+    })
+    scroller.scrollTop = 1900
+    await act(async () => { scroller.dispatchEvent(new Event('scroll')) })
+    assert.equal(queryAll(m.container, '[data-lane-label]').length, 148)
+    assert.equal(queryAll(m.container, '.lc-pulse-event').length, 147)
+    await act(async () => {
+      snapshot = snapshotOf(242)
+      for (const listener of listeners) listener()
+    })
+    await until(() => text(query(m.container, '.lc-pulse-timeline .lc-card-sub')).includes('241/241'), 'large history never landed')
+    await act(async () => { scroller.dispatchEvent(new Event('scroll')) })
+    assert.ok(queryAll(m.container, '[data-lane-label]').length < 100)
+    assert.ok(queryAll(m.container, '.lc-pulse-event').length < 241)
+    assert.ok(query(m.container, '[data-lane-label="large-30"]') !== null)
+    await act(async () => {
+      for (const observer of observers) {
+        if (observer.elements.has(scroller)) observer.callback([], {} as ResizeObserver)
+      }
+    })
+    assert.ok(query(m.container, '[data-lane-label="large-30"]') !== null)
     await m.unmount()
     ctx.dispose()
   })
