@@ -152,6 +152,7 @@ interface PulseTasksProps {
   focusedTaskKey: string | null
   revealVersion: number
   hoveredTaskId: string | null
+  hoveredAgent: string | null
   query: string
   agentOf: (party: string) => CommsAgent
   onFocus: (item: PulseWorkItem) => void
@@ -277,6 +278,8 @@ function PulseTasks(props: PulseTasksProps): ReactElement {
                 <ol className="lc-pulse-work-list">
                   {group.items.map((item) => {
                     const focused = props.focusedTaskKey === item.key
+                    const ownerSelected = item.ownerId !== undefined && item.ownerId === props.selectedAgent
+                    const ownerLinked = item.ownerId !== undefined && item.ownerId === props.hoveredAgent
                     const owner = item.ownerId !== undefined ? props.agentOf(item.ownerId) : null
                     const ownerName = item.ownerName ?? owner?.name
                     const ownerRole = owner !== null ? roleTextOf(owner, t) : ''
@@ -300,8 +303,9 @@ function PulseTasks(props: PulseTasksProps): ReactElement {
                         }}
                         className={'lc-pulse-work-item' + (focused ? ' lc-pulse-work-focused' : '')
                           + (item.kind === 'team' && dependencyChain.has(item.id) ? ' lc-pulse-work-chain' : '')
-                          + (item.ownerId !== undefined && item.ownerId === props.selectedAgent ? ' lc-pulse-work-related' : '')
-                          + (item.kind === 'team' && props.hoveredTaskId === item.id ? ' lc-pulse-work-task-hover' : '')}
+                          + (ownerSelected ? ' lc-pulse-work-related' : '')
+                          + (item.kind === 'team' && props.hoveredTaskId === item.id ? ' lc-pulse-work-task-hover' : '')
+                          + (ownerLinked ? ' lc-pulse-work-linked' : '')}
                         data-task={item.id}
                         style={{ '--lc-owner-hue': owner?.hue ?? 'var(--dsw-alias-border-l2)' } as CSSProperties}
                         onMouseEnter={() => { if (item.kind === 'team') props.onHoverTask(item.id) }}
@@ -704,6 +708,7 @@ export function MissionPulse(props: MissionPulseProps): ReactElement {
   const { t } = props
   const AgentGraph = props.graph
   const [selectedAgent, setSelectedAgent] = useState<string | null>(null)
+  const [hoveredAgent, setHoveredAgent] = useState<string | null>(null)
   const [selectedEventKey, setSelectedEventKey] = useState<string | null>(null)
   const [selectedDelegationKey, setSelectedDelegationKey] = useState<string | null>(null)
   const [focusedTaskKey, setFocusedTaskKey] = useState<string | null>(null)
@@ -826,6 +831,11 @@ export function MissionPulse(props: MissionPulseProps): ReactElement {
   useEffect(() => {
     if (props.focusMember !== null) setSelectedAgent(props.focusMember)
   }, [props.focusMember])
+  useEffect(() => {
+    if (hoveredAgent === null) return
+    if (props.forest !== null && props.forest.nodes.some(node => node.id === hoveredAgent)) return
+    setHoveredAgent(null)
+  }, [hoveredAgent, props.forest])
   const selectAgent = (id: string): void => {
     setSelectedAgent(current => current === id ? null : id)
   }
@@ -874,7 +884,9 @@ export function MissionPulse(props: MissionPulseProps): ReactElement {
               forest={props.forest}
               team={props.team}
               pinnedId={selectedAgent}
+              hoverId={hoveredAgent}
               focusId={props.focusMember}
+              onHover={setHoveredAgent}
               onSelect={selectAgent}
               inspector={false}
             />
@@ -890,6 +902,7 @@ export function MissionPulse(props: MissionPulseProps): ReactElement {
             scopedDelegations={scopedDelegations}
             team={props.team}
             hoveredTaskId={hoveredTaskId}
+            hoveredAgent={hoveredAgent}
             selectedAgent={selectedAgent}
             selectedEventKey={selectedEventKey}
             selectedDelegationKey={selectedDelegationKey}
@@ -915,6 +928,7 @@ export function MissionPulse(props: MissionPulseProps): ReactElement {
             focusedTaskKey={focusedTaskKey}
             revealVersion={taskRevealVersion}
             hoveredTaskId={hoveredTaskId}
+            hoveredAgent={hoveredAgent}
             query={workQuery}
             agentOf={agentOf}
             onFocus={focusTask}

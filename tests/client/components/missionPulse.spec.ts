@@ -1,6 +1,7 @@
 import { act, createElement as h } from 'react'
 import assert from 'node:assert/strict'
 import { describe, test, vi } from 'vitest'
+import type { AgentGraphProps } from '../../../src/client/components/agentGraph'
 import { MissionPulse } from '../../../src/client/components/missionPulse'
 import { makeRichText } from '../../../src/client/components/richText'
 import type { AgentForest, AgentNode } from '../../../src/client/agentTree'
@@ -579,6 +580,58 @@ describe('MissionPulse boundary parties', () => {
     assert.ok(text(query(task, '.lc-pulse-work-identity')).includes(kit.t('fleet.pulse.statusUnknown')))
     await click(query(task, '.lc-pulse-work-focus'))
     assert.ok(text(query(task, '.lc-pulse-work-reply')).includes(kit.t('fleet.tasks.replyFull')))
+    await mounted.unmount()
+  })
+
+  test('clears the linked task hover when the hovered node leaves the forest', async () => {
+    const child: AgentNode = {
+      id: 'child',
+      label: 'child',
+      depth: 1,
+      family: 1,
+      isCurrent: false,
+      running: true,
+      completed: false,
+      subagent: true,
+      updatedAt: 1,
+      head: null,
+      requests: 0,
+      billed: null,
+      costUsage: null,
+      durationMs: null,
+      identity: null,
+    }
+    const team: FleetTeam = {
+      members: [],
+      tasks: [{ id: 'task-1', subject: 'Linked', description: '', status: 'in_progress', ownerId: 'child', blockedBy: [], writeScopes: [], ready: false, warnings: [] }],
+    }
+    const HoverGraph = (props: AgentGraphProps) => h('button', {
+      type: 'button',
+      'data-hover-node': 'child',
+      onMouseEnter: () => { props.onHover?.('child') },
+    }, 'hover')
+    const props = {
+      graph: HoverGraph,
+      team,
+      details: makeDetails(),
+      landedDetails: new Map(),
+      comms: [],
+      delegations: [],
+      agents: new Map(),
+      titles: new Map(),
+      attested: new Map(),
+      focusMember: null,
+      currency: 'usd' as const,
+      onOpen: () => {},
+      onEnter: () => {},
+      rich: makeRichText(kit),
+      t: kit.t,
+    }
+    const mounted = await mount(h(MissionPulse, { ...props, forest: { nodes: [child], edges: [], solo: false } }))
+    await act(async () => { query(mounted.container, '[data-hover-node="child"]').dispatchEvent(new MouseEvent('mouseover', { bubbles: true })) })
+    assert.equal(queryAll(mounted.container, '.lc-pulse-work-linked').length, 1)
+    await mounted.update(h(MissionPulse, { ...props, forest: { nodes: [], edges: [], solo: false } }))
+    assert.equal(queryAll(mounted.container, '.lc-pulse-work-linked').length, 0)
     await mounted.unmount()
   })
 

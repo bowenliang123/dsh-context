@@ -181,6 +181,7 @@
 .lc-pulse-work-focused { border-color: var(--dsw-alias-border-l4); box-shadow: 0 0 0 1px color-mix(in srgb, var(--dsw-alias-state-business-primary) 24%, transparent); }
 .lc-pulse-work-chain { border-color: color-mix(in srgb, var(--dsw-alias-state-business-primary) 40%, var(--dsw-alias-border-l2)); background-color: color-mix(in srgb, var(--dsw-alias-state-business-primary) 5%, var(--dsw-alias-bg-layer-1)); }
 .lc-pulse-work-task-hover { border-color: color-mix(in srgb, var(--lc-pulse-violet) 40%, var(--dsw-alias-border-l2)); }
+.lc-pulse-work-linked { border-color: color-mix(in srgb, var(--lc-task-hue) 60%, var(--dsw-alias-border-l2)); background-color: color-mix(in srgb, var(--lc-task-hue) 6%, var(--dsw-alias-bg-layer-1)); box-shadow: 0 0 0 1px color-mix(in srgb, var(--lc-task-hue) 24%, transparent); }
 .lc-pulse-work-identity { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 7px; min-width: 0; }
 .lc-pulse-work-owner { display: inline-flex; align-items: center; gap: 5px; min-width: 0; max-width: 100%; padding: 0; border: 0; background: transparent; color: inherit; font: inherit; cursor: pointer; }
 .lc-pulse-work-owner > span:not(.lc-comms-avatar) { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 10.5px; font-weight: 650; color: var(--dsw-alias-label-primary); }

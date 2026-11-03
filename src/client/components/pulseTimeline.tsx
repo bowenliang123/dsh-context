@@ -48,6 +48,7 @@ interface PulseTimelineProps {
   scopedDelegations: readonly FleetDelegationRow[]
   team: FleetTeam | null
   hoveredTaskId: string | null
+  hoveredAgent: string | null
   selectedAgent: string | null
   selectedEventKey: string | null
   selectedDelegationKey: string | null
@@ -71,6 +72,7 @@ export function PulseTimeline(props: PulseTimelineProps): ReactElement {
   const [anchor, setAnchor] = useState<'first' | 'latest'>('first')
   const [hoveredKey, setHoveredKey] = useState<string | null>(null)
   const [hoveredLane, setHoveredLane] = useState<string | null>(null)
+  const laneHovered = (id: string): boolean => props.hoveredAgent === id || hoveredLane === id
   const scrollerRef = useRef<HTMLDivElement | null>(null)
   const labelRowsRef = useRef<HTMLDivElement | null>(null)
   const laneView = useMemo(
@@ -251,7 +253,7 @@ export function PulseTimeline(props: PulseTimelineProps): ReactElement {
                 return (
                   <div
                     key={lane.id}
-                    className={'lc-pulse-lane-label' + (props.selectedAgent === lane.id ? ' lc-pulse-lane-selected' : '') + (hoveredLane === lane.id ? ' lc-pulse-lane-hover' : '') + (matchedIds.has(lane.id) ? ' lc-pulse-lane-match' : '')}
+                    className={'lc-pulse-lane-label' + (props.selectedAgent === lane.id ? ' lc-pulse-lane-selected' : '') + (laneHovered(lane.id) ? ' lc-pulse-lane-hover' : '') + (matchedIds.has(lane.id) ? ' lc-pulse-lane-match' : '')}
                     style={{ height: lane.height, '--lc-lane-hue': agent.hue } as CSSProperties}
                     data-lane-label={lane.id}
                     onMouseEnter={() => { setHoveredLane(lane.id) }}
@@ -410,7 +412,7 @@ export function PulseTimeline(props: PulseTimelineProps): ReactElement {
                   {layout.lanes.map(lane => (
                     <div
                       key={lane.id}
-                      className={'lc-pulse-lane-track' + (hoveredLane === lane.id ? ' lc-pulse-lane-hover' : '') + (matchedIds.has(lane.id) ? ' lc-pulse-lane-track-match' : '')}
+                      className={'lc-pulse-lane-track' + (laneHovered(lane.id) ? ' lc-pulse-lane-hover' : '') + (matchedIds.has(lane.id) ? ' lc-pulse-lane-track-match' : '')}
                       style={{ height: lane.height, '--lc-lane-hue': hueOf(lane.id) } as CSSProperties}
                       data-lane={lane.id}
                       onMouseEnter={() => { setHoveredLane(lane.id) }}
