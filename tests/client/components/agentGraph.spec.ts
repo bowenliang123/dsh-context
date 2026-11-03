@@ -274,7 +274,7 @@ describe('AgentGraph — the family tree', () => {
     const focused = await mount(h(View, { sessionId: 'root', self: selfStats(), focusId: 'done' }))
     const done = query(focused.container, '[data-agent="done"]')
     assert.ok(done.classList.contains('lc-agent-hover'), 'the focused card lights like a pointed-at one')
-    assert.ok(done.classList.contains('lc-agent-on'), 'its lineage lights too')
+    assert.ok(done.classList.contains('lc-agent-on'), 'its direct relations light too')
     assert.ok(query(focused.container, '[data-agent="root"]').classList.contains('lc-agent-on'))
     assert.ok(query(focused.container, '.lc-agents-canvas').classList.contains('lc-agents-focus'))
     assert.equal(queryAll(focused.container, 'g.lc-agents-on').length, 1)

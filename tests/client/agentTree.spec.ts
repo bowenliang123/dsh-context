@@ -14,7 +14,7 @@ import {
   familyParentOf,
   fmtDurationCompact,
   layoutForest,
-  lineageOf,
+  neighborhoodOf,
   pressureColorOf,
   providerModelLabelOf,
   sessionTitlesOf,
@@ -815,7 +815,7 @@ describe('layoutForest', () => {
   })
 })
 
-describe('lineageOf', () => {
+describe('neighborhoodOf', () => {
   const forest = agentForestOf(snap({
     root: row({}),
     a: row({ parentId: 'root', origin: 'subagent' }),
@@ -825,20 +825,20 @@ describe('lineageOf', () => {
   assert.ok(forest !== null)
 
   test('null or unknown id lights nothing', () => {
-    assert.equal(lineageOf(forest, null), null)
-    assert.equal(lineageOf(forest, 'ghost'), null)
+    assert.equal(neighborhoodOf(forest, null), null)
+    assert.equal(neighborhoodOf(forest, 'ghost'), null)
   })
 
-  test('a leaf lights its ancestor chain only; the root and a mid node light both directions; a parentage cycle terminates', () => {
-    assert.deepEqual([...lineageOf(forest, 'g') ?? []].sort(), ['a', 'g', 'root'])
-    assert.deepEqual([...lineageOf(forest, 'root') ?? []].sort(), ['a', 'b', 'g', 'root'])
-    assert.deepEqual([...lineageOf(forest, 'a') ?? []].sort(), ['a', 'g', 'root'])
+  test('lights the node with its parent and direct children only; a parentage cycle terminates', () => {
+    assert.deepEqual([...neighborhoodOf(forest, 'g') ?? []].sort(), ['a', 'g'])
+    assert.deepEqual([...neighborhoodOf(forest, 'root') ?? []].sort(), ['a', 'b', 'root'])
+    assert.deepEqual([...neighborhoodOf(forest, 'a') ?? []].sort(), ['a', 'g', 'root'])
     const cycle = agentForestOf(snap({
       a: row({ parentId: 'b', origin: 'subagent' }),
       b: row({ parentId: 'a', origin: 'subagent' }),
     }), 'a')
     assert.ok(cycle !== null)
-    assert.deepEqual([...lineageOf(cycle, 'a') ?? []].sort(), ['a', 'b'])
+    assert.deepEqual([...neighborhoodOf(cycle, 'a') ?? []].sort(), ['a', 'b'])
   })
 })
 

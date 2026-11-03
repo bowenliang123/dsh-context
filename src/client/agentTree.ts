@@ -545,32 +545,19 @@ function linksOf(forest: AgentForest, points: AgentPoint[], cardH: number): Agen
   return links
 }
 
-export function lineageOf(forest: AgentForest, id: string | null): Set<string> | null {
+export function neighborhoodOf(forest: AgentForest, id: string | null): Set<string> | null {
   if (id === null) return null
-  const byId = new Map(forest.nodes.map(n => [n.id, n]))
-  const start = byId.get(id)
-  if (start === undefined) return null
-  const childrenOf = new Map<string, string[]>()
+  const related = new Set<string>([id])
+  let found = false
   for (const n of forest.nodes) {
-    if (n.parentId === undefined) continue
-    const kids = childrenOf.get(n.parentId) ?? []
-    kids.push(n.id)
-    childrenOf.set(n.parentId, kids)
-  }
-  const lit = new Set<string>()
-  let cur: AgentNode | undefined = start
-  while (cur !== undefined) {
-    lit.add(cur.id)
-    cur = cur.parentId !== undefined ? byId.get(cur.parentId) : undefined
-  }
-  const queue = [id]
-  for (let i = 0; i < queue.length; i++) {
-    for (const kid of childrenOf.get(queue[i]) ?? []) {
-      lit.add(kid)
-      queue.push(kid)
+    if (n.id === id) {
+      found = true
+      if (n.parentId !== undefined) related.add(n.parentId)
+    } else if (n.parentId === id) {
+      related.add(n.id)
     }
   }
-  return lit
+  return found ? related : null
 }
 
 export interface BarSeg {

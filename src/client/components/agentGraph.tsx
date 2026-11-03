@@ -22,7 +22,7 @@ import {
   familyHue,
   fmtDurationCompact,
   layoutForest,
-  lineageOf,
+  neighborhoodOf,
   pressureColorOf,
 } from '../agentTree'
 import { AgentInspector } from './agentInspector'
@@ -87,6 +87,8 @@ export function makeAgentGraph(
     useEffect(() => { setShowAll(false) }, [sessionId])
     const hoverId = props.hoverId !== undefined ? props.hoverId : internalHover
     const focusId = hoverId ?? (props.focusId ?? null)
+    const pinnedId = props.pinnedId ?? null
+    const litId = hoverId ?? pinnedId ?? props.focusId ?? null
     const onHover = props.onHover ?? setInternalHover
     const { book } = useModelPrices()
     const currency = displayCurrencyOf(ctx.locale)
@@ -169,12 +171,12 @@ export function makeAgentGraph(
         nodes,
         hues,
         visible,
-        lit: lineageOf(forest, focusId),
+        lit: neighborhoodOf(forest, litId),
         links: band === null
           ? layout.links
           : layout.links.filter(link => Math.min(link.y1, link.y2) - cardHeight <= band.to && Math.max(link.y1, link.y2) >= band.from),
       }
-    }, [band?.from, band?.to, cardHeight, focusId, forest, layout, members, team])
+    }, [band?.from, band?.to, cardHeight, forest, layout, litId, members, team])
     useEffect(() => {
       if (heardFocus === null || graph === null) return
       const point = graph.points.get(heardFocus)
@@ -194,7 +196,6 @@ export function makeAgentGraph(
     const byId = graph.nodes
     /* v8 ignore next 1 */
     const current = forest.nodes.find(n => n.isCurrent) ?? forest.nodes[0]
-    const pinnedId = props.pinnedId ?? null
     const pinnedNode = pinnedId !== null ? byId.get(pinnedId) : undefined
     const hoverNode = focusId !== null ? byId.get(focusId) : undefined
     const inspected = pinnedNode ?? hoverNode ?? current
@@ -305,7 +306,8 @@ export function makeAgentGraph(
                 >
                   {graph.links.map((link) => {
                     const d = linkPath(link.x1, link.y1, link.x2, link.y2)
-                    const on = lit !== null && lit.has(link.to)
+                    const parentId = graph.nodes.get(link.to)?.parentId
+                    const on = lit !== null && parentId !== undefined && lit.has(link.to) && lit.has(parentId)
                     const color = graph.hues.get(link.to)
                     return (
                       <g key={link.to} className={on ? 'lc-agents-on' : undefined}>
