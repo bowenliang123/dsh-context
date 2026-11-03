@@ -176,6 +176,12 @@
 .lc-pulse-event-list > li { flex: none; }
 .lc-pulse-event-list[hidden] { display: none; }
 .lc-pulse-event-stream .lc-comms-event { border-radius: 7px; }
+.lc-pulse-event-stream .lc-comms-event-open {
+  border-color: color-mix(in srgb, var(--lc-pulse-cyan) 65%, var(--dsw-alias-border-l2));
+  border-left-color: var(--lc-pulse-cyan);
+  background-color: color-mix(in srgb, var(--lc-pulse-cyan) 12%, var(--dsw-alias-bg-layer-1));
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--lc-pulse-cyan) 34%, transparent);
+}
 .lc-pulse-event-stream .lc-comms-hit { padding: 6px 7px; }
 .lc-pulse-event-stream .lc-comms-preview { font-size: 10px; }
 .lc-pulse-inspector { border: 1px solid color-mix(in srgb, var(--lc-pulse-violet) 15%, var(--dsw-alias-border-l2)); border-radius: 9px; background: var(--dsw-alias-bg-layer-1); overflow-y: auto; scrollbar-width: thin; }

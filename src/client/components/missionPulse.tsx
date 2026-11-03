@@ -93,6 +93,7 @@ function PulseHeader(props: PulseHeaderProps): ReactElement {
 }
 
 const WORK_SUBJECT_MAX = 60
+const EVENT_ROW_PITCH = 64
 
 interface PulseTasksProps {
   items: readonly PulseWorkItem[]
@@ -342,17 +343,35 @@ function PulseEvents(props: PulseEventsProps): ReactElement {
   const { t } = props
   const inspectorRef = useRef<HTMLDivElement | null>(null)
   const listRef = useRef<HTMLUListElement | null>(null)
+  const alignedRef = useRef<string | null>(null)
   const counts = { all: props.scopedRows.length, message: 0, report: 0 }
   for (const row of props.scopedRows) counts[kindGroupOf(row)] += 1
-  const full = fullMessageOf(props.details, props.selectedRow)
+  const shownRow = props.selectedRow ?? (props.rows.length > 0 ? props.rows[0] : undefined)
+  const full = fullMessageOf(props.details, shownRow)
   const windowed = props.rows.length >= 60
-  const rowRange = useRowWindow(listRef, props.rows.length, 64, windowed)
+  const rowRange = useRowWindow(listRef, props.rows.length, EVENT_ROW_PITCH, windowed)
   const lastRow = Math.max(0, props.rows.length - 1)
   const windowFrom = Math.min(rowRange.from, lastRow)
   const windowTo = Math.min(rowRange.to, lastRow)
   const shownRows = windowed ? props.rows.slice(windowFrom, windowTo + 1) : props.rows
   const clipped = props.scopedRows.filter(row => row.clipped === true).length
   const hidden = hiddenMessagesOf(props.details, props.scopedRows)
+  const selectedKey = props.selectedRow?.key ?? null
+  useEffect(() => {
+    if (selectedKey === null) {
+      alignedRef.current = null
+      return
+    }
+    if (alignedRef.current === selectedKey) return
+    const list = listRef.current as HTMLUListElement
+    const row = list.querySelector<HTMLElement>(`[data-comms-key="${CSS.escape(selectedKey)}"]`)
+    if (row === null) {
+      list.scrollTop = props.rows.findIndex(entry => entry.key === selectedKey) * EVENT_ROW_PITCH
+      return
+    }
+    alignedRef.current = selectedKey
+    list.scrollTop += row.getBoundingClientRect().top - list.getBoundingClientRect().top
+  }, [props.rows, rowRange.from, selectedKey])
   useEffect(() => {
     if (props.selectedRow !== undefined || props.selectedDelegation !== undefined) {
       scrollIntoViewIfPossible(inspectorRef.current, { block: 'nearest' })
@@ -397,9 +416,9 @@ function PulseEvents(props: PulseEventsProps): ReactElement {
                 key={row.key}
                 row={row}
                 agentOf={props.agentOf}
-                open={props.selectedRow?.key === row.key}
+                open={shownRow?.key === row.key}
                 onToggle={() => { props.onSelectEvent(row) }}
-                full={props.selectedRow?.key === row.key ? full : null}
+                full={shownRow?.key === row.key ? full : null}
                 t={t}
               />
             ))}
@@ -418,12 +437,12 @@ function PulseEvents(props: PulseEventsProps): ReactElement {
               onClose={props.onClose}
               t={t}
             />
-          ) : props.selectedRow !== undefined ? (
+          ) : shownRow !== undefined ? (
             <CommsEventDetail
-              row={props.selectedRow}
+              row={shownRow}
               agentOf={props.agentOf}
               full={full}
-              fullPending={props.details.fullPending.has(props.selectedRow.to)}
+              fullPending={props.details.fullPending.has(shownRow.to)}
               pinnedId={props.selectedAgent}
               onSelect={props.onSelectAgent}
               onOpen={props.onOpen}

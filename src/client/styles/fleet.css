@@ -102,8 +102,10 @@
 .lc-comms-tone-idle { --lc-kind: var(--dsw-alias-label-tertiary, var(--dsw-alias-label-secondary)); }
 .lc-comms-event:hover { border-color: color-mix(in srgb, var(--lc-kind) 32%, var(--dsw-alias-border-l2)); }
 .lc-comms-event-open {
-  border-color: color-mix(in srgb, var(--lc-kind) 45%, var(--dsw-alias-border-l2));
-  box-shadow: 0 0 0 1px color-mix(in srgb, var(--lc-kind) 20%, transparent);
+  border-color: color-mix(in srgb, var(--lc-kind) 70%, var(--dsw-alias-border-l2));
+  border-left-width: 3px;
+  background-color: color-mix(in srgb, var(--lc-kind) 10%, var(--dsw-alias-bg-layer-1));
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--lc-kind) 30%, transparent);
 }
 .lc-comms-hit {
   display: block; width: 100%; padding: 8px 10px 7px;

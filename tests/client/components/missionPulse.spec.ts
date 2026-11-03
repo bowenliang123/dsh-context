@@ -5,7 +5,7 @@ import { MissionPulse } from '../../../src/client/components/missionPulse'
 import { makeRichText } from '../../../src/client/components/richText'
 import type { CommsRow } from '../../../src/client/fleetDetail'
 import type { FleetTeam } from '../../../src/client/fleetTeam'
-import { click, makeKit, mount, query, queryAll, text, typeText } from '../helpers/kit'
+import { click, makeKit, mount, query, queryAll, text, typeText, until } from '../helpers/kit'
 
 const kit = makeKit()
 
@@ -21,6 +21,32 @@ function makeDetails(fullLanded = new Map()) {
     requestHistory: vi.fn(),
     requestFull: vi.fn(),
   }
+}
+
+function pulseOf(comms: CommsRow[]) {
+  return h(MissionPulse, {
+    forest: null,
+    team: null,
+    details: makeDetails(),
+    landedDetails: new Map(),
+    comms,
+    delegations: [],
+    agents: new Map(),
+    titles: new Map(),
+    attested: new Map(),
+    focusMember: null,
+    onOpen: () => {},
+    onEnter: () => {},
+    rich: makeRichText(kit),
+    t: kit.t,
+  })
+}
+
+function pinBox(el: HTMLElement, top: number, height: number): void {
+  Object.defineProperty(el, 'getBoundingClientRect', {
+    configurable: true,
+    value: () => ({ top, bottom: top + height, left: 0, right: 0, width: 0, height }),
+  })
 }
 
 describe('MissionPulse boundary parties', () => {
@@ -104,6 +130,8 @@ describe('MissionPulse boundary parties', () => {
       t: kit.t,
     })
     const mounted = await mount(pulse(rows))
+    assert.ok(text(query(mounted.container, '.lc-pulse-inspector')).includes('second'))
+    assert.ok(query(mounted.container, '[data-comms-key="child:2:2000:relay"]').className.includes('lc-comms-event-open'))
     const scroller = query<HTMLElement>(mounted.container, '[data-sequence-scroller]')
     Object.defineProperties(scroller, {
       clientWidth: { configurable: true, value: 200 },
@@ -176,11 +204,11 @@ describe('MissionPulse boundary parties', () => {
     await act(async () => { otherEdge.dispatchEvent(new FocusEvent('focusout', { bubbles: true })) })
     assert.ok(!events[2].className.includes('lc-pulse-event-hover'))
     await act(async () => { edge.dispatchEvent(new KeyboardEvent('keydown', { key: 'a', bubbles: true })) })
-    assert.ok(text(query(mounted.container, '.lc-pulse-inspector')).includes(kit.t('fleet.pulse.selectEvent')))
+    assert.ok(text(query(mounted.container, '.lc-pulse-inspector')).includes('second'))
     await act(async () => { query(edge, '.lc-pulse-edge-hit').dispatchEvent(new MouseEvent('click', { bubbles: true })) })
     assert.ok(text(query(mounted.container, '.lc-pulse-inspector')).includes('first'))
     await act(async () => { edge.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true })) })
-    assert.ok(text(query(mounted.container, '.lc-pulse-inspector')).includes(kit.t('fleet.pulse.selectEvent')))
+    assert.ok(text(query(mounted.container, '.lc-pulse-inspector')).includes('second'))
     await act(async () => { edge.dispatchEvent(new KeyboardEvent('keydown', { key: ' ', bubbles: true })) })
     assert.ok(text(query(mounted.container, '.lc-pulse-inspector')).includes('first'))
     const [firstButton, latestButton] = queryAll<HTMLButtonElement>(mounted.container, '.lc-pulse-sequence-actions button')
@@ -209,7 +237,7 @@ describe('MissionPulse boundary parties', () => {
     assert.ok(text(inspector).includes(kit.t('fleet.pulse.delegationNote')))
     assert.ok(text(inspector).includes(kit.t('fleet.pulse.mode.continuable')))
     await click(query(inspector, '.lc-comms-detail-close'))
-    assert.ok(text(query(mounted.container, '.lc-pulse-inspector')).includes(kit.t('fleet.pulse.selectEvent')))
+    assert.ok(text(query(mounted.container, '.lc-pulse-inspector')).includes('second'))
     await mounted.unmount()
   })
 
@@ -463,5 +491,49 @@ describe('MissionPulse boundary parties', () => {
     assert.ok(quietTimeline.includes(kit.t('fleet.comms.empty')))
     assert.ok(!quietTimeline.includes(kit.t('fleet.pulse.noLaneMatch')))
     await quiet.unmount()
+  })
+
+  test('scrolls the selected record to the top of the event list', async () => {
+    const rows: CommsRow[] = [
+      { key: 'child:1:1000:relay', to: 'child', seq: 1, time: 1000, kind: 'relay', from: 'root', text: 'first' },
+      { key: 'child:2:2000:relay', to: 'child', seq: 2, time: 2000, kind: 'relay', from: 'root', text: 'second' },
+    ]
+    const mounted = await mount(pulseOf(rows))
+    const list = query<HTMLElement>(mounted.container, '.lc-pulse-event-list')
+    const target = query<HTMLElement>(mounted.container, '[data-comms-key="child:2:2000:relay"]')
+    pinBox(list, 0, 300)
+    pinBox(target, 220, 40)
+    Object.defineProperty(list, 'scrollTop', { configurable: true, value: 0, writable: true })
+    await click(query(mounted.container, '[data-event-key="child:2:2000:relay"]'))
+    assert.equal(list.scrollTop, 220)
+    pinBox(target, 400, 40)
+    await mounted.update(pulseOf([...rows]))
+    assert.equal(list.scrollTop, 220)
+    await click(query(mounted.container, '[data-event-key="child:2:2000:relay"]'))
+    await click(query(mounted.container, '[data-event-key="child:2:2000:relay"]'))
+    assert.equal(list.scrollTop, 620)
+    await mounted.unmount()
+  })
+
+  test('jumps to a selected record the windowed event list has not rendered', async () => {
+    const rows: CommsRow[] = Array.from({ length: 70 }, (_, index) => ({
+      key: `child:${index + 1}:${(index + 1) * 1000}:relay`,
+      to: 'child',
+      seq: index + 1,
+      time: (index + 1) * 1000,
+      kind: 'relay' as const,
+      from: 'root',
+      text: `event ${index}`,
+    }))
+    const mounted = await mount(pulseOf(rows))
+    const list = query<HTMLElement>(mounted.container, '.lc-pulse-event-list')
+    Object.defineProperty(list, 'clientHeight', { configurable: true, value: 640 })
+    Object.defineProperty(list, 'scrollTop', { configurable: true, value: 0, writable: true })
+    pinBox(list, 0, 640)
+    await act(async () => { list.dispatchEvent(new Event('scroll')) })
+    await until(() => queryAll(mounted.container, '[data-comms-key]').length < 70, 'event list never windowed')
+    await click(query(mounted.container, '[data-event-key="child:41:41000:relay"]'))
+    assert.equal(list.scrollTop, 40 * 64)
+    await mounted.unmount()
   })
 })
