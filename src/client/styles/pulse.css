@@ -98,16 +98,15 @@
 .lc-pulse-lane-hover .lc-pulse-lane-name { color: var(--lc-lane-hue, var(--lc-pulse-violet)); }
 .lc-pulse-lane-match .lc-pulse-lane-name { color: var(--lc-pulse-cyan); }
 .lc-pulse-lane-selected { background: linear-gradient(90deg, color-mix(in srgb, var(--lc-pulse-violet) 13%, transparent), transparent); box-shadow: inset 2px 0 var(--lc-pulse-violet); }
-.lc-pulse-lane-agent { display: grid; grid-template-columns: auto minmax(0, 1fr); align-items: center; gap: 6px; width: 100%; min-width: 0; padding: 4px 22px 4px 7px; border: 0; background: transparent; color: inherit; font: inherit; text-align: left; cursor: pointer; }
+.lc-pulse-lane-agent { display: grid; grid-template-columns: auto minmax(0, 1fr); align-items: center; gap: 6px; width: 100%; min-width: 0; padding: 4px 7px; border: 0; background: transparent; color: inherit; font: inherit; text-align: left; cursor: pointer; }
 .lc-pulse-lane-copy { display: flex; flex-direction: column; justify-content: center; gap: 1px; min-width: 0; }
 .lc-pulse-lane-head { display: flex; align-items: baseline; gap: 4px; min-width: 0; }
-.lc-pulse-lane-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 11px; font-weight: 650; line-height: 1.15; }
-.lc-pulse-lane-role { flex: none; color: var(--dsw-alias-label-secondary); font-size: 8.5px; line-height: 1.15; }
+.lc-pulse-lane-name { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; flex: 1 1 auto; min-width: 0; overflow: hidden; overflow-wrap: anywhere; font-size: 11px; font-weight: 650; line-height: 1.1; }
 .lc-pulse-lane-linked { flex: none; color: var(--lc-pulse-violet); font-size: 8.5px; font-weight: 650; line-height: 1.15; }
 .lc-pulse-lane-model, .lc-pulse-lane-usage, .lc-pulse-lane-counts { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 9px; line-height: 1.2; color: var(--dsw-alias-label-secondary); }
 .lc-pulse-lane-usage, .lc-pulse-lane-counts { font-variant-numeric: tabular-nums; }
-.lc-pulse-lane-counts { color: var(--dsw-alias-label-tertiary, var(--dsw-alias-label-secondary)); }
-.lc-pulse-lane-open { position: absolute; top: 3px; right: 3px; display: inline-flex; align-items: center; justify-content: center; width: 18px; height: 18px; padding: 0; border: 0; border-radius: 5px; background: transparent; color: var(--dsw-alias-label-secondary); cursor: pointer; }
+.lc-pulse-lane-counts { padding-right: 17px; color: var(--dsw-alias-label-tertiary, var(--dsw-alias-label-secondary)); }
+.lc-pulse-lane-open { position: absolute; right: 3px; bottom: 3px; display: inline-flex; align-items: center; justify-content: center; width: 18px; height: 18px; padding: 0; border: 0; border-radius: 5px; background: transparent; color: var(--dsw-alias-label-secondary); cursor: pointer; }
 .lc-pulse-lane-open:hover { background: var(--dsw-alias-bg-layer-2); color: var(--lc-pulse-violet); }
 
 .lc-pulse-track-stack { position: relative; min-width: 0; overflow: hidden; }
@@ -226,7 +225,7 @@
   .lc-pulse-stats { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .lc-pulse-waterfall { grid-template-columns: minmax(132px, 152px) minmax(0, 1fr); }
   .lc-pulse-task-lane-label { padding-inline: 6px; }
-  .lc-pulse-lane-agent { gap: 5px; padding: 3px 19px 3px 5px; }
+  .lc-pulse-lane-agent { gap: 5px; padding: 3px 5px; }
   .lc-pulse-lane-name { font-size: 10px; }
   .lc-pulse-event-label { display: none; }
   .lc-pulse-work-status { white-space: normal; text-align: right; }

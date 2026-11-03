@@ -37,7 +37,7 @@ import { scrollIntoViewIfPossible } from '../revealScroll'
 import type { ViewKit } from '../viewkit'
 import { useColumnWindow } from './useRowWindow'
 import { ClearableInput } from './clearableInput'
-import { AgentAvatar, channelStyle, roleTextOf } from './commsAgent'
+import { AgentAvatar, channelStyle } from './commsAgent'
 
 interface PulseTimelineProps {
   lanes: PulseLaneInput[]
@@ -236,7 +236,6 @@ export function PulseTimeline(props: PulseTimelineProps): ReactElement {
                 /* v8 ignore next 1 */
                 const agent = agentAt.get(lane.id) ?? props.agentOf(lane.id)
                 const count = trafficAt.get(lane.id) ?? 0
-                const role = roleTextOf(agent, t)
                 const navigable = !agent.self && agent.role !== 'other'
                 const stats = statsAt.get(lane.id)
                 const model = stats?.model !== undefined ? modelLabelOf(stats.model, stats.effort) : undefined
@@ -268,7 +267,6 @@ export function PulseTimeline(props: PulseTimelineProps): ReactElement {
                       <span className="lc-pulse-lane-copy">
                         <span className="lc-pulse-lane-head">
                           <span className="lc-pulse-lane-name">{agent.name}</span>
-                          {role !== '' ? <span className="lc-pulse-lane-role">{role}</span> : null}
                           {searching && !matchedIds.has(lane.id)
                             ? <span className="lc-pulse-lane-linked">{t('fleet.pulse.linked')}</span>
                             : null}
