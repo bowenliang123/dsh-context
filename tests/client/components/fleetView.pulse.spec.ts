@@ -72,7 +72,7 @@ afterEach(() => {
   resetTimelineDetailStores()
 })
 
-describe('Multi-Agent Network', () => {
+describe('Multi-Agent Fleet', () => {
   test('combines the spatial tree with full-fleet statistics and a natural-order lane layout', async () => {
     stubFleetRoute()
     const ctx = new TestClientCtx({ services: { sessions: familySessions() } })
