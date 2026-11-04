@@ -50,7 +50,7 @@ jobs:
           git fetch --depth 1 -q origin \
             refs/tags/dsh-v0.2.0-rc.2:refs/tags/dsh-v0.2.0-rc.2 \
             refs/tags/dsh-v0.2.1-rc.2:refs/tags/dsh-v0.2.1-rc.2 \
-            refs/tags/dsh-v0.2.2-alpha.3:refs/tags/dsh-v0.2.2-alpha.3
+            refs/tags/dsh-v0.2.2-rc.1:refs/tags/dsh-v0.2.2-rc.1
 
       # `pnpm test` is the vitest run only: all three projects plus the per-file coverage thresholds; typecheck is its own step above.
       - name: Test

@@ -6,15 +6,15 @@ The rules dsh-context must hold on every supported `@deepseek-ai/dsh` release, a
 
 **Law.** Record only what no other artifact carries; delete what code, tests, or git history already say. Verify against the dsh sources before acting — source wins over this page. Less is ALWAYS better.
 
-Last verified: **2026-11-05** (dsh-context `0.81.0`, dsh `0.2.0-rc.2` / `0.2.1-rc.2` / `0.2.2-alpha.3` tag trees).
+Last verified: **2026-11-05** (dsh-context `0.81.0`, dsh `0.2.0-rc.2` / `0.2.1-rc.2` / `0.2.2-rc.1` tag trees).
 
 ## 1 · Supported set
 
 *What the plugin declares it works on.*
 
-1. **Support exactly `0.2.0-rc.2`, `0.2.1-rc.2`, and `0.2.2-alpha.3`** — the `0.2.0` and `0.2.1` lines from rc.2, and the `0.2.2` line from alpha.3, all the V4 durable-log generation (declared in `dsh.compatibility.dshReleases`, baselined in `tests/baselines.ts`). The runtime-gate floor is the single `0.2.0-rc.2` release, and its published npm dependency closure is verified complete (a fresh `npm install @deepseek-ai/dsh@0.2.0-rc.2` in a disposable project exits 0 with the full `@deepseek-ai/*` closure); `0.2.2-alpha.3`'s closure is verified the same way. The `0.1.7` line is dropped; its users must move to a supported release. Releases older than the floor are refused by the harness gate where it runs (§2), or get §2's fallback composition with an upgrade prompt where it does not — never a fold.
+1. **Support `0.2.0-rc.2+`, `0.2.1-rc.2+`, and `0.2.2-rc.1+`** — the `0.2.0` and `0.2.1` lines from rc.2 and the `0.2.2` line from rc.1, all the V4 durable-log generation. `engines.dsh` and the dsh peers declare the floors as a union of `>=` terms (`manifest.engines.dsh`), whose gate effect is the single lowest floor, proven against the gate's own `semver.satisfies` `includePrerelease` spelling in `tests/compat/manifest.spec.ts`; per-line membership rides the `dsh.compatibility.dshReleases` floor keys and `tests/baselines.ts`, which stages each line's floor tag. The `0.2.2` floor rose from alpha.3 to rc.1 over a version-bump-only tag diff (vendored cordis 4.0.6-alpha.2 → 4.1.0, schemastery 3.18.6-alpha.2 → 3.19.0): the alpha spellings leave the baselined set and the `dshReleases` records while the staged sources stay identical. The runtime-gate floor is the single `0.2.0-rc.2` release, and its published npm dependency closure is verified complete (a fresh `npm install @deepseek-ai/dsh@0.2.0-rc.2` in a disposable project exits 0 with the full `@deepseek-ai/*` closure); `0.2.2-rc.1`'s closure is verified the same way. The `0.1.7` line is dropped; its users must move to a supported release. Releases older than the lowest floor are refused by the harness gate where it runs (§2), or get §2's fallback composition with an upgrade prompt where it does not — never a fold.
 
-- **Limitation — preview admission:** the single floor admits semantically newer releases the matrix never stages (a preview newer than the staged baseline, or a later line); by design they get the real folds forward-compatibly, while the exact `dsh.compatibility.dshReleases` records — not the range — carry the store's install evidence.
+- **Limitation — preview admission:** the union's single floor admits every semantically newer release the matrix never stages — a preview above the newest staged floor, a later line, and a staged line's own sub-floor spellings the declaration dropped (e.g. `0.2.2-alpha.3`, admitted above the runtime floor); by design they get the real folds forward-compatibly, while the `dsh.compatibility.dshReleases` floor records — not the range — carry the store's install evidence.
 
 ## 2 · Admission
 

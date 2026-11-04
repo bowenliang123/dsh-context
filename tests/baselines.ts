@@ -1,4 +1,4 @@
-export type BaselineId = 'v0.2.0-rc.2' | 'v0.2.1-rc.2' | 'v0.2.2-alpha.3'
+export type BaselineId = 'v0.2.0-rc.2' | 'v0.2.1-rc.2' | 'v0.2.2-rc.1'
 
 export interface ClientSeam {
   imageFaceMethod: string
@@ -286,8 +286,8 @@ export const BASELINES: readonly Baseline[] = [
     platformModules: [...DEFAULT_PLATFORM_MODULES, 'zod', '@tanstack/react-virtual'],
     extraFoldEvents: ['job/registered', 'job/settled'],
   }),
-  baseline('v0.2.2-alpha.3', 'dsh-v0.2.2-alpha.3', '0.2.2-alpha.3', {
-    cordis: '4.0.6-alpha.2',
+  baseline('v0.2.2-rc.1', 'dsh-v0.2.2-rc.1', '0.2.2-rc.1', {
+    cordis: '4.1.0',
     stockIds: ['llm-deepseek', 'web-search-deepseek', 'web-deepseek-api'],
     platformModules: [...DEFAULT_PLATFORM_MODULES, 'zod', '@tanstack/react-virtual'],
     extraFoldEvents: ['job/registered', 'job/settled'],
