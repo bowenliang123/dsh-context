@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
-import { describe, test } from 'vitest'
-import { billedOf, coveredRowsOf, rowsOfSnapshot, sessionsSnapshotOf, tokenPartsOf } from '../../src/client/overview'
+import { describe, test, vi } from 'vitest'
+import { billedOf, coveredRowsOf, fetchOverviewBatch, rowsOfSnapshot, sessionsSnapshotOf, tokenPartsOf, type OverviewBatch } from '../../src/client/overview'
 import { mergeCostUsage } from '../../src/client/cost'
 import type { SessionCostUsage } from '../../src/shared/types'
 import { COST } from './overview.fixtures'
@@ -321,6 +321,81 @@ describe('coveredRowsOf', () => {
     assert.deepEqual(coveredRowsOf(rows, 'archived').map(r => r.id), ['b', 'c'])
     assert.equal(coveredRowsOf([], 'archived').length, 0)
     assert.deepEqual(coveredRowsOf([], 'all'), [])
+  })
+})
+
+describe('rowsOfSnapshot: the on-demand batch', () => {
+  const COST2: SessionCostUsage = { zhipuai: { m: { peak: { uncached: 300, cacheRead: 0, cacheWrite: 0, output: 0 } } } }
+  function billedHead(tokens: number, cost?: SessionCostUsage): Record<string, unknown> {
+    return timelineOf({
+      current: { system: 0, tools: 0, user: tokens, inject: 0, skill: 0, assistant: 0, tool: 0, total: tokens },
+      ...(cost !== undefined ? { cost } : {}),
+    })
+  }
+
+  test('a row without own values fills from the batch; a row with own values keeps them', () => {
+    const snap = snapshotOf([
+      ['bare', { displayTitle: 'bare' }],
+      ['own', { displayTitle: 'own', projectionValues: { contextTimeline: billedHead(9, COST) } }],
+    ])
+    const batch: OverviewBatch = new Map([
+      ['bare', { contextTimeline: billedHead(100, COST) }],
+      ['own', { contextTimeline: billedHead(500, COST2) }],
+    ])
+    const rows = rowsOfSnapshot(snap, undefined, batch)!
+    assert.equal(rows.length, 2)
+    assert.equal(rows[0].timeline?.current.total, 100, 'the batch fills the missing timeline')
+    assert.equal(rows[1].timeline?.current.total, 9, 'own values outrank the batch')
+    const bare = rowsOfSnapshot(snap, undefined, batch)!
+    assert.equal(bare[0], rows[0], 'the same batch reference reuses the cached row')
+    const next: OverviewBatch = new Map([['bare', { contextTimeline: billedHead(200, COST) }]])
+    const refreshed = rowsOfSnapshot(snap, undefined, next)!
+    assert.equal(refreshed[0].timeline?.current.total, 200, 'a new batch re-derives the row')
+    assert.equal(rowsOfSnapshot(snap, undefined)![0].timeline, null, 'no batch reads as absence')
+  })
+
+  test('a family child fills from the batch and folds into the root activity and cost', () => {
+    const snap = snapshotOf([
+      ['root', { displayTitle: 'root', projectionValues: { contextTimeline: billedHead(100, COST), contextActivity: { days: { '2026-09-16': { tokens: 5, requests: 1, cost: COST, turns: 1, toolCalls: 1, toolsMs: 100, wallMs: 1_000, tools: { read: { n: 2, last: 10 } } } } } } }],
+      ['kid', { origin: 'subagent', parentId: 'root', displayTitle: 'kid' }],
+    ])
+    const batch: OverviewBatch = new Map([
+      ['kid', {
+        contextTimeline: billedHead(50, COST2),
+        contextActivity: { days: { '2026-09-16': { tokens: 7, requests: 2, cost: COST2, turns: 1, toolCalls: 2, toolsMs: 200, wallMs: 2_000, tools: { read: { n: 3, last: 40 } } } } },
+      }],
+    ])
+    const rows = rowsOfSnapshot(snap, undefined, batch)!
+    const root = rows[0]
+    assert.equal(root.family.length, 2, 'the kid joined the family')
+    assert.equal(root.family[1]?.current.total, 50, 'the kid timeline came from the batch')
+    const day = root.activity?.days['2026-09-16']
+    assert.ok(day !== undefined)
+    assert.equal(day.tokens, 12, 'the kid activity merged into the root day tally')
+    assert.equal(root.familyCost?.zhipuai?.m?.peak?.uncached, 300, 'the kid cost merged into the family usage')
+  })
+})
+
+describe('fetchOverviewBatch', () => {
+  test('the snapshot route values land in the batch; failures resolve to thrown errors and bad entries drop', async () => {
+    vi.stubGlobal('fetch', async (_url: unknown, init: { body: string }) => {
+      assert.deepEqual(JSON.parse(init.body), {})
+      return { ok: true, status: 200, json: async () => ({ ok: true, value: { s1: { contextTimeline: { current: { total: 7 } } }, s2: null, s3: {} } }) }
+    })
+    const batch = await fetchOverviewBatch()
+    assert.deepEqual(batch.get('s1'), { contextTimeline: { current: { total: 7 } } })
+    assert.equal(batch.has('s2'), false, 'a non-object entry drops')
+    assert.equal(batch.has('s3'), false, 'an empty entry drops')
+    vi.unstubAllGlobals()
+    vi.stubGlobal('fetch', async () => ({ ok: true, status: 200, json: async () => ({ ok: true }) }))
+    assert.equal((await fetchOverviewBatch()).size, 0, 'a value-less payload reads as an empty batch')
+    vi.unstubAllGlobals()
+    vi.stubGlobal('fetch', async () => ({ ok: false, status: 500 }))
+    await assert.rejects(fetchOverviewBatch(), /HTTP 500/)
+    vi.unstubAllGlobals()
+    vi.stubGlobal('fetch', async () => ({ ok: true, status: 200, json: async () => ({ ok: false }) }))
+    await assert.rejects(fetchOverviewBatch(), /snapshot read failed/)
+    vi.unstubAllGlobals()
   })
 })
 

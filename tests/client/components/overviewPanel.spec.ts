@@ -180,6 +180,7 @@ beforeEach(() => {
   vi.stubGlobal('fetch', async (url: string | URL) => {
     const route = String(url)
     if (route.endsWith('/backfill')) backfillPosts.push(route)
+    if (route.endsWith('/snapshot')) return { ok: true, json: async () => ({ ok: true, value: {} }) }
     return { ok: true, json: async () => ({}) }
   })
 })
@@ -382,6 +383,38 @@ describe('OverviewPanel', () => {
     assert.ok(lockedButtons[1].className.includes('lc-gran-on'), 'the pick still applies to this visit')
     assert.equal(readOnly.settings.store.getSnapshot().overviewRange, '30d', 'the stored default is untouched')
     await locked.m.unmount()
+  })
+
+test('the overview batch fills a row lacking list-row values', async () => {
+    vi.stubGlobal('fetch', async (url: string | URL) => {
+      const route = String(url)
+      if (route.endsWith('/snapshot')) {
+        return {
+          ok: true,
+          json: async () => ({
+            ok: true,
+            value: { c: { contextTimeline: timeline({ current: { system: 0, tools: 0, user: 500, inject: 0, skill: 0, assistant: 0, tool: 0, total: 500 } }) } },
+          }),
+        }
+      }
+      return { ok: true, json: async () => ({}) }
+    })
+    const { m } = await openPanel(makeCtx({}), {}, settingsWith('all'))
+    const values = queryAll(m.container, '.lc-stat-value').map(el => el.textContent)
+    assert.equal(values[1], '3.5k', 'the batched timeline raised the KPI tokens total (base 3.0k + 500)')
+  })
+
+  test('a batch landing after unmount never touches state', async () => {
+    let release: (value: unknown) => void = () => {}
+    const gated = new Promise<unknown>((resolve) => { release = resolve })
+    vi.stubGlobal('fetch', async (url: string | URL) => {
+      if (String(url).endsWith('/snapshot')) return { ok: true, json: async () => gated }
+      return { ok: true, json: async () => ({}) }
+    })
+    const { m } = await openPanel(makeCtx({}), {}, settingsWith('all'))
+    m.unmount()
+    release({ ok: true, value: {} })
+    await new Promise(resolve => setTimeout(resolve, 1))
   })
 
   test('range presets and a picked calendar range re-scope the KPI band and the grid', async () => {

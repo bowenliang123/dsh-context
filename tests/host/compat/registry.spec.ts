@@ -99,8 +99,8 @@ describe('registry contract — the semantics every supported line shares', () =
     const rawHeaders = createContextHeadersDefinition()
     const rawActivity = createContextActivityDefinition()
     assert.equal(rawHeaders.wire.summary, false, 'list rows stay header-epoch free (issue #225)')
-    assert.equal(rawTimeline.wire.summary, undefined, 'the timeline head stays in every summary')
-    assert.equal(rawActivity.wire.summary, undefined, 'the activity ledger stays in every summary')
+    assert.equal(rawTimeline.wire.summary, false, 'list rows stay timeline-head free; the overview fetches its batch')
+    assert.equal(rawActivity.wire.summary, false, 'list rows stay activity-ledger free; the overview fetches its batch')
     const timeline: ProjectionDefinition<'contextTimeline', TimelineState> = rawTimeline
     const headers: ProjectionDefinition<'contextHeaders', HeadersState> = rawHeaders
     const activity: ProjectionDefinition<'contextActivity', ActivityState> = rawActivity

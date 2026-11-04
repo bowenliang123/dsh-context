@@ -3,11 +3,11 @@ import { estimateSessionCost, formatCost, type CostCurrency, type ModelBook } fr
 import { fmt } from '../format'
 import { useModelPrices } from '../modelPrices'
 import {
-  coveredRowsOf, DayAggregator, dayRangeWindow, filterRows, groupCountsOf, inGroup, kpisOf,
+  coveredRowsOf, DayAggregator, dayRangeWindow, fetchOverviewBatch, filterRows, groupCountsOf, inGroup, kpisOf,
   pageOf, rangeWindowOf, refreshSessions, requestActivityBackfill, rowsOfSnapshot,
   rowHasTally, sessionGroupsOf, sessionsSnapshotOf, skillLoadsOf, sortRows,
   tallyStatsOf, UNGROUPED_KEY, workspacesSnapshotOf,
-  type DayRange, type OverviewCoverage, type OverviewRange, type OverviewRow, type OverviewSort,
+  type DayRange, type OverviewBatch, type OverviewCoverage, type OverviewRange, type OverviewRow, type OverviewSort,
   type TallyField, type TallyStat,
 } from '../overview'
 import { openPluginSettings, openSessionVia, activeMsOf, type ClientCtx } from '../services'
@@ -43,6 +43,7 @@ const RANGES: readonly OverviewRange[] = ['today', '7d', '30d', 'all']
 const SORTS: readonly OverviewSort[] = ['recent', 'tokens', 'context']
 const COVERAGE: readonly OverviewCoverage[] = ['all', 'active', 'archived']
 const METRICS: readonly HeatMetric[] = ['sessions', 'tokens']
+const OVERVIEW_SNAPSHOT_POLL_MS = 30_000
 const PICK_FILTER: Record<TallyField, { label: string; clear: string }> = {
   skills: { label: 'node.skillTag', clear: 'ov.list.skillClear' },
   tools: { label: 'ov.list.toolFilter', clear: 'ov.list.toolClear' },
@@ -96,7 +97,8 @@ export function makeOverviewPanel(
     const { zoneProps, bubble } = useHoverTip()
     const [bodyRef, bodyMounted] = useLazyMount()
 
-    const rows = useMemo(() => rowsOfSnapshot(snapshot, wsSnapshot), [snapshot, wsSnapshot])
+    const [batched, setBatched] = useState<OverviewBatch | null>(null)
+    const rows = useMemo(() => rowsOfSnapshot(snapshot, wsSnapshot, batched ?? undefined), [snapshot, wsSnapshot, batched])
     const groups = useMemo(() => sessionGroupsOf(wsSnapshot), [wsSnapshot])
     const [catalog, setCatalog] = useState<ReadonlyMap<string, SkillInfo> | null>(null)
 
@@ -109,6 +111,21 @@ export function makeOverviewPanel(
       void readSkillCatalog(currentCwd, currentId).then((next) => { if (alive && next !== null) setCatalog(next) })
       return () => { alive = false }
     }, [currentCwd, currentId])
+
+    useEffect(() => {
+      let alive = true
+      const load = (): void => {
+        void fetchOverviewBatch().then((next) => {
+          if (alive) setBatched(next)
+        }).catch(() => {})
+      }
+      load()
+      const timer = setInterval(load, OVERVIEW_SNAPSHOT_POLL_MS)
+      return () => {
+        alive = false
+        clearInterval(timer)
+      }
+    }, [])
 
     useEffect(() => {
       requestActivityBackfill()

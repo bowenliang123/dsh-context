@@ -1,6 +1,6 @@
 import { workspaceTitleOf } from '@deepseek-ai/dsh-util-workspace-path'
 import { dayKeyOf, endOfDayKey, startOfDayKey } from '../shared/days'
-import { BACKFILL_ROUTE } from './apiRoutes'
+import { BACKFILL_ROUTE, SNAPSHOT_ROUTE } from './apiRoutes'
 import { billedParts, RING_ORDER } from './categories'
 import { cacheHitPercent } from './format'
 import { estimateSessionCost, mergeCostUsage } from './cost'
@@ -128,15 +128,38 @@ interface BaseRow {
   activity: ContextActivity | null
 }
 
-const baseCache = new WeakMap<object, BaseRow>()
+interface BaseCacheEntry {
+  row: BaseRow
+  batch: unknown
+}
 
-function baseRowOf(rec: Record<string, unknown>, id: string): BaseRow {
+const baseCache = new WeakMap<object, BaseCacheEntry>()
+
+export type OverviewBatch = ReadonlyMap<string, { contextTimeline?: unknown; contextActivity?: unknown }>
+
+const BATCH_KEYS = ['contextTimeline', 'contextActivity'] as const
+
+function valuesWithBatch(
+  values: Record<string, unknown> | null | undefined,
+  id: string,
+  batched: OverviewBatch | undefined,
+): Record<string, unknown> | undefined {
+  const fill = batched?.get(id)
+  if (fill === undefined) return values ?? undefined
+  const merged: Record<string, unknown> = { ...values }
+  for (const key of BATCH_KEYS) {
+    if (merged[key] === undefined && fill[key] !== undefined) merged[key] = fill[key]
+  }
+  return merged
+}
+
+function baseRowOf(rec: Record<string, unknown>, id: string, batched: OverviewBatch | undefined): BaseRow {
   const cached = baseCache.get(rec)
-  if (cached !== undefined && cached.id === id) return cached
+  if (cached !== undefined && cached.batch === batched && cached.row.id === id) return cached.row
   const displayTitle = typeof rec.displayTitle === 'string' && rec.displayTitle !== '' ? rec.displayTitle : undefined
   const title = typeof rec.title === 'string' && rec.title !== '' ? rec.title : undefined
   const cwd = typeof rec.cwd === 'string' && rec.cwd !== '' ? rec.cwd : undefined
-  const values = asRecord(rec.projectionValues)
+  const values = valuesWithBatch(asRecord(rec.projectionValues), id, batched)
   const row: BaseRow = {
     id,
     title: displayTitle ?? title ?? id,
@@ -146,7 +169,7 @@ function baseRowOf(rec: Record<string, unknown>, id: string): BaseRow {
     timeline: timelineOf(values?.contextTimeline),
     activity: activityOf(values?.contextActivity),
   }
-  baseCache.set(rec, row)
+  baseCache.set(rec, { row, batch: batched })
   return row
 }
 
@@ -174,7 +197,11 @@ function childlessRowOf(base: BaseRow, current: boolean, archived: boolean): Ove
   return row
 }
 
-export function rowsOfSnapshot(snapshot: unknown, workspaces?: unknown): OverviewRow[] | null {
+export function rowsOfSnapshot(
+  snapshot: unknown,
+  workspaces?: unknown,
+  batched?: OverviewBatch,
+): OverviewRow[] | null {
   const state = asRecord(snapshot)
   if (state === null) return null
   if (!Array.isArray(state.ids)) return null
@@ -189,7 +216,7 @@ export function rowsOfSnapshot(snapshot: unknown, workspaces?: unknown): Overvie
       if (row === null) continue
       if (row.blank === true) continue
       if (row.origin === 'subagent') continue
-      bases.push(baseRowOf(row, id))
+      bases.push(baseRowOf(row, id, batched))
     } catch {
     }
   }
@@ -220,7 +247,7 @@ export function rowsOfSnapshot(snapshot: unknown, workspaces?: unknown): Overvie
     const queue = [row.id]
     for (let i = 0; i < queue.length; i++) {
       for (const kid of childrenOf.get(queue[i]) ?? []) {
-        const values = kid.row.projections
+        const values = valuesWithBatch(kid.row.projections, kid.id, batched)
         timelines.push(timelineOf(values?.contextTimeline))
         activities.push(activityOf(values?.contextActivity))
         queue.push(kid.id)
@@ -864,6 +891,24 @@ export function requestActivityBackfill(): void {
   try {
     void fetch(BACKFILL_ROUTE, { method: 'POST' }).catch(() => {})
   } catch {}
+}
+
+export async function fetchOverviewBatch(): Promise<OverviewBatch> {
+  const response = await fetch(SNAPSHOT_ROUTE, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({}),
+  })
+  if (!response.ok) throw new Error(`dsh-context: snapshot route HTTP ${response.status}`)
+  const r = asRecord(await response.json())
+  if (r === null || r.ok !== true) throw new Error('dsh-context: snapshot read failed')
+  const value = asRecord(r.value)
+  const batch: [string, { contextTimeline?: unknown; contextActivity?: unknown }][] = []
+  for (const id of Object.keys(value ?? {})) {
+    const entry = asRecord(value?.[id])
+    if (entry !== null && Object.keys(entry).length > 0) batch.push([id, entry])
+  }
+  return new Map(batch)
 }
 
 export function relativeTime(t: (key: string, params?: Record<string, string | number>) => string, updatedAt: number, now: number): string {

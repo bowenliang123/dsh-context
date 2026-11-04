@@ -324,7 +324,7 @@ export function createContextTimelineDefinition(config: Config, slim: () => bool
   const definition: WiredProjection<'contextTimeline', TimelineState> = {
     key: 'contextTimeline',
     stateSchema: timelineStateSchema,
-    wire: { viewSchema: contextTimelineSchema, view },
+    wire: { viewSchema: contextTimelineSchema, view, summary: false },
     init: () => createTimelineState(),
     apply: (state: TimelineState, event: SessionEvent) => applyTimeline(state, event as Parameters<typeof applyTimeline>[1], headBounds),
     stateVersion: TIMELINE_STATE_VERSION,

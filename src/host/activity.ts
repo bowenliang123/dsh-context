@@ -319,6 +319,7 @@ export function createContextActivityDefinition(): WiredProjection<'contextActiv
     init: (): ActivityState => ({ days: {} }),
     apply: (state: ActivityState, event: SessionEvent) => applyActivity(state, event),
     wire: {
+      summary: false,
       viewSchema: contextActivitySchema,
       view: state => ({
         days: Object.fromEntries(Object.entries(state.days).map(([k, v]) => [k, {

@@ -13,3 +13,5 @@ export const SKILLS_ROUTE = 'api/dsh-context/skills'
 export const BACKFILL_ROUTE = 'api/dsh-context/backfill'
 
 export const ATTACHMENT_ROUTE = 'api/dsh-context/attachment'
+
+export const SNAPSHOT_ROUTE = 'api/dsh-context/snapshot'
