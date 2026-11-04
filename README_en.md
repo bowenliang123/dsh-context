@@ -71,6 +71,7 @@ Click **Context Insights / 上下文洞察** in the sidebar's panel list — the
 | **7-day usage chart** | When did I spend what — each of the last 7 days' billed tokens and estimated cost as a bar pair, folded per turn off the sessions' own request times (not the session's last-active day). |
 | **Activity heatmap** | When do I actually work — the last 8 weeks of daily billed tokens; click a day to filter the sessions and scope the three tally cards to that day. |
 | **Skill loads** | Which skills I loaded, how often, and how recently — the range's loads per skill; click one to filter the sessions that loaded it. |
+| **Model usage** | How many tokens each model spent — the range's billed tokens ranked per provider / model, each row labelled `provider/model` (for example `CLIProxyAPI/zcodeglobal-GLM-5.3`); configured models without usage enter at zero, and models removed from the settings keep their historical total with a **Removed** badge. |
 | **Tool calls** | Which tools ran, how often, and how recently — the range's runs per tool from the daily ledger; click one to filter the sessions that ran it. |
 | **Command executions** | Which programs ran, how often, and how recently — the range's command runs per program, counted on dispatch; click one to filter the sessions that ran it. |
 | **Settings entry** | The chip in the page head — the same guarded jump to this plugin's preferences as the Context tab's Plugin Info card. |
