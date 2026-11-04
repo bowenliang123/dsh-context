@@ -1,6 +1,7 @@
 import { Fragment, useCallback, useLayoutEffect, useMemo, useRef, useState, type ReactElement } from 'react'
 import type { Category, ContextEventRecord, RequestRecord } from '../../shared/types'
 import { CATS, CAT_COLOR } from '../categories'
+import { actualMaxOf, actualOf } from '../trendActual'
 import { RISE_CLASS, TURN_FILLS, preprocessTrend, trendMaxima, turnStepsOf, trendTipRows } from './trendChart'
 import type { ViewKit } from '../viewkit'
 
@@ -51,9 +52,11 @@ interface RibbonGeometry {
   bands: RibbonBand[]
   durationRuns: string[]
   durationDots: [number, number][]
+  actualRuns: string[]
+  actualDots: [number, number][]
 }
 
-function ribbonGeometry(requests: RequestRecord[], delta: boolean, durationOn: boolean): RibbonGeometry {
+function ribbonGeometry(requests: RequestRecord[], delta: boolean, durationOn: boolean, focused: boolean): RibbonGeometry {
   const n = requests.length
   const geo: RibbonGeometry = {
     maxTotal: 1,
@@ -67,9 +70,12 @@ function ribbonGeometry(requests: RequestRecord[], delta: boolean, durationOn: b
     bands: [],
     durationRuns: [],
     durationDots: [],
+    actualRuns: [],
+    actualDots: [],
   }
   if (n === 0) return geo
   ;({ maxTotal: geo.maxTotal, maxUp: geo.maxUp, maxDown: geo.maxDown } = trendMaxima(requests, delta))
+  if (!delta && !focused) geo.maxTotal = Math.max(geo.maxTotal, actualMaxOf(requests))
   const span = Math.max(1, geo.maxUp + geo.maxDown)
   const deltaScale = CHART_H / span
   geo.span = span
@@ -139,6 +145,24 @@ function ribbonGeometry(requests: RequestRecord[], delta: boolean, durationOn: b
     }
     flushRun()
   }
+  if (!delta && !focused) {
+    const scale = CHART_H / Math.max(1, geo.maxTotal)
+    let run: [number, number][] = []
+    const flushRun = (): void => {
+      if (run.length >= 2) geo.actualRuns.push(run.map(p => `${p[0]},${p[1]}`).join(' '))
+      else if (run.length === 1) geo.actualDots.push(run[0])
+      run = []
+    }
+    for (let i = 0; i < n; i++) {
+      const actual = actualOf(requests[i])
+      if (actual === null) {
+        flushRun()
+        continue
+      }
+      run.push([i, yOf(actual, scale, CHART_H, 1)])
+    }
+    flushRun()
+  }
   return geo
 }
 
@@ -188,7 +212,7 @@ export function makeTrendOverview(kit: ViewKit): (props: TrendOverviewProps) => 
       [props.requests, delta, props.focusCat],
     )
     const n = requests.length
-    const geo = useMemo(() => ribbonGeometry(requests, delta, durationOn), [requests, delta, durationOn])
+    const geo = useMemo(() => ribbonGeometry(requests, delta, durationOn, focus !== null), [requests, delta, durationOn, focus])
     const surfaceRef = useRef<HTMLDivElement | null>(null)
     const wrapRef = useRef<HTMLDivElement | null>(null)
     const lastIdxRef = useRef<number | null>(null)
@@ -353,6 +377,18 @@ export function makeTrendOverview(kit: ViewKit): (props: TrendOverviewProps) => 
                     <Fragment key={i}>
                       <circle className="lc-dur-halo" cx={p[0]} cy={p[1]} r={2} />
                       <circle cx={p[0]} cy={p[1]} r={1.2} />
+                    </Fragment>
+                  ))}
+                  {geo.actualRuns.map((pts, i) => (
+                    <Fragment key={`a${i}`}>
+                      <polyline className="lc-actual-line-halo" points={pts} />
+                      <polyline className="lc-actual-line" points={pts} />
+                    </Fragment>
+                  ))}
+                  {geo.actualDots.map((p, i) => (
+                    <Fragment key={`a${i}`}>
+                      <circle className="lc-actual-dot-halo" cx={p[0]} cy={p[1]} r={2} />
+                      <circle className="lc-actual-dot" cx={p[0]} cy={p[1]} r={1.2} />
                     </Fragment>
                   ))}
                 </svg>

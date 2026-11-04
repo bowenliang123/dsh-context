@@ -472,6 +472,7 @@ export const DICT_ZH = {
   'tip.turn': '第 {t} 轮 · 共 {n} 步',
   'tip.turn1': '第 {t} 轮 · 共 1 步',
   'tip.total': '合计 ≈ {n}',
+  'tip.actual': '实际 {n}',
   'tip.cat': '{cat} ≈ {n}',
   'tip.delta': 'Δ {n}',
   'tip.duration': '耗时 {n}',

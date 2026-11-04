@@ -474,6 +474,7 @@ export const DICT_EN = {
   'tip.turn': 'Turn {t} · {n} steps',
   'tip.turn1': 'Turn {t} · 1 step',
   'tip.total': 'Total ≈ {n}',
+  'tip.actual': 'Actual {n}',
   'tip.cat': '{cat} ≈ {n}',
   'tip.delta': 'Δ {n}',
   'tip.duration': 'Duration {n}',

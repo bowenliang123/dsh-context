@@ -5,7 +5,9 @@ import { deltaBandsOf, deltaTotalsOf, dnaBaseLabel } from '../dna'
 import { lruTouch, lruTrim } from '../lru'
 import type { DnaDelta, TrendBand } from '../dna'
 import { containHorizontalOverscroll } from '../overscroll'
+import { actualMaxOf, actualOf } from '../trendActual'
 import type { ViewKit } from '../viewkit'
+import { ActualCurve } from './trendActualCurve'
 import { DnaBar, DnaDeltaBar, DnaHighlights, RISE_CLASS, STAGGER_CAP } from './trendDnaBars'
 import { DurationCurve } from './trendDurationCurve'
 import { BAR_GAP, BAR_W, TREND_WINDOW_MIN, WINDOW_HYSTERESIS_BARS, WINDOW_OVERSCAN_BARS, initialBarWindow, nextBarWindow, windowPads, windowRangeFor } from './trendWindow'
@@ -140,6 +142,30 @@ export function preprocessTrend(
   return { requests: delta ? base.map((req, i) => deltaOf(req, i > 0 ? base[i - 1] : null)) : base, focus }
 }
 
+function curveGeometry(
+  count: number,
+  at: (index: number) => [number, number] | null,
+): { runs: string[]; dots: [number, number][] } {
+  const runs: string[] = []
+  const dots: [number, number][] = []
+  let run: [number, number][] = []
+  const flushRun = (): void => {
+    if (run.length >= 2) runs.push(run.map(p => `${p[0]},${p[1]}`).join(' '))
+    else if (run.length === 1) dots.push(run[0])
+    run = []
+  }
+  for (let i = 0; i < count; i++) {
+    const point = at(i)
+    if (point === null) {
+      flushRun()
+      continue
+    }
+    run.push(point)
+  }
+  flushRun()
+  return { runs, dots }
+}
+
 export function trendMaxima(requests: RequestRecord[], delta: boolean): { maxTotal: number; maxUp: number; maxDown: number } {
   let maxTotal = 1
   let maxUp = 0
@@ -191,6 +217,9 @@ export function trendTipRows(
     }
   }
   const rows = [head, metric]
+  if (!opts.delta && opts.focus === null && req.prompt !== undefined) {
+    rows.push(t('tip.actual', { n: fmt(req.prompt) }))
+  }
   if (opts.durationOn && req.activeMs !== undefined) rows.push(t('tip.duration', { n: fmtDuration(req.activeMs) }))
   return rows
 }
@@ -218,6 +247,7 @@ export function makeTrendChart(kit: ViewKit): (props: TrendChartProps) => ReactE
     up: number
     down: number
     activeMs: number
+    actual: number
   }
 
   interface ChartBarProps {
@@ -388,6 +418,7 @@ export function makeTrendChart(kit: ViewKit): (props: TrendChartProps) => ReactE
       let up = 0
       let down = 0
       let activeMs = 0
+      let actual = 0
       const from = Math.max(0, Math.floor(sl / pitch))
       const to = Math.min(n - 1, Math.max(from, Math.floor((vr - 1) / pitch)))
       for (let i = from; i <= to; i++) {
@@ -417,10 +448,14 @@ export function makeTrendChart(kit: ViewKit): (props: TrendChartProps) => ReactE
         } else if (req.total > total) {
           total = req.total
         }
+        const a = actualOf(req)
+        if (a !== null && a > actual) actual = a
       }
-      setVisMax(prev => prev !== null && prev.total === total && prev.up === up && prev.down === down && prev.activeMs === activeMs
+      setVisMax(prev => prev !== null
+        && prev.total === total && prev.up === up && prev.down === down
+        && prev.activeMs === activeMs && prev.actual === actual
         ? prev
-        : { total, up, down, activeMs })
+        : { total, up, down, activeMs, actual })
     }
     const dnaMaxima = useMemo(() => {
       const rawBandAt = (idx: number): TrendBand[] => {
@@ -449,6 +484,7 @@ export function makeTrendChart(kit: ViewKit): (props: TrendChartProps) => ReactE
       maxDown = dnaMaxima.down
     } else {
       ({ maxTotal, maxUp, maxDown } = trendMaxima(requests, delta))
+      if (!delta && focus === null) maxTotal = Math.max(maxTotal, actualMaxOf(requests))
     }
     if (adaptive && visMax !== null) {
       if (delta) {
@@ -457,7 +493,7 @@ export function makeTrendChart(kit: ViewKit): (props: TrendChartProps) => ReactE
           maxDown = visMax.down
         }
       } else {
-        maxTotal = Math.max(1, visMax.total)
+        maxTotal = Math.max(1, visMax.total, visMax.actual)
       }
     }
     let maxActiveMs = 0
@@ -469,27 +505,23 @@ export function makeTrendChart(kit: ViewKit): (props: TrendChartProps) => ReactE
       if (adaptive && visMax !== null) maxActiveMs = visMax.activeMs
     }
     const durationGeometry = useMemo(() => {
-      const runs: string[] = []
-      const dots: [number, number][] = []
-      if (!durationOn) return { runs, dots }
+      if (!durationOn) return { runs: [], dots: [] }
       const scale = CHART_H / Math.max(1, maxActiveMs)
-      let run: [number, number][] = []
-      const flushRun = (): void => {
-        if (run.length >= 2) runs.push(run.map(p => `${p[0]},${p[1]}`).join(' '))
-        else if (run.length === 1) dots.push(run[0])
-        run = []
-      }
-      for (let i = 0; i < requests.length; i++) {
+      return curveGeometry(requests.length, (i) => {
         const m = requests[i].activeMs
-        if (m === undefined) {
-          flushRun()
-          continue
-        }
-        run.push([i * (BAR_W + BAR_GAP) + BAR_W / 2, Math.round((CHART_H - m * scale) * 100) / 100])
-      }
-      flushRun()
-      return { runs, dots }
+        if (m === undefined) return null
+        return [i * (BAR_W + BAR_GAP) + BAR_W / 2, Math.round((CHART_H - m * scale) * 100) / 100]
+      })
     }, [requests, durationOn, maxActiveMs])
+    const actualGeometry = useMemo(() => {
+      if (delta || focus !== null) return { runs: [], dots: [] }
+      const scale = CHART_H / Math.max(1, maxTotal)
+      return curveGeometry(requests.length, (i) => {
+        const actual = actualOf(requests[i])
+        if (actual === null) return null
+        return [i * (BAR_W + BAR_GAP) + BAR_W / 2, Math.round((CHART_H - actual * scale) * 100) / 100]
+      })
+    }, [requests, delta, focus, maxTotal])
     const span = Math.max(1, maxUp + maxDown)
     const deltaScale = CHART_H / span
     const upPx = Math.round(maxUp * deltaScale)
@@ -855,6 +887,14 @@ export function makeTrendChart(kit: ViewKit): (props: TrendChartProps) => ReactE
                   height={CHART_H}
                   runs={durationGeometry.runs}
                   dots={durationGeometry.dots}
+                />
+              ) : null}
+              {actualGeometry.runs.length > 0 || actualGeometry.dots.length > 0 ? (
+                <ActualCurve
+                  width={requests.length * (BAR_W + BAR_GAP) - BAR_GAP}
+                  height={CHART_H}
+                  runs={actualGeometry.runs}
+                  dots={actualGeometry.dots}
                 />
               ) : null}
             </div>

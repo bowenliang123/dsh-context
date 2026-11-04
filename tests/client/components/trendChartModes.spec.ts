@@ -110,14 +110,14 @@ describe('TrendChart step granularity, total mode', () => {
       req(3, { turn: 2, step: 0, system: 0, tools: 0, user: 0, inject: 0, assistant: 0, tool: 0, total: 0, prompt: 500 }),
     ]
     const raw = await mount(h(TrendChart, propsOf(rawReqs)))
-    assert.equal(query(raw.container, '.lc-axis-top').textContent, '600')
+    assert.equal(query(raw.container, '.lc-axis-top').textContent, '1.2k', 'the axis reaches the provider prompt')
     const rawBars = bars(raw.container)
     assert.equal(rawBars.length, 3)
     const rawSegs1 = queryAll(rawBars[0]!, '.lc-bar-stack > div')
     const rawSegs2 = queryAll(rawBars[1]!, '.lc-bar-stack > div')
     assert.equal(rawSegs1.length, 6)
     assert.deepEqual(rawSegs2.map(s => s.style.height), rawSegs1.map(s => s.style.height), 'identical compositions plot identical heights regardless of the reported prompt')
-    assert.equal(rawSegs1[0]!.style.height, `${Math.round(200 / 600 * CHART_H)}px`)
+    assert.equal(rawSegs1[0]!.style.height, `${Math.round(200 / 1200 * CHART_H)}px`, 'the bars keep the fold figures on the wider scale')
     assert.equal(queryAll(rawBars[2]!, '.lc-bar-stack > div').length, 0)
     await raw.unmount()
   })

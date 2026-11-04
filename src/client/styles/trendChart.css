@@ -62,6 +62,12 @@
 .lc-duration .lc-dur-halo { stroke: var(--dsw-alias-bg-layer-1); stroke-width: 3; opacity: 0.85; }
 .lc-duration circle.lc-dur-halo { stroke: none; fill: var(--dsw-alias-bg-layer-1); }
 .lc-chart-dim .lc-duration polyline, .lc-chart-dim .lc-duration circle { opacity: 0.35; }
+.lc-actual { position: absolute; top: 18px; left: 2px; z-index: 1; overflow: visible; pointer-events: none; }
+.lc-actual-line { fill: none; stroke: var(--dsw-alias-label-primary); stroke-width: 1.5; stroke-linejoin: round; stroke-linecap: round; }
+.lc-actual-dot { fill: var(--dsw-alias-label-primary); stroke: none; }
+.lc-actual-line-halo { fill: none; stroke: var(--dsw-alias-bg-layer-1); stroke-width: 3; opacity: 0.85; }
+.lc-actual-dot-halo { fill: var(--dsw-alias-bg-layer-1); stroke: none; }
+.lc-chart-dim .lc-actual-line, .lc-chart-dim .lc-actual-dot, .lc-chart-dim .lc-actual-line-halo, .lc-chart-dim .lc-actual-dot-halo { opacity: 0.35; }
 .lc-bar-marker { position: absolute; top: -16px; left: 50%; transform: translateX(-50%); z-index: 2; font-size: 11px; color: var(--dsw-alias-state-warn-primary); }
 .lc-trend-flag { position: absolute; right: -1px; top: -17px; bottom: 0; z-index: 2; width: 1px; background: color-mix(in srgb, var(--color-neutral-500) 45%, transparent); pointer-events: none; }
 .lc-trend-flag-label { position: absolute; top: 0; right: 0; box-sizing: border-box; padding: 1px 3px; border: 1px solid color-mix(in srgb, var(--color-neutral-500) 45%, transparent); border-radius: 3px; background: var(--dsw-alias-bg-layer-1); font-size: 9px; line-height: 1; font-weight: 600; color: var(--dsw-alias-label-secondary); white-space: nowrap; }

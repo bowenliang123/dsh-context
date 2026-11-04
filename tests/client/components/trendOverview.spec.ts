@@ -174,6 +174,31 @@ describe('TrendOverview duration overlay', () => {
   })
 })
 
+describe('TrendOverview provider series', () => {
+  const reqs = [
+    req(1, { turn: 1, step: 0, total: 300, prompt: 600 }),
+    req(2, { turn: 1, step: 1, total: 300, prompt: 300 }),
+    req(3, { turn: 1, step: 2 }),
+  ]
+
+  test('the provider prompt rides the ribbon and the axis reaches it', async () => {
+    const m = await mount(h(TrendOverview, propsOf(reqs)))
+    const svg = query(m.container, '.lc-fit-svg')
+    const line = queryAll(svg, 'polyline.lc-actual-line')[0]
+    assert.equal(line.getAttribute('points'), '0,0 1,56')
+    assert.equal(query(m.container, '.lc-axis-top').textContent, '600')
+    await m.unmount()
+
+    const lone = await mount(h(TrendOverview, propsOf([
+      req(1, { turn: 1, step: 0, total: 300, prompt: 600 }),
+      req(2, { turn: 1, step: 1, total: 300 }),
+    ])))
+    assert.equal(queryAll(lone.container, 'polyline.lc-actual-line').length, 0, 'a lone point is a dot')
+    assert.equal(queryAll(lone.container, 'circle.lc-actual-dot').length, 1)
+    await lone.unmount()
+  })
+})
+
 describe('TrendOverview category focus', () => {
   test('plots the focused band rescaled to its own max; an unknown key degrades', async () => {
     const r1 = req(1, { turn: 1, step: 0 })
