@@ -23,6 +23,7 @@ describe('createContextHeadersDefinition', () => {
     const def = createContextHeadersDefinition()
     assert.equal(def.key, 'contextHeaders')
     assert.equal(def.stateVersion, 1, 'pinned: a bump would orphan idle cold sessions (no refresh channel)')
+    assert.equal(def.wire.summary, false, 'pinned: session/list rows never carry per-turn tools[] (issue #225)')
 
     const init = def.init()
     assert.deepEqual(init, { headers: [] })

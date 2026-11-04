@@ -95,9 +95,15 @@ describe('registry contract — the semantics every supported line shares', () =
   })
 
   test('the local unit contract stays assignable to the harness projection contract', () => {
-    const timeline: ProjectionDefinition<'contextTimeline', TimelineState> = createContextTimelineDefinition({}, () => false)
-    const headers: ProjectionDefinition<'contextHeaders', HeadersState> = createContextHeadersDefinition()
-    const activity: ProjectionDefinition<'contextActivity', ActivityState> = createContextActivityDefinition()
+    const rawTimeline = createContextTimelineDefinition({}, () => false)
+    const rawHeaders = createContextHeadersDefinition()
+    const rawActivity = createContextActivityDefinition()
+    assert.equal(rawHeaders.wire.summary, false, 'list rows stay header-epoch free (issue #225)')
+    assert.equal(rawTimeline.wire.summary, undefined, 'the timeline head stays in every summary')
+    assert.equal(rawActivity.wire.summary, undefined, 'the activity ledger stays in every summary')
+    const timeline: ProjectionDefinition<'contextTimeline', TimelineState> = rawTimeline
+    const headers: ProjectionDefinition<'contextHeaders', HeadersState> = rawHeaders
+    const activity: ProjectionDefinition<'contextActivity', ActivityState> = rawActivity
     for (const definition of [timeline, headers, activity]) {
       assert.ok(definition.wire !== undefined, 'every unit serves a client view')
       const state = (definition.init as () => unknown)()

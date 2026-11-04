@@ -10,6 +10,7 @@ export interface WiredProjection<K extends keyof SessionProjectionMap, S> {
   wire: {
     viewSchema: z.ZodType<SessionProjectionMap[K]>
     view(state: S): SessionProjectionMap[K]
+    summary?: boolean
   }
   stateVersion: number
 }

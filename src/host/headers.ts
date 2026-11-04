@@ -110,7 +110,7 @@ export function createContextHeadersDefinition(
   const definition: WiredProjection<'contextHeaders', HeadersState> = {
     key: 'contextHeaders',
     stateSchema: contextHeadersStateSchema,
-    wire: { viewSchema: contextHeadersSchema, view },
+    wire: { viewSchema: contextHeadersSchema, view, summary: false },
     init: (): HeadersState => ({ headers: [] }),
     apply: (state: HeadersState, event: SessionEvent): HeadersState => {
       const record = recordOf(event)
