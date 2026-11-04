@@ -23,11 +23,11 @@
     "url": "https://cloud.zilliz.com.cn/signup?utm_source=dsh_context",
     "icon": "https://avatars.githubusercontent.com/u/18416694?v=4",
     "slogan": {
-      "zh": "原厂 Milvus，全能 AI 检索。",
+      "zh": "Milvus原厂，全能 AI 检索。",
       "en": "Original Milvus Creator, full AI search."
     },
     "promotion": {
-      "zh": "Milvus 原厂全托管向量数据库，免费试用！",
+      "zh": "Milvus原厂全托管向量数据库，免费试用！",
       "en": "Fully managed vector database from the creators of Milvus. Try it!"
     },
     "tooltip": {
