@@ -16,5 +16,23 @@
       "zh": "特别感谢 DeepSeek 开放平台，为智能体开发者提供强大而易用的模型服务。通过一个 API Key 接入最新模型，把更多时间留给创造。",
       "en": "Special thanks to DeepSeek Platform for making capable, developer-friendly models accessible to agent builders. Connect the latest models with one API key and spend more time creating."
     }
+  },
+  {
+    "id": "zilliz-cloud",
+    "name": "Zilliz Cloud",
+    "url": "https://cloud.zilliz.com.cn/signup?utm_source=dsh_context",
+    "icon": "https://avatars.githubusercontent.com/u/18416694?v=4",
+    "slogan": {
+      "zh": "Milvus原厂，全能 AI 检索。",
+      "en": "Original Milvus Creator, full AI search."
+    },
+    "promotion": {
+      "zh": "Milvus原厂全托管向量数据库，免费试用！",
+      "en": "Fully managed vector database from the creators of Milvus. Try it!"
+    },
+    "tooltip": {
+      "zh": "特别感谢 Zilliz Cloud，为 AI 开发者提供高性能、易扩展的全托管向量数据库。轻松构建知识库、语义搜索与智能体记忆，省去部署运维，把更多时间留给创造。",
+      "en": "Special thanks to Zilliz Cloud for providing AI developers with a fast, scalable, fully managed vector database. Build knowledge bases, semantic search, and agent memory without managing infrastructure—and spend more time creating."
+    }
   }
 ]

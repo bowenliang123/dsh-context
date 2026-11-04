@@ -17,9 +17,16 @@ function entry(over: Record<string, unknown> = {}): Record<string, unknown> {
 }
 
 describe('recom payload', () => {
-  test('the repository data matches the built-in DeepSeek fallback and resolves its icon', async () => {
+  test('the repository data keeps the built-in DeepSeek fallback and drops no sponsor entry', async () => {
     const source = await readFile(new URL('../../data/recoms.json', import.meta.url), 'utf8')
-    assert.deepEqual(recomsOfPayload(JSON.parse(source)), [DEFAULT_RECOM])
+    const payload = JSON.parse(source) as { id: string }[]
+    const rows = recomsOfPayload(payload)
+    assert.equal(rows.length, payload.length)
+    assert.deepEqual(rows[0], DEFAULT_RECOM)
+    assert.deepEqual(rows.map((row) => row.id), payload.map((item) => item.id))
+  })
+
+  test('relative icons resolve against the repository root and absolute links keep their form', () => {
     assert.equal(recomOf(entry())?.icon, RECOM_REPOSITORY_ROOT + 'docs/recoms/deepseek.svg')
     assert.equal(recomOf(entry({ icon: 'https://simpleicons.org/icons/deepseek.svg' }))?.icon, 'https://simpleicons.org/icons/deepseek.svg')
     assert.equal(recomOf(entry({ url: 'https://example.com/' }))?.url, 'https://example.com/')
