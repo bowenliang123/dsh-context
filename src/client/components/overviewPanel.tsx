@@ -28,6 +28,8 @@ import { makeOverviewUsage } from './overviewUsage'
 import { makeStatsTiming } from './statsTiming'
 import { makeOverviewCard } from './overviewCard'
 import { makeOverviewSkills } from './overviewSkills'
+import { makeOverviewModels } from './overviewModels'
+import { modelRankOf, refreshModelCatalog, useModelCatalog } from '../modelRank'
 import { makeOverviewTally } from './overviewTally'
 import type { TallyCardKind } from './overviewTally'
 import { makeUpdatePill } from './updatePill'
@@ -64,6 +66,7 @@ export function makeOverviewPanel(
   const StatsTiming = makeStatsTiming(kit, Donut)
   const OverviewUsage = makeOverviewUsage(kit)
   const OverviewSkills = makeOverviewSkills(kit)
+  const OverviewModels = makeOverviewModels(kit)
   const OverviewTally = makeOverviewTally(kit)
   const UpdatePill = makeUpdatePill(kit)
   const ErrorBoundary = makeErrorBoundary(t)
@@ -79,6 +82,7 @@ export function makeOverviewPanel(
 
   function OverviewBody(props: OverviewPanelProps): ReactElement | null {
     const { book } = useModelPrices()
+    const modelCatalog = useModelCatalog()
     const snapshot = useDeferredValue(sessionsSnapshotOf(props))
     const wsSnapshot = useDeferredValue(workspacesSnapshotOf(props))
     const configuredRange = useSyncExternalStore(subscribeSettings, () => settings.defaultOverviewRange())
@@ -113,6 +117,7 @@ export function makeOverviewPanel(
     useEffect(() => {
       requestActivityBackfill()
       refreshSessions(ctx)
+      refreshModelCatalog()
     }, [])
 
     useEffect(() => { setPage(0) }, [preset, custom, coverage, day, query, group, pick, sort])
@@ -151,6 +156,7 @@ export function makeOverviewPanel(
     const skillStats = useMemo(() => skillLoadsOf(ranged, { scope, day }), [ranged, scope, day])
     const toolStats = useMemo(() => tallyStatsOf(ranged, { scope, day, field: 'tools' }), [ranged, scope, day])
     const commandStats = useMemo(() => tallyStatsOf(ranged, { scope, day, field: 'cmds' }), [ranged, scope, day])
+    const modelStats = useMemo(() => modelRankOf(ranged, { scope, day }, modelCatalog), [ranged, scope, day, modelCatalog])
     const tallyCards: readonly { kind: TallyCardKind; field: TallyField; stats: TallyStat[] }[] = [
       { kind: 'tool', field: 'tools', stats: toolStats },
       { kind: 'command', field: 'cmds', stats: commandStats },
@@ -277,6 +283,7 @@ export function makeOverviewPanel(
                         onSelect={(name) => { setPick(name === null ? null : { field: 'skills', name }) }}
                         catalog={catalog}
                       />
+                      <OverviewModels stats={modelStats} day={day} />
                       {tallyCards.map(card => (
                         <OverviewTally
                           key={card.kind}

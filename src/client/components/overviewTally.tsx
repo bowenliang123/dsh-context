@@ -11,12 +11,13 @@ export interface TallyCardProps {
   title: string
   day?: string | null
   summary: string
+  className?: string
   children: ReactNode
 }
 
 export function TallyCard(props: TallyCardProps): ReactElement {
   return (
-    <div className="lc-card lc-ov-tile lc-ov-tally-card">
+    <div className={'lc-card lc-ov-tile lc-ov-tally-card' + (props.className === undefined ? '' : ' ' + props.className)}>
       <div className="lc-card-title">
         <span className="lc-card-title-text">
           {props.icon}

@@ -15,6 +15,7 @@ import { makeFleetView } from './components/fleetView'
 import { watchFleetTab } from './fleetTab'
 import { makeAgentHeads } from './agentHeads'
 import { watchHistoryFaces } from './historyPage'
+import { watchModelCatalog } from './modelRank'
 import { watchPlacement } from './placement'
 import { watchSidebarContextTab } from './sidebar'
 import { makeViewKit } from './viewkit'
@@ -56,6 +57,7 @@ function apply(ctx: ClientCtx): void {
   const kit = makeViewKit(t, ctx.locale)
   ctx.effect(() => resetSessionWarm, 'dsh-context: warm-up timers')
   watchHistoryFaces(ctx)
+  watchModelCatalog(ctx)
   const settings = createContextSettings()
   const heads = makeAgentHeads()
   const ContextView = makeContextView(ctx, kit, settings, heads)

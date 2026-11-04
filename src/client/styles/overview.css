@@ -73,6 +73,7 @@
 }
 @container lc-ov (max-width: 560px) {
   .lc-ov-tiles { grid-template-columns: minmax(0, 1fr); }
+  .lc-ov-model-card { grid-column: span 1; }
 }
 .lc-ov-heat-card { display: flex; flex-direction: column; }
 
@@ -116,6 +117,13 @@ button.lc-heat-cell:hover { box-shadow: 0 0 0 1.5px color-mix(in srgb, var(--col
 .lc-ov-tally-count { flex: none; font-variant-numeric: tabular-nums; color: var(--dsw-alias-label-primary); }
 .lc-ov-tally-bar { position: absolute; left: 6px; bottom: 1px; height: 2px; border-radius: 1px; opacity: 0.45; pointer-events: none; }
 .lc-ov-tally-more { padding-top: 4px; font-size: 11px; color: var(--dsw-alias-label-secondary); }
+.lc-ov-model-card { grid-column: span 2; }
+.lc-ov-model { cursor: default; }
+.lc-ov-model-rank { flex: none; min-width: 15px; font-size: 10px; font-variant-numeric: tabular-nums; color: var(--dsw-alias-label-secondary); }
+.lc-ov-model-off .lc-ov-tally-name { color: var(--dsw-alias-label-secondary); }
+.lc-ov-model-badge { flex: none; border: 1px solid var(--dsw-alias-label-secondary); border-radius: 999px; padding: 0 5px; font-size: 10px; line-height: 1.5; color: var(--dsw-alias-label-secondary); }
+.lc-ov-model-provider { flex: none; max-width: 45%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 10px; color: var(--dsw-alias-label-secondary); opacity: 0.85; }
+.lc-ov-model-label { display: flex; align-items: baseline; flex: 1 1 auto; min-width: 0; }
 .lc-skilltip { position: fixed; z-index: 300; max-width: min(300px, 60vw); padding: 10px 12px; border-radius: 10px; white-space: normal; line-height: 1.5; }
 .lc-skilld-head { display: flex; align-items: center; gap: 7px; }
 .lc-skilld-name { flex: 1 1 auto; min-width: 0; overflow-wrap: anywhere; font-family: var(--ds-font-family-code, ui-monospace, SFMono-Regular, Menlo, monospace); font-size: 12px; font-weight: 600; color: var(--dsw-alias-label-primary); }
