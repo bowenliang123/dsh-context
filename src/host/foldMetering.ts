@@ -80,8 +80,6 @@ export function accumulateCost(st: TimelineState, time: number, usage: BilledUsa
 
 const TOOL_TIMING_CAP = 16
 
-export const DECODE_KINDS: readonly DecodeKind[] = ['reasoning', 'text', 'toolarg']
-
 export function durOf(from: number, to: number): number {
   if (!Number.isFinite(from) || !Number.isFinite(to)) return 0
   return Math.max(0, to - from)
@@ -100,10 +98,10 @@ const DECODE_FIELDS: Record<DecodeKind, { ms: 'reasoningMs' | 'textMs' | 'toolAr
   toolarg: { ms: 'toolArgMs', n: 'toolArgBlocks' },
 }
 
-export function addDecode(timing: TimingTotals, kind: DecodeKind, ms: number, blocks: number): void {
+export function addDecodeSpan(timing: TimingTotals, kind: DecodeKind, ms: number): void {
   const field = DECODE_FIELDS[kind]
-  if (ms > 0) timing[field.ms] = (timing[field.ms] ?? 0) + ms
-  if (blocks > 0) timing[field.n] = (timing[field.n] ?? 0) + blocks
+  timing[field.ms] = (timing[field.ms] ?? 0) + ms
+  timing[field.n] = (timing[field.n] ?? 0) + 1
 }
 
 export function bumpToolTotals(timing: TimingTotals, name: string, ms: number): void {

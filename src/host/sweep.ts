@@ -1,11 +1,12 @@
 import type { Context } from '@deepseek-ai/cordis'
 import { deriveHeadState } from './foldState'
 import { asRecord } from './record'
-import { TIMELINE_STATE_VERSION } from './timeline'
 
 const ROW_KEY = 'contextTimeline'
 
 const LEGACY_VERSION = 36
+
+const HEAD_ONLY_STATE_VERSION = 37
 
 interface RowLike {
   ver?: unknown
@@ -58,7 +59,7 @@ async function sweep(ctx: Context, table: TableLike): Promise<void> {
           ...current,
           rows: {
             ...current.rows,
-            [ROW_KEY]: { ver: TIMELINE_STATE_VERSION, seq: currentRow.seq, val: slim },
+            [ROW_KEY]: { ver: HEAD_ONLY_STATE_VERSION, seq: currentRow.seq, val: slim },
           },
         }
       })

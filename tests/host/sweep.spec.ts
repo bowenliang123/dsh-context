@@ -114,7 +114,7 @@ describe('the timeline row sweep (issue #217)', () => {
     await ran()
     assert.equal(harness.updates, 1)
     const row = harness.records.get('s1')!.rows[ROW_KEY]
-    assert.equal(row.ver, TIMELINE_STATE_VERSION)
+    assert.equal(row.ver, 37, 'pinned: the head-only shape generation the sweep writes')
     assert.equal(row.seq, 5)
     const val = row.val as TimelineState
     assert.equal(val.spans.length, 0)
@@ -178,7 +178,7 @@ describe('the timeline row sweep (issue #217)', () => {
     watchTimelineRowSweep(ctx)
     await ran()
     assert.equal(harness.records.get('bad')!.rows[ROW_KEY].ver, LEGACY_VERSION, 'the failed row stays on the refold path')
-    assert.equal(harness.records.get('good')!.rows[ROW_KEY].ver, TIMELINE_STATE_VERSION, 'the sweep moved on')
+    assert.equal(harness.records.get('good')!.rows[ROW_KEY].ver, 37, 'the sweep moved on')
   })
 
   test('a missing domain or table arms nothing', async () => {

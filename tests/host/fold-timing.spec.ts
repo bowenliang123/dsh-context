@@ -169,9 +169,9 @@ describe('timing — the generation split (reasoning / text / tool args)', () =>
       stepStart(1, { time: 0 }),
       assistantMessage(2, { time: 2_000, stream }),
     ])
-    assert.equal(state.timing?.ttftMs, 200)
-    assert.equal(state.timing?.genMs, 1_800)
-    assert.equal(state.timing?.reasoningMs, 500, 'reasoning owns 200→700')
+    assert.equal(state.timing?.ttftMs, 210)
+    assert.equal(state.timing?.genMs, 1_790)
+    assert.equal(state.timing?.reasoningMs, 490, 'reasoning owns 210→700')
     assert.equal(state.timing?.textMs, 500, 'text owns 700→1200')
     assert.equal(state.timing?.toolArgMs, 800, 'tool args own 1200→message')
     assert.equal(
@@ -181,6 +181,24 @@ describe('timing — the generation split (reasoning / text / tool args)', () =>
     assert.equal(state.timing?.reasoningBlocks, 1)
     assert.equal(state.timing?.textBlocks, 1)
     assert.equal(state.timing?.toolArgBlocks, 1)
+  })
+
+  test('a zero-width marker pair contributes no block count', () => {
+    const { state } = driveTimeline([
+      stepStart(1, { time: 0 }),
+      assistantMessage(2, {
+        time: 900,
+        stream: [
+          chunkRec(100, { type: 'block-start', index: 0, blockType: 'reasoning' }),
+          chunkRec(100, { type: 'block-start', index: 1, blockType: 'text' }),
+          { type: 'text-chunks', time0: 100, index: 1, dt: [], texts: ['x'] },
+        ],
+      }),
+    ])
+    assert.deepEqual(
+      [state.timing?.reasoningMs, state.timing?.reasoningBlocks, state.timing?.textMs, state.timing?.textBlocks],
+      [undefined, undefined, 800, 1],
+    )
   })
 
   test('an unstamped call carries no split (its model time is unattributed wholesale)', () => {

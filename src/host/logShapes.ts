@@ -21,11 +21,6 @@ export function decodeKindOfBlock(blockType: unknown): DecodeKind | undefined {
   return undefined
 }
 
-export interface DecodeTally {
-  spans: Record<DecodeKind, number>
-  blocks: Record<DecodeKind, number>
-}
-
 function runFirstTokenTime(record: Record<string, unknown>): number | undefined {
   const time0 = record.time0
   if (typeof time0 !== 'number' || !Number.isFinite(time0)) return undefined
@@ -58,13 +53,11 @@ export function firstTokenTimeOfStream(stream: unknown): number | undefined {
 export interface StreamTiming {
   firstToken?: number
   spans: DecodeSpan[]
-  tally: DecodeTally
 }
 
 export function streamTimingOf(stream: unknown, endTime: number): StreamTiming {
-  const tally: DecodeTally = { spans: { reasoning: 0, text: 0, toolarg: 0 }, blocks: { reasoning: 0, text: 0, toolarg: 0 } }
   const spans: DecodeSpan[] = []
-  const result: StreamTiming = { spans, tally }
+  const result: StreamTiming = { spans }
   if (!Array.isArray(stream)) return result
   const markersReadable = Number.isFinite(endTime)
   let firstToken: number | undefined
@@ -73,7 +66,6 @@ export function streamTimingOf(stream: unknown, endTime: number): StreamTiming {
   const close = (to: number): void => {
     if (kind === undefined || to <= since) return
     spans.push({ kind, start: since, end: to })
-    tally.spans[kind] += to - since
   }
   for (const record of stream) {
     if (record === null || typeof record !== 'object') continue
@@ -85,7 +77,6 @@ export function streamTimingOf(stream: unknown, endTime: number): StreamTiming {
       if (markersReadable && chunk !== null && chunk.type === 'block-start') {
         close(time as number)
         kind = decodeKindOfBlock(chunk.blockType)
-        if (kind !== undefined) tally.blocks[kind] += 1
         since = time as number
       } else if (firstToken === undefined && isTokenChunk(chunk)) {
         firstToken = time as number

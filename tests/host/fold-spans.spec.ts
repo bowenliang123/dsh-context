@@ -32,8 +32,8 @@ describe('spans — the step flush', () => {
       stepEnd(5, { time: 4_000 }),
     ])
     assert.deepEqual(state.spans, [
-      { kind: 'ttft', start: 0, end: 200 },
-      { kind: 'reasoning', start: 200, end: 700 },
+      { kind: 'ttft', start: 0, end: 210 },
+      { kind: 'reasoning', start: 210, end: 700 },
       { kind: 'text', start: 700, end: 1_200 },
       { kind: 'toolarg', start: 1_200, end: 2_000 },
       { kind: 'other', start: 2_000, end: 2_500 },
@@ -44,7 +44,7 @@ describe('spans — the step flush', () => {
     assert.equal(Object.hasOwn(state, 'stepSpans'), false, '…and the span accumulator (never undefined-valued)')
   })
 
-  test('the decode window opens at the first marker when it beats the token; the wait covers only the silent prefix', () => {
+  test('the wait ends at the first token; an earlier marker stays inside the wait', () => {
     const { state } = driveTimeline([
       stepStart(1, { time: 0 }),
       assistantMessage(2, {
@@ -57,13 +57,14 @@ describe('spans — the step flush', () => {
       stepEnd(3, { time: 1_000 }),
     ])
     assert.deepEqual(state.spans, [
-      { kind: 'ttft', start: 0, end: 100 },
-      { kind: 'reasoning', start: 100, end: 900 },
+      { kind: 'ttft', start: 0, end: 110 },
+      { kind: 'reasoning', start: 110, end: 900 },
       { kind: 'other', start: 900, end: 1_000 },
     ])
+    assert.deepEqual([state.timing?.ttftMs, state.timing?.genMs, state.timing?.reasoningMs], [110, 790, 790])
   })
 
-  test('a redacted reasoning block still paints: the marker tiles its window even though no chunk stamps a token', () => {
+  test('a redacted reasoning block moves to the wait; only the surviving decode block splits', () => {
     const { state } = driveTimeline([
       stepStart(1, { time: 0 }),
       assistantMessage(2, {
@@ -79,21 +80,48 @@ describe('spans — the step flush', () => {
       stepEnd(5, { time: 1_095 }),
     ])
     assert.deepEqual(
-      [state.timing?.ttftMs, state.timing?.genMs, state.timing?.reasoningMs],
-      [364, 699, 588],
-      'the wait and generation open at the first marker; the tally tiles that window regardless',
+      [state.timing?.ttftMs, state.timing?.genMs, state.timing?.reasoningMs, state.timing?.toolArgMs],
+      [952, 111, undefined, 111],
+      'the marker lead stays in the wait; the surviving block splits the generation window',
     )
+    assert.equal(state.timing?.reasoningBlocks, undefined, 'the redacted block left the split with its span')
+    assert.equal(state.timing?.toolArgBlocks, 1)
     assert.equal(
       (state.timing?.reasoningMs ?? 0) + (state.timing?.textMs ?? 0) + (state.timing?.toolArgMs ?? 0),
       state.timing?.genMs,
       'the decode buckets partition the generation window exactly — no double count',
     )
     assert.deepEqual(state.spans, [
-      { kind: 'ttft', start: 0, end: 364 },
-      { kind: 'reasoning', start: 364, end: 952 },
+      { kind: 'ttft', start: 0, end: 952 },
       { kind: 'toolarg', start: 952, end: 1_063 },
       { kind: 'other', start: 1_063, end: 1_064 },
       { kind: 'tools', start: 1_064, end: 1_095 },
+    ])
+  })
+
+  test('a backwards marker cannot make the decode buckets overlap the generation window', () => {
+    const { state } = driveTimeline([
+      stepStart(1, { time: 0 }),
+      assistantMessage(2, {
+        time: 3_000,
+        stream: [
+          chunkRec(900, { type: 'block-start', index: 0, blockType: 'reasoning' }),
+          chunkRec(2_000, { type: 'block-start', index: 1, blockType: 'text' }),
+          chunkRec(1_000, { type: 'block-start', index: 2, blockType: 'tool-call' }),
+          chunkRec(1_500, { type: 'block-start', index: 3, blockType: 'text' }),
+          { type: 'tool-call-chunks', time0: 1_100, index: 2, dt: [], id: 'c1', args: ['{}'] },
+        ],
+      }),
+      stepEnd(3, { time: 3_000 }),
+    ])
+    assert.deepEqual(
+      [state.timing?.ttftMs, state.timing?.genMs, state.timing?.reasoningMs, state.timing?.textMs, state.timing?.toolArgMs],
+      [1_100, 1_900, 900, 1_000, undefined],
+    )
+    assert.deepEqual(state.spans, [
+      { kind: 'ttft', start: 0, end: 1_100 },
+      { kind: 'reasoning', start: 1_100, end: 2_000 },
+      { kind: 'text', start: 2_000, end: 3_000 },
     ])
   })
 

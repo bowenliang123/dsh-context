@@ -16,6 +16,7 @@ import {
 import type { ContentBlock, MessageSource } from './pricing'
 import { deriveEventMessage } from '@deepseek-ai/dsh-session'
 import { firstTokenTimeOfStream, replaceRangeOf, streamTimingOf } from './logShapes'
+import type { DecodeSpan } from './logShapes'
 import { opBearingTool, opsOfCall, parseCallArgs, rawArgsNeeded } from '../shared/fileOps'
 import { commandArgsOf, commandTool, markersOfText, outcomeOfMarkers } from '../shared/commands'
 import {
@@ -33,7 +34,7 @@ import {
 import { countTurnRuns, trimState } from './foldState'
 import { slimSurfaceNode } from './foldState'
 import type { CommandStateRecord, TimelineEvent, TimelineState } from './foldState'
-import { accumulateCost, addDecode, bumpToolTotals, carveWindows, DECODE_KINDS, durOf, ensureTiming, idleGapWindows, mergeWindows, tokenCountOf } from './foldMetering'
+import { accumulateCost, addDecodeSpan, bumpToolTotals, carveWindows, durOf, ensureTiming, idleGapWindows, mergeWindows, tokenCountOf } from './foldMetering'
 import type { UsageLike } from './foldMetering'
 
 function categoryOf(type: string, message: { source?: MessageSource } | undefined): Category {
@@ -797,24 +798,30 @@ function applyTimelineEvent(state: TimelineState, event: TimelineEvent, bounds: 
           const streamTiming = streamTimingOf(data?.stream, event.time)
           const firstToken = stepStart.firstToken ?? streamTiming.firstToken
           if (firstToken !== undefined) {
-            const decodeBlocks = streamTiming.spans
-            let decodeStart = firstToken
-            for (const block of decodeBlocks) decodeStart = Math.min(decodeStart, block.start)
-            timing.ttftMs += durOf(stepStart.time, decodeStart)
-            timing.genMs += durOf(decodeStart, event.time)
-            const modelSpans: TimingSpan[] = [{ kind: 'ttft', start: stepStart.time, end: decodeStart }]
-            for (const block of decodeBlocks) {
+            timing.ttftMs += durOf(stepStart.time, firstToken)
+            timing.genMs += durOf(firstToken, event.time)
+            const decodeSpans: DecodeSpan[] = []
+            let opened = false
+            let cursor = firstToken
+            for (const block of streamTiming.spans) {
               const to = Math.min(event.time, block.end)
-              if (to <= block.start) continue
-              modelSpans.push({ kind: block.kind, start: modelSpans.length === 1 ? decodeStart : block.start, end: to })
+              if (to <= block.start || to <= firstToken) continue
+              const from = opened ? Math.max(cursor, block.start) : firstToken
+              if (to <= from) continue
+              decodeSpans.push({ kind: block.kind, start: from, end: to })
+              cursor = to
+              opened = true
             }
-            s.stepSpans = [...(s.stepSpans ?? []), ...modelSpans]
+            s.stepSpans = [
+              ...(s.stepSpans ?? []),
+              { kind: 'ttft', start: stepStart.time, end: firstToken },
+              ...decodeSpans,
+            ]
             if (output !== null) {
               timing.speedMs = (timing.speedMs ?? 0) + durOf(firstToken, event.time)
               timing.speedTokens = (timing.speedTokens ?? 0) + output
             }
-            const tally = streamTiming.tally
-            for (const kind of DECODE_KINDS) addDecode(timing, kind, tally.spans[kind], tally.blocks[kind])
+            for (const span of decodeSpans) addDecodeSpan(timing, span.kind, durOf(span.start, span.end))
           }
         }
         const asstMsg = deriveEventMessage(event as never) as MessageLike | null
