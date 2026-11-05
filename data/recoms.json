@@ -34,5 +34,23 @@
       "zh": "特别感谢 Zilliz Cloud，为 AI 开发者提供高性能、易扩展的全托管向量数据库。轻松构建知识库、语义搜索与智能体记忆，省去部署运维，把更多时间留给创造。",
       "en": "Special thanks to Zilliz Cloud for providing AI developers with a fast, scalable, fully managed vector database. Build knowledge bases, semantic search, and agent memory without managing infrastructure—and spend more time creating."
     }
+  },
+  {
+    "id": "powercontext",
+    "name": "PowerContext",
+    "url": "https://github.com/oceanbase/powercontext",
+    "icon": "https://raw.githubusercontent.com/oceanbase/powercontext/master/desktop/src-tauri/icons/icon.png",
+    "slogan": {
+      "zh": "OB开源 Agent 记忆及上下文引擎",
+      "en": "OSS Agentic context engine"
+    },
+    "promotion": {
+      "zh": "已支持DSH，欢迎 star！跨会话记忆、上下文复用、按需召回",
+      "en": "Supports DSH — star us! Cross-session memory, context reuse, and on-demand recall."
+    },
+    "tooltip": {
+      "zh": "特别感谢 PowerContext，为 Agent 提供开源的长期记忆与上下文管理能力。将项目决策、任务进展与历史经验保存为长期记忆，跨会话、跨 Agent 按需召回，减少重复解释和探索，让任务持续推进，让 token 花得更省。在公开测试集 SWE-bench Pro 上实测使用powercontext 累计输入 token 减少约 25%，高消耗长尾任务的单题输入 token 峰值下降超 75%。",
+      "en": "Special thanks to PowerContext for providing open-source long-term memory and context management for AI agents. Preserve project decisions, task progress, and lessons learned, then recall relevant context on demand across sessions and agents. Reduce repeated explanations and exploration, keep tasks moving, and use tokens more efficiently. In tests on the public SWE-bench Pro dataset, PowerContext reduced cumulative input tokens by approximately 25% and peak per-task input tokens for high-consumption, long-tail tasks by over 75%."
+    }
   }
 ]
