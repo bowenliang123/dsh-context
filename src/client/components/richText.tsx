@@ -27,12 +27,18 @@ export function jsonOf(text: string): object | unknown[] | null {
 
 const JSON_EXPAND_MAX = 100
 
+export interface RichView {
+  tools: ReactElement
+  body: ReactElement
+}
+
 export interface RichKit {
   RichText: (props: { text: string; mode: RichMode }) => ReactElement
   RichSwitch: (props: { mode: RichMode; json?: boolean; onPick: (mode: RichMode) => void }) => ReactElement
   RichCopy: (props: { text: string }) => ReactElement
-  useRichMode: (text: string) => [RichMode, (mode: RichMode) => void, boolean]
+  useRichMode: (text: string, allowJson?: boolean) => [RichMode, (mode: RichMode) => void, boolean]
   useRichFind: (text: string, mode: RichMode) => RichFind
+  useRichView: (text: string, allowJson?: boolean) => RichView
 }
 
 export interface RichFind {
@@ -117,8 +123,8 @@ function markMatches(root: HTMLElement, query: string, active: number): FindMark
 export function makeRichText(kit: ViewKit): RichKit {
   const { t } = kit
 
-  function useRichMode(text: string): [RichMode, (mode: RichMode) => void, boolean] {
-    const json = useMemo(() => jsonOf(text) !== null, [text])
+  function useRichMode(text: string, allowJson = true): [RichMode, (mode: RichMode) => void, boolean] {
+    const json = useMemo(() => allowJson && jsonOf(text) !== null, [allowJson, text])
     const [pick, setPick] = useState<RichMode | null>(null)
     const mode: RichMode = pick === 'raw' ? 'raw' : pick === 'json' && json ? 'json' : json ? 'json' : 'md'
     return [mode, setPick, json]
@@ -316,5 +322,26 @@ export function makeRichText(kit: ViewKit): RichKit {
     return { button, bar, bodyKey: text, bodyRef }
   }
 
-  return { RichText, RichSwitch, RichCopy, useRichMode, useRichFind }
+  function useRichView(text: string, allowJson = true): RichView {
+    const [mode, setPick, json] = useRichMode(text, allowJson)
+    const find = useRichFind(text, mode)
+    const tools = (
+      <>
+        <RichSwitch mode={mode} json={json} onPick={setPick} />
+        <RichCopy text={text} />
+        {find.button}
+      </>
+    )
+    const body = (
+      <>
+        {find.bar}
+        <div key={find.bodyKey} ref={find.bodyRef}>
+          <RichText text={text} mode={mode} />
+        </div>
+      </>
+    )
+    return { tools, body }
+  }
+
+  return { RichText, RichSwitch, RichCopy, useRichMode, useRichFind, useRichView }
 }

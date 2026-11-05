@@ -116,6 +116,7 @@ export function CommsEventDetail(props: CommsEventDetailProps): ReactElement {
   const structured = props.full?.structured ?? row.structured
   const diagnostic = props.full?.diagnostic ?? row.diagnostic
   const copyText = body !== '' ? body : (resolvedSummary ?? row.text)
+  const view = props.rich.useRichView(body, false)
   const stillClipped = props.full !== null && props.full.clipped === true
   const excerptOnly = row.clipped === true && !props.fullPending && (props.full === null || stillClipped)
   const loadingNote = props.fullPending
@@ -138,7 +139,7 @@ export function CommsEventDetail(props: CommsEventDetailProps): ReactElement {
         </span>
         <span className="lc-comms-detail-seq">{t('fleet.comms.detail.seq', { n: row.seq })}</span>
         <span className="lc-comms-detail-actions">
-          <props.rich.RichCopy text={copyText} />
+          {body === '' ? <props.rich.RichCopy text={copyText} /> : null}
           <button
             type="button"
             className="lc-inspector-btn lc-comms-detail-close"
@@ -227,11 +228,14 @@ export function CommsEventDetail(props: CommsEventDetailProps): ReactElement {
       {loadingNote !== null ? <div className="lc-comms-detail-loading">{loadingNote}</div> : null}
 
       <div className="lc-comms-detail-body">
-        {body !== ''
-          ? <props.rich.RichText text={body} mode="md" />
-          : <div className="lc-comms-detail-empty">
-            {t(row.kind === 'settled' ? 'fleet.comms.detail.noReport' : 'fleet.comms.detail.noBody')}
-          </div>}
+        {body !== '' ? (
+          <>
+            <div className="lc-comms-detail-tools">{view.tools}</div>
+            {view.body}
+          </>
+        ) : <div className="lc-comms-detail-empty">
+          {t(row.kind === 'settled' ? 'fleet.comms.detail.noReport' : 'fleet.comms.detail.noBody')}
+        </div>}
       </div>
 
       {structured !== undefined ? (

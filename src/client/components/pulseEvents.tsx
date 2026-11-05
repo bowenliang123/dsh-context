@@ -240,6 +240,7 @@ export const PulseEvents = memo(function PulseEvents(props: PulseEventsProps): R
             />
           ) : shownRow !== undefined ? (
             <CommsEventDetail
+              key={shownRow.key}
               row={shownRow}
               agentOf={props.agentOf}
               full={full}

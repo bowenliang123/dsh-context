@@ -166,6 +166,8 @@
   font-size: 12px; line-height: 1.55;
 }
 .lc-comms-detail-body .lc-ts-desc-md { padding: 0; max-height: none; overflow: visible; }
+.lc-comms-detail-tools { display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: 4px; margin-bottom: 6px; }
+.lc-comms-detail-body > .lc-find { margin: 0 -10px 8px; }
 .lc-comms-detail-empty { font-size: 11.5px; color: var(--dsw-alias-label-tertiary, var(--dsw-alias-label-secondary)); }
 .lc-comms-detail-section { margin-top: 9px; padding-top: 8px; border-top: var(--lc-line-dashed, 1px dashed var(--dsw-alias-border-l2)); }
 .lc-comms-detail-caption {

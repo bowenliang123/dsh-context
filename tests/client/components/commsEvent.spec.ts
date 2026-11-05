@@ -6,7 +6,7 @@ import { makeRichText } from '../../../src/client/components/richText'
 import type { CommsAgent } from '../../../src/client/commsModel'
 import type { CommsRow } from '../../../src/client/fleetDetail'
 import type { FleetMessage } from '../../../src/shared/types'
-import { makeKit, mount, query, queryAll, text } from '../helpers/kit'
+import { click, makeKit, mount, query, queryAll, text } from '../helpers/kit'
 
 const kit = makeKit()
 const rich = makeRichText(kit)
@@ -155,5 +155,49 @@ describe('CommsEvent and detail', () => {
     const pending = await mountEvent(row, { fullPending: true })
     assert.ok(text(query(pending.container, '.lc-comms-detail')).includes(kit.t('fleet.comms.detail.loading')))
     await pending.unmount()
+  })
+
+  test('the body offers raw, markdown, copy and find controls', async () => {
+    const row: CommsRow = {
+      key: 'root:40:11000:relay', to: 'root', seq: 40, time: 11000, kind: 'relay', from: 'w1',
+      text: '# Report\n\nsome **bold** body',
+    }
+    const mounted = await mountEvent(row)
+    const detail = query(mounted.container, '.lc-comms-detail')
+    const tools = query(detail, '.lc-comms-detail-tools')
+    assert.deepEqual(
+      queryAll<HTMLElement>(tools, '.lc-gran-btn').map(button => text(button)),
+      [kit.t('rich.raw'), kit.t('rich.md')],
+    )
+    assert.ok(query(tools, '.lc-rich-copy'))
+    assert.ok(query(detail, '.lc-comms-detail-body .lc-ts-desc-md'))
+    await click(queryAll<HTMLElement>(tools, '.lc-gran-btn')[0])
+    assert.deepEqual(
+      queryAll(detail, '.lc-comms-detail-body .lc-ts-line').map(line => text(line)),
+      ['# Report', '', 'some **bold** body'],
+    )
+    assert.equal(queryAll(detail, '.lc-comms-detail-body .lc-ts-desc-md').length, 0)
+    await click(queryAll<HTMLElement>(tools, '.lc-gran-btn')[1])
+    assert.ok(query(detail, '.lc-comms-detail-body .lc-ts-desc-md'))
+    await click(query(tools, '.lc-find-btn'))
+    assert.ok(query(detail, '.lc-comms-detail-body .lc-find'))
+    await click(queryAll(query(detail, '.lc-find'), '.lc-find-btn')[2])
+    assert.equal(queryAll(detail, '.lc-find').length, 0)
+    await mounted.unmount()
+  })
+
+  test('json-shaped message text still opens as markdown', async () => {
+    const row: CommsRow = {
+      key: 'root:41:11100:relay', to: 'root', seq: 41, time: 11100, kind: 'relay', from: 'w1', text: '{"ok":true}',
+    }
+    const mounted = await mountEvent(row)
+    const body = query(mounted.container, '.lc-comms-detail-body')
+    assert.ok(query(body, '.lc-ts-desc-md'))
+    assert.equal(queryAll(body, '.lc-ts-desc-json').length, 0)
+    assert.deepEqual(
+      queryAll<HTMLElement>(body, '.lc-gran-btn').map(button => text(button)),
+      [kit.t('rich.raw'), kit.t('rich.md')],
+    )
+    await mounted.unmount()
   })
 })

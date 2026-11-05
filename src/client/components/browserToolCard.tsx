@@ -44,24 +44,16 @@ export function TextSection(props: {
   lines: (n: number) => string
 }): ReactElement {
   const { rich } = props
-  const [mode, setMode, json] = rich.useRichMode(props.text)
-  const find = rich.useRichFind(props.text, mode)
+  const view = rich.useRichView(props.text)
   const lineCount = useMemo(() => lineCountOf(props.text), [props.text])
   return (
     <Section
       label={props.label}
       foldHead
-      actions={<>
-        <rich.RichSwitch mode={mode} json={json} onPick={setMode} />
-        <rich.RichCopy text={props.text} />
-        {find.button}
-      </>}
+      actions={view.tools}
       meta={<span className="lc-ts-card-meta">{props.lines(lineCount)}</span>}
     >
-      {find.bar}
-      <div key={find.bodyKey} ref={find.bodyRef}>
-        <rich.RichText text={props.text} mode={mode} />
-      </div>
+      {view.body}
     </Section>
   )
 }

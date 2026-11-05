@@ -758,6 +758,7 @@ describe('MissionPulse boundary parties', () => {
     Object.defineProperty(list, 'scrollTop', { configurable: true, value: 0, writable: true })
     await click(query(mounted.container, '[data-event-key="child:2:2000:relay"]'))
     assert.equal(list.scrollTop, 220)
+    list.dispatchEvent(new Event('pointerdown'))
     pinBox(target, 400, 40)
     await mounted.update(pulseOf([...rows]))
     assert.equal(list.scrollTop, 220)
@@ -866,7 +867,6 @@ describe('Fleet pane virtualization', () => {
   function pinViewport(el: HTMLElement, height: number): void {
     Object.defineProperty(el, 'clientHeight', { configurable: true, value: height })
   }
-
 
   async function flushFrames(frames: FrameRequestCallback[]): Promise<void> {
     await act(async () => { for (const frame of frames.splice(0)) frame(0) })

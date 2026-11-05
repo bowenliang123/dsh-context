@@ -123,6 +123,20 @@ function AgentStatePill(props: { state: PulseWorkItem['ownerState']; t: ViewKit[
   )
 }
 
+function RichSection(props: {
+  label: string
+  text: string
+  meta?: string
+  rich: RichKit
+}): ReactElement {
+  const view = props.rich.useRichView(props.text, false)
+  return (
+    <Section label={props.label} foldHead meta={props.meta} actions={view.tools}>
+      {view.body}
+    </Section>
+  )
+}
+
 interface PulseTasksProps {
   items: readonly PulseWorkItem[]
   teamFailure?: string
@@ -435,9 +449,7 @@ const PulseTasks = memo(function PulseTasks(props: PulseTasksProps): ReactElemen
                               {fullPending ? <span className="lc-pulse-work-loading">{t('fleet.tasks.replyFull')}</span> : null}
                             </div>
                             {prompt !== undefined && prompt !== '' ? (
-                              <Section label={t('fleet.tasks.brief')}>
-                                <props.rich.RichText text={prompt} mode="md" />
-                              </Section>
+                              <RichSection label={t('fleet.tasks.brief')} text={prompt} rich={props.rich} />
                             ) : null}
                             {ownerName !== undefined ? (
                               <Section
@@ -464,12 +476,12 @@ const PulseTasks = memo(function PulseTasks(props: PulseTasksProps): ReactElemen
                             ) : null}
                             {reply !== undefined ? (
                               <div className="lc-pulse-work-reply">
-                                <Section
+                                <RichSection
                                   label={t('fleet.tasks.reply')}
+                                  text={reply.text}
                                   meta={fullPending ? t('fleet.tasks.replyFull') : fmtTime(reply.time)}
-                                >
-                                  <props.rich.RichText text={reply.text} mode="md" />
-                                </Section>
+                                  rich={props.rich}
+                                />
                               </div>
                             ) : fullPending ? (
                               <div className="lc-pulse-work-reply">
