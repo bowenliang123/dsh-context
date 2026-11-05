@@ -17,7 +17,7 @@ export interface CommsAgent {
   description?: string
 }
 
-export type CommsKindFilter = 'all' | 'message' | 'report'
+export type CommsKindFilter = 'all' | 'message' | 'report' | 'delegation'
 
 const PREVIEW_MAX = 600
 

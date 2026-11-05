@@ -88,6 +88,13 @@ export interface FleetDetailOptions {
   scopeKey?: string
 }
 
+export function agentPromptOf(details: FleetDetailState, id: string): string | undefined {
+  const entry = details.landed.get(id)?.detail
+  return (!details.fullPending.has(id)
+    ? details.fullLanded.get(id)?.initialPrompt ?? entry?.initialPrompt
+    : entry?.initialPrompt)
+}
+
 interface QueueTask {
   id: string
   stamp: number

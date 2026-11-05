@@ -116,7 +116,7 @@ describe('Multi-Agent Fleet', () => {
           delegations: [{ seq: 9, time: 500, to: 'catalog-child', mode: 'continuable', label: 'Explore the host' }],
           truncated: false,
         }
-        : { messages: [], truncated: false }
+        : { messages: [], truncated: false, initialPrompt: 'Walk the host package tree and report its boundaries.' }
       return Promise.resolve({ ok: true, json: () => Promise.resolve({ ok: true, value }) } as Response)
     })
     const snapshot = {
@@ -134,8 +134,14 @@ describe('Multi-Agent Fleet', () => {
     await until(() => queryAll(m.container, '.lc-pulse-event').length === 1, 'delegation never landed')
     assert.equal(query(m.container, '[data-pulse-stat="messages"]').textContent, '0')
     assert.ok(text(query(m.container, '.lc-pulse-timeline .lc-card-sub')).includes('1/1'))
-    await click(query(m.container, '[data-event-key="catalog-root:9:catalog-child"]'))
+    await until(
+      () => text(query(m.container, '.lc-comms-event[data-kind="delegation"]')).includes('Walk the host package tree'),
+      'delegation prompt preview never landed',
+    )
+    await click(query(m.container, '.lc-comms-event[data-kind="delegation"] .lc-comms-hit'))
     assert.ok(text(query(m.container, '.lc-pulse-delegation-detail')).includes('Explore the host'))
+    assert.ok(text(query(m.container, '.lc-pulse-delegation-detail')).includes('Walk the host package tree and report its boundaries.'))
+    assert.ok(text(query(m.container, '.lc-pulse-delegation-detail')).includes(DICT_EN['fleet.tasks.brief']))
     await m.unmount()
     ctx.dispose()
   })

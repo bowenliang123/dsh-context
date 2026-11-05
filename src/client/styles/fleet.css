@@ -97,6 +97,7 @@
 }
 .lc-comms-kind-mailbox { --lc-kind: var(--color-purple-500, #a855f7); }
 .lc-comms-kind-settled { --lc-kind: var(--dsw-alias-state-success-primary, var(--color-green-500)); }
+.lc-comms-kind-delegation { --lc-kind: var(--color-teal-500, var(--dsw-alias-brand-primary)); }
 .lc-comms-tone-warning { --lc-kind: var(--color-amber-500); }
 .lc-comms-tone-error { --lc-kind: var(--dsw-alias-state-error-primary, var(--color-red-500)); }
 .lc-comms-tone-done { --lc-kind: var(--dsw-alias-state-success-primary, var(--color-green-500)); }

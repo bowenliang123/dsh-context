@@ -7,6 +7,9 @@ import type { FleetTeam } from '../../src/client/fleetTeam'
 import {
   layoutPulse,
   pulseDependencyChainOf,
+  pulseEventGroupOf,
+  pulseEventItemsOf,
+  pulseEventMatchesOf,
   pulseLaneVisibility,
   pulseTaskBadgeOf,
   pulseTasksByAgent,
@@ -74,6 +77,28 @@ describe('pulse timeline records', () => {
     )
     assert.deepEqual(items.map(item => item.key), ['create-a', 'create-b', 'event-a', 'event-b'])
     assert.deepEqual(pulseTimelineItemsOf([row(50, 'early')], [delegation(100, 'later')]).map(item => item.key), ['early', 'later'])
+  })
+
+  test('the event stream reverses the natural order and groups and matches per kind', () => {
+    const settledRow = { ...row(400, 'event-400'), kind: 'settled' as const, summary: 'it finished', report: 'all done' }
+    const items = pulseEventItemsOf(
+      [settledRow, row(100), row(250)],
+      [delegation(150, 'create-side', 'side'), delegation(300, 'create-bee')],
+    )
+    assert.deepEqual(items.map(item => item.key), ['event-400', 'create-bee', 'event-250', 'create-side', 'event-100'])
+    assert.deepEqual(items.map(item => pulseEventGroupOf(item)), ['report', 'delegation', 'message', 'delegation', 'message'])
+    assert.deepEqual(pulseEventMatchesOf(items[0]), ['event-400', 'it finished', 'all done'])
+    assert.deepEqual(pulseEventMatchesOf(items[1]), ['Initial create-bee'])
+    assert.deepEqual(pulseEventMatchesOf(items[2]), ['event-250', undefined, undefined])
+    assert.deepEqual(
+      pulseEventItemsOf([row(100, 'b'), row(100, 'a')], []).map(item => item.key),
+      ['a', 'b'],
+    )
+    assert.deepEqual(
+      pulseEventItemsOf([row(100, 'a'), row(100, 'b')], []).map(item => item.key),
+      ['a', 'b'],
+    )
+    assert.deepEqual(pulseEventItemsOf([], []), [])
   })
 })
 
