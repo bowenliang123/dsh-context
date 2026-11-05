@@ -98,18 +98,6 @@ export function makeAgentGraph(
     const [stageWidth, setStageWidth] = useState(0)
     const [stageHeight, setStageHeight] = useState(0)
     useEffect(() => {
-      /* v8 ignore start */
-      const el = stageRef.current
-      if (el === null || typeof ResizeObserver !== 'function') return
-      const observer = new ResizeObserver(([entry]) => {
-        setStageWidth(entry.contentRect.width)
-        if (!showAll) setStageHeight(entry.contentRect.height)
-      })
-      observer.observe(el)
-      return () => { observer.disconnect() }
-      /* v8 ignore stop */
-    }, [showAll])
-    useEffect(() => {
       const el = stageRef.current
       /* v8 ignore next 1 */
       if (el === null) return
@@ -120,6 +108,26 @@ export function makeAgentGraph(
       () => (forest !== null ? layoutForest(forest, stageWidth, props.compact === true) : null),
       [forest, props.compact, stageWidth],
     )
+    const stageMounted = forest !== null && layout !== null
+    useLayoutEffect(() => {
+      /* v8 ignore start */
+      const el = stageRef.current
+      if (el === null) return
+      const style = getComputedStyle(el)
+      const pad = parseFloat(style.paddingLeft) + parseFloat(style.paddingRight)
+      const measure = (width: number, height: number): void => {
+        setStageWidth(width)
+        if (!showAll) setStageHeight(height)
+      }
+      measure(el.clientWidth - pad, el.clientHeight)
+      if (typeof ResizeObserver !== 'function') return
+      const observer = new ResizeObserver(([entry]) => {
+        measure(entry.contentRect.width, entry.contentRect.height)
+      })
+      observer.observe(el)
+      return () => { observer.disconnect() }
+      /* v8 ignore stop */
+    }, [showAll, stageMounted])
     const avatarLabels = useMemo(
       () => forest === null
         ? null
