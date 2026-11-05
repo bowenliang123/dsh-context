@@ -18,6 +18,11 @@ export interface RecomRead {
   degraded: boolean
 }
 
+export interface RecomsRead {
+  recoms: Recom[]
+  degraded: boolean
+}
+
 export const RECOM_REPOSITORY_ROOT = 'https://raw.githubusercontent.com/bowenliang123/dsh-context/main/'
 export const RECOM_DATA_URL = RECOM_REPOSITORY_ROOT + 'data/recoms.json'
 export const RECOM_DATA_MIRROR_URL = 'https://gh-proxy.org/' + RECOM_DATA_URL

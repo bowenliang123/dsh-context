@@ -789,7 +789,7 @@ export function makeContextView(
               onEventsClick={onEventsClick} />
             <div className="lc-col">
               <PluginInfo />
-              <RecomCard />
+              <RecomCard key={typeof sessionId === 'string' ? sessionId : undefined} />
             </div>
           </div>
         )}

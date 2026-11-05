@@ -2,7 +2,7 @@ import assert from 'node:assert/strict'
 import { afterEach, describe, test, vi } from 'vitest'
 import type { Context } from '@deepseek-ai/cordis'
 import { DEFAULT_RECOM, RECOM_DATA_MIRROR_URL, RECOM_DATA_URL, type Recom } from '../../src/shared/recoms'
-import { readRecom, resetRecomRotation, setRecomFetcher, RECOM_ROUTE, watchRecomChannel } from '../../src/host/recoms'
+import { readRecoms, setRecomFetcher, RECOM_ROUTE, watchRecomChannel } from '../../src/host/recoms'
 
 function recom(id: string): Recom {
   return { ...DEFAULT_RECOM, id }
@@ -14,29 +14,28 @@ function response(body: unknown, ok = true): Response {
 
 afterEach(() => {
   setRecomFetcher(null)
-  resetRecomRotation()
   vi.unstubAllGlobals()
   vi.restoreAllMocks()
 })
 
 describe('recom reads', () => {
-  test('every read fetches the fixed URL and rotates the validated entries in order', async () => {
+  test('a read fetches the fixed URL and returns every validated entry in source order', async () => {
     const calls: { url: string; accept?: string; signal?: AbortSignal }[] = []
     setRecomFetcher(async (url, init) => {
       const headers = init.headers as Record<string, string>
       calls.push({ url, accept: headers.accept, signal: init.signal ?? undefined })
       return response([recom('first'), recom('second')])
     })
-    assert.equal((await readRecom()).recom.id, 'first')
-    assert.equal((await readRecom()).recom.id, 'second')
-    assert.equal((await readRecom()).recom.id, 'first')
-    assert.equal(calls.length, 3)
+    const read = await readRecoms()
+    assert.deepEqual(read.recoms.map(item => item.id), ['first', 'second'])
+    assert.equal(read.degraded, false)
+    assert.equal(calls.length, 1)
     assert.equal(calls[0]?.url, RECOM_DATA_URL)
     assert.equal(calls[0]?.accept, 'application/json')
     assert.ok(calls[0]?.signal instanceof AbortSignal)
   })
 
-  test('transport, HTTP, JSON, payload, and selection failures all return the default', async () => {
+  test('transport, HTTP, JSON, and payload failures all return the degraded default list', async () => {
     const failures: (() => Promise<Response>)[] = [
       () => Promise.reject(new Error('down')),
       () => Promise.resolve(response([], false)),
@@ -46,23 +45,10 @@ describe('recom reads', () => {
     ]
     for (const run of failures) {
       setRecomFetcher(run)
-      const read = await readRecom()
-      assert.deepEqual(read.recom, DEFAULT_RECOM)
+      const read = await readRecoms()
+      assert.deepEqual(read.recoms, [DEFAULT_RECOM])
       assert.equal(read.degraded, true)
     }
-    setRecomFetcher(async () => { throw new Error('fetch failed') })
-    const read = await readRecom()
-    assert.deepEqual(read.recom, DEFAULT_RECOM)
-    assert.equal(read.degraded, true)
-  })
-
-  test('a failed read does not advance the rotation', async () => {
-    setRecomFetcher(async () => response([]))
-    const failed = await readRecom()
-    assert.deepEqual(failed.recom, DEFAULT_RECOM)
-    assert.equal(failed.degraded, true)
-    setRecomFetcher(async () => response([recom('after-failure')]))
-    assert.equal((await readRecom()).recom.id, 'after-failure')
   })
 
   test('every primary failure falls through to the mirror before the default', async () => {
@@ -77,8 +63,8 @@ describe('recom reads', () => {
         urls.push(url)
         return url === RECOM_DATA_URL ? fail() : response([recom('mirror')])
       })
-      const read = await readRecom()
-      assert.equal(read.recom.id, 'mirror')
+      const read = await readRecoms()
+      assert.deepEqual(read.recoms.map(item => item.id), ['mirror'])
       assert.equal(read.degraded, false)
       assert.deepEqual(urls, [RECOM_DATA_URL, RECOM_DATA_MIRROR_URL])
     }
@@ -92,15 +78,15 @@ describe('recom reads', () => {
       seen.push(String(url))
       return response([recom('global')])
     })
-    const read = await readRecom()
-    assert.equal(read.recom.id, 'global')
+    const read = await readRecoms()
+    assert.deepEqual(read.recoms.map(item => item.id), ['global'])
     assert.equal(read.degraded, false)
     assert.deepEqual(seen, [RECOM_DATA_URL])
   })
 })
 
 describe('recom route', () => {
-  test('a usable connection serves the selected value with no-store, and absent registries stay inert', async () => {
+  test('a usable connection serves the complete list with no-store, and absent registries stay inert', async () => {
     for (const connection of [undefined, {}]) {
       const ctx = {
         inject: (_deps: string[], cb: (c: unknown) => void) => cb({ get: () => connection, effect: () => {} }),
@@ -113,14 +99,14 @@ describe('recom route', () => {
       effect: (fn: () => unknown) => fn(),
       inject(_deps: string[], cb: (c: unknown) => void) { cb(ctx) },
     }
-    setRecomFetcher(async () => response([recom('route')]))
+    setRecomFetcher(async () => response([recom('route'), recom('second')]))
     watchRecomChannel(ctx as unknown as Context)
     assert.equal(route?.path, RECOM_ROUTE)
     const reply = await route?.fetch()
     assert.equal(reply?.headers.get('cache-control'), 'no-store')
-    assert.deepEqual(await reply?.json(), { ok: true, value: recom('route'), degraded: false })
+    assert.deepEqual(await reply?.json(), { ok: true, value: [recom('route'), recom('second')], degraded: false })
     setRecomFetcher(async () => { throw new Error('down') })
     const fallback = await route?.fetch()
-    assert.deepEqual(await fallback?.json(), { ok: true, value: DEFAULT_RECOM, degraded: true })
+    assert.deepEqual(await fallback?.json(), { ok: true, value: [DEFAULT_RECOM], degraded: true })
   })
 })

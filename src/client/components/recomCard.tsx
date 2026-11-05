@@ -1,12 +1,11 @@
 import { useEffect, useId, useState, type ReactElement } from 'react'
-import { DEFAULT_RECOM, recomOf, type RecomRead, type RecomText } from '../../shared/recoms'
+import { DEFAULT_RECOM, recomsOfPayload, type Recom, type RecomRead, type RecomsRead, type RecomText } from '../../shared/recoms'
 import { RECOM_ROUTE } from '../apiRoutes'
 import { IconShare } from '../primitives'
 import type { ClientCtx } from '../services'
 import type { ViewKit } from '../viewkit'
 
 const UNCACHED_STATE: RecomRead = { recom: DEFAULT_RECOM, degraded: false }
-const DEGRADED_STATE: RecomRead = { recom: DEFAULT_RECOM, degraded: true }
 
 const textKeyOf = (value: RecomText): string => value.en + '\u0000' + value.zh
 
@@ -15,12 +14,22 @@ const shapeOf = (value: RecomRead): string =>
     textKeyOf(value.recom.slogan), textKeyOf(value.recom.promotion), textKeyOf(value.recom.tooltip)].join('\u0001')
 
 let latest: RecomRead | null = null
+let pool: Recom[] | null = null
+let inFlight: Promise<RecomRead> | null = null
 
 export function resetRecomCache(): void {
   latest = null
+  pool = null
+  inFlight = null
 }
 
-async function requestRecom(): Promise<RecomRead | null> {
+function nextCachedState(): RecomRead | null {
+  if (pool === null) return null
+  const index = pool.findIndex(item => item.id === latest?.recom.id)
+  return { recom: pool[(index + 1) % pool.length], degraded: false }
+}
+
+async function requestRecoms(): Promise<RecomsRead | null> {
   try {
     const response = await fetch(RECOM_ROUTE, {
       method: 'POST',
@@ -29,31 +38,51 @@ async function requestRecom(): Promise<RecomRead | null> {
     })
     if (!response.ok) return null
     const payload = await response.json() as { value?: unknown; degraded?: unknown } | null
-    const recom = recomOf(payload?.value)
-    return recom === null ? null : { recom, degraded: payload?.degraded === true }
+    const recoms = recomsOfPayload(payload?.value)
+    return recoms.length === 0 ? null : { recoms, degraded: payload?.degraded === true }
   } catch {
     return null
   }
+}
+
+function loadRecom(): Promise<RecomRead> {
+  if (inFlight !== null) return inFlight
+  const request = requestRecoms().then((next) => {
+    const read: RecomsRead = next ?? { recoms: [DEFAULT_RECOM], degraded: true }
+    pool = read.degraded ? null : read.recoms
+    const recom = read.recoms[Math.floor(Math.random() * read.recoms.length)]
+    latest = { recom, degraded: read.degraded }
+    return latest
+  })
+  const tracked = request.finally(() => {
+    if (inFlight === tracked) inFlight = null
+  })
+  inFlight = tracked
+  return tracked
+}
+
+function initialState(): RecomRead {
+  return nextCachedState() ?? latest ?? UNCACHED_STATE
 }
 
 export function makeRecomCard(kit: ViewKit, ctx: ClientCtx): () => ReactElement {
   return function RecomCard(): ReactElement {
     kit.useLocaleTick()
     const locale = ctx.locale.getLocale?.().active === 'zh' ? 'zh' : 'en'
-    const [state, setState] = useState<RecomRead>(() => latest ?? UNCACHED_STATE)
+    const [state, setState] = useState<RecomRead>(initialState)
     const [iconState, setIconState] = useState<'loading' | 'loaded' | 'failed'>('loading')
     const tooltipId = useId()
     useEffect(() => {
       const cached = latest
+      latest = state
+      if (pool !== null) return
       let active = true
-      void requestRecom().then((next) => {
+      void loadRecom().then((next) => {
         if (!active) return
-        const settled = next ?? cached ?? DEGRADED_STATE
-        if (shapeOf(cached ?? UNCACHED_STATE) !== shapeOf(settled)) {
+        if (shapeOf(cached ?? UNCACHED_STATE) !== shapeOf(next)) {
           setIconState('loading')
-          setState(settled)
+          setState(next)
         }
-        latest = settled
       })
       return () => { active = false }
     }, [])
