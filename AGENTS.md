@@ -74,7 +74,7 @@ Complete ALL of these before ANY commit:
 - Review the full diff independently: every change necessary, correct, and not over-engineered.
 - Clean up generated temporary files and temporary or unhelpful comments.
 - Load the [code-review](https://github.com/mattpocock/skills/blob/main/skills/engineering/code-review/SKILL.md) skill, run it to review all the changes.
-  - Independently verify or follow each of its suggestions after its multi-axis analysis done. 
+  - Independently verify or follow each of its suggestions until ALL of its multi-axis analysis are done. 
   - Tell its subagents to skip typecheck, lint, and test coverage, which the main agent covers.
   - Tell its subagent about background information and related files (and line numbers if collected), in order to skip time for re-collecting them.
 - Run `pnpm run check`: it runs `pnpm run lint`, `pnpm run typecheck` and `pnpm run coverage` concurrently, prints each tool's COMPLETE output, and fails when any of them does (the same logs stay in `.tmp/check-logs/`).
