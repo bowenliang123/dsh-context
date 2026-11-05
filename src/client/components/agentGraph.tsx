@@ -108,18 +108,20 @@ export function makeAgentGraph(
       () => (forest !== null ? layoutForest(forest, stageWidth, props.compact === true) : null),
       [forest, props.compact, stageWidth],
     )
-    const stageMounted = forest !== null && layout !== null
+    const stageMounted = forest !== null
     useLayoutEffect(() => {
       /* v8 ignore start */
       const el = stageRef.current
       if (el === null) return
       const style = getComputedStyle(el)
-      const pad = parseFloat(style.paddingLeft) + parseFloat(style.paddingRight)
+      const padX = parseFloat(style.paddingLeft) + parseFloat(style.paddingRight)
+      const padY = parseFloat(style.paddingTop) + parseFloat(style.paddingBottom)
       const measure = (width: number, height: number): void => {
         setStageWidth(width)
         if (!showAll) setStageHeight(height)
       }
-      measure(el.clientWidth - pad, el.clientHeight)
+      const rect = el.getBoundingClientRect()
+      measure(rect.width - padX, rect.height - padY)
       if (typeof ResizeObserver !== 'function') return
       const observer = new ResizeObserver(([entry]) => {
         measure(entry.contentRect.width, entry.contentRect.height)
