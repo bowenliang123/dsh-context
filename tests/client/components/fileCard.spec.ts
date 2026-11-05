@@ -129,7 +129,7 @@ describe('FileCard — header, rows, and filters', () => {
     assert.ok(dirRow.querySelector('.lc-fa-path b')?.textContent === 'src')
     const solo = rows.find(r => r.title === 'solo.md')
     assert.ok(solo !== undefined)
-    assert.ok(solo.querySelector('.lc-fa-path em') === null)
+    assert.ok(solo.querySelector('.lc-fa-path em')?.textContent === './')
     assert.ok(solo.querySelector('.lc-fa-path b')?.textContent === 'solo.md')
     assert.ok(text(solo).includes('+5') && !text(solo).includes('−'))
     assert.ok(solo.querySelector('.lc-fa-time') === null)
@@ -453,6 +453,7 @@ describe('FileCard — workspace display and system open', () => {
         entry('/etc/hosts', { reads: 1, ops: [fileOp(4, 'read', 'read')] }),
         entry('rel/b.md', { writes: 1, ops: [fileOp(3, 'write', 'write')] }),
         entry('needle', { searches: 1, pattern: true, ops: [fileOp(2, 'search', 'grep', { detail: 'needle' })] }),
+        entry('\\bfoo\\b', { searches: 1, pattern: true, ops: [fileOp(0, 'search', 'grep', { detail: '\\bfoo\\b' })] }),
         entry('./dot/c.ts', { reads: 1, ops: [fileOp(1, 'read', 'read')] }),
       ],
       totals: {
@@ -474,21 +475,24 @@ describe('FileCard — workspace display and system open', () => {
 
   const baseOf = (row: HTMLElement): HTMLElement => query(row, '.lc-fa-path b')
 
-  test('workspace and relative paths display bare-relative and the file name opens on the system; pattern and unresolvable rows stay inert', async () => {
+  test('workspace and relative paths display dot-relative and the file name opens on the system; pattern and unresolvable rows stay inert', async () => {
     const opened: string[] = []
     const m = await mount(h(FileCard, { activity: workspaceActivity(), workspace: '/repo', onOpen: p => { opened.push(p) } }))
     const a = rowOf(m.container, '/repo/src/a.ts')
-    assert.ok(a.querySelector('.lc-fa-path em')?.textContent === 'src/')
+    assert.ok(a.querySelector('.lc-fa-path em')?.textContent === './src/')
     assert.ok(baseOf(a).textContent === 'a.ts')
     const hosts = rowOf(m.container, '/etc/hosts')
     assert.ok(hosts.querySelector('.lc-fa-path em')?.textContent === '/etc/')
     const rel = rowOf(m.container, 'rel/b.md')
-    assert.ok(rel.querySelector('.lc-fa-path em')?.textContent === 'rel/')
+    assert.ok(rel.querySelector('.lc-fa-path em')?.textContent === './rel/')
     const pat = rowOf(m.container, 'needle')
     assert.equal(pat.querySelector('.lc-fa-path em'), null)
     assert.ok(baseOf(pat).textContent === 'needle')
+    const escaped = rowOf(m.container, '\\bfoo\\b')
+    assert.equal(escaped.querySelector('.lc-fa-path em'), null)
+    assert.ok(baseOf(escaped).textContent === '\\bfoo\\b')
     const dot = rowOf(m.container, './dot/c.ts')
-    assert.ok(dot.querySelector('.lc-fa-path em')?.textContent === 'dot/')
+    assert.ok(dot.querySelector('.lc-fa-path em')?.textContent === './dot/')
     assert.equal(queryAll(m.container, '.lc-fa-meta-delta').length, 0, 'no line activity drops the aggregate delta pill')
     const aName = baseOf(rowOf(m.container, '/repo/src/a.ts'))
     assert.ok(aName.className.includes('lc-fa-file'))
@@ -500,6 +504,103 @@ describe('FileCard — workspace display and system open', () => {
     assert.deepEqual(opened, ['/repo/src/a.ts', '/etc/hosts'])
     assert.equal(baseOf(rowOf(m.container, 'needle')).className.includes('lc-fa-file'), false)
     assert.equal(baseOf(rowOf(m.container, './dot/c.ts')).className.includes('lc-fa-file'), false, 'an unresolvable row renders inert')
+    await m.unmount()
+  })
+
+  test('Windows workspace paths split at the backslash leaf and abbreviate the root to dot', async () => {
+    const m = await mount(h(FileCard, {
+      activity: {
+        entries: [
+          entry('C:\\repo\\src\\client\\fleet.css', { reads: 1, ops: [fileOp(4, 'read', 'read')] }),
+          entry('C:\\repo', { form: 'dir', searches: 1, ops: [fileOp(3, 'search', 'grep')] }),
+          entry('C:\\repo-sibling\\x.ts', { reads: 1, ops: [fileOp(2, 'read', 'read')] }),
+          entry('src\\client\\pulse.css', { writes: 1, ops: [fileOp(1, 'write', 'write')] }),
+        ],
+        totals: {
+          read: { files: 2, ops: 2 },
+          write: { files: 1, ops: 1 },
+          search: { files: 1, ops: 1 },
+          image: { files: 0, ops: 0 },
+          added: 0,
+          removed: 0,
+        },
+      },
+      workspace: 'C:\\repo',
+    }))
+    const inside = rowOf(m.container, 'C:\\repo\\src\\client\\fleet.css')
+    assert.equal(inside.querySelector('.lc-fa-path em')?.textContent, '.\\src\\client\\')
+    assert.equal(baseOf(inside).textContent, 'fleet.css')
+    const root = rowOf(m.container, 'C:\\repo')
+    assert.equal(root.querySelector('.lc-fa-path em'), null)
+    assert.equal(baseOf(root).textContent, '.')
+    const sibling = rowOf(m.container, 'C:\\repo-sibling\\x.ts')
+    assert.equal(sibling.querySelector('.lc-fa-path em')?.textContent, 'C:\\repo-sibling\\')
+    assert.equal(baseOf(sibling).textContent, 'x.ts')
+    const relative = rowOf(m.container, 'src\\client\\pulse.css')
+    assert.equal(relative.querySelector('.lc-fa-path em')?.textContent, '.\\src\\client\\')
+    assert.equal(baseOf(relative).textContent, 'pulse.css')
+    await m.unmount()
+  })
+
+  test('POSIX names containing backslashes split only at forward slashes', async () => {
+    const m = await mount(h(FileCard, {
+      activity: {
+        entries: [
+          entry('/repo/src/a\\b/c.ts', { reads: 1, ops: [fileOp(2, 'read', 'read')] }),
+          entry('/repo/src/a\\b/', { form: 'dir', searches: 1, ops: [fileOp(1, 'search', 'grep')] }),
+        ],
+        totals: {
+          read: { files: 1, ops: 1 },
+          write: { files: 0, ops: 0 },
+          search: { files: 1, ops: 1 },
+          image: { files: 0, ops: 0 },
+          added: 0,
+          removed: 0,
+        },
+      },
+      workspace: '/repo',
+    }))
+    const file = rowOf(m.container, '/repo/src/a\\b/c.ts')
+    assert.equal(file.querySelector('.lc-fa-path em')?.textContent, './src/a\\b/')
+    assert.equal(baseOf(file).textContent, 'c.ts')
+    const dir = rowOf(m.container, '/repo/src/a\\b/')
+    assert.equal(dir.querySelector('.lc-fa-path em')?.textContent, './src/')
+    assert.equal(baseOf(dir).textContent, 'a\\b')
+    await m.unmount()
+  })
+
+  test('the same file reached by a relative and an absolute spelling folds into one row', async () => {
+    const m = await mount(h(FileCard, {
+      activity: {
+        entries: [
+          entry('src/a.ts', { reads: 2, ops: [fileOp(5, 'read', 'read'), fileOp(4, 'read', 'read')] }),
+          entry('/repo/src/a.ts', { writes: 1, ops: [fileOp(6, 'write', 'write')] }),
+          entry('/repo/src/b.ts', { reads: 1, ops: [fileOp(7, 'read', 'read')] }),
+          entry('src/b.ts', { reads: 1, ops: [fileOp(8, 'read', 'read')] }),
+        ],
+        totals: {
+          read: { files: 2, ops: 4 },
+          write: { files: 1, ops: 1 },
+          search: { files: 0, ops: 0 },
+          image: { files: 0, ops: 0 },
+          added: 0,
+          removed: 0,
+        },
+      },
+      workspace: '/repo',
+    }))
+    const rows = queryAll(m.container, '.lc-fa-row')
+    assert.equal(rows.length, 2)
+    assert.deepEqual(rows.map(r => r.title), ['/repo/src/a.ts', '/repo/src/b.ts'])
+    const a = rowOf(m.container, '/repo/src/a.ts')
+    assert.equal(a.querySelector('.lc-fa-path em')?.textContent, './src/')
+    assert.equal(baseOf(a).textContent, 'a.ts')
+    assert.equal(query(a, '.lc-fa-b-read').textContent, '2')
+    assert.equal(query(a, '.lc-fa-b-write').textContent, '1')
+    assert.equal(query(rowOf(m.container, '/repo/src/b.ts'), '.lc-fa-b-read').textContent, '2')
+    assert.ok(text(query(m.container, '.lc-fa-meta')).includes('2 files'))
+    await click(a)
+    assert.equal(queryAll(m.container, '.lc-fa-op').length, 3)
     await m.unmount()
   })
 

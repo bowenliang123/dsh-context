@@ -1,7 +1,7 @@
 import type { FileOpRecord, RequestRecord, SurfaceNode } from '../shared/types'
 import { opsOfCall, parseCallArgs } from '../shared/fileOps'
 import { leafNameOf } from '../shared/attachment'
-import { fileAddressFor } from '@deepseek-ai/dsh-util-workspace-path'
+import { fileAddressFor, isAbsoluteWorkspacePath, resolveWorkspacePath } from '@deepseek-ai/dsh-util-workspace-path'
 import type { ConversationNodeLike } from './services'
 
 export type FileOp = FileOpRecord
@@ -33,7 +33,7 @@ export interface FileActivity {
 
 export function formOf(tool: string, path: string): FileForm {
   if (tool === 'read_image' || IMAGE_EXT.test(path)) return 'image'
-  if (path.endsWith('/')) return 'dir'
+  if (path.endsWith('/') || path.endsWith('\\')) return 'dir'
   return 'text'
 }
 
@@ -138,7 +138,7 @@ function fileGlyph(base: string): FileGlyph {
 }
 
 export function baseNameOf(path: string): string {
-  return leafNameOf(path.endsWith('/') ? path.slice(0, -1) : path)
+  return leafNameOf(trimSeps(path))
 }
 
 export function glyphOf(path: string, form: FileForm): FileGlyph {
@@ -147,12 +147,61 @@ export function glyphOf(path: string, form: FileForm): FileGlyph {
   return form === 'dir' ? dirGlyph(base) : fileGlyph(base)
 }
 
-const DRIVE_PATH = /^[a-zA-Z]:[\\/]/
+const WINDOWS_PATH = /^(?:[A-Za-z]:[\\/]|\\\\)/
+
+function isWindowsPath(path: string): boolean {
+  return WINDOWS_PATH.test(path)
+}
+
+function trimSeps(path: string): string {
+  return path.replace(/[\\/]+$/, '')
+}
+
+function dotPathOf(path: string, windows: boolean): string {
+  const sep = windows ? '\\' : '/'
+  const native = windows ? path.replace(/\//g, '\\') : path
+  const trimmed = native
+    .replace(windows ? /^\\+/ : /^\/+/, '')
+    .replace(windows ? /\\{2,}/g : /\/{2,}/g, sep)
+  const dotPrefix = windows ? /^(?:\.\\)+/ : /^(?:\.\/)+/
+  const bare = trimmed.replace(dotPrefix, '')
+  if (bare === '' || bare === '.') return '.'
+  if (bare === '..' || bare.startsWith('..' + sep)) return bare
+  return '.' + sep + bare
+}
+
+function windowsDisplayPathOf(path: string, workspace: string | undefined): string {
+  const full = path.replace(/\//g, '\\')
+  const root = workspace === undefined ? '' : trimSeps(workspace.replace(/\//g, '\\'))
+  if (root !== '') {
+    const lowerRoot = root.toLowerCase()
+    const lowerFull = full.toLowerCase()
+    if (lowerFull === lowerRoot) return '.'
+    if (lowerFull.startsWith(lowerRoot + '\\')) return dotPathOf(full.slice(root.length + 1), true)
+  }
+  if (isAbsoluteWorkspacePath(full)) return full
+  return dotPathOf(full, true)
+}
+
+function posixDisplayPathOf(path: string, workspace: string | undefined): string {
+  if (workspace === '/') {
+    if (path === '/') return '.'
+    if (path.startsWith('/')) return dotPathOf(path.slice(1), false)
+  }
+  const root = workspace === undefined ? '' : trimSeps(workspace)
+  if (root !== '') {
+    if (path === root) return '.'
+    if (path.startsWith(root + '/')) return dotPathOf(path.slice(root.length + 1), false)
+  }
+  if (path.startsWith('/')) return path
+  return dotPathOf(path, false)
+}
 
 export function absPathOf(path: string, workspace: string | undefined): string | undefined {
-  if (path.startsWith('/') || DRIVE_PATH.test(path)) return path
+  if (isAbsoluteWorkspacePath(path)) return isWindowsPath(path) ? path.replace(/\//g, '\\') : path
   if (workspace === undefined || workspace === '' || path.startsWith('.')) return undefined
-  return workspace.replace(/\/+$/, '') + '/' + path.replace(/^\/+/, '')
+  const resolved = resolveWorkspacePath(workspace, path)
+  return isWindowsPath(workspace) ? resolved.replace(/\//g, '\\') : resolved
 }
 
 export function previewAddressOf(
@@ -170,19 +219,18 @@ export function previewAddressOf(
   }
 }
 
-function bareOf(remainder: string): string {
-  const bare = remainder.replace(/^(?:\.\/)+/, '')
-  return bare !== '' ? bare : remainder
+export function displayPathOf(path: string, workspace: string | undefined): string {
+  return displayStyleOf(path, workspace) === 'windows'
+    ? windowsDisplayPathOf(path, workspace)
+    : posixDisplayPathOf(path, workspace)
 }
 
-export function displayPathOf(path: string, workspace: string | undefined): string {
-  const root = workspace !== undefined && workspace.length > 1 ? workspace.replace(/\/+$/, '') : undefined
-  if (root !== undefined) {
-    if (path === root || path === root + '/') return './'
-    if (path.startsWith(root + '/')) return bareOf(path.slice(root.length + 1))
-  }
-  if (path.startsWith('/') || DRIVE_PATH.test(path)) return path
-  return bareOf(path)
+export type DisplayStyle = 'windows' | 'posix'
+
+export function displayStyleOf(path: string, workspace: string | undefined): DisplayStyle {
+  if (path.startsWith('/')) return 'posix'
+  if (isWindowsPath(path) || (workspace !== undefined && isWindowsPath(workspace))) return 'windows'
+  return workspace === undefined && path.includes('\\') ? 'windows' : 'posix'
 }
 
 export function totalsOf(entries: readonly FileEntry[]): FileActivity['totals'] {
@@ -242,6 +290,27 @@ function aggregateOps(ops: readonly FileOp[], before: number | null): FileActivi
   for (const e of entries) e.ops.sort((a, b) => b.seq - a.seq)
   entries.sort((a, b) => b.ops[0].seq - a.ops[0].seq)
   return { entries, totals: totalsOf(entries) }
+}
+
+export function mergeByDisplay(entries: readonly FileEntry[], workspace: string | undefined): FileEntry[] {
+  const byDisplay = new Map<string, FileEntry>()
+  for (const e of entries) {
+    const key = e.pattern === true ? 'p:' + e.path : displayPathOf(e.path, workspace)
+    const prev = byDisplay.get(key)
+    if (prev === undefined) {
+      byDisplay.set(key, { ...e, ops: [...e.ops] })
+      continue
+    }
+    prev.reads += e.reads
+    prev.writes += e.writes
+    prev.searches += e.searches
+    prev.added += e.added
+    prev.removed += e.removed
+    prev.ops.push(...e.ops)
+    if (isAbsoluteWorkspacePath(e.path)) prev.path = e.path
+  }
+  for (const e of byDisplay.values()) e.ops.sort((a, b) => b.seq - a.seq)
+  return [...byDisplay.values()]
 }
 
 export function activityOfOps(ops: readonly FileOpRecord[], archive: readonly SurfaceNode[], before: number | null): FileActivity {

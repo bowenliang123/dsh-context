@@ -75,6 +75,7 @@ describe('formOf', () => {
     assert.equal(formOf('read_image', '/x.bin'), 'image')
     assert.equal(formOf('read', '/pic.PNG'), 'image')
     assert.equal(formOf('grep', '/src/'), 'dir')
+    assert.equal(formOf('grep', 'C:\\repo\\src\\'), 'dir')
     assert.equal(formOf('read', '/a.ts'), 'text')
   })
 })
@@ -531,6 +532,7 @@ describe('glyphOf', () => {
       ['/repo/assets/', '🎨', 'files.glyph.assets'],
       ['/repo/.github/', '🗄️', 'files.glyph.hidden'],
       ['/repo/src/', '📁', 'files.form.dir'],
+      ['C:\\repo\\src\\', '📁', 'files.form.dir'],
     ]
     for (const [path, glyph, tip] of cases) assert.deepEqual(glyphOf(path, 'dir'), { glyph, tip }, path)
   })
@@ -629,25 +631,57 @@ describe('glyphOf', () => {
 describe('displayPathOf', () => {
   const ws = '/Users/bw/dev/dsh-context'
 
-  test('workspace and relative paths display bare-relative; the workspace root itself keeps ./', () => {
-    assert.equal(displayPathOf(ws + '/src/client/a.ts', ws), 'src/client/a.ts')
-    assert.equal(displayPathOf(ws, ws), './')
-    assert.equal(displayPathOf(ws + '/', ws), './')
-    assert.equal(displayPathOf('tests/client/a.spec.ts', ws), 'tests/client/a.spec.ts')
-    assert.equal(displayPathOf('./tests/a.ts', ws), 'tests/a.ts')
-    assert.equal(displayPathOf('/repo/./a.ts', '/repo'), 'a.ts')
+  test('workspace paths display dot-relative, with the workspace root itself as .', () => {
+    assert.equal(displayPathOf(ws + '/src/client/a.ts', ws), './src/client/a.ts')
+    assert.equal(displayPathOf(ws, ws), '.')
+    assert.equal(displayPathOf(ws + '/', ws), '.')
+    assert.equal(displayPathOf(ws + '/./a.ts', ws), './a.ts')
+    assert.equal(displayPathOf('tests/client/a.spec.ts', ws), './tests/client/a.spec.ts')
+    assert.equal(displayPathOf('./tests/a.ts', ws), './tests/a.ts')
+    assert.equal(displayPathOf('/repo/./a.ts', '/repo'), './a.ts')
+    assert.equal(displayPathOf('./', ws), '.')
+    assert.equal(displayPathOf('././', ws), '.')
+    assert.equal(displayPathOf('.', ws), '.')
+    assert.equal(displayPathOf('..', ws), '..')
+    assert.equal(displayPathOf('../x', ws), '../x')
+    assert.equal(displayPathOf('/repo//a.ts', '/repo'), './a.ts')
+    assert.equal(displayPathOf('/repo/a//b.ts', '/repo'), './a/b.ts')
+    assert.equal(displayPathOf('/', '/'), '.')
+    assert.equal(displayPathOf('/a/b', '/'), './a/b')
+    assert.equal(displayPathOf('a/b', '/'), './a/b')
   })
 
-  test('everything else stays verbatim', () => {
+  test('outside-workspace and already-relative paths keep their spelling', () => {
     assert.equal(displayPathOf('/etc/hosts', ws), '/etc/hosts')
+    assert.equal(displayPathOf('/a\\b', undefined), '/a\\b')
     assert.equal(displayPathOf(ws + '-sibling/a.ts', ws), ws + '-sibling/a.ts')
     assert.equal(displayPathOf('C:\\repo\\a.ts', ws), 'C:\\repo\\a.ts')
-    assert.equal(displayPathOf('needle', ws), 'needle')
+    assert.equal(displayPathOf('/etc/hosts', 'C:\\repo'), '/etc/hosts')
+    assert.equal(displayPathOf('needle', ws), './needle')
     assert.equal(displayPathOf(ws + '/a.ts', undefined), ws + '/a.ts')
-    assert.equal(displayPathOf('needle', undefined), 'needle')
-    assert.equal(displayPathOf('./needle', undefined), 'needle')
-    assert.equal(displayPathOf('./', ws), './')
-    assert.equal(displayPathOf('././', ws), '././')
+    assert.equal(displayPathOf('needle', undefined), './needle')
+    assert.equal(displayPathOf('./needle', undefined), './needle')
+  })
+
+  test('Windows roots abbreviate to . with native separators, on either path style or casing', () => {
+    const win = 'C:\\Users\\bw\\dev\\dsh-context'
+    assert.equal(displayPathOf(win + '\\src\\client\\a.ts', win), '.\\src\\client\\a.ts')
+    assert.equal(displayPathOf(win + '\\src\\client\\a.ts', win + '\\'), '.\\src\\client\\a.ts')
+    assert.equal(displayPathOf(win, win), '.')
+    assert.equal(displayPathOf(win + '\\', win), '.')
+    assert.equal(displayPathOf('c:/users/BW/dev/dsh-context/src/a.ts', win), '.\\src\\a.ts')
+    assert.equal(displayPathOf('src\\client\\a.ts', win), '.\\src\\client\\a.ts')
+    assert.equal(displayPathOf('src/client/a.ts', win), '.\\src\\client\\a.ts')
+    assert.equal(displayPathOf('src\\a.ts', undefined), '.\\src\\a.ts')
+    assert.equal(displayPathOf('..\\x', win), '..\\x')
+    assert.equal(displayPathOf('C:\\repo\\\\a.ts', 'C:\\repo'), '.\\a.ts')
+    assert.equal(displayPathOf('C:\\repo\\a\\\\b.ts', 'C:\\repo'), '.\\a\\b.ts')
+    assert.equal(displayPathOf('C:\\repo\\\\', 'C:\\repo'), '.')
+    assert.equal(displayPathOf(win + '-sibling\\a.ts', win), win + '-sibling\\a.ts')
+    assert.equal(displayPathOf('D:\\other\\a.ts', win), 'D:\\other\\a.ts')
+    assert.equal(displayPathOf('C:\\repo\\a.ts', undefined), 'C:\\repo\\a.ts')
+    assert.equal(displayPathOf('\\\\server\\share\\dir\\a.ts', '\\\\server\\share'), '.\\dir\\a.ts')
+    assert.equal(displayPathOf('\\\\other\\share\\a.ts', '\\\\server\\share'), '\\\\other\\share\\a.ts')
   })
 })
 
@@ -675,8 +709,20 @@ describe('absPathOf', () => {
     assert.equal(absPathOf('src/a.ts', ws), ws + '/src/a.ts')
     assert.equal(absPathOf('src/a.ts', ws + '/'), ws + '/src/a.ts')
     assert.equal(absPathOf('src/a.ts', undefined), undefined)
+    assert.equal(absPathOf('src/a.ts', ''), undefined)
     assert.equal(absPathOf('./src/a.ts', ws), undefined)
     assert.equal(absPathOf('C:\\repo\\a.ts', ws), 'C:\\repo\\a.ts')
+    assert.equal(absPathOf('C:/repo/a.ts', ws), 'C:\\repo\\a.ts')
+    assert.equal(absPathOf('C:/repo/a.ts', 'C:\\repo'), 'C:\\repo\\a.ts')
+  })
+
+  test('Windows relatives join with native separators; the workspace root owns the drive prefix', () => {
+    assert.equal(absPathOf('src/a.ts', 'C:\\repo'), 'C:\\repo\\src\\a.ts')
+    assert.equal(absPathOf('src\\client\\a.ts', 'C:\\repo'), 'C:\\repo\\src\\client\\a.ts')
+    assert.equal(absPathOf('src/a.ts', 'C:\\repo\\'), 'C:\\repo\\src\\a.ts')
+    assert.equal(absPathOf('src/a.ts', 'C:/repo'), 'C:\\repo\\src\\a.ts')
+    assert.equal(absPathOf('.tmp/a.ts', 'C:\\repo'), undefined)
+    assert.equal(absPathOf('src/a.ts', 'C:\\'), 'C:\\src\\a.ts')
   })
 })
 

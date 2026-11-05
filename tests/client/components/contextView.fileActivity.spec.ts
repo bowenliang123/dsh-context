@@ -201,7 +201,7 @@ describe('ContextView — file activity card', () => {
     const { ctx, opened, calls } = openCtx('sv-files-open')
     const { m, card } = await mountOpen('sv-files-open', '/repo/src/a.ts', ctx)
     const row = query(card, '.lc-fa-row')
-    assert.ok(row.querySelector('.lc-fa-path em')?.textContent === 'src/')
+    assert.ok(row.querySelector('.lc-fa-path em')?.textContent === './src/')
     const name = query(row, '.lc-fa-file')
     assert.equal(name.getAttribute('title'), DICT_EN['files.open'])
     await click(name)
