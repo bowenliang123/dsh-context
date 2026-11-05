@@ -219,7 +219,7 @@ describe('fleetDetailOfEvents — the descriptor', () => {
 })
 
 describe('fleetDetailOfEvents — durable delegations', () => {
-  test('accepts only versioned catalog and activated Team records, with catalog taking precedence', () => {
+  test('accepts every catalog version and activated Team records, with catalog taking precedence', () => {
     const detail = fleetDetailOfEvents([
       { type: 'subagent/catalog', seq: 4, time: 40, data: { version: 1, childId: 'unknown', childCreatedAt: 400, mode: 'unknown' } },
       { type: 'subagent/catalog', seq: 2, time: 20, data: { version: 0, childId: 'one', childCreatedAt: 200, mode: 'one-shot', label: 'Inspect' } },
@@ -229,28 +229,34 @@ describe('fleetDetailOfEvents — durable delegations', () => {
       { type: 'subagent/catalog', seq: 6, time: 60, data: { version: 0, childId: '', childCreatedAt: 600, mode: 'one-shot' } },
       { type: 'subagent/catalog', seq: 7, time: 70, data: { version: 0, childId: 'bad-time', childCreatedAt: 'no', mode: 'one-shot' } },
       { type: 'subagent/catalog', seq: 8, time: 80, data: null },
-      { type: 'subagent/catalog', seq: 9, time: 90, data: { version: 2, childId: 'bad-version', childCreatedAt: 900, mode: 'continuable', label: 'Wrong version' } },
       { type: 'subagent/catalog', seq: 10, time: 100, data: { version: 0, childId: 'missing-label', childCreatedAt: 1000, mode: 'continuable' } },
-      { type: 'team/member', seq: 11, time: 1100, data: { teamId: 'root', member: { id: 'mate', name: 'mate', description: 'Team duty', phase: 'provisioning' } } },
-      { type: 'team/member', seq: 12, time: 1200, data: { teamId: 'root', member: { id: 'mate', name: 'mate', description: 'Changed', phase: 'active' } } },
-      { type: 'team/member', seq: 13, time: 1300, data: { teamId: 'root', member: { id: 'failed', name: 'failed', description: 'Failed', phase: 'failed' } } },
-      { type: 'subagent/catalog', seq: 14, time: 1400, data: { version: 1, childId: 'mate', childCreatedAt: 1400, mode: 'continuable', label: 'Catalog wins' } },
-      { type: 'team/member', seq: 15, time: 1500, data: { teamId: 'root', member: { id: 'root', name: 'lead', description: 'Lead', phase: 'active' } } },
-      { type: 'team/member', seq: 16, time: 1600, data: { teamId: 'root', member: { id: '', name: 'bad', description: 'Bad', phase: 'active' } } },
-      { type: 'team/member', seq: 17, time: 1700, data: { teamId: 'root', member: { id: 'empty', name: 'empty', description: '', phase: 'active' } } },
-      { type: 'team/member', seq: 18, time: 1800, data: { teamId: 'root', member: { id: 'numeric', name: 'numeric', description: 42, phase: 'active' } } },
-      { type: 'subagent/catalog', seq: 19, time: 1900, data: { version: 0, childId: 'bare-one', childCreatedAt: 1900, mode: 'one-shot' } },
-      { type: 'subagent/catalog', seq: 20, time: 2000, data: { version: 2, childId: 'bare-external', childCreatedAt: 2000, mode: 'external' } },
+      { type: 'subagent/catalog', seq: 11, time: 110, data: { version: 3, childId: 'named', childCreatedAt: 1100, mode: 'continuable', label: 'Named duty', name: 'agent-1' } },
+      { type: 'subagent/catalog', seq: 12, time: 120, data: { version: 3, childId: 'named-external', childCreatedAt: 1200, mode: 'external', label: 'Named remote', name: 'agent-2' } },
+      { type: 'subagent/catalog', seq: 13, time: 130, data: { childId: 'bare', childCreatedAt: 1300, mode: 'one-shot' } },
+      { type: 'team/member', seq: 14, time: 1400, data: { teamId: 'root', member: { id: 'mate', name: 'mate', description: 'Team duty', phase: 'provisioning' } } },
+      { type: 'team/member', seq: 15, time: 1500, data: { teamId: 'root', member: { id: 'mate', name: 'mate', description: 'Changed', phase: 'active' } } },
+      { type: 'team/member', seq: 16, time: 1600, data: { teamId: 'root', member: { id: 'failed', name: 'failed', description: 'Failed', phase: 'failed' } } },
+      { type: 'subagent/catalog', seq: 17, time: 1700, data: { version: 1, childId: 'mate', childCreatedAt: 1400, mode: 'continuable', label: 'Catalog wins' } },
+      { type: 'team/member', seq: 18, time: 1800, data: { teamId: 'root', member: { id: 'root', name: 'lead', description: 'Lead', phase: 'active' } } },
+      { type: 'team/member', seq: 19, time: 1900, data: { teamId: 'root', member: { id: '', name: 'bad', description: 'Bad', phase: 'active' } } },
+      { type: 'team/member', seq: 20, time: 2000, data: { teamId: 'root', member: { id: 'empty', name: 'empty', description: '', phase: 'active' } } },
+      { type: 'team/member', seq: 21, time: 2100, data: { teamId: 'root', member: { id: 'numeric', name: 'numeric', description: 42, phase: 'active' } } },
+      { type: 'subagent/catalog', seq: 22, time: 2200, data: { version: 0, childId: 'bare-one', childCreatedAt: 2200, mode: 'one-shot' } },
+      { type: 'subagent/catalog', seq: 23, time: 2300, data: { version: 2, childId: 'bare-external', childCreatedAt: 2300, mode: 'external' } },
     ])
     assert.deepEqual(detail.delegations, [
       { seq: 1, time: 100, to: 'continuable', mode: 'continuable', label: 'Continue' },
       { seq: 2, time: 200, to: 'one', mode: 'one-shot', label: 'Inspect' },
       { seq: 3, time: 300, to: 'external', mode: 'external', label: 'Remote' },
-      { seq: 14, time: 1400, to: 'mate', mode: 'continuable', label: 'Catalog wins' },
-      { seq: 17, time: 1700, to: 'empty', mode: 'continuable' },
-      { seq: 18, time: 1800, to: 'numeric', mode: 'continuable' },
-      { seq: 19, time: 1900, to: 'bare-one', mode: 'one-shot' },
-      { seq: 20, time: 2000, to: 'bare-external', mode: 'external' },
+      { seq: 4, time: 400, to: 'unknown', mode: 'unknown' },
+      { seq: 11, time: 1100, to: 'named', mode: 'continuable', label: 'Named duty' },
+      { seq: 12, time: 1200, to: 'named-external', mode: 'external', label: 'Named remote' },
+      { seq: 13, time: 1300, to: 'bare', mode: 'one-shot' },
+      { seq: 17, time: 1400, to: 'mate', mode: 'continuable', label: 'Catalog wins' },
+      { seq: 20, time: 2000, to: 'empty', mode: 'continuable' },
+      { seq: 21, time: 2100, to: 'numeric', mode: 'continuable' },
+      { seq: 22, time: 2200, to: 'bare-one', mode: 'one-shot' },
+      { seq: 23, time: 2300, to: 'bare-external', mode: 'external' },
     ])
     assert.deepEqual(detail.messages, [])
   })

@@ -66,7 +66,7 @@ function delegationOf(value: unknown): FleetDelegation | null {
   const to = strings(rec.to)
   if (to === undefined) return null
   const mode = rec.mode
-  if (mode !== 'one-shot' && mode !== 'continuable' && mode !== 'external') return null
+  if (mode !== 'one-shot' && mode !== 'continuable' && mode !== 'external' && mode !== 'unknown') return null
   const label = strings(rec.label)
   return {
     seq: numOf(rec.seq),

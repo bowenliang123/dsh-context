@@ -202,8 +202,7 @@ function delegationOf(seq: number, data: Record<string, unknown>): FleetDelegati
   if (typeof data.childId !== 'string' || data.childId === '') return null
   if (typeof data.childCreatedAt !== 'number' || !Number.isFinite(data.childCreatedAt)) return null
   const mode = data.mode
-  if (mode !== 'one-shot' && mode !== 'continuable' && mode !== 'external') return null
-  if (mode === 'external' ? data.version !== 2 : data.version !== 0 && data.version !== 1) return null
+  if (mode !== 'one-shot' && mode !== 'continuable' && mode !== 'external' && mode !== 'unknown') return null
   if (mode === 'continuable' && (typeof data.label !== 'string' || data.label === '')) return null
   return {
     seq,

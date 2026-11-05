@@ -91,6 +91,7 @@ describe('fleetDetailOf — the sanitizing parse', () => {
       { seq: 1, time: 10, to: 'one', mode: 'one-shot', label: 'Inspect' },
       { seq: 2, time: 20, to: 'continuable', mode: 'continuable' },
       { seq: 3, time: 30, to: 'external', mode: 'external' },
+      { seq: 4, time: 40, to: 'unknown', mode: 'unknown' },
     ])
     assert.deepEqual(detail?.messages, [])
     assert.equal(fleetDetailOf({ delegations: 'nope' })?.delegations, undefined)

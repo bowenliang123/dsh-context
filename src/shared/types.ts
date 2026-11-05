@@ -104,7 +104,7 @@ export interface FleetDelegation {
   seq: number
   time: number
   to: string
-  mode: 'one-shot' | 'continuable' | 'external'
+  mode: 'one-shot' | 'continuable' | 'external' | 'unknown'
   label?: string
 }
 
