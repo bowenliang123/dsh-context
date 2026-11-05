@@ -1,5 +1,4 @@
 import { useEffect, useId, useState, type ReactElement } from 'react'
-import { siDeepseek } from 'simple-icons'
 import { DEFAULT_RECOM, recomOf, type RecomRead, type RecomText } from '../../shared/recoms'
 import { RECOM_ROUTE } from '../apiRoutes'
 import { IconShare } from '../primitives'
@@ -38,12 +37,11 @@ async function requestRecom(): Promise<RecomRead | null> {
 }
 
 export function makeRecomCard(kit: ViewKit, ctx: ClientCtx): () => ReactElement {
-  const { t } = kit
   return function RecomCard(): ReactElement {
     kit.useLocaleTick()
     const locale = ctx.locale.getLocale?.().active === 'zh' ? 'zh' : 'en'
     const [state, setState] = useState<RecomRead>(() => latest ?? UNCACHED_STATE)
-    const [iconFailed, setIconFailed] = useState(false)
+    const [iconState, setIconState] = useState<'loading' | 'loaded' | 'failed'>('loading')
     const tooltipId = useId()
     useEffect(() => {
       const cached = latest
@@ -52,7 +50,7 @@ export function makeRecomCard(kit: ViewKit, ctx: ClientCtx): () => ReactElement 
         if (!active) return
         const settled = next ?? cached ?? DEGRADED_STATE
         if (shapeOf(cached ?? UNCACHED_STATE) !== shapeOf(settled)) {
-          setIconFailed(false)
+          setIconState('loading')
           setState(settled)
         }
         latest = settled
@@ -69,20 +67,18 @@ export function makeRecomCard(kit: ViewKit, ctx: ClientCtx): () => ReactElement 
         rel="noreferrer"
         aria-describedby={tooltipId}
       >
-        <div className="lc-card-title">
-          <span className="lc-card-title-text">
-            <svg className="lc-recom-titlemark" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3 14.5 9.5 21 12 14.5 14.5 12 21 9.5 14.5 3 12 9.5 9.5Z" /></svg>
-            <span className="lc-recom-title">{t('recom.title')}</span>
-          </span>
-        </div>
         <div className="lc-recom-link">
           <div className="lc-recom-main">
-            <div className="lc-recom-mark">
-              {iconFailed ? (
-                <svg viewBox="0 0 24 24" className="lc-recom-fallback" aria-hidden="true"><path d={siDeepseek.path} fill="currentColor" /></svg>
-              ) : (
-                <img src={recom.icon} alt="" onError={() => { setIconFailed(true) }} />
-              )}
+            <div className={'lc-recom-mark' + (iconState === 'loaded' ? ' lc-recom-mark-loaded' : '')}>
+              <span className="lc-recom-fallback" aria-hidden="true">{recom.name.charAt(0).toUpperCase()}</span>
+              {iconState !== 'failed' ? (
+                <img
+                  src={recom.icon}
+                  alt=""
+                  onLoad={() => { setIconState('loaded') }}
+                  onError={() => { setIconState('failed') }}
+                />
+              ) : null}
             </div>
             <div className="lc-recom-copy">
               <div className="lc-recom-brand"><span>{recom.name}</span></div>

@@ -105,7 +105,6 @@ export const DICT_EN = {
   'plugin.github': 'GitHub',
   'plugin.settings': 'Plugin Settings',
   'plugin.settingsOpen': 'Open plugin settings',
-  'recom.title': 'Thanks',
   'trend.title': 'Context Trend',
   'gran.step': 'Step',
   'gran.turn': 'Turn',

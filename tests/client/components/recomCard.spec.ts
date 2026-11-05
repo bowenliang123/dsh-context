@@ -42,7 +42,8 @@ describe('RecomCard', () => {
     })
     const RecomCard = card('en')
     const m = await mount(h(RecomCard))
-    assert.ok(text(m.container).includes('Thanks'))
+    assert.ok(m.container.querySelector('.lc-card-title') === null)
+    assert.ok(m.container.querySelector('.lc-recom-link > .lc-recom-arrow') !== null)
     assert.ok(text(m.container).includes(DEFAULT_RECOM.slogan.en))
     assert.ok(m.container.querySelector('.lc-recom-degraded') === null)
     release(reply({ ok: true, value: remoteRecom(), degraded: false }))
@@ -77,7 +78,6 @@ describe('RecomCard', () => {
       const RecomCard = card('zh')
       const m = await mount(h(RecomCard))
       await flush()
-      assert.ok(text(m.container).includes('感谢'))
       assert.ok(text(m.container).includes(DEFAULT_RECOM.slogan.zh))
       assert.equal(query(m.container, '[role="tooltip"]').textContent, DEFAULT_RECOM.tooltip.zh)
       assert.ok(m.container.querySelector('.lc-recom-degraded') !== null)
@@ -91,15 +91,26 @@ describe('RecomCard', () => {
     await m.unmount()
   })
 
-  test('an icon failure swaps to the built-in mark and a late response is ignored after unmount', async () => {
+  test('the brand initial covers icon loading and failure, and a late response is ignored after unmount', async () => {
     let release!: (value: Response) => void
     vi.stubGlobal('fetch', () => new Promise<Response>((resolve) => { release = resolve }))
     const RecomCard = card('en')
     const m = await mount(h(RecomCard))
+    const mark = query(m.container, '.lc-recom-mark')
+    assert.ok(mark.querySelector('.lc-recom-fallback') !== null)
+    assert.equal(mark.querySelector('.lc-recom-fallback')?.textContent, 'D')
+    assert.ok(!mark.classList.contains('lc-recom-mark-loaded'))
+    await act(async () => {
+      query(m.container, 'img').dispatchEvent(new Event('load'))
+    })
+    assert.ok(mark.classList.contains('lc-recom-mark-loaded'))
+    assert.ok(mark.querySelector('.lc-recom-fallback') !== null)
     await act(async () => {
       query(m.container, 'img').dispatchEvent(new Event('error'))
     })
-    assert.ok(m.container.querySelector('.lc-recom-fallback') !== null)
+    assert.ok(!mark.classList.contains('lc-recom-mark-loaded'))
+    assert.ok(mark.querySelector('.lc-recom-fallback') !== null)
+    assert.ok(mark.querySelector('img') === null)
     await m.unmount()
     release(reply({ ok: true, value: remoteRecom() }))
     await flush()
@@ -144,12 +155,12 @@ describe('RecomCard', () => {
     await m.unmount()
   })
 
-  test('a host-degraded selection underlines the title until live data settles', async () => {
+  test('a host-degraded selection marks the brand until live data settles', async () => {
     vi.stubGlobal('fetch', async () => reply({ ok: true, value: DEFAULT_RECOM, degraded: true }))
     const RecomCard = card('zh')
     const m = await mount(h(RecomCard))
     await flush()
-    assert.equal(query(m.container, '.lc-recom-title').textContent, '感谢')
+    assert.equal(query(m.container, '.lc-recom-brand').textContent, 'DeepSeek')
     assert.ok(m.container.querySelector('.lc-recom-degraded') !== null)
     await m.unmount()
     let release!: (value: Response) => void

@@ -103,7 +103,6 @@ export const DICT_ZH = {
   'plugin.github': 'GitHub',
   'plugin.settings': '插件设置',
   'plugin.settingsOpen': '打开插件设置',
-  'recom.title': '感谢',
   'trend.title': '上下文趋势',
   'gran.step': '步骤',
   'gran.turn': '轮次',
