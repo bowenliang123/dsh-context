@@ -56,6 +56,16 @@ function pinBox(el: HTMLElement, top: number, height: number): void {
   })
 }
 
+function pinScrolledBox(el: HTMLElement, list: HTMLElement, top: number, height: number): void {
+  Object.defineProperty(el, 'getBoundingClientRect', {
+    configurable: true,
+    value: () => {
+      const offset = top - list.scrollTop
+      return { top: offset, bottom: offset + height, left: 0, right: 0, width: 0, height }
+    },
+  })
+}
+
 describe('MissionPulse boundary parties', () => {
   test('renders unknown parties and keeps the excerpt when the full log no longer contains the event', async () => {
     const row: CommsRow = {
@@ -766,7 +776,7 @@ describe('MissionPulse boundary parties', () => {
     await click(query(mounted.container, '[data-event-key="child:2:2000:relay"]'))
     assert.equal(list.scrollTop, 620)
     const first = query<HTMLElement>(mounted.container, '[data-comms-key="child:1:1000:relay"]')
-    pinBox(first, 500, 40)
+    pinScrolledBox(first, list, 500, 40)
     list.scrollTop = 0
     await click(query(first, '.lc-comms-hit'))
     assert.equal(list.scrollTop, 0)

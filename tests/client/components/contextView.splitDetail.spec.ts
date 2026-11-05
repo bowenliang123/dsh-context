@@ -41,7 +41,13 @@ describe('ContextView — the split generation (slim head + detail channel)', ()
   }
 
   test('the head paints the counters immediately; the detail collections land through the channel', async () => {
-    const ctx = slimCtx(async () => ({ ok: true, value: slimDetail() }))
+    let release!: () => void
+    vi.stubGlobal('fetch', (input: unknown) => String(input).endsWith('/detail')
+      ? new Promise(res => {
+        release = () => { res({ ok: true, status: 200, json: async () => ({ ok: true, value: slimDetail() }) }) }
+      })
+      : Promise.resolve({ ok: true, status: 200, json: async () => ({ ok: true, value: null }) }))
+    const ctx = new TestClientCtx()
     const View = makeView(ctx)
     const m = await mount(h(View, { sessionId: 'sv-slim', useProjection: projectionsFor(slimHead()) }))
 
@@ -51,6 +57,8 @@ describe('ContextView — the split generation (slim head + detail channel)', ()
     assert.equal(queryAll(m.container, '.lc-bar').length, 0, 'the chart waits for the detail')
     assert.equal(queryAll(m.container, '.lc-br-pick option').length, 1, 'the picker holds only the live row')
 
+    await until(() => typeof release === 'function', 'the detail read never started')
+    await act(async () => { release() })
     await until(() => queryAll(m.container, '.lc-bar').length === 3, 'the detail never landed')
     assert.ok(!text(m.container).includes(DICT_EN['detail.loading']))
     assert.ok(text(m.container).includes('heads-up'), 'the events list serves the detail')
