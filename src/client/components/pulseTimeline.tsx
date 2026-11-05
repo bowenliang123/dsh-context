@@ -33,7 +33,7 @@ import {
   type PulseTimelineItem,
 } from '../pulseModel'
 import { containHorizontalOverscroll } from '../overscroll'
-import { scrollIntoViewIfPossible } from '../revealScroll'
+import { scrollToPos, settleReveal } from '../revealScroll'
 import type { ViewKit } from '../viewkit'
 import { rowWindowFor, useColumnWindow, type RowRange } from './useRowWindow'
 import { ClearableInput } from './clearableInput'
@@ -75,6 +75,12 @@ const RECORD_OVERSCAN = 24
 function laneWindowFor(scrollTop: number, viewport: number, count: number, offset: number): RowRange | null {
   if (viewport <= 0 || count <= 0) return null
   return rowWindowFor(scrollTop - offset, viewport, PULSE_LANE_HEIGHT, count, LANE_OVERSCAN)
+}
+
+function clampTop(el: HTMLDivElement, start: number, end: number): number | undefined {
+  if (start < el.scrollTop) return start
+  if (end > el.scrollTop + el.clientHeight) return end - el.clientHeight
+  return undefined
 }
 
 export const PulseTimeline = memo(function PulseTimeline(props: PulseTimelineProps): ReactElement {
@@ -213,9 +219,8 @@ export const PulseTimeline = memo(function PulseTimeline(props: PulseTimelinePro
     /* v8 ignore next */
     if (el === null) return
     const start = top + taskOffset
-    const end = start + height
-    if (start < el.scrollTop) el.scrollTop = start
-    else if (end > el.scrollTop + el.clientHeight) el.scrollTop = end - el.clientHeight
+    const adjusted = clampTop(el, start, start + height)
+    if (adjusted !== undefined) scrollToPos(el, { top: adjusted })
   }
   useEffect(() => {
     const key = props.selectedEventKey ?? props.selectedDelegationKey
@@ -226,11 +231,17 @@ export const PulseTimeline = memo(function PulseTimeline(props: PulseTimelinePro
     const lane = layout.lanes[visibleIds.indexOf(laneItems[index].to)]
     const start = lane.top + taskOffset
     const end = start + lane.height
-    if (start < el.scrollTop) el.scrollTop = start
-    else if (end > el.scrollTop + el.clientHeight) el.scrollTop = end - el.clientHeight
-    el.scrollLeft = Math.max(0, PULSE_TRACK_PADDING + index * PULSE_POINT_PITCH - el.clientWidth / 2)
-    const target = el.querySelector(`[data-event-key="${CSS.escape(key)}"]`)
-    scrollIntoViewIfPossible(target ?? null, { block: 'nearest', inline: 'center' })
+    const left = Math.max(0, PULSE_TRACK_PADDING + (index + 0.5) * PULSE_POINT_PITCH - el.clientWidth / 2)
+    const align = (): boolean => {
+      const pos: { top?: number; left?: number } = {}
+      const adjusted = clampTop(el, start, end)
+      if (adjusted !== undefined) pos.top = adjusted
+      if (Math.abs(el.scrollLeft - left) > 1) pos.left = left
+      const issued = pos.top !== undefined || pos.left !== undefined
+      if (issued) scrollToPos(el, pos)
+      return issued
+    }
+    settleReveal(el, align)
   }, [props.selectedEventKey, props.selectedDelegationKey, laneItems, taskOffset, visibleIds])
   const selectItem = (item: PulseTimelineItem): void => {
     if (item.kind === 'message') props.onSelectEvent(item.row)
@@ -265,7 +276,7 @@ export const PulseTimeline = memo(function PulseTimeline(props: PulseTimelinePro
   const jumpTo = (target: 'first' | 'latest'): void => {
     setAnchor(target)
     const el = scrollerRef.current as HTMLDivElement
-    el.scrollLeft = target === 'latest' ? el.scrollWidth : 0
+    scrollToPos(el, { left: target === 'latest' ? el.scrollWidth : 0 })
   }
   return (
     <section className="lc-card lc-pulse-timeline" aria-busy={props.pending}>

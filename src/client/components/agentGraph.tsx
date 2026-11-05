@@ -7,7 +7,7 @@ import { billedTokensOf, displayCurrencyOf, estimateSessionCost, formatCost, typ
 import { avatarLabelsOf, avatarNameOf, type CommsAgent, type CommsRole } from '../commsModel'
 import { useModelPrices } from '../modelPrices'
 import { containHorizontalOverscroll } from '../overscroll'
-import { scrollIntoViewIfPossible } from '../revealScroll'
+import { scrollIntoViewIfPossible, scrollToPos } from '../revealScroll'
 import { openSessionVia, type ClientCtx } from '../services'
 import type { ViewKit } from '../viewkit'
 import type { FleetDetail } from '../../shared/types'
@@ -183,7 +183,7 @@ export function makeAgentGraph(
       const el = stageRef.current
       /* v8 ignore next 1 */
       if (point !== undefined && el !== null && (point.y < el.scrollTop || point.y + cardHeight > el.scrollTop + el.clientHeight)) {
-        el.scrollTop = Math.max(0, point.y - 24)
+        scrollToPos(el, { top: Math.max(0, point.y - 24) })
       }
       /* v8 ignore next 1 */
       const card = stageRef.current?.querySelector<HTMLElement>(`[data-agent="${CSS.escape(heardFocus)}"]`) ?? null

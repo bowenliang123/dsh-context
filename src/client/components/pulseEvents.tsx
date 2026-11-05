@@ -8,7 +8,7 @@ import { kindGroupOf, type CommsAgent, type CommsKindFilter } from '../commsMode
 import type { CommsRow, FleetDelegationRow } from '../fleetDetail'
 import type { FleetDetailState } from '../fleetModel'
 import { fmtDateTime } from '../format'
-import { scrollIntoViewIfPossible } from '../revealScroll'
+import { scrollIntoViewIfPossible, scrollToPos, settleReveal } from '../revealScroll'
 import type { ViewKit } from '../viewkit'
 import type { FleetMessage } from '../../shared/types'
 import { ClearableInput } from './clearableInput'
@@ -150,17 +150,26 @@ export const PulseEvents = memo(function PulseEvents(props: PulseEventsProps): R
       return
     }
     const list = listRef.current as HTMLUListElement
-    const row = list.querySelector<HTMLElement>(`[data-comms-key="${CSS.escape(selectedKey)}"]`)
-    if (row === null) {
-      list.scrollTop = props.rows.findIndex(entry => entry.key === selectedKey) * EVENT_ROW_PITCH
-      return
+    const align = (): boolean => {
+      const row = list.querySelector<HTMLElement>(`[data-comms-key="${CSS.escape(selectedKey)}"]`)
+      if (row === null) {
+        const index = Math.max(0, props.rows.findIndex(entry => entry.key === selectedKey))
+        const target = index * EVENT_ROW_PITCH
+        if (Math.abs(list.scrollTop - target) <= 1) return false
+        scrollToPos(list, { top: target })
+        return true
+      }
+      alignedRef.current = selectedKey
+      const delta = row.getBoundingClientRect().top - list.getBoundingClientRect().top
+      if (Math.abs(delta) <= 1) return false
+      scrollToPos(list, { top: list.scrollTop + delta })
+      return true
     }
-    alignedRef.current = selectedKey
-    list.scrollTop += row.getBoundingClientRect().top - list.getBoundingClientRect().top
+    settleReveal(list, align)
   }, [props.rows, rowRange.from, selectedKey])
   useEffect(() => {
     if (props.selectedRow !== undefined || props.selectedDelegation !== undefined) {
-      scrollIntoViewIfPossible(inspectorRef.current, { block: 'nearest' })
+      scrollIntoViewIfPossible(inspectorRef.current, { block: 'nearest', behavior: 'smooth' })
     }
   }, [props.selectedRow, props.selectedDelegation])
   return (

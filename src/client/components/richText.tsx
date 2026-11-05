@@ -4,6 +4,7 @@ import type { JsonTreeLabels } from '@deepseek-ai/dsh-client-ui-primitives'
 import { IconCheck, IconChevronDown, IconChevronUp, IconClose, IconCopy, IconSearch } from '../primitives'
 import type { ViewKit } from '../viewkit'
 import { ClearableInput, isBareEscape } from './clearableInput'
+import { scrollIntoViewIfPossible } from '../revealScroll'
 
 export type RichMode = 'raw' | 'md' | 'json'
 
@@ -101,7 +102,7 @@ function markMatches(root: HTMLElement, query: string, active: number): FindMark
   if (on >= 0) {
     const group = groups[on]
     for (const mark of group) mark.classList.add('lc-find-mark-on')
-    group[0].scrollIntoView({ block: 'nearest', inline: 'nearest' })
+    scrollIntoViewIfPossible(group[0], { block: 'nearest', inline: 'nearest', behavior: 'smooth' })
   }
   return {
     count: ranges.length,

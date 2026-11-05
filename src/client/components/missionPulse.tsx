@@ -226,7 +226,7 @@ const PulseTasks = memo(function PulseTasks(props: PulseTasksProps): ReactElemen
       if (revealedRef.current === key) return
       revealedRef.current = key
       pendingRevealRef.current = null
-      scrollIntoViewIfPossible(el, { block: 'nearest' })
+      scrollIntoViewIfPossible(el, { block: 'nearest', behavior: 'smooth' })
       return
     }
     if (revealedRef.current === key || pendingRevealRef.current === key) return

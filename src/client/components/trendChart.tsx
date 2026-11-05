@@ -5,6 +5,7 @@ import { deltaBandsOf, deltaTotalsOf, dnaBaseLabel } from '../dna'
 import { lruTouch, lruTrim } from '../lru'
 import type { DnaDelta, TrendBand } from '../dna'
 import { containHorizontalOverscroll } from '../overscroll'
+import { scrollToPos } from '../revealScroll'
 import type { ViewKit } from '../viewkit'
 import { DnaBar, DnaDeltaBar, DnaHighlights, RISE_CLASS, STAGGER_CAP } from './trendDnaBars'
 import { DurationCurve } from './trendDurationCurve'
@@ -199,7 +200,7 @@ export function makeTrendChart(kit: ViewKit): (props: TrendChartProps) => ReactE
   const { t, fmt, fmtDuration, eventLabel, eventAt, catLabel } = kit
 
   const centerBar = (el: HTMLDivElement, idx: number): void => {
-    el.scrollLeft = Math.max(0, idx * (BAR_W + BAR_GAP) + BAR_W / 2 - el.clientWidth / 2)
+    scrollToPos(el, { left: Math.max(0, idx * (BAR_W + BAR_GAP) + BAR_W / 2 - el.clientWidth / 2) })
   }
 
   const CHART_H = 112
