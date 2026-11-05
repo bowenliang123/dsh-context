@@ -137,10 +137,12 @@
         "typescript/unbound-method": "error",
         "typescript/unified-signatures": "error",
         "typescript/use-unknown-in-catch-callback-variable": "error",
+        "react/rules-of-hooks": "error",
         "no-void": "off"
       },
       "plugins": [
-        "typescript"
+        "typescript",
+        "react"
       ]
     },
     {

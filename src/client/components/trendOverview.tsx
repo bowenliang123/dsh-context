@@ -200,7 +200,6 @@ export function makeTrendOverview(kit: ViewKit): (props: TrendOverviewProps) => 
       setLocalHover(seq)
       props.onHover(seq)
     }, [props.onHover])
-    if (n === 0) return null
     const u = n > 1 ? n - 1 : 1
     const groups: { turn: number; count: number; first: number }[] = []
     for (let i = 0; i < n; i++) {
@@ -282,6 +281,7 @@ export function makeTrendOverview(kit: ViewKit): (props: TrendOverviewProps) => 
       const next = `translate(${Math.round(cx - lw / 2)}px, 0)`
       if (tip.style.transform !== next) tip.style.transform = next
     })
+    if (n === 0) return null
 
     const tipRows = hoveredIdx >= 0
       ? trendTipRows(kit, { granularity: props.granularity, stepsOf, delta, focus, durationOn }, requests[hoveredIdx])
