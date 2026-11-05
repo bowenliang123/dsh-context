@@ -69,7 +69,8 @@ body:not([data-ds-dark-theme]) .lc-stat { box-shadow: var(--lc-shadow-tile); }
 .lc-head > .lc-card:has(.lc-stats) { display: flex; flex-direction: column; }
 .lc-head .lc-stats { flex: 1; }
 .lc-head { container: lc-head / inline-size; }
-.lc-head > .lc-col { flex: 1 1 auto; min-width: min(240px, 100%); }
+.lc-head > .lc-col { flex: 1 1 auto; min-width: min(240px, 100%); display: flex; flex-direction: column; }
+.lc-head > .lc-col > .lc-card:last-child { flex: 1 1 auto; }
 @container lc-head (min-width: 640px) {
   .lc-head > .lc-col { flex: 0 1 25%; min-width: 0; }
 }

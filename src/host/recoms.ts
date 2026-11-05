@@ -1,5 +1,5 @@
 import type { Context } from '@deepseek-ai/cordis'
-import { DEFAULT_RECOM, RECOM_DATA_MIRROR_URL, RECOM_DATA_URL, recomsOfPayload, type Recom } from '../shared/recoms'
+import { DEFAULT_RECOM, RECOM_DATA_MIRROR_URL, RECOM_DATA_URL, recomsOfPayload, type RecomRead } from '../shared/recoms'
 import { type ConnectionHostFace, registerPostRoute } from './connection'
 
 export const RECOM_ROUTE = '/api/dsh-context/recom'
@@ -22,7 +22,7 @@ export function resetRecomRotation(): void {
   rotation = 0
 }
 
-export async function readRecom(): Promise<Recom> {
+export async function readRecom(): Promise<RecomRead> {
   for (const url of [RECOM_DATA_URL, RECOM_DATA_MIRROR_URL]) {
     try {
       const response = await fetcher(url, {
@@ -34,19 +34,22 @@ export async function readRecom(): Promise<Recom> {
       if (recoms.length === 0) continue
       const picked = recoms[rotation % recoms.length]
       rotation++
-      return picked
+      return { recom: picked, degraded: false }
     } catch {
     }
   }
-  return DEFAULT_RECOM
+  return { recom: DEFAULT_RECOM, degraded: true }
 }
 
 export function watchRecomChannel(ctx: Context): void {
   ctx.inject(['connection'], (c) => {
-    const handler = async (): Promise<Response> => Response.json(
-      { ok: true, value: await readRecom() },
-      { headers: { 'cache-control': 'no-store' } },
-    )
+    const handler = async (): Promise<Response> => {
+      const read = await readRecom()
+      return Response.json(
+        { ok: true, value: read.recom, degraded: read.degraded },
+        { headers: { 'cache-control': 'no-store' } },
+      )
+    }
     registerPostRoute(c, c.get('connection') as ConnectionHostFace | undefined, RECOM_ROUTE, handler, 'dsh-context: recom route')
   })
 }
