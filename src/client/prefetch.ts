@@ -1,5 +1,5 @@
 import { useEffect } from 'react'
-import { asRecord } from './services'
+import { asRecord, seatOf } from './services'
 import { detailStoreOf } from './timelineSource'
 
 const WARM_DELAY_MS = 900
@@ -45,10 +45,13 @@ export function resetSessionWarm(): void {
   pending.clear()
 }
 
+type ProjectionSeat = (key: string) => unknown
+
+const NO_PROJECTION: ProjectionSeat = () => undefined
+
 export function useSessionDetailWarm(sessionId: unknown, useProjection: unknown): void {
-  const head = typeof useProjection === 'function'
-    ? (useProjection as (key: string) => unknown)('contextTimeline')
-    : undefined
+  const read = seatOf(useProjection, NO_PROJECTION)
+  const head = read('contextTimeline')
   const rev = asRecord(head)?.detailRev
   const warmRev = typeof rev === 'number' && Number.isFinite(rev) && rev >= 0 ? rev : null
   useEffect(() => {

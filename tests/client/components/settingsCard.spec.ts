@@ -1,4 +1,4 @@
-import { act, createElement as h } from 'react'
+import { act, createElement as h, useState } from 'react'
 import assert from 'node:assert/strict'
 import { describe, test } from 'vitest'
 import { makePluginConfigCard } from '../../../src/client/components/settingsCard'
@@ -35,6 +35,23 @@ describe('PluginConfigCard (the Plugins-page seat)', () => {
     const m2 = await mount(h(PluginConfigCard, { useContextSettings: hookFor(stateOf({ status: 'unavailable' })) }))
     assert.equal(m2.container.childElementCount, 0)
     await m2.unmount()
+  })
+
+  test('a settings seat that appears or disappears after mount keeps the card rendering without shifting its hooks', async () => {
+    function useSettings<T>(sel: (s: SettingsState) => T): T {
+      useState(0)
+      return sel(stateOf())
+    }
+    const m = await mount(h(PluginConfigCard, {}))
+    assert.equal(m.container.childElementCount, 0)
+    await m.update(h(PluginConfigCard, { useContextSettings: useSettings }))
+    assert.ok(query(m.container, '.lc-settings-prefs'))
+    const before = m.container.firstElementChild
+    await m.update(h(PluginConfigCard, { useContextSettings: hookFor(stateOf()), set: () => {} }))
+    assert.equal(m.container.firstElementChild, before, 'a stable seat presence keeps the mounted card')
+    await m.update(h(PluginConfigCard, {}))
+    assert.equal(m.container.childElementCount, 0)
+    await m.unmount()
   })
 
   test('renders the eleven selects and the two prompt text rows across three titled groups — no card chrome', async () => {

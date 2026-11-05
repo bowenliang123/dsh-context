@@ -1,4 +1,4 @@
-import { act, createElement as h } from 'react'
+import { act, createElement as h, useState } from 'react'
 import assert from 'node:assert/strict'
 import { afterEach, beforeEach, describe, test, vi } from 'vitest'
 import { makeOverviewPanel } from '../../../src/client/components/overviewPanel'
@@ -235,6 +235,24 @@ describe('OverviewPanel', () => {
     assert.ok(text(cards[0]).includes('alpha session'))
     assert.ok(text(cards[0]).includes('workspace-one'), 'the breadcrumb group joined')
     assert.ok(text(cards[0]).includes('alpha'), 'the project basename joined')
+    await m.unmount()
+  })
+
+  test('a sessions seat that appears or disappears after mount keeps the panel rendering without shifting its hooks', async () => {
+    const ctx = makeCtx()
+    const Panel = makeOverviewPanel(asClientCtx(ctx), makeKit(), settingsWith())
+    function useSeat<T>(sel: (s: unknown) => T): T {
+      useState(0)
+      return sel(sessionsSnapshot())
+    }
+    const m = await mount(h(Panel, {}))
+    await flush()
+    await m.update(h(Panel, { useSessions: useSeat, useWorkspaces: useSeat }))
+    await flush()
+    assert.ok(query(m.container, '.lc-ov-page') !== null)
+    await m.update(h(Panel, {}))
+    await flush()
+    assert.ok(query(m.container, '.lc-ov-page') !== null)
     await m.unmount()
   })
 

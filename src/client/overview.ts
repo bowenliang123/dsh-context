@@ -6,7 +6,7 @@ import { cacheHitPercent } from './format'
 import { estimateSessionCost, mergeCostUsage } from './cost'
 import type { CostCurrency, ModelBook } from './cost'
 import { agentRowOf, familyChildrenOf, type AgentRow } from './agentTree'
-import { activityOf, asRecord, costFullyQuantified, numOf, timelineOf, type ClientCtx, type SessionsFace } from './services'
+import { activityOf, asRecord, costFullyQuantified, numOf, seatOf, timelineOf, type ClientCtx, type SessionsFace } from './services'
 import type { ActivityDay, ActivityTally, ContextActivity, ContextTimeline, DefaultOverviewRange, SessionCostUsage, TimingTotals, TokenUsage, ToolTimingTotals } from '../shared/types'
 
 export interface OverviewRow {
@@ -24,10 +24,14 @@ export interface OverviewRow {
   familyCost: SessionCostUsage | null
 }
 
-function standardSnapshotOf(seat: unknown): unknown {
-  if (typeof seat !== 'function') return null
+type SnapshotSeat = (selector: (snapshot: unknown) => unknown) => unknown
+
+const NO_SNAPSHOT: SnapshotSeat = () => null
+
+function standardSnapshotOf(useSeat: unknown): unknown {
+  const read = seatOf(useSeat, NO_SNAPSHOT)
   try {
-    return (seat as <T>(selector: (snapshot: unknown) => T) => T)(snapshot => snapshot)
+    return read(snapshot => snapshot)
   } catch {
     return null
   }

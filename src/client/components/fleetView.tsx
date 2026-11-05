@@ -7,7 +7,7 @@ import { attestedNamesOf, commsAgentsOf } from '../fleetAgents'
 import { useFleetDetails, useFleetModel } from '../fleetModel'
 import { teamOf } from '../fleetTeam'
 import type { ClientCtx, SessionStandardProps } from '../services'
-import { CONTEXT_VIEW_ID, openChildAsideVia, openSessionVia, projectionOf, seedConversationViewVia, unsupportedOf } from '../services'
+import { CONTEXT_VIEW_ID, openChildAsideVia, openSessionVia, projectionOf, seatKeyOf, seedConversationViewVia, unsupportedOf } from '../services'
 import { useFleetMemberFocus } from '../viewFocus'
 import { useContextSession } from '../sessionData'
 import type { ViewKit } from '../viewkit'
@@ -136,6 +136,6 @@ export function makeFleetView(
   }
 
   return function FleetView(props: SessionStandardProps): ReactElement {
-    return h(ErrorBoundary, null, h(FleetBody, props))
+    return h(ErrorBoundary, null, h(FleetBody, { ...props, key: seatKeyOf(props) }))
   }
 }

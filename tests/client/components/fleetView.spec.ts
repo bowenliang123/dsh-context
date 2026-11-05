@@ -1,4 +1,4 @@
-import { act, createElement as h } from 'react'
+import { act, createElement as h, useState } from 'react'
 import assert from 'node:assert/strict'
 import { afterEach, describe, test, vi } from 'vitest'
 import { makeFleetView } from '../../../src/client/components/fleetView'
@@ -35,6 +35,22 @@ function makeView(ctx: TestClientCtx) {
 }
 
 describe('FleetView Mission Pulse states', () => {
+  test('a projection seat that appears or disappears after mount keeps the view rendering without shifting its hooks', async () => {
+    emptyFleetRoute()
+    const ctx = new TestClientCtx({ services: { sessions: selfOnly('sv-flip') } })
+    const View = makeView(ctx)
+    function useProjectionSeat(key: string): unknown {
+      useState(0)
+      return key === 'contextTimeline' ? richTimeline() : undefined
+    }
+    const m = await mount(h(View, { sessionId: 'sv-flip' }))
+    await m.update(h(View, { sessionId: 'sv-flip', useProjection: useProjectionSeat }))
+    assert.ok(m.container.childElementCount > 0)
+    await m.update(h(View, { sessionId: 'sv-flip' }))
+    assert.ok(m.container.childElementCount > 0)
+    await m.unmount()
+  })
+
   test('a solo session keeps its tree, an empty timeline, and an empty work queue without the retired boards', async () => {
     emptyFleetRoute()
     const ctx = new TestClientCtx({ services: { sessions: selfOnly('sv-fleet') } })

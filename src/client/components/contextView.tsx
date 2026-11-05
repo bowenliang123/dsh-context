@@ -4,7 +4,7 @@ import { TrendReserved } from './trendReserved'
 import { briefNodes, briefOf } from '../brief'
 import { headlineOf } from '../headline'
 import type { ContextViewProps } from '../services'
-import { conversationNodesOf, headersOf, imageLoaderOf, projectionOf, sessionAddressOf, unsupportedOf } from '../services'
+import { conversationNodesOf, headersOf, imageLoaderOf, projectionOf, seatKeyOf, seatOf, sessionAddressOf, unsupportedOf } from '../services'
 import type { ClientCtx, ConversationNodeLike } from '../services'
 import { makeContentFetcher, makeHeaderFetcher, useHistoryFace } from '../historyPage'
 import { useContextSession } from '../sessionData'
@@ -86,6 +86,10 @@ export function browserCapOf(cards: readonly { top: number; bottom: number }[]):
   const span = last.bottom - first.top
   return Number.isFinite(span) && span > 0 ? Math.ceil(span) : null
 }
+
+type TabInfoSeat = () => { tab?: { visible?: boolean }; sidebar?: { expanded?: boolean } }
+
+const NO_TAB_INFO: TabInfoSeat = () => ({ tab: { visible: true } })
 
 export function makeContextView(
   ctx: ClientCtx,
@@ -878,19 +882,13 @@ export function makeContextView(
   }
 
   function ContextViewGate(props: ContextViewProps): ReactElement {
-    if (props.host === 'sidebar') {
-      const useTabInfo = (props as ContextViewProps & {
-        useTabInfo?: () => { tab?: { visible?: boolean }; sidebar?: { expanded?: boolean } }
-      }).useTabInfo
-      if (typeof useTabInfo === 'function') {
-        const info = useTabInfo()
-        if (info.tab?.visible !== true) return h('div', { className: 'lc-root' })
-      }
-    }
+    const useTabInfo = (props as ContextViewProps & { useTabInfo?: TabInfoSeat }).useTabInfo
+    const info = seatOf(useTabInfo, NO_TAB_INFO)()
+    if (props.host === 'sidebar' && info.tab?.visible !== true) return h('div', { className: 'lc-root' })
     return h(ContextViewBody, props)
   }
 
   return function ContextView(props: ContextViewProps): ReactElement {
-    return h(ErrorBoundary, null, h(ContextViewGate, props))
+    return h(ErrorBoundary, null, h(ContextViewGate, { ...props, key: seatKeyOf(props) }))
   }
 }

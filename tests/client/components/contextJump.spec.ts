@@ -1,4 +1,4 @@
-import { act, createElement as h } from 'react'
+import { act, createElement as h, useState } from 'react'
 import assert from 'node:assert/strict'
 import { describe, test } from 'vitest'
 import { makeContextJumpButton } from '../../../src/client/components/contextJump'
@@ -28,6 +28,19 @@ describe('ContextJump — seat guards', () => {
       assert.equal(queryAll(m.container, 'button').length, 0)
       await m.unmount()
     }
+  })
+
+  test('a chat seat that appears or disappears after mount keeps the button rendering without shifting its hooks', async () => {
+    function useChatSeat<T>(sel: (s: unknown) => T): T {
+      useState(0)
+      return sel({ legacy: { nodes: [reply] } })
+    }
+    const m = await mount(h(Jump, { messageId: 'msg-4', sessionId: SESSION }))
+    await m.update(h(Jump, { messageId: 'msg-4', sessionId: SESSION, useChat: useChatSeat }))
+    assert.ok(query(m.container, 'button.lc-jump') !== null)
+    await m.update(h(Jump, { messageId: 'msg-4', sessionId: SESSION }))
+    assert.ok(query(m.container, 'button.lc-jump') !== null)
+    await m.unmount()
   })
 
   test('renders the labelled icon button for a finalized reply; a click with no served node seat switches tabs and mints no focus', async () => {

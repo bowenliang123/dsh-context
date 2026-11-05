@@ -1,7 +1,7 @@
 import { useSyncExternalStore, type ReactElement } from 'react'
 import { Tooltip } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { ClientCtx, ConversationNodeLike, UseChatLike } from '../services'
-import { conversationNodesOf } from '../services'
+import { conversationNodesOf, seatKeyOf } from '../services'
 import { activateViewTab, openContextSidebar, requestContextFocus } from '../viewFocus'
 import { placementSurfaces } from '../placement'
 import type { ContextSettings } from '../settings'
@@ -43,6 +43,9 @@ export function makeContextJumpButton(
   const { t } = kit
   const subscribeSettings = settings.store.subscribe.bind(settings.store)
   return function ContextJump(props: ContextJumpProps): ReactElement | null {
+    return <ContextJumpBody key={seatKeyOf(props)} {...props} />
+  }
+  function ContextJumpBody(props: ContextJumpProps): ReactElement | null {
     const nodes = conversationNodesOf(props)
     const placement = useSyncExternalStore(subscribeSettings, () => settings.defaultPlacement())
     const messageId = props.messageId

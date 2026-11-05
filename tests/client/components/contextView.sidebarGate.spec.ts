@@ -1,4 +1,4 @@
-import { createElement as h } from 'react'
+import { createElement as h, useState } from 'react'
 import assert from 'node:assert/strict'
 import { afterEach, describe, test, vi } from 'vitest'
 import { makeAgentHeads } from '../../../src/client/agentHeads'
@@ -53,6 +53,25 @@ describe('ContextView — the right Sidebar gate', () => {
     const ctx = new TestClientCtx()
     const View = makeContextView(asClientCtx(ctx), kit, createContextSettings(), makeAgentHeads())
     const m = await mount(h(View, { sessionId: 's-gate2', host: 'sidebar', useProjection: projectionsFor(richTimeline()) }))
+    assert.ok(queryAll(m.container, '.lc-card').length > 0)
+    await m.unmount()
+    ctx.dispose()
+  })
+
+  test('a tab-info seat that appears or disappears after mount keeps the gate rendering without shifting its hooks', async () => {
+    const ctx = new TestClientCtx()
+    const View = makeContextView(asClientCtx(ctx), kit, createContextSettings(), makeAgentHeads())
+    const props = { sessionId: 's-flip', host: 'sidebar' as const, useProjection: projectionsFor(richTimeline()) }
+    const m = await mount(h(View, props))
+    assert.ok(queryAll(m.container, '.lc-card').length > 0)
+    function useTabInfo(): { tab: { visible: boolean } } {
+      const [visible] = useState(true)
+      return { tab: { visible } }
+    }
+    const seated = { ...props, useTabInfo }
+    await m.update(h(View, seated))
+    assert.ok(queryAll(m.container, '.lc-card').length > 0)
+    await m.update(h(View, props))
     assert.ok(queryAll(m.container, '.lc-card').length > 0)
     await m.unmount()
     ctx.dispose()

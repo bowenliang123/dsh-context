@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, type ReactElement, type ReactNode } from 'react'
 import { Menu } from '@deepseek-ai/dsh-client-ui-primitives'
 import { IconChevronDown } from '../primitives'
+import { seatKeyOf, seatOf } from '../services'
 import { ClearButton, clearOnEscape } from './clearableInput'
 import type { SettingsField, SettingsState } from '../settings'
 import type { ViewKit } from '../viewkit'
@@ -9,6 +10,10 @@ interface SettingsCardProps {
   useContextSettings?: <T>(selector: (state: SettingsState) => T) => T
   set?: (field: SettingsField, value: string) => void
 }
+
+type SettingsSeat = (selector: (state: SettingsState) => SettingsState | undefined) => SettingsState | undefined
+
+const NO_SETTINGS: SettingsSeat = () => undefined
 
 interface PrefRowProps {
   label: string
@@ -260,7 +265,11 @@ function PreferenceRows(props: { t: Translate; state: SettingsState; set?: Setti
 export function makePluginConfigCard(kit: ViewKit): (props: SettingsCardProps) => ReactElement | null {
   const { t } = kit
   return function PluginConfigCard(props: SettingsCardProps): ReactElement | null {
-    const state = typeof props.useContextSettings === 'function' ? props.useContextSettings(s => s) : undefined
+    return <PluginConfigCardBody key={seatKeyOf(props)} {...props} />
+  }
+  function PluginConfigCardBody(props: SettingsCardProps): ReactElement | null {
+    const read = seatOf<SettingsSeat>(props.useContextSettings, NO_SETTINGS)
+    const state = read(s => s)
     if (state === undefined || state.status === 'unavailable') return null
     return (
       <div className="lc-settings-prefs">

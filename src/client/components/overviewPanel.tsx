@@ -10,7 +10,7 @@ import {
   type DayRange, type OverviewBatch, type OverviewCoverage, type OverviewRange, type OverviewRow, type OverviewSort,
   type TallyField, type TallyStat,
 } from '../overview'
-import { openPluginSettings, openSessionVia, activeMsOf, type ClientCtx } from '../services'
+import { openPluginSettings, openSessionVia, activeMsOf, seatKeyOf, type ClientCtx } from '../services'
 import { readSkillCatalog } from '../skills'
 import type { ContextSettings } from '../settings'
 import type { SkillInfo } from '../../shared/types'
@@ -425,7 +425,7 @@ export function makeOverviewPanel(
   }
 
   return function OverviewPanel(props: OverviewPanelProps): ReactElement | null {
-    return <ErrorBoundary><OverviewBody {...props} /></ErrorBoundary>
+    return <ErrorBoundary><OverviewBody key={seatKeyOf(props)} {...props} /></ErrorBoundary>
   }
 }
 

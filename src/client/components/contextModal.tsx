@@ -6,7 +6,7 @@ import { headlineOf } from '../headline'
 import { modalStoreOf, takePendingConsume } from '../modalStore'
 import type { ClientCtx, SessionStandardProps, SessionsFace } from '../services'
 import type { ContextSettings } from '../settings'
-import { contextBreakdownOf, contextPressureOf, conversationNodesOf, headersOf, imageLoaderOf, projectionOf, sessionAddressOf, workspaceOf } from '../services'
+import { contextBreakdownOf, contextPressureOf, conversationNodesOf, headersOf, imageLoaderOf, projectionOf, seatKeyOf, seatOf, sessionAddressOf, workspaceOf } from '../services'
 import { makeContentFetcher, makeHeaderFetcher, useHistoryFace } from '../historyPage'
 import { useSessionDetailWarm } from '../prefetch'
 import { useTimelineSource } from '../timelineSource'
@@ -23,6 +23,10 @@ export interface ContextModalProps extends SessionStandardProps {
   useContextModal?: (sel: (open: boolean) => boolean) => boolean
   warm?: boolean
 }
+
+type ModalSeat = NonNullable<ContextModalProps['useContextModal']>
+
+const NO_MODAL: ModalSeat = () => false
 
 export function makeContextModal(
   ctx: ClientCtx,
@@ -45,9 +49,9 @@ export function makeContextModal(
 
   function ContextModalGate(props: ContextModalProps): ReactElement | null {
     const warm = props.warm === true
+    const open = seatOf(props.useContextModal, NO_MODAL)
     useSessionDetailWarm(warm ? props.sessionId : undefined, warm ? props.useProjection : undefined)
-    const open = typeof props.useContextModal === 'function' ? props.useContextModal(s => s) : false
-    return open ? h(ContextModalBody, props) : null
+    return open(s => s) ? h(ContextModalBody, props) : null
   }
 
   function ContextModalBody(props: ContextModalProps): ReactElement {
@@ -157,6 +161,7 @@ export function makeContextModal(
   }
 
   return function ContextModal(props: ContextModalProps): ReactElement | null {
-    return h(ErrorBoundary, null, h(ContextModalGate, props))
+    const key = `${props.warm === true ? 'warm' : 'cold'}:${seatKeyOf(props)}`
+    return h(ErrorBoundary, null, h(ContextModalGate, { ...props, key }))
   }
 }

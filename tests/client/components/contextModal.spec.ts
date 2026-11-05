@@ -1,4 +1,4 @@
-import { act, createElement as h, useSyncExternalStore } from 'react'
+import { act, createElement as h, useState, useSyncExternalStore } from 'react'
 import assert from 'node:assert/strict'
 import { afterEach, describe, test, vi } from 'vitest'
 import { makeContextModal } from '../../../src/client/components/contextModal'
@@ -75,6 +75,22 @@ describe('ContextModal', () => {
       assert.ok(loading.container.querySelector('.lc-modal-card') !== null)
       await loading.unmount()
     }
+  })
+
+  test('a projection seat that appears or disappears after mount keeps the gate rendering without shifting its hooks', async () => {
+    const ctx = new TestClientCtx({ services: { sessions: new TestSessions() } })
+    const ContextModal = makeContextModal(asClientCtx(ctx), kit, settings)
+    function useTimelineSeat(): ContextTimeline {
+      useState(0)
+      return timeline()
+    }
+    const base = { sessionId: 'sm-flip', useContextModal: OPEN, warm: true }
+    const m = await mount(h(ContextModal, base))
+    await m.update(h(ContextModal, { ...base, useProjection: useTimelineSeat }))
+    assert.ok(m.container.querySelector('.lc-modal-backdrop') !== null)
+    await m.update(h(ContextModal, base))
+    assert.ok(m.container.querySelector('.lc-modal-backdrop') !== null)
+    await m.unmount()
   })
 
   test('a cold read that settles without data surfaces the retryable failure, not a stall', async () => {
