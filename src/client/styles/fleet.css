@@ -83,7 +83,8 @@
 .lc-comms-event {
   --lc-kind: var(--dsw-alias-brand-primary, var(--color-blue-500));
   border: var(--lc-line-fine, 1px solid var(--dsw-alias-border-l2));
-  border-left: 2px solid color-mix(in srgb, var(--lc-kind) 62%, transparent);
+  border-left: 2px solid var(--lc-ch-a);
+  border-right: 2px solid var(--lc-ch-b);
   border-radius: 9px;
   background:
     linear-gradient(100deg,
@@ -100,10 +101,16 @@
 .lc-comms-tone-error { --lc-kind: var(--dsw-alias-state-error-primary, var(--color-red-500)); }
 .lc-comms-tone-done { --lc-kind: var(--dsw-alias-state-success-primary, var(--color-green-500)); }
 .lc-comms-tone-idle { --lc-kind: var(--dsw-alias-label-tertiary, var(--dsw-alias-label-secondary)); }
-.lc-comms-event:hover { border-color: color-mix(in srgb, var(--lc-kind) 32%, var(--dsw-alias-border-l2)); }
+.lc-comms-event:hover {
+  border-top-color: color-mix(in srgb, var(--lc-kind) 32%, var(--dsw-alias-border-l2));
+  border-bottom-color: color-mix(in srgb, var(--lc-kind) 32%, var(--dsw-alias-border-l2));
+  background-color: var(--dsw-alias-interactive-bg-hover);
+}
 .lc-comms-event-open {
-  border-color: color-mix(in srgb, var(--lc-kind) 70%, var(--dsw-alias-border-l2));
+  border-top-color: color-mix(in srgb, var(--lc-kind) 70%, var(--dsw-alias-border-l2));
+  border-bottom-color: color-mix(in srgb, var(--lc-kind) 70%, var(--dsw-alias-border-l2));
   border-left-width: 3px;
+  border-right-width: 3px;
   background-color: color-mix(in srgb, var(--lc-kind) 10%, var(--dsw-alias-bg-layer-1));
   box-shadow: 0 0 0 2px color-mix(in srgb, var(--lc-kind) 30%, transparent);
 }

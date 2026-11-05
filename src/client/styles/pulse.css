@@ -248,8 +248,8 @@
 .lc-pulse-event-list[hidden] { display: none; }
 .lc-pulse-event-stream .lc-comms-event { border-radius: 7px; }
 .lc-pulse-event-stream .lc-comms-event-open {
-  border-color: color-mix(in srgb, var(--lc-pulse-cyan) 65%, var(--dsw-alias-border-l2));
-  border-left-color: var(--lc-pulse-cyan);
+  border-top-color: color-mix(in srgb, var(--lc-pulse-cyan) 65%, var(--dsw-alias-border-l2));
+  border-bottom-color: color-mix(in srgb, var(--lc-pulse-cyan) 65%, var(--dsw-alias-border-l2));
   background-color: color-mix(in srgb, var(--lc-pulse-cyan) 12%, var(--dsw-alias-bg-layer-1));
   box-shadow: 0 0 0 2px color-mix(in srgb, var(--lc-pulse-cyan) 34%, transparent);
 }
