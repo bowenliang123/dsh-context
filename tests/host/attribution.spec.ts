@@ -39,6 +39,13 @@ describe('createToolAttribution', () => {
     assert.equal(attribution.ownerOf('grep'), '@deepseek-ai/dsh-tool-fs-search')
   })
 
+  test('the static chain follows the detected line for the moved schedule tools', () => {
+    assert.equal(createToolAttribution(new Context(), '0.2.0-rc.2').ownerOf('schedule_create'), '@deepseek-ai/dsh-schedule')
+    const current = createToolAttribution(new Context(), '0.2.2-rc.1')
+    assert.equal(current.ownerOf('schedule_create'), '@deepseek-ai/dsh-tool-schedule')
+    assert.equal(current.ownerOf('schedule_view'), '@deepseek-ai/dsh-tool-schedule')
+  })
+
   test('attributes tools to the plugin that read ctx.tools and registered them', async () => {
     const app = new Context()
     const attribution = createToolAttribution(app)

@@ -5,6 +5,7 @@ import {
   MCP_PREFIX,
   mcpServerOf,
   mcpSourceOf,
+  pinnedSourceOf,
 } from '../../src/host/toolSources'
 
 describe('mcpServerOf', () => {
@@ -36,13 +37,35 @@ describe('mcpSourceOf', () => {
 })
 
 describe('FIRST_PARTY_SOURCES', () => {
-  test('the pinned map is frozen and carries the documented core names', () => {
+  test('the pinned map is frozen and carries every attributed first-party name', () => {
     assert.ok(Object.isFrozen(FIRST_PARTY_SOURCES))
-    for (const name of ['read', 'write', 'edit', 'bash', 'pwsh', 'glob', 'grep',
+    for (const name of ['read', 'write', 'edit', 'apply_patch', 'bash', 'pwsh', 'glob', 'grep',
       'web_search', 'web_fetch', 'job_kill', 'ask_user_question', 'plan', 'skill',
-      'todo_write', 'subagent', 'send_message', 'ralph', 'workflow', 'run_code']) {
+      'todo_write', 'subagent', 'send_message', 'ralph', 'workflow', 'run_code',
+      'schedule_view', 'schedule_edit', 'schedule_update', 'working_directory']) {
       assert.ok(name in FIRST_PARTY_SOURCES, `expected ${name} in the first-party map`)
     }
+    assert.equal(FIRST_PARTY_SOURCES.apply_patch, '@deepseek-ai/dsh-tool-fs')
+    assert.equal(FIRST_PARTY_SOURCES.working_directory, '@deepseek-ai/dsh-tool-working-directory')
+    assert.equal(FIRST_PARTY_SOURCES.schedule_view, '@deepseek-ai/dsh-tool-schedule')
+    assert.equal(FIRST_PARTY_SOURCES.schedule_edit, '@deepseek-ai/dsh-tool-schedule')
+    assert.equal(FIRST_PARTY_SOURCES.schedule_update, '@deepseek-ai/dsh-tool-schedule')
     assert.equal(MCP_PREFIX, 'mcp__')
+  })
+})
+
+describe('pinnedSourceOf', () => {
+  test('the schedule tools keep the 0.2.0 package label only on the 0.2.0 line', () => {
+    assert.equal(pinnedSourceOf('schedule_create', '0.2.0-rc.2'), '@deepseek-ai/dsh-schedule')
+    assert.equal(pinnedSourceOf('schedule_delete', '0.2.0'), '@deepseek-ai/dsh-schedule')
+    assert.equal(pinnedSourceOf('schedule_create', '0.2.1-rc.2'), '@deepseek-ai/dsh-tool-schedule')
+    assert.equal(pinnedSourceOf('schedule_list', '0.2.2-rc.1'), '@deepseek-ai/dsh-tool-schedule')
+    assert.equal(pinnedSourceOf('schedule_list'), '@deepseek-ai/dsh-tool-schedule', 'an undetectable version uses the current package')
+    assert.equal(pinnedSourceOf('schedule_view', '0.2.0-rc.2'), '@deepseek-ai/dsh-tool-schedule', 'the 0.2.2 tool never moved')
+    assert.equal(pinnedSourceOf('schedule_create', 'nightly'), '@deepseek-ai/dsh-tool-schedule')
+    assert.equal(pinnedSourceOf('schedule_create', '1.0.0'), '@deepseek-ai/dsh-tool-schedule')
+    assert.equal(pinnedSourceOf('schedule_create', '0.3.0'), '@deepseek-ai/dsh-tool-schedule')
+    assert.equal(pinnedSourceOf('read', '0.2.0-rc.2'), '@deepseek-ai/dsh-tool-fs')
+    assert.equal(pinnedSourceOf('unknown_tool', '0.2.2-rc.1'), undefined)
   })
 })

@@ -40,7 +40,7 @@ export function apply(ctx: Context, config: Config): void {
     ctx.sessionProjections.register(createFallbackActivityDefinition() as never)
     return
   }
-  const attribution = createToolAttribution(ctx)
+  const attribution = createToolAttribution(ctx, harnessVersion)
   watchStepIdentity(ctx)
   const gate = createDetailGate(ctx)
   watchDetailChannel(ctx, resolveBounds(config), coldReads, gate)

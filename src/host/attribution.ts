@@ -92,7 +92,7 @@ interface ToolServiceLike {
   }
 }
 
-export function createToolAttribution(ctx: Context): ToolAttribution {
+export function createToolAttribution(ctx: Context, harnessVersion?: string): ToolAttribution {
   const live = new Map<string, string>()
   const wrapped = new WeakSet()
   const self = ctx.fiber.name
@@ -159,7 +159,7 @@ export function createToolAttribution(ctx: Context): ToolAttribution {
   }
   return {
     ownerOf: name =>
-      mcpSourceOf(name) ?? live.get(name) ?? pinnedSourceOf(name)
+      mcpSourceOf(name) ?? live.get(name) ?? pinnedSourceOf(name, harnessVersion)
         ?? (boot.has(name) ? UNKNOWN_TOOL_SOURCE : undefined),
   }
 }
