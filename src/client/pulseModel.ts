@@ -242,6 +242,21 @@ export function pulseTaskOf(
   return tasks.length === 0 ? null : tasks[0]
 }
 
+export function pulseTaskLaneIdsOf(
+  items: readonly PulseTimelineItem[],
+  tasksByAgent: ReadonlyMap<string, readonly FleetTeamTask[]>,
+  taskFilterId: string | null,
+): ReadonlySet<string> | null {
+  if (taskFilterId === null) return null
+  const ids = new Set<string>()
+  for (const item of items) {
+    if (pulseTaskOf(item, tasksByAgent)?.id !== taskFilterId) continue
+    ids.add(item.from)
+    ids.add(item.to)
+  }
+  return ids
+}
+
 export type PulseWorkAgentState = 'running' | 'latest_complete' | 'idle'
 
 export interface PulseWorkItem {

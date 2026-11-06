@@ -12,6 +12,7 @@ import {
   pulseEventMatchesOf,
   pulseLaneVisibility,
   pulseTaskBadgeOf,
+  pulseTaskLaneIdsOf,
   pulseTasksByAgent,
   pulseTimelineItemsOf,
   pulseWorkGroupsOf,
@@ -208,6 +209,32 @@ describe('pulse lane visibility', () => {
   test('small fleets never lose quiet lanes', () => {
     const small = lanes.slice(0, 3)
     assert.deepEqual(pulseLaneVisibility(small, [], [], null, '', false).visible, ['a0', 'a1', 'a2'])
+  })
+})
+
+describe('pulse task lanes', () => {
+  const team: FleetTeam = {
+    members: [
+      { id: 'lead', name: 'lead', role: 'lead', phase: 'active' },
+      { id: 'bee', name: 'worker-bee', role: 'teammate', phase: 'active' },
+    ],
+    tasks: [
+      { id: 'task-1', subject: 'Parse schema', description: '', status: 'in_progress', ownerName: 'worker-bee', blockedBy: [], writeScopes: [], ready: true, warnings: [] },
+      { id: 'task-2', subject: 'Scan docs', description: '', status: 'pending', ownerName: 'lead', blockedBy: [], writeScopes: [], ready: true, warnings: [] },
+    ],
+  }
+  const tasksByAgent = pulseTasksByAgent(team)
+
+  test('collects both endpoints of the records the filtered task owns, and nothing else', () => {
+    const items = pulseTimelineItemsOf(
+      [row(400, 'reply', 'lead', 'side'), row(300, 'note', 'side', 'bee'), row(200, 'aside', 'side', 'side')],
+      [delegation(100, 'create-bee')],
+    )
+    assert.equal(pulseTaskLaneIdsOf(items, tasksByAgent, null), null)
+    assert.deepEqual([...pulseTaskLaneIdsOf(items, tasksByAgent, 'task-1')!], ['lead', 'bee', 'side'])
+    assert.deepEqual([...pulseTaskLaneIdsOf(items, tasksByAgent, 'task-2')!], ['side', 'lead'])
+    assert.equal(pulseTaskLaneIdsOf(items, tasksByAgent, 'task-9')!.size, 0)
+    assert.equal(pulseTaskLaneIdsOf([], tasksByAgent, 'task-1')!.size, 0)
   })
 })
 

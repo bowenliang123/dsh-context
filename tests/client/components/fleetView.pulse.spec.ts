@@ -222,7 +222,7 @@ describe('Multi-Agent Fleet', () => {
     ctx.dispose()
   })
 
-  test('filters the collaboration records by task and keeps task reveal and clear actions', async () => {
+  test('filters the collaboration records and lanes by task and keeps task reveal and clear actions', async () => {
     vi.stubGlobal('fetch', (_url: unknown, init: { body: string }) => {
       const { sessionId } = JSON.parse(init.body) as { sessionId: string }
       const messages = sessionId === 'root'
@@ -246,12 +246,21 @@ describe('Multi-Agent Fleet', () => {
     assert.equal(queryAll(m.container, '[data-task-chip]').length, 1)
     assert.equal(query(m.container, '[data-task-chip="task-1"]').getAttribute('aria-pressed'), 'true')
     assert.equal(query(m.container, '[data-task="task-1"] .lc-pulse-work-focus').getAttribute('aria-expanded'), 'true')
-    assert.ok(text(query(m.container, '.lc-pulse-timeline .lc-card-sub')).includes('1/2'))
+    assert.deepEqual(
+      queryAll<HTMLElement>(m.container, '.lc-pulse-lane-label[data-lane-label]').map(el => el.dataset.laneLabel),
+      ['root', 'w1'],
+    )
+    assert.equal(queryAll(m.container, '[data-quiet-lane]').length, 0)
+    assert.ok(text(query(m.container, '.lc-pulse-timeline .lc-card-sub')).includes('1/2 records · 2 lanes'))
     assert.equal(text(query(m.container, '.lc-pulse-task-filter')), 'Task 1 ×')
     await click(query(m.container, '.lc-pulse-task-filter'))
     assert.equal(queryAll(m.container, '.lc-pulse-event').length, 2)
     assert.equal(queryAll(m.container, '.lc-pulse-task-filter').length, 0)
     assert.equal(m.container.ownerDocument.activeElement, query(m.container, '[data-sequence-scroller]'))
+    assert.deepEqual(
+      queryAll<HTMLElement>(m.container, '.lc-pulse-lane-label[data-lane-label]').map(el => el.dataset.laneLabel),
+      ['root', 'w1', 'w2', 'w9'],
+    )
     await click(query(m.container, '[data-task-chip="task-0"]'))
     assert.equal(queryAll(m.container, '.lc-pulse-event').length, 1)
     assert.equal(query(m.container, '.lc-pulse-event').getAttribute('data-to'), 'root')
@@ -435,13 +444,17 @@ describe('Multi-Agent Fleet', () => {
     ctx.dispose()
   })
 
-  test('folds quiet lanes without changing fleet totals and reveals search matches explicitly', async () => {
+  test('folds quiet lanes without changing fleet totals, reveals search matches, and scopes lanes to the filtered task', async () => {
+    const quietTeam = {
+      enabled: true,
+      tasks: [{ id: 'task-2', subject: 'burst task', description: '', status: 'in_progress', ownerId: 'q2', blockedBy: [], writeScopes: [], ready: true, writeScopeWarnings: [] }],
+    }
     const byId = Object.fromEntries(Array.from({ length: 10 }, (_, index) => [`q${index}`, {
       ...(index > 0 ? { parentId: 'q0', origin: 'subagent' } : {}),
       displayTitle: `Agent ${index}`,
       running: index === 1,
       updatedAt: 10 - index,
-      projectionValues: index > 0 ? { subagent: { mode: 'one-shot', label: `Agent ${index}` } } : {},
+      projectionValues: index > 0 ? { subagent: { mode: 'one-shot', label: `Agent ${index}` } } : { agentTeam: quietTeam },
     }]))
     vi.stubGlobal('fetch', (_url: unknown, init: { body: string }) => {
       const { sessionId } = JSON.parse(init.body) as { sessionId: string }
@@ -472,6 +485,21 @@ describe('Multi-Agent Fleet', () => {
     await typeText(query<HTMLInputElement>(m.container, '.lc-pulse-timeline .lc-pulse-search'), 'Agent 8')
     assert.ok(query(m.container, '[data-lane-label="q8"]') !== null)
     assert.equal(query(m.container, '[data-pulse-stat="agents"]').textContent, '10')
+    await typeText(query<HTMLInputElement>(m.container, '.lc-pulse-timeline .lc-pulse-search'), '')
+    await click(query(m.container, '[data-task-chip="task-2"]'))
+    assert.deepEqual(
+      queryAll<HTMLElement>(m.container, '.lc-pulse-lane-label[data-lane-label]').map(el => el.dataset.laneLabel),
+      ['q2', 'q3'],
+    )
+    assert.ok(text(query(m.container, '.lc-pulse-timeline .lc-card-sub')).includes('1/1 records · 2 lanes'))
+    assert.equal(queryAll(m.container, '[data-quiet-lane]').length, 0)
+    await click(query(m.container, '.lc-pulse-task-filter'))
+    await click(query(m.container, '[data-quiet-lane] button'))
+    assert.ok(text(query(m.container, '.lc-pulse-quiet')).includes(DICT_EN['fleet.pulse.hideQuiet']))
+    await click(query(m.container, '[data-task-chip="task-2"]'))
+    assert.equal(queryAll(m.container, '.lc-pulse-quiet').length, 0)
+    await click(query(m.container, '.lc-pulse-task-filter'))
+    assert.equal(queryAll(m.container, '.lc-pulse-quiet').length, 1)
     await m.unmount()
     ctx.dispose()
   })

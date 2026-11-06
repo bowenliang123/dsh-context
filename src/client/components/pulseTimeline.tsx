@@ -24,6 +24,7 @@ import {
   PULSE_TRACK_PADDING,
   pulseLaneVisibility,
   pulseTaskBadgeOf,
+  pulseTaskLaneIdsOf,
   pulseTaskOf,
   pulseTasksByAgent,
   pulseTimelineItemsOf,
@@ -89,24 +90,34 @@ export const PulseTimeline = memo(function PulseTimeline(props: PulseTimelinePro
   const [anchor, setAnchor] = useState<'first' | 'latest'>('first')
   const [hoveredKey, setHoveredKey] = useState<string | null>(null)
   const [taskFilterId, setTaskFilterId] = useState<string | null>(null)
+  const taskFiltered = taskFilterId !== null
   const [hoveredLane, setHoveredLane] = useState<string | null>(null)
   const [laneScopeState, setLaneScopeState] = useState<{ from: number; to: number } | null>(null)
   const laneHovered = (id: string): boolean => props.hoveredAgent === id || hoveredLane === id
   const scrollerRef = useRef<HTMLDivElement | null>(null)
   const labelRowsRef = useRef<HTMLDivElement | null>(null)
-  const laneView = useMemo(
-    () => pulseLaneVisibility(props.lanes, props.scopedRows, props.links, props.selectedAgent, props.query, showQuiet),
-    [props.lanes, props.links, props.query, props.scopedRows, props.selectedAgent, showQuiet],
-  )
-  const visibleIds = laneView.visible
-  const matchedIds = laneView.matched
   const timelineItems = useMemo(
     () => pulseTimelineItemsOf(props.rows, props.delegations),
     [props.rows, props.delegations],
   )
+  const tasksByAgent = useMemo(() => pulseTasksByAgent(props.team), [props.team])
+  const taskLanes = useMemo(
+    () => pulseTaskLaneIdsOf(timelineItems, tasksByAgent, taskFilterId),
+    [taskFilterId, tasksByAgent, timelineItems],
+  )
+  const laneView = useMemo(
+    () => pulseLaneVisibility(
+      props.lanes, props.scopedRows, props.links, props.selectedAgent, props.query, showQuiet || taskFiltered,
+    ),
+    [props.lanes, props.links, props.query, props.scopedRows, props.selectedAgent, showQuiet, taskFiltered],
+  )
+  const visibleIds = useMemo(
+    () => taskLanes === null ? laneView.visible : laneView.visible.filter(id => taskLanes.has(id)),
+    [laneView.visible, taskLanes],
+  )
+  const matchedIds = laneView.matched
   const laneIds = useMemo(() => new Set(visibleIds), [visibleIds])
   const laneRecords = useMemo(() => timelineItems.filter(item => laneIds.has(item.to)), [laneIds, timelineItems])
-  const tasksByAgent = useMemo(() => pulseTasksByAgent(props.team), [props.team])
   const taskAt = useMemo(() => {
     const map = new Map<string, FleetTeamTask>()
     for (const item of laneRecords) {
@@ -192,7 +203,7 @@ export const PulseTimeline = memo(function PulseTimeline(props: PulseTimelinePro
   }, [props.scopedRows])
   const searching = props.query.trim() !== ''
   const agentSelected = props.selectedAgent !== null
-  const hidden = searching || agentSelected ? 0 : props.lanes.length - visibleIds.length
+  const hidden = searching || agentSelected || taskFiltered ? 0 : props.lanes.length - visibleIds.length
   const recordTotal = props.scopedRows.length + props.scopedDelegations.length
   const shownRecords = laneItems.length
   useEffect(() => {
@@ -307,7 +318,7 @@ export const PulseTimeline = memo(function PulseTimeline(props: PulseTimelinePro
             onChange={props.onQuery}
           />
           <span className="lc-pulse-title-actions">
-            {!searching && !agentSelected && props.lanes.length > 8 && (showQuiet || hidden > 0) ? (
+            {!searching && !agentSelected && !taskFiltered && props.lanes.length > 8 && (showQuiet || hidden > 0) ? (
               <button type="button" className="lc-pulse-quiet" aria-pressed={showQuiet} onClick={() => { setShowQuiet(value => !value) }}>
                 {showQuiet ? t('fleet.pulse.hideQuiet') : t('fleet.pulse.showQuiet', { n: hidden })}
               </button>
