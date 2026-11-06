@@ -111,9 +111,21 @@ Complete ALL of these before ANY commit:
 - Consider updating dependencies to the latest version where possible — deepseek-harness evolves rapidly.
 
 ## I18n
-- Chinese (Simplified) and English are supported for UI elements.
-- Update all the supported languages translations when adding or modifying the UI elements.
-- Do not keep the deprecated or unused language keys.
+- Be concise and clear in all languages, and avoid unnecessary verbosity.
+- Prefer similar terms or phasing used by DeepSeek Harness.
+- Drop the deprecated or unused language keys.
+- Supported languages for UI elements and README
+  - Primarily source languages: 
+    - zh: Chinese (Simplified) 
+    - en: English
+  - Fallback: English for any unsupported language
+  - Other supported languages
+    - ja: Japanese, use zh as source for translation, prefer Kanji(漢字) over Hiragana(ひらがな) and Katakana(カタカナ)
+    - es: Español
+    - fr: Français
+    - de: Deutsch
+    - ru: Русский
+    - pt: Português
 
 ## Docs
 - `docs` directory contains only end-user faced documents.
