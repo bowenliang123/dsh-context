@@ -1,7 +1,7 @@
 import type { ReactElement } from 'react'
 import assert from 'node:assert/strict'
 import { describe, test } from 'vitest'
-import { DICT_EN, DICT_ZH } from '../../src/client/i18n'
+import { DICTS } from '../../src/client/i18n'
 import { modalStoreOf, type ModalStore } from '../../src/client/modalStore'
 import type { SettingsField, SettingsScopeLike, SettingsState } from '../../src/client/settings'
 import { TestClientCtx, TestSessions, asClientCtx } from './helpers/harness'
@@ -65,7 +65,7 @@ function scopeWith(snapshot: { status: string; value: unknown; writable: boolean
 }
 
 describe('client entry: identity and dictionaries', () => {
-  test('name and inject declare the plugin identity; apply registers the real zh/en dicts and dispose removes them', () => {
+  test('name and inject declare the plugin identity; apply registers all locale dictionaries and dispose removes them', () => {
     assert.equal(name, 'dsh-context')
     assert.deepEqual(inject, ['slots', 'locale'])
 
@@ -73,8 +73,7 @@ describe('client entry: identity and dictionaries', () => {
     applyTo(ctx)
     const dicts = ctx.locale.namespaces.get('dsh-context')
     assert.ok(dicts)
-    assert.equal(dicts.zh, DICT_ZH)
-    assert.equal(dicts.en, DICT_EN)
+    for (const [locale, dict] of Object.entries(DICTS)) assert.equal(dicts[locale], dict)
     assert.equal(ctx.locale.bind('dsh-context')('tab.context'), 'Context')
     ctx.dispose()
     assert.equal(ctx.locale.namespaces.has('dsh-context'), false)

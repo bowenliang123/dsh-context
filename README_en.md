@@ -2,7 +2,7 @@
 
 # dsh-context
 
-[中文](README.md)
+[简体中文](README.md) · [English](README_en.md) · [日本語](README_ja.md) · [Español](README_es.md) · [Français](README_fr.md) · [Português](README_pt.md)
 
 [![npm version](https://img.shields.io/npm/v/dsh-context)](https://www.npmjs.com/package/dsh-context)
 [![GitHub stars](https://img.shields.io/github/stars/bowenliang123/dsh-context?style=social)](https://github.com/bowenliang123/dsh-context)
@@ -231,7 +231,7 @@ The Context Insights preset buttons write the pick back as the stored default; e
 - **Cache footprint** — the plugin checkpoints only a compact per-session summary (composition, counts, cost/timing, model info) into dsh's projection cache; the heavy per-event details (surface text, request breakdowns, file ops, command programs, spans) are refolded from the durable log when a panel needs them, so the cache stays small even on long sessions. Detail views are bounded (steps 1500 · turns 300 · events 400 · surface nodes 2000 · archive 400 · file ops 400 · commands 400).
 - **Estimates vs actuals** — category figures use dsh's own fixed-density heuristic (the same one as its built-in token meter); the pinned trend details show provider-reported actuals next to them, and the Token card pairs its ≈-estimated composition shares with the provider-exact billed total.
 - **Compatibility** — works on `@deepseek-ai/dsh` from **0.2.0-rc.2** (the `0.2.0` and `0.2.1` lines verified on their rc.2 releases, and the `0.2.2` line on its alpha.3 preview), the V4 session-log generation, from one shape-driven code path. The per-release matrix and how it is verified: [docs/compatibility.md](docs/compatibility.md).
-- **I18n** — UI in English and 简体中文.
+- **I18n** — UI in 简体中文, English, 日本語, Español, Français, and Português.
 
 ## Like it?
 

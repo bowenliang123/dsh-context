@@ -56,7 +56,7 @@ export class TestLocale implements LocaleService {
   }
 
   bind(ns: string): (key: string, params?: Record<string, string | number>) => string {
-    return makeTranslate(this.active as 'en' | 'zh', this.namespaces.get(ns))
+    return makeTranslate(this.active, this.namespaces.get(ns))
   }
 
   getLocale(): { active: string } {
@@ -65,7 +65,7 @@ export class TestLocale implements LocaleService {
 }
 
 export interface TestClientCtxOptions {
-  locale?: 'en' | 'zh'
+  locale?: string
   services?: Record<string, unknown>
 }
 

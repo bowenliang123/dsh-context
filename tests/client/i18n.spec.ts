@@ -1,29 +1,29 @@
 import assert from 'node:assert/strict'
 import { describe, test } from 'vitest'
-import { DICT_EN, DICT_ZH, type DictKey } from '../../src/client/i18n'
+import { DICTS, DICT_EN, type DictKey } from '../../src/client/i18n'
 
 function placeholders(s: string): string[] {
   return [...s.matchAll(/\{(\w+)\}/g)].map(m => m[1]).sort()
 }
 
 describe('dictionaries', () => {
-  test('every value is a non-empty string', () => {
-    for (const dict of [DICT_ZH, DICT_EN]) {
+  test('every supported locale has the complete key set and non-empty values', () => {
+    const keys = Object.keys(DICT_EN).sort()
+    assert.deepEqual(Object.keys(DICTS).sort(), ['en', 'es', 'fr', 'ja', 'pt', 'zh'])
+    for (const [locale, dict] of Object.entries(DICTS)) {
+      assert.deepEqual(Object.keys(dict).sort(), keys, locale)
       for (const [key, value] of Object.entries(dict)) {
-        assert.equal(typeof value, 'string', key)
-        assert.ok(value.length > 0, key)
+        assert.equal(typeof value, 'string', `${locale}:${key}`)
+        assert.ok(value.length > 0, `${locale}:${key}`)
       }
     }
   })
 
-  test('interpolation placeholders agree between locales for every key', () => {
+  test('interpolation placeholders agree between every locale and English', () => {
     for (const key of Object.keys(DICT_EN) as DictKey[]) {
-      if (key === 'block.line') {
-        assert.deepEqual(placeholders(DICT_ZH[key]), ['n'])
-        assert.deepEqual(placeholders(DICT_EN[key]), [])
-        continue
+      for (const [locale, dict] of Object.entries(DICTS)) {
+        assert.deepEqual(placeholders(dict[key]), placeholders(DICT_EN[key]), `${locale}:${key}`)
       }
-      assert.deepEqual(placeholders(DICT_ZH[key]), placeholders(DICT_EN[key]), key)
     }
   })
 })

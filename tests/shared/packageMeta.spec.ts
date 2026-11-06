@@ -9,11 +9,12 @@ interface PackageManifest {
 }
 
 const manifest = JSON.parse(await readFile('package.json', 'utf8')) as PackageManifest
+const locales = ['en', 'es', 'fr', 'ja', 'pt', 'zh']
 
 describe('package meta localization', () => {
-  test('the locale dictionaries ship, resolve, and carry well-formed meta', async () => {
+  test('every supported locale ships, resolves, and carries well-formed meta', async () => {
     const names = (await readdir('locale')).filter(name => name.endsWith('.json')).sort()
-    assert.ok(names.includes('en.json'), 'en.json is the fallback dictionary and gates the meta scan')
+    assert.deepEqual(names, locales.map(locale => `${locale}.json`).sort())
     for (const name of names) {
       assert.match(name, /^en\.json$|^[A-Za-z]{2,8}(-[A-Za-z0-9]{1,8})*\.json$/, `${name}: language-id filename`)
       const parsed = JSON.parse(await readFile(`locale/${name}`, 'utf8')) as {
@@ -27,12 +28,14 @@ describe('package meta localization', () => {
     assert.ok(manifest.files.includes('locale/*.json'), 'the dictionaries ship')
   })
 
-  test('the zh dictionary is a real translation of the en one', async () => {
+  test('every localized dictionary translates the complete English meta shape', async () => {
     const en = JSON.parse(await readFile('locale/en.json', 'utf8')) as { meta: Record<string, string> }
-    const zh = JSON.parse(await readFile('locale/zh.json', 'utf8')) as { meta: Record<string, string> }
-    assert.deepEqual(Object.keys(zh.meta).sort(), Object.keys(en.meta).sort())
-    for (const field of Object.keys(en.meta)) {
-      assert.notEqual(zh.meta[field], en.meta[field], `zh ${field} is translated`)
+    for (const locale of locales.filter(locale => locale !== 'en')) {
+      const dict = JSON.parse(await readFile(`locale/${locale}.json`, 'utf8')) as { meta: Record<string, string> }
+      assert.deepEqual(Object.keys(dict.meta).sort(), Object.keys(en.meta).sort(), locale)
+      for (const field of Object.keys(en.meta)) {
+        assert.notEqual(dict.meta[field], en.meta[field], `${locale} ${field} is translated`)
+      }
     }
   })
 

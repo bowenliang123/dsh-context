@@ -1,5 +1,5 @@
 import { createElement as h } from 'react'
-import { DICT_EN, DICT_ZH } from './i18n'
+import { DICTS } from './i18n'
 import { registerContextCommand } from './command'
 import { makeContextModal } from './components/contextModal'
 import { makeOverviewPanel } from './components/overviewPanel'
@@ -49,7 +49,7 @@ const JUMP_ID = 'context-jump'
 function apply(ctx: ClientCtx): void {
   if (entrySeated(ctx, JUMP_SLOT, JUMP_ID)) return
   ctx.effect(() => {
-    return ctx.locale.register(NS, { zh: DICT_ZH, en: DICT_EN })
+    return ctx.locale.register(NS, DICTS)
   }, 'dsh-context: dictionaries')
   const t = ctx.locale.bind(NS)
 

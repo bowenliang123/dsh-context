@@ -1,7 +1,7 @@
 import { afterEach } from 'vitest'
 import { act, type ReactElement, type ReactNode } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
-import { DICT_EN, DICT_ZH } from '../../../src/client/i18n'
+import { DICTS } from '../../../src/client/i18n'
 import type { Translate } from '../../../src/client/i18n'
 import { makeViewKit, type ViewKit } from '../../../src/client/viewkit'
 import type { SurfaceNode } from '../../../src/shared/types'
@@ -14,16 +14,15 @@ export function surfaceNodeAt(seq: number, over: Partial<SurfaceNode> = {}): Sur
   return { seq, cat: 'user', tokens: 1, ...over }
 }
 
-export function makeTranslate(active: 'en' | 'zh' = 'en', dicts?: Record<string, Record<string, string>>): Translate {
-  const table: Record<string, Record<string, string>> = dicts ?? { zh: DICT_ZH, en: DICT_EN }
+export function makeTranslate(active = 'en', dicts: Record<string, Record<string, string>> = DICTS): Translate {
   return (key, params) => {
-    let s = table[active]?.[key] ?? table.en[key] ?? key
+    let s = dicts[active]?.[key] ?? dicts.en[key] ?? key
     if (params) for (const k in params) s = s.replace('{' + k + '}', String(params[k]))
     return s
   }
 }
 
-export function makeKit(active: 'en' | 'zh' = 'en'): ViewKit {
+export function makeKit(active = 'en'): ViewKit {
   return makeViewKit(makeTranslate(active))
 }
 

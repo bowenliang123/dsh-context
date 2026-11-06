@@ -2,7 +2,7 @@
 
 # dsh-context
 
-[English](README_en.md)
+[简体中文](README.md) · [English](README_en.md) · [日本語](README_ja.md) · [Español](README_es.md) · [Français](README_fr.md) · [Português](README_pt.md)
 
 [![npm version](https://img.shields.io/npm/v/dsh-context)](https://www.npmjs.com/package/dsh-context)
 [![GitHub stars](https://img.shields.io/github/stars/bowenliang123/dsh-context?style=social)](https://github.com/bowenliang123/dsh-context)
@@ -229,7 +229,7 @@ dsh plugin --profile web update dsh-context@latest
 - **缓存占用** — 插件只把每个会话的精简摘要（组成、计数、成本/耗时、模型信息）写入 dsh 的投影缓存；体量较大的逐事件明细（surface 文本、请求拆分、文件操作、命令程序、span）会在面板需要时从持久日志重新汇总，因此即使会话很长，缓存也能保持很小。明细视图均有上限（步骤 1500 · 轮次 300 · 事件 400 · surface 节点 2000 · 存档 400 · 文件操作 400 · 命令 400）。
 - **估算值与实际值** — 各类别数值采用 dsh 自身的固定密度启发式算法（与内置 Token 计量器相同）；在趋势图中固定某一步后，其明细会在估算值旁显示服务商报告的实际值，而 Token 卡片则将 ≈ 估算的组成占比与服务商精确报告的计费总量并列呈现。
 - **兼容性** — 通过同一条由数据形状驱动的代码路径，支持 V4 会话日志格式的 `@deepseek-ai/dsh` **0.2.0-rc.2 及更高版本**（`0.2.0` 与 `0.2.1` 系列已在各自的 rc.2 版本上验证，`0.2.2` 系列已在 alpha.3 预览版上验证）。各版本支持情况及验证方式见：[docs/compatibility.md](docs/compatibility.md)。
-- **国际化** — UI 支持英文和简体中文。
+- **国际化** — UI 支持简体中文、英语、日语、西班牙语、法语和葡萄牙语。
 
 ## 喜欢它？
 
