@@ -175,6 +175,7 @@ function baseline(id: BaselineId, tag: string, session: string, line: {
         guideEntry: {
           file: 'packages/client/ui-sidebar-right/src/client/tab-registry.ts',
           fields: [
+            'readonly id: string',
             'readonly order: number',
             'readonly title: () => string',
             'readonly description?: () => string',

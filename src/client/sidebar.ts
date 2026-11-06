@@ -28,6 +28,7 @@ export function watchSidebarContextTab(
         kind: SIDEBAR_CONTEXT_KIND,
         title: () => t('tab.context'),
         guide: [{
+          id: SIDEBAR_CONTEXT_ID,
           order: GUIDE_ORDER,
           title: () => t('tab.context'),
           description: () => t('sidebar.guideDescription'),

@@ -57,6 +57,7 @@ describe('watchSidebarContextTab — the optional registration', () => {
     assert.equal(def.kind, SIDEBAR_CONTEXT_KIND, 'the kind is namespaced so a foreign `context` cannot collide')
     assert.equal(def.title(), 'Context')
     assert.equal(def.guide?.length, 1)
+    assert.equal(def.guide?.[0].id, SIDEBAR_CONTEXT_ID, 'the guide entry carries the stable entry identity')
     assert.equal(def.guide?.[0].order, 20, 'after the shipped Files entry (order 10)')
     assert.equal(def.guide?.[0].title(), 'Context')
     assert.equal(def.guide?.[0].description?.(), DICT_EN['sidebar.guideDescription'])

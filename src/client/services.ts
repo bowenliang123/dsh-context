@@ -46,6 +46,7 @@ export function entrySeated(ctx: ClientCtx, name: string, id: string): boolean {
 }
 
 export interface SidebarGuideEntryLike {
+  id: string
   order: number
   title: () => string
   description?: () => string
