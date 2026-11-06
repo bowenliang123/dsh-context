@@ -10,7 +10,7 @@ A DeepSeek Harness plugin for context insight, actions, and management.
   - NPM: @deepseek-ai/dsh
   - MUST ensure the full clone of the DeepSeek Harness repository is available locally, before any work.
   - MUST always dive deep into the details of dsh source code and dependencies, for its mechanisms, lifecycles, and modules. Ensure every decision is based on the full and actual truth of the dsh source code.
-  - Local clone at `~/dev/deepseek-harness`: `git pull` on `main` to update, and run `pnpm install` after pulling or switching commit/tag. Commits and version tags are available for reference and diff.
+  - Local clone at `~/dev/deepseek-harness`: `git pull` on `master` to update, and run `pnpm install` after pulling or switching commit/tag. Commits and version tags are available for reference and diff.
 
 - DeepSeek Harness Plugin:
   - Reference docs: https://deepseek-harness.github.io/deepseek-harness/en/reference/
