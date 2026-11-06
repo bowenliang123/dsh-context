@@ -2,7 +2,7 @@
 
 # dsh-context
 
-[简体中文](https://github.com/bowenliang123/dsh-context/blob/main/README.md) · [English](https://github.com/bowenliang123/dsh-context/blob/main/README_en.md) · [日本語](https://github.com/bowenliang123/dsh-context/blob/main/README_ja.md) · [Español](https://github.com/bowenliang123/dsh-context/blob/main/README_es.md) · [Français](https://github.com/bowenliang123/dsh-context/blob/main/README_fr.md) · [Português](https://github.com/bowenliang123/dsh-context/blob/main/README_pt.md)
+[简体中文](https://github.com/bowenliang123/dsh-context/blob/main/README.md) · [English](https://github.com/bowenliang123/dsh-context/blob/main/README_en.md) · [日本語](https://github.com/bowenliang123/dsh-context/blob/main/README_ja.md) · [Español](https://github.com/bowenliang123/dsh-context/blob/main/README_es.md) · [Français](https://github.com/bowenliang123/dsh-context/blob/main/README_fr.md) · [Deutsch](https://github.com/bowenliang123/dsh-context/blob/main/README_de.md) · [Русский](https://github.com/bowenliang123/dsh-context/blob/main/README_ru.md) · [Português](https://github.com/bowenliang123/dsh-context/blob/main/README_pt.md)
 
 [![npm version](https://img.shields.io/npm/v/dsh-context)](https://www.npmjs.com/package/dsh-context)
 [![GitHub stars](https://img.shields.io/github/stars/bowenliang123/dsh-context?style=social)](https://github.com/bowenliang123/dsh-context)
@@ -184,27 +184,29 @@ Every shell and code run with its status, wall time, and step stamp, plus a sess
 
 ## 🚢 The Fleet tab
 
-Open any session and click the **Fleet / 编队** tab (right of **Context**) — the agent family on a page of its own, with room for the collaboration surfaces that follow:
+Open any session and click the **Fleet** tab (right of **Context**) — the agent family on a page of its own: a summary band, the **Agent Network** and **Cross-Agent Collaboration** cards, then **Teamwork Tasks** and **Event Inspection**.
 
-![The Fleet page for an eleven-agent team: summary, Agent Network, Fleet Members, and Tasks](https://raw.githubusercontent.com/bowenliang123/dsh-context/main/docs/fleet-overview.png)
+![The Fleet page for a six-agent team: fleet summary, Agent Network, Cross-Agent Collaboration, Teamwork Tasks, and Event Inspection](https://raw.githubusercontent.com/bowenliang123/dsh-context/main/docs/fleet-overview.png)
 
-A one-line summary opens the page — agents and their status, live context, estimated cost, and task progress — then hands the same family to four linked surfaces: **Agent Network**, **Fleet Members**, **Tasks**, and **Agent Comms**. Picking an agent on the graph or the member board narrows the tasks and channels to that agent, so the page answers for one member at a time.
+The summary band counts agents, running agents, work items, and messages. Picking an agent in the graph or a lane narrows the collaboration view to that agent, so the page answers for one member at a time.
 
 ### 🕸 Agent Network — the family portrait
 
-The current agent, its parents, and every subagent — one card per agent: its title, live context size and window occupancy, a composition bar, and how long it has run for and how many steps it has taken. Edges fan out from each parent in the lineage's color — hover a card to light its whole chain and read the full breakdown in the detail strip; click to jump into that session's own Context tab. Running agents breathe with a green pulse on their incoming edge and turn over the harness's own rolling spinner beside their title, which settles into the same green dot the header's subagent list uses once the work is done; narrow panes fold the family into tidy rows — never a horizontal scrollbar.
+The current agent, its parents, and every subagent — one card per agent: its title, live context size and window occupancy, a composition bar, and how long it has run for and how many steps it has taken. Edges fan out from each parent in the lineage's color — hover a card to light its whole chain and read the full breakdown in the detail strip; click a node to highlight it. Running agents breathe with a green pulse on their incoming edge and turn over the harness's own rolling spinner beside their title, which settles into the same green dot the header's subagent list uses once the work is done; narrow panes fold the family into tidy rows — never a horizontal scrollbar.
 
-### 👥 Fleet Members & Tasks — who is doing what
+### 🛰 Cross-Agent Collaboration — the family on one timeline
 
-Each roster member's card carries its role (lead or teammate), model, latest reply, run time and steps, and active task count; the family's other agents sit below in the same card shape. A card's buttons open that agent's chat in the sidebar or the whole view, search and the status chips narrow both sections, and the sort menu orders the other agents by spawn order, tokens, duration, steps, or recency. The **Tasks** board puts team tasks and subagent delegations in the same place — owner groups, status filters, and blocked-by links that light the whole prerequisite chain when you focus a task. Click a task to open its full description in place, raw or rendered, and the board scrolls it to the front under a sticky owner header.
+Each agent gets a lane on one timeline: inter-agent messages, team-task markers, and delegation records, with quiet lanes folded behind a toggle. Team-task numbers identify a task across lanes — repeated numbers are the same task — and hovering links the records that belong together. **Earliest / Latest** flips the order, the search box narrows the lanes, and clicking a task filters the timeline and reveals it.
 
-### 📡 Agent Comms — who said what to whom
+### ✅ Teamwork Tasks — who is doing what
 
-The comms card reads the family's session logs automatically — no scan step. Team relays, mailbox deliveries, and the runtime's settlement notices merge into channels: each card pairs the lead or current agent with one counterpart, labels both sides, and shows how many messages each side sent. The timeline names both parties and their roles. Clicking any message opens the full record inline below it — the session log it came from and its sequence, a notice when the runtime wrote the settlement rather than the child, the complete closing report (with its structured result or diagnostic), and participant cards that open that agent's chat in the sidebar or the whole view. Filter by message kind or text, flip the order, and the shared agent pick from the graph or member board narrows the whole hub; older history and clipped excerpts are disclosed instead of silently truncated.
+The **Teamwork Tasks** board puts team tasks and subagent delegations in one place — owner groups, status filters (All / In progress / Pending / Done), and blocked-by links that light the whole prerequisite chain when you focus a task. Each card carries its owner, brief, write scopes, and final reply; click a task to open its full description in place, raw or rendered.
 
-![Agent Comms with a settlement record expanded inline](https://raw.githubusercontent.com/bowenliang123/dsh-context/main/docs/fleet-comms.png)
+### 📡 Event Inspection — who said what to whom
 
-The right Sidebar's **Context** panel keeps the same card inline, so the family stays one click away while you read the chat. Don't want the tab at all? Turn **Fleet tab** off in the preferences card — the card then lives on in that panel, and the Context tab's family cell opens it there whenever a Sidebar is served.
+The **Event Inspection** card reads the family's session logs automatically — no scan step. Messages, reports, and delegation records filter into one stream: select a timeline node or a stream record to see the full record — the session log it came from and its sequence, a notice when the runtime wrote the settlement rather than the child, the complete closing report (with its structured result or diagnostic), and participant cards that open that agent's chat in the sidebar or the whole view. Filter by kind or text, and the shared agent pick narrows the whole hub.
+
+The right Sidebar's **Context** panel keeps the same family card inline, so the family stays one click away while you read the chat. Don't want the tab at all? Turn **Fleet tab** off in the preferences card — the card then lives on in that panel, and the Context tab's family cell opens it there whenever a Sidebar is served.
 
 ## ⌨️ `/context` command
 
@@ -231,7 +233,7 @@ The Context Insights preset buttons write the pick back as the stored default; e
 - **Cache footprint** — the plugin checkpoints only a compact per-session summary (composition, counts, cost/timing, model info) into dsh's projection cache; the heavy per-event details (surface text, request breakdowns, file ops, command programs, spans) are refolded from the durable log when a panel needs them, so the cache stays small even on long sessions. Detail views are bounded (steps 1500 · turns 300 · events 400 · surface nodes 2000 · archive 400 · file ops 400 · commands 400).
 - **Estimates vs actuals** — category figures use dsh's own fixed-density heuristic (the same one as its built-in token meter); the pinned trend details show provider-reported actuals next to them, and the Token card pairs its ≈-estimated composition shares with the provider-exact billed total.
 - **Compatibility** — works on `@deepseek-ai/dsh` from **0.2.0-rc.2** (the `0.2.0` and `0.2.1` lines verified on their rc.2 releases, and the `0.2.2` line on its rc.1 release), the V4 session-log generation, from one shape-driven code path. The per-release matrix and how it is verified: [docs/compatibility.md](docs/compatibility.md).
-- **I18n** — UI in 简体中文, English, 日本語, Español, Français, and Português (switching languages needs dsh 0.2.2+; earlier supported lines offer Chinese and English only).
+- **I18n** — UI in 简体中文, English, 日本語, Español, Français, Deutsch, Русский, and Português (switching languages needs dsh 0.2.2+; earlier supported lines offer Chinese and English only).
 
 ## Like it?
 

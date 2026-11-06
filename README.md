@@ -2,7 +2,7 @@
 
 # dsh-context
 
-[简体中文](https://github.com/bowenliang123/dsh-context/blob/main/README.md) · [English](https://github.com/bowenliang123/dsh-context/blob/main/README_en.md) · [日本語](https://github.com/bowenliang123/dsh-context/blob/main/README_ja.md) · [Español](https://github.com/bowenliang123/dsh-context/blob/main/README_es.md) · [Français](https://github.com/bowenliang123/dsh-context/blob/main/README_fr.md) · [Português](https://github.com/bowenliang123/dsh-context/blob/main/README_pt.md)
+[简体中文](https://github.com/bowenliang123/dsh-context/blob/main/README.md) · [English](https://github.com/bowenliang123/dsh-context/blob/main/README_en.md) · [日本語](https://github.com/bowenliang123/dsh-context/blob/main/README_ja.md) · [Español](https://github.com/bowenliang123/dsh-context/blob/main/README_es.md) · [Français](https://github.com/bowenliang123/dsh-context/blob/main/README_fr.md) · [Deutsch](https://github.com/bowenliang123/dsh-context/blob/main/README_de.md) · [Русский](https://github.com/bowenliang123/dsh-context/blob/main/README_ru.md) · [Português](https://github.com/bowenliang123/dsh-context/blob/main/README_pt.md)
 
 [![npm version](https://img.shields.io/npm/v/dsh-context)](https://www.npmjs.com/package/dsh-context)
 [![GitHub stars](https://img.shields.io/github/stars/bowenliang123/dsh-context?style=social)](https://github.com/bowenliang123/dsh-context)
@@ -180,29 +180,31 @@ dsh plugin --profile web update dsh-context@latest
 
 每次 Shell 和代码执行的状态、墙钟耗时与步骤定位，附带会话摘要、值得注意的快捷入口和程序分布。值得注意的事项与程序分布始终保持全局，只有搜索与状态筛选在收窄右侧列表。左侧每次点击都会把对应视角写入过滤框：点击程序会填入名称并高亮该行，再次点击则同时清除两者——过滤框始终反映当前生效的筛选。
 
-## 🚢 Fleet 标签页
+## 🚢 编队 Tab
 
-打开任意会话并点击 **Fleet / 编队** 标签页（位于 **Context** 右侧）——Agent 家族拥有自己的页面，为后续协作功能留出空间：
+打开任意会话，点击 **编队** Tab（**上下文** 右侧）——在一个独立页面查看 Agent 家族：顶部摘要条，下方是 **Agent 网络** 与 **跨 Agent 协作**，再往下是 **协作任务** 与 **事件检查**。
 
-![11 个 Agent 的编队总览：摘要、Agent 网络、编队成员与任务](https://raw.githubusercontent.com/bowenliang123/dsh-context/main/docs/fleet-overview.png)
+![6 个 Agent 的编队总览：编队摘要、Agent 网络、跨 Agent 协作、协作任务与事件检查](https://raw.githubusercontent.com/bowenliang123/dsh-context/main/docs/fleet-overview.png)
 
-页面顶部的编队摘要先给出 Agent 数量与状态、实时上下文、预估成本和任务进度，再把同一个家族交给四个联动区域：**Agent 网络**、**编队成员**、**任务**与**通讯记录**。在图谱或成员板上选中某个 Agent，任务与通讯通道会一并收窄到该 Agent，整页一次只回答一个成员的情况。
+摘要条统计 Agent 数、运行中、工作项与消息；在关系图或泳道中选中某个 Agent，协作视图会收窄到该成员，页面始终只回答一个成员的情况。
 
-### 🕸 Agent Network — 家族全景
+### 🕸 Agent 网络 —— 家族全景
 
-当前 Agent、它的父级以及所有子 Agent——每个 Agent 一张卡片，显示标题、实时上下文大小和窗口占用率、组成条，以及运行时长和已执行的步骤数。连线以各自血缘关系的颜色从父级展开；悬停在卡片上可高亮其整条关系链，并在详情栏查看完整明细；点击卡片可跳转至该会话自己的 Context 标签页。运行中的 Agent 会通过入边上的绿色脉冲和标题旁 Harness 自带的滚动指示器显示活动状态；任务完成后，指示器会变成与标题子 Agent 列表相同的绿色圆点。面板较窄时，家族会折叠成整齐的行——不会出现横向滚动条。
+当前 Agent、其父级与每个子 Agent —— 每个 Agent 一张卡片：标题、实时上下文大小与窗口占用、构成条，以及运行时长和步数。连线从每个父级按谱系颜色展开——悬停卡片会点亮整条链路，并在详情条中显示完整拆分；点击节点会高亮该节点。运行中的 Agent 在入边上有绿色脉冲，标题旁转动 harness 自己的滚动加载指示器；完成后落定为与头部子 Agent 列表相同的绿点。窄面板会把家族折成整齐的行——绝不出现横向滚动条。
 
-### 👥 编队成员与任务 — 谁在做什么
+### 🛰 跨 Agent 协作 —— 家族在同一条时间线上
 
-每张团队成员卡显示角色（主控或队友）、运行模型、最新回复、运行时长与步数，以及进行中的任务数；其余 Agent 以同样的卡片列在下方。卡片上的按钮可把该 Agent 的聊天打开到侧边栏或整页；搜索和状态筛选同时收窄两段名单，排序菜单可把其余 Agent 按派生顺序、Token、时长、步数或最近活动排序。下方的 **任务** 板把团队任务与子 Agent 派发放在同一处：按负责人分组、可按状态筛选；聚焦某个任务时，整条阻塞前置链会一起点亮。点击任务即可原地展开完整描述（原文 / Markdown），任务板会把它滚动到最前，分组标题固定在顶部。
+协作卡片为每个 Agent 铺一条泳道，把消息流、任务标记与委派记录放到同一条时间线上；安静的泳道可一键收起。任务编号在泳道间标识同一个任务——重复编号即同一任务——悬停会联动相关记录。**最早 / 最新** 可切换顺序，搜索框收窄泳道；点击任务可筛选时间线并定位该任务。
 
-### 📡 通讯记录 — 谁在和谁说什么
+### ✅ 协作任务 —— 谁在做什么
 
-通讯卡片会自动读取编队的会话日志，不再需要手动扫描。团队私信、邮箱投递与运行时的结算通知会合并成一条条通道：每张通道卡把主控（或当前 Agent）与一个对话方配对，写明双方身份，并显示双方各发了多少条消息。时间线同样标明双方与角色。点击任意一条消息，完整记录会在它下方内联展开——来源会话日志与序号、对运行时结算记录（而非子 Agent 直接消息）的提示、完整的完成报告（含结构化结果或诊断），以及可直接打开对方聊天（侧边栏或整页）的参与者卡片。可以按消息类型或文本搜索、切换排序；图谱和成员板上的共享选择也会收窄整个通讯区域。较早的历史与被截断的摘录会明确标注，而不是悄悄省略。
+**协作任务** 面板把团队任务与子 Agent 委派放在同一处——所属分组、状态筛选（全部 / 进行中 / 待处理 / 已完成），以及聚焦任务时点亮整条前置依赖链的 blocked-by 链接。每张卡片带有归属 Agent、任务简报、写入范围与最终回报；点击任务可在原处展开完整描述，支持原文或渲染视图。
 
-![展开一条结算记录的通讯记录](https://raw.githubusercontent.com/bowenliang123/dsh-context/main/docs/fleet-comms.png)
+### 📡 事件检查 —— 谁对谁说了什么
 
-右侧 Sidebar 的 **Context** 面板会内嵌相同的卡片，因此你阅读聊天时，Agent 家族始终只需点击一次即可查看。如果不需要该标签页，可在 Preferences 卡片中关闭 **Fleet tab**——卡片仍会保留在该面板中；只要 Harness 提供 Sidebar，Context 标签页中的家族单元格也会在此处打开它。
+**事件检查** 卡片自动读取家族的会话日志——无需扫描步骤。消息、报告与委派记录汇入同一条可筛选的流：选择时间线节点或流中记录即可查看完整记录——它来自哪个会话日志及其序号、何时由运行时而非子 Agent 写入结算、完整收尾报告（含结构化结果或诊断），以及可打开该 Agent 侧边栏聊天或完整视图的参与者卡片。可按类型或文本筛选，共享的 Agent 选择会收窄整个中枢。
+
+右侧边栏的 **上下文** 面板也内嵌同一张卡片，阅读聊天时家族始终一键可达。完全不需要这个 Tab？在偏好设置卡片中关闭 **编队 Tab**——卡片会继续留在该面板中，上下文 Tab 的家族单元会在有侧边栏时打开它。
 
 ## ⌨️ `/context` 命令
 
@@ -229,7 +231,7 @@ dsh plugin --profile web update dsh-context@latest
 - **缓存占用** — 插件只把每个会话的精简摘要（组成、计数、成本/耗时、模型信息）写入 dsh 的投影缓存；体量较大的逐事件明细（surface 文本、请求拆分、文件操作、命令程序、span）会在面板需要时从持久日志重新汇总，因此即使会话很长，缓存也能保持很小。明细视图均有上限（步骤 1500 · 轮次 300 · 事件 400 · surface 节点 2000 · 存档 400 · 文件操作 400 · 命令 400）。
 - **估算值与实际值** — 各类别数值采用 dsh 自身的固定密度启发式算法（与内置 Token 计量器相同）；在趋势图中固定某一步后，其明细会在估算值旁显示服务商报告的实际值，而 Token 卡片则将 ≈ 估算的组成占比与服务商精确报告的计费总量并列呈现。
 - **兼容性** — 通过同一条由数据形状驱动的代码路径，支持 V4 会话日志格式的 `@deepseek-ai/dsh` **0.2.0-rc.2 及更高版本**（`0.2.0` 与 `0.2.1` 系列已在各自的 rc.2 版本上验证，`0.2.2` 系列已在 rc.1 版本上验证）。各版本支持情况及验证方式见：[docs/compatibility.md](docs/compatibility.md)。
-- **国际化** — UI 支持简体中文、英语、日语、西班牙语、法语和葡萄牙语（切换语言需 dsh 0.2.2+；更早的支持版本仅提供中文和英语）。
+- **国际化** — UI 支持简体中文、英语、日语、西班牙语、法语、德语、俄语和葡萄牙语（切换语言需 dsh 0.2.2+；更早的支持版本仅提供中文和英语）。
 
 ## 喜欢它？
 

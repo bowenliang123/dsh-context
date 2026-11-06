@@ -2,7 +2,7 @@
 
 # dsh-context
 
-[简体中文](https://github.com/bowenliang123/dsh-context/blob/main/README.md) · [English](https://github.com/bowenliang123/dsh-context/blob/main/README_en.md) · [日本語](https://github.com/bowenliang123/dsh-context/blob/main/README_ja.md) · [Español](https://github.com/bowenliang123/dsh-context/blob/main/README_es.md) · [Français](https://github.com/bowenliang123/dsh-context/blob/main/README_fr.md) · [Português](https://github.com/bowenliang123/dsh-context/blob/main/README_pt.md)
+[简体中文](https://github.com/bowenliang123/dsh-context/blob/main/README.md) · [English](https://github.com/bowenliang123/dsh-context/blob/main/README_en.md) · [日本語](https://github.com/bowenliang123/dsh-context/blob/main/README_ja.md) · [Español](https://github.com/bowenliang123/dsh-context/blob/main/README_es.md) · [Français](https://github.com/bowenliang123/dsh-context/blob/main/README_fr.md) · [Deutsch](https://github.com/bowenliang123/dsh-context/blob/main/README_de.md) · [Русский](https://github.com/bowenliang123/dsh-context/blob/main/README_ru.md) · [Português](https://github.com/bowenliang123/dsh-context/blob/main/README_pt.md)
 
 [![versão do npm](https://img.shields.io/npm/v/dsh-context)](https://www.npmjs.com/package/dsh-context)
 [![estrelas no GitHub](https://img.shields.io/github/stars/bowenliang123/dsh-context?style=social)](https://github.com/bowenliang123/dsh-context)
@@ -184,27 +184,29 @@ Cada execução de shell e código com seu status, tempo de execução e marca d
 
 ## 🚢 A aba Frota
 
-Abra qualquer sessão e clique na aba **Frota** (à direita de **Contexto**) — a família de agentes em uma página própria, com espaço para as superfícies de colaboração seguintes:
+Abra qualquer sessão e clique na aba **Frota** (à direita de **Contexto**) — a família de agentes em uma página própria: uma faixa de resumo, os cartões **Rede de agentes** e **Colaboração entre agentes**, e abaixo **Tarefas de trabalho em equipe** e **Inspeção de eventos**.
 
-![A página Frota para uma equipe de onze agentes: resumo, Rede de agentes, Membros da frota e Tarefas](https://raw.githubusercontent.com/bowenliang123/dsh-context/main/docs/fleet-overview.png)
+![A página Frota para uma equipe de seis agentes: resumo da frota, Rede de agentes, Colaboração entre agentes, Tarefas de trabalho em equipe e Inspeção de eventos](https://raw.githubusercontent.com/bowenliang123/dsh-context/main/docs/fleet-overview.png)
 
-Um resumo de uma linha abre a página — agentes e seus status, contexto ao vivo, custo estimado e progresso das tarefas — e depois entrega a mesma família a quatro superfícies vinculadas: **Rede de agentes**, **Membros da frota**, **Tarefas** e **Comunicação de agentes**. Selecionar um agente no grafo ou no quadro de membros restringe as tarefas e os canais àquele agente, para que a página responda por um membro de cada vez.
+A faixa de resumo conta agentes, agentes em execução, itens de trabalho e mensagens. Escolher um agente no grafo ou em uma faixa restringe a visão de colaboração a esse agente, então a página responde por um membro de cada vez.
 
 ### 🕸 Rede de agentes — o retrato da família
 
-O agente atual, seus pais e todos os subagentes — um cartão por agente: seu título, tamanho do contexto ao vivo e ocupação da janela, uma barra de composição, e há quanto tempo está em execução e quantas etapas realizou. As arestas se abrem a partir de cada pai na cor da linhagem — passe o mouse sobre um cartão para destacar toda a sua cadeia e ler o detalhamento completo na faixa de detalhes; clique para saltar para a aba Contexto da própria sessão. Agentes em execução pulsam em verde na aresta de entrada e giram o spinner do próprio harness ao lado do título, que se transforma no mesmo ponto verde usado pela lista de subagentes do cabeçalho quando o trabalho termina; painéis estreitos dobram a família em linhas organizadas — nunca uma barra de rolagem horizontal.
+O agente atual, seus pais e cada subagente — um cartão por agente: seu título, o tamanho do contexto ao vivo e a ocupação da janela, uma barra de composição, e há quanto tempo está em execução e quantos passos deu. As arestas saem de cada pai na cor da linhagem — passe o mouse sobre um cartão para iluminar toda a sua cadeia e ler o detalhamento completo na faixa de detalhes; clique em um nó para destacá-lo. Agentes em execução respiram com um pulso verde na aresta de entrada e giram o próprio indicador rotativo do harness ao lado do título, que se assenta no mesmo ponto verde que a lista de subagentes do cabeçalho usa quando o trabalho termina; painéis estreitos dobram a família em linhas organizadas — nunca uma barra de rolagem horizontal.
 
-### 👥 Membros da frota e Tarefas — quem está fazendo o quê
+### 🛰 Colaboração entre agentes — a família em uma única linha do tempo
 
-O cartão de cada membro traz sua função (líder ou membro da equipe), modelo, última resposta, tempo de execução e etapas, e contagem de tarefas ativas; os outros agentes da família ficam abaixo no mesmo formato de cartão. Os botões de um cartão abrem o chat daquele agente na barra lateral ou na visualização inteira, a pesquisa e os chips de status restringem ambas as seções, e o menu de ordenação organiza os outros agentes por ordem de criação, tokens, duração, etapas ou recência. O quadro **Tarefas** reúne tarefas da equipe e delegações de subagentes no mesmo lugar — grupos de responsáveis, filtros de status e links de bloqueio que destacam toda a cadeia de pré-requisitos quando você focaliza uma tarefa. Clique em uma tarefa para abrir sua descrição completa no local, bruta ou renderizada, e o quadro a rola para a frente sob um cabeçalho fixo do responsável.
+Cada agente ganha uma faixa em uma linha do tempo única: mensagens entre agentes, marcadores de tarefas da equipe e registros de delegação, com as faixas silenciosas recolhidas atrás de um botão. Números de tarefa identificam uma tarefa entre faixas — números repetidos são a mesma tarefa — e passar o mouse vincula os registros que andam juntos. **Earliest / Latest** inverte a ordem, a busca restringe as faixas e clicar em uma tarefa filtra a linha do tempo e a revela.
 
-### 📡 Comunicação de agentes — quem disse o quê a quem
+### ✅ Tarefas de trabalho em equipe — quem está fazendo o quê
 
-O cartão de comunicação lê automaticamente os logs de sessão da família — sem etapa de varredura. Retransmissões da equipe, entregas na caixa de correio e avisos de encerramento do runtime são reunidos em canais: cada cartão emparelha o líder ou agente atual com um interlocutor, identifica ambos os lados e mostra quantas mensagens cada lado enviou. A linha do tempo nomeia as duas partes e suas funções. Clicar em qualquer mensagem abre o registro completo logo abaixo — o log da sessão de origem e sua sequência, um aviso quando o runtime escreveu o encerramento em vez do filho, o relatório final completo (com seu resultado estruturado ou diagnóstico) e cartões de participantes que abrem o chat daquele agente na barra lateral ou na visualização inteira. Filtre por tipo ou texto da mensagem, inverta a ordem, e a seleção compartilhada de agente do grafo ou quadro de membros restringe todo o hub; histórico mais antigo e trechos cortados são informados em vez de truncados silenciosamente.
+O quadro **Tarefas de trabalho em equipe** reúne tarefas da equipe e delegações a subagentes — grupos por proprietário, filtros de status (Todas / Em andamento / Pendentes / Concluídas) e links de bloqueio que acendem toda a cadeia de pré-requisitos ao focar uma tarefa. Cada cartão traz seu proprietário, resumo, escopos de escrita e resposta final; clique em uma tarefa para abrir sua descrição completa no local, bruta ou renderizada.
 
-![Comunicação de agentes com um registro de encerramento expandido no local](https://raw.githubusercontent.com/bowenliang123/dsh-context/main/docs/fleet-comms.png)
+### 📡 Inspeção de eventos — quem disse o quê a quem
 
-O painel **Contexto** da barra lateral direita mantém o mesmo cartão no local, para que a família fique a um clique enquanto você lê o chat. Não quer a aba? Desative **Aba Frota** no cartão de preferências — o cartão continua naquele painel, e a célula da família na aba Contexto o abre ali sempre que uma barra lateral estiver disponível.
+O cartão **Inspeção de eventos** lê os logs de sessão da família automaticamente — sem etapa de varredura. Mensagens, relatórios e registros de delegação se filtram em um único fluxo: selecione um nó da linha do tempo ou um registro do fluxo para ver o registro completo — o log de sessão de onde veio e sua sequência, um aviso quando o runtime escreveu o encerramento em vez do filho, o relatório de encerramento completo (com seu resultado estruturado ou diagnóstico) e cartões de participantes que abrem o chat desse agente na barra lateral ou na visão completa. Filtre por tipo ou texto, e a seleção compartilhada de agente restringe todo o hub.
+
+O painel **Contexto** da barra lateral direita mantém o mesmo cartão inline, então a família fica a um clique enquanto você lê o chat. Não quer a aba? Desative **Aba Frota** no cartão de preferências — o cartão continua vivendo nesse painel, e a célula de família da aba Contexto o abre ali sempre que uma barra lateral é servida.
 
 ## ⌨️ Comando `/context`
 
@@ -231,7 +233,7 @@ Os botões de predefinição dos Insights de contexto gravam a escolha como padr
 - **Pegada do cache** — o plugin salva checkpoints apenas de um resumo compacto por sessão (composição, contagens, custo/tempo, informações do modelo) no cache de projeção do dsh; os detalhes pesados por evento (texto das superfícies, detalhamentos de requisições, operações de arquivos, programas de comandos, intervalos) são reconstituídos a partir do log durável quando um painel precisa deles, para que o cache permaneça pequeno mesmo em sessões longas. As visualizações de detalhes são limitadas (etapas 1500 · turnos 300 · eventos 400 · nós de superfície 2000 · arquivo 400 · operações de arquivos 400 · comandos 400).
 - **Estimativas versus valores reais** — os valores por categoria usam a própria heurística de densidade fixa do dsh (a mesma do seu medidor de tokens integrado); os detalhes fixados da tendência mostram os valores reais informados pelo provedor ao lado deles, e o cartão Tokens combina suas participações de composição estimadas com ≈ ao total faturado exato do provedor.
 - **Compatibilidade** — funciona com `@deepseek-ai/dsh` a partir de **0.2.0-rc.2** (as linhas `0.2.0` e `0.2.1` verificadas em suas versões rc.2, e a linha `0.2.2` em sua versão rc.1), a geração de log de sessão V4, por um único caminho de código orientado pela estrutura. A matriz por versão e como ela é verificada: [docs/compatibility.md](docs/compatibility.md).
-- **I18n** — interface em 简体中文, English, 日本語, Español, Français e Português (trocar de idioma exige dsh 0.2.2+; as linhas suportadas anteriores oferecem apenas chinês e inglês).
+- **I18n** — interface em 简体中文, English, 日本語, Español, Français, Deutsch, Русский e Português (trocar de idioma exige dsh 0.2.2+; as linhas suportadas anteriores oferecem apenas chinês e inglês).
 
 ## Gostou?
 
