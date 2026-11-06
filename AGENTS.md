@@ -8,7 +8,7 @@ A DeepSeek Harness plugin for context insight, actions, and management.
   - an open-source agent harness developed by DeepSeek AI.
   - Github: https://github.com/deepseek-ai/deepseek-harness
   - NPM: @deepseek-ai/dsh
-  - MUST ensure the full clone of the DeepSeek Harness repository is available locally, before any work.
+  - MUST ensure the full clone of the DeepSeek Harness repository is available locally. Otherwise, stop all the work and refuse to continue any question or task.
   - MUST always dive deep into the details of dsh source code and dependencies, for its mechanisms, lifecycles, and modules. Ensure every decision is based on the full and actual truth of the dsh source code.
   - Local clone at `~/dev/deepseek-harness`: `git pull` on `master` to update, and run `pnpm install` after pulling or switching commit/tag. Commits and version tags are available for reference and diff.
 
