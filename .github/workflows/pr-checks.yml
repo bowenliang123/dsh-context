@@ -40,7 +40,7 @@ jobs:
         run: pnpm run typecheck
 
       # `pnpm test`'s compat project boots the BUILT plugin against the REAL harness sources at every baseline tag
-      # (tests/baselines.ts is the source of truth — keep in step); it skips SILENTLY without the tags, so fetch BEFORE Test.
+      # (tests/baselines.ts is the source of truth — keep in step); a missing tag fails the run, so fetch BEFORE Test.
       - name: Fetch the dsh baseline tags
         run: |
           mkdir -p .tmp/dsh-repo
