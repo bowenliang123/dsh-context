@@ -124,8 +124,6 @@ Complete ALL of these before ANY commit:
     - ja: Japanese, use zh as source for translation, prefer Kanji(漢字) over Hiragana(ひらがな) and Katakana(カタカナ)
     - es: Español
     - fr: Français
-    - de: Deutsch
-    - ru: Русский
     - pt: Português
 
 ## Docs
