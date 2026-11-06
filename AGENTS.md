@@ -114,6 +114,7 @@ Complete ALL of these before ANY commit:
 - Be concise and clear in all languages, and avoid unnecessary verbosity.
 - Prefer similar terms or phasing used by DeepSeek Harness.
 - Drop the deprecated or unused language keys.
+- Must ensure all the supported languages are fully translated.
 - Supported languages for UI elements and README
   - Primarily source languages: 
     - zh: Chinese (Simplified) 
