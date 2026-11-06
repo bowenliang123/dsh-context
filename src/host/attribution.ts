@@ -106,14 +106,14 @@ export function createToolAttribution(ctx: Context): ToolAttribution {
     wrapped.add(tools)
     const original = (register as { attributedOriginal?: unknown }).attributedOriginal ?? register
     if (typeof original !== 'function') return
-    const instance = tools as { register: (this: unknown, definition?: { name?: unknown }) => unknown }
-    const wrappedRegister = function (this: unknown, definition?: { name?: unknown }) {
+    const instance = tools as { register: (this: unknown, definition?: { name?: unknown }, ...args: unknown[]) => unknown }
+    const wrappedRegister = function (this: unknown, definition?: { name?: unknown }, ...args: unknown[]) {
       const toolName = definition?.name
       let owner = lastReader
       if (!owner || owner === 'root' || owner === self) {
         owner = callerPackageFrom(new Error().stack)
       }
-      const dispose = (original as (this: unknown, definition?: unknown) => unknown).call(this, definition)
+      const dispose: unknown = Reflect.apply(original, this, [definition, ...args])
       if (typeof toolName === 'string' && owner && owner !== 'root' && owner !== self && owner !== selfPackage) {
         live.set(toolName, owner)
         if (typeof dispose === 'function') {

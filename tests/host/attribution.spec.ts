@@ -61,6 +61,34 @@ describe('createToolAttribution', () => {
     assert.equal(attribution.ownerOf('beta'), 'provider-a')
   })
 
+  test('forwards registration options and keeps the disposer attribution', async () => {
+    const app = new Context()
+    const seen: unknown[][] = []
+    let receiver: unknown
+    const fake = {
+      register(this: unknown, ...args: unknown[]) {
+        receiver = this
+        seen.push(args)
+        return () => {}
+      },
+    }
+    app.provide('tools', fake)
+    const attribution = createToolAttribution(app)
+    const when = () => true
+    let release: (() => void) | undefined
+    await app.plugin({
+      name: 'gated-provider',
+      apply(sub) {
+        release = (sub as any).tools.register({ name: 'gated' }, { when })
+      },
+    })
+    assert.deepEqual(seen, [[{ name: 'gated' }, { when }]], 'the definition and its registration options both reach the original')
+    assert.equal(receiver, fake, 'the original register keeps its receiver')
+    assert.equal(attribution.ownerOf('gated'), 'gated-provider')
+    release?.()
+    assert.equal(attribution.ownerOf('gated'), undefined, 'the forwarded call still returns the wrapped disposer')
+  })
+
   test('falls back to the caller stack when no tools read happened', async () => {
     const app = new Context()
     const fake = { register() { return () => {} } }
