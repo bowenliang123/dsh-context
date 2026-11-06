@@ -17,8 +17,8 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
-      - name: Check the DeeSeek Harness plugin
-        # `dshVersion` defaults to `latest`, which serves the 0.2.1 line (0.2.1-rc.5); the 0.2.2 previews publish under `alpha`.
+      - name: Check the DeepSeek Harness plugin
+        # `dshVersion` defaults to npm `latest`, so this checks one line at a time; the per-line manual pass is in docs/compatibility.md (Verification).
         uses: bowenliang123/dsh-plugin-checker@v1
 
       # No `packageManager` field in this plugin's package.json, so both workflows pin the version explicitly.
