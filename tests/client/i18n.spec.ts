@@ -9,7 +9,7 @@ function placeholders(s: string): string[] {
 describe('dictionaries', () => {
   test('every supported locale has the complete key set and non-empty values', () => {
     const keys = Object.keys(DICT_EN).sort()
-    assert.deepEqual(Object.keys(DICTS).sort(), ['en', 'es', 'fr', 'ja', 'pt', 'zh'])
+    assert.deepEqual(Object.keys(DICTS).sort(), ['de', 'en', 'es', 'fr', 'ja', 'pt', 'ru', 'zh'])
     for (const [locale, dict] of Object.entries(DICTS)) {
       assert.deepEqual(Object.keys(dict).sort(), keys, locale)
       for (const [key, value] of Object.entries(dict)) {

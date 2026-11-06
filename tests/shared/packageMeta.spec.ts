@@ -1,4 +1,5 @@
 import { readFile, readdir } from 'node:fs/promises'
+import { DICTS } from '../../src/client/i18n'
 import assert from 'node:assert/strict'
 import { describe, test } from 'vitest'
 
@@ -9,7 +10,7 @@ interface PackageManifest {
 }
 
 const manifest = JSON.parse(await readFile('package.json', 'utf8')) as PackageManifest
-const locales = ['en', 'es', 'fr', 'ja', 'pt', 'zh']
+const locales = Object.keys(DICTS).sort()
 
 describe('package meta localization', () => {
   test('every supported locale ships, resolves, and carries well-formed meta', async () => {
