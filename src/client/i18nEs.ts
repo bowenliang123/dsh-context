@@ -603,7 +603,7 @@ export const DICT_ES = {
   'attach.raw': 'Original',
   'attach.sent': 'Enviado',
   'attach.token': 'Token',
-  'attach.imageTokensTip': 'Coste estimado en tokens mediante la conversión oficial de DeepSeek según el tamaño de la imagen (límite de 384 tokens por imagen)',
+  'attach.imageTokensTip': 'Coste estimado en tokens mediante la conversión oficial de DeepSeek según el tamaño de la imagen (límite de {cap} tokens por imagen)',
   'attach.fileTokensTip': 'Estimación: el modelo recibe un identificador con el nombre del archivo, su tamaño y un prefijo de 8 caracteres del hash SHA-256; nunca su contenido, por lo que el coste apenas varía con el tamaño del archivo',
   'ov.title': 'Análisis del contexto',
   'ov.unavailable': 'La lista de sesiones no está disponible',

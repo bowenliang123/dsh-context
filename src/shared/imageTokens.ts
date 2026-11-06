@@ -1,111 +1,107 @@
 const PATCH_SIZE = 14
 const DOWNSAMPLE_RATIO = 3
-const MAX_TOKENS = 384
-const COMPRESS_PAD_TO = 4
-const MAX_WH_RATIO = 8
-const MIN_PIXELS = 147456
+export const MAX_IMAGE_TOKENS = 1024
+const MIN_PIXELS = 544 * 544
+const CELL_SIZE = PATCH_SIZE * DOWNSAMPLE_RATIO
 
-const floorDiv = (a: number, b: number): number => Math.floor(a / b)
-const ceilDiv = (a: number, b: number): number => Math.floor((a + b - 1) / b)
+const intDiv = (value: number, divisor: number): number => Math.floor(value / divisor)
+const ceilDiv = (value: number, divisor: number): number => Math.floor((value + divisor - 1) / divisor)
 
-function gridTokens(rows: number, cols: number): number {
-  let n = rows * (cols + 1) + 2
-  if (rows % 2 === 1) n += cols + 1
-  n += (ceilDiv(rows, 2) * (cols + 1) % 2) * 2
-  return n
-}
-
-interface ResizeSolution {
-  nLlmH: number
-  nLlmW: number
+interface GridResize {
+  gridHeight: number
+  gridWidth: number
   bestHeight: number
   bestWidth: number
   numTokens: number
 }
 
-function solveResizeRatio(height: number, width: number, budget: number): ResizeSolution {
-  const ratio = height / width
-  const gridW = Math.sqrt((budget - 2) / ratio + 0.25) - 0.5
-  const gridH = gridW * ratio
-  const unit = PATCH_SIZE * DOWNSAMPLE_RATIO
+function gridTokens(gridHeight: number, gridWidth: number): number {
+  return gridHeight * (gridWidth + 1) + 2
+}
+
+function gridCells(paddedLength: number): number {
+  return ceilDiv(intDiv(paddedLength, PATCH_SIZE), DOWNSAMPLE_RATIO)
+}
+
+function solveResizeRatio(height: number, width: number, budget: number): GridResize {
+  const aspect = height / width
+  const idealGridWidth = Math.sqrt((budget - 2) / aspect + 0.25) - 0.5
+  const idealGridHeight = idealGridWidth * aspect
   let bestHeight: number
   let bestWidth: number
-  if (gridW < 1) {
-    let rows = floorDiv(budget - 2, 2)
-    /* v8 ignore else */
-    if (rows % 2 === 1) rows -= 1
-    bestWidth = unit
-    bestHeight = rows * unit
-  /* v8 ignore start */
-  } else if (gridH < 2) {
-    const cols = floorDiv(budget - 2, 2) - 1
-    if (cols <= 1) throw new Error('image tokens: budget too small to solve')
-    bestHeight = 2 * unit
-    bestWidth = cols * unit
-  /* v8 ignore stop */
+  if (idealGridWidth < 1) {
+    const solvedGridWidth = 1
+    const solvedGridHeight = intDiv(budget - 2, solvedGridWidth + 1)
+    bestWidth = solvedGridWidth * CELL_SIZE
+    bestHeight = solvedGridHeight * CELL_SIZE
+  } else if (idealGridHeight < 1) {
+    const solvedGridHeight = 1
+    const solvedGridWidth = intDiv(budget - 2, solvedGridHeight) - 1
+    bestWidth = solvedGridWidth * CELL_SIZE
+    bestHeight = solvedGridHeight * CELL_SIZE
   } else {
-    const cols = Math.trunc(gridW)
-    let rows = Math.trunc(gridH)
-    if (rows % 2 === 1) rows -= 1
-    const scale = Math.min(cols * unit / width, rows * unit / height)
+    const solvedGridWidth = Math.trunc(idealGridWidth)
+    const solvedGridHeight = Math.trunc(idealGridHeight)
+    const scale = Math.min(solvedGridWidth * CELL_SIZE / width, solvedGridHeight * CELL_SIZE / height)
     bestWidth = Math.trunc(width * scale / PATCH_SIZE) * PATCH_SIZE
     bestHeight = Math.trunc(height * scale / PATCH_SIZE) * PATCH_SIZE
   }
-  const nLlmH = ceilDiv(floorDiv(bestHeight, PATCH_SIZE), DOWNSAMPLE_RATIO)
-  const nLlmW = ceilDiv(floorDiv(bestWidth, PATCH_SIZE), DOWNSAMPLE_RATIO)
-  return { nLlmH, nLlmW, bestHeight, bestWidth, numTokens: gridTokens(nLlmH, nLlmW) }
+  const gridHeight = gridCells(bestHeight)
+  const gridWidth = gridCells(bestWidth)
+  return { gridHeight, gridWidth, bestHeight, bestWidth, numTokens: gridTokens(gridHeight, gridWidth) }
 }
 
-function safeResize(height: number, width: number, paddedHeight: number, paddedWidth: number): ResizeSolution {
-  const nLlmH = ceilDiv(floorDiv(paddedHeight, PATCH_SIZE), DOWNSAMPLE_RATIO)
-  const nLlmW = ceilDiv(floorDiv(paddedWidth, PATCH_SIZE), DOWNSAMPLE_RATIO)
-  const pad = COMPRESS_PAD_TO - 1
-  const budget = MAX_TOKENS - pad
-  let result: ResizeSolution = {
-    nLlmH,
-    nLlmW,
+function safeResize(height: number, width: number, paddedHeight: number, paddedWidth: number): GridResize {
+  const gridHeight = gridCells(paddedHeight)
+  const gridWidth = gridCells(paddedWidth)
+  const direct: GridResize = {
+    gridHeight,
+    gridWidth,
     bestHeight: paddedHeight,
     bestWidth: paddedWidth,
-    numTokens: gridTokens(nLlmH, nLlmW),
+    numTokens: gridTokens(gridHeight, gridWidth),
   }
-  if (result.numTokens > budget) {
-    result = solveResizeRatio(height, width, budget)
-    let nextBudget = budget
-    while (result.numTokens > budget) {
-      nextBudget -= 1
-      result = solveResizeRatio(height, width, nextBudget)
-    }
+  if (direct.numTokens <= MAX_IMAGE_TOKENS) return direct
+  const solved = solveResizeRatio(height, width, MAX_IMAGE_TOKENS)
+  /* v8 ignore next 3 */
+  if (solved.numTokens > MAX_IMAGE_TOKENS) {
+    throw new Error(`image tokens: no grid fits ${width}x${height}`)
   }
-  result.numTokens += pad
-  return result
+  return solved
 }
 
-function calcResizeInner(width: number, height: number): ResizeSolution {
-  let w = width
-  let h = height
-  if (w > h * MAX_WH_RATIO) w = h * MAX_WH_RATIO
-  const pixels = w * h
+function resizeOnce(width: number, height: number): GridResize {
+  let scaledWidth = width
+  let scaledHeight = height
+  const pixels = scaledWidth * scaledHeight
   if (pixels < MIN_PIXELS && pixels > 0) {
     const scale = Math.sqrt(MIN_PIXELS / pixels)
-    w = Math.trunc(w * scale)
-    h = Math.trunc(h * scale)
+    scaledWidth = Math.trunc(scaledWidth * scale)
+    scaledHeight = Math.trunc(scaledHeight * scale)
   }
-  const paddedWidth = ceilDiv(w, PATCH_SIZE) * PATCH_SIZE
-  const paddedHeight = ceilDiv(h, PATCH_SIZE) * PATCH_SIZE
-  return safeResize(h, w, paddedHeight, paddedWidth)
+  const paddedWidth = ceilDiv(scaledWidth, PATCH_SIZE) * PATCH_SIZE
+  const paddedHeight = ceilDiv(scaledHeight, PATCH_SIZE) * PATCH_SIZE
+  return safeResize(scaledHeight, scaledWidth, paddedHeight, paddedWidth)
+}
+
+function sameResize(a: GridResize, b: GridResize): boolean {
+  return a.gridHeight === b.gridHeight
+    && a.gridWidth === b.gridWidth
+    && a.bestHeight === b.bestHeight
+    && a.bestWidth === b.bestWidth
+    && a.numTokens === b.numTokens
 }
 
 export function estimateImageTokens(width: number, height: number): number | null {
   if (!Number.isFinite(width) || !Number.isFinite(height) || width <= 0 || height <= 0) return null
   try {
-    let result = calcResizeInner(width, height)
-    for (let i = 1; i < 10; i++) {
-      const next = calcResizeInner(result.bestWidth, result.bestHeight)
-      if (next.nLlmH === result.nLlmH && next.nLlmW === result.nLlmW
-        && next.bestHeight === result.bestHeight && next.bestWidth === result.bestWidth
-        && next.numTokens === result.numTokens) return result.numTokens
+    let result = resizeOnce(width, height)
+    for (let iteration = 1; iteration < 10; iteration += 1) {
+      const next = resizeOnce(result.bestWidth, result.bestHeight)
+      if (sameResize(next, result)) return result.numTokens
       result = next
     }
+    /* v8 ignore next */
     return null
   } catch {
     /* v8 ignore next */

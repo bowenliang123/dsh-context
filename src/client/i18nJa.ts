@@ -603,7 +603,7 @@ export const DICT_JA = {
   'attach.raw': '元画像',
   'attach.sent': '送信済み',
   'attach.token': 'Token',
-  'attach.imageTokensTip': 'DeepSeek 公式の画像サイズ換算（1 画像あたり上限 384 Token）による推定 Token 消費',
+  'attach.imageTokensTip': 'DeepSeek 公式の画像サイズ換算（1 画像あたり上限 {cap} Token）による推定 Token 消費',
   'attach.fileTokensTip': '推定値：モデルが受け取るのはハンドル（ファイル名、サイズ、SHA-256 ダイジェストの 8 文字の接頭辞）のみでファイル内容は受け取らないため、オーバーヘッドはファイルサイズによる影響をほとんど受けません',
   'ov.title': 'コンテキストインサイト',
   'ov.unavailable': 'セッション一覧を利用できません',

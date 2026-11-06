@@ -603,7 +603,7 @@ export const DICT_DE = {
   'attach.raw': 'Roh',
   'attach.sent': 'Gesendet',
   'attach.token': 'Token',
-  'attach.imageTokensTip': 'Geschätzte Token-Kosten über DeepSeeks offizielle Bildgrößenumrechnung (max. 384 Tokens pro Bild)',
+  'attach.imageTokensTip': 'Geschätzte Token-Kosten über DeepSeeks offizielle Bildgrößenumrechnung (max. {cap} Tokens pro Bild)',
   'attach.fileTokensTip': 'Geschätzt: Das Modell erhält einen Handle mit Dateiname, Größe und einem 8-stelligen SHA-256-Digest-Präfix — niemals den Inhalt —, daher ändern sich die Kosten kaum mit der Dateigröße',
   'ov.title': 'Kontext-Einblicke',
   'ov.unavailable': 'Die Sitzungsliste ist nicht verfügbar',

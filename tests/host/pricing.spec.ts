@@ -76,7 +76,7 @@ describe('estimateMessage', () => {
   test('image blocks price through the vision calculator only with two finite dimensions', () => {
     assert.equal(
       estimateMessage({ content: [{ type: 'image', attachment: { width: 800, height: 600 } }] }),
-      341 + 8,
+      317 + 8,
     )
     for (const attachment of [null, 'ref', { width: 800 }, { width: NaN, height: 100 }]) {
       const block = { type: 'image', attachment } as unknown as ContentBlock

@@ -50,7 +50,7 @@ describe('the attachment block', () => {
     const imageCard = cards[3]
     assert.ok(text(imageCard).includes('3462×1211'), 'raw dimensions')
     assert.ok(text(imageCard).includes('1568×1350 · 146.2 kB'), 'sent dimensions and size')
-    assert.ok(text(imageCard).includes('Token') && text(imageCard).includes('≈325'))
+    assert.ok(text(imageCard).includes('Token') && text(imageCard).includes('≈988'))
     assert.ok(!text(cards[0]).includes('Type'))
     assert.ok(text(cards[0]).includes('Size') && text(cards[0]).includes('2.6 kB'))
     assert.ok(text(cards[0]).includes('Token') && text(cards[0]).includes('≈58'), 'the handle price')

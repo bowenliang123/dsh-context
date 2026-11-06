@@ -603,7 +603,7 @@ export const DICT_EN = {
   'attach.raw': 'Raw',
   'attach.sent': 'Sent',
   'attach.token': 'Token',
-  'attach.imageTokensTip': 'Estimated token cost via DeepSeek\'s official image-size conversion (384-token cap per image)',
+  'attach.imageTokensTip': 'Estimated token cost via DeepSeek\'s official image-size conversion ({cap}-token cap per image)',
   'attach.fileTokensTip': 'Estimated: the model receives a handle with the file name, size, and an 8-character SHA-256 digest prefix — never its contents — so the cost barely moves with the file\'s size',
   'ov.title': 'Context Insights',
   'ov.unavailable': 'The session list is unavailable',

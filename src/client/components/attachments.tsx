@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, type ReactElement } 
 import { attachmentExtension } from '../../shared/attachment'
 import type { AttachmentRef } from '../../shared/attachment'
 import { estimateFileTokens } from '../../shared/fileTokens'
-import { estimateImageTokens } from '../../shared/imageTokens'
+import { MAX_IMAGE_TOKENS, estimateImageTokens } from '../../shared/imageTokens'
 import { fmtBytes } from '../format'
 import type { AttachmentOpener, ImageLoader, ImageRefLike } from '../services'
 import type { ViewKit } from '../viewkit'
@@ -98,7 +98,7 @@ function factsOf(ref: AttachmentRef, t: ViewKit['t'], fmt: ViewKit['fmt']): Fact
     ? estimateImageTokens(ref.width, ref.height)
     : null
   if (tokens !== null) {
-    rows.push({ label: t('attach.token'), value: `≈${fmt(tokens)}`, tip: t('attach.imageTokensTip') })
+    rows.push({ label: t('attach.token'), value: `≈${fmt(tokens)}`, tip: t('attach.imageTokensTip', { cap: MAX_IMAGE_TOKENS }) })
   }
   return rows
 }
