@@ -9,6 +9,7 @@
  * <session.jsonl> [...]; exit 0 = all match.
  */
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { homedir } from 'node:os'
 import { join } from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
 import { deriveEventMessage, isSurfaceEvent } from '@deepseek-ai/dsh-session'
@@ -16,7 +17,7 @@ import { deriveEventMessage, isSurfaceEvent } from '@deepseek-ai/dsh-session'
 import { createContextTimelineDefinition } from '../src/host/timeline.ts'
 import { estimateImageTokens } from '../src/shared/imageTokens.ts'
 
-const DSH_REPO = process.env.DSH_REPO || `${process.env.HOME}/dev/deepseek-harness`
+const DSH_REPO = process.env.DSH_REPO || join(homedir(), 'dev', 'deepseek-harness')
 const TMP = join(fileURLToPath(new URL('..', import.meta.url)), '.tmp')
 mkdirSync(TMP, { recursive: true })
 const dir = mkdtempSync(join(TMP, 'dsh-diff-fold-'))
