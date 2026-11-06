@@ -233,11 +233,20 @@ export const PulseTimeline = memo(function PulseTimeline(props: PulseTimelinePro
     const adjusted = clampTop(el, start, start + height)
     if (adjusted !== undefined) scrollToPos(el, { top: adjusted })
   }
+  const alignedKeyRef = useRef<string | null>(null)
   useEffect(() => {
     const key = props.selectedEventKey ?? props.selectedDelegationKey
-    if (key === null) return
+    if (key === null) {
+      alignedKeyRef.current = null
+      return
+    }
     const index = laneItems.findIndex(item => item.key === key)
-    if (index < 0) return
+    if (index < 0) {
+      alignedKeyRef.current = null
+      return
+    }
+    if (alignedKeyRef.current === key) return
+    alignedKeyRef.current = key
     const el = scrollerRef.current as HTMLDivElement
     const lane = layout.lanes[visibleIds.indexOf(laneItems[index].to)]
     const start = lane.top + taskOffset

@@ -28,7 +28,7 @@ function makeDetails(fullLanded = new Map()) {
   }
 }
 
-function pulseOf(comms: CommsRow[], forest: AgentForest | null = null) {
+function pulseOf(comms: CommsRow[], forest: AgentForest | null = null, agents: ReadonlyMap<string, CommsAgent> = new Map()) {
   return h(MissionPulse, {
     graph,
     forest,
@@ -37,7 +37,7 @@ function pulseOf(comms: CommsRow[], forest: AgentForest | null = null) {
     landedDetails: new Map(),
     comms,
     delegations: [],
-    agents: new Map(),
+    agents,
     titles: new Map(),
     attested: new Map(),
     focusMember: null,
@@ -573,6 +573,53 @@ describe('MissionPulse boundary parties', () => {
     await mounted.unmount()
   })
 
+  test('reveals the inspector once per selection, not on every stream update', async () => {
+    const rows: CommsRow[] = [
+      { key: 'child:1:1000:relay', to: 'child', seq: 1, time: 1000, kind: 'relay', from: 'root', text: 'first' },
+      { key: 'child:2:2000:relay', to: 'child', seq: 2, time: 2000, kind: 'relay', from: 'root', text: 'second' },
+    ]
+    const mounted = await mount(pulseOf(rows))
+    const reveal = vi.spyOn(Element.prototype, 'scrollIntoView').mockImplementation(() => {})
+    try {
+      await click(query(mounted.container, '[data-event-key="child:1:1000:relay"]'))
+      const revealed = reveal.mock.calls.length
+      assert.ok(revealed > 0, 'selection never revealed the inspector')
+      await mounted.update(pulseOf([...rows]))
+      assert.equal(reveal.mock.calls.length, revealed)
+      await click(query(mounted.container, '[data-event-key="child:2:2000:relay"]'))
+      assert.ok(reveal.mock.calls.length > revealed)
+    } finally {
+      reveal.mockRestore()
+      await mounted.unmount()
+    }
+  })
+
+  test('keeps the timeline pan across stream updates while a record stays selected', async () => {
+    const rows: CommsRow[] = Array.from({ length: 20 }, (_, index) => ({
+      key: `child:${index + 1}:${(index + 1) * 1000}:relay`,
+      to: 'child',
+      seq: index + 1,
+      time: (index + 1) * 1000,
+      kind: 'relay' as const,
+      from: 'root',
+      text: `event ${index}`,
+    }))
+    const agents = new Map([
+      ['root', { id: 'root', name: 'Lead', role: 'lead' as const, self: true, hue: 'red' }],
+      ['child', { id: 'child', name: 'child', role: 'subagent' as const, self: false, hue: 'blue' }],
+    ])
+    const mounted = await mount(pulseOf(rows, null, agents))
+    const scroller = query<HTMLElement>(mounted.container, '[data-sequence-scroller]')
+    Object.defineProperty(scroller, 'clientWidth', { configurable: true, value: 200 })
+    await click(query(mounted.container, '[data-event-key="child:10:10000:relay"]'))
+    assert.equal(scroller.scrollLeft, 8 + 9.5 * 32 - 100)
+    scroller.dispatchEvent(new Event('pointerdown'))
+    scroller.scrollLeft = 500
+    await mounted.update(pulseOf([...rows], null, agents))
+    assert.equal(scroller.scrollLeft, 500)
+    await mounted.unmount()
+  })
+
   test('jumps to a selected record the windowed event list has not rendered', async () => {
     const rows: CommsRow[] = Array.from({ length: 70 }, (_, index) => ({
       key: `child:${index + 1}:${(index + 1) * 1000}:relay`,
@@ -592,6 +639,10 @@ describe('MissionPulse boundary parties', () => {
     await until(() => queryAll(mounted.container, '[data-comms-key]').length < 70, 'event list never windowed')
     await click(query(mounted.container, '[data-event-key="child:41:41000:relay"]'))
     assert.equal(list.scrollTop, 29 * 64)
+    list.dispatchEvent(new Event('pointerdown'))
+    list.scrollTop = 500
+    await mounted.update(pulseOf([...rows]))
+    assert.equal(list.scrollTop, 500)
     await mounted.unmount()
   })
 

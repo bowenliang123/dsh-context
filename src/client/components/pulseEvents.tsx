@@ -148,6 +148,7 @@ export const PulseEvents = memo(function PulseEvents(props: PulseEventsProps): R
   const listRef = useRef<HTMLUListElement | null>(null)
   const alignedRef = useRef<string | null>(null)
   const listClickRef = useRef<string | null>(null)
+  const estimateRef = useRef<string | null>(null)
   const counts = { all: props.scopedEvents.length, message: 0, report: 0, delegation: 0 }
   for (const item of props.scopedEvents) counts[pulseEventGroupOf(item)] += 1
   const shown = props.selectedItem ?? (props.events.length > 0 ? props.events[0] : undefined)
@@ -166,6 +167,7 @@ export const PulseEvents = memo(function PulseEvents(props: PulseEventsProps): R
     if (selectedKey === null) {
       alignedRef.current = null
       listClickRef.current = null
+      estimateRef.current = null
       return
     }
     if (alignedRef.current === selectedKey) return
@@ -178,6 +180,8 @@ export const PulseEvents = memo(function PulseEvents(props: PulseEventsProps): R
     const align = (): boolean => {
       const row = list.querySelector<HTMLElement>(`[data-comms-key="${CSS.escape(selectedKey)}"]`)
       if (row === null) {
+        if (estimateRef.current === selectedKey) return false
+        estimateRef.current = selectedKey
         const index = Math.max(0, props.events.findIndex(entry => entry.key === selectedKey))
         const target = index * EVENT_ROW_PITCH
         if (Math.abs(list.scrollTop - target) <= 1) return false
@@ -193,10 +197,10 @@ export const PulseEvents = memo(function PulseEvents(props: PulseEventsProps): R
     settleReveal(list, align)
   }, [props.events, rowRange.from, selectedKey])
   useEffect(() => {
-    if (props.selectedItem !== undefined) {
+    if (selectedKey !== null) {
       scrollIntoViewIfPossible(inspectorRef.current, { block: 'nearest', behavior: 'smooth' })
     }
-  }, [props.selectedItem])
+  }, [selectedKey])
   return (
     <section className="lc-card lc-pulse-events">
       <div className="lc-card-title">
