@@ -23,7 +23,7 @@ describe('CommandPanel — the summary rail', () => {
     ]
   }
 
-  test('with two failing programs, the Failed row lands on exactly its own program’s failures', async () => {
+  test('with two failing programs, the Most failures row lands on exactly its own program’s failures', async () => {
     const commands: Command[] = [
       cmd(1, { cmd: 'vitest run a', status: 'failed', exit: 1 }),
       cmd(2, { cmd: 'vitest run b', status: 'failed', exit: 1 }),
@@ -31,7 +31,7 @@ describe('CommandPanel — the summary rail', () => {
       cmd(4, { cmd: 'git status' }),
     ]
     const m = await mount(h(Panel, { commands }))
-    const failing = queryAll(m.container, '.lc-cmd-attn-row').find(b => text(b).includes('Failed'))
+    const failing = queryAll(m.container, '.lc-cmd-attn-row').find(b => text(b).includes('Most failures'))
     assert.ok(failing !== undefined)
     assert.ok(text(failing).includes('vitest'))
     await click(failing)
@@ -50,8 +50,8 @@ describe('CommandPanel — the summary rail', () => {
     assert.ok(rail.includes('Program · 2'), 'two distinct programs (git, pnpm)')
     assert.ok(rail.includes('Attention'))
     assert.ok(rail.includes('Slowest'))
-    assert.ok(rail.includes('Failed'))
-    assert.ok(rail.includes('Repeated'))
+    assert.ok(rail.includes('Most failures'))
+    assert.ok(rail.includes('Most repeated'))
     assert.ok(rail.includes('Background'))
     const gitProgram = queryAll(m.container, '.lc-cmd-prog').find(b => text(b).startsWith('git'))
     assert.ok(gitProgram !== undefined)
@@ -76,7 +76,7 @@ describe('CommandPanel — the summary rail', () => {
     assert.equal(rowTextsNow().length, 5, 'a second click clears the lens')
     assert.equal(box(), '')
 
-    const failingBtn = attnBtn('Failed')
+    const failingBtn = attnBtn('Most failures')
     await click(failingBtn)
     assert.equal(rowTextsNow().length, 1)
     assert.ok(rowTextsNow()[0].includes('vitest'))
@@ -92,7 +92,7 @@ describe('CommandPanel — the summary rail', () => {
     assert.equal(box(), '')
     assert.equal(queryAll(m.container, '.lc-cmd-prog-on').length, 0)
 
-    const repeatsBtn = attnBtn('Repeated')
+    const repeatsBtn = attnBtn('Most repeated')
     await click(repeatsBtn)
     const withRepeats = rowTextsNow()
     assert.equal(withRepeats.length, 2, 'both git status runs show')

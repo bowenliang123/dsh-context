@@ -207,7 +207,7 @@ describe('CommandPanel — filtering, search, sort', () => {
     assert.ok(echoProgram !== undefined)
     assert.equal(text(query(echoProgram, '.lc-cmd-prog-runs')), '· 1 run')
     assert.ok(sessionAttention.some(r => r.includes('Slowest') && r.includes('cat missing.txt')))
-    assert.ok(sessionAttention.some(r => r.includes('Failed') && r.includes('cat')))
+    assert.ok(sessionAttention.some(r => r.includes('Most failures') && r.includes('cat')))
     assert.ok(sessionAttention.some(r => r.includes('Background')))
     await typeSearch(m.container, 'cat')
     assert.equal(rowTexts(m.container).length, 3)
