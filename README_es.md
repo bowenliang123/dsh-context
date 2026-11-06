@@ -230,8 +230,8 @@ Los botones de preset de Análisis del contexto guardan la selección como valor
 
 - **Huella de caché**: el plugin solo guarda puntos de control con un resumen compacto por sesión (composición, recuentos, coste/tiempo e información del modelo) en la caché de proyecciones de dsh; los detalles pesados por evento (texto de superficie, desgloses de solicitudes, operaciones de archivos, programas de comandos e intervalos) se reconstruyen a partir del registro persistente cuando un panel los necesita, de modo que la caché sigue siendo pequeña incluso en sesiones largas. Las vistas de detalle están limitadas (pasos 1500 · turnos 300 · eventos 400 · nodos de superficie 2000 · archivo 400 · operaciones de archivos 400 · comandos 400).
 - **Estimaciones y valores reales**: las cifras por categoría usan la heurística de densidad fija propia de dsh, la misma que su medidor de tokens integrado; los detalles fijados de la tendencia muestran los valores reales informados por el proveedor junto a ellas, y la tarjeta Tokens combina sus proporciones de composición estimadas con ≈ y el total facturado exacto del proveedor.
-- **Compatibilidad**: funciona con `@deepseek-ai/dsh` desde **0.2.0-rc.2** (las líneas `0.2.0` y `0.2.1` verificadas en sus versiones rc.2, y la línea `0.2.2` en su vista previa alpha.3), la generación V4 del registro de sesiones, desde una única ruta de código orientada por la forma. La matriz por versión y cómo se verifica: [docs/compatibility.md](docs/compatibility.md).
-- **I18n**: interfaz en chino simplificado, inglés, japonés, español, francés y portugués.
+- **Compatibilidad**: funciona con `@deepseek-ai/dsh` desde **0.2.0-rc.2** (las líneas `0.2.0` y `0.2.1` verificadas en sus versiones rc.2, y la línea `0.2.2` en su versión rc.1), la generación V4 del registro de sesiones, desde una única ruta de código orientada por la forma. La matriz por versión y cómo se verifica: [docs/compatibility.md](docs/compatibility.md).
+- **I18n**: interfaz en chino simplificado, inglés, japonés, español, francés y portugués (cambiar de idioma requiere dsh 0.2.2+; las líneas admitidas anteriores solo ofrecen chino e inglés).
 
 ## ¿Te gusta?
 

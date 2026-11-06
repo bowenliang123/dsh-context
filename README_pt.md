@@ -230,8 +230,8 @@ Os botões de predefinição dos Insights de contexto gravam a escolha como padr
 
 - **Pegada do cache** — o plugin salva checkpoints apenas de um resumo compacto por sessão (composição, contagens, custo/tempo, informações do modelo) no cache de projeção do dsh; os detalhes pesados por evento (texto das superfícies, detalhamentos de requisições, operações de arquivos, programas de comandos, intervalos) são reconstituídos a partir do log durável quando um painel precisa deles, para que o cache permaneça pequeno mesmo em sessões longas. As visualizações de detalhes são limitadas (etapas 1500 · turnos 300 · eventos 400 · nós de superfície 2000 · arquivo 400 · operações de arquivos 400 · comandos 400).
 - **Estimativas versus valores reais** — os valores por categoria usam a própria heurística de densidade fixa do dsh (a mesma do seu medidor de tokens integrado); os detalhes fixados da tendência mostram os valores reais informados pelo provedor ao lado deles, e o cartão Tokens combina suas participações de composição estimadas com ≈ ao total faturado exato do provedor.
-- **Compatibilidade** — funciona com `@deepseek-ai/dsh` a partir de **0.2.0-rc.2** (as linhas `0.2.0` e `0.2.1` verificadas em suas versões rc.2, e a linha `0.2.2` em sua prévia alpha.3), a geração de log de sessão V4, por um único caminho de código orientado pela estrutura. A matriz por versão e como ela é verificada: [docs/compatibility.md](docs/compatibility.md).
-- **I18n** — interface em 简体中文, English, 日本語, Español, Français e Português.
+- **Compatibilidade** — funciona com `@deepseek-ai/dsh` a partir de **0.2.0-rc.2** (as linhas `0.2.0` e `0.2.1` verificadas em suas versões rc.2, e a linha `0.2.2` em sua versão rc.1), a geração de log de sessão V4, por um único caminho de código orientado pela estrutura. A matriz por versão e como ela é verificada: [docs/compatibility.md](docs/compatibility.md).
+- **I18n** — interface em 简体中文, English, 日本語, Español, Français e Português (trocar de idioma exige dsh 0.2.2+; as linhas suportadas anteriores oferecem apenas chinês e inglês).
 
 ## Gostou?
 

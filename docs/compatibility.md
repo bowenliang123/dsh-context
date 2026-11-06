@@ -6,7 +6,7 @@ The rules dsh-context must hold on every supported `@deepseek-ai/dsh` release, a
 
 **Law.** Record only what no other artifact carries; delete what code, tests, or git history already say. Verify against the dsh sources before acting — source wins over this page. Less is ALWAYS better.
 
-Last verified: **2026-11-05** (dsh-context `0.81.0`, dsh `0.2.0-rc.2` / `0.2.1-rc.2` / `0.2.2-rc.1` tag trees).
+Last verified: **2026-11-06** (dsh-context `0.82.1`, dsh `0.2.0-rc.2` / `0.2.1-rc.2` / `0.2.2-rc.1` tag trees).
 
 ## 1 · Supported set
 
@@ -44,7 +44,7 @@ Last verified: **2026-11-05** (dsh-context `0.81.0`, dsh `0.2.0-rc.2` / `0.2.1-r
 
 **Totality**
 
-5. **Folds are TOTAL** — unknown event types return state unchanged; a malformed event drops whole (no partial state); no `undefined`-valued property is ever materialized into persisted state. The projection registry drives `apply` with no error boundary: one throw stalls the unit's cells and push feed forever, and one `undefined` property fails EVERY projection-cache write for the session.
+7. **Folds are TOTAL** — unknown event types return state unchanged; a malformed event drops whole (no partial state); no `undefined`-valued property is ever materialized into persisted state. The projection registry drives `apply` with no error boundary: one throw stalls the unit's cells and push feed forever, and one `undefined` property fails EVERY projection-cache write for the session.
 
 - **Limitation — image offload (deferred):** on `IMAGE_OFFLOAD_REQUIRED` the harness offloads images via a message projection; the fold reads raw durable events, so an offloaded message keeps its pre-offload image count and price until compaction removes it. Revisit only if it shows in practice.
 
@@ -88,6 +88,8 @@ Last verified: **2026-11-05** (dsh-context `0.81.0`, dsh `0.2.0-rc.2` / `0.2.1-r
 5. **The member card's enter pre-seeds the entered session's view** — the conversation shell re-reads its per-session persisted `view` preference on EVERY session binding, so merge-writing `dsh.conversation.<sessionId>` (the draft rides along; a malformed stored state is replaced whole) before rule 3's whole-view jump lands the entered session on this bundle's `context` view; an unregistered id (sidebar/hide placement) resolves to the shell's chat fallback. (dsh: `packages/client/ui-conversation/src/client/stores.ts` `readConversationViewPreference`, `apply.ts` `restoreView`; `src/client/services.ts` `seedConversationViewVia`)
 6. **The settings jump uses the Plugins panel's own navigator**, `pluginNavigation.openBundle(packageName)` — never a DOM walk over its chrome: the `0.2.1` and later lines' contributed `plugins.tab` slot remembers its selection, so the card the walk seeks is absent while another tab is open, and the navigator resets that tab to Installed (the `0.2.0` line ships no contributed tabs). (dsh: `packages/client/ui-plugin-manager/src/client/index.ts`; probe `pluginsNav`)
 7. **Locale switches reach memoized cards through the LocaleFace `subscribe`/`getLocale` pair** — the kit's `useLocaleTick` subscribes when the face exists and degrades to the boot locale when it does not (an old face simply never fires). (dsh: `packages/client/locale/src/client/index.ts` `LocaleFace`; `src/client/viewkit.ts`)
+
+- **Limitation — language selection on the older lines:** the ja/es/fr/pt UI is selectable only where the harness client ships those language packs (`0.2.2-rc.1`); the `0.2.0` and `0.2.1` lines carry `zh`/`en` only (`LOCALE_IDS`), so their selector stays Chinese/English and the four dictionaries resolve as English. (dsh: `packages/client/locale/src/client/index.ts` — the built-in `addLanguage` loop for ja/es/fr/de/ru/pt first appears at `dsh-v0.2.2-rc.1`)
 
 **Boundary**
 
