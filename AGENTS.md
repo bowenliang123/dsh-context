@@ -120,7 +120,7 @@ Complete ALL of these before ANY commit:
     - zh: Chinese (Simplified) 
     - en: English
   - Fallback: English for any unsupported language
-  - Other supported languages
+  - Other supported languages, use en as source for translation
     - ja: Japanese, use zh as source for translation, prefer Kanji(漢字) over Hiragana(ひらがな) and Katakana(カタカナ)
     - es: Español
     - fr: Français
