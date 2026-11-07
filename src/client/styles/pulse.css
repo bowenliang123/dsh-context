@@ -72,7 +72,7 @@
 .lc-pulse-main .lc-col-graph, .lc-pulse-boards > .lc-card { min-width: 0; }
 .lc-pulse-main .lc-col-graph > .lc-card, .lc-pulse-boards > .lc-card { margin-bottom: 0; }
 
-.lc-pulse-timeline, .lc-pulse-tasks, .lc-pulse-events { min-width: 0; border-color: var(--dsw-alias-border-l2); background: var(--dsw-alias-bg-layer-1); }
+.lc-pulse-timeline, .lc-pulse-tasks, .lc-pulse-events { min-width: 0; border-color: var(--dsw-alias-border-l2-darkmode-thin); background: var(--dsw-alias-bg-layer-1); }
 .lc-pulse-events { max-height: 620px; }
 .lc-pulse-timeline, .lc-pulse-tasks { display: flex; flex-direction: column; max-height: 413px; }
 .lc-pulse-timeline > .lc-card-title, .lc-pulse-tasks > .lc-card-title, .lc-pulse-tasks > .lc-pulse-work-warning { flex: none; }

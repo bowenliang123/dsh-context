@@ -8,14 +8,11 @@
 .lc-fa-meta-delta { position: relative; }
 .lc-fa-meta-tip { top: calc(100% + 6px); left: 0; max-width: 260px; white-space: normal; line-height: 1.5; }
 @container lc-card (max-width: 380px) { .lc-fa-meta-delta { position: static; } .lc-fa-meta-tip { box-sizing: border-box; right: auto; left: 0; max-width: 100%; } }
-.lc-fa-item { border: 1px solid transparent; border-radius: 8px; transition: background-color var(--ds-transition-duration, 0.2s) var(--ds-ease-in-out, ease-in-out), border-color var(--ds-transition-duration, 0.2s) var(--ds-ease-in-out, ease-in-out); }
-.lc-fa-item-on { background: var(--dsw-alias-bg-layer-2); border-color: var(--dsw-alias-border-l2); }
+.lc-fa-item { border: 0.5px solid transparent; border-radius: 8px; transition: border-color var(--ds-transition-duration, 0.2s) var(--ds-ease-in-out, ease-in-out); }
+.lc-fa-item-on { border-color: var(--dsw-alias-border-l4); }
 .lc-fa-item-alt:not(.lc-fa-item-on) > .lc-fa-row { background: var(--lc-list-stripe); }
 .lc-fa-item-alt:not(.lc-fa-item-on) > .lc-fa-row:hover { background: var(--dsw-alias-interactive-bg-hover); }
-body:not([data-ds-dark-theme]) .lc-fa-item { border-width: 0.5px; }
-body:not([data-ds-dark-theme]) .lc-fa-item-on { background: transparent; border-color: var(--dsw-alias-border-l4); }
-body:not([data-ds-dark-theme]) .lc-fa-item-on > .lc-fa-row { background: var(--dsw-alias-interactive-bg-active); }
-body:not([data-ds-dark-theme]) .lc-fa-item-on > .lc-fa-row:hover { background: var(--dsw-alias-interactive-bg-active); }
+.lc-fa-item-on > .lc-fa-row, .lc-fa-item-on > .lc-fa-row:hover { background: var(--dsw-alias-interactive-bg-active); }
 .lc-row-pad { flex: none; }
 .lc-fa-row { content-visibility: auto; contain-intrinsic-size: auto 27px; display: flex; align-items: center; gap: 7px; width: 100%; border: 0; background: transparent; color: var(--dsw-alias-label-primary); font: inherit; font-size: 12px; padding: 6px 8px; cursor: pointer; text-align: left; border-radius: 7px; transition: background-color var(--ds-transition-duration, 0.2s) var(--ds-ease-in-out, ease-in-out); }
 .lc-fa-form { flex: none; width: 20px; height: 14px; display: flex; align-items: center; justify-content: center; font-size: 11px; opacity: 0.85; }
