@@ -98,7 +98,7 @@ for (const file of files) {
         const shadowed = new Set(shadowedSeqs)
         live = live.filter(n => !shadowed.has(n.seq))
       } else {
-        live = live.filter(n => n.seq < op.start || n.seq > op.end)
+        live = live.filter(n => n.seq < op.startSeq || n.seq > op.endSeq)
       }
     }
     shadowedSeqs = null

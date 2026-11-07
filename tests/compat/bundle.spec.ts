@@ -8,6 +8,12 @@ import ReactDOM from 'react-dom'
 import * as jsxRuntime from 'react/jsx-runtime'
 import * as staging from './staging'
 
+test('module-table requires are scraped from both the lean and the minified wrapper', () => {
+  assert.deepEqual(staging.moduleRequiresOf('window.__ModuleLoader__.load({ id: "dsh-context", factory: (require) => {\n  require("react");\n  require("react");\n} });'), ['react'])
+  assert.deepEqual(staging.moduleRequiresOf('window.__ModuleLoader__.load({id:`dsh-context`,factory:e=>{e("react"),e("react-dom")}})'), ['react', 'react-dom'])
+  assert.deepEqual(staging.moduleRequiresOf('require("react")'), ['react'])
+})
+
 describe.skipIf(staging.artifactsMissing())('bundle smoke — the built lib/client.js', () => {
   const dom = new JSDOM('<!doctype html><html><head></head><body></body></html>', { pretendToBeVisual: true })
   const globals = globalThis as { window?: unknown; document?: unknown }
@@ -16,7 +22,7 @@ describe.skipIf(staging.artifactsMissing())('bundle smoke — the built lib/clie
   const state: {
     plugin?: { name: string; inject: string[]; apply(ctx: unknown): void }
     dicts: Map<string, Record<string, Record<string, string>>>
-    slots: [string, { name?: string; order?: number; id?: string; label?: () => string; inject?: (sessionId?: string) => unknown }][]
+    slots: [string, { name?: string; order?: number; id?: string; label?: () => string; key?: string; inject?: (sessionId?: string) => unknown }][]
     sources: { trigger: string }[]
     disposers: (() => void)[]
   } = { dicts: new Map(), slots: [], sources: [], disposers: [] }
@@ -43,7 +49,7 @@ describe.skipIf(staging.artifactsMissing())('bundle smoke — the built lib/clie
       throw new Error(`bundle required a non-platform module: ${spec}`)
     }
 
-    ;(dom.window as { __ModuleLoader__: unknown }).__ModuleLoader__ = { load: (h: typeof handoff) => { handoff = h } }
+    ;(dom.window as unknown as { __ModuleLoader__: unknown }).__ModuleLoader__ = { load: (h: typeof handoff) => { handoff = h } }
     new Function(readFileSync(join(staging.REPO, 'lib', 'client.js'), 'utf8'))()
     assert.ok(handoff !== null, 'bundle must register through __ModuleLoader__.load')
 
@@ -84,8 +90,9 @@ describe.skipIf(staging.artifactsMissing())('bundle smoke — the built lib/clie
         },
       },
     }
-    state.plugin = handoff.factory(moduleTable) as typeof state.plugin
-    state.plugin.apply(ctx)
+    const plugin = handoff.factory(moduleTable) as NonNullable<typeof state.plugin>
+    state.plugin = plugin
+    plugin.apply(ctx)
   })
 
   test('handoff: the bundle registers as dsh-context with the factory closure', () => {

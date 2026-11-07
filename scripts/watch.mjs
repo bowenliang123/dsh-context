@@ -2,7 +2,7 @@ import { spawn } from 'node:child_process'
 import { existsSync } from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { findPids, supervise, terminatePids } from './proc.mjs'
+import { ancestorPids, findPids, supervise, terminatePids } from './proc.mjs'
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
 const tsdownEntry = path.join(root, 'node_modules', 'tsdown', 'dist', 'run.mjs')
@@ -23,7 +23,8 @@ const pattern = `${rootPattern}${separator}node_modules${separator}(\\.bin${sepa
 
 let stale = []
 try {
-  stale = findPids(pattern).filter(pid => pid !== process.pid)
+  const ownPids = ancestorPids()
+  stale = findPids(pattern).filter(pid => !ownPids.has(pid))
 } catch (error) {
   console.warn(`warning: could not scan for stale watch instances: ${error.message}`)
 }

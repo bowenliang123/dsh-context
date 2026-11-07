@@ -67,7 +67,7 @@ Klicke in der Panel-Liste der Seitenleiste auf **Kontext-Einblicke** — dieselb
 
 | Abschnitt | Die Frage, die er beantwortet |
 | --- | --- |
-| **KPI-Leiste** | Wie viel verbrauche ich — im gewählten Bereich (7T / 30T / alle) aktive Sitzungen mit abgerechneten Tokens, geschätzten Kosten, Cache-Trefferquote und Runden, gefaltet nach dem Tag, an dem jeder Schritt begann; Tool-Läufe und aktive Zeit umfassen diese Sitzungen und die gesamte Lebensdauer ihrer Subagenten und entsprechen der Zeitstatistik-Karte. |
+| **KPI-Leiste** | Wie viel verbrauche ich — im gewählten Bereich (heute / 7T / 30T / alle) aktive Sitzungen mit abgerechneten Tokens, geschätzten Kosten, Cache-Trefferquote und Runden, gefaltet nach dem Tag, an dem jeder Schritt begann; Tool-Läufe und aktive Zeit umfassen diese Sitzungen und die gesamte Lebensdauer ihrer Subagenten und entsprechen der Zeitstatistik-Karte. |
 | **7-Tage-Nutzungsdiagramm** | Wann habe ich was ausgegeben — die abgerechneten Tokens und geschätzten Kosten jedes der letzten 7 Tage als Balkenpaar, aggregiert nach dem Starttag jeder Anfrage in ihrer Sitzung (nicht dem Tag der letzten Aktivität der Sitzung). |
 | **Aktivitäts-Heatmap** | Wann arbeite ich tatsächlich — die letzten 8 Wochen täglicher abgerechneter Tokens; klicke auf einen Tag, um die Sitzungen zu filtern und die drei Zählkarten auf diesen Tag zu begrenzen. |
 | **Skill-Ladungen** | Welche Skills ich geladen habe, wie oft und wie kürzlich — die Ladevorgänge pro Skill im Bereich; klicke auf einen, um die Sitzungen zu filtern, die ihn geladen haben. |

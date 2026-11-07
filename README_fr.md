@@ -67,7 +67,7 @@ Cliquez sur **Analyse du contexte** dans la liste des panneaux de la barre laté
 
 | Section | La question à laquelle elle répond |
 | --- | --- |
-| **Bande d’indicateurs clés** | Quelle est mon utilisation ? Sessions actives dans la plage choisie (7 j / 30 j / tout), avec tokens facturés, coût estimé, taux de succès du cache et tours répartis selon le jour de début de chaque étape ; les exécutions d’outils et le temps actif couvrent toute la durée de vie de ces sessions et de leurs sous-agents, en cohérence avec la carte des durées. |
+| **Bande d’indicateurs clés** | Quelle est mon utilisation ? Sessions actives dans la plage choisie (aujourd’hui / 7 j / 30 j / tout), avec tokens facturés, coût estimé, taux de succès du cache et tours répartis selon le jour de début de chaque étape ; les exécutions d’outils et le temps actif couvrent toute la durée de vie de ces sessions et de leurs sous-agents, en cohérence avec la carte des durées. |
 | **Graphique d’utilisation sur 7 jours** | Quand ai-je dépensé quoi ? Les tokens facturés et le coût estimé de chacun des 7 derniers jours forment une paire de barres, regroupés selon le jour de début de chaque requête dans sa session, et non selon le dernier jour d’activité de la session. |
 | **Carte thermique d’activité** | Quand est-ce que je travaille réellement ? Les tokens facturés quotidiennement au cours des 8 dernières semaines ; cliquez sur un jour pour filtrer les sessions et limiter les trois cartes de totaux à ce jour. |
 | **Chargements de compétences** | Quelles compétences ai-je chargées, à quelle fréquence et à quand remonte leur dernier chargement ? Les chargements de la plage par compétence ; cliquez sur l’une pour filtrer les sessions qui l’ont chargée. |

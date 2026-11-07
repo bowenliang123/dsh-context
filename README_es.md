@@ -67,7 +67,7 @@ Haz clic en **Análisis del contexto** en la lista de paneles de la barra latera
 
 | Sección | La pregunta que responde |
 | --- | --- |
-| **Banda de KPI** | Cuánto estoy usando: sesiones activas en el intervalo seleccionado (7 d / 30 d / todo), con tokens facturados, coste estimado, tasa de aciertos de caché y turnos agregados por el día en que comenzó cada paso; las ejecuciones de herramientas y el tiempo activo abarcan toda la vida de esas sesiones y de sus subagentes, igual que la tarjeta de tiempo. |
+| **Banda de KPI** | Cuánto estoy usando: sesiones activas en el intervalo seleccionado (hoy / 7 d / 30 d / todo), con tokens facturados, coste estimado, tasa de aciertos de caché y turnos agregados por el día en que comenzó cada paso; las ejecuciones de herramientas y el tiempo activo abarcan toda la vida de esas sesiones y de sus subagentes, igual que la tarjeta de tiempo. |
 | **Gráfico de uso de 7 días** | Cuánto gasté y cuándo: los tokens facturados y el coste estimado de cada uno de los últimos 7 días como un par de barras, agregados por el día de inicio de cada solicitud en su sesión, no el último día activo de la sesión. |
 | **Mapa de calor de actividad** | Cuándo trabajo realmente: los tokens facturados diarios de las últimas 8 semanas; haz clic en un día para filtrar las sesiones y limitar las tres tarjetas de totales a ese día. |
 | **Cargas de habilidades** | Qué habilidades cargué, con qué frecuencia y cuándo fue la última vez: las cargas por habilidad del intervalo; haz clic en una para filtrar las sesiones que la cargaron. |

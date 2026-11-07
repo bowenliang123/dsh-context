@@ -148,10 +148,12 @@ export interface DriverReport {
   coldMatches: boolean
   developerTokens: number | null
   developerRequestTokens: number | null
+  developerInjectCount: number | null
   developerRestoreMatches: boolean
   hostileSnapshotOk: boolean
   hostilePrompt: number | null
   hostileCacheRead: number | null
+  hostileSteps: number | null
   poisonedEscapedDrive: number
   poisonedStarves: boolean
   poisonedSnapshotThrows: boolean
@@ -321,9 +323,18 @@ export function runDriver(baseline: Baseline): DriverReport {
   return JSON.parse(line.slice('DRIVER-JSON '.length)) as DriverReport
 }
 
+export function moduleRequiresOf(source: string): string[] {
+  const callee = /factory\s*:\s*(?:function\s*)?\(?\s*([A-Za-z_$][\w$]*)/.exec(source)?.[1] ?? 'require'
+  const calls = [...source.matchAll(/([A-Za-z_$][\w$]*)\("([^"]+)"\)/g)]
+    .filter(match => match[1] === callee)
+    .map(match => match[2])
+  return [...new Set(calls)]
+}
+
 export function bundleRequires(): string[] {
-  const source = readFileSync(join(REPO, 'lib', 'client.js'), 'utf8')
-  return [...new Set([...source.matchAll(/require\("([^"]+)"\)/g)].map(m => m[1]))]
+  const requires = moduleRequiresOf(readFileSync(join(REPO, 'lib', 'client.js'), 'utf8'))
+  if (requires.length === 0) throw new Error('lib/client.js declares no module-table requires; the scrape no longer matches the bundle format')
+  return requires
 }
 
 export const SLOT_SEAMS = [

@@ -67,7 +67,7 @@ Clique em **Insights de contexto** na lista de painéis da barra lateral — no 
 
 | Seção | A pergunta que ela responde |
 | --- | --- |
-| **Faixa de KPIs** | Quanto estou usando — sessões ativas no intervalo escolhido (7 dias / 30 dias / tudo), com tokens faturados, custo estimado, taxa de acerto de cache e turnos agregados pelo dia em que cada etapa começou; execuções de ferramentas e tempo ativo cobrem toda a vida útil dessas sessões e de seus subagentes, correspondendo ao cartão de tempo. |
+| **Faixa de KPIs** | Quanto estou usando — sessões ativas no intervalo escolhido (hoje / 7 dias / 30 dias / tudo), com tokens faturados, custo estimado, taxa de acerto de cache e turnos agregados pelo dia em que cada etapa começou; execuções de ferramentas e tempo ativo cobrem toda a vida útil dessas sessões e de seus subagentes, correspondendo ao cartão de tempo. |
 | **Gráfico de uso de 7 dias** | Quando gastei quanto — tokens faturados e custo estimado de cada um dos últimos 7 dias como um par de barras, agregados pelo dia de início de cada requisição em sua sessão (não pelo último dia ativo da sessão). |
 | **Mapa de calor de atividade** | Quando realmente trabalho — tokens faturados diários das últimas 8 semanas; clique em um dia para filtrar as sessões e limitar os três cartões de totais àquele dia. |
 | **Carregamentos de skills** | Quais skills carreguei, com que frequência e há quanto tempo — carregamentos por skill no intervalo; clique em uma para filtrar as sessões que a carregaram. |

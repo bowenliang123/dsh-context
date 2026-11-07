@@ -25,13 +25,16 @@ function windowsPids(pattern) {
   return parsePids(output)
 }
 
-function unixPids(pattern) {
+function pgrepPids(pattern) {
   try {
     return parsePids(execFileSync('pgrep', ['-f', pattern], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] }))
   } catch (error) {
-    if (error.status === 1) return []
-    if (error.code !== 'ENOENT') throw error
+    if (error.code === 'ENOENT' || error.status === 1) return []
+    throw error
   }
+}
+
+function psPids(pattern) {
   const matcher = new RegExp(pattern)
   return execFileSync('ps', ['-axo', 'pid=,command='], { encoding: 'utf8' })
     .split(/\r?\n/)
@@ -39,6 +42,28 @@ function unixPids(pattern) {
       const match = line.trim().match(/^(\d+)\s+(.*)$/)
       return match && matcher.test(match[2]) ? [Number(match[1])] : []
     })
+}
+
+function unixPids(pattern) {
+  return [...new Set([...pgrepPids(pattern), ...psPids(pattern)])]
+}
+
+const MAX_ANCESTRY = 64
+
+export function ancestorPids() {
+  const pids = new Set([process.pid])
+  if (process.platform === 'win32') return pids
+  let pid = process.ppid
+  for (let depth = 0; depth < MAX_ANCESTRY && pid > 0 && !pids.has(pid); depth += 1) {
+    pids.add(pid)
+    try {
+      const output = execFileSync('ps', ['-o', 'ppid=', '-p', String(pid)], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] })
+      pid = Number(output.trim())
+    } catch {
+      break
+    }
+  }
+  return pids
 }
 
 export function findPids(pattern) {

@@ -1,17 +1,24 @@
 import { spawn } from 'node:child_process'
-import { findPids, supervise, terminatePids } from './proc.mjs'
+import { ancestorPids, findPids, supervise, terminatePids } from './proc.mjs'
 
 const pattern = process.platform === 'win32' ? 'dsh web|@deepseek-ai[\\\\/]dsh[\\\\/].* web' : 'dsh web'
 
 let pids = []
 try {
-  pids = findPids(pattern).filter(pid => pid !== process.pid)
+  pids = findPids(pattern)
 } catch (error) {
   console.warn(`warning: could not scan for a running dsh web: ${error.message}`)
 }
-if (pids.length > 0) {
-  console.log(`killing existing dsh web (pid: ${pids.join(' ')})`)
-  await terminatePids(pids)
+const ownPids = ancestorPids()
+const hosting = pids.filter(pid => ownPids.has(pid))
+if (hosting.length > 0) {
+  console.error(`refusing to replace the running dsh web (pid: ${hosting.join(' ')}): it is this process's own ancestor, so it hosts the session that launched this command. Restart it from outside the session.`)
+  process.exit(1)
+}
+const stale = pids.filter(pid => !ownPids.has(pid))
+if (stale.length > 0) {
+  console.log(`killing existing dsh web (pid: ${stale.join(' ')})`)
+  await terminatePids(stale)
 }
 
 const [command, args] = process.platform === 'win32'

@@ -46,7 +46,6 @@ export default defineConfig({
       exclude: [
         'src/**/*.d.ts',
         // Pure type declarations: no runtime surface to instrument.
-        'src/shared/types.ts',
         'src/host/projection.ts',
       ],
       thresholds: { perFile: true, statements: 100, branches: 100, functions: 100, lines: 100 },
