@@ -84,6 +84,6 @@ body:not([data-ds-dark-theme]) .lc-stat { box-shadow: var(--lc-shadow-tile); }
 :is(.lc-ov-cover, .lc-fleet-sort, .lc-br-pick) { transition: border-color var(--ds-transition-duration, 0.2s) var(--ds-ease-in-out, ease-in-out); }
 :is(.lc-ov-cover, .lc-fleet-sort, .lc-br-pick):focus { outline: none; border-color: var(--dsw-alias-state-business-primary); }
 .lc-foot { color: var(--dsw-alias-label-secondary); font-size: 12px; margin-top: 4px; }
-[data-conversation-scroll][data-lc-surface] > [data-composer-seat]:not(:has([data-approval-key], [data-question-key], [data-plan-review-key])) { display: none; }
+[data-conversation-scroll][data-lc-surface] > [data-composer-seat]:not(:has([data-approval-key], [data-plan-review-key])) { display: none; }
 [data-conversation-scroll][data-lc-surface] ~ [data-width-handle],
 [data-conversation-scroll][data-lc-modal] ~ [data-width-handle] { display: none; }
