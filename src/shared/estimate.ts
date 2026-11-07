@@ -1,6 +1,6 @@
-const CHARS_PER_TOKEN = 4
-const ROLE_OVERHEAD = 4
-const BLOCK_OVERHEAD = 4
+export const CHARS_PER_TOKEN = 4
+export const ROLE_OVERHEAD = 4
+export const BLOCK_OVERHEAD = 4
 
 export function estimateSystemTokens(text: unknown): number {
   if (typeof text !== 'string' || text.length === 0) return 0

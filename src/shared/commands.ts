@@ -1,4 +1,5 @@
 import type { CommandRecord } from './types'
+import { asPlainObject, stringOf } from './decode'
 import { parseCallArgs } from './fileOps'
 
 export type CommandTool = 'bash' | 'pwsh' | 'run_code'
@@ -17,14 +18,9 @@ export interface CommandArgs {
   sandbox?: string
 }
 
-function stringOf(value: unknown): string | undefined {
-  return typeof value === 'string' && value !== '' ? value : undefined
-}
-
 export function commandArgsRecordOf(value: unknown): Record<string, unknown> | null {
   if (typeof value === 'string') return parseCallArgs(value)
-  if (value !== null && typeof value === 'object' && !Array.isArray(value)) return value as Record<string, unknown>
-  return null
+  return asPlainObject(value)
 }
 
 export function commandArgsOf(tool: string, raw: unknown, maxChars: number): (CommandArgs & { truncated?: true }) | null {

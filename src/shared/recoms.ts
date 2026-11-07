@@ -1,3 +1,5 @@
+import { asPlainObject } from './decode'
+
 export interface RecomText {
   en: string
   zh: string
@@ -46,14 +48,8 @@ export const DEFAULT_RECOM: Recom = {
   },
 }
 
-function recordOf(value: unknown): Record<string, unknown> | null {
-  return typeof value === 'object' && value !== null && !Array.isArray(value)
-    ? value as Record<string, unknown>
-    : null
-}
-
 function textOf(value: unknown): RecomText | null {
-  const record = recordOf(value)
+  const record = asPlainObject(value)
   if (record === null || typeof record.en !== 'string' || record.en.trim() === ''
     || typeof record.zh !== 'string' || record.zh.trim() === '') return null
   return { en: record.en, zh: record.zh }
@@ -80,7 +76,7 @@ function iconOf(value: unknown): string | null {
 }
 
 export function recomOf(value: unknown): Recom | null {
-  const record = recordOf(value)
+  const record = asPlainObject(value)
   if (record === null || typeof record.id !== 'string' || record.id.trim() === ''
     || typeof record.name !== 'string' || record.name.trim() === '') return null
   const url = httpsOf(record.url)
