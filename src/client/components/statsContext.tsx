@@ -12,6 +12,7 @@ import { type ClientCtx } from '../services'
 import { isDeepSeekProvider } from '../../shared/providers'
 import type { ViewKit } from '../viewkit'
 import { IconData } from '../primitives'
+import { useElementSize } from './useElementMetrics'
 
 interface PriceRow { key: string; face: PriceFace }
 interface PriceMissRow { key: string; provider: string; model: string; miss: PriceMiss }
@@ -216,16 +217,8 @@ function useFittedChips(tally: readonly unknown[]) {
     setShown(prev => (prev === pills ? prev : pills))
   }, [tally])
 
-  useLayoutEffect(fit, [fit])
-  /* v8 ignore start */
-  useEffect(() => {
-    const row = rowRef.current
-    if (row === null || typeof ResizeObserver !== 'function') return
-    const observer = new ResizeObserver(fit)
-    observer.observe(row)
-    return () => { observer.disconnect() }
-  }, [fit])
-  /* v8 ignore stop */
+  const rowSize = useElementSize(rowRef)
+  useLayoutEffect(fit, [fit, rowSize.width])
   return { shown, rowRef, gaugeRef, chipGaugeRef }
 }
 

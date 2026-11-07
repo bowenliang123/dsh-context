@@ -22,6 +22,7 @@ body:not([data-ds-dark-theme]) {
 .lc-card { background: var(--dsw-alias-bg-layer-1); border: 1px solid var(--dsw-alias-border-l2); border-radius: 10px; padding: 14px 16px; margin-bottom: 14px; }
 body:not([data-ds-dark-theme]) .lc-card { border-radius: 12px; box-shadow: var(--lc-shadow-card); }
 .lc-root .lc-card { box-sizing: border-box; padding: 7px 8px; margin-bottom: 7px; container: lc-card / inline-size; }
+.lc-modal-card .lc-card, .lc-ov-page .lc-card { container: lc-card / inline-size; }
 .lc-root .lc-cols { gap: 7px; margin-bottom: 7px; }
 body:not([data-ds-dark-theme]) .lc-root .lc-card { padding: 8px 9px; margin-bottom: 9px; }
 body:not([data-ds-dark-theme]) .lc-root .lc-cols { gap: 9px; margin-bottom: 9px; }

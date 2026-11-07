@@ -2,7 +2,7 @@ import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useStat
 import type { Category, ContextEventRecord, RequestRecord } from '../../shared/types'
 import { CATS } from '../categories'
 import { deltaBandsOf, deltaTotalsOf, dnaBaseLabel } from '../dna'
-import { lruTouch, lruTrim } from '../lru'
+import { lruTouch, lruTrim } from '../boundedCache'
 import type { DnaDelta, TrendBand } from '../dna'
 import { containHorizontalOverscroll } from '../overscroll'
 import { scrollToPos } from '../revealScroll'
@@ -11,13 +11,9 @@ import { DnaBar, DnaDeltaBar, DnaHighlights, RISE_CLASS, STAGGER_CAP } from './t
 import { DurationCurve } from './trendDurationCurve'
 import { BAR_GAP, BAR_W, TREND_WINDOW_MIN, WINDOW_HYSTERESIS_BARS, WINDOW_OVERSCAN_BARS, initialBarWindow, nextBarWindow, windowPads, windowRangeFor } from './trendWindow'
 import type { BarWindow } from './trendWindow'
-export {
-  BAR_GAP, BAR_W, TREND_WINDOW_MIN, WINDOW_HYSTERESIS_BARS, WINDOW_OVERSCAN_BARS,
-  initialBarWindow, nextBarWindow, windowPads, windowRangeFor,
-}
-export type { BarWindow }
-
-export { RISE_CLASS }
+import { preprocessTrend, TURN_FILLS, trendMaxima, trendTipRows, turnStepsOf } from './trendModel'
+import { clampTipLeft } from './tip'
+import { useElementSize } from './useElementMetrics'
 
 export const RISE_CAP = 200
 
@@ -50,150 +46,6 @@ export interface TrendChartProps {
   onPickTurn: (turn: number) => void
   onFocusTurnHandled: () => void
   onFocusSeqHandled: () => void
-}
-
-export function aggregateByTurn(requests: RequestRecord[]): RequestRecord[] {
-  const out: RequestRecord[] = []
-  let runSteps = 0
-  let runActiveMs = 0
-  let runHasActiveMs = false
-  for (const req of requests) {
-    const last = out.length > 0 ? out[out.length - 1] : null
-    if (last !== null && (last.turn ?? 0) === (req.turn ?? 0)) {
-      runSteps++
-      if (req.activeMs !== undefined) { runActiveMs += req.activeMs; runHasActiveMs = true }
-      out[out.length - 1] = { ...req, stepCount: runSteps, ...(runHasActiveMs ? { activeMs: runActiveMs } : {}) }
-    } else {
-      runSteps = 1
-      runActiveMs = req.activeMs ?? 0
-      runHasActiveMs = req.activeMs !== undefined
-      out.push({ ...req, stepCount: 1 })
-    }
-  }
-  return out
-}
-
-export function turnStepsOf(requests: RequestRecord[]): (turn: number | undefined) => number {
-  const counts = new Map<number, number>()
-  for (const req of requests) {
-    const turn = req.turn ?? 0
-    counts.set(turn, (counts.get(turn) ?? 0) + 1)
-  }
-  return turn => counts.get(turn ?? 0) ?? 1
-}
-
-export function attachMarkers(requests: RequestRecord[], events: ContextEventRecord[]): (ContextEventRecord | undefined)[] {
-  const markers: (ContextEventRecord | undefined)[] = new Array<ContextEventRecord | undefined>(requests.length)
-  for (const ev of events) {
-    if (ev.kind !== 'compaction' && ev.kind !== 'prune') continue
-    const i = boundaryIndex(requests, ev.seq)
-    if (i >= 0 && markers[i] === undefined) markers[i] = ev
-  }
-  return markers
-}
-
-export function boundaryIndex(requests: RequestRecord[], seq: number): number {
-  for (let i = 0; i < requests.length; i++) if (requests[i].seq >= seq) return i
-  return -1
-}
-
-export function jumpTargetOf(requests: RequestRecord[], seq: number): RequestRecord | null {
-  for (const req of requests) if (req.seq === seq) return req
-  return requests.length > 0 ? requests[0] : null
-}
-
-export const TURN_FILLS = [
-  'color-mix(in srgb, var(--color-neutral-500) 12%, transparent)',
-  'color-mix(in srgb, var(--color-neutral-500) 26%, transparent)',
-]
-
-function focusOf(req: RequestRecord, cat: string): RequestRecord {
-  const key = cat as Category | 'system' | 'tools'
-  const out: RequestRecord = { ...req }
-  const v = req[key] || 0
-  out.total = v
-  for (const c of CATS) out[c.key] = c.key === key ? v : 0
-  return out
-}
-
-function deltaOf(req: RequestRecord, prev: RequestRecord | null): RequestRecord {
-  const { prompt: _prompt, output: _output, ...out } = req
-  let churn = 0
-  let net = 0
-  for (const c of CATS) {
-    const d = prev !== null ? (req[c.key] || 0) - (prev[c.key] || 0) : 0
-    out[c.key] = d
-    churn += Math.abs(d)
-    net += d
-  }
-  out.total = churn
-  out.net = net
-  return out
-}
-
-export function preprocessTrend(
-  requests: RequestRecord[],
-  delta: boolean,
-  focusCat: string | null | undefined,
-): { requests: RequestRecord[]; focus: string | null } {
-  const focus = focusCat !== null && focusCat !== undefined && CATS.some(c => c.key === focusCat) ? focusCat : null
-  const base = focus !== null ? requests.map(req => focusOf(req, focus)) : requests
-  return { requests: delta ? base.map((req, i) => deltaOf(req, i > 0 ? base[i - 1] : null)) : base, focus }
-}
-
-export function trendMaxima(requests: RequestRecord[], delta: boolean): { maxTotal: number; maxUp: number; maxDown: number } {
-  let maxTotal = 1
-  let maxUp = 0
-  let maxDown = 0
-  if (delta) {
-    for (const req of requests) {
-      let up = 0
-      let down = 0
-      for (const c of CATS) {
-        const d = req[c.key] || 0
-        if (d > 0) up += d
-        else down -= d
-      }
-      if (up > maxUp) maxUp = up
-      if (down > maxDown) maxDown = down
-    }
-  } else {
-    for (const req of requests) if (req.total > maxTotal) maxTotal = req.total
-  }
-  return { maxTotal, maxUp, maxDown }
-}
-
-export function trendTipRows(
-  kit: Pick<ViewKit, 't' | 'fmt' | 'fmtDuration' | 'catLabel'>,
-  opts: {
-    granularity: 'step' | 'turn'
-    stepsOf: (turn: number | undefined) => number
-    delta: boolean
-    focus: string | null
-    durationOn: boolean
-    metric?: string
-  },
-  req: RequestRecord,
-): string[] {
-  const { t, fmt, fmtDuration, catLabel } = kit
-  const n = req.stepCount ?? 1
-  const head = opts.granularity === 'turn'
-    ? (n > 1 ? t('tip.turn', { t: req.turn ?? 0, n }) : t('tip.turn1', { t: req.turn ?? 0 }))
-    : t('tip.step', { t: req.turn ?? 0, s: req.step ?? 0, n: opts.stepsOf(req.turn) })
-  let metric = opts.metric
-  if (metric === undefined) {
-    if (opts.delta) {
-      /* v8 ignore next 1 */
-      metric = t('tip.delta', { n: (req.net ?? 0) > 0 ? '+' + fmt(req.net ?? 0) : fmt(req.net ?? 0) })
-    } else {
-      metric = opts.focus !== null
-        ? t('tip.cat', { cat: catLabel(opts.focus), n: fmt(req.total) })
-        : t('tip.total', { n: fmt(req.total) })
-    }
-  }
-  const rows = [head, metric]
-  if (opts.durationOn && req.activeMs !== undefined) rows.push(t('tip.duration', { n: fmtDuration(req.activeMs) }))
-  return rows
 }
 
 export function makeTrendChart(kit: ViewKit): (props: TrendChartProps) => ReactElement {
@@ -251,6 +103,9 @@ export function makeTrendChart(kit: ViewKit): (props: TrendChartProps) => ReactE
     const diverge = props.upPx !== undefined && props.downPx !== undefined && props.deltaScale !== undefined
     const enterStyle = { '--lc-i': Math.min(props.enterIndex, STAGGER_CAP) } as CSSProperties
     const riseCls = props.rise ? RISE_CLASS : ''
+    const label = req.stepCount !== undefined && req.stepCount > 1
+      ? t('tip.turn', { t: req.turn ?? 0, n: req.stepCount })
+      : t('browser.stepAt', { t: req.turn ?? 0, s: req.step ?? 0 })
     return (
       <div
         className={'lc-bar hover:bg-(--dsw-alias-interactive-bg-hover)'
@@ -259,7 +114,16 @@ export function makeTrendChart(kit: ViewKit): (props: TrendChartProps) => ReactE
           + (props.inTurn ? ' lc-bar-in-turn' : '')}
         data-seq={req.seq}
         style={{ width: `${BAR_W}px` }}
+        role="button"
+        tabIndex={0}
+        aria-label={label + ' · ' + t('tip.total', { n: fmt(req.total) })}
+        aria-pressed={props.selected}
         onClick={() => { props.onSelect(props.selected ? null : req.seq) }}
+        onKeyDown={(ev) => {
+          if (ev.key !== 'Enter' && ev.key !== ' ') return
+          ev.preventDefault()
+          props.onSelect(props.selected ? null : req.seq)
+        }}
         onMouseEnter={() => { props.onHover(req.seq) }}
       >
         {props.flag !== null ? (
@@ -535,6 +399,7 @@ export function makeTrendChart(kit: ViewKit): (props: TrendChartProps) => ReactE
     }
 
     const scrollRef = useRef<HTMLDivElement | null>(null)
+    const chartWidth = useElementSize(scrollRef).width
     const scrolledOnce = useRef(false)
     const lastGranRef = useRef(props.granularity)
     const lastSeqRef = useRef(0)
@@ -667,11 +532,10 @@ export function makeTrendChart(kit: ViewKit): (props: TrendChartProps) => ReactE
       const el = scrollRef.current
       /* v8 ignore next 1 */
       if (el === null) return
-      if (typeof ResizeObserver !== 'function') return
-      const observer = new ResizeObserver(() => { cwRef.current = el.clientWidth; measureRef.current(el); syncWindowRef.current(el) })
-      observer.observe(el)
-      return () => { observer.disconnect() }
-    }, [])
+      cwRef.current = chartWidth
+      measureRef.current(el)
+      syncWindowRef.current(el)
+    }, [chartWidth])
     useLayoutEffect(() => {
       const el = scrollRef.current
       /* v8 ignore next 1 */
@@ -757,9 +621,7 @@ export function makeTrendChart(kit: ViewKit): (props: TrendChartProps) => ReactE
       if (tip === null) return
       const lw = tip.offsetWidth
       const cw = cwRef.current
-      const half = Math.min(lw / 2, cw / 2)
-      const cx = Math.min(Math.max(tipColRef.current - slRef.current, half), cw - half)
-      const next = `translate(${Math.round(cx - lw / 2)}px, 0)`
+      const next = `translate(${clampTipLeft(tipColRef.current - slRef.current, lw, cw)}px, 0)`
       if (tip.style.transform !== next) tip.style.transform = next
     }
 
@@ -871,6 +733,15 @@ export function makeTrendChart(kit: ViewKit): (props: TrendChartProps) => ReactE
                       background: TURN_FILLS[gi % TURN_FILLS.length],
                     }}
                     title={`T${grp.turn}`}
+                    role="button"
+                    tabIndex={0}
+                    aria-label={t('tip.turn1', { t: grp.turn })}
+                    aria-pressed={on}
+                    onKeyDown={(ev) => {
+                      if (ev.key !== 'Enter' && ev.key !== ' ') return
+                      ev.preventDefault()
+                      props.onPickTurn(grp.turn)
+                    }}
                     onMouseEnter={() => { props.onHoverTurn(grp.turn) }}
                     onClick={() => { props.onPickTurn(grp.turn) }}
                   ><span className="lc-turn-label">{`${grp.turn}`}</span></span>

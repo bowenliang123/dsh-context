@@ -1,7 +1,8 @@
-import { useLayoutEffect, useRef, useState, type CSSProperties, type ReactElement } from 'react'
+import { useRef, useState, type CSSProperties, type ReactElement } from 'react'
 import type { PartsPart } from '../categories'
 import type { ContextReserve } from '../reserve'
 import type { ViewKit } from '../viewkit'
+import { TipBubble, tipShiftStyle, useTipShift } from './tip'
 
 const STAGGER_CAP = 8
 
@@ -40,7 +41,6 @@ export function makeStackedBar(kit: ViewKit): (props: StackedBarProps) => ReactE
     const [reserveOn, setReserveOn] = useState<ReserveMask['key'] | 'trigger' | null>(null)
     const wrapRef = useRef<HTMLDivElement | null>(null)
     const tipRef = useRef<HTMLDivElement | null>(null)
-    const [tipShift, setTipShift] = useState(0)
     let total = 0
     for (const p of props.parts) total += p.value
     const scale = props.max !== undefined && props.max > total ? props.max : total
@@ -140,28 +140,8 @@ export function makeStackedBar(kit: ViewKit): (props: StackedBarProps) => ReactE
       }
     }
 
-    useLayoutEffect(() => {
-      if (tip === null) {
-        setTipShift(prev => (prev === 0 ? prev : 0))
-        return
-      }
-      /* v8 ignore next */
-      const wrapW = wrapRef.current === null ? 0 : wrapRef.current.getBoundingClientRect().width
-      const tipW = tipRef.current === null ? 0 : tipRef.current.getBoundingClientRect().width
-      setTipShift((prev) => {
-        if (wrapW <= 0 || tipW <= 0) return prev === 0 ? prev : 0
-        const center = tip.leftPct / 100 * wrapW
-        const leftOver = tipW / 2 - center
-        const rightOver = center + tipW / 2 - wrapW
-        const next = leftOver > 0 ? Math.ceil(leftOver) : rightOver > 0 ? Math.ceil(-rightOver) : 0
-        return next === prev ? prev : next
-      })
-    })
-
-    const shift = tipShift === 0
-      ? null
-      : { transform: `translateX(calc(-50% ${tipShift > 0 ? '+' : '-'} ${Math.abs(tipShift)}px))` }
-    const tipStyle = tip === null ? { left: '50%' } : { left: `${tip.leftPct}%`, ...shift }
+    const tipShift = useTipShift(wrapRef, tipRef, tip === null ? null : { unit: 'pct', value: tip.leftPct })
+    const tipStyle = tip === null ? { left: '50%' } : { left: `${tip.leftPct}%`, ...tipShiftStyle(tipShift) }
 
     return (
       <div className="lc-stacked-wrap" ref={wrapRef}>
@@ -181,6 +161,18 @@ export function makeStackedBar(kit: ViewKit): (props: StackedBarProps) => ReactE
                 key={p.key}
                 className={'lc-stacked-seg' + (animate ? ' animate-lc-stacked-in motion-reduce:animate-none' : '') + (on ? ' lc-stacked-seg-on' : '') + (pickKey !== undefined ? ' lc-stacked-seg-pick' : '')}
                 style={{ width: `${widths[i]}%`, backgroundColor: p.color, ...(animate ? { '--lc-i': Math.min(i, STAGGER_CAP) } : {}) }}
+                {...(pickKey !== undefined
+                  ? {
+                    role: 'button',
+                    tabIndex: 0,
+                    'aria-label': `${p.label ?? catLabel(p.key)} ${fmt(p.raw ?? p.value)}`,
+                    onKeyDown: (ev: { key: string; preventDefault: () => void }) => {
+                      if (ev.key !== 'Enter' && ev.key !== ' ') return
+                      ev.preventDefault()
+                      pickKey(p.key)
+                    },
+                  }
+                  : {})}
                 onMouseEnter={() => { if (props.onHoverKey !== undefined) props.onHoverKey(p.key) }}
                 onClick={pickKey !== undefined ? () => { pickKey(p.key) } : undefined}
               />
@@ -218,20 +210,16 @@ export function makeStackedBar(kit: ViewKit): (props: StackedBarProps) => ReactE
         </div>
         {props.tip !== false
           ? (
-            <div
-              ref={tipRef}
-              className={'lc-tip lc-bar-tip' + (tip ? ' lc-bar-tip-on' : '')}
-              role={tip === null ? undefined : 'tooltip'}
+            <TipBubble
+              tipRef={tipRef}
+              className="lc-tip lc-bar-tip"
+              onClass="lc-bar-tip-on"
+              shown={tip !== null}
               style={tipStyle}
-            >
-              {tip === null ? null : (
-                <>
-                  <b className="lc-bar-tip-head">{tip.head}</b>
-                  <span className="lc-bar-tip-fig">{tip.figure}</span>
-                  {tip.note !== undefined ? <span className="lc-bar-tip-note">{tip.note}</span> : null}
-                </>
-              )}
-            </div>
+              head={tip?.head}
+              figure={tip?.figure}
+              note={tip?.note}
+            />
           )
           : null}
       </div>
@@ -262,6 +250,14 @@ export function makeLegend(kit: ViewKit): (props: LegendProps) => ReactElement {
               key={p.key}
               className={'lc-chip' + (on ? ' lc-chip-on' : '')}
               title={props.delta === true ? undefined : t('overview.ofUsed')}
+              {...(props.onHoverKey !== undefined
+                ? {
+                  tabIndex: 0,
+                  'aria-label': `${catLabel(p.key)} ${fmt(count)}`,
+                  onFocus: () => { props.onHoverKey?.(p.key) },
+                  onBlur: () => { props.onHoverKey?.(null) },
+                }
+                : {})}
               onMouseEnter={() => { if (props.onHoverKey !== undefined) props.onHoverKey(p.key) }}
               onMouseLeave={() => { if (props.onHoverKey !== undefined) props.onHoverKey(null) }}
             >

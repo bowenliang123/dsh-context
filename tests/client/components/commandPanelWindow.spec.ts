@@ -2,9 +2,9 @@ import assert from 'node:assert/strict'
 import { createElement as h } from 'react'
 import { afterAll, beforeAll, describe, test, vi } from 'vitest'
 import { makeCommandPanel } from '../../../src/client/components/commandPanel'
-import { rowWindowFor } from '../../../src/client/components/useRowWindow'
 import type { Command } from '../../../src/client/commands'
 import { click, fireScroll, makeKit, mount, query, queryAll, settle, text, typeText, until } from '../helpers/kit'
+import { restoreLayout, stubClientSizes, stubResizeObserver, stubRowRects } from '../helpers/layout'
 
 const Panel = makeCommandPanel(makeKit())
 
@@ -13,47 +13,24 @@ const GAP = 2
 const T0 = 1_700_000_000_000
 let mixedRows = false
 let zeroRows = false
-let originals: [string, PropertyDescriptor | undefined][] = []
 
 beforeAll(() => {
-  vi.stubGlobal('ResizeObserver', class {
-    observe = (): void => {}
-    disconnect = (): void => {}
-  })
-  originals = (['clientHeight', 'getBoundingClientRect'] as const)
-    .map(name => [name, Object.getOwnPropertyDescriptor(HTMLElement.prototype, name)] as [string, PropertyDescriptor | undefined])
-  Object.defineProperty(HTMLElement.prototype, 'clientHeight', {
-    configurable: true,
-    get(this: HTMLElement): number {
-      if (this.classList.contains('lc-cmd-list')) return 320
-      const own = Object.getOwnPropertyDescriptor(Element.prototype, 'clientHeight')?.get
-      return own === undefined ? 0 : own.call(this)
-    },
-  })
-  const rect = Object.getOwnPropertyDescriptor(Element.prototype, 'getBoundingClientRect')!.value as () => DOMRect
-  Object.defineProperty(HTMLElement.prototype, 'getBoundingClientRect', {
-    configurable: true,
-    value(this: HTMLElement): DOMRect {
-      if (this.classList.contains('lc-cmd-item')) {
-        const items = [...(this.parentElement?.querySelectorAll('.lc-cmd-item') ?? [])]
-        const i = items.indexOf(this)
-        const heightOf = (j: number): number => (zeroRows ? 0 : (mixedRows && j % 7 === 0 ? PITCH + 20 : PITCH) - GAP)
-        let top = 0
-        for (let j = 0; j < i; j++) top += heightOf(j) + GAP
-        return { left: 0, top, width: 500, height: heightOf(i), right: 500, bottom: top + heightOf(i), x: 0, y: top, toJSON: () => ({}) } as DOMRect
-      }
-      return rect.call(this) as DOMRect
-    },
-  })
+  stubResizeObserver()
+  stubClientSizes({ 'lc-cmd-list': { height: 320 } })
+  stubRowRects('lc-cmd-item', index => (zeroRows ? 0 : (mixedRows && index % 7 === 0 ? PITCH + 20 : PITCH) - GAP), GAP)
 })
 
 afterAll(() => {
   vi.unstubAllGlobals()
-  for (const [name, desc] of originals) {
-    if (desc === undefined) delete (HTMLElement.prototype as unknown as Record<string, unknown>)[name]
-    else Object.defineProperty(HTMLElement.prototype, name, desc)
-  }
+  restoreLayout()
 })
+
+function rowPositions(container: ParentNode): number[] {
+  return queryAll(container, '.lc-cmd-cmd')
+    .map(cmd => Number(/item-(\d+)/.exec(text(cmd))?.[1] ?? '-1'))
+    .map(index => 119 - index)
+    .sort((a, b) => a - b)
+}
 
 function commandsOf(count: number): Command[] {
   return Array.from({ length: count }, (_, i) => ({
@@ -75,20 +52,23 @@ describe('CommandPanel row windowing', () => {
     try {
       const list = query<HTMLElement>(m.container, '.lc-cmd-list')
       await until(() => queryAll(m.container, '.lc-cmd-item').length < 120, 'the list windows after measuring')
-      const start = rowWindowFor(0, 320, PITCH, 120)
-      assert.equal(queryAll(m.container, '.lc-cmd-item').length, start.to - start.from + 1)
+      const initial = rowPositions(m.container)
+      assert.equal(initial[0], 0, 'the window starts at the newest row')
+      assert.equal(queryAll<HTMLElement>(m.container, '.lc-row-pad').length, 1)
       const [bottomOnly] = queryAll<HTMLElement>(m.container, '.lc-row-pad')
-      assert.equal(bottomOnly.style.height, `${(119 - start.to) * PITCH - GAP}px`)
+      assert.equal(bottomOnly.style.height, `${(119 - initial[initial.length - 1]) * PITCH - GAP}px`)
 
       list.scrollTop = 900
       await settle(40)
       await fireScroll(list)
       await until(() => queryAll<HTMLElement>(m.container, '.lc-row-pad').length === 2, 'a top pad appears after scrolling')
-      const mid = rowWindowFor(900, 320, PITCH, 120)
-      assert.equal(queryAll(m.container, '.lc-cmd-item').length, mid.to - mid.from + 1)
+      const mid = rowPositions(m.container)
+      assert.ok(mid[0] * PITCH <= 900, 'the first rendered row reaches the viewport top')
+      assert.ok(mid[mid.length - 1] * PITCH + PITCH >= 900 + 320, 'the last rendered row covers the viewport bottom')
+      assert.equal(mid.length, mid[mid.length - 1] - mid[0] + 1, 'the rendered window is contiguous')
       const [topPad, bottomPad] = queryAll<HTMLElement>(m.container, '.lc-row-pad')
-      assert.equal(topPad.style.height, `${mid.from * PITCH - GAP}px`)
-      assert.equal(bottomPad.style.height, `${(119 - mid.to) * PITCH - GAP}px`)
+      assert.equal(topPad.style.height, `${mid[0] * PITCH - GAP}px`)
+      assert.equal(bottomPad.style.height, `${(119 - mid[mid.length - 1]) * PITCH - GAP}px`)
 
       list.scrollTop = 100_000
       list.dispatchEvent(new Event('scroll'))
@@ -163,18 +143,19 @@ describe('CommandPanel row windowing', () => {
     const m = await mount(h(Panel, { commands: commandsOf(120), workspace: '/repo' }))
     const list = query<HTMLElement>(m.container, '.lc-cmd-list')
     await until(() => queryAll(m.container, '.lc-cmd-item').length < 120, 'windowed')
-    const check = (from: number): void => {
+    const check = (): void => {
       const rows = queryAll<HTMLElement>(m.container, '.lc-cmd-item')
-      for (let i = 0; i < rows.length; i++) {
-        assert.equal(rows[i].classList.contains('lc-cmd-item-alt'), (from + i) % 2 === 1, `row ${from + i}`)
+      for (const row of rows) {
+        const index = Number(/item-(\d+)/.exec(text(query(row, '.lc-cmd-cmd')))?.[1] ?? '-1')
+        assert.equal(row.classList.contains('lc-cmd-item-alt'), (119 - index) % 2 === 1, `row ${index}`)
       }
     }
-    check(rowWindowFor(0, 320, PITCH, 120).from)
+    check()
     list.scrollTop = PITCH * 21
     await settle(40)
     await fireScroll(list)
     await until(() => queryAll<HTMLElement>(m.container, '.lc-row-pad').length === 2, 'scrolled past the overscan')
-    check(rowWindowFor(PITCH * 21, 320, PITCH, 120).from)
+    check()
     await m.unmount()
   })
 

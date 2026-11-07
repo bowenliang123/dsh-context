@@ -2,7 +2,7 @@ import { act, createElement as h } from 'react'
 import assert from 'node:assert/strict'
 import { afterEach, describe, test, vi } from 'vitest'
 import type { Command } from '../../../src/client/commands'
-import { mount, query, queryAll, text, click } from '../helpers/kit'
+import { mount, query, queryAll, text, click, until } from '../helpers/kit'
 import type { ConversationNodeLike } from '../../../src/client/services'
 import { Panel, T0, chipCounts, cmd, rowTexts, typeSearch } from './commandPanelHarness'
 
@@ -359,6 +359,35 @@ describe('CommandPanel — the result block', () => {
     assert.equal(bareCards.length, 1, 'no fetcher — no result card')
     assert.ok(query(bareCards[0], '.lc-cmd-detail-facts') !== null, 'the facts band closes the command card')
     await bare.unmount()
+  })
+
+  test('keeps only the most recent expanded results so a long session cannot retain every output', async () => {
+    const commands = Array.from({ length: 12 }, (_, index) => cmd(index + 1, {
+      cmd: `echo out-${index}`,
+      resultSeq: 100 + index,
+    }))
+    const calls: number[] = []
+    const outputs = new Map<number, string>()
+    for (let seq = 100; seq < 112; seq++) outputs.set(seq, `output-${seq}`)
+    const m = await mount(h(Panel, {
+      commands,
+      fetchContent: async (seq) => {
+        calls.push(seq)
+        const text = outputs.get(seq)
+        return { kind: 'tool', seq, content: [{ type: 'text', text: text ?? '' }] }
+      },
+    }))
+    for (let index = 0; index < 12; index++) {
+      const row = queryAll(m.container, '.lc-cmd-item').find(item => text(query(item, '.lc-cmd-cmd')) === `echo out-${index}`)
+      assert.ok(row !== undefined)
+      await click(query(row, '.lc-cmd-row'))
+      await until(() => text(m.container).includes(`output-${100 + index}`), `output ${index} never landed`)
+    }
+    assert.equal(new Set(calls).size, 12)
+    await click(query(queryAll(m.container, '.lc-cmd-item').find(item => text(query(item, '.lc-cmd-cmd')) === 'echo out-0')!, '.lc-cmd-row'))
+    await until(() => text(m.container).includes('output-100'), 'the evicted result never re-reads')
+    assert.equal(calls.filter(seq => seq === 100).length, 2, 'the oldest result was evicted and read again')
+    await m.unmount()
   })
 
   test('both cards carry the copy and find actions; the result copy writes the result text', async () => {

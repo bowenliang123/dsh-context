@@ -1,4 +1,4 @@
-import { createElement as h } from 'react'
+import { act, createElement as h } from 'react'
 import assert from 'node:assert/strict'
 import { describe, test } from 'vitest'
 import { CATS } from '../../../src/client/categories'
@@ -184,6 +184,36 @@ describe('TrendChart tooltips', () => {
     assert.deepEqual(spies.hover, [1, null])
     await m.update(h(TrendChart, propsOf(reqs, { ...handlers, hoveredSeq: null })))
     assert.equal(queryAll(m.container, '.lc-chart-tip').length, 0)
+    await m.unmount()
+  })
+})
+
+describe('TrendChart keyboard picks', () => {
+  test('a focused bar selects on Enter and Space only, and turn chips pick their turn number', async () => {
+    const { spies, handlers } = makeSpies()
+    const first = req(1, { turn: 1, step: 0 })
+    const second = req(2, { turn: 2, step: 0 })
+    const m = await mount(h(TrendChart, propsOf([first, second], handlers)))
+    const [bar, other] = bars(m.container)
+    assert.equal(bar.getAttribute('role'), 'button')
+    assert.equal(bar.getAttribute('aria-pressed'), 'false')
+    await act(async () => { bar.dispatchEvent(new KeyboardEvent('keydown', { key: 'a', bubbles: true, cancelable: true })) })
+    assert.deepEqual(spies.select, [])
+    await act(async () => { bar.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true })) })
+    assert.deepEqual(spies.select, [1])
+    await act(async () => { other.dispatchEvent(new KeyboardEvent('keydown', { key: ' ', bubbles: true, cancelable: true })) })
+    assert.deepEqual(spies.select, [1, 2])
+    await m.update(h(TrendChart, propsOf([first, second], { ...handlers, selectedSeq: 1 })))
+    const picked = bars(m.container)[0]
+    assert.equal(picked.getAttribute('aria-pressed'), 'true')
+    await act(async () => { picked.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true })) })
+    assert.deepEqual(spies.select, [1, 2, null])
+    const turns = queryAll(m.container, '.lc-turn')
+    assert.equal(turns[1].getAttribute('role'), 'button')
+    await act(async () => { turns[1].dispatchEvent(new KeyboardEvent('keydown', { key: 'a', bubbles: true })) })
+    assert.deepEqual(spies.pickTurn, [])
+    await act(async () => { turns[1].dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true })) })
+    assert.deepEqual(spies.pickTurn, [2])
     await m.unmount()
   })
 })

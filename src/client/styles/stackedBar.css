@@ -35,3 +35,8 @@ body[data-ds-dark-theme] .lc-stacked { background: color-mix(in srgb, var(--colo
 .lc-chip-nums-down { color: var(--dsw-alias-state-error-primary); }
 .lc-chip-on { font-weight: 600; background: var(--dsw-alias-interactive-bg-hover); }
 .lc-chip-on i { box-shadow: 0 0 0 1px var(--dsw-alias-brand-primary); }
+
+.lc-stacked-seg:focus-visible, .lc-chip:focus-visible {
+  outline: 2px solid var(--dsw-alias-brand-primary);
+  outline-offset: 1px;
+}

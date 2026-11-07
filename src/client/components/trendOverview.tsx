@@ -1,7 +1,9 @@
-import { Fragment, useCallback, useLayoutEffect, useMemo, useRef, useState, type ReactElement } from 'react'
+import { Fragment, useCallback, useLayoutEffect, useMemo, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type ReactElement } from 'react'
 import type { Category, ContextEventRecord, RequestRecord } from '../../shared/types'
 import { CATS, CAT_COLOR } from '../categories'
-import { RISE_CLASS, TURN_FILLS, preprocessTrend, trendMaxima, turnStepsOf, trendTipRows } from './trendChart'
+import { RISE_CLASS } from './trendDnaBars'
+import { TURN_FILLS, preprocessTrend, trendMaxima, turnStepsOf, trendTipRows } from './trendModel'
+import { clampTipLeft } from './tip'
 import type { ViewKit } from '../viewkit'
 
 export interface TrendOverviewProps {
@@ -195,6 +197,7 @@ export function makeTrendOverview(kit: ViewKit): (props: TrendOverviewProps) => 
     const lastCatRef = useRef<RibbonBand['cat'] | null>(null)
     const [localHover, setLocalHover] = useState<number | null>(null)
     const [localCat, setLocalCat] = useState<RibbonBand['cat'] | null>(null)
+    const [keyCursor, setKeyCursor] = useState<number | null>(null)
     const hoverSeq = localHover ?? props.hoveredSeq
     const handleHover = useCallback((seq: number | null): void => {
       setLocalHover(seq)
@@ -265,20 +268,32 @@ export function makeTrendOverview(kit: ViewKit): (props: TrendOverviewProps) => 
 
     const hoveredIdx = hoverSeq !== null ? requests.findIndex(r => r.seq === hoverSeq) : -1
     const selectedIdx = props.selectedSeq !== null ? requests.findIndex(r => r.seq === props.selectedSeq) : -1
+    const keyboardIdx = (): number => keyCursor ?? (hoveredIdx >= 0 ? hoveredIdx : selectedIdx >= 0 ? selectedIdx : 0)
+    const moveCursor = (index: number): void => {
+      const clamped = Math.min(n - 1, Math.max(0, index))
+      setKeyCursor(clamped)
+      handleHover(requests[clamped].seq)
+    }
+    const onKeyDown = (ev: ReactKeyboardEvent): void => {
+      if (ev.key === 'ArrowLeft') { ev.preventDefault(); moveCursor(keyboardIdx() - 1) }
+      else if (ev.key === 'ArrowRight') { ev.preventDefault(); moveCursor(keyboardIdx() + 1) }
+      else if (ev.key === 'Home') { ev.preventDefault(); moveCursor(0) }
+      else if (ev.key === 'End') { ev.preventDefault(); moveCursor(n - 1) }
+      else if (ev.key === 'Enter' || ev.key === ' ') {
+        ev.preventDefault()
+        const seq = requests[keyboardIdx()].seq
+        props.onSelect(props.selectedSeq === seq ? null : seq)
+      }
+    }
     const stepsOf = useMemo(() => turnStepsOf(props.requests), [props.requests])
     useLayoutEffect(() => {
       const el = surfaceRef.current
       /* v8 ignore next 1 */
       if (el === null) return
-      const cw = el.clientWidth
       /* v8 ignore next 1 */
       const tip = (wrapRef.current ?? document.body).querySelector<HTMLElement>('.lc-chart-tip')
       if (tip === null) return
-      const lw = tip.offsetWidth
-      const half = Math.min(lw / 2, cw / 2)
-      /* v8 ignore next 1 */
-      const cx = hoveredIdx >= 0 ? Math.min(Math.max(hoveredIdx / u * cw, half), cw - half) : 0
-      const next = `translate(${Math.round(cx - lw / 2)}px, 0)`
+      const next = `translate(${clampTipLeft(Math.max(0, hoveredIdx) / u * el.clientWidth, tip.offsetWidth, el.clientWidth)}px, 0)`
       if (tip.style.transform !== next) tip.style.transform = next
     })
     if (n === 0) return null
@@ -318,6 +333,12 @@ export function makeTrendOverview(kit: ViewKit): (props: TrendOverviewProps) => 
               className="lc-chart"
               ref={surfaceRef}
               data-catdim={localCat ?? props.hoverCat ?? undefined}
+              role="button"
+              tabIndex={0}
+              aria-label={kit.t('trend.title')}
+              onKeyDown={onKeyDown}
+              onFocus={() => { moveCursor(keyboardIdx()) }}
+              onBlur={() => { setKeyCursor(null); handleHover(null) }}
               onMouseMove={onMove}
               onMouseLeave={onLeave}
               onClick={onClick}
@@ -399,6 +420,15 @@ export function makeTrendOverview(kit: ViewKit): (props: TrendOverviewProps) => 
                     className={'lc-turn' + (on ? ' lc-turn-on' : '')}
                     style={{ flexGrow: grp.count, flexBasis: 0, background: TURN_FILLS[gi % TURN_FILLS.length] }}
                     title={`T${grp.turn}`}
+                    role="button"
+                    tabIndex={0}
+                    aria-label={kit.t('tip.turn1', { t: grp.turn })}
+                    aria-pressed={on}
+                    onKeyDown={(ev) => {
+                      if (ev.key !== 'Enter' && ev.key !== ' ') return
+                      ev.preventDefault()
+                      props.onPickTurn(grp.turn)
+                    }}
                     onMouseEnter={() => { props.onHoverTurn(grp.turn) }}
                     onClick={() => { props.onPickTurn(grp.turn) }}
                   >{flagGroups.includes(gi) ? <span className="lc-turn-label">{`${grp.turn}`}</span> : null}</span>

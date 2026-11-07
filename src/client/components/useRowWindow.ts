@@ -273,3 +273,72 @@ export function useMeasuredWindow(
     scrollToKey,
   }
 }
+
+export interface RowGeometry {
+  pitch: number
+  gap: number
+}
+
+export function rowGeometryOf(items: readonly HTMLElement[]): RowGeometry | null {
+  if (items.length < 2) return null
+  const rects = items.map(item => item.getBoundingClientRect())
+  const height = Math.round(rects[0].height)
+  if (!(height > 4)) return null
+  const pitch = Math.round(rects[1].top - rects[0].top)
+  if (!(pitch > height)) return null
+  for (let i = 0; i < rects.length; i++) {
+    if (Math.abs(Math.round(rects[i].height) - height) > 1) return null
+    if (i > 0 && Math.abs(Math.round(rects[i].top - rects[i - 1].top) - pitch) > 1) return null
+  }
+  return { pitch, gap: Math.max(0, pitch - height) }
+}
+
+export function useRowGeometry(
+  ref: RefObject<HTMLElement | null>,
+  count: number,
+  selector: string,
+  signature: string,
+  enabled = true,
+): RowGeometry | null {
+  const [measured, setMeasured] = useState<{ signature: string; geometry: RowGeometry | null } | null>(null)
+  useLayoutEffect(() => {
+    if (!enabled || count < 2) return
+    const el = ref.current
+    /* v8 ignore next 1 */
+    if (el === null) return
+    const items = [...el.querySelectorAll<HTMLElement>(selector)]
+    /* v8 ignore next 1 */
+    if (items.length !== count) return
+    setMeasured({ signature, geometry: rowGeometryOf(items) })
+  }, [count, enabled, ref, selector, signature])
+  return measured !== null && measured.signature === signature ? measured.geometry : null
+}
+
+export interface WindowedRows {
+  from: number
+  to: number
+  topPad: number
+  bottomPad: number
+  pitch: number
+}
+
+export function useWindowedRows(
+  ref: RefObject<HTMLElement | null>,
+  count: number,
+  geometry: RowGeometry | null,
+  enabled: boolean,
+): WindowedRows {
+  const pitch = geometry === null ? 1 : geometry.pitch
+  const gap = geometry === null ? 0 : geometry.gap
+  const range = useRowWindow(ref, count, pitch, enabled)
+  const last = Math.max(0, count - 1)
+  const from = Math.min(range.from, last)
+  const to = Math.min(range.to, last)
+  return {
+    from,
+    to,
+    topPad: from > 0 ? Math.max(0, from * pitch - gap) : 0,
+    bottomPad: to < last ? Math.max(0, (last - to) * pitch - gap) : 0,
+    pitch,
+  }
+}

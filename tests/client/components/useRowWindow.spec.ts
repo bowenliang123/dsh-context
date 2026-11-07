@@ -2,7 +2,7 @@ import assert from 'node:assert/strict'
 import { createElement as h, useRef } from 'react'
 import { act } from 'react'
 import { describe, test, vi } from 'vitest'
-import { ROW_WINDOW_OVERSCAN, rowWindowFor, useColumnWindow, useMeasuredWindow, useRowWindow, type MeasuredWindow } from '../../../src/client/components/useRowWindow'
+import { ROW_WINDOW_OVERSCAN, rowGeometryOf, rowWindowFor, useColumnWindow, useMeasuredWindow, useRowWindow, type MeasuredWindow } from '../../../src/client/components/useRowWindow'
 import { mount, pinScroll, query, queryAll, until } from '../helpers/kit'
 
 describe('rowWindowFor', () => {
@@ -352,5 +352,22 @@ describe('useMeasuredWindow — key pruning', () => {
     } finally {
       vi.unstubAllGlobals()
     }
+  })
+})
+
+describe('rowGeometryOf', () => {
+  function row(height: number, top: number): HTMLElement {
+    const el = document.createElement('div')
+    el.getBoundingClientRect = () => ({ top, height, bottom: top + height, left: 0, right: 100, width: 100, x: 0, y: top, toJSON: () => ({}) }) as DOMRect
+    return el
+  }
+
+  test('reads a uniform pitch and gap, and rejects a lone, tiny, tight, or mixed row set', () => {
+    assert.deepEqual(rowGeometryOf([row(28, 0), row(28, 30), row(28, 60)]), { pitch: 30, gap: 2 })
+    assert.equal(rowGeometryOf([row(28, 0)]), null)
+    assert.equal(rowGeometryOf([row(0, 0), row(0, 0)]), null)
+    assert.equal(rowGeometryOf([row(30, 0), row(30, 10)]), null)
+    assert.equal(rowGeometryOf([row(20, 0), row(28, 30), row(28, 60)]), null)
+    assert.equal(rowGeometryOf([row(28, 0), row(28, 40), row(28, 60)]), null)
   })
 })

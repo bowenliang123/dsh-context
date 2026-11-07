@@ -1,7 +1,7 @@
 import { act, createElement as h } from 'react'
 import assert from 'node:assert/strict'
 import { describe, test } from 'vitest'
-import { aggregateByTurn } from '../../../src/client/components/trendChart'
+import { aggregateByTurn } from '../../../src/client/components/trendModel'
 import type { RequestRecord } from '../../../src/shared/types'
 import { flush, mount, query, queryAll, wheel } from '../helpers/kit'
 import { BAR_CELL, CHART_H, TrendChart, bars, kit, makeSpies, propsOf, req, scrollEvent, scrollTo, viewport, type LayoutEl } from './trendChartHarness'

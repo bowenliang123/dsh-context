@@ -8,6 +8,7 @@ import { resetTimelineDetailStores } from '../../../src/client/timelineSource'
 import { TestClientCtx, asClientCtx } from '../helpers/harness'
 import { click, makeKit, mount, query, queryAll, text, typeText, until } from '../helpers/kit'
 import { projectionsFor, richTimeline } from './contextViewHarness'
+import { restoreLayout, stubRowRects } from '../helpers/layout'
 
 const TEAM = {
   members: [
@@ -69,6 +70,7 @@ async function settleEvents(m: Awaited<ReturnType<typeof mount>>, count = 2): Pr
 afterEach(() => {
   vi.restoreAllMocks()
   vi.unstubAllGlobals()
+  restoreLayout()
   resetTimelineDetailStores()
 })
 
@@ -668,6 +670,7 @@ describe('Multi-Agent Fleet', () => {
   })
 
   test('complete history backfills beyond the preview cap without any user action', async () => {
+    stubRowRects('lc-comms-event', () => 60, 4)
     const total = 245
     const snapshot = {
       byId: {

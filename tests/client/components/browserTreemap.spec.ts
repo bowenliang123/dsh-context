@@ -4,6 +4,7 @@ import { describe, test } from 'vitest'
 import type { ContextBrowserProps } from '../../../src/client/components/browser'
 import type { ContextHeaders } from '../../../src/shared/types'
 import { click, focus, hover, mount, pinRect, query, queryAll, surfaceNode, text, tipRows, unhover, type Mounted } from '../helpers/kit'
+import { restoreLayout, stubListRect } from '../helpers/layout'
 import { Browser, catRow, elemRows, props, tl } from './browserHarness'
 
 const mapHeaders: ContextHeaders = {
@@ -199,10 +200,10 @@ describe('ContextBrowser block map', () => {
 
   test('the bubble clamps inside the panel: shifted at the edges, centered and unflipped mid-panel', async () => {
     const m = await mount(h(Browser, props({ data: mapData(), headers: mapHeaders })))
+    stubListRect('lc-map', 400, 240)
     await click(mapBtn(m))
     const wrap = query(m.container, '.lc-map')
     const tip = query(m.container, '.lc-map-tip')
-    pinRect(wrap, 400, 240)
     pinRect(tip, 300)
     await m.update(h(Browser, props({ data: mapData(), headers: mapHeaders })))
 
@@ -219,6 +220,7 @@ describe('ContextBrowser block map', () => {
     await unhover(wrap)
     assert.equal(tip.style.transform, '')
     await m.unmount()
+    restoreLayout()
   })
 
   test('degenerate regions: a sliver category renders a bare frame, a sub-minimum one drops out', async () => {

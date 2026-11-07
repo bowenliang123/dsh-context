@@ -41,7 +41,8 @@ import type { StatsEventKind, StatsJump } from './statsContext'
 import { makeStatsTiming } from './statsTiming'
 import { makeStatsTokens } from './statsTokens'
 import { makeLegend, makeStackedBar } from './stackedBar'
-import { aggregateByTurn, attachMarkers, boundaryIndex, jumpTargetOf, makeTrendChart, turnStepsOf } from './trendChart'
+import { makeTrendChart } from './trendChart'
+import { aggregateByTurn, attachMarkers, boundaryIndex, jumpTargetOf, turnStepsOf } from './trendModel'
 import { makeTrendOverview } from './trendOverview'
 import { stepStampOf } from './browserHelpers'
 import { cachedByData } from './derivedCache'
@@ -54,6 +55,7 @@ import type { TrendBand } from '../dna'
 import { activateViewTab, openContextSidebar, subscribeContextFocus, takeContextFocus, useFleetMemberFocus } from '../viewFocus'
 import { revealInScrollParent } from '../revealScroll'
 import { makeErrorBoundary } from './errorBoundary'
+import { remoteStateOf } from './useRemoteState'
 
 const viewScroll = new Map<string, number>()
 
@@ -269,7 +271,7 @@ export function makeContextView(
       if (col === null) return
       const next = browserCapOf([...col.children].map(el => el.getBoundingClientRect()))
       setBrowserCap(prev => (prev === next ? prev : next))
-    }, [data, capTick, sidebarVisible])
+    }, [capTick, data, sidebarVisible])
     /* v8 ignore start */
     useEffect(() => {
       const col = leftColRef.current
@@ -278,7 +280,7 @@ export function makeContextView(
       observer.observe(col)
       for (const el of col.querySelectorAll(':scope > .lc-card')) observer.observe(el)
       return () => { observer.disconnect() }
-    }, [data, sidebarVisible])
+    }, [sidebarVisible])
     /* v8 ignore stop */
     const onJump = useCallback((jump: StatsJump): void => {
       if (jump === 'turns' || jump === 'steps') {
@@ -351,6 +353,7 @@ export function makeContextView(
       [requests, granularity],
     )
     const stepsOf = useMemo(() => turnStepsOf(requests), [requests])
+    const remote = remoteStateOf(displayRequests.length, source.detailState, source.retryDetail)
     const opStampOf = useMemo(() => stepStampOf(requests), [requests])
     const markers = useMemo(() => attachMarkers(displayRequests, events), [displayRequests, events])
     /* v8 ignore next 1 */
@@ -697,7 +700,9 @@ export function makeContextView(
           ? (detailReady
             ? <TrendReserved catLabel={catLabel}><div className="lc-empty">{t('trend.empty')}</div></TrendReserved>
             : <TrendReserved catLabel={catLabel}>
-              <DetailNote state={source.detailState === 'failed' ? 'failed' : 'loading'} onRetry={source.retryDetail} />
+              {remote.kind === 'failed'
+                ? <DetailNote state="failed" onRetry={remote.retry} />
+                : <DetailNote state="loading" />}
             </TrendReserved>)
           : (
             <div>

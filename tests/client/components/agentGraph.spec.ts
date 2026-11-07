@@ -628,7 +628,7 @@ describe('AgentGraph — cold-relative composition fetch', () => {
     await remounted.unmount()
   })
 
-  test('a failing fetch degrades to the pressure-only fill and never retries', async () => {
+  test('a failing fetch degrades to the pressure-only fill and retries only when the family changes', async () => {
     const rpc = detailFetch({ reject: true })
     const { View, face } = makeFetchingView()
     const m = await mount(h(View, { sessionId: 'root', self: selfStats() }))
@@ -639,7 +639,7 @@ describe('AgentGraph — cold-relative composition fetch', () => {
       face.setState(family())
     })
     await flush()
-    assert.deepEqual(rpc.calls, ['api/dsh-context/detail:done'], 'the sticky failure never re-fetches')
+    assert.deepEqual(rpc.calls, ['api/dsh-context/detail:done', 'api/dsh-context/detail:done'], 'a rejected read is not cached so the next cold tick retries')
     await m.unmount()
   })
 

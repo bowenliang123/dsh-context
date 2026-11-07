@@ -1,3 +1,4 @@
+import { formLabelOf } from '../labels'
 import { memo, type ComponentType, type MouseEvent, type ReactElement, type ReactNode } from 'react'
 import type { ContextEventRecord, RequestRecord, SurfaceNode } from '../../shared/types'
 import { partsOf, CATS } from '../categories'
@@ -63,7 +64,7 @@ export function makeRequestDetail(
     }
     if (n.cat === 'skill') {
       return {
-        tag: n.skill !== undefined ? t('node.skillTag', { name: n.skill }) : t('form.' + (n.form ?? 'context')),
+        tag: n.skill !== undefined ? t('node.skillTag', { name: n.skill }) : formLabelOf(t, n.form),
         text: n.text ?? callSummaryOf(conv) ?? '',
       }
     }
@@ -79,7 +80,7 @@ export function makeRequestDetail(
       const text = n.text !== undefined && n.text !== ''
         ? (n.form === 'snapshot' ? t('node.snapshot') + n.text : n.text)
         : ''
-      return { tag: t('form.' + (n.form ?? 'context')), text }
+      return { tag: formLabelOf(t, n.form), text }
     }
     const imgs = n.imgs ?? 0
     return {

@@ -4,7 +4,7 @@ import { describe, test } from 'vitest'
 import {
   BAR_GAP, BAR_W, initialBarWindow, nextBarWindow, WINDOW_HYSTERESIS_BARS, WINDOW_OVERSCAN_BARS,
   windowPads, windowRangeFor,
-} from '../../../src/client/components/trendChart'
+} from '../../../src/client/components/trendWindow'
 import { flush, mount, query, queryAll, until } from '../helpers/kit'
 import { TrendChart, bars, propsOf, req, scrollTo, viewport } from './trendChartHarness'
 import type { LayoutEl } from './trendChartHarness'

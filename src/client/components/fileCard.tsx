@@ -9,6 +9,8 @@ import { IconFolderOpen } from '../primitives'
 import { ClearableInput } from './clearableInput'
 import { makeDetailNote } from './detailNote'
 import { useRowWindow } from './useRowWindow'
+import { useElementSize } from './useElementMetrics'
+import { remoteStateOf } from './useRemoteState'
 
 export type FileFilter = 'all' | FileOpKind | 'image'
 
@@ -62,7 +64,6 @@ export function makeFileCard(kit: ViewKit, settings: ContextSettings): Component
     const [query, setQuery] = useState('')
     const [openPath, setOpenPath] = useState<string | null>(null)
     const listRef = useRef<HTMLDivElement | null>(null)
-    const [listWide, setListWide] = useState(false)
     const [rowPitch, setRowPitch] = useState(0)
     const [rowGap, setRowGap] = useState(0)
 
@@ -102,21 +103,8 @@ export function makeFileCard(kit: ViewKit, settings: ContextSettings): Component
     const matchedTotals = totalsOf(matched)
     const shownTotals = totalsOf(shown)
 
-    useEffect(() => {
-      const el = listRef.current
-      if (el === null) {
-        setListWide(false)
-        return
-      }
-      const sync = (): void => { setListWide(el.clientWidth >= 380) }
-      sync()
-      if (typeof ResizeObserver !== 'function') return
-      /* v8 ignore start */
-      const observer = new ResizeObserver(sync)
-      observer.observe(el)
-      return () => { observer.disconnect() }
-      /* v8 ignore stop */
-    }, [shown.length > 0])
+    const listSize = useElementSize(listRef, 'client', shown.length > 0)
+    const listWide = listSize.width >= 380
     useEffect(() => {
       setRowPitch(0)
       setRowGap(0)
@@ -142,6 +130,7 @@ export function makeFileCard(kit: ViewKit, settings: ContextSettings): Component
       }
     }, [listWide, openPath, rowPitch, rowGap, shown.length])
     const rowRange = useRowWindow(listRef, shown.length, rowPitch, listWide && openPath === null && rowPitch > 0)
+    const remote = remoteStateOf(entries.length, props.state, props.onRetry)
     const chips: { key: FileFilter; files: number; ops: number }[] = [
       {
         key: 'all',
@@ -246,10 +235,10 @@ export function makeFileCard(kit: ViewKit, settings: ContextSettings): Component
               ))}
             </span>
           </div>
-          {entries.length === 0 && props.state === 'loading' ? (
+          {remote.kind === 'loading' ? (
             <DetailNote state="loading" className="lc-empty lc-lane" />
-          ) : entries.length === 0 && props.state === 'failed' && props.onRetry !== undefined ? (
-            <DetailNote state="failed" onRetry={props.onRetry} className="lc-empty lc-lane" />
+          ) : remote.kind === 'failed' ? (
+            <DetailNote state="failed" onRetry={remote.retry} className="lc-empty lc-lane" />
           ) : shown.length === 0 ? (
             <div className="lc-empty lc-lane">{t(entries.length === 0 ? 'files.empty' : 'files.noMatch')}</div>
           ) : (

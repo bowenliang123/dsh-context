@@ -17,9 +17,7 @@ import { AgentAvatar, channelStyle } from './commsAgent'
 import { CommsEvent, CommsEventDetail, DelegationEvent } from './commsEvent'
 import { PulseSelectionPill } from './pulseSelection'
 import type { RichKit } from './richText'
-import { useRowWindow } from './useRowWindow'
-
-const EVENT_ROW_PITCH = 64
+import { useRowGeometry, useWindowedRows } from './useRowWindow'
 
 function fullMessageOf(details: FleetDetailState, row: CommsRow): FleetMessage | null {
   const detail = details.fullLanded.get(row.to)
@@ -153,12 +151,16 @@ export const PulseEvents = memo(function PulseEvents(props: PulseEventsProps): R
   for (const item of props.scopedEvents) counts[pulseEventGroupOf(item)] += 1
   const shown = props.selectedItem ?? (props.events.length > 0 ? props.events[0] : undefined)
   const full = shown?.kind === 'message' ? fullMessageOf(props.details, shown.row) : null
-  const windowed = props.events.length >= 60
-  const rowRange = useRowWindow(listRef, props.events.length, EVENT_ROW_PITCH, windowed)
-  const lastRow = Math.max(0, props.events.length - 1)
-  const windowFrom = Math.min(rowRange.from, lastRow)
-  const windowTo = Math.min(rowRange.to, lastRow)
-  const shownEvents = windowed ? props.events.slice(windowFrom, windowTo + 1) : props.events
+  const geometry = useRowGeometry(
+    listRef,
+    props.events.length,
+    '.lc-comms-event',
+    `${props.kind}|${props.query}|${props.selectedAgent ?? ''}|${String(props.events.length)}`,
+    props.events.length > 0,
+  )
+  const windowed = geometry !== null
+  const rows = useWindowedRows(listRef, props.events.length, geometry, windowed)
+  const shownEvents = windowed ? props.events.slice(rows.from, rows.to + 1) : props.events
   const scopedMessages = pulseEventRowsOf(props.scopedEvents)
   const clipped = scopedMessages.filter(row => row.clipped === true).length
   const hidden = hiddenMessagesOf(props.details, scopedMessages)
@@ -183,7 +185,7 @@ export const PulseEvents = memo(function PulseEvents(props: PulseEventsProps): R
         if (estimateRef.current === selectedKey) return false
         estimateRef.current = selectedKey
         const index = Math.max(0, props.events.findIndex(entry => entry.key === selectedKey))
-        const target = index * EVENT_ROW_PITCH
+        const target = index * rows.pitch
         if (Math.abs(list.scrollTop - target) <= 1) return false
         scrollToPos(list, { top: target })
         return true
@@ -195,7 +197,7 @@ export const PulseEvents = memo(function PulseEvents(props: PulseEventsProps): R
       return true
     }
     settleReveal(list, align)
-  }, [props.events, rowRange.from, selectedKey])
+  }, [geometry, props.events, rows.from, rows.pitch, selectedKey])
   useEffect(() => {
     if (selectedKey !== null) {
       scrollIntoViewIfPossible(inspectorRef.current, { block: 'nearest', behavior: 'smooth' })
@@ -237,7 +239,7 @@ export const PulseEvents = memo(function PulseEvents(props: PulseEventsProps): R
         <div className="lc-pulse-event-stream">
           {props.events.length === 0 ? <div className="lc-empty">{t(props.scopedEvents.length === 0 ? 'fleet.comms.empty' : 'fleet.comms.noMatch')}</div> : null}
           <ul className="lc-comms-list lc-pulse-event-list" ref={listRef} hidden={props.events.length === 0}>
-            {windowed && windowFrom > 0 ? <li aria-hidden="true" style={{ height: windowFrom * EVENT_ROW_PITCH }} /> : null}
+            {windowed && rows.topPad > 0 ? <li aria-hidden="true" style={{ height: rows.topPad }} /> : null}
             {shownEvents.map(item => item.kind === 'delegation' ? (
               <DelegationEvent
                 key={item.key}
@@ -265,7 +267,7 @@ export const PulseEvents = memo(function PulseEvents(props: PulseEventsProps): R
                 t={t}
               />
             ))}
-            {windowed && windowTo < lastRow ? <li aria-hidden="true" style={{ height: (lastRow - windowTo) * EVENT_ROW_PITCH }} /> : null}
+            {windowed && rows.bottomPad > 0 ? <li aria-hidden="true" style={{ height: rows.bottomPad }} /> : null}
           </ul>
         </div>
         <div className="lc-pulse-inspector" ref={inspectorRef}>

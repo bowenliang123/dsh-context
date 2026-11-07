@@ -1,3 +1,4 @@
+import { formLabelOf } from '../labels'
 import type { SurfaceNode } from '../../shared/types'
 import type { ViewKit } from '../viewkit'
 import type { ConversationNodeLike } from '../services'
@@ -36,7 +37,7 @@ export function makeNodeRowOf(
       tagNames = n.tool !== undefined ? [n.tool] : null
       preview = callSummaryOf(conv) ?? t('node.toolResult')
     } else if (n.cat === 'skill') {
-      tag = n.skill !== undefined ? t('node.skillTag', { name: n.skill }) : t('form.' + (n.form || 'context'))
+      tag = n.skill !== undefined ? t('node.skillTag', { name: n.skill }) : formLabelOf(t, n.form)
       preview = (n.skill === undefined && id !== '' ? id : null)
         ?? (n.text !== undefined && n.text !== '' ? n.text : null)
         ?? callSummaryOf(conv) ?? preview
@@ -57,7 +58,7 @@ export function makeNodeRowOf(
         tag = t('attach.title') + (attCount > 1 ? ' ×' + String(attCount) : '')
       }
     } else {
-      tag = t('form.' + (n.form || 'context'))
+      tag = formLabelOf(t, n.form)
       if (id !== '') {
         preview = id
       } else if (n.text !== undefined && n.text !== '') {

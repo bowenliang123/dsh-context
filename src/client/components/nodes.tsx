@@ -1,3 +1,4 @@
+import { formLabelOf } from '../labels'
 import type { SurfaceNode } from '../../shared/types'
 import type { ViewKit } from '../viewkit'
 
@@ -11,7 +12,7 @@ export function makeNodeText(kit: ViewKit): (n: SurfaceNode) => string {
     if (n.calls) return t('node.calls') + n.calls.join(', ')
     if (n.text) return n.form === 'snapshot' ? t('node.snapshot') + n.text : n.text
     if (n.cat === 'assistant') return t('node.empty')
-    if (n.cat === 'inject' || n.cat === 'skill') return t('form.' + (n.form || 'context'))
+    if (n.cat === 'inject' || n.cat === 'skill') return formLabelOf(t, n.form)
     return t('node.nonText')
   }
 }

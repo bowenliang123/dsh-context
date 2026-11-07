@@ -1,7 +1,7 @@
 import { createElement as h, useState } from 'react'
 import assert from 'node:assert/strict'
 import { describe, test } from 'vitest'
-import { aggregateByTurn, attachMarkers, jumpTargetOf, turnStepsOf } from '../../../src/client/components/trendChart'
+import { aggregateByTurn, attachMarkers, jumpTargetOf, turnStepsOf } from '../../../src/client/components/trendModel'
 import type { ContextEventRecord, RequestRecord } from '../../../src/shared/types'
 import { click, mount, query, queryAll } from '../helpers/kit'
 import { TrendChart, bars, propsOf, req } from './trendChartHarness'

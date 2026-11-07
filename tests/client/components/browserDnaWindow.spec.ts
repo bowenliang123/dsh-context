@@ -4,41 +4,18 @@ import { afterAll, beforeAll, describe, test, vi } from 'vitest'
 import type { ContextHeaders } from '../../../src/shared/types'
 import { act } from 'react'
 import { mount, query, queryAll, surfaceNode, until } from '../helpers/kit'
+import { restoreLayout, stubClientSizes, stubResizeObserver, stubRowRects } from '../helpers/layout'
 import { Browser, props, tl } from './browserHarness'
 
-let originals: [string, PropertyDescriptor | undefined][] = []
-
 beforeAll(() => {
-  originals = (['clientWidth', 'clientHeight'] as const)
-    .map(name => [name, Object.getOwnPropertyDescriptor(HTMLElement.prototype, name)] as [string, PropertyDescriptor | undefined])
-  Object.defineProperty(HTMLElement.prototype, 'clientWidth', {
-    configurable: true,
-    get(this: HTMLElement): number {
-      if (this.classList.contains('lc-br-scroll')) return 500
-      const own = Object.getOwnPropertyDescriptor(Element.prototype, 'clientWidth')?.get
-      return own === undefined ? 0 : own.call(this)
-    },
-  })
-  Object.defineProperty(HTMLElement.prototype, 'clientHeight', {
-    configurable: true,
-    get(this: HTMLElement): number {
-      if (this.classList.contains('lc-br-scroll')) return 400
-      const own = Object.getOwnPropertyDescriptor(Element.prototype, 'clientHeight')?.get
-      return own === undefined ? 0 : own.call(this)
-    },
-  })
-  vi.stubGlobal('ResizeObserver', class {
-    observe = (): void => {}
-    disconnect = (): void => {}
-  })
+  stubResizeObserver()
+  stubClientSizes({ 'lc-br-scroll': { width: 500, height: 400 } })
+  stubRowRects('lc-br-elem', () => 28, 2)
 })
 
 afterAll(() => {
   vi.unstubAllGlobals()
-  for (const [name, desc] of originals) {
-    if (desc === undefined) delete (HTMLElement.prototype as unknown as Record<string, unknown>)[name]
-    else Object.defineProperty(HTMLElement.prototype, name, desc)
-  }
+  restoreLayout()
 })
 
 const NODES = Array.from({ length: 200 }, (_, i) => surfaceNode({

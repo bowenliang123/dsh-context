@@ -1,4 +1,4 @@
-import { createElement as h, useState } from 'react'
+import { act, createElement as h, useState } from 'react'
 import assert from 'node:assert/strict'
 import { describe, test } from 'vitest'
 import { makeLegend, makeStackedBar, SEGMENT_ANIMATION_MAX } from '../../../src/client/components/stackedBar'
@@ -436,5 +436,39 @@ describe('StackedBar minBand floor', () => {
     assert.deepEqual(segs.filter(s => /animate-/.test(s.className)), [])
     assert.equal(segs[0].getAttribute('style')?.includes('--lc-i'), false, 'no stagger delay left behind')
     await m.unmount()
+  })
+})
+
+describe('StackedBar keyboard picks', () => {
+  test('segments pick on Enter and Space only when a pick handler is wired, and legend chips drive hover from focus', async () => {
+    const picks: string[] = []
+    const m = await mount(h(StackedBar, { parts: [part('user', 4), part('system', 3)], onPickKey: key => { picks.push(key) } }))
+    const segs = queryAll(m.container, '.lc-stacked-seg')
+    assert.equal(segs[0].getAttribute('role'), 'button')
+    assert.equal(segs[0].getAttribute('tabindex'), '0')
+    await act(async () => { segs[0].dispatchEvent(new KeyboardEvent('keydown', { key: 'a', bubbles: true })) })
+    assert.deepEqual(picks, [])
+    await act(async () => { segs[0].dispatchEvent(new KeyboardEvent('keydown', { key: ' ', bubbles: true, cancelable: true })) })
+    assert.deepEqual(picks, ['user'])
+    await act(async () => { segs[1].dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true })) })
+    assert.deepEqual(picks, ['user', 'system'])
+    await m.unmount()
+
+    const inert = await mount(h(StackedBar, { parts: [part('user', 4)] }))
+    assert.equal(query(inert.container, '.lc-stacked-seg').getAttribute('role'), null)
+    await inert.unmount()
+
+    const hovers: (string | null)[] = []
+    const legend = await mount(h(Legend, { parts: [part('user', 4), part('system', 3)], onHoverKey: key => { hovers.push(key) } }))
+    const chip = queryAll(legend.container, '.lc-chip')[0]
+    assert.equal(chip.getAttribute('tabindex'), '0')
+    await act(async () => { chip.dispatchEvent(new FocusEvent('focusin', { bubbles: true })) })
+    await act(async () => { chip.dispatchEvent(new FocusEvent('focusout', { bubbles: true })) })
+    assert.deepEqual(hovers, ['user', null])
+    await legend.unmount()
+
+    const guarded = await mount(h(Legend, { parts: [part('user', 4)] }))
+    assert.equal(guarded.container.querySelector('.lc-chip')?.getAttribute('tabindex'), null)
+    await guarded.unmount()
   })
 })

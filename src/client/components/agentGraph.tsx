@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type KeyboardEvent, type ReactElement } from 'react'
+import { useEffect, useMemo, useRef, useState, type CSSProperties, type KeyboardEvent, type ReactElement } from 'react'
 import { IconWorkspaceTreeOutlineRegular, StateDot } from '@deepseek-ai/dsh-client-ui-primitives'
 import { CATS } from '../categories'
 import type { AgentHeads } from '../agentHeads'
@@ -27,6 +27,7 @@ import {
 } from '../agentTree'
 import { AgentInspector } from './agentInspector'
 import { AgentAvatar } from './commsAgent'
+import { useElementSize, useScrollMetrics } from './useElementMetrics'
 function memberStyle(hue: string): CSSProperties {
   return { '--lc-member-hue': hue } as CSSProperties
 }
@@ -95,8 +96,8 @@ export function makeAgentGraph(
 
     const stageRef = useRef<HTMLDivElement | null>(null)
     const heardFocus = props.focusId ?? null
-    const [stageWidth, setStageWidth] = useState(0)
-    const [stageHeight, setStageHeight] = useState(0)
+    const stageSize = useElementSize(stageRef, 'content', forest !== null)
+    const stageScroll = useScrollMetrics(stageRef, forest !== null)
     useEffect(() => {
       const el = stageRef.current
       /* v8 ignore next 1 */
@@ -105,66 +106,20 @@ export function makeAgentGraph(
     }, [])
 
     const layout = useMemo(
-      () => (forest !== null ? layoutForest(forest, stageWidth, props.compact === true) : null),
-      [forest, props.compact, stageWidth],
+      () => (forest !== null ? layoutForest(forest, stageSize.width, props.compact === true) : null),
+      [forest, props.compact, stageSize.width],
     )
-    const stageMounted = forest !== null
-    useLayoutEffect(() => {
-      /* v8 ignore start */
-      const el = stageRef.current
-      if (el === null) return
-      const style = getComputedStyle(el)
-      const padX = parseFloat(style.paddingLeft) + parseFloat(style.paddingRight)
-      const padY = parseFloat(style.paddingTop) + parseFloat(style.paddingBottom)
-      const measure = (width: number, height: number): void => {
-        setStageWidth(width)
-        if (!showAll) setStageHeight(height)
-      }
-      const rect = el.getBoundingClientRect()
-      measure(rect.width - padX, rect.height - padY)
-      if (typeof ResizeObserver !== 'function') return
-      const observer = new ResizeObserver(([entry]) => {
-        measure(entry.contentRect.width, entry.contentRect.height)
-      })
-      observer.observe(el)
-      return () => { observer.disconnect() }
-      /* v8 ignore stop */
-    }, [showAll, stageMounted])
     const avatarLabels = useMemo(
       () => forest === null
         ? null
         : avatarLabelsOf(forest.nodes.map(node => ({ id: node.id, name: avatarIdentityOf(team, node, t).name }))),
       [forest, team, t],
     )
-    const [stageView, setStageView] = useState<{ top: number; height: number; measured: boolean }>({ top: 0, height: 0, measured: false })
-    useLayoutEffect(() => {
-      /* v8 ignore start */
-      const el = stageRef.current
-      if (el === null) return undefined
-      let frame = 0
-      const update = (): void => {
-        frame = 0
-        setStageView(current => (current.top === el.scrollTop && current.height === el.clientHeight && current.measured
-          ? current
-          : { top: el.scrollTop, height: el.clientHeight, measured: true }))
-      }
-      const schedule = (): void => { if (frame === 0) frame = requestAnimationFrame(update) }
-      update()
-      el.addEventListener('scroll', schedule, { passive: true })
-      const observer = typeof ResizeObserver === 'function' ? new ResizeObserver(schedule) : null
-      observer?.observe(el)
-      return () => {
-        el.removeEventListener('scroll', schedule)
-        if (frame !== 0) cancelAnimationFrame(frame)
-        observer?.disconnect()
-      }
-      /* v8 ignore stop */
-    }, [layout?.height, showAll])
     const cardHeight = props.compact === true ? AGENT_CARD_COMPACT_H : AGENT_CARD_H
-    const seededHeight = !stageView.measured && forest !== null && forest.nodes.length > GRAPH_WINDOW_SEED ? STAGE_H : 0
-    const viewportHeight = stageView.height > 0 ? stageView.height : seededHeight
+    const seededHeight = !stageScroll.measured && forest !== null && forest.nodes.length > GRAPH_WINDOW_SEED ? STAGE_H : 0
+    const viewportHeight = stageScroll.height > 0 ? stageScroll.height : seededHeight
     const band = viewportHeight > 0
-      ? { from: stageView.top - GRAPH_OVERSCAN, to: stageView.top + viewportHeight + GRAPH_OVERSCAN }
+      ? { from: stageScroll.scrollTop - GRAPH_OVERSCAN, to: stageScroll.scrollTop + viewportHeight + GRAPH_OVERSCAN }
       : null
     const graph = useMemo(() => {
       if (forest === null || layout === null) return null
@@ -202,7 +157,7 @@ export function makeAgentGraph(
 
     if (forest === null || layout === null || graph === null) return null
     const tallFamily = layout.height > STAGE_H
-    const overflowsStage = showAll || (tallFamily && layout.height > stageHeight)
+    const overflowsStage = showAll || (tallFamily && layout.height > stageSize.height)
     const byId = graph.nodes
     /* v8 ignore next 1 */
     const current = forest.nodes.find(n => n.isCurrent) ?? forest.nodes[0]

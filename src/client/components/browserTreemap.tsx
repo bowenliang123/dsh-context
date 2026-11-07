@@ -1,8 +1,10 @@
-import { useLayoutEffect, useRef, useState, type CSSProperties, type ReactElement } from 'react'
+import { useRef, useState, type CSSProperties, type ReactElement } from 'react'
 import type { Assembled } from '../assemble'
 import { CAT_COLOR } from '../categories'
 import type { ViewKit } from '../viewkit'
 import { mapOf, squarify, type MapBlock, type MapCat } from '../treemap'
+import { TipBubble, tipShiftTransform, useTipShift } from './tip'
+import { useElementSize } from './useElementMetrics'
 
 export interface BrowserTreemapProps {
   view: Assembled
@@ -105,35 +107,14 @@ export function makeBrowserTreemap(kit: ViewKit): (props: BrowserTreemapProps) =
   return function BrowserTreemap(props: BrowserTreemapProps): ReactElement {
     const wrapRef = useRef<HTMLDivElement | null>(null)
     const tipRef = useRef<HTMLDivElement | null>(null)
-    const [size, setSize] = useState({ w: 0, h: 0 })
-    const [, setResizeTick] = useState(0)
     const [tipKey, setTipKey] = useState<string | null>(null)
-    const [tipShift, setTipShift] = useState(0)
+    const size = useElementSize(wrapRef, 'content')
 
     const cats = mapOf(props.view, t, catLabel)
     let total = 0
     for (const c of cats) total += c.tokens
 
-    useLayoutEffect(() => {
-      const el = wrapRef.current
-      /* v8 ignore next 1 */
-      if (el === null) return
-      const r = el.getBoundingClientRect()
-      const w = Math.round(r.width)
-      const h = Math.round(r.height)
-      setSize(prev => (prev.w === w && prev.h === h ? prev : { w, h }))
-    })
-    /* v8 ignore start */
-    useLayoutEffect(() => {
-      const el = wrapRef.current
-      if (el === null || typeof ResizeObserver !== 'function') return
-      const observer = new ResizeObserver(() => { setResizeTick(tick => tick + 1) })
-      observer.observe(el)
-      return () => { observer.disconnect() }
-    }, [])
-    /* v8 ignore stop */
-
-    const tree = layoutTree(cats, size.w > 0 ? size.w : FALLBACK_W, size.h > 0 ? size.h : FALLBACK_H)
+    const tree = layoutTree(cats, size.width > 0 ? size.width : FALLBACK_W, size.height > 0 ? size.height : FALLBACK_H)
 
     let tip: MapTip | null = null
     if (tipKey !== null) {
@@ -170,22 +151,9 @@ export function makeBrowserTreemap(kit: ViewKit): (props: BrowserTreemapProps) =
       }
     }
 
-    useLayoutEffect(() => {
-      const wrapW = wrapRef.current === null ? 0 : wrapRef.current.getBoundingClientRect().width
-      const tipW = tipRef.current === null ? 0 : tipRef.current.getBoundingClientRect().width
-      setTipShift((prev) => {
-        if (tip === null || wrapW <= 0 || tipW <= 0) return prev === 0 ? prev : 0
-        const leftOver = tipW / 2 - tip.cx
-        const rightOver = tip.cx + tipW / 2 - wrapW
-        const next = leftOver > 0 ? Math.ceil(leftOver) : rightOver > 0 ? Math.ceil(-rightOver) : 0
-        return next === prev ? prev : next
-      })
-    })
-
+    const tipShift = useTipShift(wrapRef, tipRef, tip === null ? null : { unit: 'px', value: tip.cx })
     const flip = tip !== null && tip.top < TIP_FLIP_Y
-    const shiftX = tipShift === 0
-      ? 'translateX(-50%)'
-      : `translateX(calc(-50% ${tipShift > 0 ? '+' : '-'} ${Math.abs(tipShift)}px))`
+    const shiftX = tipShiftTransform(tipShift)
     const tipStyle = tip === null
       ? { left: '0px', top: '0px' }
       : {
@@ -271,20 +239,16 @@ export function makeBrowserTreemap(kit: ViewKit): (props: BrowserTreemapProps) =
             </div>
           )
         })}
-        <div
-          ref={tipRef}
-          className={'lc-tip lc-map-tip' + (tip !== null ? ' lc-map-tip-on' : '')}
-          role={tip === null ? undefined : 'tooltip'}
+        <TipBubble
+          tipRef={tipRef}
+          className="lc-tip lc-map-tip"
+          onClass="lc-map-tip-on"
+          shown={tip !== null}
           style={tipStyle}
-        >
-          {tip === null ? null : (
-            <>
-              <b className="lc-bar-tip-head">{tip.head}</b>
-              <span className="lc-bar-tip-fig">{tip.fig}</span>
-              {tip.note !== undefined ? <span className="lc-bar-tip-note">{tip.note}</span> : null}
-            </>
-          )}
-        </div>
+          head={tip?.head}
+          figure={tip?.fig}
+          note={tip?.note}
+        />
       </div>
     )
   }

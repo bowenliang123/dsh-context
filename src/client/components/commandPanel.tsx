@@ -14,7 +14,9 @@ import { makeDetailNote } from './detailNote'
 import { makeRichText } from './richText'
 import { IconApi, IconShare } from '../primitives'
 import { Section } from './section'
+import { lruTrim } from '../boundedCache'
 import { useRowWindow } from './useRowWindow'
+import { remoteStateOf } from './useRemoteState'
 import type { CommandFill } from './useCommandLog'
 
 export interface CommandPanelProps {
@@ -55,6 +57,7 @@ export function makeCommandPanel(kit: ViewKit): ComponentType<CommandPanelProps>
   const FILTERS: readonly CommandFilter[] = ['all', 'failed', 'slow', 'background']
   const SORTS: readonly CommandSort[] = ['latest', 'slowest']
   const WINDOW_MIN_ROWS = 100
+  const RESULT_KEEP_MAX = 8
 
   function statusGlyphOf(rec: Command): { glyph: string; cls: string; tip: string } {
     if (rec.status === 'running') return { glyph: '⏳', cls: 'run', tip: t('cmds.status.running') }
@@ -111,21 +114,36 @@ export function makeCommandPanel(kit: ViewKit): ComponentType<CommandPanelProps>
     const [programPick, setProgramPick] = useState<string | null>(null)
     const [openSeq, setOpenSeq] = useState<number | null>(null)
     type ResultRead = { state: 'loading' } | { state: 'miss' } | { state: 'empty' } | { state: 'failed' } | { state: 'ready'; text: string }
-    const [results, setResults] = useState<Partial<Record<number, ResultRead>>>({})
+    const [results, setResults] = useState<ReadonlyMap<number, ResultRead>>(() => new Map())
+    const remember = (seq: number, read: ResultRead): void => {
+      setResults((cur) => {
+        const next = new Map(cur)
+        next.delete(seq)
+        next.set(seq, read)
+        lruTrim(next, RESULT_KEEP_MAX)
+        return next
+      })
+    }
     const openRec = openSeq === null ? undefined : commands.find(rec => rec.seq === openSeq)
     const openTarget = openRec !== undefined ? surfaceSeqOf(openRec) : undefined
     useEffect(() => {
       const fetchContent = props.fetchContent
       if (openTarget === undefined || fetchContent === undefined) return
       let live = true
-      setResults(cur => (cur[openTarget] !== undefined ? cur : { ...cur, [openTarget]: { state: 'loading' } }))
+      setResults((cur) => {
+        if (cur.has(openTarget)) return cur
+        const next = new Map(cur)
+        next.set(openTarget, { state: 'loading' })
+        lruTrim(next, RESULT_KEEP_MAX)
+        return next
+      })
       void fetchContent(openTarget).then(
         (node) => {
           if (!live) return
           const text = node === null ? null : resultTextOf(node)
-          setResults(cur => ({ ...cur, [openTarget]: node === null ? { state: 'miss' } : text === null ? { state: 'empty' } : { state: 'ready', text } }))
+          remember(openTarget, node === null ? { state: 'miss' } : text === null ? { state: 'empty' } : { state: 'ready', text })
         },
-        () => { if (live) setResults(cur => ({ ...cur, [openTarget]: { state: 'failed' } })) },
+        () => { if (live) remember(openTarget, { state: 'failed' }) },
       )
       return () => { live = false }
     }, [openTarget, props.fetchContent])
@@ -252,8 +270,7 @@ export function makeCommandPanel(kit: ViewKit): ComponentType<CommandPanelProps>
     const showProgSearch = programs.length > 6 || pq !== ''
     const shownPrograms = programs.filter(p => p.name === programPick || pq === '' || p.name.toLowerCase().includes(pq))
 
-    const loadingChannel = commands.length === 0 && props.state === 'loading'
-    const failedChannel = commands.length === 0 && props.state === 'failed'
+    const remote = remoteStateOf(commands.length, props.state, props.onRetry, false)
     const fillNote = ((): ReactNode => {
       if (props.floor === undefined || commands.length === 0 || fillStatus === 'done') return null
       if (fillStatus === 'loading') {
@@ -275,7 +292,7 @@ export function makeCommandPanel(kit: ViewKit): ComponentType<CommandPanelProps>
       }
       return <div className="lc-cmd-floor">{t('cmds.coverage', { n: fmt(commands.length) })}</div>
     })()
-    const showRail = !loadingChannel && !failedChannel
+    const showRail = remote.kind !== 'loading' && remote.kind !== 'failed'
     const totalTime = commands.length === 0 ? '0' : fmtDuration(tally.ms)
     const rail = showRail ? (
       <div className="lc-cmd-rail">
@@ -393,7 +410,7 @@ export function makeCommandPanel(kit: ViewKit): ComponentType<CommandPanelProps>
       if (rec.denied === true) facts.push(<span key="deny">{t('cmds.denied')}</span>)
       if (rec.signal !== undefined) facts.push(<span key="sig">{t('cmds.signalOf', { s: rec.signal })}</span>)
       if (rec.sandbox !== undefined) facts.push(<span key="sand">{t('cmds.sandboxAsk', { s: rec.sandbox })}</span>)
-      const result = target !== undefined ? results[target] : undefined
+      const result = target !== undefined ? results.get(target) : undefined
       const factsEl = facts.length > 0 ? <div className="lc-cmd-detail-facts">{facts}</div> : null
       const stampSuffix = stamp !== null ? ' · ' + t('browser.stepAt', { t: stamp.turn, s: stamp.step }) : ''
       const resultCard = target !== undefined && props.fetchContent !== undefined ? (
@@ -552,10 +569,10 @@ export function makeCommandPanel(kit: ViewKit): ComponentType<CommandPanelProps>
               </span>
             </div>
             {fillNote}
-            {loadingChannel ? (
+            {remote.kind === 'loading' ? (
               <DetailNote state="loading" className="lc-empty lc-lane" />
-            ) : failedChannel ? (
-              <DetailNote state="failed" onRetry={props.onRetry} className="lc-empty lc-lane" />
+            ) : remote.kind === 'failed' ? (
+              <DetailNote state="failed" onRetry={remote.retry} className="lc-empty lc-lane" />
             ) : shown.length === 0 ? (
               <div className="lc-empty lc-lane">{t(commands.length === 0 ? 'cmds.empty' : 'cmds.noMatch')}</div>
             ) : (

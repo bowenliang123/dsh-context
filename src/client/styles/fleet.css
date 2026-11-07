@@ -125,7 +125,7 @@
 .lc-comms-flow { flex: 1 1 280px; min-width: 0; display: inline-flex; flex-wrap: wrap; align-items: center; gap: 3px 5px; }
 .lc-comms-party { display: inline-flex; align-items: center; gap: 4px; min-width: 0; max-width: 100%; }
 .lc-comms-party-name {
-  min-width: 0; max-width: min(30ch, 46vw); overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  min-width: 0; max-width: min(30ch, 46cqi); overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
   font-size: 11.5px; font-weight: 650; color: var(--dsw-alias-label-primary);
 }
 .lc-comms-role { flex: none; font-size: 9.5px; color: var(--dsw-alias-label-tertiary, var(--dsw-alias-label-secondary)); }
@@ -234,7 +234,7 @@
   .lc-comms-kind { order: 1; margin-left: auto; }
   .lc-comms-chev { order: 1; }
   .lc-comms-flow { order: 2; flex-basis: 100%; }
-  .lc-comms-party-name { max-width: min(22ch, 52vw); }
+  .lc-comms-party-name { max-width: min(22ch, 52cqi); }
   .lc-comms-list { max-height: 460px; }
   .lc-comms-detail-body { max-height: 330px; }
   .lc-comms-person-actions { width: 100%; justify-content: flex-start; margin-left: 36px; }

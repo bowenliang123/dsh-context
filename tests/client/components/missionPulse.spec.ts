@@ -10,6 +10,7 @@ import type { CommsRow } from '../../../src/client/fleetDetail'
 import type { CommsAgent } from '../../../src/client/commsModel'
 import type { FleetTeam } from '../../../src/client/fleetTeam'
 import { click, makeKit, mount, pinScroll, query, queryAll, text, typeText, until } from '../helpers/kit'
+import { restoreLayout, stubRowRects } from '../helpers/layout'
 
 const kit = makeKit()
 const graph = () => null
@@ -621,6 +622,7 @@ describe('MissionPulse boundary parties', () => {
   })
 
   test('jumps to a selected record the windowed event list has not rendered', async () => {
+    stubRowRects('lc-comms-event', () => 60, 4)
     const rows: CommsRow[] = Array.from({ length: 70 }, (_, index) => ({
       key: `child:${index + 1}:${(index + 1) * 1000}:relay`,
       to: 'child',
@@ -644,6 +646,7 @@ describe('MissionPulse boundary parties', () => {
     await mounted.update(pulseOf([...rows]))
     assert.equal(list.scrollTop, 500)
     await mounted.unmount()
+    restoreLayout()
   })
 
   test('stacks the model, usage and work counts under each agent name', async () => {
@@ -726,7 +729,7 @@ describe('Fleet pane virtualization', () => {
     pinViewport(scroller, 200)
     scroller.scrollTop = 1900
     await act(async () => { scroller.dispatchEvent(new Event('scroll')) })
-    assert.ok(queryAll(mounted.container, '[data-lane-label]').length < 100)
+    await until(() => queryAll(mounted.container, '[data-lane-label]').length < 100, 'lane window never applied')
     const grown = manyAgents(242)
     await mounted.update(h(MissionPulse, { graph, forest: null, team: null, details: makeDetails(), landedDetails: new Map(), comms: grown.comms, delegations: [], agents: grown.agents, titles: new Map(), attested: new Map(), focusMember: null, currency: 'usd', onOpen: () => {}, onEnter: () => {}, rich: makeRichText(kit), t: kit.t }))
     assert.ok(query(mounted.container, '[data-lane-label="agent-30"]') !== null)

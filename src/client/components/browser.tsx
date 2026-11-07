@@ -3,7 +3,6 @@ import { assembleCached } from './derivedCache'
 import { UNKNOWN_TOOL_SOURCE, type Category, type ContextHeaders, type ContextTimeline, type HeaderRecord, type HeaderTool, type RequestRecord, type SurfaceNode, type SystemPromptNode } from '../../shared/types'
 import { CATS, CAT_COLOR, partsOf } from '../categories'
 import { dnaBaseLabel, dnaOf } from '../dna'
-import { useRowWindow } from './useRowWindow'
 import type { DnaItem } from '../dna'
 import type { ContentFetcher, ConversationNodeLike, HeaderFetcher } from '../services'
 import type { ContextSettings, DefaultDeltaBase, DefaultToolSort } from '../settings'
@@ -12,7 +11,9 @@ import { IconBrowse } from '../primitives'
 import type { DetailState } from '../timelineSource'
 import { makeDetailNote } from './detailNote'
 import { makeNodeText } from './nodes'
-import { turnStepsOf } from './trendChart'
+import { turnStepsOf } from './trendModel'
+import { useRowGeometry, useWindowedRows } from './useRowWindow'
+import { useElementSize } from './useElementMetrics'
 import { fetchMissNote, useFetchOnMiss } from './fetchOnMiss'
 import { makeNodeRowOf, rowMatches } from './browserRows'
 import type { NodeRow } from './browserRows'
@@ -31,7 +32,6 @@ export { stepStampOf } from './browserHelpers'
 import { MapIcon, makeBrowserTreemap } from './browserTreemap'
 import type { MapBlock } from '../treemap'
 
-const FLAT_ROW_PITCH = 30
 
 export interface ContextBrowserProps {
   locale?: string
@@ -131,7 +131,9 @@ export function makeContextBrowser(
     const rootRef = useRef<HTMLDivElement | null>(null)
     const scrollRef = useRef<HTMLDivElement | null>(null)
     const flatIndexRef = useRef<Map<string, number>>(new Map())
-    const [flatWide, setFlatWide] = useState(true)
+    const flatPitchRef = useRef(30)
+    const flatSize = useElementSize(scrollRef, 'client', dna)
+    const flatWide = flatSize.width >= 380
     const focusScrollRef = useRef(false)
     const revealFlatKey = useCallback((key: string): boolean => {
       /* v8 ignore next 1 */
@@ -140,7 +142,7 @@ export function makeContextBrowser(
       /* v8 ignore next 1 */
       if (index === undefined) return false
       const el = scrollRef.current
-      el.scrollTop = Math.max(0, index * FLAT_ROW_PITCH - 40)
+      el.scrollTop = Math.max(0, index * flatPitchRef.current - 40)
       el.dispatchEvent(new Event('scroll'))
       const settle = (left: number): void => {
         /* v8 ignore next 1 */
@@ -662,20 +664,6 @@ export function makeContextBrowser(
         breakdown.system, undefined, systemBodyOf(sys), false, null, stampFor(sys.seq),
         { onHover: (over) => { setRowDnaKey(over ? 'system' : null) } })
 
-    /* v8 ignore start */
-    useLayoutEffect(() => {
-      if (!dna) return
-      const el = scrollRef.current
-      if (el === null) return
-      const sync = (): void => { setFlatWide(el.clientWidth >= 380) }
-      sync()
-      if (typeof ResizeObserver !== 'function') return
-      const observer = new ResizeObserver(sync)
-      observer.observe(el)
-      return () => { observer.disconnect() }
-    }, [dna])
-    /* v8 ignore stop */
-
     interface FlatEntry {
       r: NodeRow
       pos: number
@@ -710,8 +698,17 @@ export function makeContextBrowser(
       return { entries, tail, count: entries.length + tail.length, tokens }
     }
     const flatRowsModel = dna ? flatRows() : null
-    const flatRange = useRowWindow(scrollRef, flatRowsModel?.entries.length ?? 0, 30, dna && flatWide && openElem === null)
     const flat = flatRowsModel ?? { entries: [] as FlatEntry[], tail: [] as ReactElement[], count: 0, tokens: 0 }
+    const flatGeometry = useRowGeometry(
+      scrollRef,
+      dna ? flat.entries.length : 0,
+      '.lc-br-flat > [data-lc-key^="n"]',
+      `${String(flat.entries.length)}|${rowQuery}|${openElem === null ? '' : 'open'}`,
+      dna && openElem === null,
+    )
+    if (flatGeometry !== null) flatPitchRef.current = flatGeometry.pitch
+    const flatRowsOn = dna && flatWide && flatGeometry !== null
+    const flatWindow = useWindowedRows(scrollRef, flat.entries.length, flatGeometry, flatRowsOn)
     const flatToolbar = (): ReactElement => (
       <RowToolbar
         value={rowQuery}
@@ -833,16 +830,16 @@ export function makeContextBrowser(
           {dna
             ? (
               <div className="lc-br-flat">
-                {flatRange.from > 0 ? <div className="lc-row-pad" style={{ height: Math.max(0, flatRange.from * FLAT_ROW_PITCH - 2) }} aria-hidden="true" /> : null}
-                {flat.entries.slice(flatRange.from, flatRange.to + 1).map(({ r, pos }) => messageRow(r, (
+                {flatWindow.topPad > 0 ? <div className="lc-row-pad" style={{ height: flatWindow.topPad }} aria-hidden="true" /> : null}
+                {flat.entries.slice(flatWindow.from, flatWindow.to + 1).map(({ r, pos }) => messageRow(r, (
                   <>
                     {catChip(r.n.cat)}
                     <span className="lc-br-pos">#{fmt(pos)}</span>
                     {rowTagNode(r.tag, r.tagNames)}
                   </>
                 ), (over) => { setRowDnaKey(over ? 'n' + String(r.n.seq) : null) }))}
-                {flatRange.to < flat.entries.length - 1
-                  ? <div className="lc-row-pad" style={{ height: Math.max(0, (flat.entries.length - 1 - flatRange.to) * FLAT_ROW_PITCH - 2) }} aria-hidden="true" />
+                {flatWindow.bottomPad > 0
+                  ? <div className="lc-row-pad" style={{ height: flatWindow.bottomPad }} aria-hidden="true" />
                   : null}
                 {flat.tail}
                 {flat.count === 0 ? <div className="lc-br-note">{t('browser.rowNoMatch')}</div> : null}
