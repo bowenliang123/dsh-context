@@ -24,6 +24,19 @@
   @keyframes lc-agent-in { from { opacity: 0; transform: translateY(6px); } }
 }
 
+body[data-ds-dark-theme] :is(.lc-root, .lc-ov-page, .lc-modal-card, .lc-tip) {
+  --color-red-500: oklch(70% 0.16 25.331);
+  --color-orange-500: oklch(75% 0.14 47.604);
+  --color-amber-500: oklch(82% 0.13 70.08);
+  --color-green-500: oklch(78% 0.15 149.579);
+  --color-teal-500: oklch(76% 0.1 182.503);
+  --color-blue-500: oklch(71% 0.14 259.815);
+  --color-indigo-500: oklch(68% 0.17 277.117);
+  --color-violet-500: oklch(79% 0.11 292.717);
+  --color-purple-500: oklch(68% 0.17 303.9);
+  --color-pink-500: oklch(76% 0.15 354.308);
+}
+
 @source "../";
 
 @tailwind utilities;
