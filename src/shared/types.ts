@@ -188,6 +188,8 @@ export interface Snapshot {
   generatedAnswerTokens?: number
   generatedCallTokens?: number
   toolCalls?: number
+  toolTally?: Record<string, number>
+  programTally?: Record<string, number>
   humanInputs?: number
   answers?: number
   lastUser?: string

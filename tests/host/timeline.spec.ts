@@ -9,7 +9,7 @@ describe('createContextTimelineDefinition', () => {
   test('carries the pinned projection contract; the wire and state schemas accept a real fold', () => {
     const def = createContextTimelineDefinition({}, () => false)
     assert.equal(def.key, 'contextTimeline')
-    assert.equal(def.stateVersion, 40, 'pinned: the full-session head counters cannot be backfilled from the retained window')
+    assert.equal(def.stateVersion, 41, 'pinned: the full-session head counters cannot be backfilled from the retained window')
     const drive = driveTimeline(realLog(), {}, true)
     assert.equal(def.wire.viewSchema.safeParse(drive.view).success, true, 'a real folded view validates')
     const view = drive.view
@@ -21,7 +21,7 @@ describe('createContextTimelineDefinition', () => {
     assert.equal(view.nodes.length, 4, 'the fallback wire serves the slim surface index')
     assert.ok(view.nodes.every(node => !('text' in node)), 'the fallback surface carries no detail text')
     assert.equal(view.requests.length, 0, 'slim request records stay off the fallback wire')
-    assert.ok(view.events.length > 0, 'the events window rides the fallback wire')
+    assert.equal(view.events.length, 0, 'events are refold-only: the head-only state persists no window')
     for (const state of drive.states) {
       def.stateSchema.parse(structuredClone(state))
     }

@@ -4,7 +4,7 @@ import { asRecord } from './record'
 import { type ColdReadGate, makeColdReadGate } from './coldRead'
 import { buildTimelineDetail, buildTimelineHead } from './foldWire'
 import { DetailShadow, foldLog } from './detailShadow'
-import { failure, leaseOf, mountPostRoute, observeOf, readBody, reply } from './postRoute'
+import { failure, leaseOf, mountPostRoute, observeOf, readBody, reply, revisionOf } from './postRoute'
 import type { ContextTimelineDetail, Snapshot } from '../shared/types'
 import type { TimelineState } from './foldState'
 
@@ -18,11 +18,6 @@ interface ColdPayload {
   value: ContextTimelineDetail
 }
 
-function revisionOf(observation: unknown): string | undefined {
-  const revision = (observation as { revision?: unknown } | null)?.revision
-  return typeof revision === 'string' && revision !== '' ? revision : undefined
-}
-
 function headOfDetail(detail: { rev: number; head?: unknown }): { rev: number; head?: unknown } {
   return { rev: detail.rev, head: detail.head }
 }
@@ -31,7 +26,7 @@ function headPayloadOf(state: TimelineState): { rev: number; head: Snapshot } {
   return { rev: state.detailRev ?? 0, head: buildTimelineHead(state) }
 }
 
-interface DetailChannelGate {
+export interface DetailChannelGate {
   live: boolean
   retain(key: string, registration: unknown): void
   stateOf(session: unknown, key: string): unknown
@@ -81,9 +76,9 @@ export function watchDetailChannel(
   bounds: FoldBounds,
   coldReads: ColdReadGate = makeColdReadGate(),
   gate: DetailChannelGate = createDetailGate(ctx),
+  shadow: DetailShadow = new DetailShadow(ctx, bounds, coldReads, () => observeOf(ctx)),
 ): DetailChannelGate {
   const payloads = new Map<string, ColdPayload>()
-  const shadow = new DetailShadow(ctx, bounds, coldReads, () => observeOf(ctx))
   mountPostRoute({
     ctx,
     deps: ['connection', 'sessions'],

@@ -3,7 +3,7 @@ import type { ContextEventRecord, ContextTimeline, RequestRecord, SessionCostUsa
 import { estimateSessionCost, billedTokensOf, formatCost, formatPriceRate, mergeCostUsage, priceLookupsOf, toCurrency } from '../cost'
 import type { CostCurrency, ModelBook, PriceFace, PriceMiss } from '../cost'
 import { sessionsFaceOf, subagentCostFoldOf } from '../agentTree'
-import { useSessionsSnapshot } from '../agentHeads'
+import { readHeads, useSessionsSnapshot } from '../agentHeads'
 import type { AgentHeads } from '../agentHeads'
 import type { Translate } from '../i18n'
 import { useModelPrices } from '../modelPrices'
@@ -70,12 +70,20 @@ export function makeSubagentCost(
       [snapshot, sessionId, landed],
     )
     useEffect(() => {
-      for (const id of fold.cold) {
-        void heads.headOf(id).then((head) => {
-          /* v8 ignore next 1 */
-          if (head !== null) setLanded(prev => prev.get(id) === head ? prev : new Map(prev).set(id, head))
-        }).catch(() => {})
+      const cold = fold.cold
+      if (cold.length === 0) return
+      const land = (head: ContextTimeline | null | undefined, id: string): void => {
+        /* v8 ignore next 1 */
+        if (head !== null && head !== undefined) setLanded(prev => prev.get(id) === head ? prev : new Map(prev).set(id, head))
       }
+      if (cold.length > 1) {
+        void readHeads(heads, cold).then((reads) => {
+          for (const id of cold) land(reads.get(id), id)
+        }).catch(() => {})
+        return
+      }
+      const [only] = cold
+      void heads.headOf(only).then((head) => { land(head, only) }).catch(() => {})
     }, [fold, heads])
     return { usage: fold.usage, count: fold.count }
   }

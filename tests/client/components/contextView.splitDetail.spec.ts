@@ -68,6 +68,33 @@ describe('ContextView — the split generation (slim head + detail channel)', ()
     await m.unmount()
   })
 
+  test('the head tallies paint the tool and command stats before the detail lands', async () => {
+    vi.stubGlobal('fetch', () => new Promise(() => {}))
+    const ctx = new TestClientCtx()
+    const View = makeView(ctx)
+    const head = slimHead({
+      toolTally: { bash: 2, read: 1 },
+      programTally: { ls: 3, cat: 1 },
+      commandStats: { runs: 3, failed: 0, ms: 10, bg: 0 },
+    })
+    const m = await mount(h(View, { sessionId: 'sv-tally', useProjection: projectionsFor(head) }))
+    await until(() => text(m.container).includes('bash'), 'the tool tally never painted')
+    assert.ok(text(m.container).includes('ls'), 'the command tally paints from the head')
+    assert.ok(text(m.container).includes('read'))
+    await m.unmount()
+  })
+
+  test('a head with program tallies but no command stats paints the programs and a zero run count', async () => {
+    vi.stubGlobal('fetch', () => new Promise(() => {}))
+    const ctx = new TestClientCtx()
+    const View = makeView(ctx)
+    const head = slimHead({ toolTally: { bash: 1 }, programTally: { ls: 2 } })
+    const m = await mount(h(View, { sessionId: 'sv-tally2', useProjection: projectionsFor(head) }))
+    await until(() => text(m.container).includes('ls'), 'the program tally never painted')
+    assert.ok(text(m.container).includes('bash'))
+    await m.unmount()
+  })
+
   test('the pending trend body reserves the loaded panel, so the detail fills the card instead of growing it', async () => {
     let release!: () => void
     vi.stubGlobal('fetch', () => new Promise(res => {

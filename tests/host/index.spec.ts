@@ -62,6 +62,34 @@ async function boot() {
 }
 
 describe('dsh-context host plugin', () => {
+  test('mounts the facts route with the shared detail shadow', async () => {
+    const ctx = new Context()
+    const routes = new Map<string, { fetch?: (request: Request) => Promise<Response> }>()
+    ctx.provide('connection', {
+      fetch: {
+        register(route: { path: string; fetch: (request: Request) => Promise<Response> }) {
+          routes.set(route.path, route)
+          return () => { routes.delete(route.path) }
+        },
+      },
+    })
+    await ctx.plugin(SessionStore)
+    await ctx.plugin(SessionProjectionRegistry)
+    await ctx.plugin(plugin, noConfig)
+    const session = ctx.sessions.create()
+    appendRealEnvelopes(session)
+    const route = await until(() => routes.get('/api/dsh-context/facts'), 'facts route mounted')
+    const response = await route.fetch!(new Request('http://dsh.test/api/dsh-context/facts', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ sessionId: session.id, parts: ['head', 'nodes'] }),
+    }))
+    const body = await response.json() as { ok: boolean; value: { parts: Record<string, unknown>; missing?: string[] } }
+    assert.equal(body.ok, true)
+    assert.ok(body.value.parts.head !== undefined, 'the facts route serves the head')
+    assert.deepEqual(body.value.missing, ['nodes'], 'detail parts need an observation face and are reported missing')
+  })
+
   test('module shape is the sessionProjections inject gate, and all three units serve folded views over real appends', async () => {
     assert.equal(name, 'dsh-context')
     assert.deepEqual(inject, ['sessionProjections'])

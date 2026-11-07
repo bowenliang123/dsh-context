@@ -1,5 +1,5 @@
 import type { FileOpRecord, RequestRecord, SurfaceNode } from '../shared/types'
-import { opsOfCall, parseCallArgs } from '../shared/fileOps'
+import { isImageFileOp, opsOfCall, parseCallArgs } from '../shared/fileOps'
 import { leafNameOf } from '../shared/attachment'
 import { fileAddressFor, isAbsoluteWorkspacePath, resolveWorkspacePath } from '@deepseek-ai/dsh-util-workspace-path'
 import type { ConversationNodeLike } from './services'
@@ -32,12 +32,10 @@ export interface FileActivity {
 }
 
 export function formOf(tool: string, path: string): FileForm {
-  if (tool === 'read_image' || IMAGE_EXT.test(path)) return 'image'
+  if (isImageFileOp(tool, path)) return 'image'
   if (path.endsWith('/') || path.endsWith('\\')) return 'dir'
   return 'text'
 }
-
-const IMAGE_EXT = /\.(png|jpe?g|gif|webp|svg|bmp|ico|avif)$/i
 
 export interface FileGlyph {
   glyph: string

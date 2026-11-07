@@ -218,6 +218,8 @@ const lastSchema = z.object({
   prompt: z.number().int().nonnegative().optional(),
 }).strict()
 
+const tallySchema = z.record(z.string(), z.number().int().nonnegative())
+
 export const contextTimelineSchema = z.object({
   ok: z.literal(true),
   unsupported: unsupportedSchema.optional(),
@@ -232,6 +234,8 @@ export const contextTimelineSchema = z.object({
   generatedAnswerTokens: z.number().int().nonnegative().optional(),
   generatedCallTokens: z.number().int().nonnegative().optional(),
   toolCalls: z.number().int().nonnegative().optional(),
+  toolTally: tallySchema.optional(),
+  programTally: tallySchema.optional(),
   humanInputs: z.number().int().nonnegative().optional(),
   answers: z.number().int().nonnegative().optional(),
   lastUser: z.string().optional(),
@@ -321,9 +325,13 @@ const timelineStateSchema = z.object({
   spans: z.array(timingSpanSchema),
   stepSpans: z.array(timingSpanSchema).optional(),
   pendingCodeOps: z.record(z.string(), z.array(fileOpSchema)).optional(),
+  toolTally: tallySchema.optional(),
+  programTally: tallySchema.optional(),
+  commandCalls: z.array(z.string()).optional(),
+  commandCallsOverflow: z.boolean().optional(),
 }) as unknown as z.ZodType<TimelineState>
 
-export const TIMELINE_STATE_VERSION = 40
+export const TIMELINE_STATE_VERSION = 41
 
 export function createContextTimelineDefinition(config: Config, slim: () => boolean): WiredProjection<'contextTimeline', TimelineState> {
   const bounds = resolveBounds(config)

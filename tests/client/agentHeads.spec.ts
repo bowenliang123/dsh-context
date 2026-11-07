@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import { afterEach, describe, test, vi } from 'vitest'
-import { makeAgentHeads, makeHeadFetcher } from '../../src/client/agentHeads'
+import { makeAgentHeads, makeBatchHeadFetcher, makeHeadFetcher, headsOf, readHeads } from '../../src/client/agentHeads'
 
 function headResponse(model = 'deepseek-v4-flash'): unknown {
   return {
@@ -193,5 +193,158 @@ describe('useSessionsSnapshot coalescing', () => {
     await vi.advanceTimersByTimeAsync(200)
     assert.equal(listeners.size, 0)
     vi.useRealTimers()
+  })
+})
+
+
+describe('headsOf and the batch heads channel', () => {
+  afterEach(() => { vi.unstubAllGlobals() })
+
+  function batchResponse(ids: string[]): unknown {
+    const value: Record<string, unknown> = {}
+    for (const id of ids) value[id] = { head: { ok: true, current: { system: 0, tools: 0, user: 1, inject: 0, skill: 0, assistant: 0, tool: 0, total: 1 } } }
+    return { ok: true, status: 200, json: async () => ({ ok: true, value }) }
+  }
+
+  test('decodes a heads envelope, dropping unusable rows', () => {
+    assert.equal(headsOf(null), null)
+    assert.equal(headsOf(42), null)
+    const decoded = headsOf({ a: { head: { ok: true, current: { system: 0, tools: 0, user: 1, inject: 0, skill: 0, assistant: 0, tool: 0, total: 1 } } }, b: { head: null }, c: 7 })
+    assert.equal(decoded?.size, 1)
+    assert.equal(decoded?.get('a')?.current.total, 1)
+  })
+
+  test('the batch fetcher posts the ids once and rejects malformed envelopes', async () => {
+    const bodies: unknown[] = []
+    vi.stubGlobal('fetch', async (_url: unknown, init: { body: string }) => {
+      bodies.push(JSON.parse(init.body))
+      return batchResponse(['a', 'b'])
+    })
+    const fetcher = makeBatchHeadFetcher(['a', 'b'])
+    const heads = await fetcher()
+    assert.equal(heads?.size, 2)
+    assert.deepEqual(bodies, [{ ids: ['a', 'b'] }])
+    vi.stubGlobal('fetch', async () => ({ ok: true, status: 200, json: async () => ({ ok: true, value: null }) }))
+    assert.equal(await makeBatchHeadFetcher(['a']) (), null)
+    vi.stubGlobal('fetch', async () => ({ ok: true, status: 200, json: async () => ({ ok: true, value: { a: { head: 7 } } }) }))
+    assert.equal((await makeBatchHeadFetcher(['a'])())?.size, 0, 'unusable rows are dropped instead of failing the batch')
+    vi.stubGlobal('fetch', async () => ({ ok: false, status: 500 }))
+    await assert.rejects(makeBatchHeadFetcher(['a'])())
+  })
+
+  test('headOfMany batches the cold ids once, joins concurrent asks, and replays cached heads', async () => {
+    const bodies: { ids?: string[] }[] = []
+    vi.stubGlobal('fetch', async (_url: unknown, init: { body: string }) => {
+      bodies.push(JSON.parse(init.body))
+      return batchResponse(JSON.parse(init.body).ids)
+    })
+    const heads = makeAgentHeads()
+    const many = heads.headOfMany
+    assert.ok(many !== undefined)
+    const first = await many.call(heads, ['a', 'b'])
+    assert.deepEqual([...first.keys()].sort(), ['a', 'b'])
+    assert.deepEqual(bodies, [{ ids: ['a', 'b'] }])
+    const replay = await many.call(heads, ['a', 'b', 'a', ''])
+    assert.deepEqual([...replay.keys()].sort(), ['a', 'b'])
+    assert.equal(bodies.length, 1, 'cached heads replay without a read')
+    const none = await many.call(heads, [])
+    assert.equal(none.size, 0)
+  })
+
+  test('a wide fleet splits its head reads into 64-id chunks', async () => {
+    const bodies: { ids: string[] }[] = []
+    vi.stubGlobal('fetch', async (_url: unknown, init: { body: string }) => {
+      bodies.push(JSON.parse(init.body))
+      return batchResponse(JSON.parse(init.body).ids)
+    })
+    const heads = makeAgentHeads()
+    const ids = Array.from({ length: 130 }, (_, i) => 'wide-' + i)
+    const reads = await heads.headOfMany!(ids)
+    assert.equal(reads.size, 130, 'every child head lands')
+    assert.deepEqual(bodies.map(body => body.ids.length), [64, 64, 2])
+    assert.deepEqual(bodies.flatMap(body => body.ids), ids)
+  })
+
+  test('concurrent batches for the same cold ids join the in-flight reads', async () => {
+    let release!: () => void
+    let calls = 0
+    vi.stubGlobal('fetch', () => {
+      calls++
+      return new Promise((resolve) => {
+        release = () => resolve(batchResponse(['x']))
+      })
+    })
+    const heads = makeAgentHeads()
+    const many = heads.headOfMany!
+    const one = many.call(heads, ['x'])
+    const two = many.call(heads, ['x'])
+    await Promise.resolve()
+    release()
+    const [a, b] = await Promise.all([one, two])
+    assert.equal(a.get('x')?.current.total, 1)
+    assert.equal(b.get('x')?.current.total, 1)
+    assert.equal(calls, 1)
+  })
+
+  test('a batch joins a single in-flight read and drops a null head', async () => {
+    let release!: () => void
+    vi.stubGlobal('fetch', () => new Promise((resolve) => {
+      release = () => resolve({ ok: true, status: 200, json: async () => ({ ok: true, value: null }) })
+    }))
+    const heads = makeAgentHeads()
+    const single = heads.headOf('x')
+    const many = heads.headOfMany!
+    const joined = many.call(heads, ['x'])
+    release()
+    assert.equal(await single, null)
+    assert.equal((await joined).size, 0)
+  })
+
+  test('a failed batch rejects every ask and a later batch retries', async () => {
+    let fail = true
+    vi.stubGlobal('fetch', async () => {
+      if (fail) throw new Error('offline')
+      return batchResponse(['x'])
+    })
+    const heads = makeAgentHeads()
+    const many = heads.headOfMany!
+    await assert.rejects(many.call(heads, ['x']), /offline/)
+    fail = false
+    const retried = await many.call(heads, ['x'])
+    assert.equal(retried.get('x')?.current.total, 1)
+    vi.stubGlobal('fetch', async () => { throw 'offline-string' })
+    await assert.rejects(many.call(heads, ['y']), /heads read failed/)
+    vi.stubGlobal('fetch', async () => ({ ok: true, status: 200, json: async () => ({ ok: true, value: null }) }))
+    const absent = await many.call(heads, ['gone'])
+    assert.equal(absent.size, 0)
+    const again = await many.call(heads, ['gone'])
+    assert.equal(again.size, 0)
+  })
+})
+
+
+describe('readHeads — the batch-or-single seam', () => {
+  const timeline = (): never => ({ ok: true, current: { system: 0, tools: 0, user: 1, inject: 0, skill: 0, assistant: 0, tool: 0, total: 1 }, requests: [], events: [], nodes: [], droppedNodes: 0, archive: [] }) as never
+
+  test('prefers the batch face when the channel provides one', async () => {
+    const calls: string[][] = []
+    const reads = await readHeads({
+      headOf: () => { throw new Error('single reads must not run') },
+      headOfMany: (ids) => { calls.push([...ids]); return Promise.resolve(new Map(ids.map(id => [id, timeline()] as const))) },
+    }, ['a', 'b'])
+    assert.deepEqual(calls, [['a', 'b']])
+    assert.equal(reads.size, 2)
+  })
+
+  test('falls back to single reads, dropping absent heads and reporting a failure', async () => {
+    const calls: string[] = []
+    const fallback = {
+      headOf: (id: string) => { calls.push(id); return Promise.resolve(id === 'a' ? timeline() : null) },
+    }
+    const reads = await readHeads(fallback, ['a', 'b'])
+    assert.deepEqual(calls, ['a', 'b'])
+    assert.deepEqual([...reads.keys()], ['a'])
+    await assert.rejects(readHeads({ headOf: (id: string) => id === 'b' ? Promise.reject(new Error('bad')) : Promise.resolve(timeline()) }, ['a', 'b']), /bad/)
+    await assert.rejects(readHeads({ headOf: () => Promise.reject('plain') }, ['a']), /heads read failed/)
   })
 })

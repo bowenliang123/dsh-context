@@ -100,7 +100,7 @@ describe('registry contract — the semantics every supported line shares', () =
     assert.ok(rows !== undefined, 'checkpoint rows are losslessly JSON-serializable')
     for (const key of ['contextTimeline', 'contextHeaders']) {
       const row = rows[key] as { ver: number; seq: number }
-      assert.equal(row.ver, key === 'contextTimeline' ? 40 : 1)
+      assert.equal(row.ver, key === 'contextTimeline' ? 41 : 1)
       assert.equal(row.seq, 12)
     }
   })
@@ -150,10 +150,10 @@ describe('registry contract — the semantics every supported line shares', () =
     const timeline = restored.values.contextTimeline as { current: { total: number }; nodes: unknown[] }
     assert.ok(timeline.current.total > 0, 'the refold serves the wire view')
     const refolded = (driver.checkpoint(session).contextTimeline as { val: { requests: { seq: number; prompt?: number }[] } }).val
-    assert.deepEqual(refolded.requests.map(r => r.seq), [6, 10, 13, 14, 15], 'the refold re-tracks every step')
+    assert.deepEqual(refolded.requests.map(r => r.seq), [14, 15], 'the head row keeps only the last requests for its last-value')
     assert.deepEqual(
-      refolded.requests.filter(r => r.seq >= 13).map(r => r.prompt ?? null),
-      [151, null, 12],
+      refolded.requests.map(r => r.prompt ?? null),
+      [null, 12],
       'the persisted records keep the sanitized prompt figure (issue #44)',
     )
 

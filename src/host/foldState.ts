@@ -80,7 +80,7 @@ export function deriveHeadState(val: unknown): TimelineState | undefined {
   const commands = slimCommands(prev.commands)
   const pendingCodeCmds = slimPendingCommands(prev.pendingCodeCmds)
   const { pendingCodeCmds: _prevPending, ...rest } = prev
-  return {
+  const state = {
     ...rest,
     sums,
     surface,
@@ -91,6 +91,18 @@ export function deriveHeadState(val: unknown): TimelineState | undefined {
     fileOps: [],
     archived: [],
   } as unknown as TimelineState
+  for (const rec of commands) {
+    if (typeof rec.call === 'string') noteCommandCall(state, rec.call)
+  }
+  if (pendingCodeCmds !== undefined) {
+    for (const records of Object.values(pendingCodeCmds)) {
+      for (const rec of records) {
+        if (typeof rec.call === 'string') noteCommandCall(state, rec.call)
+      }
+    }
+  }
+  trimHeadState(state)
+  return state
 }
 
 export interface CommandStateRecord extends CommandRecord {
@@ -183,6 +195,10 @@ export interface TimelineState {
   commands: CommandStateRecord[]
   commandsFloor?: number
   commandStats?: CommandStats
+  toolTally?: Record<string, number>
+  programTally?: Record<string, number>
+  commandCalls?: string[]
+  commandCallsOverflow?: boolean
   pendingCodeCmds?: Record<string, CommandStateRecord[]>
   pendingCodeOps?: Record<string, FileOpRecord[]>
 }
@@ -252,6 +268,10 @@ export function trimState(st: TimelineState, bounds: FoldBounds): void {
     st.commandsFloor = Math.max(st.commandsFloor ?? 0, floor)
     st.commands = kept
   }
+  if (bounds.headOnly === true) {
+    trimHeadState(st)
+    return
+  }
   if (st.archived.length > 0) {
     let drop = 0
     const oldestReq = st.requests.length > 0 ? st.requests[0].seq : undefined
@@ -270,9 +290,39 @@ export function trimState(st: TimelineState, bounds: FoldBounds): void {
   }
 }
 
+const COMMAND_CALLS_MAX = 1024
+
+export function noteCommandCall(st: TimelineState, callId: string): void {
+  if (callId === '') return
+  const calls = st.commandCalls
+  if (calls === undefined) {
+    st.commandCalls = [callId]
+    return
+  }
+  if (calls.includes(callId)) return
+  calls.push(callId)
+  if (calls.length > COMMAND_CALLS_MAX) {
+    calls.splice(0, calls.length - COMMAND_CALLS_MAX)
+    st.commandCallsOverflow = true
+  }
+}
+
+export function trimHeadState(st: TimelineState): void {
+  if (st.requests.length > 2) st.requests = st.requests.slice(-2)
+  if (st.events.length > 0) st.events = []
+  if (st.commands.length > 0) st.commands = st.commands.filter(rec => rec.status === 'running').slice(-16)
+  if (st.fileOps.length > 0) st.fileOps = []
+  if (st.spans.length > 0) st.spans = []
+  if (st.archived.length > 0) st.archived = []
+}
+
 const TIMING_SPANS_MAX = 2_000
 
 export const SKILL_NAMES_MAX = 500
+
+export const TALLY_NAMES_MAX = 128
+
+export const TALLY_NAME_CHARS_MAX = 120
 
 export interface CumulativeTotals {
   turns: number

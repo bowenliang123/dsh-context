@@ -18,7 +18,7 @@ import { deriveEventMessage } from '@deepseek-ai/dsh-session'
 import { firstTokenTimeOfStream, replaceRangeOf, streamTimingOf } from './logShapes'
 import type { DecodeSpan } from './logShapes'
 import { opBearingTool, opsOfCall, parseCallArgs, rawArgsNeeded } from '../shared/fileOps'
-import { commandArgsOf, commandTool, markersOfText, outcomeOfMarkers } from '../shared/commands'
+import { commandArgsOf, commandProgramsOf, commandTool, markersOfText, outcomeOfMarkers } from '../shared/commands'
 import {
   bumpBg,
   commandRecordOf,
@@ -31,7 +31,7 @@ import {
   setCommand,
   tallyRun,
 } from './foldCommands'
-import { countCompaction, countInject, countStep, countTurnRuns, noteSkillName, noteTurn, trimState } from './foldState'
+import { TALLY_NAME_CHARS_MAX, TALLY_NAMES_MAX, countCompaction, countInject, countStep, countTurnRuns, noteCommandCall, noteSkillName, noteTurn, trimState } from './foldState'
 import { slimSurfaceNode } from './foldState'
 import type { CommandStateRecord, TimelineEvent, TimelineState } from './foldState'
 import { accumulateCost, addDecodeSpan, bumpToolTotals, carveWindows, durOf, ensureTiming, idleGapWindows, mergeWindows, tokenCountOf } from './foldMetering'
@@ -82,6 +82,29 @@ function argsRawOf(value: unknown): string | undefined {
 
 function pushFileOps(st: TimelineState, ops: FileOpRecord[]): void {
   for (const op of ops) st.fileOps.push(op)
+}
+
+function tallyName(map: Record<string, number> | undefined, name: string): Record<string, number> | undefined {
+  if (name === '' || name === '__proto__') return undefined
+  const key = name.length > TALLY_NAME_CHARS_MAX ? name.slice(0, TALLY_NAME_CHARS_MAX) : name
+  const next = { ...(map ?? {}) }
+  if (!Object.hasOwn(next, key) && Object.keys(next).length >= TALLY_NAMES_MAX) return undefined
+  next[key] = (next[key] ?? 0) + 1
+  return next
+}
+
+function tallyTool(st: TimelineState, name: string): void {
+  const next = tallyName(st.toolTally, name)
+  if (next !== undefined) st.toolTally = next
+}
+
+function tallyPrograms(st: TimelineState, tool: Parameters<typeof commandProgramsOf>[0], cmd: string): void {
+  let tally = st.programTally
+  for (const name of commandProgramsOf(tool, cmd)) {
+    const next = tallyName(tally, name)
+    if (next !== undefined) tally = next
+  }
+  if (tally !== undefined && tally !== st.programTally) st.programTally = tally
 }
 
 function bufferCodeOps(st: TimelineState, rootCallId: string, ops: FileOpRecord[]): void {
@@ -315,6 +338,13 @@ function applyTimelineEvent(state: TimelineState, event: TimelineEvent, bounds: 
     return st
   }
 
+  const bumpTrimmedCommand = (callId: string): TimelineState | undefined => {
+    if (bounds.headOnly !== true || (state.commandCallsOverflow !== true && state.commandCalls?.includes(callId) !== true)) return undefined
+    const s = ensure([])
+    bumpDetailRev(s)
+    return s
+  }
+
   const data = event.data
   try {
     switch (event.type) {
@@ -401,6 +431,8 @@ function applyTimelineEvent(state: TimelineState, event: TimelineEvent, bounds: 
                 step: data.step,
                 call: data.callId,
               }, bounds.headOnly === true))
+              tallyPrograms(s, cmdTool, parsed.cmd)
+              if (bounds.headOnly === true) noteCommandCall(s, data.callId)
               if (parsed.background === true) bumpBg(s)
               bumpDetailRev(s)
             }
@@ -419,9 +451,11 @@ function applyTimelineEvent(state: TimelineState, event: TimelineEvent, bounds: 
           bumpDetailRev(s)
           break
         }
-        if (state.pendingCodeCmds === undefined) return state
+        if (state.pendingCodeCmds === undefined) return bumpTrimmedCommand(callId) ?? state
         const s = ensure([])
-        if (!patchBufferedCommand(s, state.pendingCodeCmds, callId, rec => ({ ...rec, start: startedAt }))) return state
+        if (!patchBufferedCommand(s, state.pendingCodeCmds, callId, rec => ({ ...rec, start: startedAt }))) {
+          return bumpTrimmedCommand(callId) ?? state
+        }
         break
       }
       case 'job/settled': {
@@ -438,9 +472,11 @@ function applyTimelineEvent(state: TimelineState, event: TimelineEvent, bounds: 
           break
         }
         const pendingCmds = state.pendingCodeCmds
-        if (pendingCmds === undefined) return state
+        if (pendingCmds === undefined) return bumpTrimmedCommand(callId) ?? state
         const s = ensure([])
-        if (!patchBufferedCommand(s, pendingCmds, callId, rec => jobOutcomePatch(rec, status, finishedAt, data?.detail))) return state
+        if (!patchBufferedCommand(s, pendingCmds, callId, rec => jobOutcomePatch(rec, status, finishedAt, data?.detail))) {
+          return bumpTrimmedCommand(callId) ?? state
+        }
         break
       }
       case 'tool/ptc-dispatch-start': {
@@ -464,6 +500,8 @@ function applyTimelineEvent(state: TimelineState, event: TimelineEvent, bounds: 
         }, bounds.headOnly === true)
         const s = ensure([])
         if (parsed.background === true) bumpBg(s)
+        tallyPrograms(s, cmdTool, parsed.cmd)
+        if (bounds.headOnly === true) noteCommandCall(s, subCallId)
         s.pendingCodeCmds = { ...pending, [rootCallId]: [...(pending[rootCallId] ?? []), rec] }
         break
       }
@@ -758,6 +796,9 @@ function applyTimelineEvent(state: TimelineState, event: TimelineEvent, bounds: 
               if (i >= 0) s.surface[i] = surfaceNodeOf(node, bounds)
             }
           }
+        }
+        if ((node.cat === 'tool' || node.cat === 'skill') && node.tool !== undefined && node.tool !== '') {
+          tallyTool(s, node.tool)
         }
         break
       }

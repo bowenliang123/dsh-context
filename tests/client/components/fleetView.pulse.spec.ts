@@ -814,7 +814,11 @@ describe('Multi-Agent Fleet', () => {
       })),
     })
     vi.stubGlobal('fetch', (_url: unknown, init: { body: string }) => {
-      const { sessionId } = JSON.parse(init.body) as { sessionId: string }
+      const body = JSON.parse(init.body) as { sessionId?: string; ids?: string[] }
+      if (body.ids !== undefined) {
+        return Promise.resolve({ ok: true, json: () => Promise.resolve({ ok: true, value: {} }) } as Response)
+      }
+      const sessionId = body.sessionId as string
       const index = Number(sessionId.slice(6))
       const value = Number.isInteger(index) && index > 0
         ? { messages: [], delegations: [{ seq: 1, time: 1000 + index, to: sessionId, mode: 'continuable', label: `Task ${index}` }], truncated: false }

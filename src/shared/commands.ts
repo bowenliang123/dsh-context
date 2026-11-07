@@ -733,6 +733,16 @@ function programOfText(text: string, dialect: CommandDialect, vars = new Map<str
   return dialect === 'pwsh' ? pwshProgram(text, vars) : bashProgram(text, vars)
 }
 
+export function commandProgramsOf(tool: string | undefined, cmd: string): string[] {
+  const cmdTool = commandTool(tool)
+  if (cmdTool === null) return []
+  if (cmdTool === 'bash' || cmdTool === 'pwsh') {
+    const programs = programsOfCommand(cmd, cmdTool)
+    if (programs.length > 0) return programs
+  }
+  return [programOfCommand(cmdTool, cmd)]
+}
+
 export function programsOfCommand(cmd: string, dialect: CommandDialect = 'bash'): string[] {
   if (cmd.trim() === '') return []
   const fallback = dialect === 'pwsh' ? 'pwsh' : 'shell'

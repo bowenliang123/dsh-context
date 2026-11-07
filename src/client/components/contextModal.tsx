@@ -1,4 +1,4 @@
-import { createElement as h, useCallback, useLayoutEffect, useMemo, useRef, useState, type ReactElement } from 'react'
+import { createElement as h, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactElement } from 'react'
 import { createPortal } from 'react-dom'
 import { providerModelLabelOf } from '../agentTree'
 import { makeAttachmentOpener } from '../attachmentSource'
@@ -101,6 +101,10 @@ export function makeContextModal(
       const scope = sessions.scope(sessionId)
       if (scope !== undefined) scope.bail(scope, 'slash/input-consume-token', { guard })
     }, [ctx, sessionId])
+
+    useEffect(() => {
+      if (source.detailState === 'ready') source.ensurePart('nodes', { nodesTail: 2000 })
+    }, [source.detailState, source.ensurePart])
 
     useEscapeClose(true, close)
 

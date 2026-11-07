@@ -28,6 +28,13 @@ export function reply(value: unknown): Response {
   return Response.json(value, { headers: { 'cache-control': 'no-store' } })
 }
 
+export function revisionOf(observation: unknown): string | undefined {
+  const revision = observation !== null && typeof observation === 'object'
+    ? (observation as { revision?: unknown }).revision
+    : undefined
+  return typeof revision === 'string' && revision !== '' ? revision : undefined
+}
+
 export function failure(code: string, message: string): Response {
   return reply({ ok: false, error: { code, message } })
 }

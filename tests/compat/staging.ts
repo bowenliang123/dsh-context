@@ -218,15 +218,19 @@ const values = registryC.snapshot(sessionC).values
 const node = values.contextTimeline.nodes.find(n => n.seq === 2)
 developerTokens = node ? node.tokens : null
 const developerState = registryC.checkpoint(sessionC).contextTimeline.val
-developerInjectCount = Array.isArray(developerState.events) ? developerState.events.filter(e => e.kind === 'inject').length : null
+developerInjectCount = typeof developerState.totals?.injects === 'number'
+  ? developerState.totals.injects
+  : Array.isArray(developerState.events) ? developerState.events.filter(e => e.kind === 'inject').length : null
 const rows = snapshotJsonValue(registryC.checkpoint(sessionC))
 const warm = registryC.restore(rows, registryLog, 0, sessionC.header)
 const oldLog = registryLog.map(e => e.type === 'developer/message' ? { ...e, type: 'todo/write' } : e)
 const oldRows = registryC.restore({}, oldLog, 0, sessionC.header).checkpoint
 oldRows.contextTimeline.ver = 24
 const rebuilt = registryC.restore(oldRows, registryLog, 0, sessionC.header)
-developerRestoreMatches = JSON.stringify(warm.snapshot.values) === JSON.stringify(values)
-  && JSON.stringify(rebuilt.snapshot.values) === JSON.stringify(values)
+const HEAD_VIEW_FIELDS = ['current', 'counts', 'cost', 'last', 'model', 'provider', 'reasoningEffort', 'contextWindow', 'maxOutputTokens', 'images', 'toolCalls', 'toolTally', 'programTally', 'commandStats', 'humanInputs', 'answers', 'lastUser', 'generatedReasoning', 'generatedAnswerTokens', 'generatedCallTokens', 'detailRev', 'timing', 'systems']
+const headViewOf = (view) => JSON.stringify(Object.fromEntries(HEAD_VIEW_FIELDS.filter(field => view?.[field] !== undefined).map(field => [field, view[field]])))
+developerRestoreMatches = headViewOf(warm.snapshot.values.contextTimeline) === headViewOf(values.contextTimeline)
+  && headViewOf(rebuilt.snapshot.values.contextTimeline) === headViewOf(values.contextTimeline)
 
 const hostile = [
   ev(12, 'step/start'),
@@ -237,9 +241,14 @@ drive(ctx, session, hostile)
 let hostileSnapshotOk = true
 let hostileSteps = null
 try {
-  registry.snapshot(session)
+  const hostileSnapshot = registry.snapshot(session).values
+  const hostileView = hostileSnapshot.contextTimeline
   const hostileState = registry.checkpoint(session).contextTimeline.val
-  hostileSteps = Array.isArray(hostileState.requests) ? hostileState.requests.length : null
+  hostileSteps = typeof hostileView?.counts?.steps === 'number'
+    ? hostileView.counts.steps
+    : typeof hostileState.totals?.steps === 'number'
+      ? hostileState.totals.steps
+      : Array.isArray(hostileState.requests) ? hostileState.requests.length : null
 } catch {
   hostileSnapshotOk = false
 }

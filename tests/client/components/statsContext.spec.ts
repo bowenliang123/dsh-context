@@ -689,14 +689,14 @@ describe('StatsContext — the real subagent-cost seat (makeSubagentCost)', () =
   })
 
   test('a headless detail answer (or a null value) lands nothing and never retries', async () => {
-    const calls: string[] = []
+    const calls: unknown[] = []
     vi.stubGlobal('fetch', async (_url: unknown, init: { body: string }) => {
-      calls.push(String((JSON.parse(String(init?.body)) as { sessionId?: unknown }).sessionId))
+      calls.push(JSON.parse(String(init?.body)))
       const headless = { rev: 1, requests: [], events: [], nodes: [], droppedNodes: 0, archive: [] }
       return {
         ok: true,
         status: 200,
-        json: async () => ({ ok: true, value: calls.length === 1 ? headless : null }),
+        json: async () => ({ ok: true, value: { headless: { head: headless } } }),
       }
     })
     const { seat, face } = makeSeat({
@@ -707,7 +707,7 @@ describe('StatsContext — the real subagent-cost seat (makeSubagentCost)', () =
     const Stats = makeStatsContext(kit, seat)
     const m = await mount(h(Stats, { counts: NO_COUNTS, files: NO_FILES, tools: [], locale: 'en', sessionId: 'root', }))
     await flush()
-    assert.deepEqual(calls, ['headless', 'absent'])
+    assert.deepEqual(calls, [{ ids: ['headless', 'absent'] }], 'both cold children ride one batch')
     assert.deepEqual(costCellsOf(m.container), ['Fleet?0/—', 'Current Agent?0/—', 'Subagents × 2?0/—'])
     await act(async () => {
       face.setState({
@@ -717,7 +717,7 @@ describe('StatsContext — the real subagent-cost seat (makeSubagentCost)', () =
       })
     })
     await flush()
-    assert.deepEqual(calls, ['headless', 'absent'])
+    assert.equal(calls.length, 1, 'a landed null head never retries')
     await m.unmount()
   })
 
@@ -753,5 +753,48 @@ describe('StatsContext — the real subagent-cost seat (makeSubagentCost)', () =
       assert.deepEqual(costCellsOf(m.container), ['Fleet?0/—', 'Current Agent?0/—', 'Subagents × 0?—/—'])
       await m.unmount()
     }
+  })
+})
+
+
+describe('makeSubagentCost — batch head channel', () => {
+  class FakeSessions {
+    private listeners = new Set<() => void>()
+    state: unknown
+    constructor(byId: Record<string, unknown>) {
+      this.state = { byId }
+    }
+    readonly list = {
+      getSnapshot: (): unknown => this.state,
+      subscribe: (fn: () => void): (() => void) => {
+        this.listeners.add(fn)
+        return () => { this.listeners.delete(fn) }
+      },
+    }
+  }
+
+  afterEach(() => { vi.unstubAllGlobals() })
+
+  function coldChild(id: string): unknown {
+    return { parentId: 'root', origin: 'subagent', updatedAt: 2, id }
+  }
+
+  test('batches the cold relative heads in one read and survives a failed batch', async () => {
+    const face = new FakeSessions({ root: { running: true, updatedAt: 1 }, a: coldChild('a'), b: coldChild('b') })
+    const ctx = new TestClientCtx({ services: { sessions: face } })
+    const calls: string[][] = []
+    const heads = {
+      headOf: () => Promise.resolve(null),
+      headOfMany: (ids: readonly string[]) => {
+        calls.push([...ids])
+        return Promise.reject(new Error('offline'))
+      },
+    }
+    const Stats = makeStatsContext(kit, makeSubagentCost(asClientCtx(ctx), heads))
+    const m = await mount(h(Stats, { counts: NO_COUNTS, files: NO_FILES, tools: [], locale: 'en', sessionId: 'root' }))
+    await flush()
+    assert.deepEqual(calls[0]?.slice().sort(), ['a', 'b'], 'both cold children ride one batch')
+    assert.ok(text(m.container).length > 0)
+    await m.unmount()
   })
 })

@@ -19,7 +19,7 @@ async function bootWithRoutes(): Promise<{
   ctx: Context
   routes: Map<string, RouteBox>
   listed: { header: unknown }[]
-  cacheMode: { throws: boolean }
+  cacheMode: { throws: boolean; empty: boolean; requested: string[]; values?: Record<string, unknown> }
   createSession: () => Session
 }> {
   const ctx = new Context()
@@ -37,12 +37,14 @@ async function bootWithRoutes(): Promise<{
   ctx.provide('sessionQuery', {
     listSessions: () => Promise.resolve(listed),
   })
-  const cacheMode = { throws: false }
+  const cacheMode: { throws: boolean; empty: boolean; requested: string[]; values?: Record<string, unknown> } = { throws: false, empty: false, requested: [] }
   ctx.provide('sessionProjectionCache', {
     cachedSnapshot: (header: unknown, keys: unknown) => {
       if (cacheMode.throws) throw new Error('cache read failed')
       assert.ok((keys as Set<string>).has('contextActivity'))
       assert.ok((keys as Set<string>).has('contextTimeline'))
+      if (cacheMode.empty) return { values: {} }
+      if (cacheMode.values !== undefined) return { asOfSeq: 5, values: cacheMode.values }
       return { asOfSeq: 5, values: { contextActivity: { days: {} } } }
     },
   })
@@ -115,7 +117,14 @@ test('without the connection face the route never registers, and the watcher dis
     assert.equal(all.ok, true)
     const row = all.value?.[session.header.id]
     assert.ok(row !== undefined, 'the live session serves its summary-excluded values on demand')
-    assert.ok(row.contextTimeline !== undefined, 'the timeline head rides the snapshot route')
+    const compact = row.contextTimeline as Record<string, unknown>
+    assert.ok(compact !== undefined, 'the timeline digest rides the snapshot route')
+    assert.ok(compact.current !== undefined, 'the digest carries the composition')
+    assert.deepEqual(Object.keys(compact.counts as Record<string, unknown>).sort(), ['steps', 'turns'])
+    assert.equal('last' in compact, false, 'the digest drops the pressure cursor')
+    assert.equal('nodes' in compact, false, 'the digest never carries the surface')
+    assert.equal('requests' in compact, false, 'the digest never carries the request window')
+    assert.equal('events' in compact, false, 'the digest never carries the event window')
     assert.ok(row.contextActivity !== undefined, 'the activity ledger rides the snapshot route')
 
     const filtered = await callRoute(routes, { ids: [session.header.id, 'missing-session'] })
@@ -134,6 +143,51 @@ test('without the connection face the route never registers, and the watcher dis
     const degraded = await callRoute(routes, {})
     assert.equal(degraded.ok, true, 'a failed cache row skips whole and the route still serves')
     assert.equal(degraded.value?.['cold-session-id'], undefined)
+  })
+
+  test('compacts the served timeline to the overview fields and drops hostile members', async () => {
+    const h = await bootWithRoutes()
+    h.listed.push({ header: { id: 'digest-1', version: 4, createdAt: 1, cwd: '/tmp', isSeeded: false } })
+    h.cacheMode.values = {
+      contextTimeline: {
+        ok: 'yes',
+        current: { system: 1, total: 2 },
+        contextWindow: 128000,
+        counts: { turns: 3, steps: 'bad', injects: 9 },
+        cost: { p: { m: { peak: { uncached: 1, cacheRead: 2, cacheWrite: 0, output: 3 } } } },
+        timing: { wallMs: 10, ttftMs: 'bad', tools: { bash: { calls: 1, ms: 2 } }, calls: 4 },
+        lastUser: 'hi',
+        systems: [{ seq: 1, time: 1, tokens: 1 }],
+      },
+      contextActivity: { days: { '2026-11-01': { tokens: 5, requests: 1 } } },
+    }
+    const read = await callRoute(h.routes, { ids: ['digest-1'] })
+    const row = read.value?.['digest-1'] as Record<string, unknown>
+    const digest = row.contextTimeline as Record<string, unknown>
+    assert.equal(digest.ok, 'yes')
+    assert.deepEqual(digest.current, { system: 1, total: 2 })
+    assert.equal(digest.contextWindow, 128000)
+    assert.deepEqual(digest.counts, { turns: 3 })
+    assert.equal('injects' in (digest.counts as object), false)
+    assert.equal('systems' in digest, false)
+    assert.deepEqual(digest.timing, { tools: {}, wallMs: 10, calls: 4 })
+    assert.equal(digest.lastUser, 'hi')
+    assert.deepEqual(row.contextActivity, { days: { '2026-11-01': { tokens: 5, requests: 1 } } })
+    const bare = { ...h.cacheMode }
+    bare.values = { contextTimeline: {} }
+    h.cacheMode.values = bare.values
+    const empty = await callRoute(h.routes, { ids: ['digest-1'] })
+    const emptyRow = empty.value?.['digest-1'] as Record<string, unknown>
+    assert.deepEqual(emptyRow.contextTimeline, { ok: true })
+    h.cacheMode.values = { contextTimeline: { timing: { bogus: 1 } } }
+    const noTiming = await callRoute(h.routes, { ids: ['digest-1'] })
+    assert.deepEqual((noTiming.value?.['digest-1'] as Record<string, unknown>).contextTimeline, { ok: true }, 'a timing without figures is omitted')
+    h.cacheMode.values = { contextTimeline: { counts: { injects: 4 } } }
+    const noCounts = await callRoute(h.routes, { ids: ['digest-1'] })
+    assert.deepEqual((noCounts.value?.['digest-1'] as Record<string, unknown>).contextTimeline, { ok: true })
+    h.cacheMode.values = { contextTimeline: 'nope' }
+    const dropped = await callRoute(h.routes, { ids: ['digest-1'] })
+    assert.equal(dropped.value?.['digest-1'], undefined, 'a non-object timeline yields no row')
   })
 
   test('a listing failure fails with the internal code', async () => {

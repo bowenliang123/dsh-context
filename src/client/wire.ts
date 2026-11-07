@@ -119,6 +119,9 @@ export function timelineOf(value: unknown): ContextTimeline | null {
   const unsupported = unsupportedOf(data.unsupported)
   const counts = countsOf(data.counts)
   const last = lastOf(data.last)
+  const toolTally = tallyOf(data.toolTally)
+  const programTally = tallyOf(data.programTally)
+  const commandStats = commandStatsOf(data.commandStats)
   const generatedReasoning = optNumOf(data.generatedReasoning)
   const generatedAnswerTokens = optNumOf(data.generatedAnswerTokens)
   const generatedCallTokens = optNumOf(data.generatedCallTokens)
@@ -151,6 +154,9 @@ export function timelineOf(value: unknown): ContextTimeline | null {
     ...(generatedAnswerTokens !== undefined ? { generatedAnswerTokens } : {}),
     ...(generatedCallTokens !== undefined ? { generatedCallTokens } : {}),
     ...(typeof data.toolCalls === 'number' ? { toolCalls: data.toolCalls } : {}),
+    ...(toolTally !== undefined ? { toolTally } : {}),
+    ...(programTally !== undefined ? { programTally } : {}),
+    ...(commandStats !== undefined ? { commandStats } : {}),
     ...(typeof data.humanInputs === 'number' ? { humanInputs: data.humanInputs } : {}),
     ...(typeof data.answers === 'number' && Number.isFinite(data.answers) ? { answers: data.answers } : {}),
     ...(typeof data.lastUser === 'string' && data.lastUser !== '' ? { lastUser: data.lastUser.slice(0, 200) } : {}),
@@ -200,6 +206,22 @@ function countsOf(value: unknown): ContextTimeline['counts'] {
     prunes: numOf(data.prunes),
     skills: numOf(data.skills),
   }
+}
+
+const TALLY_KEYS_MAX = 128
+
+const TALLY_KEY_CHARS_MAX = 120
+
+function tallyOf(value: unknown): Record<string, number> | undefined {
+  const data = asRecord(value)
+  if (data === null) return undefined
+  const out: Record<string, number> = {}
+  for (const key of Object.keys(data).slice(0, TALLY_KEYS_MAX)) {
+    const count = data[key]
+    if (typeof count !== 'number' || !Number.isFinite(count) || count < 0) continue
+    out[key.length > TALLY_KEY_CHARS_MAX ? key.slice(0, TALLY_KEY_CHARS_MAX) : key] = Math.floor(count)
+  }
+  return Object.keys(out).length > 0 ? out : undefined
 }
 
 function lastOf(value: unknown): ContextTimeline['last'] {

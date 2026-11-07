@@ -78,6 +78,11 @@ describe('previewOf', () => {
 })
 
 describe('viewsOf — one derivation per record', () => {
+  test('program lists cover run_code and non-command tools', () => {
+    const views = viewsOf([cmd(1, { tool: 'run_code' }), cmd(2, { tool: 'edit' })], undefined)
+    assert.deepEqual(views.map(view => view.programs), [['run_code'], ['edit']])
+  })
+
   test('carries the program, the preview and the shape badges', () => {
     const views = viewsOf([
       cmd(1, { cmd: "cd /repo && python3 - <<'PY'\nprint(1)\nPY" }),

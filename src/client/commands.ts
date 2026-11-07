@@ -1,5 +1,5 @@
 import type { CommandRecord, CommandStats, SurfaceNode } from '../shared/types'
-import { commandTool, programsOfCommand, programOfCommand, firstLineOf, hideableCdPrefix, shapeOfCmd } from '../shared/commands'
+import { commandProgramsOf, commandTool, programOfCommand, firstLineOf, hideableCdPrefix, shapeOfCmd } from '../shared/commands'
 import type { CommandShape } from '../shared/commands'
 
 export type Command = CommandRecord
@@ -43,7 +43,7 @@ export interface CommandView {
 }
 
 function viewOf(rec: CommandRecord, workspace: string | undefined): CommandView {
-  const programs = rec.tool === 'bash' || rec.tool === 'pwsh' ? programsOfCommand(rec.cmd ?? '', rec.tool) : []
+  const programs = commandProgramsOf(rec.tool, rec.cmd ?? '')
   const program = programs[0] ?? programOf(rec)
   const allPrograms = programs.length > 0 ? programs : [program]
   return { rec, program, programs: allPrograms, preview: previewOf(rec, workspace), shape: shapeOfCmd(rec.cmd ?? '') }

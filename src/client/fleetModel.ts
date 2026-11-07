@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import type { AgentHeads } from './agentHeads'
+import { readHeads, type AgentHeads } from './agentHeads'
 import { useSessionsSnapshot } from './agentHeads'
 import type { AgentForest, AgentSelfStats } from './agentTree'
 import { agentForestOf, sessionTitlesOf, sessionsFaceOf } from './agentTree'
@@ -76,12 +76,28 @@ export function useFleetModel(
         })
       }, () => { requested.current.delete(id) })
     }
+    const pending: { id: string; updatedAt: number }[] = []
     for (const n of forest.nodes) {
       if (n.isCurrent || (n.head !== null && n.head.parts.length > 0)) continue
       if ((requested.current.get(n.id) ?? Number.NEGATIVE_INFINITY) >= n.updatedAt) continue
       requested.current.set(n.id, n.updatedAt)
-      attach(heads.headOf(n.id), n.id)
+      pending.push({ id: n.id, updatedAt: n.updatedAt })
     }
+    if (pending.length === 0) return
+    if (pending.length > 1) {
+      void readHeads(heads, pending.map(entry => entry.id)).then((reads) => {
+        for (const entry of pending) {
+          const head = reads.get(entry.id)
+          if (head !== undefined) attach(Promise.resolve(head), entry.id)
+          else requested.current.delete(entry.id)
+        }
+      }, () => {
+        for (const entry of pending) requested.current.delete(entry.id)
+      })
+      return
+    }
+    const [only] = pending
+    attach(heads.headOf(only.id), only.id)
   }, [forest, heads])
 
   const team = useMemo(() => teamOfSnapshot(snapshot, forest), [snapshot, forest])

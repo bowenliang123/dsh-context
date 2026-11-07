@@ -120,6 +120,8 @@ describe('head-only retention (issue #217)', () => {
     assert.equal(state.spans.length, 0)
     assert.equal(state.fileOps.length, 0)
     assert.equal(state.archived.length, 0)
+    assert.equal(state.events.length, 0, 'events are refolded on demand, not persisted head-side')
+    assert.ok(state.requests.length <= 2, 'only the last request survives for the head last-value')
     for (const rec of state.commands) {
       assert.equal('cmd' in rec, false)
       assert.equal('description' in rec, false)
@@ -173,7 +175,9 @@ describe('head-only retention (issue #217)', () => {
     assert.deepEqual(derived.surface[1], { seq: 2, cat: 'user', tokens: 3 })
     assert.deepEqual(derived.requests[0], { time: 1, seq: 1, total: 10, turn: 1, step: 0, prompt: 8, activeMs: 20 })
     assert.deepEqual(derived.requests[1], { time: 2, seq: 2, total: 12 })
-    assert.equal(derived.commands.length, 1, 'junk command entries drop')
+    assert.equal(derived.commands.length, 0, 'completed commands stay refold-only head-side')
+    assert.equal(derived.events.length, 0)
+    assert.deepEqual(derived.commandCalls, ['c1', 'rc1:code:0'], 'trimmed command call ids stay for the detail revision parity')
     assert.equal(derived.spans.length, 0)
     assert.equal(derived.fileOps.length, 0)
     assert.equal(derived.archived.length, 0)
@@ -196,6 +200,7 @@ describe('head-only retention (issue #217)', () => {
     assert.equal(derived.spans.length, 0)
     assert.equal(derived.fileOps.length, 0)
     assert.equal(derived.archived.length, 0)
+    assert.equal(derived.events.length, 0)
     assert.ok(derived.commands.every(rec => !('cmd' in rec) && !('description' in rec) && !('cwd' in rec)))
     assert.ok(derived.surface.every(node => !('text' in node)))
     const def = timelineDef({})
@@ -253,7 +258,7 @@ describe('head-only retention (issue #217)', () => {
     }
   })
 
-  test('the head fold keeps commands and surfaces but never parses or retains file-op arguments', () => {
+  test('the head fold keeps the command tallies and surfaces but never parses or retains file-op arguments', () => {
     const events = [
       toolCall(1, { callId: 'rc1', name: 'run_code', arguments: JSON.stringify({ code: 'x', description: 'batch' }) }),
       codeDispatchStart(2, { rootCallId: 'rc1', subCallId: 'rc1:code:0', name: 'bash', arguments: { command: 'git status' } }),
@@ -266,30 +271,31 @@ describe('head-only retention (issue #217)', () => {
     const [slim] = fold(events, HEAD).slice(-1)
     assert.equal('pendingCodeOps' in slim, false)
     assert.equal(slim.fileOps.length, 0)
-    assert.equal(slim.commands.some(rec => rec.codeMode === true && rec.status === 'completed'), true)
+    assert.equal(slim.commands.length, 0, 'settled commands are refold-only')
+    assert.equal(slim.commandCalls?.includes('rc1'), true)
+    assert.equal(slim.commandCalls?.includes('rc1:code:0'), true)
+    assert.equal(slim.commandStats?.runs, 2)
     for (const entry of Object.values(slim.callNames)) assert.equal('argsRaw' in entry, false)
     const [full] = fold(events, FULL).slice(-1)
     assert.equal(full.fileOps.length > 0, true)
     assert.equal(Object.values(full.callNames).some(entry => 'argsRaw' in entry), true)
   })
 
-  test('a completed command keeps its fold pairing record without the heavy text; a late patch lands on both', () => {
+  test('a completed command keeps its tally and call id; a late patch moves both detail revisions', () => {
     const events = [
       toolCall(1, { callId: 'c1', name: 'bash', arguments: JSON.stringify({ command: 'ls' }) }),
       toolResult(2, { callId: 'c1', content: text('done') }),
     ]
     const [slim] = fold(events, HEAD).slice(-1)
     const [full] = fold(events, FULL).slice(-1)
-    assert.equal(slim.commands.length, 1)
-    assert.equal(slim.commands[0]?.status, 'completed')
-    assert.equal('cmd' in slim.commands[0], false)
+    assert.equal(slim.commands.length, 0)
+    assert.deepEqual(slim.commandCalls, ['c1'])
     assert.equal(full.commands[0]?.cmd, 'ls')
     assert.equal(slim.commandStats?.runs, 1)
     assert.equal(full.commandStats?.runs, 1)
     const settled = jobSettled(3, { callId: 'c1', finishedAt: 9_000, status: 'killed', detail: 'signal: SIGKILL' })
     const patchedSlim = applyTimeline(slim, settled, HEAD)
     const patchedFull = applyTimeline(full, settled, FULL)
-    assert.equal(patchedSlim.commands[0]?.status, 'killed', 'the slim record still patches')
     assert.equal(patchedFull.commands[0]?.status, 'killed')
     assert.equal(patchedSlim.detailRev, patchedFull.detailRev, 'the detail revision moves together')
   })

@@ -32,6 +32,7 @@ import type { FileFilter } from './fileCard'
 import { makeCommandPanel } from './commandPanel'
 import { makeCommandPager } from '../commandPages'
 import { useCommandLog } from './useCommandLog'
+import { tallyEntriesOf } from '../tallySort'
 import { makePluginInfo } from './pluginInfo'
 import { makeRecomCard } from './recomCard'
 import { makeUpgradeGate } from './upgradeGate'
@@ -124,6 +125,7 @@ export function makeContextView(
     const sessionId = props.sessionId
     const inSidebar = props.host === 'sidebar'
     const { source, data, pressure, breakdown, usage } = useContextSession(props)
+    const ensurePart = source.ensurePart
     const headers = projectionOf(props, 'contextHeaders', headersOf)
     const [selectedSeq, setSelectedSeq] = useState<number | null>(null)
     const [hoveredSeq, setHoveredSeq] = useState<number | null>(null)
@@ -261,6 +263,25 @@ export function makeContextView(
     const [belowFoldRef, belowFoldMounted] = useLazyMount(filterFocus !== null || eventsFocus > 0)
     const [cmdsRef, cmdsMounted] = useLazyMount(commandFocus !== null || commandReveal > 0)
     const [browserRef, browserMounted] = useLazyMount()
+
+    useEffect(() => {
+      if (source.detailState !== 'ready') return
+      ensurePart('files')
+      const timer = setTimeout(() => { ensurePart('spans', { spansTail: 2000 }) }, 0)
+      return () => { clearTimeout(timer) }
+    }, [source.detailState, ensurePart])
+    useEffect(() => {
+      if (browserMounted) ensurePart('nodes', { nodesTail: 2000 })
+    }, [browserMounted, ensurePart])
+    useEffect(() => {
+      if (belowFoldMounted) ensurePart('events')
+    }, [belowFoldMounted, ensurePart])
+    useEffect(() => {
+      if (cmdsMounted) ensurePart('commands')
+    }, [cmdsMounted, ensurePart])
+    useEffect(() => {
+      if (dna || trendMode === 'delta') ensurePart('requests')
+    }, [dna, trendMode, ensurePart])
 
     const leftColRef = useRef<HTMLDivElement | null>(null)
     const [browserCap, setBrowserCap] = useState<number | null>(null)
@@ -468,7 +489,10 @@ export function makeContextView(
       },
       [data, briefList, convOf],
     )
-    const toolTally = useMemo(() => (data ? cachedByData(data, 'toolTally', () => toolTallyOf(data.nodes)) : []), [data])
+    const toolTally = useMemo(() => {
+      if (data?.toolTally !== undefined) return tallyEntriesOf(data.toolTally)
+      return data ? cachedByData(data, 'toolTally', () => toolTallyOf(data.nodes)) : []
+    }, [data])
     const commandList = useMemo(() => {
       if (data === null || data.commands === undefined) return []
       const records = data.commands
@@ -482,10 +506,12 @@ export function makeContextView(
     const fullCommandList = commandLog.records
     const workspace = typeof ctx.get === 'function' ? workspaceOf(ctx, typeof sessionId === 'string' ? sessionId : undefined) : undefined
     const commandBoard = useMemo(() => {
-      if (fullCommandList.length === 0) return { runs: 0, top: [] as [string, number][] }
-      const stats = data?.commandStats ?? tallyOfCommands(fullCommandList)
-      const top = programsOf(viewsOf(fullCommandList, workspace)).map(p => [p.name, p.n] as [string, number])
-      return { runs: stats.runs, top }
+      const stats = data?.commandStats ?? (fullCommandList.length > 0 ? tallyOfCommands(fullCommandList) : null)
+      const top = data?.programTally !== undefined
+        ? tallyEntriesOf(data.programTally)
+        : programsOf(viewsOf(fullCommandList, workspace)).map(p => [p.name, p.n] as [string, number])
+      if (stats === null && top.length === 0) return { runs: 0, top: [] as [string, number][] }
+      return { runs: stats?.runs ?? 0, top }
     }, [fullCommandList, data, workspace])
     const hasCommands = fullCommandList.length > 0
     const [canOpenPaths, setCanOpenPaths] = useState(false)

@@ -640,3 +640,86 @@ describe('useFleetDetails — refresh window edges', () => {
     vi.useRealTimers()
   })
 })
+
+
+describe('useFleetModel — batch head channel', () => {
+  function sessionsFace(byId: Record<string, unknown>, refreshed: string[]) {
+    const snapshot = { byId }
+    return {
+      list: {
+        getSnapshot: (): unknown => snapshot,
+        subscribe: (): (() => void) => () => {},
+      },
+      refreshSubagents: (id: string) => {
+        refreshed.push(id)
+        return Promise.resolve()
+      },
+    }
+  }
+
+  test('a wide fleet asks its missing child heads in one batch and keeps the landed ledger', async () => {
+    const byId: Record<string, unknown> = { s1: { displayTitle: 'Main', running: true, updatedAt: 1 } }
+    for (let i = 0; i < 3; i++) byId[`kid-${i}`] = { parentId: 's1', origin: 'subagent', running: false, updatedAt: 2 }
+    const ctx = new TestClientCtx({ services: { sessions: sessionsFace(byId, []) } })
+    const batches: string[][] = []
+    const heads = {
+      headOf: () => { throw new Error('single reads must not be used for a batch') },
+      headOfMany: (ids: readonly string[]) => {
+        batches.push([...ids])
+        return Promise.resolve(new Map(ids.map(id => [id, headTimeline(5)] as const)))
+      },
+    }
+    const box: { current: FleetModel | null } = { current: null }
+    function Probe(): null {
+      box.current = useFleetModel(asClientCtx(ctx), heads, 's1', undefined, true)
+      return null
+    }
+    const m = await mount(h(Probe))
+    await until(() => batches.length === 1, 'the batch head read never fired')
+    await flush()
+    assert.deepEqual(batches[0]?.slice().sort(), ['kid-0', 'kid-1', 'kid-2'])
+    assert.equal(box.current?.forest?.nodes.length, 4)
+    await m.unmount()
+    ctx.dispose()
+  })
+
+  test('a failed batch clears the stamps so the next snapshot retries', async () => {
+    let snapshot: { byId: Record<string, unknown> } = {
+      byId: {
+        s1: { displayTitle: 'Main', running: true, updatedAt: 1 },
+        a: { parentId: 's1', origin: 'subagent', running: false, updatedAt: 2 },
+        b: { parentId: 's1', origin: 'subagent', running: false, updatedAt: 2 },
+      },
+    }
+    const face = sessionsFace(snapshot.byId, [])
+    const ctx = new TestClientCtx({ services: { sessions: face } })
+    let attempts = 0
+    const heads = {
+      headOf: () => Promise.resolve(null),
+      headOfMany: () => {
+        attempts++
+        if (attempts === 1) return Promise.reject(new Error('offline'))
+        return Promise.resolve(new Map([['a', headTimeline(1)], ['b', headTimeline(1)]]))
+      },
+    }
+    const box: { current: FleetModel | null } = { current: null }
+    function Probe(): null {
+      box.current = useFleetModel(asClientCtx(ctx), heads, 's1', undefined, true)
+      return null
+    }
+    const m = await mount(h(Probe))
+    await until(() => attempts === 1, 'the first batch never fired')
+    await flush()
+    snapshot = { byId: {
+      s1: { displayTitle: 'Main', running: true, updatedAt: 1 },
+      a: { parentId: 's1', origin: 'subagent', running: false, updatedAt: 3 },
+      b: { parentId: 's1', origin: 'subagent', running: false, updatedAt: 3 },
+    } }
+    await m.unmount()
+    const m2 = await mount(h(Probe))
+    await until(() => attempts === 2, 'the retry batch never fired')
+    assert.equal(box.current?.forest?.nodes.length, 3)
+    await m2.unmount()
+    ctx.dispose()
+  })
+})

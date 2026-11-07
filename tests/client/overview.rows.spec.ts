@@ -354,6 +354,26 @@ describe('rowsOfSnapshot: the on-demand batch', () => {
     assert.equal(rowsOfSnapshot(snap, undefined)![0].timeline, null, 'no batch reads as absence')
   })
 
+  test('a compact snapshot digest still yields a row timeline', () => {
+    const snap = snapshotOf([['digest', { displayTitle: 'digest' }]])
+    const batch: OverviewBatch = new Map([['digest', {
+      contextTimeline: {
+        ok: true,
+        current: { system: 1, tools: 2, user: 3, inject: 0, skill: 0, assistant: 4, tool: 5, total: 15 },
+        counts: { turns: 2, steps: 4, injects: 1, compactions: 0, prunes: 0 },
+        cost: COST,
+        lastUser: 'hello',
+        detailRev: 7,
+      },
+    }]])
+    const rows = rowsOfSnapshot(snap, undefined, batch)!
+    assert.equal(rows[0].timeline?.current.total, 15)
+    assert.equal(rows[0].timeline?.counts?.turns, 2)
+    assert.equal(rows[0].timeline?.lastUser, 'hello')
+    assert.equal(rows[0].timeline?.detailRev, 7)
+    assert.equal(rows[0].timeline?.cost !== undefined, true)
+  })
+
   test('a family child fills from the batch and folds into the root activity and cost', () => {
     const snap = snapshotOf([
       ['root', { displayTitle: 'root', projectionValues: { contextTimeline: billedHead(100, COST), contextActivity: { days: { '2026-09-16': { tokens: 5, requests: 1, cost: COST, turns: 1, toolCalls: 1, toolsMs: 100, wallMs: 1_000, tools: { read: { n: 2, last: 10 } } } } } } }],

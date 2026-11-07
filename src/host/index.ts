@@ -8,7 +8,11 @@ import { makeColdReadGate } from './coldRead'
 import { watchCommandPageChannel } from './commandPages'
 import { Config, resolveBounds } from './config'
 import { watchDetailChannel, createDetailGate } from './detail'
+import { DetailShadow } from './detailShadow'
+import { observeOf } from './postRoute'
 import { createFallbackActivityDefinition, createFallbackHeadersDefinition, createFallbackTimelineDefinition } from './fallback'
+import { watchFactsChannel } from './facts'
+import { watchHeadsChannel } from './headsRoute'
 import { watchFleetChannel } from './fleet'
 import { createContextHeadersDefinition } from './headers'
 import { watchPromptInjection } from './promptInjection'
@@ -43,8 +47,12 @@ export function apply(ctx: Context, config: Config): void {
   const attribution = createToolAttribution(ctx, harnessVersion)
   watchStepIdentity(ctx)
   const gate = createDetailGate(ctx)
-  watchDetailChannel(ctx, resolveBounds(config), coldReads, gate)
+  const bounds = resolveBounds(config)
+  const shadow = new DetailShadow(ctx, bounds, coldReads, () => observeOf(ctx))
+  watchDetailChannel(ctx, bounds, coldReads, gate, shadow)
+  watchFactsChannel(ctx, bounds, { gates: gate, coldReads, detailState: id => shadow.stateOf(id) })
   watchCommandPageChannel(ctx, resolveBounds(config), coldReads)
+  watchHeadsChannel(ctx)
   gate.retain('contextTimeline', ctx.sessionProjections.register(createContextTimelineDefinition(config, () => gate.live)))
   ctx.sessionProjections.register(createContextHeadersDefinition(name => attribution.ownerOf(name)))
   ctx.sessionProjections.register(createContextActivityDefinition())

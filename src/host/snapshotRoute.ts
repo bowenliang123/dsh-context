@@ -1,4 +1,5 @@
 import type { Context } from '@deepseek-ai/cordis'
+import type { CachedSnapshotFace, ListRecordLike, SessionQueryFace, SnapshotProjectionsFace } from './faces'
 import { asRecord } from './record'
 import { failure, mountPostRoute, readBody, reply } from './postRoute'
 
@@ -6,25 +7,53 @@ export const SNAPSHOT_ROUTE = '/api/dsh-context/snapshot'
 
 const SNAPSHOT_KEYS = new Set<string>(['contextTimeline', 'contextActivity'])
 
-interface ListRecordLike {
-  header?: unknown
+function compactCountsOf(value: unknown): Record<string, number> | undefined {
+  const counts = asRecord(value)
+  if (counts === null) return undefined
+  const compact: Record<string, number> = {}
+  for (const field of ['turns', 'steps'] as const) {
+    const count = counts[field]
+    if (typeof count === 'number' && Number.isFinite(count) && count >= 0) compact[field] = count
+  }
+  return Object.keys(compact).length > 0 ? compact : undefined
 }
 
-interface QueryFaceLike {
-  listSessions(signal?: AbortSignal): Promise<unknown>
+const COMPACT_TIMING_FIELDS = [
+  'wallMs', 'ttftMs', 'genMs', 'calls', 'toolsMs', 'toolCalls',
+  'reasoningMs', 'reasoningBlocks', 'textMs', 'textBlocks', 'toolArgMs', 'toolArgBlocks',
+  'toolBusyMs', 'idleMs', 'speedTokens', 'speedMs',
+] as const
+
+function compactTimingOf(value: unknown): Record<string, unknown> | undefined {
+  const timing = asRecord(value)
+  if (timing === null) return undefined
+  const compact: Record<string, unknown> = {}
+  for (const field of COMPACT_TIMING_FIELDS) {
+    const figure = timing[field]
+    if (typeof figure === 'number' && Number.isFinite(figure)) compact[field] = figure
+  }
+  if (Object.keys(compact).length === 0) return undefined
+  compact.tools = {}
+  return compact
 }
 
-interface SnapshotBlockLike {
-  values?: unknown
+function compactTimelineOf(value: unknown): Record<string, unknown> | undefined {
+  const view = asRecord(value)
+  if (view === null) return undefined
+  const compact: Record<string, unknown> = { ok: view.ok === undefined ? true : view.ok }
+  const current = asRecord(view.current)
+  if (current !== null) compact.current = current
+  if (typeof view.contextWindow === 'number' && Number.isFinite(view.contextWindow)) compact.contextWindow = view.contextWindow
+  const counts = compactCountsOf(view.counts)
+  if (counts !== undefined) compact.counts = counts
+  const cost = asRecord(view.cost)
+  if (cost !== null) compact.cost = cost
+  const timing = compactTimingOf(view.timing)
+  if (timing !== undefined) compact.timing = timing
+  if (typeof view.lastUser === 'string' && view.lastUser !== '') compact.lastUser = view.lastUser
+  return compact
 }
 
-interface ProjectionsFaceLike {
-  snapshot(session: unknown, keys?: ReadonlySet<string>): SnapshotBlockLike | undefined
-}
-
-interface CacheFaceLike {
-  cachedSnapshot(header: unknown, keys?: ReadonlySet<string>): SnapshotBlockLike | undefined
-}
 
 function wantedIdsOf(body: Record<string, unknown>): Set<string> | undefined {
   const ids = body.ids
@@ -43,9 +72,9 @@ export function watchSnapshotRoute(ctx: Context): void {
     path: SNAPSHOT_ROUTE,
     label: 'dsh-context: snapshot route',
     handler: (c) => {
-      const query = c.get('sessionQuery') as QueryFaceLike
-      const cache = c.get('sessionProjectionCache') as CacheFaceLike
-      const projections = c.get('sessionProjections') as ProjectionsFaceLike
+      const query = c.get('sessionQuery') as SessionQueryFace
+      const cache = c.get('sessionProjectionCache') as CachedSnapshotFace
+      const projections = c.get('sessionProjections') as SnapshotProjectionsFace
       const sessions = c.get('sessions') as { get(id: string): unknown }
       const listSessions = query.listSessions.bind(query)
       const snapshotOf = projections.snapshot.bind(projections)
@@ -66,7 +95,7 @@ export function watchSnapshotRoute(ctx: Context): void {
             const header = asRecord(record?.header)
             const id = typeof header?.id === 'string' ? header.id : undefined
             if (id === undefined || (wanted !== undefined && !wanted.has(id))) continue
-            let block: SnapshotBlockLike | undefined
+            let block: ReturnType<CachedSnapshotFace['cachedSnapshot']>
             try {
               const session = getSession(id)
               block = session !== undefined
@@ -78,9 +107,9 @@ export function watchSnapshotRoute(ctx: Context): void {
             const served = asRecord(block?.values)
             if (served === null) continue
             const picked: Record<string, unknown> = {}
-            for (const key of SNAPSHOT_KEYS) {
-              if (served[key] !== undefined) picked[key] = served[key]
-            }
+            const compact = compactTimelineOf(served.contextTimeline)
+            if (compact !== undefined) picked.contextTimeline = compact
+            if (served.contextActivity !== undefined) picked.contextActivity = served.contextActivity
             if (Object.keys(picked).length > 0) values[id] = picked
           }
           return reply({ ok: true, value: values })

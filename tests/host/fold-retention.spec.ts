@@ -125,13 +125,13 @@ describe('trimState archive pruning', () => {
 })
 
 describe('trimState restored-state defenses', () => {
-  test('archived entries without `gone` survive the request window, then cap away without touching archiveFloor', () => {
+  test('archived entries never persist head-side, so no floor is recorded for them', () => {
     const def = timelineDef({ maxArchiveNodes: 2 })
     const st = createTimelineState()
     st.requests.push(req(5, 1, 1))
     st.archived.push({ seq: 1, cat: 'user', tokens: 9 })
     const next = def.apply(st, planMode(10, { active: true }))
-    assert.deepEqual(next.archived.map(n => n.seq), [1])
+    assert.deepEqual(next.archived, [], 'detail collections are refold-only head-side')
     assert.equal(next.archiveFloor, undefined)
     const capped = timelineDef({ maxArchiveNodes: 1 })
     const restored = createTimelineState()
@@ -141,8 +141,8 @@ describe('trimState restored-state defenses', () => {
       { seq: 3, cat: 'user', tokens: 9 },
     )
     const trimmed = capped.apply(restored, planMode(10, { active: true }))
-    assert.deepEqual(trimmed.archived.map(n => n.seq), [3], 'maxArchiveNodes keeps the newest removal')
-    assert.equal('archiveFloor' in trimmed, false, 'the last dropped entry has no `gone`: no floor to record')
+    assert.deepEqual(trimmed.archived, [])
+    assert.equal('archiveFloor' in trimmed, false)
   })
 })
 
