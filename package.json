@@ -127,7 +127,7 @@
     "@types/react": "^18.3.31",
     "@types/react-dom": "^18.3.7",
     "@types/semver": "^7.8.0",
-    "@vitest/coverage-v8": "^5.0.5",
+    "@vitest/coverage-v8": "^5.1.0",
     "anser": "^2.3.5",
     "clsx": "^2.1.1",
     "diff": "^9.0.0",
@@ -158,7 +158,7 @@
     "simple-icons": "16.32.0",
     "tsdown": "0.23.1",
     "typescript": "~7.0.2",
-    "vitest": "^5.0.5",
+    "vitest": "^5.1.0",
     "zustand": "~4.4.7"
   }
 }
