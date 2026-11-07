@@ -147,7 +147,7 @@ body:not([data-ds-dark-theme]) .lc-ov-skill-unit .lc-ov-skill-detail { border: 0
 .lc-ov-groups { display: flex; gap: 6px; flex-wrap: wrap; margin: -2px 0 10px; }
 .lc-ov-chip { display: inline-flex; align-items: baseline; gap: 5px; border: var(--lc-line-strong, 1px solid var(--dsw-alias-border-l2)); background: transparent; color: var(--dsw-alias-label-secondary); border-radius: 999px; font: inherit; font-size: 11px; line-height: 1.5; padding: 2px 10px; cursor: pointer; max-width: 220px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; transition: color var(--ds-transition-duration, 0.2s) var(--ds-ease-in-out, ease-in-out), border-color var(--ds-transition-duration, 0.2s) var(--ds-ease-in-out, ease-in-out), background-color var(--ds-transition-duration, 0.2s) var(--ds-ease-in-out, ease-in-out); }
 .lc-ov-chip:hover { background: var(--dsw-alias-interactive-bg-hover); color: var(--dsw-alias-label-primary); border-color: var(--dsw-alias-label-secondary); }
-.lc-ov-chip-on, .lc-ov-chip-on:hover { background: var(--dsw-alias-button-primary-fill); border-color: transparent; color: var(--dsw-alias-label-primary-foreground); }
+.lc-ov-chip-on, .lc-ov-chip-on:hover { background: var(--dsw-alias-button-ghost-active-fill); border-color: var(--dsw-alias-button-ghost-active-border); color: var(--dsw-alias-label-primary); }
 .lc-ov-chip-n { font-variant-numeric: tabular-nums; opacity: 0.65; font-size: 10px; }
 .lc-ov-chip-on .lc-ov-chip-n { opacity: 0.85; }
 

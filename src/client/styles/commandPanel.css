@@ -2,7 +2,7 @@
 .lc-cmd-card .lc-card-title { align-content: center; flex: none; }
 .lc-cmd-ctl { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-bottom: 8px; }
 .lc-cmd-chip-all, .lc-cmd-chip-all:hover { color: var(--dsw-alias-state-business-primary); }
-.lc-cmd-chip-all.lc-gran-on, .lc-cmd-chip-all.lc-gran-on:hover { background: var(--dsw-alias-button-info-fill); color: var(--dsw-alias-label-primary-foreground); }
+.lc-cmd-chip-all.lc-gran-on, .lc-cmd-chip-all.lc-gran-on:hover { background: color-mix(in srgb, var(--dsw-alias-state-business-primary) 14%, transparent); color: var(--dsw-alias-state-business-primary); }
 .lc-cmd-chip-failed, .lc-cmd-chip-failed:hover { color: var(--dsw-alias-state-error-primary); }
 .lc-cmd-chip-failed.lc-gran-on, .lc-cmd-chip-failed.lc-gran-on:hover { background: color-mix(in srgb, var(--dsw-alias-state-error-primary) 14%, transparent); color: var(--dsw-alias-state-error-primary); }
 .lc-cmd-chip-slow, .lc-cmd-chip-slow:hover { color: var(--dsw-alias-state-warn-primary); }

@@ -33,7 +33,7 @@
 .lc-fa-chip-write.lc-gran-on, .lc-fa-chip-write.lc-gran-on:hover { background: color-mix(in srgb, var(--dsw-alias-state-success-primary) 14%, transparent); color: var(--dsw-alias-state-success-primary); }
 .lc-fa-chip-search.lc-gran-on, .lc-fa-chip-search.lc-gran-on:hover { background: color-mix(in srgb, var(--dsw-alias-state-warn-primary) 14%, transparent); color: var(--dsw-alias-state-warn-primary); }
 .lc-fa-chip-all, .lc-fa-chip-all:hover { color: var(--dsw-alias-state-business-primary); }
-.lc-fa-chip-all.lc-gran-on, .lc-fa-chip-all.lc-gran-on:hover { background: var(--dsw-alias-button-info-fill); color: var(--dsw-alias-label-primary-foreground); }
+.lc-fa-chip-all.lc-gran-on, .lc-fa-chip-all.lc-gran-on:hover { background: color-mix(in srgb, var(--dsw-alias-state-business-primary) 14%, transparent); color: var(--dsw-alias-state-business-primary); }
 .lc-fa-delta { flex: none; display: inline-flex; gap: 5px; font-size: 11px; font-weight: 600; font-variant-numeric: tabular-nums; white-space: nowrap; }
 .lc-fa-up { color: var(--dsw-alias-state-success-primary); }
 .lc-fa-down { color: var(--dsw-alias-state-error-primary); }
