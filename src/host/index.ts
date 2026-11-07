@@ -20,6 +20,7 @@ import { watchStepIdentity } from './stepIdentity'
 import { watchSkillCatalog } from './skills'
 import { watchRecomChannel } from './recoms'
 import { watchSnapshotRoute } from './snapshotRoute'
+import { watchPricingSnapshotRoute } from './pricingSnapshotRoute'
 import { watchTimelineRowSweep } from './sweep'
 import { createContextTimelineDefinition } from './timeline'
 import { detectHarnessVersion } from './version'
@@ -59,6 +60,7 @@ export function apply(ctx: Context, config: Config): void {
   watchTimelineRowSweep(ctx)
   watchActivityBackfill(ctx, coldReads)
   watchSnapshotRoute(ctx)
+  watchPricingSnapshotRoute(ctx)
   watchPromptInjection(ctx, config)
 }
 

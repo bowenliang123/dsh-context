@@ -55,7 +55,15 @@ describe('pricesBookOf', () => {
     assert.equal(pricesBookOf(null), null)
     assert.equal(pricesBookOf('x'), null)
     assert.equal(pricesBookOf([FIXTURE]), null)
-    assert.deepEqual(pricesBookOf({}), { prices: {}, index: { byModel: new Map(), byNormalized: new Map(), branches: new Map() } }, 'an empty payload prices an empty book')
+    assert.deepEqual(pricesBookOf({}), { prices: {}, index: { byModel: new Map(), byNormalized: new Map(), branches: new Map() }, canonical: {} }, 'an empty payload prices an empty book')
+  })
+
+  test('prototype-like registry names never change object prototypes', () => {
+    const model = { cost: { input: 1, output: 2 } }
+    const payload = Object.fromEntries(['__proto__', 'constructor', 'prototype', 'p'].map(id => [id, {
+      models: Object.fromEntries(['__proto__', 'constructor', 'prototype', 'm'].map(mid => [mid, model])),
+    }]))
+    assert.deepEqual(pricesBookOf(payload)?.prices, { p: { m: { hit: 1, miss: 1, write: 1, out: 2 } } })
   })
 
   test('canonical ids join the branch index and mark its labs', () => {
@@ -79,7 +87,7 @@ describe('the price store', () => {
   let snaps: ModelPricesSnap[]
 
   async function settle(): Promise<void> {
-    for (let i = 0; i < 10; i++) await Promise.resolve()
+    for (let i = 0; i < 30; i++) await Promise.resolve()
   }
 
   beforeEach(() => {
@@ -193,19 +201,48 @@ describe('the price store', () => {
     assert.deepEqual(getModelPricesSnap().book, pricesBookOf(FIXTURE))
   })
 
+  test('reset ignores pending persisted reads and both resolved and rejected old refreshes', async () => {
+    let read: ((response: Response) => void) | undefined
+    vi.stubGlobal('fetch', vi.fn(() => new Promise<Response>(resolve => { read = resolve })))
+    setModelPricesLoader(async () => FIXTURE)
+    subscribeModelPrices(() => {})
+    resetModelPrices()
+    read?.(Response.json({ ok: true, value: null }))
+    await settle()
+    assert.equal(getModelPricesSnap().book, null)
+    vi.stubGlobal('fetch', vi.fn(async () => Response.json({ ok: true, value: null })))
+    for (const reject of [false, true]) {
+      let finish: ((value: unknown) => void) | undefined
+      let fail: ((error: Error) => void) | undefined
+      setModelPricesLoader(() => new Promise((resolve, rejectLoad) => { finish = resolve; fail = rejectLoad }))
+      subscribeModelPrices(() => {})
+      await settle()
+      resetModelPrices()
+      if (reject) fail?.(new Error('stale'))
+      else finish?.(FIXTURE)
+      await settle()
+      assert.deepEqual(getModelPricesSnap(), { book: null, failed: false })
+    }
+    vi.unstubAllGlobals()
+  })
+
   test('the default loader reads models.dev through the SDK client', async () => {
     const responses = [
       new Response('not json', { status: 200 }),
       new Response(JSON.stringify(FIXTURE), { status: 200 }),
     ]
-    const fetchMock = vi.fn((_input: URL | RequestInfo): Promise<Response> => Promise.resolve(responses.shift() ?? new Response('{}', { status: 200 })))
+    const fetchMock = vi.fn((input: URL | RequestInfo): Promise<Response> => Promise.resolve(
+      String(input) === 'api/dsh-context/pricing-snapshot'
+        ? Response.json({ ok: true, value: null })
+        : responses.shift() ?? new Response('{}', { status: 200 }),
+    ))
     vi.stubGlobal('fetch', fetchMock)
     try {
       resetModelPrices()
       setModelPricesLoader(null)
       subscribeModelPrices(() => snaps.push(getModelPricesSnap()))
       await settle()
-      const requested = String(fetchMock.mock.calls[0]?.[0])
+      const requested = String(fetchMock.mock.calls.find(call => String(call[0]).startsWith('https:'))?.[0])
       assert.equal(requested, 'https://models.dev/api.json')
       assert.deepEqual(getModelPricesSnap(), { book: null, failed: true }, 'a non-JSON body fails the boundary and retries')
       await vi.advanceTimersByTimeAsync(30_000)

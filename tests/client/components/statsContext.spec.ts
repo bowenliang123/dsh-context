@@ -617,7 +617,8 @@ describe('StatsContext — the real subagent-cost seat (makeSubagentCost)', () =
   test('warm rows fold live; cold rows fetch once and land; snapshot ticks never refetch', async () => {
     const calls: string[] = []
     let release: ((value: unknown) => void) | undefined
-    vi.stubGlobal('fetch', async (_url: unknown, init: { body: string }) => {
+    vi.stubGlobal('fetch', async (url: unknown, init: { body: string }) => {
+      if (url === 'api/dsh-context/pricing-snapshot') return Response.json({ ok: true, value: null })
       calls.push(String((JSON.parse(String(init?.body)) as { sessionId?: unknown }).sessionId))
       return await new Promise((resolve) => { release = resolve })
     })
@@ -667,7 +668,8 @@ describe('StatsContext — the real subagent-cost seat (makeSubagentCost)', () =
 
   test('a failing cold fetch degrades the card without crashing or retrying', async () => {
     const calls: string[] = []
-    vi.stubGlobal('fetch', async (_url: unknown, init: { body: string }) => {
+    vi.stubGlobal('fetch', async (url: unknown, init: { body: string }) => {
+      if (url === 'api/dsh-context/pricing-snapshot') return Response.json({ ok: true, value: null })
       calls.push(String((JSON.parse(String(init?.body)) as { sessionId?: unknown }).sessionId))
       throw new Error('transport down')
     })
@@ -690,7 +692,8 @@ describe('StatsContext — the real subagent-cost seat (makeSubagentCost)', () =
 
   test('a headless detail answer (or a null value) lands nothing and never retries', async () => {
     const calls: unknown[] = []
-    vi.stubGlobal('fetch', async (_url: unknown, init: { body: string }) => {
+    vi.stubGlobal('fetch', async (url: unknown, init: { body: string }) => {
+      if (url === 'api/dsh-context/pricing-snapshot') return Response.json({ ok: true, value: null })
       calls.push(JSON.parse(String(init?.body)))
       const headless = { rev: 1, requests: [], events: [], nodes: [], droppedNodes: 0, archive: [] }
       return {
@@ -737,7 +740,8 @@ describe('StatsContext — the real subagent-cost seat (makeSubagentCost)', () =
 
   test('without a sessions face or a session id the seat prices nothing and fetches nothing', async () => {
     const calls: string[] = []
-    vi.stubGlobal('fetch', async (_url: unknown, init: { body: string }) => {
+    vi.stubGlobal('fetch', async (url: unknown, init: { body: string }) => {
+      if (url === 'api/dsh-context/pricing-snapshot') return Response.json({ ok: true, value: null })
       calls.push(String((JSON.parse(String(init?.body)) as { sessionId?: unknown }).sessionId))
       throw new Error('must not fetch')
     })

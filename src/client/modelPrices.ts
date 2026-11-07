@@ -2,6 +2,7 @@ import { Models } from '@opencode-ai/models'
 import { useSyncExternalStore } from 'react'
 import { asRecord } from './services'
 import { priceIndexOf } from './cost'
+import { loadPricingSnapshot, rememberPricingBook, resetPricingSnapshot } from './pricingSnapshot'
 import type { ModelBook, ModelPrices, PriceTriple } from './cost'
 
 function rateOf(value: unknown): number | null {
@@ -14,12 +15,14 @@ export function pricesBookOf(value: unknown): ModelBook | null {
   const book: ModelPrices = {}
   const canonicalOf: Record<string, Record<string, string>> = {}
   for (const providerId of Object.keys(data)) {
+    if (['__proto__', 'constructor', 'prototype'].includes(providerId)) continue
     const provider = asRecord(data[providerId])
     if (provider === null) continue
     const modelList = asRecord(provider.models)
     if (modelList === null) continue
     const models: Record<string, PriceTriple> = {}
     for (const id of Object.keys(modelList)) {
+      if (['__proto__', 'constructor', 'prototype'].includes(id)) continue
       const model = asRecord(modelList[id])
       const cost = model !== null ? asRecord(model.cost) : null
       if (cost === null) continue
@@ -40,7 +43,7 @@ export function pricesBookOf(value: unknown): ModelBook | null {
     }
     if (Object.keys(models).length > 0) book[providerId] = models
   }
-  return { prices: book, index: priceIndexOf(book, canonicalOf) }
+  return { prices: book, index: priceIndexOf(book, canonicalOf), canonical: canonicalOf }
 }
 
 export interface ModelPricesSnap {
@@ -57,6 +60,7 @@ const RETRY_BASE_MS = 30_000
 let loader: Loader = defaultLoader
 let snap: ModelPricesSnap = { book: null, failed: false }
 let inFlight = false
+let generation = 0
 let failures = 0
 let timer: ReturnType<typeof setTimeout> | null = null
 const listeners = new Set<() => void>()
@@ -73,15 +77,26 @@ function fail(): void {
 
 async function fire(): Promise<void> {
   inFlight = true
+  const current = generation
+  const restored = await loadPricingSnapshot().then(pricesBookOf).catch(() => null)
+  if (current !== generation) return
+  if (snap.book === null && restored !== null) {
+    rememberPricingBook(restored, false)
+    snap = { book: restored, failed: false }
+    for (const fn of listeners) fn()
+  }
   try {
     const book = pricesBookOf(await loader())
+    if (current !== generation) return
     if (book !== null) {
+      rememberPricingBook(book)
       snap = { book, failed: false }
       failures = 0
     } else {
       fail()
     }
   } catch {
+    if (current !== generation) return
     fail()
   }
   inFlight = false
@@ -89,7 +104,7 @@ async function fire(): Promise<void> {
 }
 
 function kick(): void {
-  if (snap.book !== null || inFlight || timer !== null) return
+  if ((snap.book !== null && !snap.failed) || inFlight || timer !== null) return
   void fire()
 }
 
@@ -108,6 +123,8 @@ export function useModelPrices(): ModelPricesSnap {
 }
 
 export function resetModelPrices(): void {
+  generation++
+  resetPricingSnapshot()
   if (timer !== null) {
     clearTimeout(timer)
     timer = null

@@ -71,6 +71,12 @@ This is why a coding-plan session shows a maker reference price, not `$0`. The $
 - **Not priced: … has N entries with different rates** — carriers disagree and no authority selects one.
 - **Model prices are unavailable (retrying automatically)** — the price book failed to load; this is not a mapping gap.
 
+## Reopening the GUI
+
+The last price book and derived USD amounts are saved in the local DSH host's storage. Reopening the GUI restores them before refreshing models.dev in the background. Unchanged usage reuses its saved amount; changed usage or a changed price book is priced again. Currency changes reuse the USD amount.
+
+Only this derived cache is bounded (20,000 entries, with size limits); evicted entries are recalculated when needed. Session statistics and selected scopes remain complete, and deleted sessions do not contribute to totals. Missing, corrupt, or unavailable storage falls back to fresh calculation; an offline price-book refresh retains the saved reference prices until retry succeeds.
+
 ## Boundaries
 
 - models.dev lists public USD prices; private contracts, regional pricing, reseller discounts, and CNY-only lists are not represented.

@@ -571,6 +571,7 @@ describe('AgentGraph — cold-relative composition fetch', () => {
     const calls: string[] = []
     let release: ((value: unknown) => void) | undefined
     vi.stubGlobal('fetch', async (url: unknown, init: { body: string }) => {
+      if (url === 'api/dsh-context/pricing-snapshot') return Response.json({ ok: true, value: null })
       const sessionId = (JSON.parse(String(init?.body)) as { sessionId?: unknown }).sessionId
       calls.push(`${String(url)}:${String(sessionId)}`)
       if (options.reject) throw new Error('transport down')

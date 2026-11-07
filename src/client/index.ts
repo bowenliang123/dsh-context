@@ -6,6 +6,7 @@ import { makeOverviewPanel } from './components/overviewPanel'
 import { resetSessionWarm } from './prefetch'
 import { resetTimelineDetailStores } from './timelineSource'
 import { clearAttachmentPaths } from './attachmentSource'
+import { resetModelPrices } from './modelPrices'
 import { makePluginConfigCard } from './components/settingsCard'
 import { watchInsightPage } from './insightPage'
 import { modalStoreOf } from './modalStore'
@@ -60,6 +61,7 @@ function apply(ctx: ClientCtx): void {
     resetSessionWarm()
     resetTimelineDetailStores()
     clearAttachmentPaths()
+    resetModelPrices()
   }, 'dsh-context: warm-up timers')
   watchHistoryFaces(ctx)
   const settings = createContextSettings()

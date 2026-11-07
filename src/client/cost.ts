@@ -1,4 +1,5 @@
 import type { SessionCostUsage } from '../shared/types'
+import { cachedSessionCost } from './pricingSnapshot'
 import { isDeepSeekProvider, modelsDevProviderOf } from '../shared/providers'
 import { asRecord, numOf, type LocaleService } from './services'
 import {
@@ -77,7 +78,11 @@ interface PriceIndex {
   branches: Map<string, PriceBranch>
 }
 
-export interface ModelBook { prices: ModelPrices; index: PriceIndex }
+export interface ModelBook {
+  prices: ModelPrices
+  index: PriceIndex
+  canonical?: Record<string, Record<string, string> | undefined>
+}
 
 type PriceLookup =
   | { provider: string; model: string; face: PriceFace; miss?: undefined }
@@ -364,6 +369,11 @@ export function estimateSessionCost(
   currency: CostCurrency,
 ): number | null {
   if (usage === null || usage === undefined || book === null || book === undefined) return null
+  const usd = cachedSessionCost(usage, book, () => calculateSessionCost(usage, book))
+  return usd === null ? null : toCurrency(usd, currency)
+}
+
+function calculateSessionCost(usage: SessionCostUsage, book: ModelBook): number | null {
   let total = 0
   let any = false
   for (const provider of Object.keys(usage)) {
@@ -384,7 +394,7 @@ export function estimateSessionCost(
       }
     }
   }
-  return any ? toCurrency(total, currency) : null
+  return any ? total : null
 }
 
 export function billedTokensOf(usage: SessionCostUsage | null | undefined): number {

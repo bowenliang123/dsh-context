@@ -1,6 +1,8 @@
 import type { ReactElement } from 'react'
 import assert from 'node:assert/strict'
-import { describe, test } from 'vitest'
+import { describe, test, vi } from 'vitest'
+import { pricesBookOf, resetModelPrices } from '../../src/client/modelPrices'
+import { loadPricingSnapshot, rememberPricingBook } from '../../src/client/pricingSnapshot'
 import { DICTS } from '../../src/client/i18n'
 import { modalStoreOf, type ModalStore } from '../../src/client/modalStore'
 import type { SettingsField, SettingsScopeLike, SettingsState } from '../../src/client/settings'
@@ -65,6 +67,33 @@ function scopeWith(snapshot: { status: string; value: unknown; writable: boolean
 }
 
 describe('client entry: identity and dictionaries', () => {
+  test('disposing the plugin cancels failed pricing persistence and prevents further retries', async () => {
+    vi.useFakeTimers()
+    resetModelPrices()
+    const fetcher = vi.fn(async (_url: unknown, init?: RequestInit) => String(init?.body) === '{}'
+      ? Response.json({ ok: true, value: null })
+      : Response.json({ ok: false }, { status: 503 }))
+    vi.stubGlobal('fetch', fetcher)
+    const ctx = new TestClientCtx()
+    try {
+      applyTo(ctx)
+      await loadPricingSnapshot()
+      rememberPricingBook(pricesBookOf({ p: { models: { m: { cost: { input: 1, output: 1 } } } } })!)
+      await vi.advanceTimersByTimeAsync(500)
+      assert.equal(fetcher.mock.calls.length, 2)
+      assert.ok(vi.getTimerCount() > 0)
+      ctx.dispose()
+      assert.equal(vi.getTimerCount(), 0)
+      await vi.advanceTimersByTimeAsync(60_000)
+      assert.equal(fetcher.mock.calls.length, 2)
+    } finally {
+      ctx.dispose()
+      resetModelPrices()
+      vi.unstubAllGlobals()
+      vi.useRealTimers()
+    }
+  })
+
   test('name and inject declare the plugin identity; apply registers all locale dictionaries and dispose removes them', () => {
     assert.equal(name, 'dsh-context')
     assert.deepEqual(inject, ['slots', 'locale'])
