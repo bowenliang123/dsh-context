@@ -50,7 +50,7 @@ export function firstTokenTimeOfStream(stream: unknown): number | undefined {
   return streamTimingOf(stream, Number.NaN).firstToken
 }
 
-export interface StreamTiming {
+interface StreamTiming {
   firstToken?: number
   spans: DecodeSpan[]
 }

@@ -1,7 +1,8 @@
 import type { Context } from '@deepseek-ai/cordis'
 import type { FleetDelegation, FleetDescriptor, FleetDetail, FleetMemberInfo, FleetMessage } from '../shared/types'
 import { type ColdReadGate, makeColdReadGate } from './coldRead'
-import { type ConnectionHostFace, registerPostRoute } from './connection'
+import { failure, leaseOf, mountPostRoute, observeOf, readBody, reply } from './postRoute'
+import { asRecord } from './record'
 
 export const FLEET_ROUTE = '/api/dsh-context/fleet'
 
@@ -13,24 +14,6 @@ const REPLY_TEXT_MAX = 300
 function detailModeOf(body: unknown): FleetDetailMode {
   if (asRecord(body)?.full === true) return 'full'
   return asRecord(body)?.history === true ? 'history' : 'preview'
-}
-
-interface SessionQueryFace {
-  observeSession?(id: string, options: unknown): Promise<unknown>
-}
-
-function reply(value: unknown): Response {
-  return Response.json(value, { headers: { 'cache-control': 'no-store' } })
-}
-
-function failure(code: string, message: string): Response {
-  return reply({ ok: false, error: { code, message } })
-}
-
-function asRecord(value: unknown): Record<string, unknown> | null {
-  return value !== null && typeof value === 'object' && !Array.isArray(value)
-    ? value as Record<string, unknown>
-    : null
 }
 
 function textOfContent(content: unknown): string {
@@ -226,7 +209,7 @@ function teamDelegationOf(seq: number, time: number, data: Record<string, unknow
   }
 }
 
-export type FleetDetailMode = 'preview' | 'history' | 'full'
+type FleetDetailMode = 'preview' | 'history' | 'full'
 
 interface FleetCaps {
   promptMax: number
@@ -250,7 +233,7 @@ function capsOf(mode: FleetDetailMode): FleetCaps {
   return { promptMax: PROMPT_TEXT_MAX, replyMax: REPLY_TEXT_MAX, messageMax: MESSAGE_TEXT_MAX, listMax: MESSAGES_MAX }
 }
 
-export class FleetFold {
+class FleetFold {
   private descriptor: FleetDescriptor | undefined
   private initialPrompt: string | undefined
   private truncated = false
@@ -438,58 +421,56 @@ function foldOf(
 
 export function watchFleetChannel(ctx: Context, coldReads: ColdReadGate = makeColdReadGate()): void {
   const cache = new Map<string, FoldEntry>()
-  ctx.inject(['connection'], (c) => {
-    const handler = async (request: Request): Promise<Response> => {
-      let sessionId: unknown
-      let mode: FleetDetailMode = 'preview'
-      try {
-        const body: unknown = await request.json()
-        sessionId = asRecord(body)?.sessionId
-        mode = detailModeOf(body)
-      } catch {
-        return failure('dsh-context/bad-request', 'body is not JSON')
+  mountPostRoute({
+    ctx,
+    deps: ['connection'],
+    path: FLEET_ROUTE,
+    label: 'dsh-context: fleet route',
+    handler: (c) => {
+      const persistence = c.get('sessionPersistence') as unknown
+      return async (request: Request): Promise<Response> => {
+        const read = await readBody(request)
+        if (!read.ok) return read.response
+        const body = read.body
+        const sessionId = asRecord(body)?.sessionId
+        const mode = detailModeOf(body)
+        if (typeof sessionId !== 'string' || sessionId === '') {
+          return failure('dsh-context/bad-request', 'missing sessionId')
+        }
+        try {
+          const observe = observeOf(ctx)
+          if (observe === undefined) return reply({ ok: true, value: null })
+          const value = await coldReads.admit(async () => {
+            const observation = await observe(sessionId, { projectionMode: 'none' }) as ObservationLike | null
+            const events = observation?.events
+            if (!Array.isArray(events)) return null
+            const inheritedEventCount = typeof observation?.inheritedEventCount === 'number' && Number.isFinite(observation.inheritedEventCount)
+              ? Math.max(0, observation.inheritedEventCount)
+              : 0
+            const release = leaseOf(observation)
+            try {
+              if (mode !== 'preview') return fleetDetailOfEvents(events, mode, inheritedEventCount)
+              const isLive = observation?.source === 'live'
+              return foldOf(
+                cache,
+                sessionId,
+                events,
+                isLive,
+                isLive ? undefined : revisionOf(observation),
+                persistence,
+                cursorOfEvents(events),
+                inheritedEventCount,
+              ).serve()
+            } finally {
+              release()
+            }
+          })
+          return reply({ ok: true, value: value ?? null })
+        } catch (err) {
+          return failure('gateway/internal', err instanceof Error ? err.message : String(err))
+        }
       }
-      if (typeof sessionId !== 'string' || sessionId === '') {
-        return failure('dsh-context/bad-request', 'missing sessionId')
-      }
-      try {
-        const query = ctx.get('sessionQuery') as SessionQueryFace | undefined
-        const observe = typeof query?.observeSession === 'function'
-          ? query.observeSession.bind(query)
-          : undefined
-        if (observe === undefined) return reply({ ok: true, value: null })
-        const persistence = c.get('sessionPersistence') as unknown
-        const value = await coldReads.admit(async () => {
-          const observation = await observe(sessionId, { projectionMode: 'none' }) as ObservationLike | null
-          const events = observation?.events
-          if (!Array.isArray(events)) return null
-          const inheritedEventCount = typeof observation?.inheritedEventCount === 'number' && Number.isFinite(observation.inheritedEventCount)
-            ? Math.max(0, observation.inheritedEventCount)
-            : 0
-          try {
-            if (mode !== 'preview') return fleetDetailOfEvents(events, mode, inheritedEventCount)
-            const isLive = observation?.source === 'live'
-            return foldOf(
-              cache,
-              sessionId,
-              events,
-              isLive,
-              isLive ? undefined : revisionOf(observation),
-              persistence,
-              cursorOfEvents(events),
-              inheritedEventCount,
-            ).serve()
-          } finally {
-            const dispose = observation?.[Symbol.dispose]
-            if (typeof dispose === 'function') dispose.call(observation)
-          }
-        })
-        return reply({ ok: true, value: value ?? null })
-      } catch (err) {
-        return failure('gateway/internal', err instanceof Error ? err.message : String(err))
-      }
-    }
-    registerPostRoute(c, c.get('connection') as ConnectionHostFace | undefined, FLEET_ROUTE, handler, 'dsh-context: fleet route')
+    },
   })
 }
 

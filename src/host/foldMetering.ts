@@ -129,9 +129,9 @@ export function bumpToolTotals(timing: TimingTotals, name: string, ms: number): 
   timing.tools[name] = { calls: cur.calls + 1, ms: cur.ms + ms }
 }
 
-export const IDLE_MIN_MS = 120_000
+const IDLE_MIN_MS = 120_000
 
-export interface IdleWindow {
+interface IdleWindow {
   start: number
   end: number
 }

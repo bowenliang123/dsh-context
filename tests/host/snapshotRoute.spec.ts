@@ -101,11 +101,10 @@ test('without the connection face the route never registers, and the watcher dis
     ctx.provide('sessionProjectionCache', { cachedSnapshot: () => undefined })
     await ctx.plugin(SessionStore)
     await ctx.plugin(SessionProjectionRegistry)
-    const dispose = watchSnapshotRoute(ctx)
+    watchSnapshotRoute(ctx)
     await ctx.plugin(plugin, noConfig)
     await new Promise(resolve => setTimeout(resolve, 1))
     assert.equal(routes.has(SNAPSHOT_ROUTE), false, 'no registrar, no route')
-    dispose()
   })
   test('serves a live session from the registry, honors the ids filter, and drops unknown ids', async () => {
     const { routes, createSession } = await bootWithRoutes()

@@ -1,9 +1,5 @@
-import { estimateTextTokens } from '../shared/estimate'
+import { BLOCK_OVERHEAD, CHARS_PER_TOKEN, ROLE_OVERHEAD, estimateTextTokens } from '../shared/estimate'
 import { estimateImageTokens } from '../shared/imageTokens'
-
-const CHARS_PER_TOKEN = 4
-const BLOCK_OVERHEAD = 4
-const ROLE_OVERHEAD = 4
 
 export function estimateToolsTotal(tools: unknown[]): number {
   return tools.length > 0

@@ -1,7 +1,7 @@
 import type { Context } from '@deepseek-ai/cordis'
 import type { CommandPage } from '../shared/types'
 import { type ColdReadGate, makeColdReadGate } from './coldRead'
-import { type ConnectionHostFace, registerPostRoute } from './connection'
+import { failure, leaseOf, mountPostRoute, observeOf, readBody, reply } from './postRoute'
 import type { FoldBounds } from './config'
 import { applyTimeline } from './fold'
 import { createTimelineState } from './foldState'
@@ -25,24 +25,12 @@ interface CommandObservation {
   [Symbol.dispose]?: unknown
 }
 
-interface SessionQueryFace {
-  observeSession?(id: string, options: unknown): Promise<unknown>
-}
-
 interface CachedState {
   live: boolean
   persistence?: unknown
   revision?: string
   cursor: number
   state: TimelineState
-}
-
-function reply(value: unknown): Response {
-  return Response.json(value, { headers: { 'cache-control': 'no-store' } })
-}
-
-function failure(code: string, message: string): Response {
-  return reply({ ok: false, error: { code, message } })
 }
 
 function revisionOf(observation: CommandObservation): string | undefined {
@@ -122,50 +110,47 @@ export function watchCommandPageChannel(
   coldReads: ColdReadGate = makeColdReadGate(),
 ): void {
   const cache = new Map<string, CachedState>()
-  ctx.inject(['connection', 'sessionQuery'], (c) => {
-    const query = c.get('sessionQuery') as SessionQueryFace | undefined
-    const observe = typeof query?.observeSession === 'function' ? query.observeSession.bind(query) : undefined
-    if (observe === undefined) return
-    const handler = async (request: Request): Promise<Response> => {
-      let sessionId: unknown
-      let beforeSeq: unknown
-      let limit: unknown
-      try {
-        const body: unknown = await request.json()
-        if (body !== null && typeof body === 'object') {
-          sessionId = (body as { sessionId?: unknown }).sessionId
-          beforeSeq = (body as { beforeSeq?: unknown }).beforeSeq
-          limit = (body as { limit?: unknown }).limit
+  mountPostRoute({
+    ctx,
+    deps: ['connection', 'sessionQuery'],
+    path: COMMANDS_ROUTE,
+    label: 'dsh-context: command page route',
+    handler: (c) => {
+      const observe = observeOf(c)
+      if (observe === undefined) return undefined
+      return async (request: Request): Promise<Response> => {
+        const read = await readBody(request)
+        if (!read.ok) return read.response
+        const body = read.body
+        const sessionId = body !== null && typeof body === 'object' ? (body as { sessionId?: unknown }).sessionId : undefined
+        const beforeSeq = body !== null && typeof body === 'object' ? (body as { beforeSeq?: unknown }).beforeSeq : undefined
+        const limit = body !== null && typeof body === 'object' ? (body as { limit?: unknown }).limit : undefined
+        if (typeof sessionId !== 'string' || sessionId === '') {
+          return failure('dsh-context/bad-request', 'missing sessionId')
         }
-      } catch {
-        return failure('dsh-context/bad-request', 'body is not JSON')
+        if (beforeSeq !== undefined && (typeof beforeSeq !== 'number' || !Number.isFinite(beforeSeq) || beforeSeq < 0)) {
+          return failure('dsh-context/bad-request', 'beforeSeq must be a non-negative number')
+        }
+        const pageSize = typeof limit === 'number' && Number.isFinite(limit)
+          ? Math.min(PAGE_LIMIT_MAX, Math.max(1, Math.floor(limit)))
+          : PAGE_LIMIT
+        try {
+          const persistence: unknown = c.get('sessionPersistence')
+          const value = await coldReads.admit(async () => {
+            const observation = await observe(sessionId, { projectionMode: 'none' }) as CommandObservation | null
+            if (observation === null || typeof observation !== 'object') return null
+            const release = leaseOf(observation)
+            try {
+              return await readPage(observation, beforeSeq, pageSize, bounds, cache, sessionId, persistence)
+            } finally {
+              release()
+            }
+          })
+          return reply({ ok: true, value: value ?? null })
+        } catch (err) {
+          return failure('gateway/internal', err instanceof Error ? err.message : String(err))
+        }
       }
-      if (typeof sessionId !== 'string' || sessionId === '') {
-        return failure('dsh-context/bad-request', 'missing sessionId')
-      }
-      if (beforeSeq !== undefined && (typeof beforeSeq !== 'number' || !Number.isFinite(beforeSeq) || beforeSeq < 0)) {
-        return failure('dsh-context/bad-request', 'beforeSeq must be a non-negative number')
-      }
-      const pageSize = typeof limit === 'number' && Number.isFinite(limit)
-        ? Math.min(PAGE_LIMIT_MAX, Math.max(1, Math.floor(limit)))
-        : PAGE_LIMIT
-      try {
-        const persistence: unknown = c.get('sessionPersistence')
-        const value = await coldReads.admit(async () => {
-          const observation = await observe(sessionId, { projectionMode: 'none' }) as CommandObservation | null
-          if (observation === null || typeof observation !== 'object') return null
-          try {
-            return await readPage(observation, beforeSeq, pageSize, bounds, cache, sessionId, persistence)
-          } finally {
-            const dispose = observation[Symbol.dispose]
-            if (typeof dispose === 'function') dispose.call(observation)
-          }
-        })
-        return reply({ ok: true, value: value ?? null })
-      } catch (err) {
-        return failure('gateway/internal', err instanceof Error ? err.message : String(err))
-      }
-    }
-    registerPostRoute(c, c.get('connection') as ConnectionHostFace | undefined, COMMANDS_ROUTE, handler, 'dsh-context: command page route')
+    },
   })
 }

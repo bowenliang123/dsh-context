@@ -1,64 +1,15 @@
 import assert from 'node:assert/strict'
 import { describe, test, vi } from 'vitest'
-import type { Context } from '@deepseek-ai/cordis'
 import { COMMANDS_ROUTE, watchCommandPageChannel } from '../../src/host/commandPages'
 import { resolveBounds } from '../../src/host/config'
 import type { TimelineEvent } from '../../src/host/foldState'
+import { connectionOf, fakeCtx, observationOf, postJson } from './helpers/ctx'
+import type { FakeRoute } from './helpers/ctx'
 import { toolCall, toolResult } from './helpers/events'
 
 const BOUNDS = resolveBounds({})
 
-type RouteFetch = (request: Request) => Promise<Response>
-
-interface Captured {
-  path?: string
-  fetch?: RouteFetch
-}
-
-interface CtxSpec {
-  connection?: unknown
-  sessionQuery?: unknown
-  sessionPersistence?: unknown
-}
-
-function ctxOf(spec: CtxSpec): { ctx: Context; captured: Captured; disposers: (() => void)[] } {
-  const captured: Captured = {}
-  const disposers: (() => void)[] = []
-  const services = new Map<string, unknown>()
-  if ('connection' in spec) services.set('connection', spec.connection)
-  if ('sessionQuery' in spec) services.set('sessionQuery', spec.sessionQuery)
-  const ctx = {
-    get: (name: string) => (name === 'sessionPersistence' ? spec.sessionPersistence : services.get(name)),
-    effect(fn: () => unknown) {
-      const d = fn()
-      if (typeof d === 'function') disposers.push(d as () => void)
-      return () => {}
-    },
-    inject(deps: string[], cb: (c: unknown) => unknown) {
-      if (!deps.every(d => services.has(d))) return
-      const d = cb(ctx)
-      if (typeof d === 'function') disposers.push(d as () => void)
-    },
-  }
-  const conn = spec.connection as { fetch?: { register?: unknown } } | undefined
-  if (conn !== undefined && typeof conn.fetch?.register === 'function') {
-    conn.fetch.register = (route: { path: string; fetch: RouteFetch }) => {
-      captured.path = route.path
-      captured.fetch = route.fetch
-      return () => {}
-    }
-  }
-  return { ctx: ctx as unknown as Context, captured, disposers }
-}
-
-async function call(captured: Captured, body: unknown): Promise<unknown> {
-  const request = new Request(`http://dsh.test${COMMANDS_ROUTE}`, {
-    method: 'POST',
-    headers: { 'content-type': 'application/json' },
-    ...(body === undefined ? {} : { body: typeof body === 'string' ? body : JSON.stringify(body) }),
-  })
-  return await captured.fetch!(request).then(r => r.json())
-}
+const call = (captured: FakeRoute, body: unknown): Promise<unknown> => postJson(captured, COMMANDS_ROUTE, body)
 
 function bashCall(seq: number, callId: string, cmd: string): TimelineEvent {
   return toolCall(seq, { callId, name: 'bash', arguments: JSON.stringify({ command: cmd }) })
@@ -77,16 +28,6 @@ function logOf(n: number): TimelineEvent[] {
   return events
 }
 
-function observationOf(events: readonly TimelineEvent[], over: Record<string, unknown> = {}): Record<string, unknown> {
-  return {
-    source: 'live',
-    cursor: events.length === 0 ? -1 : events[events.length - 1].seq,
-    events,
-    [Symbol.dispose]: () => {},
-    ...over,
-  }
-}
-
 interface PageValue {
   ok: boolean
   value: { commands: Array<{ seq: number; cmd: string; status: string; resultSeq?: number }>; atStart: boolean; total: number } | null
@@ -96,63 +37,49 @@ interface PageValue {
 function routeWith(
   observe: (id: string, options: unknown) => Promise<unknown>,
   persistence?: () => unknown,
-): { captured: Captured; calls: unknown[] } {
+): { captured: FakeRoute; calls: unknown[] } {
   const calls: unknown[] = []
-  const spec: CtxSpec = {
-    connection: { fetch: { register: () => () => {} } },
+  const fake = fakeCtx({
+    connection: connectionOf(),
     sessionQuery: {
       observeSession: (id: string, options: unknown) => {
         calls.push({ id, options })
         return observe(id, options)
       },
     },
-  }
-  if (persistence !== undefined) {
-    Object.defineProperty(spec, 'sessionPersistence', { get: persistence, enumerable: true })
-  }
-  const { ctx, captured } = ctxOf(spec)
-  watchCommandPageChannel(ctx, BOUNDS)
-  return { captured, calls }
+  }, persistence === undefined ? {} : { serviceGetters: { sessionPersistence: persistence } })
+  watchCommandPageChannel(fake.ctx, BOUNDS)
+  return { captured: fake.captured, calls }
 }
 
 describe('watchCommandPageChannel gating', () => {
   test('the route stays unregistered without its faces or when the registry refuses', () => {
-    const none = ctxOf({})
+    const none = fakeCtx({})
     watchCommandPageChannel(none.ctx, BOUNDS)
     assert.equal(none.captured.fetch, undefined)
 
-    const connectionOnly = ctxOf({ connection: { fetch: { register: () => () => {} } } })
+    const connectionOnly = fakeCtx({ connection: connectionOf() })
     watchCommandPageChannel(connectionOnly.ctx, BOUNDS)
     assert.equal(connectionOnly.captured.fetch, undefined)
 
-    const noObserve = ctxOf({ connection: { fetch: { register: () => () => {} } }, sessionQuery: {} })
+    const noObserve = fakeCtx({ connection: connectionOf(), sessionQuery: {} })
     watchCommandPageChannel(noObserve.ctx, BOUNDS)
     assert.equal(noObserve.captured.fetch, undefined)
 
-    const rejecting = {
-      get: (name: string) => (name === 'connection'
-        ? { fetch: { register: () => { throw new Error('registration rejected') } } }
-        : { observeSession: () => Promise.resolve(null) }),
-      effect(fn: () => unknown) {
-        fn()
-        return () => {}
-      },
-      inject(deps: string[], cb: (c: unknown) => unknown) {
-        if (deps.every(d => d === 'connection' || d === 'sessionQuery')) cb(rejecting)
-      },
-    }
-    assert.doesNotThrow(() => watchCommandPageChannel(rejecting as unknown as Context, BOUNDS))
+    const rejecting = fakeCtx({
+      connection: { fetch: { register: () => { throw new Error('registration rejected') } } },
+      sessionQuery: { observeSession: () => Promise.resolve(null) },
+    })
+    assert.doesNotThrow(() => watchCommandPageChannel(rejecting.ctx, BOUNDS))
+    assert.equal(rejecting.captured.fetch, undefined)
   })
 
   test('registration opens the path and its effect disposer is collected', () => {
-    const { ctx, captured, disposers } = ctxOf({
-      connection: { fetch: { register: () => () => {} } },
-      sessionQuery: { observeSession: () => Promise.resolve(null) },
-    })
-    watchCommandPageChannel(ctx, BOUNDS)
-    assert.equal(captured.path, '/api/dsh-context/commands')
-    assert.equal(disposers.length, 1)
-    for (const d of disposers) d()
+    const fake = fakeCtx({ connection: connectionOf(), sessionQuery: { observeSession: () => Promise.resolve(null) } })
+    watchCommandPageChannel(fake.ctx, BOUNDS)
+    assert.equal(fake.captured.path, '/api/dsh-context/commands')
+    assert.equal(fake.disposers.length, 1)
+    for (const d of fake.disposers) d()
   })
 })
 
@@ -185,15 +112,12 @@ describe('the command page route', () => {
     const noCursor = routeWith(() => Promise.resolve({ source: 'live' }))
     assert.deepEqual(((await call(noCursor.captured, { sessionId: 's1' })) as PageValue).value, { commands: [], atStart: true, total: 0 })
 
-    const { ctx, captured } = ctxOf({
-      connection: { fetch: { register: () => () => {} } },
-      sessionQuery: { observeSession: () => Promise.resolve(null) },
-    })
+    const gate = fakeCtx({ connection: connectionOf(), sessionQuery: { observeSession: () => Promise.resolve(null) } })
     let admitted = 0
-    watchCommandPageChannel(ctx, BOUNDS, {
+    watchCommandPageChannel(gate.ctx, BOUNDS, {
       admit: <T>(_read: () => Promise<T>): Promise<T | undefined> => { admitted++; return Promise.resolve(undefined) },
     })
-    assert.deepEqual(await call(captured, { sessionId: 's1' }), { ok: true, value: null })
+    assert.deepEqual(await call(gate.captured, { sessionId: 's1' }), { ok: true, value: null })
     assert.equal(admitted, 1)
   })
 

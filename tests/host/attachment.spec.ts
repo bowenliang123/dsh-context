@@ -1,72 +1,20 @@
 import assert from 'node:assert/strict'
-import { describe, test } from 'vitest'
-import type { Context } from '@deepseek-ai/cordis'
+import { describe, test, afterEach } from 'vitest'
 import { mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { basename, join } from 'node:path'
-import { afterEach } from 'vitest'
 import { ATTACHMENT_ROUTE, referencedAttachmentOf, imagePreviewNameOf, watchAttachmentChannel } from '../../src/host/attachment'
 import type { ColdReadGate } from '../../src/host/coldRead'
+import { connectionOf, fakeCtx, observing, OPEN_GATE, postJson, SKIP_GATE } from './helpers/ctx'
+import type { FakeCtx, FakeRoute } from './helpers/ctx'
 
-type RouteFetch = (request: Request) => Promise<Response>
-
-interface CtxSpec {
-  connection?: unknown
-  sessionQuery?: unknown
-  attachments?: unknown
+function armed(spec: Record<string, unknown> = {}, gate: ColdReadGate = OPEN_GATE): FakeCtx {
+  const fake = fakeCtx({ connection: connectionOf(), ...spec })
+  watchAttachmentChannel(fake.ctx, gate)
+  return fake
 }
 
-function ctxOf(spec: CtxSpec): { ctx: Context; captured: { path?: string; fetch?: RouteFetch }; disposers: (() => void)[] } {
-  const captured: { path?: string; fetch?: RouteFetch } = {}
-  const disposers: (() => void)[] = []
-  const services = new Map<string, unknown>()
-  if ('connection' in spec) services.set('connection', spec.connection)
-  if ('sessionQuery' in spec) services.set('sessionQuery', spec.sessionQuery)
-  if ('attachments' in spec) services.set('attachments', spec.attachments)
-  const ctx = {
-    get: (name: string) => services.get(name),
-    effect(fn: () => unknown, _label?: string) {
-      const d = fn()
-      if (typeof d === 'function') disposers.push(d as () => void)
-      return () => {}
-    },
-    inject(deps: string[], cb: (c: unknown) => unknown) {
-      if (!deps.every(d => services.has(d))) return
-      const d = cb(ctx)
-      if (typeof d === 'function') disposers.push(d as () => void)
-    },
-  }
-  if (spec.connection !== undefined && spec.connection !== null) {
-    const conn = spec.connection as { fetch?: { register?: unknown } }
-    if (typeof conn.fetch?.register === 'function') {
-      conn.fetch.register = (route: { path: string; fetch: RouteFetch }) => {
-        captured.path = route.path
-        captured.fetch = route.fetch
-        return () => {}
-      }
-    }
-  }
-  return { ctx: ctx as unknown as Context, captured, disposers }
-}
-
-const OPEN_GATE: ColdReadGate = { admit: read => read() }
-const SKIP_GATE: ColdReadGate = { admit: () => Promise.resolve(undefined) }
-
-function armed(spec: CtxSpec = {}, gate: ColdReadGate = OPEN_GATE): { captured: { path?: string; fetch?: RouteFetch } } {
-  const { ctx, captured } = ctxOf({ connection: { fetch: { register: () => () => {} } }, ...spec })
-  watchAttachmentChannel(ctx, gate)
-  return { captured }
-}
-
-async function call(captured: { fetch?: RouteFetch }, body: unknown): Promise<Record<string, unknown>> {
-  const request = new Request(`http://dsh.test${ATTACHMENT_ROUTE}`, {
-    method: 'POST',
-    headers: { 'content-type': 'application/json' },
-    ...(body === undefined ? {} : { body: JSON.stringify(body) }),
-  })
-  const response = await captured.fetch!(request)
-  return await response.json() as Record<string, unknown>
-}
+const call = (captured: FakeRoute, body: unknown): Promise<Record<string, unknown>> => postJson(captured, ATTACHMENT_ROUTE, body)
 
 const BARE_IMAGE_EVENT = {
   type: 'user/message',
@@ -87,17 +35,6 @@ const USER_EVENT = {
       { type: 'text', text: 'how many files?' },
     ],
   },
-}
-
-function observing(events: unknown): { observeSession(id: string, options: unknown): Promise<unknown>; disposed(): boolean } {
-  let disposed = false
-  return {
-    observeSession: () => Promise.resolve({
-      events,
-      [Symbol.dispose]() { disposed = true },
-    }),
-    disposed: () => disposed,
-  }
 }
 
 const ALIAS = '/home/me/.dsh/attachments/v1/files/a3/a3f0/report.md'
@@ -163,24 +100,14 @@ describe('referencedAttachmentOf', () => {
 describe('watchAttachmentChannel gating', () => {
   test('no route without the connection service or its fetch registry, and a rejecting registry stays up without one', () => {
     for (const spec of [{}, { connection: {} }, { connection: { fetch: {} } }]) {
-      const { ctx, captured } = ctxOf(spec)
+      const { ctx, captured } = fakeCtx(spec)
       watchAttachmentChannel(ctx, OPEN_GATE)
       assert.equal(captured.path, undefined, JSON.stringify(spec))
     }
     assert.equal(armed().captured.path, ATTACHMENT_ROUTE)
-    const ctx = {
-      get: (name: string) => name === 'connection'
-        ? {
-          fetch: {
-            register: () => {
-              throw new Error('registration rejected')
-            },
-          },
-        }
-        : undefined,
-      inject(_deps: string[], cb: (c: unknown) => unknown) { cb(ctx) },
-    }
-    assert.doesNotThrow(() => { watchAttachmentChannel(ctx as unknown as Context, OPEN_GATE) })
+    const rejecting = fakeCtx({ connection: { fetch: { register: () => { throw new Error('registration rejected') } } } })
+    assert.doesNotThrow(() => { watchAttachmentChannel(rejecting.ctx, OPEN_GATE) })
+    assert.equal(rejecting.captured.path, undefined)
   })
 
   test('bad bodies, a missing session, and a missing attachment are typed failures', async () => {
@@ -205,7 +132,7 @@ describe('watchAttachmentChannel gating', () => {
     const query = observing([USER_EVENT])
     const { captured } = armed({ sessionQuery: query })
     assert.deepEqual(await call(captured, { sessionId: 's1', attachmentId: 'sha256:invented' }), { ok: true, value: null })
-    assert.equal(query.disposed(), true)
+    assert.equal(query.wasDisposed(), true)
   })
 
   test('a throwing observation surfaces as an internal failure', async () => {
@@ -233,7 +160,7 @@ describe('watchAttachmentChannel resolution', () => {
     })
     assert.deepEqual(await call(captured, { sessionId: 's1', attachmentId: 'sha256:f1' }), { ok: true, value: { path: ALIAS } })
     assert.deepEqual(seen, [{ attachmentId: 'sha256:f1', name: 'report.md', bytes: 47320 }])
-    assert.equal(query.disposed(), true)
+    assert.equal(query.wasDisposed(), true)
   })
 
   test('every unlocatable file shape resolves a typed null', async () => {

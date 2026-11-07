@@ -1,6 +1,5 @@
 import assert from 'node:assert/strict'
 import { describe, test } from 'vitest'
-import type { Context } from '@deepseek-ai/cordis'
 import { resolveBounds } from '../../src/host/config'
 import { TIMELINE_STATE_VERSION } from '../../src/host/timeline'
 import { watchTimelineRowSweep } from '../../src/host/sweep'
@@ -8,6 +7,8 @@ import { buildTimelineHead } from '../../src/host/foldWire'
 import { applyTimeline, createTimelineState } from '../../src/host/fold'
 import type { TimelineEvent } from '../../src/host/fold'
 import type { TimelineState } from '../../src/host/foldState'
+import { fakeCtx } from './helpers/ctx'
+import type { FakeCtx } from './helpers/ctx'
 import { assistantMessage, header, toolCall, toolResult, userMessage } from './helpers/events'
 
 const ROW_KEY = 'contextTimeline'
@@ -43,35 +44,21 @@ function fullVal(): TimelineState {
   return state
 }
 
-function ctxOf(table: TableHarness | undefined, onFirstUpdate?: () => void): { ctx: Context; ran: () => Promise<void> } {
-  let launch: (() => void) | undefined
-  const facility = table === undefined
+interface SweepHarness extends FakeCtx {
+  ran(): Promise<void>
+}
+
+function ctxOf(table: TableHarness | undefined, onFirstUpdate?: () => void): SweepHarness {
+  const domain = table === undefined
     ? undefined
-    : {
-      get: (name: string) => name === 'session_projcache'
-        ? { table: (name2: string) => name2 === 'sessions' ? tableFace(table, onFirstUpdate) : undefined }
-        : undefined,
-    }
-  const ctx = {
-    get: (name: string) => name === 'storageDomain' ? facility : undefined,
-    logger: {
-      info: () => {},
-      warn: () => {},
-    },
-    inject(deps: string[], cb: (c: unknown) => unknown) {
-      if (deps.every(d => d === 'sessionProjectionCache' || d === 'storageDomain')) launch = () => {
-        const result = cb(ctx)
-        if (typeof result === 'function') result()
-      }
-    },
-  }
+    : { table: (name2: string) => name2 === 'sessions' ? tableFace(table, onFirstUpdate) : undefined }
+  const fake = fakeCtx({ storageDomain: { get: (name: string) => name === 'session_projcache' ? domain : undefined } }, {
+    injectAll: true,
+    logger: { info: () => {}, warn: () => {} },
+  })
   return {
-    ctx: ctx as unknown as Context,
-    ran: async () => {
-      assert.ok(launch !== undefined, 'the sweep armed')
-      launch!()
-      await new Promise(resolve => setTimeout(resolve, 0))
-    },
+    ...fake,
+    ran: async () => { await new Promise(resolve => setTimeout(resolve, 0)) },
   }
 }
 
@@ -182,22 +169,21 @@ describe('the timeline row sweep (issue #217)', () => {
   })
 
   test('a missing domain or table arms nothing', async () => {
-    const { ctx, ran } = ctxOf(undefined)
-    watchTimelineRowSweep(ctx)
-    await ran()
+    for (const storageDomain of [undefined, 42, {}, { get: () => undefined }]) {
+      const fake = fakeCtx(storageDomain === undefined ? {} : { storageDomain }, {
+        injectAll: true,
+        logger: { info: () => {}, warn: () => {} },
+      })
+      watchTimelineRowSweep(fake.ctx)
+      await new Promise(resolve => setTimeout(resolve, 0))
+    }
   })
 
   test('a junk domain or table face arms nothing', async () => {
     for (const domain of ['junk', {}, { table: () => 'junk' }, { table: () => ({}) }]) {
       const facility = { get: (name: string) => name === 'session_projcache' ? domain : undefined }
-      const ctx = {
-        get: (name: string) => name === 'storageDomain' ? facility : undefined,
-        logger: { info: () => {}, warn: () => {} },
-        inject(deps: string[], cb: (c: unknown) => unknown) {
-          if (deps.every(d => d === 'sessionProjectionCache' || d === 'storageDomain')) cb(ctx)
-        },
-      }
-      watchTimelineRowSweep(ctx as unknown as Context)
+      const fake = fakeCtx({ storageDomain: facility }, { injectAll: true, logger: { info: () => {}, warn: () => {} } })
+      watchTimelineRowSweep(fake.ctx)
       await new Promise(resolve => setTimeout(resolve, 0))
     }
   })
@@ -209,14 +195,11 @@ describe('the timeline row sweep (issue #217)', () => {
         : undefined,
     }
     const warnings: string[] = []
-    const ctx = {
-      get: (name: string) => name === 'storageDomain' ? facility : undefined,
-      logger: { info: () => {}, warn: (message: string) => warnings.push(message) },
-      inject(deps: string[], cb: (c: unknown) => unknown) {
-        if (deps.every(d => d === 'sessionProjectionCache' || d === 'storageDomain')) cb(ctx)
-      },
-    }
-    watchTimelineRowSweep(ctx as unknown as Context)
+    const fake = fakeCtx({ storageDomain: facility }, {
+      injectAll: true,
+      logger: { info: () => {}, warn: (message: unknown) => warnings.push(String(message)) },
+    })
+    watchTimelineRowSweep(fake.ctx)
     await new Promise(resolve => setTimeout(resolve, 0))
     assert.ok(warnings.some(message => message.includes('quarantined')), 'the outer guard reports the rejection')
   })

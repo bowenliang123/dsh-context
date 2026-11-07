@@ -1,9 +1,8 @@
 import assert from 'node:assert/strict'
 import { describe, test } from 'vitest'
-import type { Context } from '@deepseek-ai/cordis'
 import { SKILLS_ROUTE, watchSkillCatalog } from '../../src/host/skills'
-
-type RouteFetch = (request: Request) => Promise<Response>
+import { connectionOf, fakeCtx, postJson } from './helpers/ctx'
+import type { FakeCtx, FakeRoute } from './helpers/ctx'
 
 interface CtxSpec {
   connection?: unknown
@@ -13,37 +12,7 @@ interface CtxSpec {
   agentPresets?: unknown
 }
 
-function ctxOf(spec: CtxSpec): { ctx: Context; captured: { path?: string; fetch?: RouteFetch } } {
-  const captured: { path?: string; fetch?: RouteFetch } = {}
-  const services = new Map<string, unknown>()
-  for (const key of ['connection', 'skills', 'sessionQuery', 'agents', 'agentPresets'] as const) {
-    if (key in spec) services.set(key, spec[key])
-  }
-  const ctx = {
-    get: (name: string) => services.get(name),
-    effect(fn: () => unknown) {
-      fn()
-      return () => {}
-    },
-    inject(deps: string[], cb: (c: unknown) => unknown) {
-      if (!deps.every(d => services.has(d))) return
-      cb(ctx)
-    },
-  }
-  const conn = spec.connection as { fetch?: { register?: unknown } } | undefined
-  if (typeof conn?.fetch?.register === 'function') {
-    const original = conn.fetch.register as (route: { path: string; fetch: RouteFetch }) => (() => void)
-    conn.fetch.register = (route: { path: string; fetch: RouteFetch }) => {
-      const dispose = original(route)
-      captured.path = route.path
-      captured.fetch = route.fetch
-      return dispose
-    }
-  }
-  return { ctx: ctx as unknown as Context, captured }
-}
-
-const connectionOf = (): { fetch: { register: () => () => void } } => ({ fetch: { register: () => () => {} } })
+const ctxOf = (spec: CtxSpec): FakeCtx => fakeCtx(spec)
 
 function registryOf(rows: unknown, log?: unknown[]): { list: (options: unknown) => Promise<unknown> } {
   return {
@@ -73,19 +42,12 @@ const ROWS = [
   { name: 'ask-matt', description: 'A router', source: 'project-agents' },
 ]
 
-async function serve(captured: { fetch?: RouteFetch }, body: unknown = {}): Promise<Record<string, unknown>> {
-  const response = await captured.fetch!(new Request('http://localhost' + SKILLS_ROUTE, {
-    method: 'POST',
-    headers: { 'content-type': 'application/json' },
-    body: JSON.stringify(body),
-  }))
-  return await response.json() as Record<string, unknown>
-}
+const serve = (captured: FakeRoute, body: unknown = {}): Promise<Record<string, unknown>> => postJson(captured, SKILLS_ROUTE, body)
 
-function armed(spec: Omit<CtxSpec, 'connection'>): { path?: string; fetch?: RouteFetch } {
-  const { ctx, captured } = ctxOf({ connection: connectionOf(), ...spec })
-  watchSkillCatalog(ctx)
-  return captured
+function armed(spec: Omit<CtxSpec, 'connection'> = {}): FakeRoute {
+  const fake = fakeCtx({ connection: connectionOf(), ...spec })
+  watchSkillCatalog(fake.ctx)
+  return fake.captured
 }
 
 describe('skills route registration', () => {
@@ -196,7 +158,7 @@ describe('skills route: the session-addressed resolution', () => {
     }
     const log: unknown[] = []
     const captured = armed({ skills: registryOf([], log) })
-    for (const body of [{ cwd: '/repo/alpha' }, {}, { cwd: 42 }, { cwd: '' }, 'not a record']) await serve(captured, body)
+    for (const body of [{ cwd: '/repo/alpha' }, {}, { cwd: 42 }, { cwd: '' }, 'not a record']) await serve(captured, JSON.stringify(body))
     assert.deepEqual(log, [{ cwd: '/repo/alpha' }, {}, {}, {}, {}])
   })
 

@@ -1,17 +1,16 @@
 import assert from 'node:assert/strict'
 import { describe, test, vi } from 'vitest'
-import type { Context } from '@deepseek-ai/cordis'
 import { DETAIL_ROUTE, createDetailGate, watchDetailChannel } from '../../src/host/detail'
 import { resolveBounds } from '../../src/host/config'
 import type { TimelineState } from '../../src/host/fold'
 import { buildTimelineDetail } from '../../src/host/foldWire'
 import type { TimelineEvent } from '../../src/host/foldState'
-import { assistantMessage, header, userMessage } from './helpers/events'
+import { connectionOf, fakeCtx, postJson } from './helpers/ctx'
+import type { FakeCtx, FakeRoute } from './helpers/ctx'
+import { assistantMessage, header, manyEvents, userMessage } from './helpers/events'
 import { driveTimeline } from './helpers/projection'
 
 const BOUNDS = resolveBounds({})
-
-type RouteFetch = (request: Request) => Promise<Response>
 
 interface CtxSpec {
   connection?: unknown
@@ -22,69 +21,17 @@ interface CtxSpec {
   logger?: { error(error: unknown): void }
 }
 
-function ctxOf(spec: CtxSpec): { ctx: Context; captured: { path?: string; fetch?: RouteFetch }; disposers: (() => void)[] } {
-  const captured: { path?: string; fetch?: RouteFetch } = {}
-  const disposers: (() => void)[] = []
-  const listeners = new Map<string, ((...args: unknown[]) => void)[]>()
-  const services = new Map<string, unknown>()
-  if ('connection' in spec) services.set('connection', spec.connection)
-  if ('sessions' in spec) services.set('sessions', spec.sessions)
-  if ('sessionQuery' in spec) services.set('sessionQuery', spec.sessionQuery)
-  if ('sessionPersistence' in spec) services.set('sessionPersistence', spec.sessionPersistence)
-  const ctx = {
-    get: (name: string) => services.get(name),
-    on(event: string, listener: (...args: unknown[]) => void) {
-      const known = listeners.get(event) ?? []
-      known.push(listener)
-      listeners.set(event, known)
-    },
-    emit(event: string, ...args: unknown[]): void {
-      for (const listener of listeners.get(event) ?? []) listener(...args)
-    },
-    sessionProjections: { stateOf: spec.stateOf ?? (() => undefined) },
-    logger: spec.logger ?? { error: () => {} },
-    effect(fn: () => unknown, _label?: string) {
-      const d = fn()
-      if (typeof d === 'function') disposers.push(d as () => void)
-      return () => {}
-    },
-    inject(deps: string[], cb: (c: unknown) => unknown) {
-      if (!deps.every(d => services.has(d))) return
-      const d = cb(ctx)
-      if (typeof d === 'function') disposers.push(d as () => void)
-    },
-  }
-  if (spec.connection !== undefined && spec.connection !== null) {
-    const conn = spec.connection as { fetch?: { register?: unknown } }
-    if (typeof conn.fetch?.register === 'function') {
-      conn.fetch.register = (route: { path: string; fetch: RouteFetch }) => {
-        captured.path = route.path
-        captured.fetch = route.fetch
-        return () => {}
-      }
-    }
-  }
-  return { ctx: ctx as unknown as Context, captured, disposers }
+function ctxOf(spec: CtxSpec): FakeCtx {
+  const { stateOf, logger, ...services } = spec
+  return fakeCtx(services, {
+    ...(logger === undefined ? {} : { logger }),
+    sessionProjections: { stateOf: stateOf ?? (() => undefined) },
+  })
 }
 
-async function call(captured: { fetch?: RouteFetch }, body: unknown): Promise<Record<string, unknown>> {
-  const request = new Request(`http://dsh.test${DETAIL_ROUTE}`, {
-    method: 'POST',
-    headers: { 'content-type': 'application/json' },
-    ...(body === undefined ? {} : { body: JSON.stringify(body) }),
-  })
-  const response = await captured.fetch!(request)
-  return await response.json() as Record<string, unknown>
-}
+const call = (captured: FakeRoute, body: unknown): Promise<Record<string, unknown>> => postJson(captured, DETAIL_ROUTE, body)
 
-async function callRaw(captured: { fetch?: RouteFetch }, body: string): Promise<Record<string, unknown>> {
-  const request = new Request(`http://dsh.test${DETAIL_ROUTE}`, {
-    method: 'POST',
-    headers: { 'content-type': 'application/json' },
-    body,
-  })
-  return await captured.fetch!(request).then(r => r.json()) as Record<string, unknown>
-}
+const callRaw = (captured: FakeRoute, body: string): Promise<Record<string, unknown>> => postJson(captured, DETAIL_ROUTE, body)
 
 function sessionsWith(session: unknown): { get(id: string): unknown } {
   return { get: (id: string) => (id === 's1' ? session : undefined) }
@@ -105,35 +52,22 @@ describe('watchDetailChannel gating', () => {
       connection: { fetch: { register: () => () => {} } },
       sessions: { get: 42 },
     }).ctx, BOUNDS).live, false)
-    const rejecting = {
-      get: (name: string) =>
-        name === 'connection'
-          ? { fetch: { register: () => { throw new Error('registration rejected') } } }
-          : name === 'sessions'
-            ? sessionsWith(okSession())
-            : undefined,
-      sessionProjections: { stateOf: () => undefined },
-      on() {},
-      effect(fn: () => unknown) {
-        fn()
-        return () => {}
-      },
-      inject(deps: string[], cb: (c: unknown) => unknown) {
-        if (deps.every(d => (d === 'connection' || d === 'sessions'))) cb(rejecting)
-      },
-    }
-    assert.equal(watchDetailChannel(rejecting as unknown as Context, BOUNDS).live, false, 'a rejecting registry keeps the gate closed')
+    const rejecting = fakeCtx({
+      connection: { fetch: { register: () => { throw new Error('registration rejected') } } },
+      sessions: sessionsWith(okSession()),
+    })
+    assert.equal(watchDetailChannel(rejecting.ctx, BOUNDS).live, false, 'a rejecting registry keeps the gate closed')
   })
 
   test('the gate opens on registration and closes on unload', () => {
-    const { ctx, captured, disposers } = ctxOf({
-      connection: { fetch: { register: () => () => {} } },
+    const fake = ctxOf({
+      connection: connectionOf(),
       sessions: sessionsWith(okSession()),
     })
-    const gate = watchDetailChannel(ctx, BOUNDS)
+    const gate = watchDetailChannel(fake.ctx, BOUNDS)
     assert.equal(gate.live, true)
-    assert.equal(captured.path, '/api/dsh-context/detail')
-    for (const d of disposers) d()
+    assert.equal(fake.captured.path, '/api/dsh-context/detail')
+    for (const d of fake.disposers) d()
     assert.equal(gate.live, false)
   })
 })
@@ -145,7 +79,7 @@ describe('the detail route', () => {
     assistantMessage(3, { turn: 1, step: 0, usage: { inputTokens: 10, outputTokens: 5 } }),
   ]
 
-  function liveCtx(state: TimelineState | undefined, events: TimelineEvent[] | null = null): { ctx: Context; captured: { fetch?: RouteFetch } } {
+  function liveCtx(state: TimelineState | undefined, events: TimelineEvent[] | null = null): FakeCtx {
     return ctxOf({
       connection: { fetch: { register: () => () => {} } },
       sessions: sessionsWith(okSession()),
@@ -411,7 +345,7 @@ describe('the detail route', () => {
 })
 
 describe('the cold fold (issue #145)', () => {
-  function coldCtx(observe: (id: string) => Promise<unknown>, persistence: unknown = { backend: 'default' }): { ctx: Context; captured: { fetch?: RouteFetch } } {
+  function coldCtx(observe: (id: string) => Promise<unknown>, persistence: unknown = { backend: 'default' }): FakeCtx {
     return ctxOf({
       connection: { fetch: { register: () => () => {} } },
       sessions: sessionsWith(okSession()),
@@ -419,16 +353,6 @@ describe('the cold fold (issue #145)', () => {
       sessionQuery: { observeSession: (id: string) => observe(id) },
       sessionPersistence: persistence,
     })
-  }
-
-  function manyEvents(count: number): TimelineEvent[] {
-    const events: TimelineEvent[] = [header(1, { model: 'deepseek-v4-flash', provider: 'deepseek' })]
-    for (let seq = 2; seq <= count; seq++) {
-      events.push(seq % 2 === 0
-        ? userMessage(seq, [{ type: 'text', text: `question ${seq}` }], { kind: 'user' })
-        : assistantMessage(seq, { turn: seq, step: seq, usage: { inputTokens: 10, outputTokens: 5 } }))
-    }
-    return events
   }
 
   test('a monster log folds to the byte-identical detail, yielding to the event loop per chunk', async () => {
@@ -562,11 +486,7 @@ describe('createDetailGate projection reads', () => {
   test('without a handle the registry read answers, and an absent face answers undefined', () => {
     const gate = createDetailGate(ctxOf({ stateOf: (_session, key) => key }).ctx)
     assert.equal(gate.stateOf({}, 'contextTimeline'), 'contextTimeline')
-    const bare = ctxOf({}).ctx as unknown as Record<string, unknown>
-    bare.sessionProjections = {}
-    assert.equal(createDetailGate(bare as unknown as Context).stateOf({}, 'contextTimeline'), undefined)
-    delete bare.sessionProjections
-    assert.equal(createDetailGate(bare as unknown as Context).stateOf({}, 'contextTimeline'), undefined)
+    assert.equal(createDetailGate(fakeCtx({}, { sessionProjections: {} }).ctx).stateOf({}, 'contextTimeline'), undefined)
   })
 
   test('non-thenable registrations, non-handle resolutions, and hostile values keep the fallback', async () => {

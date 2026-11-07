@@ -4,19 +4,7 @@ import type { ProjectionDefinition } from '@deepseek-ai/dsh-session-projection'
 import { createContextActivityDefinition } from '../../../src/host/activity'
 import { createContextHeadersDefinition } from '../../../src/host/headers'
 import { createContextTimelineDefinition } from '../../../src/host/timeline'
-import {
-  assistantMessage,
-  compaction,
-  header,
-  planMode,
-  requestContext,
-  stepEnd,
-  stepStart,
-  systemMessage,
-  toolCall,
-  toolResult,
-  userMessage,
-} from '../helpers/events'
+import { canonicalLog, assistantMessage } from '../helpers/events'
 import type { TimelineEvent } from '../../../src/host/fold'
 import type { TimelineState } from '../../../src/host/foldState'
 import type { HeadersState } from '../../../src/host/headers'
@@ -24,27 +12,6 @@ import type { ActivityState } from '../../../src/host/activity'
 import { RegistryDriver, RegistryViolationError } from './registryDriver'
 import type { Checkpoint, SessionLike } from './registryDriver'
 import { assertStatesPlainJson, driveTimeline } from '../helpers/projection'
-
-function canonicalLog(): TimelineEvent[] {
-  return [
-    header(1, {
-      tools: [{ name: 'bash', description: 'run a command' }],
-      model: 'deepseek-v4-flash',
-      provider: 'deepseek',
-    }),
-    systemMessage(2),
-    requestContext(3, { contextWindow: 128000 }),
-    stepStart(4),
-    userMessage(5, [{ type: 'text', text: 'hello there' }], { kind: 'user' }),
-    assistantMessage(6, { turn: 1, step: 0, usage: { inputTokens: 10, outputTokens: 5, cacheReadTokens: 3 } }),
-    toolCall(7, { callId: 'c1', name: 'bash' }),
-    toolResult(8, { callId: 'c1', content: [{ type: 'text', text: 'ok' }] }),
-    stepEnd(9),
-    assistantMessage(10, { turn: 1, step: 1, usage: { inputTokens: 20, outputTokens: 8 } }),
-    compaction(11, 'summary', { shadowedTokenCount: 12, shadowedSeqs: [5] }),
-    planMode(12, { active: true }),
-  ]
-}
 
 function fullLog(): TimelineEvent[] {
   return [{ seq: 0, time: 0, type: 'session/created', data: {} } as unknown as TimelineEvent, ...canonicalLog()]
@@ -133,7 +100,7 @@ describe('registry contract — the semantics every supported line shares', () =
     assert.ok(rows !== undefined, 'checkpoint rows are losslessly JSON-serializable')
     for (const key of ['contextTimeline', 'contextHeaders']) {
       const row = rows[key] as { ver: number; seq: number }
-      assert.equal(row.ver, key === 'contextTimeline' ? 39 : 1)
+      assert.equal(row.ver, key === 'contextTimeline' ? 40 : 1)
       assert.equal(row.seq, 12)
     }
   })

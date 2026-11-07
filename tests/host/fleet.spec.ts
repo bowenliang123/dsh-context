@@ -1,104 +1,32 @@
 import assert from 'node:assert/strict'
 import { describe, test } from 'vitest'
-import type { Context } from '@deepseek-ai/cordis'
 import { FLEET_ROUTE, fleetDetailOfEvents, watchFleetChannel } from '../../src/host/fleet'
-import type { ColdReadGate } from '../../src/host/coldRead'
+import { connectionOf, fakeCtx, observing as observingOf, OPEN_GATE, postJson, SKIP_GATE } from './helpers/ctx'
+import type { FakeCtx, FakeRoute } from './helpers/ctx'
 
-type RouteFetch = (request: Request) => Promise<Response>
-
-interface CtxSpec {
-  connection?: unknown
-  sessionQuery?: unknown
-  sessionPersistence?: unknown
+const armed = (spec: Record<string, unknown> = {}): FakeCtx => {
+  const fake = fakeCtx({ connection: connectionOf(), ...spec })
+  watchFleetChannel(fake.ctx, OPEN_GATE)
+  return fake
 }
 
-function ctxOf(spec: CtxSpec): { ctx: Context; captured: { path?: string; fetch?: RouteFetch }; disposers: (() => void)[] } {
-  const captured: { path?: string; fetch?: RouteFetch } = {}
-  const disposers: (() => void)[] = []
-  const services = new Map<string, unknown>()
-  if ('connection' in spec) services.set('connection', spec.connection)
-  if ('sessionQuery' in spec) services.set('sessionQuery', spec.sessionQuery)
-  if ('sessionPersistence' in spec) services.set('sessionPersistence', spec.sessionPersistence)
-  const ctx = {
-    get: (name: string) => services.get(name),
-    effect(fn: () => unknown, _label?: string) {
-      const d = fn()
-      if (typeof d === 'function') disposers.push(d as () => void)
-      return () => {}
-    },
-    inject(deps: string[], cb: (c: unknown) => unknown) {
-      if (!deps.every(d => services.has(d))) return
-      const d = cb(ctx)
-      if (typeof d === 'function') disposers.push(d as () => void)
-    },
-  }
-  if (spec.connection !== undefined && spec.connection !== null) {
-    const conn = spec.connection as { fetch?: { register?: unknown } }
-    if (typeof conn.fetch?.register === 'function') {
-      conn.fetch.register = (route: { path: string; fetch: RouteFetch }) => {
-        captured.path = route.path
-        captured.fetch = route.fetch
-        return () => {}
-      }
-    }
-  }
-  return { ctx: ctx as unknown as Context, captured, disposers }
-}
+const call = (captured: FakeRoute, body: unknown): Promise<Record<string, unknown>> => postJson(captured, FLEET_ROUTE, body)
 
-const OPEN_GATE: ColdReadGate = { admit: read => read() }
-const SKIP_GATE: ColdReadGate = { admit: () => Promise.resolve(undefined) }
-
-function armed(spec: CtxSpec = {}): { captured: { path?: string; fetch?: RouteFetch } } {
-  const { ctx, captured } = ctxOf({ connection: { fetch: { register: () => () => {} } }, ...spec })
-  watchFleetChannel(ctx, OPEN_GATE)
-  return { captured }
-}
-
-async function call(captured: { fetch?: RouteFetch }, body: unknown): Promise<Record<string, unknown>> {
-  const request = new Request(`http://dsh.test${FLEET_ROUTE}`, {
-    method: 'POST',
-    headers: { 'content-type': 'application/json' },
-    ...(body === undefined ? {} : { body: JSON.stringify(body) }),
-  })
-  const response = await captured.fetch!(request)
-  return await response.json() as Record<string, unknown>
-}
-
-function observing(events: unknown, inheritedEventCount?: number): { observeSession(id: string, options: unknown): Promise<unknown>; wasDisposed(): boolean } {
-  let disposed = false
-  return {
-    wasDisposed: () => disposed,
-    observeSession: () => Promise.resolve({
-      events,
-      ...(inheritedEventCount !== undefined ? { inheritedEventCount } : {}),
-      get disposed() { return disposed },
-      [Symbol.dispose]() { disposed = true },
-    }),
-  }
-}
+const observing = (events: unknown, inheritedEventCount?: number): ReturnType<typeof observingOf> =>
+  observingOf(events, inheritedEventCount === undefined ? {} : { inheritedEventCount })
 
 describe('watchFleetChannel gating', () => {
   test('no route without the connection service or its fetch registry; a rejecting registry keeps it absent without throwing', () => {
     for (const spec of [{}, { connection: {} }, { connection: { fetch: {} } }]) {
-      const { ctx, captured } = ctxOf(spec)
+      const { ctx, captured } = fakeCtx(spec)
       watchFleetChannel(ctx, OPEN_GATE)
       assert.equal(captured.path, undefined, JSON.stringify(spec))
     }
     const { captured } = armed()
     assert.equal(captured.path, FLEET_ROUTE)
-    const ctx = {
-      get: (name: string) => name === 'connection'
-        ? {
-          fetch: {
-            register: () => {
-              throw new Error('registration rejected')
-            },
-          },
-        }
-        : undefined,
-      inject(_deps: string[], cb: (c: unknown) => unknown) { cb(ctx) },
-    }
-    assert.doesNotThrow(() => { watchFleetChannel(ctx as unknown as Context, OPEN_GATE) })
+    const rejecting = fakeCtx({ connection: { fetch: { register: () => { throw new Error('registration rejected') } } } })
+    assert.doesNotThrow(() => { watchFleetChannel(rejecting.ctx, OPEN_GATE) })
+    assert.equal(rejecting.captured.path, undefined)
   })
 
   test('bad bodies and missing session ids are typed failures', async () => {
@@ -115,12 +43,9 @@ describe('watchFleetChannel gating', () => {
     assert.deepEqual(await call(armed().captured, { sessionId: 's1' }), { ok: true, value: null })
     assert.deepEqual(await call(armed({ sessionQuery: {} }).captured, { sessionId: 's1' }), { ok: true, value: null })
     assert.deepEqual(await call(armed({ sessionQuery: observing(null) }).captured, { sessionId: 's1' }), { ok: true, value: null })
-    const { ctx, captured } = ctxOf({
-      connection: { fetch: { register: () => () => {} } },
-      sessionQuery: observing([]),
-    })
-    watchFleetChannel(ctx, SKIP_GATE)
-    assert.deepEqual(await call(captured, { sessionId: 's1' }), { ok: true, value: null })
+    const skipped = fakeCtx({ connection: connectionOf(), sessionQuery: observing([]) })
+    watchFleetChannel(skipped.ctx, SKIP_GATE)
+    assert.deepEqual(await call(skipped.captured, { sessionId: 's1' }), { ok: true, value: null })
   })
 
   test('events fold into the detail and the observation disposes', async () => {

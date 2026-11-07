@@ -1,7 +1,8 @@
 import { asRecord } from './record'
+import { stringOf } from '../shared/decode'
 import type { Context } from '@deepseek-ai/cordis'
 import type { SkillInfo } from '../shared/types'
-import { type ConnectionHostFace, registerPostRoute } from './connection'
+import { mountPostRoute, reply } from './postRoute'
 
 export const SKILLS_ROUTE = '/api/dsh-context/skills'
 
@@ -9,10 +10,6 @@ const MAX_SKILLS = 500
 
 interface SkillRegistryLike {
   list(options: { cwd?: string; scope?: unknown }): Promise<unknown>
-}
-
-function stringOf(value: unknown): string | undefined {
-  return typeof value === 'string' && value !== '' ? value : undefined
 }
 
 async function disposeOf(resource: unknown): Promise<void> {
@@ -102,9 +99,12 @@ async function resolveRegistry(
 }
 
 export function watchSkillCatalog(ctx: Context): void {
-  ctx.inject(['connection'], (c) => {
-
-    const handler = async (request: Request): Promise<Response> => {
+  mountPostRoute({
+    ctx,
+    deps: ['connection'],
+    path: SKILLS_ROUTE,
+    label: 'dsh-context: skills route',
+    handler: () => async (request: Request): Promise<Response> => {
       let value: { skills: SkillInfo[] } | null = null
       let lease: unknown
       try {
@@ -132,9 +132,7 @@ export function watchSkillCatalog(ctx: Context): void {
       } finally {
         await disposeOf(lease)
       }
-      return Response.json({ ok: true, value }, { headers: { 'cache-control': 'no-store' } })
-    }
-
-    registerPostRoute(c, c.get('connection') as ConnectionHostFace | undefined, SKILLS_ROUTE, handler, 'dsh-context: skills route')
+      return reply({ ok: true, value })
+    },
   })
 }
