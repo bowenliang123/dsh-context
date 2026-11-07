@@ -1,4 +1,4 @@
-export interface DockMeasure {
+interface DockMeasure {
   left: number
   right: number
   frame: HTMLElement | null

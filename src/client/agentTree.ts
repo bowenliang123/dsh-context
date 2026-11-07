@@ -23,12 +23,12 @@ export interface AgentRow {
   projections?: Record<string, unknown>
 }
 
-export interface AgentIdentity {
+interface AgentIdentity {
   mode: 'one-shot' | 'continuable'
   label?: string
 }
 
-export interface AgentStats {
+interface AgentStats {
   head: Headline | null
   requests: number
   billed: number | null
@@ -196,7 +196,7 @@ export function agentSelfOf(
   }
 }
 
-export function catalogOrderOf(values: Record<string, unknown> | undefined): Map<string, number> | null {
+function catalogOrderOf(values: Record<string, unknown> | undefined): Map<string, number> | null {
   const cat = values?.subagentCatalog
   if (!Array.isArray(cat)) return null
   const order = new Map<string, number>()
@@ -208,7 +208,7 @@ export function catalogOrderOf(values: Record<string, unknown> | undefined): Map
   return order.size > 0 ? order : null
 }
 
-export interface AgentChild {
+interface AgentChild {
   id: string
   row: AgentRow
 }
@@ -348,7 +348,7 @@ export function sessionTitlesOf(snapshot: unknown): Map<string, string> {
   return titles
 }
 
-export interface SubagentCostFold {
+interface SubagentCostFold {
   usage: SessionCostUsage | null
   cold: string[]
   count: number
@@ -391,14 +391,14 @@ export function subagentCostFoldOf(
   return { usage: parts.length > 0 ? mergeCostUsage(...parts) : null, cold, count: seen.size - 1 }
 }
 
-export interface AgentPoint {
+interface AgentPoint {
   id: string
   x: number
   y: number
   depth: number
 }
 
-export interface AgentLink {
+interface AgentLink {
   to: string
   running: boolean
   color: string
@@ -408,7 +408,7 @@ export interface AgentLink {
   y2: number
 }
 
-export interface AgentLayout {
+interface AgentLayout {
   width: number
   height: number
   cardW: number
@@ -560,7 +560,7 @@ export function neighborhoodOf(forest: AgentForest, id: string | null): Set<stri
   return found ? related : null
 }
 
-export interface BarSeg {
+interface BarSeg {
   key: string
   color: string
   share: number

@@ -1,6 +1,8 @@
 import { previewAddressOf } from './fileActivity'
 import type { AttachmentRef } from '../shared/attachment'
 import { ATTACHMENT_ROUTE } from './apiRoutes'
+import { lruTrim } from './boundedCache'
+import { postRouteQuietly } from './route'
 import { asRecord, openResourceVia } from './services'
 import type { AttachmentLocator, AttachmentOpener, ClientCtx } from './services'
 
@@ -23,27 +25,11 @@ export function makeAttachmentLocator(sessionId: string | undefined): Attachment
     const key = attachment.attachmentId
     const cached = paths.get(key)
     if (cached !== undefined) return cached
-    try {
-      const response = await fetch(ATTACHMENT_ROUTE, {
-        method: 'POST',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ sessionId, attachmentId: key }),
-      })
-      if (!response.ok) return null
-      const body = asRecord(await response.json())
-      if (body === null || body.ok !== true) return null
-      const path = pathOfValue(body.value)
-      if (path === null) return null
-      if (paths.size >= CACHE_MAX) {
-        const oldest = paths.keys().next().value
-        /* v8 ignore next 1 */
-        if (oldest !== undefined) paths.delete(oldest)
-      }
-      paths.set(key, path)
-      return path
-    } catch {
-      return null
-    }
+    const path = await postRouteQuietly(ATTACHMENT_ROUTE, { sessionId, attachmentId: key }, pathOfValue)
+    if (path === null) return null
+    paths.set(key, path)
+    lruTrim(paths, CACHE_MAX)
+    return path
   }
 }
 

@@ -4,6 +4,8 @@ import { registerContextCommand } from './command'
 import { makeContextModal } from './components/contextModal'
 import { makeOverviewPanel } from './components/overviewPanel'
 import { resetSessionWarm } from './prefetch'
+import { resetTimelineDetailStores } from './timelineSource'
+import { clearAttachmentPaths } from './attachmentSource'
 import { makePluginConfigCard } from './components/settingsCard'
 import { watchInsightPage } from './insightPage'
 import { modalStoreOf } from './modalStore'
@@ -54,7 +56,11 @@ function apply(ctx: ClientCtx): void {
   const t = ctx.locale.bind(NS)
 
   const kit = makeViewKit(t, ctx.locale)
-  ctx.effect(() => resetSessionWarm, 'dsh-context: warm-up timers')
+  ctx.effect(() => () => {
+    resetSessionWarm()
+    resetTimelineDetailStores()
+    clearAttachmentPaths()
+  }, 'dsh-context: warm-up timers')
   watchHistoryFaces(ctx)
   const settings = createContextSettings()
   const heads = makeAgentHeads()

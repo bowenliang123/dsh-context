@@ -2,7 +2,8 @@ import { useCallback, useSyncExternalStore } from 'react'
 import type { ContextTimeline } from '../shared/types'
 import type { SessionsFaceLike } from './agentTree'
 import { DETAIL_ROUTE } from './apiRoutes'
-import { lruTouch, lruTrim } from './lru'
+import { BoundedCache, byteSizeOf } from './boundedCache'
+import { postRoute } from './route'
 import { asRecord, timelineOf } from './services'
 
 export interface AgentHeads {
@@ -11,38 +12,50 @@ export interface AgentHeads {
 
 export function makeHeadFetcher(sessionId: string): (() => Promise<ContextTimeline | null>) | undefined {
   if (sessionId === '') return undefined
-  return async () => {
-    const response = await fetch(DETAIL_ROUTE, {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ sessionId, head: true }),
-    })
-    if (!response.ok) throw new Error(`dsh-context: head route HTTP ${response.status}`)
-    const r = asRecord(await response.json())
-    if (r === null || r.ok !== true) throw new Error('dsh-context: head read failed')
-    if (r.value === null) return null
-    const head = timelineOf(asRecord(r.value)?.head)
-    if (head === null) throw new Error('dsh-context: head read malformed')
-    return head
-  }
+  return () => postRoute(
+    DETAIL_ROUTE,
+    { sessionId, head: true },
+    value => timelineOf(asRecord(value)?.head),
+    { label: 'head' },
+  )
 }
 
 const HEADS_MAX = 128
 
+const HEADS_BYTES_MAX = 1024 * 1024
+
+interface HeadEntry {
+  promise: Promise<ContextTimeline | null>
+  bytes: number
+}
+
 export function makeAgentHeads(): AgentHeads {
-  const heads = new Map<string, Promise<ContextTimeline | null>>()
+  const heads = new BoundedCache<string, HeadEntry>({
+    maxEntries: HEADS_MAX,
+    maxBytes: HEADS_BYTES_MAX,
+    sizeOf: entry => entry.bytes,
+  })
+  const inflight = new Map<string, HeadEntry>()
   return {
     headOf(id: string): Promise<ContextTimeline | null> {
       const cached = heads.get(id)
-      if (cached !== undefined) {
-        lruTouch(heads, id)
-        return cached
-      }
+      if (cached !== undefined) return cached.promise
+      const running = inflight.get(id)
+      if (running !== undefined) return running.promise
       const fetcher = makeHeadFetcher(id)
+      const entry: HeadEntry = { promise: Promise.resolve(null), bytes: 0 }
       const pending = fetcher !== undefined ? fetcher() : Promise.resolve(null)
-      heads.set(id, pending)
-      lruTrim(heads, HEADS_MAX)
-      return pending
+      entry.promise = pending.then((head) => {
+        inflight.delete(id)
+        entry.bytes = head === null ? 0 : byteSizeOf(head)
+        heads.set(id, entry)
+        return head
+      }, (error: unknown) => {
+        inflight.delete(id)
+        throw error
+      })
+      inflight.set(id, entry)
+      return entry.promise
     },
   }
 }

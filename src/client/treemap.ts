@@ -2,6 +2,7 @@ import type { Category, SurfaceNode } from '../shared/types'
 import type { Assembled } from './assemble'
 import { MESSAGE_CATS } from './categories'
 import type { Translate } from './i18n'
+import { formLabelOf } from './labels'
 
 const MAX_BLOCKS = 12
 const TOP_BLOCKS = MAX_BLOCKS - 1
@@ -21,8 +22,8 @@ export interface MapCat {
   blocks: MapBlock[]
 }
 
-export interface MapBox { x: number; y: number; w: number; h: number }
-export interface Laid<T> { item: T; rect: MapBox }
+interface MapBox { x: number; y: number; w: number; h: number }
+interface Laid<T> { item: T; rect: MapBox }
 
 function groupOf(n: SurfaceNode, t: Translate): { gkey: string; label: string } {
   switch (n.cat) {
@@ -30,8 +31,8 @@ function groupOf(n: SurfaceNode, t: Translate): { gkey: string; label: string } 
     case 'skill':
       return n.skill !== undefined
         ? { gkey: 'skill:' + n.skill, label: n.skill }
-        : { gkey: 'skill~' + (n.form || 'context'), label: t('form.' + (n.form || 'context')) }
-    default: return { gkey: 'inject:' + (n.form || 'context'), label: t('form.' + (n.form || 'context')) }
+        : { gkey: 'skill~' + (n.form || 'context'), label: formLabelOf(t, n.form) }
+    default: return { gkey: 'inject:' + (n.form || 'context'), label: formLabelOf(t, n.form) }
   }
 }
 

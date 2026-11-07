@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import { describe, test } from 'vitest'
-import { lruTouch, lruTrim } from '../../src/client/lru'
+import { lruTouch, lruTrim } from '../../src/client/boundedCache'
 
 describe('lruTouch', () => {
   test('a hit moves the key to the newest end; a miss leaves the map alone', () => {

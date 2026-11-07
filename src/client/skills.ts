@@ -1,5 +1,6 @@
 import type { SkillInfo } from '../shared/types'
 import { SKILLS_ROUTE } from './apiRoutes'
+import { postRouteQuietly } from './route'
 import { asRecord } from './services'
 
 export function skillInfoListOf(value: unknown): SkillInfo[] | null {
@@ -23,23 +24,15 @@ export async function readSkillCatalog(
   cwd: string | undefined,
   sessionId: string | undefined,
 ): Promise<ReadonlyMap<string, SkillInfo> | null> {
-  try {
-    const response = await fetch(SKILLS_ROUTE, {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({
-        ...(cwd === undefined ? {} : { cwd }),
-        ...(sessionId === undefined ? {} : { sessionId }),
-      }),
-    })
-    if (!response.ok) return null
-    const body = asRecord(await response.json())
-    const list = body === null || body.ok !== true ? null : skillInfoListOf(body.value)
-    if (list === null || list.length === 0) return null
-    return new Map(list.map(info => [info.name, info]))
-  } catch {
-    return null
-  }
+  return postRouteQuietly(
+    SKILLS_ROUTE,
+    { ...(cwd === undefined ? {} : { cwd }), ...(sessionId === undefined ? {} : { sessionId }) },
+    (value) => {
+      const list = skillInfoListOf(value)
+      if (list === null || list.length === 0) return null
+      return new Map(list.map(info => [info.name, info]))
+    },
+  )
 }
 
 type TextCopier = (text: string) => Promise<void>

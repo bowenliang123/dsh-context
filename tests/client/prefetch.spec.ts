@@ -2,7 +2,7 @@ import assert from 'node:assert/strict'
 import { act, createElement as h } from 'react'
 import { afterEach, describe, test, vi } from 'vitest'
 import { resetSessionWarm, scheduleSessionWarm, useSessionDetailWarm } from '../../src/client/prefetch'
-import { resetTimelineDetailStores } from '../../src/client/timelineSource'
+import { detailStoreOf, resetTimelineDetailStores } from '../../src/client/timelineSource'
 import { mount } from './helpers/kit'
 
 function detail(rev: number): unknown {
@@ -17,12 +17,12 @@ function detail(rev: number): unknown {
   }
 }
 
-function stubDetail(): { reads: string[] } {
+function stubDetail(rev = 1): { reads: string[] } {
   const reads: string[] = []
   vi.stubGlobal('fetch', async (_url: unknown, init?: { body?: string }) => {
     const id = JSON.parse(init?.body ?? '{}').sessionId as string
     reads.push(id)
-    return { ok: true, status: 200, json: async () => ({ ok: true, value: detail(1) }) }
+    return { ok: true, status: 200, json: async () => ({ ok: true, value: detail(rev) }) }
   })
   return { reads }
 }
@@ -58,6 +58,18 @@ describe('scheduleSessionWarm', () => {
     scheduleSessionWarm('s1', 1)
     await vi.advanceTimersByTimeAsync(1000)
     assert.deepEqual(reads, ['s1'], 'the landed revision covers a replay')
+  })
+
+  test('the fired window warms the newest scheduled revision, not the first', async () => {
+    vi.useFakeTimers()
+    const { reads } = stubDetail(5)
+    detailStoreOf('s1').warm(5)
+    await vi.advanceTimersByTimeAsync(0)
+    assert.deepEqual(reads, ['s1'])
+    scheduleSessionWarm('s1', 1)
+    scheduleSessionWarm('s1', 6)
+    await vi.advanceTimersByTimeAsync(900)
+    assert.deepEqual(reads, ['s1', 's1'], 'the upgraded revision warmed the channel')
   })
 
   test('the pending map stays bounded under a burst of sessions', async () => {

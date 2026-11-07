@@ -11,12 +11,12 @@ interface PulseTimelineBase {
   to: string
 }
 
-export interface PulseMessageItem extends PulseTimelineBase {
+interface PulseMessageItem extends PulseTimelineBase {
   kind: 'message'
   row: CommsRow
 }
 
-export interface PulseDelegationItem extends PulseTimelineBase {
+interface PulseDelegationItem extends PulseTimelineBase {
   kind: 'delegation'
   delegation: FleetDelegationRow
 }
@@ -82,21 +82,21 @@ export const PULSE_TASK_LANE_HEIGHT = 40
 export const PULSE_POINT_PITCH = 32
 export const PULSE_TRACK_PADDING = 8
 
-export interface PulseLaneLayout {
+interface PulseLaneLayout {
   id: string
   top: number
   height: number
   center: number
 }
 
-export interface PulsePointLayout {
+interface PulsePointLayout {
   key: string
   item: PulseTimelineItem
   x: number
   y: number
 }
 
-export interface PulseLayout {
+interface PulseLayout {
   width: number
   lanes: PulseLaneLayout[]
   points: PulsePointLayout[]
@@ -153,7 +153,7 @@ export interface PulseLaneLink {
   to: string
 }
 
-export interface PulseLaneView {
+interface PulseLaneView {
   visible: string[]
   matched: ReadonlySet<string>
 }
@@ -257,7 +257,7 @@ export function pulseTaskLaneIdsOf(
   return ids
 }
 
-export type PulseWorkAgentState = 'running' | 'latest_complete' | 'idle'
+type PulseWorkAgentState = 'running' | 'latest_complete' | 'idle'
 
 export interface PulseWorkItem {
   key: string

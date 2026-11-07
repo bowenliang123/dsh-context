@@ -22,7 +22,7 @@ export interface PriceTriple { hit: number; miss: number; write: number; out: nu
 
 export type ModelPrices = Record<string, Record<string, PriceTriple>>
 
-export type PriceVia =
+type PriceVia =
   | 'direct'
   | 'branch-suffix'
   | 'branch-normalized'
@@ -32,9 +32,9 @@ export type PriceVia =
   | 'family'
   | 'index'
 
-export type PriceConfidence = 'high' | 'medium' | 'low'
+type PriceConfidence = 'high' | 'medium' | 'low'
 
-export interface PriceCandidate {
+interface PriceCandidate {
   pid: string
   mid: string
   rate: PriceTriple
@@ -42,7 +42,7 @@ export interface PriceCandidate {
   lab?: string
 }
 
-export type PriceMissReason = 'book-unavailable' | 'model-unknown' | 'ambiguous' | 'no-entry'
+type PriceMissReason = 'book-unavailable' | 'model-unknown' | 'ambiguous' | 'no-entry'
 
 export type PriceMiss =
   | { reason: 'ambiguous'; candidates: number }
@@ -57,11 +57,11 @@ export interface PriceFace {
   canonical?: string
 }
 
-export type PriceResolution =
+type PriceResolution =
   | { kind: 'priced'; face: PriceFace }
   | { kind: 'unpriced'; miss: PriceMiss }
 
-export interface PriceBranch {
+interface PriceBranch {
   pid: string
   byExact: Map<string, PriceCandidate[]>
   bySuffix: Map<string, PriceCandidate[]>
@@ -71,7 +71,7 @@ export interface PriceBranch {
   multiVendor: boolean
 }
 
-export interface PriceIndex {
+interface PriceIndex {
   byModel: Map<string, PriceCandidate[]>
   byNormalized: Map<string, PriceCandidate[]>
   branches: Map<string, PriceBranch>
@@ -79,7 +79,7 @@ export interface PriceIndex {
 
 export interface ModelBook { prices: ModelPrices; index: PriceIndex }
 
-export type PriceLookup =
+type PriceLookup =
   | { provider: string; model: string; face: PriceFace; miss?: undefined }
   | { provider: string; model: string; face: null; miss: PriceMiss }
 

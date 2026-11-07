@@ -4,7 +4,7 @@ import { useSessionsSnapshot } from './agentHeads'
 import type { AgentForest, AgentSelfStats } from './agentTree'
 import { agentForestOf, sessionTitlesOf, sessionsFaceOf } from './agentTree'
 import { FleetDetailCache } from './fleetDetail'
-import { lruTrim } from './lru'
+import { lruTrim } from './boundedCache'
 import { teamOf, type FleetTeam } from './fleetTeam'
 import { asRecord, type ClientCtx } from './services'
 import type { ContextTimeline, FleetDetail } from '../shared/types'
@@ -14,6 +14,14 @@ export interface FleetModel {
   team: FleetTeam | null
   titles: ReadonlyMap<string, string>
 }
+
+const HEADS_LANDED_MAX = 512
+
+const LANDED_MAX = 512
+
+const HISTORY_LANDED_MAX = 64
+
+const AUTO_HISTORY_MAX = 256
 
 export function teamOfSnapshot(snapshot: unknown, forest: AgentForest | null): FleetTeam | null {
   if (forest === null) return null
@@ -45,21 +53,33 @@ export function useFleetModel(
   }, [face, sessionId])
 
   const [landed, setLanded] = useState<ReadonlyMap<string, ContextTimeline>>(new Map())
+  const requested = useRef(new Map<string, number>())
 
   const forest = useMemo(
     () => agentForestOf(snapshot, sessionId, self, landed),
     [snapshot, sessionId, self, landed],
   )
 
+  useEffect(() => { requested.current.clear() }, [sessionId])
+
   useEffect(() => {
     if (forest === null) return
     const attach = (pending: Promise<ContextTimeline | null>, id: string): void => {
       void pending.then((head) => {
-        if (head !== null) setLanded(prev => prev.get(id) === head ? prev : new Map(prev).set(id, head))
-      }).catch(() => {})
+        if (head === null) return
+        setLanded((prev) => {
+          const next = new Map(prev)
+          next.delete(id)
+          next.set(id, head)
+          lruTrim(next, HEADS_LANDED_MAX)
+          return next
+        })
+      }, () => { requested.current.delete(id) })
     }
     for (const n of forest.nodes) {
       if (n.isCurrent || (n.head !== null && n.head.parts.length > 0)) continue
+      if ((requested.current.get(n.id) ?? Number.NEGATIVE_INFINITY) >= n.updatedAt) continue
+      requested.current.set(n.id, n.updatedAt)
       attach(heads.headOf(n.id), n.id)
     }
   }, [forest, heads])
@@ -82,7 +102,7 @@ export interface FleetDetailState {
   requestFull(id: string): void
 }
 
-export interface FleetDetailOptions {
+interface FleetDetailOptions {
   concurrency?: number
   refreshDelayMs?: number
   scopeKey?: string
@@ -115,6 +135,7 @@ export function useFleetDetails(cache?: FleetDetailCache, options: FleetDetailOp
   const [historyPending, setHistoryPending] = useState<ReadonlySet<string>>(new Set())
   const requested = useRef(new Map<string, number>())
   const historyRequested = useRef(new Map<string, number>())
+  const autoHistory = useRef(new Set<string>())
   const mounted = useRef(true)
   const active = useRef(0)
   const queue = useRef<QueueTask[]>([])
@@ -133,11 +154,27 @@ export function useFleetDetails(cache?: FleetDetailCache, options: FleetDetailOp
           ? historyRequested.current.get(task.id) === task.stamp
           : requested.current.get(task.id) === task.stamp
         if (!mounted.current || !currentValid) return
-        if (task.history) setHistoryLanded(prev => new Map(prev).set(task.id, { detail, updatedAt: task.stamp }))
-        else {
-          setLanded(prev => new Map(prev).set(task.id, { detail, updatedAt: task.stamp }))
-          /* v8 ignore next 1 */
-          if (detail !== null && detail.messagesTotal !== undefined) requestHistory(task.id, task.stamp)
+        if (task.history) {
+          setHistoryLanded((prev) => {
+            const next = new Map(prev)
+            next.delete(task.id)
+            next.set(task.id, { detail, updatedAt: task.stamp })
+            lruTrim(next, HISTORY_LANDED_MAX)
+            return next
+          })
+        } else {
+          setLanded((prev) => {
+            const next = new Map(prev)
+            next.delete(task.id)
+            next.set(task.id, { detail, updatedAt: task.stamp })
+            lruTrim(next, LANDED_MAX)
+            return next
+          })
+          if (detail !== null && detail.messagesTotal !== undefined
+            && !autoHistory.current.has(task.id) && autoHistory.current.size < AUTO_HISTORY_MAX) {
+            autoHistory.current.add(task.id)
+            requestHistory(task.id, task.stamp)
+          }
         }
         const clear = task.history ? setHistoryPending : setPending
         clear((prev) => {
@@ -221,6 +258,7 @@ export function useFleetDetails(cache?: FleetDetailCache, options: FleetDetailOp
     requested.current.clear()
     historyRequested.current.clear()
     owned?.clear()
+    autoHistory.current = new Set()
     fullRequested.current.clear()
     fullKnown.current = new Set()
     fullInFlight.current.clear()

@@ -117,7 +117,7 @@ export function programOf(rec: CommandRecord): string {
   return tool === null ? rec.tool : programOfCommand(tool, rec.cmd ?? '')
 }
 
-export interface ProgramCount {
+interface ProgramCount {
   name: string
   n: number
   runs: number
@@ -145,7 +145,7 @@ export function programsOf(views: readonly CommandView[]): ProgramCount[] {
     .sort((a, b) => (b.n - a.n) || (a.name < b.name ? -1 : 1))
 }
 
-export interface CommandAttention {
+interface CommandAttention {
   slowest?: { cmd: string; ms: number }
   failing?: { program: string; count: number }
   repeats?: { cmd: string; count: number }

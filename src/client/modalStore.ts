@@ -1,3 +1,4 @@
+import { lruTouch, lruTrim } from './boundedCache'
 import type { TokenSpan } from './services'
 
 export interface ModalStore {
@@ -6,11 +7,16 @@ export interface ModalStore {
   set(open: boolean): void
 }
 
+const MODAL_STORES_MAX = 32
+
 const stores = new Map<string, ModalStore>()
 
 export function modalStoreOf(sessionId: string): ModalStore {
   const existing = stores.get(sessionId)
-  if (existing !== undefined) return existing
+  if (existing !== undefined) {
+    lruTouch(stores, sessionId)
+    return existing
+  }
   let open = false
   const listeners = new Set<() => void>()
   const store: ModalStore = {
@@ -26,6 +32,7 @@ export function modalStoreOf(sessionId: string): ModalStore {
     },
   }
   stores.set(sessionId, store)
+  lruTrim(stores, MODAL_STORES_MAX)
   return store
 }
 

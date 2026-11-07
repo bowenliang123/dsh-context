@@ -37,7 +37,7 @@ function monoMarkup(id: string): string {
     + canvasRect('currentColor', ` mask="url(#${thin})"`)
 }
 
-export interface ContextIconProps {
+interface ContextIconProps {
   size?: number
   className?: string
   mono?: boolean

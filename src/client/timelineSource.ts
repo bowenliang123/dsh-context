@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useSyncExternalStore } from 'react'
 import type { ContextTimeline, ContextTimelineDetail } from '../shared/types'
 import { DETAIL_ROUTE } from './apiRoutes'
+import { BoundedCache } from './boundedCache'
+import { postRoute } from './route'
 import type { SessionStandardProps } from './services'
 import { asRecord, collectionsOf, projectionOf, timelineOf } from './services'
 
@@ -20,23 +22,10 @@ export function makeDetailFetcher(
   sessionId: string,
 ): (() => Promise<ContextTimelineDetail | null>) | undefined {
   if (sessionId === '') return undefined
-  return async () => {
-    const response = await fetch(DETAIL_ROUTE, {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ sessionId }),
-    })
-    if (!response.ok) throw new Error(`dsh-context: detail route HTTP ${response.status}`)
-    const r = asRecord(await response.json())
-    if (r === null || r.ok !== true) throw new Error('dsh-context: detail read failed')
-    if (r.value === null) return null
-    const detail = detailOf(r.value)
-    if (detail === null) throw new Error('dsh-context: detail read malformed')
-    return detail
-  }
+  return () => postRoute(DETAIL_ROUTE, { sessionId }, detailOf, { label: 'detail' })
 }
 
-export interface DetailSnap {
+interface DetailSnap {
   detail: ContextTimelineDetail | null
   failed: boolean
   pending: boolean
@@ -280,43 +269,25 @@ export function detailBytesOf(detail: ContextTimelineDetail): number {
 
 const DETAIL_STORE_ENTRIES_MAX = 64
 
-const stores = new Map<string, DetailStore>()
-
-function payloadHolders(): number {
-  let held = 0
-  for (const store of stores.values()) if (store.hasPayload) held++
-  return held
-}
-
-function payloadBytes(): number {
-  let bytes = 0
-  for (const store of stores.values()) bytes += store.byteSize
-  return bytes
-}
+const stores = new BoundedCache<string, DetailStore>({
+  maxEntries: DETAIL_STORE_ENTRIES_MAX,
+  maxBytes: DETAIL_BYTES_MAX,
+  maxWeight: DETAIL_STORES_MAX,
+  sizeOf: store => store.byteSize,
+  weightOf: store => (store.hasPayload ? 1 : 0),
+  evictable: store => !store.active,
+  onEvict: (store) => { store.release() },
+})
 
 export function detailStoreOf(sessionId: string): DetailStore {
   const known = stores.get(sessionId)
-  const store = known ?? new DetailStore(makeDetailFetcher(sessionId), DETAIL_DEBOUNCE_MS, true)
-  if (known !== undefined) stores.delete(sessionId)
+  if (known !== undefined) {
+    stores.trim({ protect: sessionId })
+    return known
+  }
+  stores.trim({ reserveWeight: 1 })
+  const store = new DetailStore(makeDetailFetcher(sessionId), DETAIL_DEBOUNCE_MS, true)
   stores.set(sessionId, store)
-  let excess = payloadHolders() - DETAIL_STORES_MAX + (store.hasPayload ? 0 : 1)
-  let bytes = payloadBytes()
-  for (const candidate of stores.values()) {
-    if (excess <= 0 && bytes <= DETAIL_BYTES_MAX) break
-    if (candidate === store || candidate.active || !candidate.hasPayload) continue
-    bytes -= candidate.byteSize
-    candidate.release()
-    excess--
-  }
-  if (stores.size > DETAIL_STORE_ENTRIES_MAX) {
-    for (const id of stores.keys()) {
-      if (stores.size <= DETAIL_STORE_ENTRIES_MAX) break
-      if (id === sessionId) continue
-      const candidate = stores.get(id)
-      if (candidate === undefined || candidate.active) continue
-      stores.delete(id)
-    }
-  }
   return store
 }
 

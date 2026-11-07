@@ -1,7 +1,7 @@
 import type { ContextSettings } from './settings'
 import type { DefaultPlacement } from '../shared/types'
 
-export interface PlacementMounts {
+interface PlacementMounts {
   tab(): unknown
   sidebar(): unknown
 }

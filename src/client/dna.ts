@@ -2,6 +2,7 @@ import type { Category, SurfaceNode } from '../shared/types'
 import type { Assembled } from './assemble'
 import { CAT_COLOR } from './categories'
 import type { Translate } from './i18n'
+import { formLabelOf } from './labels'
 
 export type DnaItem =
   | { key: string; cat: 'system' | 'tools'; tokens: number; time?: number }
@@ -47,7 +48,7 @@ export function trendBandsOf(view: Assembled): TrendBand[] {
   return bands
 }
 
-export type DeltaBand =
+type DeltaBand =
   | { key: string; cat: 'system' | 'tools'; tokens: number; off: number; color: string }
   | { key: string; cat: Category; tokens: number; off: number; color: string; node: SurfaceNode }
 
@@ -107,6 +108,6 @@ export function dnaBaseLabel(b: DnaItem | TrendBand | DeltaBand, t: Translate, c
   const n = b.node
   return n.skill !== undefined ? t('node.skillTag', { name: n.skill })
     : n.cat === 'tool' ? (n.tool ?? '?')
-      : n.cat === 'inject' ? t('form.' + (n.form || 'context'))
+      : n.cat === 'inject' ? formLabelOf(t, n.form)
         : catLabel(n.cat)
 }

@@ -1,4 +1,4 @@
-export interface ScrollPos {
+interface ScrollPos {
   top?: number
   left?: number
 }

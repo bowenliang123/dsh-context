@@ -2,7 +2,7 @@ import type { ContextBreakdown, ContextPressure, ContextTimeline, TokenUsage } f
 import { contextBreakdownOf, contextPressureOf, projectionOf, tokenUsageOf, type SessionStandardProps } from './services'
 import { useTimelineSource, type TimelineSource } from './timelineSource'
 
-export interface ContextSession {
+interface ContextSession {
   source: TimelineSource
   data: ContextTimeline | null
   pressure: ContextPressure | null

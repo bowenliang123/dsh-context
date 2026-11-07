@@ -84,7 +84,7 @@ export function initialsOf(name: string): string {
 
 const AVATAR_LINE_MAX = 3
 
-export interface AvatarLabel {
+interface AvatarLabel {
   lines: readonly string[]
   condensed: boolean
 }

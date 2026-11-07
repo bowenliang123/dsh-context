@@ -42,14 +42,14 @@ export const IconInspect = resolveIcon('IconInspectOutlineRegular')
 export const IconPlugin = resolveIcon('IconPluginPinwheelOutlineRegular')
 export const IconSkill = resolveIcon('IconSkillOutlineRegular')
 
-export interface FileGlyphProps {
+interface FileGlyphProps {
   path?: string
   kind?: string
   size?: number
   className?: string
 }
 
-export type FileGlyphComponent = (props: FileGlyphProps) => ReactElement | null
+type FileGlyphComponent = (props: FileGlyphProps) => ReactElement | null
 
 export function resolveFileGlyph(source: Record<string, unknown> = ns): FileGlyphComponent {
   const found = exportOf('FileTypeIcon', source)

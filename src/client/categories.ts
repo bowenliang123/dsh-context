@@ -79,7 +79,7 @@ const countOf = (value: number | undefined): number =>
 
 export const RING_ORDER: readonly string[] = ['system', 'tools', 'user', 'inject', 'skill', 'toolCalls', 'thinking', 'answers']
 
-export interface GeneratedTokens {
+interface GeneratedTokens {
   reasoning?: number
   answers?: number
   calls?: number

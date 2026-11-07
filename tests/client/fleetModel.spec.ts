@@ -10,10 +10,22 @@ import {
 } from '../../src/client/fleetModel'
 import { FleetDetailCache } from '../../src/client/fleetDetail'
 import type { AgentNode } from '../../src/client/agentTree'
-import type { FleetDetail } from '../../src/shared/types'
+import type { ContextTimeline, FleetDetail } from '../../src/shared/types'
 import { TestClientCtx, asClientCtx } from './helpers/harness'
-import { flush, mount } from './helpers/kit'
+import { flush, mount, until } from './helpers/kit'
 import { makeAgentHeads } from '../../src/client/agentHeads'
+
+function headTimeline(total: number): ContextTimeline {
+  return {
+    ok: true,
+    current: { system: 0, tools: 0, user: total, inject: 0, skill: 0, assistant: 0, tool: 0, total },
+    requests: [],
+    events: [],
+    nodes: [],
+    droppedNodes: 0,
+    archive: [],
+  }
+}
 
 function nodeOf(id: string, over: Partial<AgentNode> = {}): AgentNode {
   return {
@@ -100,6 +112,103 @@ describe('useFleetModel', () => {
     assert.equal(box.current?.team?.members[0]?.name, 'lead')
     assert.equal(box.current?.titles.get('s1'), 'Main')
     assert.deepEqual(refreshed, ['s1'])
+    await m.unmount()
+    ctx.dispose()
+  })
+
+  test('a wide fleet asks every child once and the landed ledger stays bounded', async () => {
+    const byId: Record<string, unknown> = { s1: { displayTitle: 'Main', running: true, updatedAt: 1 } }
+    for (let i = 0; i < 130; i++) byId[`kid-${i}`] = { parentId: 's1', origin: 'subagent', running: false, updatedAt: 2 }
+    const ctx = new TestClientCtx({ services: { sessions: sessionsFace(byId, []) } })
+    const calls: string[] = []
+    const heads = { headOf: (id: string) => { calls.push(id); return Promise.resolve(headTimeline(5)) } }
+    const box: { current: FleetModel | null } = { current: null }
+    function Probe(): null {
+      box.current = useFleetModel(asClientCtx(ctx), heads, 's1', undefined, true)
+      return null
+    }
+    const m = await mount(h(Probe))
+    await until(() => calls.length === 130, 'the fleet head reads never completed')
+    await flush()
+    assert.equal(box.current?.forest?.nodes.length, 131, 'the whole family stays in the model')
+    assert.equal(calls.length, 130, 'an evicted child is never re-requested')
+    await m.unmount()
+    ctx.dispose()
+  })
+
+  test('a failed head read retries on the next snapshot change; an absent one re-asks only when its stamp advances', async () => {
+    let snapshot: { byId: Record<string, unknown> } = {
+      byId: {
+        s1: { displayTitle: 'Main', running: true, updatedAt: 1 },
+        kid: { parentId: 's1', origin: 'subagent', running: false, updatedAt: 2 },
+      },
+    }
+    const listeners = new Set<() => void>()
+    const ctx = new TestClientCtx({
+      services: {
+        sessions: {
+          list: {
+            getSnapshot: (): unknown => snapshot,
+            subscribe: (fn: () => void) => { listeners.add(fn); return () => { listeners.delete(fn) } },
+          },
+        },
+      },
+    })
+    let calls = 0
+    let fail = true
+    const heads = {
+      headOf: (): Promise<ContextTimeline | null> => {
+        calls += 1
+        return fail ? Promise.reject(new Error('down')) : Promise.resolve(null)
+      },
+    }
+    const box: { current: FleetModel | null } = { current: null }
+    function Probe(): null {
+      box.current = useFleetModel(asClientCtx(ctx), heads, 's1', undefined, true)
+      return null
+    }
+    const m = await mount(h(Probe))
+    await until(() => calls === 1, 'the first child read never fired')
+    fail = false
+    await act(async () => {
+      snapshot = { byId: { ...snapshot.byId, s1: { displayTitle: 'Main', running: true, updatedAt: 3 } } }
+      for (const fn of listeners) fn()
+    })
+    await until(() => calls === 2, 'the failed read never retried')
+    await flush()
+    assert.equal(calls, 2, 'an unchanged child stamp is not re-asked on every snapshot change')
+    await act(async () => {
+      snapshot = { byId: { ...snapshot.byId, kid: { parentId: 's1', origin: 'subagent', running: false, updatedAt: 9 } } }
+      for (const fn of listeners) fn()
+    })
+    await flush()
+    assert.equal(calls, 3, 'the advanced child stamp re-asks the absent head')
+    await m.unmount()
+    ctx.dispose()
+  })
+
+  test('switching sessions reads each session\'s own child and reuses the landed head on return', async () => {
+    const byId: Record<string, unknown> = {
+      s1: { displayTitle: 'One', running: true, updatedAt: 1 },
+      s2: { displayTitle: 'Two', running: true, updatedAt: 1 },
+      kid: { parentId: 's1', origin: 'subagent', running: false, updatedAt: 2 },
+      kid2: { parentId: 's2', origin: 'subagent', running: false, updatedAt: 2 },
+    }
+    const ctx = new TestClientCtx({ services: { sessions: sessionsFace(byId, []) } })
+    const calls: string[] = []
+    const heads = { headOf: (id: string) => { calls.push(id); return Promise.resolve(headTimeline(5)) } }
+    function Probe(props: { id: string }): null {
+      useFleetModel(asClientCtx(ctx), heads, props.id, undefined, true)
+      return null
+    }
+    const m = await mount(h(Probe, { id: 's1' }))
+    await until(() => calls.length === 1, 'the first session child read never fired')
+    await m.update(h(Probe, { id: 's2' }))
+    await until(() => calls.length === 2, 'the second session child read never fired')
+    assert.deepEqual(calls, ['kid', 'kid2'])
+    await m.update(h(Probe, { id: 's1' }))
+    await flush()
+    assert.deepEqual(calls, ['kid', 'kid2'], 'the already-landed head serves the return')
     await m.unmount()
     ctx.dispose()
   })
@@ -325,6 +434,26 @@ describe('useFleetDetails', () => {
     await m.unmount()
   })
 
+})
+
+describe('useFleetDetails — bounded ledgers and the auto-history cap', () => {
+  test('the excerpt and history ledgers stay bounded and auto history is capped', async () => {
+    const cache = new FleetDetailCache()
+    vi.spyOn(cache, 'fetch').mockImplementation(() => Promise.resolve({ messages: [], truncated: false, messagesTotal: 5 }))
+    const historyReads = vi.spyOn(cache, 'fetchHistory').mockImplementation(() => Promise.resolve({ messages: [], truncated: false }))
+    const { box, Probe } = probeDetails(cache)
+    const m = await mount(h(Probe))
+    const state = box.current as FleetDetailState
+    act(() => { for (let i = 0; i < 520; i++) state.request(`s${i}`, 1) })
+    await until(() => box.current?.landed.size === 512, 'the excerpt ledger never bounded')
+    await until(() => box.current?.historyLanded.size === 64, 'the history ledger never bounded')
+    assert.equal(historyReads.mock.calls.length, 256, 'auto history is bounded to the moderate-fleet budget')
+    assert.equal(box.current?.landed.has('s0'), false, 'the oldest excerpt left the ledger')
+    assert.equal(box.current?.landed.has('s519'), true, 'the newest excerpt stays')
+    act(() => { for (let i = 0; i < 520; i++) (box.current as FleetDetailState).requestHistory(`s${i}`, 1) })
+    await until(() => box.current?.historyLanded.size === 64, 'the manual history ledger never bounded')
+    await m.unmount()
+  })
 })
 
 describe('useFleetDetails history and scope', () => {

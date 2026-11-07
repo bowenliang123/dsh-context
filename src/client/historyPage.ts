@@ -1,5 +1,5 @@
 import { useSyncExternalStore } from 'react'
-import { lruTouch, lruTrim } from './lru'
+import { BoundedCache } from './boundedCache'
 import type {
   ClientCtx, ContentFetcher, ConversationNodeLike, HeaderFetcher,
   HistoryEntryLike, SessionAddressLike, SessionPageFace,
@@ -211,18 +211,12 @@ export function makeContentFetcher(
 ): ContentFetcher | undefined {
   const read = pageReaderOf(addressOf)
   if (read === undefined) return undefined
-  const cache = new Map<number, ConversationNodeLike>()
+  const cache = new BoundedCache<number, ConversationNodeLike>({ maxEntries: CONTENT_CACHE_MAX })
   return async (seq) => {
     const hit = cache.get(seq)
-    if (hit !== undefined) {
-      lruTouch(cache, seq)
-      return hit
-    }
+    if (hit !== undefined) return hit
     const node = pageNodesOf(rowsOf(await read(seq))).get(seq) ?? null
-    if (node !== null) {
-      cache.set(seq, node)
-      lruTrim(cache, CONTENT_CACHE_MAX)
-    }
+    if (node !== null) cache.set(seq, node)
     return node
   }
 }
@@ -262,13 +256,10 @@ export function makeHeaderFetcher(
 ): HeaderFetcher | undefined {
   const read = pageReaderOf(addressOf)
   if (read === undefined) return undefined
-  const cache = new Map<number, HeaderEpochContent>()
+  const cache = new BoundedCache<number, HeaderEpochContent>({ maxEntries: HEADER_CACHE_MAX })
   return async (seq) => {
     const hit = cache.get(seq)
-    if (hit !== undefined) {
-      lruTouch(cache, seq)
-      return hit
-    }
+    if (hit !== undefined) return hit
     const rows = rowsOf(await read(seq))
     let picked: HeaderEpochContent | null = null
     for (const entry of rows) {
@@ -279,7 +270,6 @@ export function makeHeaderFetcher(
       cache.set(ev.seq, content)
       if (ev.seq === seq) picked = content
     }
-    lruTrim(cache, HEADER_CACHE_MAX)
     return picked
   }
 }

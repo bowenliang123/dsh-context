@@ -45,7 +45,7 @@ describe('makeHeadFetcher', () => {
 describe('makeAgentHeads', () => {
   afterEach(() => { vi.unstubAllGlobals() })
 
-  test('one read per id replays the cached promise; the map is bounded; a rejected read still caches', async () => {
+  test('one read per id replays the cached promise and the entry map is bounded', async () => {
     const bodies: unknown[] = []
     vi.stubGlobal('fetch', async (_url: unknown, init: { body: string }) => {
       bodies.push(JSON.parse(init.body))
@@ -67,16 +67,64 @@ describe('makeAgentHeads', () => {
     assert.deepEqual(refetched, ['bounded-0'], 'only the demoted oldest id refetched')
     const newer = heads.headOf('bounded-129')
     assert.ok(newer === heads.headOf('bounded-129'), 'the newest stays cached')
+  })
 
+  test('a concurrent ask joins the in-flight read; a rejected read retries instead of hiding the child', async () => {
+    let release!: () => void
+    let calls = 0
+    vi.stubGlobal('fetch', () => {
+      calls++
+      return new Promise((resolve) => {
+        release = () => resolve(headResponse())
+      })
+    })
+    const heads = makeAgentHeads()
+    const first = heads.headOf('slow')
+    const second = heads.headOf('slow')
+    assert.equal(first, second, 'the in-flight read is shared, not stacked')
+    assert.equal(calls, 1)
+    release()
+    assert.ok(await first !== null)
+    assert.equal(calls, 1)
+
+    let failures = 0
+    vi.stubGlobal('fetch', async () => {
+      failures++
+      if (failures === 1) throw new Error('down')
+      return headResponse()
+    })
+    const flaky = makeAgentHeads()
+    await assert.rejects(flaky.headOf('bad'))
+    assert.ok(await flaky.headOf('bad') !== null, 'the retry serves the head once the route recovers')
+    assert.equal(failures, 2)
+  })
+
+  test('an absent head is cached as absent, so only a new stamp asks again', async () => {
     let calls = 0
     vi.stubGlobal('fetch', async () => {
       calls++
-      throw new Error('down')
+      return { ok: true, status: 200, json: async () => ({ ok: true, value: null }) }
     })
-    const broken = makeAgentHeads()
-    await broken.headOf('bad').catch(() => null)
-    await broken.headOf('bad').catch(() => null)
-    assert.equal(calls, 1, 'a broken session never hammers the route')
+    const heads = makeAgentHeads()
+    assert.equal(await heads.headOf('gone'), null)
+    assert.equal(await heads.headOf('gone'), null)
+    assert.equal(calls, 1, 'absence replays from the cache instead of hammering the route')
+    assert.equal(await heads.headOf(''), null, 'an empty id has no fetcher')
+    assert.equal(calls, 1, 'the empty id never reaches the route')
+  })
+
+  test('the byte budget demotes the oldest oversized head', async () => {
+    const fetched: string[] = []
+    vi.stubGlobal('fetch', async (_url: unknown, init: { body: string }) => {
+      const id = (JSON.parse(init.body) as { sessionId: string }).sessionId
+      fetched.push(id)
+      return headResponse('m'.repeat(700_000))
+    })
+    const heads = makeAgentHeads()
+    await heads.headOf('huge-0')
+    await heads.headOf('huge-1')
+    await heads.headOf('huge-0')
+    assert.deepEqual(fetched, ['huge-0', 'huge-1', 'huge-0'], 'the first oversized head was demoted by the byte budget')
   })
 })
 

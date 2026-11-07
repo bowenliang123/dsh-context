@@ -1,5 +1,7 @@
+import { amountOf } from '../shared/decode'
 import type { PlatformBalance, PlatformBalanceEntry } from '../shared/types'
 import { BALANCE_ROUTE } from './apiRoutes'
+import { postRouteQuietly } from './route'
 import { asRecord } from './services'
 
 const STORAGE_KEY = 'dsh-context:platform-balance'
@@ -15,11 +17,6 @@ export function setPlatformBalanceStorage(next: StorageFace | null | undefined):
 }
 
 export const PLATFORM_BALANCE_STORAGE_KEY = STORAGE_KEY
-
-function amountOf(value: unknown): number | null {
-  const n = typeof value === 'string' ? Number(value) : value
-  return typeof n === 'number' && Number.isFinite(n) && n >= 0 ? n : null
-}
 
 export function platformBalanceOf(value: unknown): PlatformBalance | null {
   const data = asRecord(value)
@@ -89,18 +86,7 @@ function rememberBalance(value: PlatformBalance | null): void {
 }
 
 async function readRoute(): Promise<PlatformBalance | null> {
-  try {
-    const response = await fetch(BALANCE_ROUTE, {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-    })
-    if (!response.ok) return null
-    const r = asRecord(await response.json())
-    if (r === null || r.ok !== true || r.value === null || r.value === undefined) return null
-    return platformBalanceOf(r.value)
-  } catch {
-    return null
-  }
+  return postRouteQuietly(BALANCE_ROUTE, {}, platformBalanceOf)
 }
 
 export function readPlatformBalance(onRefresh: (value: PlatformBalance) => void): PlatformBalance | null {

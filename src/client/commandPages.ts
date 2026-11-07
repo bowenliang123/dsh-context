@@ -1,5 +1,6 @@
 import type { CommandRecord, CommandStatus, CommandPage } from '../shared/types'
 import { COMMANDS_ROUTE } from './apiRoutes'
+import { postRoute } from './route'
 import { asRecord } from './services'
 
 const STATUSES: ReadonlySet<unknown> = new Set<CommandStatus>(['running', 'completed', 'failed', 'killed'])
@@ -60,18 +61,10 @@ export function makeCommandPager(
   limit?: number,
 ): CommandPageFetcher | undefined {
   if (sessionId === '') return undefined
-  return async (beforeSeq) => {
-    const response = await fetch(COMMANDS_ROUTE, {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ sessionId, beforeSeq, ...(limit === undefined ? {} : { limit }) }),
-    })
-    if (!response.ok) throw new Error(`dsh-context: commands route HTTP ${response.status}`)
-    const data = asRecord(await response.json())
-    if (data === null || data.ok !== true) throw new Error('dsh-context: command page read failed')
-    if (data.value === null) return null
-    const page = commandPageOf(data.value)
-    if (page === null) throw new Error('dsh-context: command page read malformed')
-    return page
-  }
+  return beforeSeq => postRoute(
+    COMMANDS_ROUTE,
+    { sessionId, beforeSeq, ...(limit === undefined ? {} : { limit }) },
+    commandPageOf,
+    { label: 'command page' },
+  )
 }

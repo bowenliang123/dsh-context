@@ -63,3 +63,12 @@ export function fmtDuration(ms: number): string {
   if (ms < 3_600_000) return `${m}m${s}s`
   return `${Math.floor(m / 60)}h${m % 60}m`
 }
+export function relativeTime(t: (key: string, params?: Record<string, string | number>) => string, updatedAt: number, now: number): string {
+  const diff = now - updatedAt
+  if (!Number.isFinite(diff) || diff < 60_000) return t('ov.time.now')
+  const minutes = Math.floor(diff / 60_000)
+  if (minutes < 60) return t('ov.time.m', { n: minutes })
+  const hours = Math.floor(minutes / 60)
+  if (hours < 24) return t('ov.time.h', { n: hours })
+  return t('ov.time.d', { n: Math.floor(hours / 24) })
+}

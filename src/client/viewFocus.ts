@@ -1,7 +1,9 @@
 import { useEffect, useState } from 'react'
-import { lruTrim } from './lru'
+import { lruTrim } from './boundedCache'
 import { asRecord, type ClientCtx } from './services'
 import { SIDEBAR_CONTEXT_KIND } from './sidebar'
+
+const PENDING_FOCUS_MAX = 16
 
 const pendingFocus = new Map<string, number>()
 
@@ -9,6 +11,7 @@ const focusListeners = new Set<() => void>()
 
 export function requestContextFocus(sessionId: string, seq: number): void {
   pendingFocus.set(sessionId, seq)
+  lruTrim(pendingFocus, PENDING_FOCUS_MAX)
   for (const listener of focusListeners) listener()
 }
 
@@ -40,7 +43,7 @@ export function currentFleetMemberFocus(sessionId: string): string | null {
   return memberFocus.get(sessionId) ?? null
 }
 
-export function subscribeFleetMemberFocus(listener: () => void): () => void {
+function subscribeFleetMemberFocus(listener: () => void): () => void {
   memberListeners.add(listener)
   return () => { memberListeners.delete(listener) }
 }
