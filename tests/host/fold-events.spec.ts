@@ -1,5 +1,7 @@
 import assert from 'node:assert/strict'
 import { describe, test } from 'vitest'
+import { Context } from '@deepseek-ai/cordis'
+import SessionStore, { foldSurface } from '@deepseek-ai/dsh-session'
 import type { TimelineEvent } from '../../src/host/fold'
 import {
   assistantAttempt,
@@ -16,7 +18,7 @@ import {
   userMessage,
 } from './helpers/events'
 import { estimateToolsTotal } from '../../src/host/pricing'
-import { assertPlainJson, assertStable, driveTimeline, requestsOf, timelineDef } from './helpers/projection'
+import { assertPlainJson, assertStable, driveTimeline, fullDef, requestsOf, timelineDef } from './helpers/projection'
 
 const text = (t: string) => [{ type: 'text', text: t }]
 
@@ -62,7 +64,7 @@ describe('request/header', () => {
 })
 
 describe('request/context', () => {
-  test('route and capacity metadata land; hostile or absent values change nothing but still re-seal', () => {
+  test('route and capacity metadata land; hostile or absent values return the same state reference', () => {
     const routed = driveTimeline([header(1, { model: 'm' }), requestContext(2, {
       contextWindow: 128000, model: 'm2', provider: 'p2',
     })]).state
@@ -70,13 +72,18 @@ describe('request/context', () => {
     const def = timelineDef({})
     const armed = def.apply(def.init(), header(1, { model: 'm', provider: 'p' }))
     const hostile = def.apply(armed, requestContext(2, { contextWindow: 'x', model: 5, provider: 9 }))
-    assert.ok(hostile !== armed)
-    assert.deepEqual([hostile.contextWindow, hostile.model, hostile.provider], [undefined, 'm', 'p'])
+    assert.equal(hostile, armed)
     const init = def.init()
     const absent = def.apply(init, requestContext(1))
-    assert.ok(absent !== init, 'request/context always re-seals the state')
-    assert.equal(absent.contextWindow, undefined)
-    assert.equal(absent.model, undefined)
+    assert.equal(absent, init, 'an unchanged route leaves the state untouched')
+    const same = def.apply(routed, requestContext(3, { contextWindow: 128000, model: 'm2', provider: 'p2' }))
+    assert.equal(same, routed)
+    const routedOnly = def.apply(def.apply(def.init(), header(1, { model: 'm', provider: 'p' })), requestContext(2, { contextWindow: 64000 }))
+    assert.deepEqual([routedOnly.contextWindow, routedOnly.model, routedOnly.provider], [64000, 'm', 'p'])
+    const modelOnly = def.apply(routedOnly, requestContext(3, { model: 'm2', provider: 'p2' }))
+    assert.deepEqual([modelOnly.contextWindow, modelOnly.model, modelOnly.provider], [64000, 'm2', 'p2'])
+    const windowOnly = def.apply(modelOnly, requestContext(4, { contextWindow: 64000 }))
+    assert.equal(windowOnly, modelOnly)
   })
 })
 
@@ -579,5 +586,61 @@ describe('hostile events', () => {
     ])
     assert.ok(state.sums.user > 0)
     assertPlainJson(state)
+  })
+})
+
+describe('surface order parity with the harness fold', () => {
+  test('every prefix keeps the canonical surface order after prune and summary replacements', async () => {
+    const ctx = new Context()
+    await ctx.plugin(SessionStore)
+    const session = ctx.sessions.create()
+    const appendUnknown = (type: string, data: unknown): { seq: number } =>
+      (session.append as unknown as (type: string, data: unknown) => { seq: number })(type, data)
+    session.append('request/header', { header: { config: { model: 'deepseek-v4-flash', provider: 'deepseek' } }, reason: 'initial' } as never)
+    session.append('system/message', {
+      turn: 1,
+      step: 0,
+      message: { role: 'system', source: { kind: 'plugin', plugin: '@deepseek-ai/dsh-system-prompt' }, content: [{ type: 'text', text: 'You are an agent.' }] },
+    } as never, { surfaceOp: 'append' })
+    session.append('user/message', { content: [{ type: 'text', text: 'one' }], source: { kind: 'user' } } as never, { surfaceOp: 'append' })
+    session.append('assistant/message', {
+      turn: 1,
+      step: 0,
+      message: { content: [{ type: 'text', text: 'reply' }] },
+      usage: { inputTokens: 10, outputTokens: 5 },
+    } as never, { surfaceOp: 'append' })
+    session.append('tool/call', { turn: 1, step: 0, callId: 'c1', name: 'bash', arguments: '{}' } as never)
+    const result = session.append('tool/result', {
+      message: { role: 'tool', toolCallId: 'c1', source: { kind: 'tool', callId: 'c1' }, content: [{ type: 'text', text: 'ok' }] },
+    } as never, { surfaceOp: 'append' })
+    const two = session.append('user/message', { content: [{ type: 'text', text: 'two' }], source: { kind: 'user' } } as never, { surfaceOp: 'append' })
+    const three = session.append('user/message', { content: [{ type: 'text', text: 'three' }], source: { kind: 'user' } } as never, { surfaceOp: 'append' })
+    appendUnknown('compaction/prune', { shadowedRange: { start: result.seq, end: result.seq }, shadowedSeqs: [result.seq], shadowedTokenCount: 5 })
+    session.append('tool/result', {
+      message: { role: 'tool', toolCallId: 'c1', source: { kind: 'tool', callId: 'c1' }, content: [{ type: 'text', text: 'pruned' }] },
+    } as never, { surfaceOp: { op: 'replace', startSeq: result.seq, endSeq: result.seq }, sourceEventSeqs: [result.seq] })
+    appendUnknown('compaction/summary', {
+      compactionId: 'c1',
+      summary: 'summary',
+      shadowedRange: { start: two.seq, end: three.seq },
+      shadowedSeqs: [two.seq, three.seq],
+      shadowedTokenCount: 12,
+      provider: 'deepseek',
+      model: 'deepseek-v4-flash',
+    })
+    session.append('user/message', { content: [{ type: 'text', text: 'summary' }], source: { kind: 'plugin', form: 'summary' } } as never, {
+      surfaceOp: { op: 'replace', startSeq: two.seq, endSeq: three.seq },
+      sourceEventSeqs: [two.seq, three.seq],
+    })
+    const log = session.snapshotEvents() as unknown as TimelineEvent[]
+    const def = fullDef()
+    for (let cut = 1; cut <= log.length; cut++) {
+      const prefix = log.slice(0, cut)
+      const types = new Map<number, string>(prefix.map(event => [event.seq, event.type] as const))
+      let state = def.init()
+      for (const event of prefix) state = def.apply(state, event)
+      const canonical = foldSurface(prefix as never).nodes.filter(seq => types.get(seq) !== 'system/message')
+      assert.deepStrictEqual(state.surface.map(node => node.seq), canonical, `surface order drift at prefix ${cut}`)
+    }
   })
 })

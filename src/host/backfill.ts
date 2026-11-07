@@ -1,10 +1,9 @@
 import { asRecord } from './record'
 import { performance } from 'node:perf_hooks'
 import type { Context } from '@deepseek-ai/cordis'
-import { interruptedTurnClosers } from '@deepseek-ai/dsh-session'
 import type { SessionEvent, SessionHeader } from '@deepseek-ai/dsh-session'
 import { type ColdReadGate, makeColdReadGate } from './coldRead'
-import { type ConnectionHostFace, registerPostRoute } from './connection'
+import { mountPostRoute, reply } from './postRoute'
 
 export const BACKFILL_ROUTE = '/api/dsh-context/backfill'
 
@@ -35,6 +34,7 @@ interface ReadHandleLike {
 
 interface PersistenceLike {
   open(id: string, access: 'read', options?: { signal?: AbortSignal }): Promise<ReadHandleLike>
+  stat?(id: string): Promise<unknown>
 }
 
 const MIN_REST_MS = 25
@@ -71,16 +71,50 @@ function headerOf(record: unknown): SessionHeader | null {
 
 const PROBE_KEYS = ['contextActivity', 'contextTimeline']
 
-function servesRows(cache: ProjectionCacheLike, header: SessionHeader): boolean {
+interface StatCapability {
+  reportsEventCount?: boolean
+}
+
+async function durableEventCount(
+  persistence: PersistenceLike,
+  id: string,
+  capability: StatCapability,
+): Promise<number | undefined> {
+  if (capability.reportsEventCount === false) return undefined
+  if (typeof persistence.stat !== 'function') return undefined
   try {
-    const block = asRecord(cache.cachedSnapshot(header, PROBE_KEYS))
-    const values = asRecord(block?.values)
-    return values !== null
-      && values.contextActivity !== undefined
-      && values.contextTimeline !== undefined
+    const snapshot = asRecord(await persistence.stat(id))
+    const eventCount = snapshot?.eventCount
+    if (typeof eventCount === 'number' && Number.isSafeInteger(eventCount) && eventCount >= 0) {
+      capability.reportsEventCount = true
+      return eventCount
+    }
+    if (snapshot !== null && !('eventCount' in snapshot)) capability.reportsEventCount = false
+    return undefined
+  } catch {
+    return undefined
+  }
+}
+
+async function servesRows(
+  persistence: PersistenceLike,
+  cache: ProjectionCacheLike,
+  header: SessionHeader,
+  capability: StatCapability,
+): Promise<boolean> {
+  let block: Record<string, unknown> | null
+  try {
+    block = asRecord(cache.cachedSnapshot(header, PROBE_KEYS))
   } catch {
     return false
   }
+  const values = asRecord(block?.values)
+  if (values === null || values.contextActivity === undefined || values.contextTimeline === undefined) return false
+  const asOfSeq = block?.asOfSeq
+  if (typeof asOfSeq !== 'number' || !Number.isSafeInteger(asOfSeq)) return false
+  const eventCount = await durableEventCount(persistence, header.id, capability)
+  if (eventCount === undefined) return true
+  return asOfSeq + 1 === eventCount || asOfSeq === eventCount
 }
 
 async function readColdLog(
@@ -104,7 +138,7 @@ async function readColdLog(
   return {
     header: handle.header,
     inheritedEventCount: handle.inheritedEventCount,
-    events: [...events, ...interruptedTurnClosers(events)],
+    events: [...events],
   }
 }
 
@@ -196,13 +230,16 @@ export function watchActivityBackfill(
     launch()
   }
 
-  const routeFiber = ctx.inject(['connection'], (c) => {
-    const handler = () => {
+  const routeFiber = mountPostRoute({
+    ctx,
+    deps: ['connection'],
+    path: BACKFILL_ROUTE,
+    label: 'dsh-context: backfill route',
+    handler: () => () => {
       requested = true
       tryLaunch()
-      return Response.json({ ok: true }, { headers: { 'cache-control': 'no-store' } })
-    }
-    registerPostRoute(c, c.get('connection') as ConnectionHostFace | undefined, BACKFILL_ROUTE, handler, 'dsh-context: backfill route')
+      return reply({ ok: true })
+    },
   })
 
   const runnerFiber = ctx.inject(['sessionQuery', 'sessionProjectionCache', 'sessionPersistence', 'sessions'], (raw) => {
@@ -241,6 +278,7 @@ export function watchActivityBackfill(
     const run = async (): Promise<void> => {
       const listed = await (query as unknown as SessionQueryLike).listSessions(abort.signal)
       if (!Array.isArray(listed)) return
+      const statCapability: StatCapability = {}
       let folded = 0
       let refused = 0
       let paused = false
@@ -275,7 +313,13 @@ export function watchActivityBackfill(
         const header = headerOf(record)
         if (header === null || typeof header.cwd !== 'string') continue
         if (isLive(sessions, header.id)) continue
-        if (servesRows(cache as unknown as ProjectionCacheLike, header)) continue
+        const warm = await servesRows(
+          persistence as unknown as PersistenceLike,
+          cache as unknown as ProjectionCacheLike,
+          header,
+          statCapability,
+        )
+        if (warm) continue
         const started = pacing.now()
         let slicedWorkMs = 0
         try {

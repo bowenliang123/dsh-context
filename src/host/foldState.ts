@@ -151,6 +151,7 @@ export interface TimelineState {
   maxOutputTokens?: number
   requests: SlimRequestRecord[]
   turnRuns?: number
+  totals?: CumulativeTotals
   events: ContextEventRecord[]
   archived: SurfaceNode[]
   cost?: SessionCostUsage
@@ -271,6 +272,64 @@ export function trimState(st: TimelineState, bounds: FoldBounds): void {
 
 const TIMING_SPANS_MAX = 2_000
 
+export const SKILL_NAMES_MAX = 500
+
+export interface CumulativeTotals {
+  turns: number
+  steps: number
+  injects: number
+  compactions: number
+  prunes: number
+  skills: Record<string, true>
+  lastTurn?: number
+}
+
+function emptyTotals(): CumulativeTotals {
+  return { turns: 0, steps: 0, injects: 0, compactions: 0, prunes: 0, skills: {} }
+}
+
+function ownedTotals(st: TimelineState): CumulativeTotals {
+  return st.totals === undefined ? emptyTotals() : { ...st.totals }
+}
+
+export function countStep(st: TimelineState): void {
+  const totals = ownedTotals(st)
+  totals.steps += 1
+  st.totals = totals
+}
+
+export function countInject(st: TimelineState): void {
+  const totals = ownedTotals(st)
+  totals.injects += 1
+  st.totals = totals
+}
+
+export function countCompaction(st: TimelineState, kind: 'compaction' | 'prune'): void {
+  const totals = ownedTotals(st)
+  if (kind === 'compaction') totals.compactions += 1
+  else totals.prunes += 1
+  st.totals = totals
+}
+
+export function noteTurn(st: TimelineState, turn: number | undefined): void {
+  const label = turn !== undefined && Number.isFinite(turn) ? turn : 0
+  if (st.totals?.lastTurn === label) return
+  const totals = ownedTotals(st)
+  totals.turns += 1
+  totals.lastTurn = label
+  st.totals = totals
+}
+
+export function noteSkillName(st: TimelineState, name: string): void {
+  if (name === '' || name === '__proto__') return
+  const current = st.totals
+  if (current !== undefined && Object.hasOwn(current.skills, name)) return
+  if (current !== undefined && Object.keys(current.skills).length >= SKILL_NAMES_MAX) return
+  const totals = ownedTotals(st)
+  totals.skills = { ...totals.skills, [name]: true }
+  st.totals = totals
+}
+
 export function createTimelineState(): TimelineState {
   return {
     surface: [],
@@ -282,6 +341,7 @@ export function createTimelineState(): TimelineState {
     toolsTokens: 0,
     requests: [],
     turnRuns: 0,
+    totals: emptyTotals(),
     events: [],
     archived: [],
     callNames: {},

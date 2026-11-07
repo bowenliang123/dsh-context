@@ -253,6 +253,26 @@ describe('head-only retention (issue #217)', () => {
     }
   })
 
+  test('the head fold keeps commands and surfaces but never parses or retains file-op arguments', () => {
+    const events = [
+      toolCall(1, { callId: 'rc1', name: 'run_code', arguments: JSON.stringify({ code: 'x', description: 'batch' }) }),
+      codeDispatchStart(2, { rootCallId: 'rc1', subCallId: 'rc1:code:0', name: 'bash', arguments: { command: 'git status' } }),
+      codeDispatch(3, { rootCallId: 'rc1', subCallId: 'rc1:code:0', name: 'bash', arguments: { command: 'git status' }, content: [text('ok')] }),
+      toolResult(4, { callId: 'rc1', content: text('done') }),
+      toolCall(5, { callId: 'c1', name: 'read', arguments: JSON.stringify({ file_path: 'b.ts' }) }),
+      toolResult(6, { callId: 'c1', content: text('b body') }),
+      toolCall(7, { callId: 'c2', name: 'read', arguments: JSON.stringify({ file_path: 'c.ts' }) }),
+    ]
+    const [slim] = fold(events, HEAD).slice(-1)
+    assert.equal('pendingCodeOps' in slim, false)
+    assert.equal(slim.fileOps.length, 0)
+    assert.equal(slim.commands.some(rec => rec.codeMode === true && rec.status === 'completed'), true)
+    for (const entry of Object.values(slim.callNames)) assert.equal('argsRaw' in entry, false)
+    const [full] = fold(events, FULL).slice(-1)
+    assert.equal(full.fileOps.length > 0, true)
+    assert.equal(Object.values(full.callNames).some(entry => 'argsRaw' in entry), true)
+  })
+
   test('a completed command keeps its fold pairing record without the heavy text; a late patch lands on both', () => {
     const events = [
       toolCall(1, { callId: 'c1', name: 'bash', arguments: JSON.stringify({ command: 'ls' }) }),

@@ -128,13 +128,14 @@ export class DetailShadow {
   }
 
   private async seed(id: string, entry: ShadowEntry): Promise<void> {
+    let observation: unknown
     try {
       const observe = this.observeOf()
       if (observe === undefined) {
         this.entries.delete(id)
         return
       }
-      const observation = await this.coldReads.admit(() => observe(id, { projectionMode: 'none' }))
+      observation = await this.coldReads.admit(() => observe(id, { projectionMode: 'none' }))
       if (this.entries.get(id) !== entry) return
       if (observation === undefined) {
         this.entries.delete(id)
@@ -160,6 +161,9 @@ export class DetailShadow {
     } catch (error: unknown) {
       this.entries.delete(id)
       throw error
+    } finally {
+      const dispose = (observation as { [Symbol.dispose]?: unknown } | null | undefined)?.[Symbol.dispose]
+      if (typeof dispose === 'function') dispose.call(observation)
     }
   }
 }

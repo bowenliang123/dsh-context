@@ -1,11 +1,132 @@
 import assert from 'node:assert/strict'
 import { describe, test } from 'vitest'
 import { Context } from '@deepseek-ai/cordis'
+import { SessionProjectionRegistry } from '@deepseek-ai/dsh-session-projection'
+import { interruptedTurnClosers } from '@deepseek-ai/dsh-session'
+import type { SessionEvent } from '@deepseek-ai/dsh-session'
 import { BACKFILL_ROUTE, watchActivityBackfill } from '../../src/host/backfill'
+import { createContextTimelineDefinition } from '../../src/host/timeline'
+import { createContextActivityDefinition } from '../../src/host/activity'
+import { createContextHeadersDefinition } from '../../src/host/headers'
 import { arm, captureLogs, coldFaces, connectionOf, fakeState, trigger, unsupportedFormatError, until } from './helpers/backfill'
 import type { RouteBox } from './helpers/backfill'
 
 const settle = (ms = 30): Promise<void> => new Promise(resolve => setTimeout(resolve, ms))
+
+function crashTailEvents(filler: number): SessionEvent[] {
+  const events: SessionEvent[] = Array.from({ length: filler }, (_, seq) => ({
+    type: 'todo/write', seq, time: seq + 1, data: {},
+  })) as unknown as SessionEvent[]
+  const base = filler
+  const tail = [
+    { type: 'turn/start', seq: base, time: base + 1, data: { turn: 1 } },
+    { type: 'step/start', seq: base + 1, time: base + 2, data: { turn: 1, step: 1 } },
+    {
+      type: 'user/message',
+      seq: base + 2,
+      time: base + 3,
+      data: { id: 'u1', role: 'user', content: [{ type: 'text', text: 'run it' }], source: { kind: 'user' } },
+      surfaceOp: 'append',
+    },
+    {
+      type: 'assistant/message',
+      seq: base + 3,
+      time: base + 4,
+      data: {
+        turn: 1,
+        step: 1,
+        message: {
+          id: 'a1',
+          role: 'assistant',
+          content: [{ type: 'tool-call', id: 'c1', name: 'bash', arguments: '{"command":"true"}' }],
+          source: { kind: 'model', provider: 'p', model: 'm' },
+        },
+        stream: [],
+        usage: { inputTokens: 1, outputTokens: 1 },
+      },
+      surfaceOp: 'append',
+    },
+    {
+      type: 'tool/call',
+      seq: base + 4,
+      time: base + 5,
+      data: { turn: 1, step: 1, callId: 'c1', name: 'bash', arguments: '{"command":"true"}' },
+    },
+  ]
+  return [...events, ...tail as unknown as SessionEvent[]]
+}
+
+function fakePersistence(events: SessionEvent[], stat?: (id: string) => Promise<unknown>, opened?: string[]) {
+  return {
+    open: async (id: string) => {
+      opened?.push(id)
+      return {
+        header: { id, version: 1, createdAt: 1, cwd: `/repo/${id}`, isSeeded: false },
+        inheritedEventCount: 0,
+        read: async () => ({ events }),
+        close: async () => {},
+      }
+    },
+    ...(stat === undefined ? {} : { stat }),
+  }
+}
+
+interface SlicedRig {
+  route: RouteBox
+  writes: Map<string, Record<string, { seq: number }>>
+  hydrateCuts: number[]
+  prepareCuts: number[]
+}
+
+function slicedRig(ctx: Context, eventsById: Map<string, SessionEvent[]>): SlicedRig {
+  const route: RouteBox = {}
+  const state = fakeState([...eventsById.keys()].map(id => ({ header: { id, cwd: `/repo/${id}` } })))
+  const rig: SlicedRig = { route, writes: new Map(), hydrateCuts: [], prepareCuts: [] }
+  const registry = new SessionProjectionRegistry(ctx as never)
+  registry.register(createContextTimelineDefinition({}, () => true) as never)
+  registry.register(createContextActivityDefinition() as never)
+  registry.register(createContextHeadersDefinition() as never)
+  const hydrate = registry.hydrate.bind(registry)
+  registry.hydrate = ((session: never, checkpoint: never, events: SessionEvent[], baseSeq: never) => {
+    rig.hydrateCuts.push(events.at(-1)?.seq ?? -1)
+    return hydrate(session, checkpoint, events, baseSeq)
+  }) as typeof registry.hydrate
+  ctx.provide('connection', connectionOf(route))
+  ctx.provide('sessionQuery', { listSessions: async () => state.listed })
+  ctx.provide('sessionProjectionCache', {
+    cachedSnapshot: () => undefined,
+    coldSnapshot: () => { throw new Error('the sliced path never calls coldSnapshot') },
+    write: async (session: { id: string }) => {
+      rig.writes.set(session.id, registry.checkpoint(session as never) as never)
+    },
+  })
+  ctx.provide('sessionPersistence', {
+    open: async (id: string) => ({
+      header: { id, version: 1, createdAt: 1, cwd: `/repo/${id}`, isSeeded: false },
+      inheritedEventCount: 0,
+      read: async () => ({ events: eventsById.get(id) ?? [] }),
+      close: async () => {},
+    }),
+    stat: async () => ({ eventCount: 0 }),
+  })
+  ctx.provide('sessions', {
+    get: () => undefined,
+    prepare: (id: string, o: { seed: SessionEvent[]; meta: unknown; inheritedEventCount: number }) => {
+      rig.prepareCuts.push(o.seed.at(-1)?.seq ?? -1)
+      const marker = { type: 'session/end-seed', seq: o.seed.length, time: Date.now(), data: {} } as SessionEvent
+      const log = [...o.seed, marker]
+      return {
+        id,
+        header: o.meta,
+        inheritedEventCount: o.inheritedEventCount,
+        seq: log.length,
+        eventAt: (seq: number) => log[seq],
+        snapshotEvents: () => log,
+      }
+    },
+  })
+  return rig
+}
 
 describe('watchActivityBackfill', () => {
   test('without a connection route, or with a half that never registers, the pass stays unarmed', async () => {
@@ -398,5 +519,158 @@ describe('watchActivityBackfill', () => {
     assert.equal(admitted, 2, 'one run plus one skip — the loop did not hammer the gate')
     assert.ok(lines.some(l => l.level === 'info' && l.text.includes('backfilled for 1 session(s)')), 'the folded count still reports')
     assert.ok(lines.some(l => l.level === 'info' && l.text.includes('stopped early under heap pressure')), 'the early stop reports once')
+  })
+
+  test('a crash-tailed log is written from the durable stored events: no synthetic closer reaches the cold write-back', async () => {
+    const ctx = new Context()
+    const durable = crashTailEvents(0)
+    const durableLast = durable.at(-1)?.seq
+    assert.ok(interruptedTurnClosers(durable).length > 0, 'the fixture ends in an open turn with an unanswered call')
+    const state = fakeState([{ header: { id: 'crash', cwd: '/repo/crash' } }])
+    const written: SessionEvent[] = []
+    let coldCalls = 0
+    const route = arm(ctx, state, {
+      sessionProjectionCache: {
+        cachedSnapshot: () => undefined,
+        coldSnapshot: (_header: unknown, _inheritedEventCount: unknown, events: SessionEvent[]) => {
+          coldCalls++
+          written.push(...events)
+          return {}
+        },
+      },
+      sessionPersistence: fakePersistence(durable),
+    })
+    const dispose = watchActivityBackfill(ctx)
+    await trigger(route)
+    await until(() => (coldCalls === 1 ? true : undefined), 'the cold fold ran')
+    dispose()
+    assert.deepEqual(written.map(event => event.seq), durable.map(event => event.seq), 'the write-back sees the durable log verbatim')
+    assert.equal(written.at(-1)?.seq, durableLast)
+  })
+
+  test('the sliced write-back folds the durable seed and lands only the deterministic resume marker above it', async () => {
+    const ctx = new Context()
+    const durable = crashTailEvents(4_000)
+    const durableLast = durable.at(-1)?.seq ?? -1
+    assert.ok(interruptedTurnClosers(durable).length > 0, 'the fixture ends in an open turn with an unanswered call')
+    const rig = slicedRig(ctx, new Map([['monster', durable]]))
+    const dispose = watchActivityBackfill(ctx)
+    await trigger(rig.route)
+    await until(() => (rig.writes.has('monster') ? true : undefined), 'the write-back landed')
+    dispose()
+    assert.deepEqual(rig.prepareCuts, [durableLast], 'the prepared seed ends at the durable cut')
+    assert.deepEqual(rig.hydrateCuts, [durableLast], 'hydrate folds only the durable cut')
+    const rows = Object.values(rig.writes.get('monster') ?? {})
+    assert.ok(rows.length > 0, 'the write-back carries at least one projection row')
+    for (const row of rows) assert.ok(row.seq <= durableLast + 1, `row seq ${row.seq} exceeds the durable end plus its resume marker`)
+    assert.ok(rows.some(row => row.seq === durableLast + 1), 'the prepared session cursor carries the constructor resume marker')
+  })
+
+  test('a row at the durable end stays served while rows behind or ahead of it refold', async () => {
+    const ctx = new Context()
+    const state = fakeState([
+      { header: { id: 'fresh', cwd: '/repo/fresh' } },
+      { header: { id: 'behind', cwd: '/repo/behind' } },
+      { header: { id: 'ahead', cwd: '/repo/ahead' } },
+      { header: { id: 'marker', cwd: '/repo/marker' } },
+    ])
+    const route = arm(ctx, state, {
+      sessionProjectionCache: {
+        cachedSnapshot: (header: { id: string }) => {
+          const asOfSeq = header.id === 'behind' ? 1 : header.id === 'ahead' ? 5 : header.id === 'marker' ? 3 : 2
+          return { asOfSeq, values: { contextActivity: { days: {} }, contextTimeline: { ok: true } } }
+        },
+        coldSnapshot: (header: { id: string }) => {
+          state.coldSnapshots.push(header.id)
+          return {}
+        },
+      },
+      sessionPersistence: fakePersistence([], async () => ({ eventCount: 3 }), state.coldReads),
+    })
+    const dispose = watchActivityBackfill(ctx)
+    await trigger(route)
+    await until(() => (state.coldSnapshots.length >= 2 ? true : undefined), 'the stale rows refolded')
+    await settle(40)
+    dispose()
+    assert.deepEqual(state.coldReads.sort(), ['ahead', 'behind'])
+    assert.deepEqual(state.coldSnapshots.sort(), ['ahead', 'behind'])
+  })
+
+  test('a no-stat backend keeps the presence check: a watermark that would look stale is served', async () => {
+    const ctx = new Context()
+    const state = fakeState([{ header: { id: 'a', cwd: '/repo/a' } }])
+    state.served.add('a')
+    const route = arm(ctx, state)
+    const dispose = watchActivityBackfill(ctx)
+    await trigger(route)
+    await settle(40)
+    dispose()
+    assert.deepEqual(state.coldReads, [], 'no stat face means a present row is warm')
+  })
+
+  test('a backend whose stat never reports an event count is probed once per run', async () => {
+    const ctx = new Context()
+    const state = fakeState(['a', 'b', 'c'].map(id => ({ header: { id, cwd: `/repo/${id}` } })))
+    for (const id of ['a', 'b', 'c']) state.served.add(id)
+    let probes = 0
+    const route = arm(ctx, state, {
+      sessionPersistence: fakePersistence([], async () => { probes++; return { header: { id: 'x' } } }),
+    })
+    const dispose = watchActivityBackfill(ctx)
+    await trigger(route)
+    await settle(40)
+    dispose()
+    assert.deepEqual(state.coldReads, [], 'presence keeps every served row warm')
+    assert.equal(probes, 1, 'the capability probe runs once per pass, not once per session')
+  })
+
+  test('an unhelpful stat face falls back to the presence check', async () => {
+    const statVariants: [string, (id: string) => Promise<unknown>][] = [
+      ['throwing', async () => { throw new Error('no stat') }],
+      ['non-record', async () => 'junk'],
+      ['string count', async () => ({ eventCount: '2' })],
+      ['fractional count', async () => ({ eventCount: 1.5 })],
+      ['negative count', async () => ({ eventCount: -1 })],
+    ]
+    for (const [label, stat] of statVariants) {
+      const ctx = new Context()
+      const state = fakeState([{ header: { id: 'a', cwd: '/repo/a' } }])
+      state.served.add('a')
+      const route = arm(ctx, state, { sessionPersistence: fakePersistence([], stat) })
+      const dispose = watchActivityBackfill(ctx)
+      await trigger(route)
+      await settle(20)
+      dispose()
+      assert.deepEqual(state.coldReads, [], label)
+    }
+  })
+
+  test('a served block without a usable watermark refolds instead of trusting the rows', async () => {
+    const ctx = new Context()
+    const state = fakeState([
+      { header: { id: 'missing', cwd: '/repo/missing' } },
+      { header: { id: 'fractional', cwd: '/repo/fractional' } },
+      { header: { id: 'activity-only', cwd: '/repo/activity-only' } },
+    ])
+    const full = { contextActivity: { days: {} }, contextTimeline: { ok: true } }
+    const route = arm(ctx, state, {
+      sessionProjectionCache: {
+        cachedSnapshot: (header: { id: string }) => {
+          if (header.id === 'activity-only') return { asOfSeq: 0, values: { contextTimeline: {} } }
+          if (header.id === 'fractional') return { asOfSeq: 0.5, values: full }
+          return { values: full }
+        },
+        coldSnapshot: (header: { id: string }) => {
+          state.coldSnapshots.push(header.id)
+          return {}
+        },
+      },
+    })
+    const dispose = watchActivityBackfill(ctx)
+    await trigger(route)
+    await until(() => (state.coldSnapshots.length >= 3 ? true : undefined), 'the unusable blocks refolded')
+    await settle(30)
+    dispose()
+    assert.deepEqual(state.coldReads.sort(), ['activity-only', 'fractional', 'missing'])
   })
 })

@@ -113,21 +113,50 @@ function detailCollectionsOf(state: TimelineState, bounds: FoldBounds): Omit<Con
   return result
 }
 
-export function buildTimelineHead(state: TimelineState): Snapshot {
-  const result = headFieldsOf(state)
+function skillNamesCountOf(state: TimelineState): number {
+  const names = state.totals?.skills
+  if (names !== undefined) return Object.keys(names).length
+  const skills = new Set<string>()
+  for (const e of state.events) {
+    if (e.sub === 'skill' && typeof e.name === 'string' && e.name !== '') skills.add(e.name)
+  }
+  return skills.size
+}
+
+function retainedCountsOf(state: TimelineState): NonNullable<Snapshot['counts']> {
   const turns = new Set<number>()
   for (const r of state.requests) turns.add(r.turn ?? 0)
   let injects = 0
   let compactions = 0
   let prunes = 0
-  const skills = new Set<string>()
   for (const e of state.events) {
     if (e.kind === 'inject') injects++
     else if (e.kind === 'compaction') compactions++
     else if (e.kind === 'prune') prunes++
-    if (e.sub === 'skill' && typeof e.name === 'string' && e.name !== '') skills.add(e.name)
   }
-  result.counts = { turns: turns.size, steps: state.requests.length, injects, compactions, prunes, skills: skills.size }
+  return {
+    turns: turns.size,
+    steps: state.requests.length,
+    injects,
+    compactions,
+    prunes,
+    skills: skillNamesCountOf(state),
+  }
+}
+
+export function buildTimelineHead(state: TimelineState): Snapshot {
+  const result = headFieldsOf(state)
+  const totals = state.totals
+  result.counts = totals !== undefined
+    ? {
+      turns: totals.turns,
+      steps: totals.steps,
+      injects: totals.injects,
+      compactions: totals.compactions,
+      prunes: totals.prunes,
+      skills: skillNamesCountOf(state),
+    }
+    : retainedCountsOf(state)
   const last = state.requests.at(-1)
   if (last !== undefined) {
     result.last = { seq: last.seq, total: last.total, ...(typeof last.prompt === 'number' ? { prompt: last.prompt } : {}) }

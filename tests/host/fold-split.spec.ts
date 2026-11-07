@@ -3,40 +3,8 @@ import { describe, test } from 'vitest'
 import { buildTimelineDetail, buildTimelineHead, skillNameOf } from '../../src/host/fold'
 import type { TimelineEvent } from '../../src/host/fold'
 import { resolveBounds } from '../../src/host/config'
-import {
-  assistantMessage,
-  compaction,
-  header,
-  planMode,
-  requestContext,
-  stepEnd,
-  stepStart,
-  systemMessage,
-  toolCall,
-  toolResult,
-  userMessage,
-} from './helpers/events'
+import { canonicalLog, assistantMessage, compaction, header, requestContext, stepStart, toolCall, toolResult, userMessage } from './helpers/events'
 import { assertPlainJson, driveTimeline, timelineDef } from './helpers/projection'
-
-function canonicalLog(): TimelineEvent[] {
-  return [
-    header(1, {
-      tools: [{ name: 'bash', description: 'run a command' }],
-      config: { model: 'deepseek-v4-flash', provider: 'deepseek', reasoningEffort: 'max' },
-    }),
-    systemMessage(2),
-    requestContext(3, { contextWindow: 128000 }),
-    stepStart(4),
-    userMessage(5, [{ type: 'text', text: 'hello there' }], { kind: 'user' }),
-    assistantMessage(6, { turn: 1, step: 0, usage: { inputTokens: 10, outputTokens: 5, cacheReadTokens: 3 } }),
-    toolCall(7, { callId: 'c1', name: 'bash' }),
-    toolResult(8, { callId: 'c1', content: [{ type: 'text', text: 'ok' }] }),
-    stepEnd(9),
-    assistantMessage(10, { turn: 1, step: 1, usage: { inputTokens: 20, outputTokens: 8 } }),
-    compaction(11, 'summary', { shadowedTokenCount: 12, shadowedSeqs: [5] }),
-    planMode(12, { active: true }),
-  ]
-}
 
 describe('the detailRev ledger', () => {
   test('bumps exactly on detail-mutating folds — never on working-slot or envelope folds — and on a real model switch', () => {

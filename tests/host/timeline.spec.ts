@@ -3,47 +3,13 @@ import { describe, test } from 'vitest'
 import { createContextTimelineDefinition } from '../../src/host/timeline'
 import type { SurfaceNode } from '../../src/shared/types'
 import { driveTimeline } from './helpers/projection'
-import {
-  assistantMessage,
-  compaction,
-  header,
-  planMode,
-  requestContext,
-  stepEnd,
-  stepStart,
-  systemMessage,
-  toolCall,
-  toolResult,
-  userMessage,
-} from './helpers/events'
-import type { TimelineEvent } from '../../src/host/fold'
-
-function realLog(): TimelineEvent[] {
-  return [
-    header(1, {
-      tools: [{ name: 'bash', description: 'run a command' }],
-      model: 'deepseek-v4-flash',
-      provider: 'deepseek',
-    }),
-    systemMessage(2),
-    requestContext(3, { contextWindow: 128000 }),
-    stepStart(4),
-    userMessage(5, [{ type: 'text', text: 'hello there' }], { kind: 'user' }),
-    assistantMessage(6, { turn: 1, step: 0, usage: { inputTokens: 10, outputTokens: 5, cacheReadTokens: 3 } }),
-    toolCall(7, { callId: 'c1', name: 'bash' }),
-    toolResult(8, { callId: 'c1', content: [{ type: 'text', text: 'ok' }] }),
-    stepEnd(9),
-    assistantMessage(10, { turn: 1, step: 1, usage: { inputTokens: 20, outputTokens: 8 } }),
-    compaction(11, 'summary', { shadowedTokenCount: 12, shadowedSeqs: [5] }),
-    planMode(12, { active: true }),
-  ]
-}
+import { canonicalLog as realLog } from './helpers/events'
 
 describe('createContextTimelineDefinition', () => {
   test('carries the pinned projection contract; the wire and state schemas accept a real fold', () => {
     const def = createContextTimelineDefinition({}, () => false)
     assert.equal(def.key, 'contextTimeline')
-    assert.equal(def.stateVersion, 39, 'pinned: the first-token wait boundary cannot be backfilled from later events (issue #229)')
+    assert.equal(def.stateVersion, 40, 'pinned: the full-session head counters cannot be backfilled from the retained window')
     const drive = driveTimeline(realLog(), {}, true)
     assert.equal(def.wire.viewSchema.safeParse(drive.view).success, true, 'a real folded view validates')
     const view = drive.view

@@ -279,6 +279,15 @@ const timelineStateSchema = z.object({
   maxOutputTokens: z.number().positive().optional(),
   requests: z.array(requestRecordSchema),
   turnRuns: z.number().int().nonnegative().optional(),
+  totals: z.object({
+    turns: z.number().int().nonnegative(),
+    steps: z.number().int().nonnegative(),
+    injects: z.number().int().nonnegative(),
+    compactions: z.number().int().nonnegative(),
+    prunes: z.number().int().nonnegative(),
+    skills: z.record(z.string(), z.literal(true)),
+    lastTurn: z.number().optional(),
+  }).strict().optional(),
   events: z.array(contextEventSchema),
   archived: z.array(surfaceNodeSchema),
   cost: costUsageSchema.optional(),
@@ -314,7 +323,7 @@ const timelineStateSchema = z.object({
   pendingCodeOps: z.record(z.string(), z.array(fileOpSchema)).optional(),
 }) as unknown as z.ZodType<TimelineState>
 
-export const TIMELINE_STATE_VERSION = 39
+export const TIMELINE_STATE_VERSION = 40
 
 export function createContextTimelineDefinition(config: Config, slim: () => boolean): WiredProjection<'contextTimeline', TimelineState> {
   const bounds = resolveBounds(config)

@@ -8,7 +8,7 @@ import type { ContextTimeline } from '../../../src/shared/types'
 import { createTimelineState } from '../../../src/host/foldState'
 import { createContextTimelineDefinition } from '../../../src/host/timeline'
 
-export interface TimelineDefLike {
+interface TimelineDefLike {
   key: string
   stateSchema: { parse(value: unknown): unknown; safeParse(value: unknown): { success: boolean; error?: { issues: unknown[] } } }
   init(): TimelineState
@@ -84,7 +84,7 @@ function assertNoAbsentMembers(value: unknown, path = '$', seen = new Set<object
   }
 }
 
-export interface TimelineDrive {
+interface TimelineDrive {
   def: TimelineDefLike
   state: TimelineState
   states: TimelineState[]

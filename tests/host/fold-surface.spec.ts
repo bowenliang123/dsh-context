@@ -192,7 +192,7 @@ describe('surfaceOp variants', () => {
     }
   })
 
-  test('a replace with an armed claim removes by seqs and rewrites the metering event net-freed, clamped at zero', () => {
+  test('a replace with an armed claim removes by seqs, inserts at the replaced position, and rewrites the metering event net-freed, clamped at zero', () => {
     const { state } = driveTimeline([
       userMessage(1, text(big)),
       userMessage(2, text(big)),
@@ -202,8 +202,8 @@ describe('surfaceOp variants', () => {
     ])
     assert.deepEqual(
       [state.surface.map(n => n.seq), state.sums.user, state.archived.map(n => [n.seq, n.gone]), state.events[0].tokens],
-      [[3, 5], 22, [[1, 5], [2, 5]], 14],
-      'removed nodes archived as stamped copies, the metering row rewritten net-freed',
+      [[5, 3], 22, [[1, 5], [2, 5]], 14],
+      'removed nodes archived as stamped copies, the replacement lands at the replaced position, the metering row rewritten net-freed',
     )
     assertPlainJson(state)
     const clamped = driveTimeline([
@@ -242,6 +242,18 @@ describe('surfaceOp variants', () => {
       ]).state
       assert.deepEqual(missing.surface.map(n => n.seq), [1, 2], JSON.stringify(surfaceOp))
     }
+  })
+
+  test('an armed claim whose seqs are absent from the surface appends the replacement', () => {
+    const def = fullDef({})
+    const base = driveTimeline([userMessage(1, text('aaaa'))]).state
+    const applied = def.apply(
+      { ...base, pendingShadowedSeqs: [99], pendingShadowEventSeq: 99 },
+      userMessage(2, text('bbbb'), undefined, { surfaceOp: { op: 'replace', startSeq: 1, endSeq: 1 } }),
+    )
+    assert.deepEqual(applied.surface.map(n => n.seq), [1, 2])
+    assert.deepEqual(applied.archived, [])
+    assert.equal(applied.events.length, 0)
   })
 
   test('restored state: a claim whose metering event cannot be rewritten skips the rewrite', () => {

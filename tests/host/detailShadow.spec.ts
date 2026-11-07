@@ -67,11 +67,17 @@ async function shadowSeed(
   return shadow.stateOf('s1')
 }
 
-function observeOf(events: TimelineEvent[] | Error, reads: { count: number } = { count: 0 }) {
+function observeOf(events: TimelineEvent[] | Error, reads: { count: number } = { count: 0 }, disposed?: { count: number }) {
   return (id: string, options: unknown): Promise<unknown> => {
     reads.count++
     if (events instanceof Error) return Promise.reject(events)
-    return Promise.resolve({ events, options, [Symbol.dispose]: () => {} })
+    return Promise.resolve({
+      events,
+      options,
+      [Symbol.dispose]: () => {
+        if (disposed !== undefined) disposed.count++
+      },
+    })
   }
 }
 
@@ -143,9 +149,10 @@ describe('DetailShadow', () => {
     assert.deepStrictEqual(buildTimelineDetail(state, BOUNDS), reference, 'the buffered event folded exactly once')
   })
 
-  test('an event flood during a stalled seed drops the entry; the next read reseeds', async () => {
+  test('an event flood during a stalled seed drops the entry; the next read reseeds and both leases dispose', async () => {
     const harness = ctxOf()
     const reads = { count: 0 }
+    const disposed = { count: 0 }
     let release: (() => void) | undefined
     const blocked = new Promise<void>(resolve => {
       release = resolve
@@ -155,7 +162,7 @@ describe('DetailShadow', () => {
         await blocked
         return read()
       },
-    }, () => observeOf(log(1, 1), reads))
+    }, () => observeOf(log(1, 1), reads, disposed))
     const pending = shadow.stateOf('s1')
     for (let i = 0; i < 600; i++) {
       harness.emit('session/event', { id: 's1' }, log(1, 1)[1])
@@ -163,18 +170,28 @@ describe('DetailShadow', () => {
     release!()
     const state = await pending
     assert.equal(state, null, 'the flooded entry dropped; the seed aborted')
+    assert.equal(disposed.count, 1, 'the dropped seed disposes its observation lease once')
     const again = await shadow.stateOf('s1')
     assert.ok(again !== null, 'the next read reseeds cleanly')
     assert.equal(reads.count, 2)
+    assert.equal(disposed.count, 2, 'the reseeded lease disposes once on success')
   })
 
-  test('a disposed session drops its entry; the observation lease still disposes', async () => {
+  test('a disposed session drops its seeded entry and its lease was disposed once at seed completion', async () => {
     const harness = ctxOf()
-    const shadow = new DetailShadow(harness.ctx, BOUNDS, gate(), () => observeOf(log(1, 1)))
+    const reads = { count: 0 }
+    const disposed = { count: 0 }
+    const shadow = new DetailShadow(harness.ctx, BOUNDS, gate(), () => observeOf(log(1, 1), reads, disposed))
     await shadow.stateOf('s1')
+    assert.equal(reads.count, 1)
+    assert.equal(disposed.count, 1, 'the seeded observation lease is disposed exactly once')
     harness.emit('session/disposed', { id: 's1' })
     harness.emit('session/event', { id: 's1' }, log(3, 1)[1])
-    assert.ok(true, 'no throw after dispose')
+    assert.equal(disposed.count, 1, 'dropping the entry never disposes the lease again')
+    const reseeded = await shadow.stateOf('s1')
+    assert.ok(reseeded !== null)
+    assert.equal(reads.count, 2, 'a later read reseeds after the dispose')
+    assert.equal(disposed.count, 2, 'the reseeded lease is disposed too')
   })
 
   test('a failed observation propagates the failure and clears the entry', async () => {
@@ -187,6 +204,20 @@ describe('DetailShadow', () => {
     assert.ok(state !== null, 'a fresh shadow seeds after the failure')
   })
 
+  test('a seed failure after the lease arrives disposes the lease exactly once and clears the entry', async () => {
+    const harness = ctxOf()
+    const disposed = { count: 0 }
+    const shadow = new DetailShadow(harness.ctx, BOUNDS, gate(), () => async () => ({
+      get events(): readonly TimelineEvent[] { throw new Error('log read failed') },
+      [Symbol.dispose]: () => { disposed.count++ },
+    }))
+    await assert.rejects(shadow.stateOf('s1'), /log read failed/)
+    assert.equal(disposed.count, 1, 'the finally disposes the failed seed lease')
+    const retried = new DetailShadow(harness.ctx, BOUNDS, gate(), () => observeOf(log(1, 1), { count: 0 }, disposed))
+    assert.ok(await retried.stateOf('s1') !== null, 'a fresh shadow seeds after the failure')
+    assert.equal(disposed.count, 2, 'the retried lease disposes once on success')
+  })
+
   test('a refused cold-read admission answers null without observing', async () => {
     const harness = ctxOf()
     const reads = { count: 0 }
@@ -196,7 +227,7 @@ describe('DetailShadow', () => {
     assert.equal(reads.count, 0, 'a refused admission never touches the log')
   })
 
-  test('junk payloads fold past; a session disposed mid-seed aborts the seed at the next yield', async () => {
+  test('junk payloads fold past and hostile entries never break the seed', async () => {
     const harness = ctxOf()
     const events: TimelineEvent[] = []
     for (let seq = 1; seq <= 1_200; seq++) {
@@ -249,17 +280,22 @@ describe('DetailShadow', () => {
     assert.deepStrictEqual(buildTimelineDetail(state, BOUNDS), reference, 'junk and stale buffers fold to the same state')
   })
 
-  test('a session disposed mid-seed aborts at the next yield', async () => {
+  test('a session disposed mid-seed aborts at the next yield and still disposes its lease once', async () => {
     const harness = ctxOf()
+    const disposed = { count: 0 }
     const shadow = new DetailShadow(harness.ctx, BOUNDS, gate(), () => (id, options) => {
       void id
       void options
-      return Promise.resolve({ events: log(1, 3_200), [Symbol.dispose]: () => {} })
+      return Promise.resolve({
+        events: log(1, 3_200),
+        [Symbol.dispose]: () => { disposed.count++ },
+      })
     })
     const pending = shadow.stateOf('s1')
     await new Promise(resolve => setTimeout(resolve, 20))
     harness.emit('session/disposed', { id: 's1' })
     assert.equal(await pending, null, 'the seed aborts once the entry is gone')
+    assert.equal(disposed.count, 1, 'the aborted seed still disposes the observation lease once')
   })
 
   test('evicting while every other entry still seeds keeps them all', async () => {

@@ -93,12 +93,15 @@ function armSliced(ctx: Context, eventsById: Map<string, SessionEvent[]>, opts: 
         throw new Error(`session "${id}" already exists`)
       }
       if (opts.failPrepare?.has(id) === true) throw new Error(`session "${id}" has a corrupt header`)
+      const marker = { type: 'session/end-seed', seq: o.seed.length, time: 1, data: {} } as SessionEvent
+      const log = [...o.seed, marker]
       return {
         id,
         header: o.meta,
         inheritedEventCount: o.inheritedEventCount,
-        seq: o.seed.length,
-        snapshotEvents: () => o.seed,
+        seq: log.length,
+        eventAt: (seq: number) => log[seq],
+        snapshotEvents: () => log,
       }
     }
   }
@@ -107,7 +110,7 @@ function armSliced(ctx: Context, eventsById: Map<string, SessionEvent[]>, opts: 
 }
 
 describe('the sliced cold fold (issue #145)', () => {
-  test('a monster session folds in slices (a dropped restore answer refolds from init) and lands one-shot rows byte for byte', async () => {
+  test('a monster session folds in slices (a dropped restore answer refolds from init) and lands one-shot rows plus the resume marker', async () => {
     const ctx = new Context()
     const events = fakeEvents(4_001)
     const rig = armSliced(ctx, new Map([['monster', events]]), { hostileRestoreAt: 2 })
@@ -118,7 +121,8 @@ describe('the sliced cold fold (issue #145)', () => {
     assert.deepEqual(rig.coldSnapshots, [], 'the sliced path never calls coldSnapshot')
     assert.deepEqual(rig.prepares, ['monster'])
     assert.ok(rig.restoreCalls.length >= 3, `expected ≥3 sliced restores, got ${rig.restoreCalls.join(',')}`)
-    assert.deepStrictEqual(rig.writes.get('monster'), referenceRows(events, 'monster'), 'sliced rows must equal the single-shot rows byte for byte')
+    const marker = { type: 'session/end-seed', seq: events.length, time: 1, data: {} } as SessionEvent
+    assert.deepStrictEqual(rig.writes.get('monster'), referenceRows([...events, marker], 'monster'), 'sliced rows equal the single-shot rows at the resume-marker cut')
   })
 
   test('a session at or under the slice threshold, or one without the slice faces, stays on the single-shot coldSnapshot path', async () => {
@@ -323,6 +327,7 @@ describe('the sliced cold fold (issue #145)', () => {
     const pauses = lines.filter(l => l.level === 'info' && l.text.includes('pausing after'))
     assert.equal(pauses.length, 2)
     assert.match(pauses[0].text, /pausing after 1s of fold work; resuming in 2s/)
-    assert.deepStrictEqual(rig.writes.get('monster'), referenceRows(events, 'monster'), 'pauses never change the rows')
+    const marker = { type: 'session/end-seed', seq: events.length, time: 1, data: {} } as SessionEvent
+    assert.deepStrictEqual(rig.writes.get('monster'), referenceRows([...events, marker], 'monster'), 'pauses never change the rows')
   })
 })
