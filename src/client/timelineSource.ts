@@ -195,6 +195,10 @@ function emptyDetail(rev: number, head?: ContextTimeline, requests?: RequestReco
   }
 }
 
+function seriesHasBreakdown(series: readonly RequestRecord[]): boolean {
+  return series.every(request => typeof request.system === 'number' || typeof request.assistant === 'number' || typeof request.tool === 'number')
+}
+
 function sameWindow(a: FactWindow, b: FactWindow): boolean {
   return a.requestsTail === b.requestsTail && a.nodesTail === b.nodesTail && a.eventsTail === b.eventsTail
     && a.filesTail === b.filesTail && a.commandsTail === b.commandsTail && a.spansTail === b.spansTail
@@ -493,6 +497,7 @@ export class DetailStore {
           this.acceptedRev = d.rev
           this.unavailableParts.clear()
           this.partRev.clear()
+          if (!seriesHasBreakdown(d.requests)) this.ensurePart('requests')
           this.fetchWantedParts()
         }
         if (d.rev >= this.acceptedRev && d.rev < this.targetRev) {

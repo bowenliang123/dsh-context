@@ -9,7 +9,7 @@ import { buildTimelineHead, serveCommand } from './foldWire'
 import type { TimelineState } from './foldState'
 import { failure, leaseOf, mountPostRoute, observeOf, readBody, reply, revisionOf } from './postRoute'
 import { asRecord } from './record'
-import type { SlimRequestRecord } from '../shared/types'
+import type { RequestRecord } from '../shared/types'
 
 export const FACTS_ROUTE = '/api/dsh-context/facts'
 
@@ -130,20 +130,8 @@ function kernelOfCold(cache: CachedSnapshotFace | undefined, header: unknown): K
   }
 }
 
-function slimSeriesOf(state: TimelineState): SlimRequestRecord[] {
-  const series: SlimRequestRecord[] = []
-  for (const request of state.requests) {
-    series.push({
-      seq: request.seq,
-      time: request.time,
-      total: request.total,
-      ...(request.turn === undefined ? {} : { turn: request.turn }),
-      ...(request.step === undefined ? {} : { step: request.step }),
-      ...(request.prompt === undefined ? {} : { prompt: request.prompt }),
-      ...(request.activeMs === undefined ? {} : { activeMs: request.activeMs }),
-    })
-  }
-  return series
+function seriesOf(state: TimelineState): RequestRecord[] {
+  return state.requests.map(request => ({ ...request })) as RequestRecord[]
 }
 
 function tailOf<T>(items: readonly T[], tail: number): T[] {
@@ -217,7 +205,7 @@ function valueOf(
   ]
   const partsValue: Record<string, unknown> = {
     ...(parts.has('head') ? { head: buildTimelineHead(state) } : {}),
-    ...(parts.has('series') ? { series: slimSeriesOf(aligned ?? state) } : {}),
+    ...(parts.has('series') ? { series: seriesOf(aligned ?? state) } : {}),
     ...(parts.has('stats') && kernel.values !== undefined ? { stats: kernel.values } : {}),
     ...(aligned === null ? {} : detailPartsOf(aligned, parts, window)),
   }

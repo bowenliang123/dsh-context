@@ -26,7 +26,7 @@ function head(rev: number): Record<string, unknown> {
 }
 
 function series(rev: number): Record<string, unknown>[] {
-  return [{ seq: rev, time: T0, total: 15, turn: 1, step: 0 }]
+  return [{ seq: rev, time: T0, total: 15, turn: 1, step: 0, system: 1, tools: 2, user: 3, inject: 0, assistant: 4, tool: 5 }]
 }
 
 function core(rev: number): FactsRead {
@@ -344,6 +344,23 @@ describe('DetailStore over the facts protocol', () => {
     nullStore.ensurePart('nodes')
     await new Promise(resolve => setTimeout(resolve, 10))
     assert.equal(nullStore.getSnapshot().detail?.nodes.length, 0)
+  })
+
+  test('a slim core series automatically pulls the full requests part', async () => {
+    const calls: FactPart[] = []
+    const slim = { seq: 1, time: 1, total: 5, turn: 1, step: 0 }
+    const full = { ...slim, system: 1, tools: 2, user: 1, inject: 0, assistant: 1, tool: 0 }
+    const store = storeOf(async () => ({ rev: 1, live: true, parts: { head: head(1) as never, series: [slim as never] } }), async (part) => {
+      calls.push(part)
+      if (part === 'requests') return { rev: 1, parts: { requests: [full as never] } }
+      return { rev: 1, parts: {} }
+    })
+    store.subscribe(() => {})
+    store.request(1)
+    await until(() => store.hasPayload, 'the core never landed')
+    await until(() => calls.includes('requests'), 'the slim series never triggered the requests part')
+    await until(() => store.getSnapshot().detail?.requests[0]?.assistant === 1, 'the full request never replaced the slim series')
+    store.release()
   })
 
   test('a degraded core series is rejected so the legacy detail route can serve it', async () => {

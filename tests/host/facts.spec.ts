@@ -325,6 +325,20 @@ describe('detail parts and windows', () => {
     assert.equal('nodes' in parts, false)
   })
 
+  test('series carries the full request breakdown for the trend and per-step composition', async () => {
+    const head = stateOf() as import('../../src/host/foldState').TimelineState
+    const fullRequests = [
+      { seq: 1, time: 1, total: 10, turn: 1, step: 0, system: 2, tools: 3, user: 4, inject: 0, assistant: 5, tool: 6, prompt: 9 },
+      { seq: 2, time: 2, total: 20, turn: 1, step: 1, system: 2, tools: 3, user: 4, inject: 0, assistant: 10, tool: 11 },
+    ]
+    const fake = liveFake(head, undefined, { detailState: async () => ({ ...head, requests: fullRequests as never }) })
+    const body = (await call(fake.captured, { sessionId: 's1', parts: ['head', 'series'] })).value as Record<string, unknown>
+    const series = (body.parts as { series: Record<string, unknown>[] }).series
+    assert.equal(series.length, 2)
+    assert.deepEqual(series[0], fullRequests[0], 'the trend needs the category buckets, not the trimmed total')
+    assert.deepEqual(series[1], fullRequests[1])
+  })
+
   test('serves series from the full detail state, not the trimmed head window', async () => {
     const head = stateOf() as import('../../src/host/foldState').TimelineState
     const detailState = { ...head, requests: Array.from({ length: 5 }, (_, i) => ({ seq: i + 1, time: i, total: i + 1 })) }
