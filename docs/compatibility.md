@@ -2,7 +2,7 @@
 
 Rules dsh-context holds on every supported `@deepseek-ai/dsh` release, and the evidence for each. Unmarked paths are in this repo; `dsh:` paths are in the harness tree read at the per-line floor tag (`dsh-v0.2.0-rc.2`, `dsh-v0.2.1-rc.2`, `dsh-v0.2.2-rc.1`) unless another tag is named. A `.../` prefix continues the preceding path's directory. Source wins over this page.
 
-Last verified: **2026-11-08** (dsh-context `0.82.2`; dsh floors `0.2.0-rc.2`, `0.2.1-rc.2`, `0.2.2-rc.1`, plus the `0.2.1-rc.2`…`rc.5` diffs).
+Last verified: **2026-11-09** (dsh-context `0.83.0`; dsh floors `0.2.0-rc.2`, `0.2.1-rc.2`, `0.2.2-rc.1`, plus the `0.2.1-rc.2`…`rc.5` diffs).
 
 ## 1 · Supported set
 
