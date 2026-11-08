@@ -61,6 +61,9 @@ A DeepSeek Harness plugin for context insight, actions, and management.
   
   - Every source and test file stays under 1000 lines.
 
+  ### Memory and Performance
+  - Carefully follow every instructions in `docs/host-client-principles.md`.
+
 
 ## Pre-commit checks
 
