@@ -517,7 +517,7 @@ export function makeContextView(
       if (stats === null && top.length === 0) return { runs: 0, top: [] as [string, number][] }
       return { runs: stats?.runs ?? 0, top }
     }, [fullCommandList, data, workspace])
-    const hasCommands = fullCommandList.length > 0
+    const hasCommands = fullCommandList.length > 0 || (data?.commandStats?.runs ?? 0) > 0
     const [canOpenPaths, setCanOpenPaths] = useState(false)
     useEffect(() => {
       let live = true

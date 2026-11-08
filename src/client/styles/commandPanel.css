@@ -64,6 +64,7 @@ body:not([data-ds-dark-theme]) .lc-cmd-item-on > .lc-cmd-row { background: var(-
 body:not([data-ds-dark-theme]) .lc-cmd-item-on > .lc-cmd-row:hover { background: var(--dsw-alias-interactive-bg-active); }
 .lc-cmd-row { content-visibility: auto; height: 28px; box-sizing: border-box; display: flex; align-items: center; gap: 7px; width: 100%; border: 0; background: transparent; color: var(--dsw-alias-label-primary); font: inherit; font-size: 12px; padding: 6px 8px; cursor: pointer; text-align: left; border-radius: 7px; transition: background-color var(--ds-transition-duration, 0.2s) var(--ds-ease-in-out, ease-in-out); }
 .lc-cmd-row .lc-br-chev { margin-right: -2px; }
+.lc-cmd-toggle { flex: 1; min-width: 0; display: flex; align-items: center; gap: 7px; margin: 0; padding: 0; border: 0; background: transparent; color: inherit; font: inherit; font-size: 12px; cursor: pointer; text-align: left; }
 .lc-cmd-st { flex: none; width: 14px; text-align: center; font-size: 11px; line-height: 1; }
 .lc-cmd-st-ok { color: var(--dsw-alias-state-success-primary); }
 .lc-cmd-st-fail { color: var(--dsw-alias-state-error-primary); }
@@ -82,7 +83,7 @@ body:not([data-ds-dark-theme]) .lc-cmd-item-on > .lc-cmd-row:hover { background:
 .lc-cmd-dur-3 { color: var(--dsw-alias-state-warn-primary); font-weight: 700; }
 .lc-cmd-dur-run { color: var(--dsw-alias-brand-primary); }
 .lc-cmd-time { flex: none; color: var(--dsw-alias-label-secondary); font-size: 11px; font-variant-numeric: tabular-nums; white-space: nowrap; }
-.lc-cmd-time-link { cursor: pointer; border-radius: 4px; padding: 0 3px; margin-right: -3px; }
+.lc-cmd-time-link { flex: none; cursor: pointer; border: 0; background: transparent; color: var(--dsw-alias-label-secondary); font: inherit; font-size: 11px; font-variant-numeric: tabular-nums; border-radius: 4px; padding: 0 3px; margin-right: -3px; }
 .lc-cmd-time-link:hover { color: var(--dsw-alias-brand-primary); text-decoration: underline; text-underline-offset: 2px; }
 .lc-cmd-detail { margin: 8px 8px 8px 15px; display: flex; flex-direction: column; gap: 8px; }
 .lc-cmd-full { margin: 0; padding: 8px 10px; max-height: 220px; overflow-y: auto; font-family: inherit; font-size: 11px; line-height: 1.5; white-space: pre-wrap; word-break: break-all; color: var(--dsw-alias-label-primary); }
