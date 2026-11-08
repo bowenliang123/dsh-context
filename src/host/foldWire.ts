@@ -1,4 +1,5 @@
 import type { CommandRecord, ContextTimelineDetail, RequestRecord, Snapshot, ToolTimingTotals } from '../shared/types'
+import { attachTurnSpans } from '../shared/turnSpans'
 import { copyCostUsage } from './foldMetering'
 import type { FoldBounds } from './config'
 import type { CommandStateRecord, TimelineState } from './foldState'
@@ -68,12 +69,21 @@ function headFieldsOf(state: TimelineState): Snapshot {
   return result
 }
 
+export function requestRowsOf(state: TimelineState): RequestRecord[] {
+  return state.requests
+    .filter((r): r is RequestRecord => typeof (r as { system?: unknown }).system === 'number')
+    .map(r => ({ ...r }))
+}
+
+export function eventsOf(state: TimelineState, requests: readonly RequestRecord[] = requestRowsOf(state)): ContextTimelineDetail['events'] {
+  return attachTurnSpans(state.events, requests)
+}
+
 function detailCollectionsOf(state: TimelineState, bounds: FoldBounds): Omit<ContextTimelineDetail, 'rev'> {
+  const requests = requestRowsOf(state)
   const result: Omit<ContextTimelineDetail, 'rev'> = {
-    requests: state.requests
-      .filter((r): r is RequestRecord => typeof (r as { system?: unknown }).system === 'number')
-      .map(r => ({ ...r })),
-    events: state.events.map(e => ({ ...e })),
+    requests,
+    events: eventsOf(state, requests),
     nodes: [],
     droppedNodes: 0,
     archive: state.archived.map(n => ({ ...n })),
@@ -96,23 +106,6 @@ function detailCollectionsOf(state: TimelineState, bounds: FoldBounds): Omit<Con
     result.surfaceFloor = floor
   }
   if (state.archiveFloor !== undefined) result.archiveFloor = state.archiveFloor
-
-  const requests = result.requests
-  const events = result.events
-  let ri = 0
-  for (const ev of events) {
-    while (ri < requests.length && requests[ri].seq <= ev.seq) ri++
-    const next = requests.at(ri)
-    const prev = ri > 0 ? requests.at(ri - 1) : undefined
-    if (next !== undefined && typeof next.turn === 'number' && typeof next.step === 'number') {
-      ev.turn = next.turn
-      ev.step = next.step
-    }
-    if (prev !== undefined && typeof prev.turn === 'number' && typeof prev.step === 'number') {
-      ev.fromTurn = prev.turn
-      ev.fromStep = prev.step
-    }
-  }
   return result
 }
 

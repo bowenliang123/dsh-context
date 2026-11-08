@@ -5,11 +5,10 @@ import { foldLog } from './detailShadow'
 import type { DetailChannelGate } from './detail'
 import type { CachedSnapshotFace, SessionsFace, StateProjectionsFace } from './faces'
 import { type ColdReadGate, makeColdReadGate } from './coldRead'
-import { buildTimelineHead, serveCommand } from './foldWire'
-import type { TimelineState } from './foldState'
+import { buildTimelineHead, eventsOf, requestRowsOf, serveCommand } from './foldWire'
+import { TIMING_SPANS_MAX, type TimelineState } from './foldState'
 import { failure, leaseOf, mountPostRoute, observeOf, readBody, reply, revisionOf } from './postRoute'
 import { asRecord } from './record'
-import type { RequestRecord } from '../shared/types'
 
 export const FACTS_ROUTE = '/api/dsh-context/facts'
 
@@ -25,22 +24,15 @@ const WINDOW_FIELDS = ['requestsTail', 'nodesTail', 'eventsTail', 'filesTail', '
 
 type FactWindow = Record<typeof WINDOW_FIELDS[number], number>
 
-const WINDOW_LIMITS: FactWindow = {
-  requestsTail: 1500,
-  nodesTail: 2000,
-  eventsTail: 400,
-  filesTail: 400,
-  commandsTail: 400,
-  spansTail: 2000,
-}
-
-const WINDOW_DEFAULTS: FactWindow = {
-  requestsTail: 1500,
-  nodesTail: 2000,
-  eventsTail: 400,
-  filesTail: 400,
-  commandsTail: 120,
-  spansTail: 2000,
+function windowCapsOf(bounds: FoldBounds): FactWindow {
+  return {
+    requestsTail: bounds.maxRequestSteps,
+    nodesTail: bounds.maxNodes,
+    eventsTail: bounds.maxEvents,
+    filesTail: bounds.maxFileOps,
+    commandsTail: bounds.maxCommands,
+    spansTail: TIMING_SPANS_MAX,
+  }
 }
 
 interface FactPartRequest {
@@ -65,20 +57,20 @@ function tailNumber(value: unknown, fallback: number, limit: number): number {
   return Math.min(limit, Math.max(1, Math.floor(value)))
 }
 
-function windowOf(body: Record<string, unknown>): FactWindow {
+function windowOf(body: Record<string, unknown>, caps: FactWindow): FactWindow {
   const raw = asRecord(body.window)
-  if (raw === null) return WINDOW_DEFAULTS
-  const window = { ...WINDOW_DEFAULTS }
-  for (const field of WINDOW_FIELDS) window[field] = tailNumber(raw[field], WINDOW_DEFAULTS[field], WINDOW_LIMITS[field])
+  if (raw === null) return caps
+  const window = { ...caps }
+  for (const field of WINDOW_FIELDS) window[field] = tailNumber(raw[field], caps[field], caps[field])
   return window
 }
 
-function partsOf(body: unknown): FactPartRequest | null {
+function partsOf(body: unknown, caps: FactWindow): FactPartRequest | null {
   const data = asRecord(body)
   if (data === null) return null
   const sessionId = data.sessionId
   if (typeof sessionId !== 'string' || sessionId === '') return null
-  const window = windowOf(data)
+  const window = windowOf(data, caps)
   const requested = data.parts
   if (!Array.isArray(requested)) return { sessionId, parts: FACT_PARTS, window }
   const parts = new Set<string>()
@@ -130,12 +122,13 @@ function kernelOfCold(cache: CachedSnapshotFace | undefined, header: unknown): K
   }
 }
 
-function seriesOf(state: TimelineState): RequestRecord[] {
-  return state.requests.map(request => ({ ...request })) as RequestRecord[]
-}
-
 function tailOf<T>(items: readonly T[], tail: number): T[] {
   return items.length > tail ? items.slice(items.length - tail) : [...items]
+}
+
+function windowFloorOf(items: readonly { seq: number }[], tail: number, floor: number | undefined): number | undefined {
+  if (items.length <= tail) return floor
+  return Math.max(floor ?? 0, items[items.length - tail - 1].seq)
 }
 
 function surfacePartOf(state: TimelineState, tail: number): Record<string, unknown> {
@@ -164,19 +157,22 @@ function surfacePartOf(state: TimelineState, tail: number): Record<string, unkno
 
 function detailPartsOf(state: TimelineState, parts: ReadonlySet<string>, window: FactWindow): Record<string, unknown> {
   const out: Record<string, unknown> = {}
-  if (parts.has('requests')) out.requests = tailOf(state.requests, window.requestsTail).map(request => ({ ...request }))
+  const requests = parts.has('requests') || parts.has('events') ? requestRowsOf(state) : []
+  if (parts.has('requests')) out.requests = tailOf(requests, window.requestsTail)
   if (parts.has('nodes')) out.nodes = surfacePartOf(state, window.nodesTail)
-  if (parts.has('events')) out.events = tailOf(state.events, window.eventsTail).map(event => ({ ...event }))
+  if (parts.has('events')) out.events = tailOf(eventsOf(state, requests), window.eventsTail)
   if (parts.has('files')) {
+    const fileOpsFloor = windowFloorOf(state.fileOps, window.filesTail, state.fileOpsFloor)
     out.files = {
       fileOps: tailOf(state.fileOps, window.filesTail).map(op => ({ ...op })),
-      ...(state.fileOpsFloor === undefined ? {} : { fileOpsFloor: state.fileOpsFloor }),
+      ...(fileOpsFloor === undefined ? {} : { fileOpsFloor }),
     }
   }
   if (parts.has('commands')) {
+    const commandsFloor = windowFloorOf(state.commands, window.commandsTail, state.commandsFloor)
     out.commands = {
       commands: tailOf(state.commands, window.commandsTail).map(serveCommand),
-      ...(state.commandsFloor === undefined ? {} : { commandsFloor: state.commandsFloor }),
+      ...(commandsFloor === undefined ? {} : { commandsFloor }),
       ...(state.commandStats === undefined ? {} : { commandStats: { ...state.commandStats } }),
     }
   }
@@ -205,7 +201,7 @@ function valueOf(
   ]
   const partsValue: Record<string, unknown> = {
     ...(parts.has('head') ? { head: buildTimelineHead(state) } : {}),
-    ...(parts.has('series') ? { series: seriesOf(aligned ?? state) } : {}),
+    ...(parts.has('series') ? { series: requestRowsOf(aligned ?? state) } : {}),
     ...(parts.has('stats') && kernel.values !== undefined ? { stats: kernel.values } : {}),
     ...(aligned === null ? {} : detailPartsOf(aligned, parts, window)),
   }
@@ -229,6 +225,7 @@ export function watchFactsChannel(ctx: Context, bounds: FoldBounds, deps: FactsC
   const stateCache = new Map<string, ColdState>()
   const stateCacheMax = deps.stateCacheMax ?? STATE_CACHE_MAX
   const coldReads = deps.coldReads ?? makeColdReadGate()
+  const caps = windowCapsOf(bounds)
   mountPostRoute({
     ctx,
     deps: ['connection'],
@@ -271,7 +268,7 @@ export function watchFactsChannel(ctx: Context, bounds: FoldBounds, deps: FactsC
         const observe = observeOf(c)
         const read = await readBody(request)
         if (!read.ok) return read.response
-        const wanted = partsOf(read.body)
+        const wanted = partsOf(read.body, caps)
         if (wanted === null) return failure('dsh-context/bad-request', 'missing sessionId')
         const wantedDetail = detailPartsRequested(wanted.parts)
         try {

@@ -103,21 +103,21 @@ describe('request validation', () => {
   })
 })
 
-function liveFake(state: unknown = stateOf(), snapshot?: unknown, deps: Record<string, unknown> = {}): FakeCtx {
+function liveFake(state: unknown = stateOf(), snapshot?: unknown, deps: Record<string, unknown> = {}, bounds = BOUNDS): FakeCtx {
   const projections = { stateOf: () => state, ...(snapshot === undefined ? {} : { snapshot }) }
   const fake = fakeCtx({
     connection: connectionOf(),
     sessions: { get: (id: string) => (id === 's1' ? { id: 's1' } : undefined) },
     sessionProjections: projections,
   })
-  watchFactsChannel(fake.ctx, BOUNDS, { gates: gatesWith(state), ...deps })
+  watchFactsChannel(fake.ctx, bounds, { gates: gatesWith(state), ...deps })
   return fake
 }
 
 describe('live sessions', () => {
 
 
-  test('serves head, slim series and kernel stats in one consistent value', async () => {
+  test('serves head, full series and kernel stats in one consistent value', async () => {
     const snapshot = () => ({
       asOfSeq: 3,
       values: {
@@ -127,12 +127,16 @@ describe('live sessions', () => {
         ignored: { value: true },
       },
     })
-    const fake = liveFake(stateOf(), snapshot)
+    const state = createTimelineState()
+    state.detailRev = 2
+    const fullRequests = [{ seq: 3, time: 1, total: 9, system: 1, tools: 2, user: 1, inject: 0, assistant: 2, tool: 3 }]
+    const fake = liveFake(state, snapshot, { detailState: async () => ({ ...state, requests: fullRequests as never }) })
     const body = await call(fake.captured, { sessionId: 's1' })
     const value = body.value as Record<string, unknown>
     assert.equal(value.live, true)
     assert.equal(value.asOfSeq, 3)
     assert.equal(typeof value.rev, 'number')
+    assert.equal(value.missing, undefined, 'an aligned detail fold backs the series')
     const parts = value.parts as Record<string, unknown>
     assert.ok(parts.head !== undefined)
     assert.ok(Array.isArray(parts.series))
@@ -140,6 +144,8 @@ describe('live sessions', () => {
     const series = (parts.series as Record<string, unknown>[])[0] as Record<string, unknown>
     assert.equal(series.seq, 3)
     assert.equal(series.total, 9)
+    assert.equal(series.assistant, 2)
+    assert.equal(series.tool, 3)
     const stats = parts.stats as Record<string, unknown>
     assert.deepEqual(stats.sessionStats, { turns: 1, steps: 1 })
     assert.equal(stats.tokenUsage !== undefined, true)
@@ -180,14 +186,27 @@ describe('live sessions', () => {
   test('serializes every optional series field', async () => {
     const state = createTimelineState()
     state.detailRev = 4
-    state.requests.push({ seq: 5, time: 100, total: 9, turn: 1, step: 2, prompt: 7, activeMs: 12 })
-    state.requests.push({ seq: 6, time: 200, total: 3 })
+    state.requests.push({ seq: 5, time: 100, total: 9, turn: 1, step: 2, prompt: 7, activeMs: 12, system: 1, tools: 2, user: 3, inject: 0, assistant: 2, tool: 1 } as never)
+    state.requests.push({ seq: 6, time: 200, total: 3, system: 0, tools: 0, user: 2, inject: 0, assistant: 1, tool: 0 } as never)
     const fake = liveFake(state)
     const body = (await call(fake.captured, { sessionId: 's1', parts: ['series'] })).value as Record<string, unknown>
     const series = (body.parts as { series: Record<string, unknown>[] }).series
-    assert.deepEqual(series[0], { seq: 5, time: 100, total: 9, turn: 1, step: 2, prompt: 7, activeMs: 12 })
-    assert.deepEqual(series[1], { seq: 6, time: 200, total: 3 })
+    assert.deepEqual(series[0], state.requests[0])
+    assert.deepEqual(series[1], state.requests[1])
     assert.equal(body.rev, 4)
+  })
+
+  test('enriches facts events with the same turn/step spans as the detail route', async () => {
+    const head = stateOf() as import('../../src/host/foldState').TimelineState
+    const full = richState()
+    full.requests = [
+      { seq: 3, time: 3, total: 3, turn: 1, step: 1, system: 1, tools: 1, user: 1, inject: 0, assistant: 0, tool: 0 },
+      { seq: 5, time: 5, total: 5, turn: 1, step: 2, system: 1, tools: 1, user: 1, inject: 0, assistant: 2, tool: 0 },
+    ] as never
+    const fake = liveFake(head, undefined, { detailState: async () => ({ ...full, detailRev: head.detailRev ?? 0 }) })
+    const body = (await call(fake.captured, { sessionId: 's1', parts: ['events'] })).value as Record<string, unknown>
+    const events = (body.parts as { events: Record<string, unknown>[] }).events
+    assert.deepEqual(events, [{ seq: 4, time: 9, kind: 'inject', form: 'context', tokens: 4, turn: 1, step: 2, fromTurn: 1, fromStep: 1 }])
   })
 
   test('omits the stats part when the kernel values are not an object', async () => {
@@ -265,7 +284,7 @@ function richState(): TimelineState {
   ]
   state.archived = [{ seq: 2, cat: 'tool', tokens: 2, gone: 6 }]
   state.archiveFloor = 2
-  state.requests = [{ seq: 5, time: 10, total: 5, turn: 1, step: 2, prompt: 4 }]
+  state.requests = [{ seq: 5, time: 10, total: 5, turn: 1, step: 2, prompt: 4, system: 1, tools: 1, user: 1, inject: 0, assistant: 1, tool: 1 } as never]
   state.events = [{ seq: 4, time: 9, kind: 'inject', form: 'context', tokens: 4 }]
   state.fileOps = [{ seq: 5, path: 'x.ts', kind: 'read', tool: 'read', err: false, added: 0, removed: 0 }]
   state.fileOpsFloor = 3
@@ -341,7 +360,7 @@ describe('detail parts and windows', () => {
 
   test('serves series from the full detail state, not the trimmed head window', async () => {
     const head = stateOf() as import('../../src/host/foldState').TimelineState
-    const detailState = { ...head, requests: Array.from({ length: 5 }, (_, i) => ({ seq: i + 1, time: i, total: i + 1 })) }
+    const detailState = { ...head, requests: Array.from({ length: 5 }, (_, i) => ({ seq: i + 1, time: i, total: i + 1, turn: 1, step: i, system: 1, tools: 1, user: 1, inject: 0, assistant: 1, tool: 1 })) as never }
     const fake = liveFake(head, undefined, { detailState: async () => detailState })
     const body = (await call(fake.captured, { sessionId: 's1', parts: ['head', 'series'] })).value as Record<string, unknown>
     const parts = body.parts as Record<string, unknown>
@@ -355,7 +374,7 @@ describe('detail parts and windows', () => {
     const body = (await call(fake.captured, { sessionId: 's1', parts: ['series'] })).value as Record<string, unknown>
     assert.deepEqual(body.missing, ['series'])
     const parts = body.parts as Record<string, unknown>
-    assert.equal((parts.series as unknown[]).length, 1, 'the head window still backs a degraded series')
+    assert.equal((parts.series as unknown[]).length, 0, 'the trimmed head cannot back a full trend series')
   })
 
   test('omits detail parts and reports them as missing when no detail state is available', async () => {
@@ -366,6 +385,43 @@ describe('detail parts and windows', () => {
     assert.deepEqual(((await call(nullRead.captured, { sessionId: 's1', parts: ['nodes'] })).value as Record<string, unknown>).missing, ['nodes'])
     const throwing = liveFake(stateOf(), undefined, { detailState: async () => { throw new Error('shadow down') } })
     assert.deepEqual(((await call(throwing.captured, { sessionId: 's1', parts: ['nodes'] })).value as Record<string, unknown>).missing, ['nodes'])
+  })
+
+  test('a command window reports its own floor so the client can page the dropped gap', async () => {
+    const head = stateOf() as import('../../src/host/foldState').TimelineState
+    const full = { ...richState(), commandsFloor: undefined, commands: [1, 2, 3, 4, 5].map(seq => ({ seq, time: seq, tool: 'bash', cmd: 'ls', start: seq, status: 'completed', err: false })) as never }
+    const fake = liveFake(head, undefined, { detailState: async () => ({ ...full, detailRev: head.detailRev ?? 0 }) })
+    const body = (await call(fake.captured, { sessionId: 's1', parts: ['commands'], window: { commandsTail: 2 } })).value as Record<string, unknown>
+    const commands = (body.parts as { commands: { commands: { seq: number }[]; commandsFloor?: number } }).commands
+    assert.deepEqual(commands.commands.map(rec => rec.seq), [4, 5])
+    assert.equal(commands.commandsFloor, 3, 'the client must page from the last dropped command, not the state floor')
+    const fullBody = (await call(fake.captured, { sessionId: 's1', parts: ['commands'], window: { commandsTail: 5 } })).value as Record<string, unknown>
+    assert.equal((fullBody.parts as { commands: { commandsFloor?: number } }).commands.commandsFloor, undefined, 'a full window needs no window floor')
+  })
+
+  test('derives window defaults and caps from the configured fold bounds', async () => {
+    const head = stateOf() as import('../../src/host/foldState').TimelineState
+    const full = {
+      ...richState(),
+      fileOpsFloor: undefined,
+      commandsFloor: undefined,
+      requests: [1, 2, 3].map(seq => ({ seq, time: seq, total: seq, turn: 1, step: seq, system: 1, tools: 1, user: 1, inject: 0, assistant: 1, tool: 1 })) as never,
+      events: [1, 2, 3, 4].map(seq => ({ seq, time: seq, kind: 'inject', form: 'context' })) as never,
+      fileOps: [1, 2, 3].map(seq => ({ seq, path: 'x' + seq, kind: 'read', tool: 'read', err: false, added: 0, removed: 0 })) as never,
+      commands: [1, 2, 3].map(seq => ({ seq, time: seq, tool: 'bash', cmd: 'ls', start: seq, status: 'completed', err: false })) as never,
+    }
+    const bounds = { ...BOUNDS, maxRequestSteps: 2, maxEvents: 2, maxFileOps: 2, maxCommands: 2, maxNodes: 2 }
+    const fake = liveFake(head, undefined, { detailState: async () => ({ ...full, detailRev: head.detailRev ?? 0 }) }, bounds)
+    const body = (await call(fake.captured, { sessionId: 's1', parts: ['requests', 'events', 'files', 'commands'] })).value as Record<string, unknown>
+    const parts = body.parts as { requests: unknown[]; events: unknown[]; files: { fileOps: { seq: number }[]; fileOpsFloor?: number }; commands: { commands: { seq: number }[]; commandsFloor?: number } }
+    assert.equal(parts.requests.length, 2)
+    assert.equal(parts.events.length, 2)
+    assert.deepEqual(parts.files.fileOps.map(rec => rec.seq), [2, 3])
+    assert.equal(parts.files.fileOpsFloor, 1)
+    assert.deepEqual(parts.commands.commands.map(rec => rec.seq), [2, 3])
+    assert.equal(parts.commands.commandsFloor, 1)
+    const huge = (await call(fake.captured, { sessionId: 's1', parts: ['commands'], window: { commandsTail: 9_999 } })).value as Record<string, unknown>
+    assert.equal(((huge.parts as { commands: { commands: unknown[] } }).commands.commands.length), 2, 'a requested tail clamps to the configured bound')
   })
 
   test('clamps and defaults the requested window', async () => {

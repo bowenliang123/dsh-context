@@ -103,7 +103,7 @@ export function makeContextModal(
     }, [ctx, sessionId])
 
     useEffect(() => {
-      if (source.detailState === 'ready') source.ensurePart('nodes', { nodesTail: 2000 })
+      if (source.detailState === 'ready') source.ensurePart('nodes')
     }, [source.detailState, source.ensurePart])
 
     useEscapeClose(true, close)

@@ -316,7 +316,7 @@ export function trimHeadState(st: TimelineState): void {
   if (st.archived.length > 0) st.archived = []
 }
 
-const TIMING_SPANS_MAX = 2_000
+export const TIMING_SPANS_MAX = 2_000
 
 export const SKILL_NAMES_MAX = 500
 
