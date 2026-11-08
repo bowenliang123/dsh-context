@@ -1,5 +1,5 @@
 import { useSyncExternalStore } from 'react'
-import { BoundedCache } from './boundedCache'
+import { makeRetentionCache } from './retention'
 import type {
   ClientCtx, ContentFetcher, ConversationNodeLike, HeaderFetcher,
   HistoryEntryLike, SessionAddressLike, SessionPageFace,
@@ -204,14 +204,12 @@ function pageReaderOf(addressOf: () => SessionAddressLike): ((seq: number) => Pr
   }
 }
 
-const CONTENT_CACHE_MAX = 128
-
 export function makeContentFetcher(
   addressOf: () => SessionAddressLike,
 ): ContentFetcher | undefined {
   const read = pageReaderOf(addressOf)
   if (read === undefined) return undefined
-  const cache = new BoundedCache<number, ConversationNodeLike>({ maxEntries: CONTENT_CACHE_MAX })
+  const cache = makeRetentionCache<number, ConversationNodeLike>('historyContent')
   return async (seq) => {
     const hit = cache.get(seq)
     if (hit !== undefined) return hit
@@ -249,14 +247,12 @@ function headerContentOf(event: { type: string; data: Record<string, unknown> })
   return { tools }
 }
 
-const HEADER_CACHE_MAX = 12
-
 export function makeHeaderFetcher(
   addressOf: () => SessionAddressLike,
 ): HeaderFetcher | undefined {
   const read = pageReaderOf(addressOf)
   if (read === undefined) return undefined
-  const cache = new BoundedCache<number, HeaderEpochContent>({ maxEntries: HEADER_CACHE_MAX })
+  const cache = makeRetentionCache<number, HeaderEpochContent>('historyHeader')
   return async (seq) => {
     const hit = cache.get(seq)
     if (hit !== undefined) return hit

@@ -59,18 +59,24 @@ export async function foldLog(
   return { state, lastSeq }
 }
 
+const IDLE_SWEEP_MS = 20_000
+
 export class DetailShadow {
   private readonly entries = new Map<string, ShadowEntry>()
   private ticks = 0
+  private sweepTimer: ReturnType<typeof setTimeout> | null = null
 
   constructor(
     ctx: Context,
     private readonly bounds: FoldBounds,
     private readonly coldReads: ColdReadGate,
     private readonly observeOf: () => ((id: string, options: unknown) => Promise<unknown>) | undefined,
+    private readonly sweepMs: number = IDLE_SWEEP_MS,
   ) {
     ctx.effect(() => () => {
       this.entries.clear()
+      if (this.sweepTimer !== null) clearTimeout(this.sweepTimer)
+      this.sweepTimer = null
     }, 'dsh-context.detailShadow')
     ctx.on('session/event', (session: SessionLike, event: unknown) => {
       if (typeof session.id !== 'string') return
@@ -79,6 +85,15 @@ export class DetailShadow {
     ctx.on('session/disposed', (session: SessionLike) => {
       if (typeof session.id === 'string') this.entries.delete(session.id)
     })
+  }
+
+  private touch(): void {
+    if (this.sweepTimer !== null) clearTimeout(this.sweepTimer)
+    this.sweepTimer = setTimeout(() => {
+      this.sweepTimer = null
+      this.entries.clear()
+    }, this.sweepMs)
+    ;(this.sweepTimer as { unref?: () => void }).unref?.()
   }
 
   private advance(id: string, event: unknown): void {
@@ -99,6 +114,7 @@ export class DetailShadow {
   }
 
   async stateOf(id: string): Promise<TimelineState | null> {
+    this.touch()
     let entry = this.entries.get(id)
     if (entry === undefined) {
       entry = { state: null, buffer: [], seed: null, touched: this.ticks, stateSeq: -1 }

@@ -57,6 +57,7 @@ interface PulseTimelineProps {
   query: string
   currency: CostCurrency
   pending: boolean
+  totalRecords?: number | null
   agentOf: (party: string) => CommsAgent
   onSelectAgent: (id: string) => void
   onSelectEvent: (row: CommsRow) => void
@@ -197,7 +198,7 @@ export const PulseTimeline = memo(function PulseTimeline(props: PulseTimelinePro
   const searching = props.query.trim() !== ''
   const agentSelected = props.selectedAgent !== null
   const hidden = searching || agentSelected || taskFiltered ? 0 : props.lanes.length - visibleIds.length
-  const recordTotal = props.scopedRows.length + props.scopedDelegations.length
+  const recordTotal = props.totalRecords ?? (props.scopedRows.length + props.scopedDelegations.length)
   const shownRecords = laneItems.length
   useEffect(() => {
     const el = scrollerRef.current
@@ -593,7 +594,7 @@ export const PulseTimeline = memo(function PulseTimeline(props: PulseTimelinePro
         <div className="lc-empty lc-pulse-timeline-empty">
           {searching && visibleIds.length === 0
             ? t('fleet.pulse.noLaneMatch')
-            : recordTotal === 0 && props.pending
+            : props.pending && shownRecords === 0
               ? t('fleet.comms.loading')
               : recordTotal > 0 || agentSelected ? t('fleet.pulse.emptyTimeline') : t('fleet.comms.empty')}
         </div>

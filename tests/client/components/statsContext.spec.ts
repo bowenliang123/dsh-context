@@ -1,31 +1,46 @@
 
 import { act, createElement as h } from 'react'
 import assert from 'node:assert/strict'
-import { afterEach, describe, test, vi, beforeEach } from 'vitest'
+import { afterEach, describe, test, vi } from 'vitest'
 import { makeStatsContext, makeSubagentCost } from '../../../src/client/components/statsContext'
 import type { StatsEventKind, SubagentStats } from '../../../src/client/components/statsContext'
 import { DICT_EN } from '../../../src/client/i18n'
 import { nameColorOf } from '../../../src/client/nameColor'
 import { makeAgentHeads } from '../../../src/client/agentHeads'
-import { resetModelPrices, setModelPricesLoader } from '../../../src/client/modelPrices'
-import type { ContextTimeline, SessionCostUsage } from '../../../src/shared/types'
+import { invalidate, resetInvalidations } from '../../../src/client/invalidation'
+import type { ContextTimeline, CostPriceFace, SessionCostRead, SessionCostUsage } from '../../../src/shared/types'
 import { TestClientCtx, asClientCtx } from '../helpers/harness'
 import { click, flush, makeKit, mount, query, queryAll, text } from '../helpers/kit'
 
 const kit = makeKit()
 const kitZh = makeKit('zh')
-const NO_SUB = (): SubagentStats => ({ usage: null, count: 0 })
+const NO_SUB = (): SubagentStats => ({ usage: null, count: 0, costRead: null })
 const StatsContext = makeStatsContext(kit, NO_SUB)
 const StatsContextZh = makeStatsContext(kitZh, NO_SUB)
-
-const PROVIDERS = {
-  deepseek: { models: { 'deepseek-v4-flash': { cost: { input: 0.15, output: 0.6, cache_read: 0.003 } } } },
-  zhipuai: { models: { 'glm-5.3-flash': { cost: { input: 0.075, output: 0.25, cache_read: 0.015, cache_write: 0 } } } },
-}
 
 const COST: SessionCostUsage = {
   'deepseek-official': { 'deepseek-v4-flash': { peak: { uncached: 1_000_000, cacheRead: 0, cacheWrite: 0, output: 0 } } },
 }
+
+const FACE_FLASH: CostPriceFace = {
+  provider: 'deepseek',
+  model: 'deepseek-v4-flash',
+  rate: { hit: 0.003, miss: 0.15, write: 0.15, out: 0.6 },
+  via: 'direct',
+  confidence: 'high',
+}
+
+const FACE_GLM: CostPriceFace = {
+  provider: 'zhipuai',
+  model: 'glm-5.3-flash',
+  rate: { hit: 0.015, miss: 0.075, write: 0, out: 0.25 },
+  via: 'direct',
+  confidence: 'high',
+}
+
+const OWN_READ: SessionCostRead = { usd: 0.3, ready: true, faces: [FACE_FLASH] }
+
+const SUB_READ: SessionCostRead = { usd: 0.15, ready: true, faces: [FACE_GLM] }
 
 const NO_FILES = { reads: 0, writes: 0, searches: 0, images: 0 }
 const NO_COUNTS = { turns: 0, steps: 0, injects: 0, compactions: 0, prunes: 0 }
@@ -49,15 +64,6 @@ function costTipOf(container: HTMLElement, scope: 'team' | 'own' | 'sub'): strin
   const index = scope === 'team' ? 0 : scope === 'own' ? 1 : 2
   return text(queryAll(container, '.lc-ledger-team .lc-stat-tip')[index])
 }
-
-beforeEach(() => {
-  resetModelPrices()
-  setModelPricesLoader(() => Promise.resolve(PROVIDERS))
-})
-
-afterEach(() => {
-  resetModelPrices()
-})
 
 describe('StatsContext', () => {
   function stubWidths(chipWidth: number, moreWidth: number, rowWidth: number): () => void {
@@ -127,6 +133,7 @@ describe('StatsContext', () => {
       tools: [['read', 8], ['bash', 3], ['grep', 2], ['edit', 1], ['glob', 1]],
       commands: { runs: 626, top: [['python3', 212]] },
       cost: COST,
+      costRead: OWN_READ,
       locale: 'en',
     }))
     await flush()
@@ -170,8 +177,8 @@ describe('StatsContext', () => {
     await tallied.unmount()
   })
 
-  test('the cost bubble lists the billed models with their billed rates', async () => {
-    const m = await mount(h(StatsContext, { counts: NO_COUNTS, files: NO_FILES, tools: [], cost: COST, locale: 'en', }))
+  test('the cost bubble lists the host price faces with their billed rates', async () => {
+    const m = await mount(h(StatsContext, { counts: NO_COUNTS, files: NO_FILES, tools: [], cost: COST, costRead: OWN_READ, locale: 'en', }))
     await flush()
     const tips = queryAll(m.container, '.lc-stat-tip').map(el => text(el))
     assert.equal(tips.length, 4, 'the user chip plus the three team-cost tips')
@@ -203,11 +210,14 @@ describe('StatsContext', () => {
         },
       },
     }
-    const splitMount = await mount(h(StatsContext, { counts: NO_COUNTS, files: NO_FILES, tools: [], cost: split, locale: 'en', }))
+    const splitMount = await mount(h(StatsContext, {
+      counts: NO_COUNTS, files: NO_FILES, tools: [], cost: split,
+      costRead: { usd: 0.6, ready: true, faces: [FACE_FLASH] }, locale: 'en',
+    }))
     await flush()
     assert.deepEqual(costCellsOf(splitMount.container)[0], 'Fleet?3.0M/$0.60')
     const splitTip = costTipOf(splitMount.container, 'team')
-    assert.ok(splitTip.includes('Cache input $0.00'), 'the table lists the book rates once, whatever the billed buckets')
+    assert.ok(splitTip.includes('Cache input $0.00'), 'the table lists the host rate once, whatever the billed buckets')
     assert.ok(splitTip.includes('Uncached input $0.15'))
     assert.ok(splitTip.includes('peak windows'), 'the peak-window footnote explains the bucket split')
     assert.ok(!splitTip.includes('|'))
@@ -220,6 +230,7 @@ describe('StatsContext', () => {
       files: NO_FILES,
       tools: [],
       cost: { 'zai-coding-cn': { 'glm-5.3-flash': { peak: { uncached: 1_000_000, cacheRead: 0, cacheWrite: 0, output: 0 } } } },
+      costRead: { usd: 0.15, ready: true, faces: [FACE_GLM] },
       locale: 'en',
     }))
     await flush()
@@ -236,7 +247,10 @@ describe('StatsContext', () => {
       'deepseek-official': { 'deepseek-v4-flash': { peak: { uncached: 1_000_000, cacheRead: 0, cacheWrite: 0, output: 0 } } },
       'zai-coding-cn': { 'glm-5.3-flash': { peak: { uncached: 2_000_000, cacheRead: 0, cacheWrite: 0, output: 0 } } },
     }
-    const m = await mount(h(StatsContext, { counts: NO_COUNTS, files: NO_FILES, tools: [], cost: two, locale: 'en', }))
+    const m = await mount(h(StatsContext, {
+      counts: NO_COUNTS, files: NO_FILES, tools: [], cost: two,
+      costRead: { usd: 0.45, ready: true, faces: [FACE_FLASH, FACE_GLM] }, locale: 'en',
+    }))
     await flush()
     assert.equal(queryAll(m.container, 'a.lc-strip-link').length, 0, 'two providers name their faces in the tooltip instead')
     const costTip = costTipOf(m.container, 'team')
@@ -253,6 +267,7 @@ describe('StatsContext', () => {
       files: { reads: 2, writes: 1, searches: 0, images: 0 },
       tools: [['read', 2]],
       cost: COST,
+      costRead: OWN_READ,
       locale: 'zh',
     }))
     await flush()
@@ -279,13 +294,14 @@ describe('StatsContext', () => {
     const picks: string[] = []
     const toolPicks: string[] = []
     const programs = [['python3', 212], ['git', 88], ['grep', 40], ['node', 20], ['npm', 10]] as const
-    const Stats = makeStatsContext(kit, () => ({ usage: SUB, count: 5 }))
+    const Stats = makeStatsContext(kit, () => ({ usage: SUB, count: 5, costRead: SUB_READ }))
     const m = await mount(h(Stats, {
       counts: NO_COUNTS,
       files: NO_FILES,
       tools: [['read', 8]],
       commands: { runs: 626, top: programs },
       cost: COST,
+      costRead: OWN_READ,
       locale: 'en',
       onToolPick: (tool) => { toolPicks.push(tool) },
       onCommandPick: (program) => { picks.push(program) },
@@ -317,17 +333,14 @@ describe('StatsContext', () => {
     await m.unmount()
   })
 
-  test('a pending book keeps the cost figure dashed without claiming an outage; a failed fetch notes the outage in the tip', async () => {
-    setModelPricesLoader(() => new Promise(() => {}))
-    const pending = await mount(h(StatsContext, { counts: NO_COUNTS, files: NO_FILES, tools: [], cost: COST, locale: 'en' }))
+  test('a ready read without a usd figure dashes the cost without claiming an outage; a non-ready read notes the outage', async () => {
+    const ready = await mount(h(StatsContext, { counts: NO_COUNTS, files: NO_FILES, tools: [], cost: COST, costRead: { usd: null, ready: true }, locale: 'en' }))
     await flush()
-    assert.deepEqual(costCellsOf(pending.container)[0], 'Fleet?1.0M/—')
-    assert.ok(!text(pending.container).includes('unavailable'), 'a pending fetch is not a failure')
-    await pending.unmount()
+    assert.deepEqual(costCellsOf(ready.container)[0], 'Fleet?1.0M/—')
+    assert.ok(!text(ready.container).includes('unavailable'), 'a usd-less ready read is not an outage')
+    await ready.unmount()
 
-    resetModelPrices()
-    setModelPricesLoader(() => Promise.reject(new Error('down')))
-    const failed = await mount(h(StatsContext, { counts: NO_COUNTS, files: NO_FILES, tools: [], cost: COST, locale: 'en' }))
+    const failed = await mount(h(StatsContext, { counts: NO_COUNTS, files: NO_FILES, tools: [], cost: COST, costRead: { usd: null, ready: false }, locale: 'en' }))
     await flush()
     assert.deepEqual(costCellsOf(failed.container)[0], 'Fleet?1.0M/—')
     const costTip = costTipOf(failed.container, 'team')
@@ -336,39 +349,48 @@ describe('StatsContext', () => {
     await failed.unmount()
   })
 
-  test('an unpriceable model notes the outage; an inferred maker price says it is a reference estimate', async () => {
-    for (const [model, cell, expected] of [
-      ['mystery-model', 'Fleet?1/—', 'Not priced: future-provider / mystery-model'],
-      ['deepseek-v4-flash', 'Fleet?1/$', 'reference estimate'],
-    ] as const) {
-      const m = await mount(h(StatsContext, {
-        counts: NO_COUNTS,
-        files: NO_FILES,
-        tools: [],
-        cost: { 'future-provider': { [model]: { peak: { uncached: 1, cacheRead: 0, cacheWrite: 0, output: 0 } } } },
-        locale: 'en',
-      }))
-      await flush()
-      assert.ok(costCellsOf(m.container)[0].startsWith(cell))
-      assert.ok(costTipOf(m.container, 'team').includes(expected))
-      await m.unmount()
-    }
+  test('an unpriced model names the miss; an inferred family price says it is a reference estimate', async () => {
+    const unpriced = await mount(h(StatsContext, {
+      counts: NO_COUNTS,
+      files: NO_FILES,
+      tools: [],
+      cost: { 'future-provider': { 'mystery-model': { peak: { uncached: 1, cacheRead: 0, cacheWrite: 0, output: 0 } } } },
+      costRead: { usd: null, ready: true, misses: [{ provider: 'future-provider', model: 'mystery-model', reason: 'model-unknown' }] },
+      locale: 'en',
+    }))
+    await flush()
+    assert.ok(costCellsOf(unpriced.container)[0].startsWith('Fleet?1/—'))
+    assert.ok(costTipOf(unpriced.container, 'team').includes('Not priced: future-provider / mystery-model'))
+    assert.ok(!costTipOf(unpriced.container, 'team').includes('unavailable'), 'a ready catalog with one unknown model is not an outage')
+    await unpriced.unmount()
+
+    const inferred = await mount(h(StatsContext, {
+      counts: NO_COUNTS,
+      files: NO_FILES,
+      tools: [],
+      cost: { 'future-provider': { 'deepseek-v4-flash': { peak: { uncached: 1, cacheRead: 0, cacheWrite: 0, output: 0 } } } },
+      costRead: { usd: 0.0000015, ready: true, faces: [{ ...FACE_FLASH, via: 'family', confidence: 'medium' }] },
+      locale: 'en',
+    }))
+    await flush()
+    assert.ok(costCellsOf(inferred.container)[0].startsWith('Fleet?1/$'))
+    assert.ok(costTipOf(inferred.container, 'team').includes('reference estimate'))
+    await inferred.unmount()
   })
 
-  test('an ambiguous book face names the disagreement instead of an outage', async () => {
-    setModelPricesLoader(() => Promise.resolve({
-      a: { models: { x: { cost: { input: 1, output: 2 } } } },
-      b: { models: { x: { cost: { input: 2, output: 3 } } } },
-    }))
+  test('an ambiguous host face names the disagreement instead of an outage', async () => {
     const m = await mount(h(StatsContext, {
       counts: NO_COUNTS,
       files: NO_FILES,
       tools: [],
       cost: { gateway: { x: { peak: { uncached: 1, cacheRead: 0, cacheWrite: 0, output: 0 } } } },
+      costRead: { usd: null, ready: true, misses: [{ provider: 'gateway', model: 'x', reason: 'ambiguous', candidates: 2 }] },
       locale: 'en',
     }))
     await flush()
-    assert.ok(costTipOf(m.container, 'team').includes('has 2 models.dev entries with different rates'))
+    const costTip = costTipOf(m.container, 'team')
+    assert.ok(costTip.includes('has 2 models.dev entries with different rates'))
+    assert.ok(!costTip.includes('unavailable'), 'an ambiguous catalog face is not an outage')
     await m.unmount()
   })
 
@@ -382,7 +404,7 @@ describe('StatsContext', () => {
         },
       },
     } as unknown as SessionCostUsage
-    const m = await mount(h(StatsContext, { counts: NO_COUNTS, files: NO_FILES, tools: [], cost: hostile, locale: 'en', }))
+    const m = await mount(h(StatsContext, { counts: NO_COUNTS, files: NO_FILES, tools: [], cost: hostile, costRead: { usd: 0.15, ready: true, faces: [FACE_GLM] }, locale: 'en', }))
     await flush()
     const costTip = costTipOf(m.container, 'team')
     assert.ok(costTip.includes('glm-5.3-flash'))
@@ -394,7 +416,7 @@ describe('StatsContext', () => {
 
   test('the Fleet section hands its jump to the caller; the price link stays out of it', async () => {
     let opened = 0
-    const m = await mount(h(StatsContext, { counts: NO_COUNTS, files: NO_FILES, tools: [], cost: COST, locale: 'en', onTeamClick: () => { opened += 1 }, }))
+    const m = await mount(h(StatsContext, { counts: NO_COUNTS, files: NO_FILES, tools: [], cost: COST, costRead: OWN_READ, locale: 'en', onTeamClick: () => { opened += 1 }, }))
     await flush()
     const head = query(m.container, '.lc-ledger-team-head')
     assert.equal(head.getAttribute('role'), null, 'the header is not a button wrapping the provider link')
@@ -526,18 +548,20 @@ describe('StatsContext — the subagent split (injected seat)', () => {
   }
 
   test('the family figure merges the subagent usage in; the split cells price each share alone', async () => {
-    for (const [cost, cells] of [
-      [COST, ['Fleet?3.0M/$0.45', 'Current Agent?1.0M/$0.30', 'Subagents × 2?2.0M/$0.15']],
-      [undefined, ['Fleet?2.0M/$0.15', 'Current Agent?0/—', 'Subagents × 2?2.0M/$0.15']],
-    ] as const) {
-      const Stats = makeStatsContext(kit, () => ({ usage: SUB, count: 2 }))
-      const m = await mount(h(Stats, { counts: NO_COUNTS, files: NO_FILES, tools: [], ...(cost !== undefined ? { cost } : {}), locale: 'en' }))
+    for (const own of [OWN_READ, undefined] as const) {
+      const Stats = makeStatsContext(kit, () => ({ usage: SUB, count: 2, costRead: SUB_READ }))
+      const m = await mount(h(Stats, { counts: NO_COUNTS, files: NO_FILES, tools: [], ...(own !== undefined ? { cost: COST, costRead: own } : {}), locale: 'en' }))
       await flush()
-      assert.deepEqual(costCellsOf(m.container), cells)
-      if (cost !== undefined) {
+      assert.deepEqual(costCellsOf(m.container), own !== undefined
+        ? ['Fleet?3.0M/$0.45', 'Current Agent?1.0M/$0.30', 'Subagents × 2?2.0M/$0.15']
+        : ['Fleet?2.0M/$0.15', 'Current Agent?0/—', 'Subagents × 2?2.0M/$0.15'])
+      if (own !== undefined) {
         const teamTip = costTipOf(m.container, 'team')
         assert.ok(teamTip.includes('for deepseek · deepseek-v4-flash.'))
         assert.ok(teamTip.includes('for zhipuai · glm-5.3-flash.'))
+        const ownTip = costTipOf(m.container, 'own')
+        assert.ok(ownTip.includes('for deepseek · deepseek-v4-flash.'))
+        assert.ok(!ownTip.includes('glm-5.3-flash'), 'the own tip never borrows a subagent face')
         const subTip = costTipOf(m.container, 'sub')
         for (const part of ['every descendant subagent session', 'all levels', 'for zhipuai · glm-5.3-flash.']) {
           assert.ok(subTip.includes(part), `the sub tip carries: ${part}`)
@@ -547,11 +571,40 @@ describe('StatsContext — the subagent split (injected seat)', () => {
     }
   })
 
+  test('dedupes repeated faces and misses across the own and sub reads', async () => {
+    const MISS = { provider: 'future', model: 'mystery', reason: 'model-unknown' as const }
+    const Stats = makeStatsContext(kit, () => ({ usage: SUB, count: 1, costRead: { usd: 0.1, ready: true, faces: [FACE_FLASH, FACE_GLM], misses: [MISS] } }))
+    const m = await mount(h(Stats, {
+      counts: NO_COUNTS,
+      files: NO_FILES,
+      tools: [],
+      cost: COST,
+      costRead: { usd: 0.3, ready: true, faces: [FACE_FLASH], misses: [MISS] },
+      locale: 'en',
+    }))
+    await flush()
+    const teamTip = costTipOf(m.container, 'team')
+    assert.equal(teamTip.split('for deepseek · deepseek-v4-flash.').length - 1, 1, 'the shared face appears once')
+    assert.equal(teamTip.split('Not priced: future / mystery').length - 1, 1, 'the shared miss appears once')
+    assert.equal(queryAll(m.container, 'a.lc-strip-link').length, 0, 'two priced providers keep the figure unlinked')
+    await m.unmount()
+  })
+
+  test('a non-ready sub read dashes the family figure and notes the outage under both tips', async () => {
+    const Stats = makeStatsContext(kit, () => ({ usage: SUB, count: 2, costRead: { usd: 0.15, ready: false } }))
+    const m = await mount(h(Stats, { counts: NO_COUNTS, files: NO_FILES, tools: [], cost: COST, costRead: OWN_READ, locale: 'en' }))
+    await flush()
+    assert.deepEqual(costCellsOf(m.container), ['Fleet?3.0M/—', 'Current Agent?1.0M/$0.30', 'Subagents × 2?2.0M/—'])
+    assert.ok(costTipOf(m.container, 'team').includes('unavailable'))
+    assert.ok(costTipOf(m.container, 'sub').includes('unavailable'))
+    await m.unmount()
+  })
+
   test('a DeepSeek-billing subagent surfaces the peak/off-peak note under both tips', async () => {
     const deepseekSub: SessionCostUsage = {
       'deepseek-official': { 'deepseek-v4-flash': { off: { uncached: 1_000_000, cacheRead: 0, cacheWrite: 0, output: 0 } } },
     }
-    const Stats = makeStatsContext(kit, () => ({ usage: deepseekSub, count: 1 }))
+    const Stats = makeStatsContext(kit, () => ({ usage: deepseekSub, count: 1, costRead: { usd: 0.15, ready: true, faces: [FACE_FLASH] } }))
     const m = await mount(h(Stats, { counts: NO_COUNTS, files: NO_FILES, tools: [], locale: 'en', }))
     await flush()
     assert.deepEqual(costCellsOf(m.container)[0], 'Fleet?1.0M/$0.15')
@@ -560,9 +613,13 @@ describe('StatsContext — the subagent split (injected seat)', () => {
     await m.unmount()
   })
 
-  test('a sub usage the book cannot price dashes the sub cell and notes the outage in its tip', async () => {
-    const Stats = makeStatsContext(kit, () => ({ usage: { future: { 'mystery-model': { peak: { uncached: 1, cacheRead: 0, cacheWrite: 0, output: 0 } } } }, count: 1 }))
-    const m = await mount(h(Stats, { counts: NO_COUNTS, files: NO_FILES, tools: [], cost: COST, locale: 'en', }))
+  test('a sub read the host cannot price dashes the sub cell and names the miss in its tip', async () => {
+    const Stats = makeStatsContext(kit, () => ({
+      usage: { future: { 'mystery-model': { peak: { uncached: 1, cacheRead: 0, cacheWrite: 0, output: 0 } } } },
+      count: 1,
+      costRead: { usd: null, ready: true, misses: [{ provider: 'future', model: 'mystery-model', reason: 'model-unknown' }] },
+    }))
+    const m = await mount(h(Stats, { counts: NO_COUNTS, files: NO_FILES, tools: [], cost: COST, costRead: OWN_READ, locale: 'en', }))
     await flush()
     assert.deepEqual(costCellsOf(m.container), ['Fleet?1.0M/$0.30', 'Current Agent?1.0M/$0.30', 'Subagents × 1?1/—'])
     assert.ok(costTipOf(m.container, 'sub').includes('Not priced: future / mystery-model'))
@@ -571,7 +628,7 @@ describe('StatsContext — the subagent split (injected seat)', () => {
 })
 
 describe('StatsContext — the real subagent-cost seat (makeSubagentCost)', () => {
-  function head(cost?: SessionCostUsage): ContextTimeline {
+  function head(cost?: SessionCostUsage, costRead?: SessionCostRead): ContextTimeline {
     return {
       ok: true,
       contextWindow: 1000,
@@ -582,6 +639,7 @@ describe('StatsContext — the real subagent-cost seat (makeSubagentCost)', () =
       droppedNodes: 0,
       archive: [],
       ...(cost !== undefined ? { cost } : {}),
+      ...(costRead !== undefined ? { costRead } : {}),
     }
   }
 
@@ -624,20 +682,21 @@ describe('StatsContext — the real subagent-cost seat (makeSubagentCost)', () =
     const SUB_WARM: SessionCostUsage = {
       'zai-coding-cn': { 'glm-5.3-flash': { peak: { uncached: 2_000_000, cacheRead: 0, cacheWrite: 0, output: 0 } } },
     }
+    const WARM_READ: SessionCostRead = { usd: 0.15, ready: true }
     const { seat, face } = makeSeat({
       root: { running: false, updatedAt: 1 },
-      warm: { parentId: 'root', origin: 'subagent', updatedAt: 2, projectionValues: { contextTimeline: head(SUB_WARM) } },
+      warm: { parentId: 'root', origin: 'subagent', updatedAt: 2, projectionValues: { contextTimeline: head(SUB_WARM, WARM_READ) } },
       cold: { parentId: 'root', origin: 'subagent', updatedAt: 3 },
     })
     const Stats = makeStatsContext(kit, seat)
     const m = await mount(h(Stats, { counts: NO_COUNTS, files: NO_FILES, tools: [], locale: 'en', sessionId: 'root', }))
     await flush()
-    assert.deepEqual(costCellsOf(m.container), ['Fleet?2.0M/$0.15', 'Current Agent?0/—', 'Subagents × 2?2.0M/$0.15'])
+    assert.deepEqual(costCellsOf(m.container), ['Fleet?2.0M/—', 'Current Agent?0/—', 'Subagents × 2?2.0M/—'], 'a missing member read dashes the family figure')
     assert.deepEqual(calls, ['cold'], 'only the timeline-less relative fetched')
     await act(async () => {
       face.setState({
         root: { running: false, updatedAt: 1 },
-        warm: { parentId: 'root', origin: 'subagent', updatedAt: 2, projectionValues: { contextTimeline: head(SUB_WARM) } },
+        warm: { parentId: 'root', origin: 'subagent', updatedAt: 2, projectionValues: { contextTimeline: head(SUB_WARM, WARM_READ) } },
         cold: { parentId: 'root', origin: 'subagent', updatedAt: 3 },
       })
     })
@@ -650,7 +709,10 @@ describe('StatsContext — the real subagent-cost seat (makeSubagentCost)', () =
           ok: true,
           value: {
             rev: 1,
-            head: head({ 'zai-coding-cn': { 'glm-5.3-flash': { peak: { uncached: 2_000_000, cacheRead: 0, cacheWrite: 0, output: 0 } } } }),
+            head: head(
+              { 'zai-coding-cn': { 'glm-5.3-flash': { peak: { uncached: 2_000_000, cacheRead: 0, cacheWrite: 0, output: 0 } } } },
+              { usd: 0.15, ready: true },
+            ),
             requests: [],
             events: [],
             nodes: [],
@@ -663,6 +725,55 @@ describe('StatsContext — the real subagent-cost seat (makeSubagentCost)', () =
     await flush()
     assert.deepEqual(costCellsOf(m.container), ['Fleet?4.0M/$0.30', 'Current Agent?0/—', 'Subagents × 2?4.0M/$0.30'])
     await m.unmount()
+  })
+
+  test('a pricing invalidation re-reads landed child heads that still lack a price', async () => {
+    let round = 0
+    const calls: unknown[] = []
+    vi.stubGlobal('fetch', async (_url: unknown, init: { body: string }) => {
+      calls.push(JSON.parse(String(init.body)))
+      round++
+      const read = round === 1 ? { usd: null, ready: false } : { usd: 0.2, ready: true }
+      const value = {
+        a: { head: head({ 'zai-coding-cn': { 'glm-5.3-flash': { peak: { uncached: 2_000_000, cacheRead: 0, cacheWrite: 0, output: 0 } } } }, read) },
+        b: { head: head({ 'zai-coding-cn': { 'glm-5.3-flash': { peak: { uncached: 2_000_000, cacheRead: 0, cacheWrite: 0, output: 0 } } } }, read) },
+      }
+      return { ok: true, status: 200, json: async () => ({ ok: true, value }) }
+    })
+    const { seat, face } = makeSeat({
+      root: { running: false, updatedAt: 1 },
+      a: { parentId: 'root', origin: 'subagent', updatedAt: 2 },
+      b: { parentId: 'root', origin: 'subagent', updatedAt: 3 },
+    })
+    const Stats = makeStatsContext(kit, seat)
+    const m = await mount(h(Stats, { counts: NO_COUNTS, files: NO_FILES, tools: [], locale: 'en', sessionId: 'root' }))
+    await flush()
+    await flush()
+    assert.deepEqual(costCellsOf(m.container), ['Fleet?4.0M/—', 'Current Agent?0/—', 'Subagents × 2?4.0M/—'])
+    assert.equal(calls.length, 1)
+    await act(async () => {
+      invalidate('pricing')
+    })
+    await flush()
+    await flush()
+    assert.equal(calls.length, 2, 'the unpriced landed heads were re-read')
+    assert.deepEqual(costCellsOf(m.container), ['Fleet?4.0M/$0.40', 'Current Agent?0/—', 'Subagents × 2?4.0M/$0.40'])
+    await act(async () => {
+      invalidate('heads')
+    })
+    await flush()
+    assert.equal(calls.length, 2)
+    await act(async () => {
+      invalidate('pricing')
+    })
+    await flush()
+    assert.equal(calls.length, 2, 'priced heads stay landed')
+    await act(async () => {
+      face.setState({ root: { running: false, updatedAt: 1 }, a: { parentId: 'root', origin: 'subagent', updatedAt: 2 }, b: { parentId: 'root', origin: 'subagent', updatedAt: 3 } })
+    })
+    await flush()
+    await m.unmount()
+    resetInvalidations()
   })
 
   test('a failing cold fetch degrades the card without crashing or retrying', async () => {
@@ -707,7 +818,7 @@ describe('StatsContext — the real subagent-cost seat (makeSubagentCost)', () =
     const Stats = makeStatsContext(kit, seat)
     const m = await mount(h(Stats, { counts: NO_COUNTS, files: NO_FILES, tools: [], locale: 'en', sessionId: 'root', }))
     await flush()
-    assert.deepEqual(calls, [{ ids: ['headless', 'absent'] }], 'both cold children ride one batch')
+    assert.deepEqual(calls, [{ ids: ['headless', 'absent'] }, { sessionId: 'absent', head: true }], 'both cold children ride one batch; the missing head falls back to one detail read')
     assert.deepEqual(costCellsOf(m.container), ['Fleet?0/—', 'Current Agent?0/—', 'Subagents × 2?0/—'])
     await act(async () => {
       face.setState({
@@ -717,7 +828,7 @@ describe('StatsContext — the real subagent-cost seat (makeSubagentCost)', () =
       })
     })
     await flush()
-    assert.equal(calls.length, 1, 'a landed null head never retries')
+    assert.equal(calls.length, 2, 'a landed null head never retries past the one detail fallback')
     await m.unmount()
   })
 

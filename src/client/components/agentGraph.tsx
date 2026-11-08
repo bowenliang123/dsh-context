@@ -3,9 +3,8 @@ import { IconWorkspaceTreeOutlineRegular, StateDot } from '@deepseek-ai/dsh-clie
 import { CATS } from '../categories'
 import type { AgentHeads } from '../agentHeads'
 import { makeAgentHeads } from '../agentHeads'
-import { billedTokensOf, displayCurrencyOf, estimateSessionCost, formatCost, type CostCurrency, type ModelBook } from '../cost'
+import { billedTokensOf, displayCurrencyOf, formatCost, toCurrency, type CostCurrency } from '../cost'
 import { avatarLabelsOf, avatarNameOf, type CommsAgent, type CommsRole } from '../commsModel'
-import { useModelPrices } from '../modelPrices'
 import { containHorizontalOverscroll } from '../overscroll'
 import { scrollIntoViewIfPossible, scrollToPos } from '../revealScroll'
 import { openSessionVia, type ClientCtx } from '../services'
@@ -91,7 +90,6 @@ export function makeAgentGraph(
     const pinnedId = props.pinnedId ?? null
     const litId = hoverId ?? pinnedId ?? props.focusId ?? null
     const onHover = props.onHover ?? setInternalHover
-    const { book } = useModelPrices()
     const currency = displayCurrencyOf(ctx.locale)
 
     const stageRef = useRef<HTMLDivElement | null>(null)
@@ -311,7 +309,6 @@ export function makeAgentGraph(
                       onOpen={open}
                       onSelect={select}
                       onKeyOpen={keyOpen(node.id)}
-                      book={book}
                       currency={currency}
                       memberName={teammateNameOf(team, node)}
                       avatar={{
@@ -364,7 +361,6 @@ interface CardProps {
   onOpen: (id: string) => void
   onSelect?: (id: string) => void
   onKeyOpen: (ev: KeyboardEvent) => void
-  book: ModelBook | null
   currency: CostCurrency
   memberName?: string
   avatar: CommsAgent
@@ -378,10 +374,12 @@ function AgentCard(props: CardProps): ReactElement {
   const segs = node.head !== null ? barSegments(node.head.parts, pct, pressureColorOf(pct)) : []
   const consumed = node.billed !== null && node.billed > 0 ? node.billed
     : node.costUsage !== null ? billedTokensOf(node.costUsage) : null
-  const cost = estimateSessionCost(node.costUsage, props.book, props.currency)
+  const costRead = node.costRead ?? null
+  const usd = costRead !== null && costRead.ready && costRead.usd !== null ? costRead.usd : null
+  const cost = usd === null ? null : formatCost(toCurrency(usd, props.currency), props.currency)
   const metricBits: string[] = []
   if (consumed !== null && consumed > 0) metricBits.push(props.fmt(consumed))
-  if (cost !== null) metricBits.push(formatCost(cost, props.currency))
+  if (cost !== null) metricBits.push(cost)
   const meta: string[] = []
   if (node.durationMs !== null) meta.push(fmtDurationCompact(node.durationMs))
   if (node.requests > 0) meta.push(props.t('agents.steps', { n: node.requests }))

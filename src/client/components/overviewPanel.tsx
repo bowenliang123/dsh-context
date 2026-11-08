@@ -1,16 +1,15 @@
-import { useDeferredValue, useEffect, useMemo, useRef, useState, useSyncExternalStore, type ReactElement } from 'react'
-import { estimateSessionCost, formatCost, type CostCurrency, type ModelBook } from '../cost'
+import { useDeferredValue, useEffect, useMemo, useState, useSyncExternalStore, type ReactElement } from 'react'
+import { formatCost, toCurrency, type CostCurrency } from '../cost'
+import { RING_COLOR } from '../categories'
 import { fmt } from '../format'
-import { useModelPrices } from '../modelPrices'
 import {
-  coveredRowsOf, DayAggregator, dayRangeWindow, fetchOverviewBatch, filterRows, groupCountsOf, inGroup, kpisOf,
-  pageOf, rangeWindowOf, refreshSessions, requestActivityBackfill, rowsOfSnapshot,
-  rowHasTally, sessionGroupsOf, sessionsSnapshotOf, skillLoadsOf, sortRows,
-  tallyStatsOf, UNGROUPED_KEY, workspacesSnapshotOf,
-  type DayRange, type OverviewBatch, type OverviewCoverage, type OverviewRange, type OverviewRow, type OverviewSort,
+  dayRangeWindow, rangeWindowOf, refreshSessions, sessionsSnapshotOf, UNGROUPED_KEY,
+  type DayRange, type DayTotals, type OverviewCoverage, type OverviewRange, type OverviewSort,
   type TallyField, type TallyStat,
 } from '../overview'
-import { openPluginSettings, openSessionVia, activeMsOf, seatKeyOf, type ClientCtx } from '../services'
+import { useOverviewDays, useOverviewPage, useOverviewSummary, useOverviewTally } from '../overviewSource'
+import type { OverviewRange as HostRange, OverviewScope, OverviewSummary } from '../../shared/types'
+import { asRecord, openPluginSettings, openSessionVia, activeMsOf, seatKeyOf, type ClientCtx } from '../services'
 import { readSkillCatalog } from '../skills'
 import type { ContextSettings } from '../settings'
 import type { SkillInfo } from '../../shared/types'
@@ -26,7 +25,7 @@ import { useHoverTip } from './hoverTip'
 import { makeOverviewTokens } from './overviewTokens'
 import { makeOverviewUsage } from './overviewUsage'
 import { makeStatsTiming } from './statsTiming'
-import { makeOverviewCard } from './overviewCard'
+import { makeOverviewCard, type OverviewCardRow } from './overviewCard'
 import { makeOverviewSkills } from './overviewSkills'
 import { makeOverviewTally } from './overviewTally'
 import type { TallyCardKind } from './overviewTally'
@@ -43,7 +42,6 @@ const RANGES: readonly OverviewRange[] = ['today', '7d', '30d', 'all']
 const SORTS: readonly OverviewSort[] = ['recent', 'tokens', 'context']
 const COVERAGE: readonly OverviewCoverage[] = ['all', 'active', 'archived']
 const METRICS: readonly HeatMetric[] = ['sessions', 'tokens']
-const OVERVIEW_SNAPSHOT_POLL_MS = 30_000
 const PICK_FILTER: Record<TallyField, { label: string; clear: string }> = {
   skills: { label: 'node.skillTag', clear: 'ov.list.skillClear' },
   tools: { label: 'ov.list.toolFilter', clear: 'ov.list.toolClear' },
@@ -79,9 +77,7 @@ export function makeOverviewPanel(
   }
 
   function OverviewBody(props: OverviewPanelProps): ReactElement | null {
-    const { book } = useModelPrices()
-    const snapshot = useDeferredValue(sessionsSnapshotOf(props))
-    const wsSnapshot = useDeferredValue(workspacesSnapshotOf(props))
+    const sessionsSnapshot = useDeferredValue(sessionsSnapshotOf(props))
     const configuredRange = useSyncExternalStore(subscribeSettings, () => settings.defaultOverviewRange())
     const [picked, setPicked] = useState<OverviewRange | null>(null)
     const preset = picked ?? configuredRange
@@ -97,38 +93,16 @@ export function makeOverviewPanel(
     const { zoneProps, bubble } = useHoverTip()
     const [bodyRef, bodyMounted] = useLazyMount()
 
-    const [batched, setBatched] = useState<OverviewBatch | null>(null)
-    const rows = useMemo(() => rowsOfSnapshot(snapshot, wsSnapshot, batched ?? undefined), [snapshot, wsSnapshot, batched])
-    const groups = useMemo(() => sessionGroupsOf(wsSnapshot), [wsSnapshot])
+    const current = useMemo(() => currentSessionOf(sessionsSnapshot), [sessionsSnapshot])
     const [catalog, setCatalog] = useState<ReadonlyMap<string, SkillInfo> | null>(null)
-
-    const currentRow = (rows ?? []).find(row => row.current)
-    const currentCwd = currentRow?.cwd
-    const currentId = currentRow?.id
     useEffect(() => {
       let alive = true
       setCatalog(null)
-      void readSkillCatalog(currentCwd, currentId).then((next) => { if (alive && next !== null) setCatalog(next) })
+      void readSkillCatalog(current.cwd, current.id).then((next) => { if (alive && next !== null) setCatalog(next) })
       return () => { alive = false }
-    }, [currentCwd, currentId])
+    }, [current.cwd, current.id])
 
     useEffect(() => {
-      let alive = true
-      const load = (): void => {
-        void fetchOverviewBatch().then((next) => {
-          if (alive) setBatched(next)
-        }).catch(() => {})
-      }
-      load()
-      const timer = setInterval(load, OVERVIEW_SNAPSHOT_POLL_MS)
-      return () => {
-        alive = false
-        clearInterval(timer)
-      }
-    }, [])
-
-    useEffect(() => {
-      requestActivityBackfill()
       refreshSessions(ctx)
     }, [])
 
@@ -137,41 +111,91 @@ export function makeOverviewPanel(
     const currency = activeCurrency()
     const nowMinute = Math.floor(Date.now() / 60_000) * 60_000
     const nowForCards = Date.now()
-    const allRows = rows ?? []
-    const covered = useMemo(() => coveredRowsOf(allRows, coverage), [allRows, coverage])
-    const scope = useMemo(
+    const hostRange = useMemo<HostRange>(() => {
+      const window = custom === null ? null : dayRangeWindow(custom)
+      if (window !== null && window.start !== null && window.end !== null) return { start: window.start, end: window.end }
+      /* v8 ignore next 1 */
+      return preset
+    }, [custom, preset])
+    const scopeWindow = useMemo(
       () => (custom !== null ? dayRangeWindow(custom) : null) ?? rangeWindowOf(preset, nowMinute),
       [custom, preset, nowMinute],
     )
-    const spanFrom = scope.start === null ? null : dayKeyOf(scope.start)
-    const spanTo = scope.start === null ? null : dayKeyOf(scope.end ?? nowMinute)
+    const spanFrom = scopeWindow.start === null ? null : dayKeyOf(scopeWindow.start)
+    const spanTo = scopeWindow.start === null ? null : dayKeyOf(scopeWindow.end ?? nowMinute)
     const span = spanFrom !== null && spanTo !== null ? { from: spanFrom, to: spanTo } : null
-    const ranged = useMemo(() => filterRows(covered, { scope, day: null, query: '' }), [covered, scope])
-    const scoped = useMemo(() => filterRows(ranged, { scope, day, query }), [ranged, scope, day, query])
-    const counts = useMemo(() => groupCountsOf(scoped, wsSnapshot), [scoped, wsSnapshot])
-    const chips = group !== null && !counts.some(c => c.key === group)
-      ? [...counts, { key: group, count: 0 }]
-      : counts
-    const visible = useMemo(() => sortRows(
-      (group === null ? scoped : scoped.filter(row => inGroup(row, group, groups)))
-        .filter(row => pick === null || rowHasTally(row, pick.field, pick.name, { scope, day })),
+    const listScope = useMemo<OverviewScope>(() => ({
+      range: hostRange,
+      coverage,
+      ...(day === null ? {} : { day }),
+      ...(group === null ? {} : { group: group === UNGROUPED_KEY ? '__ungrouped__' : group }),
+      ...(query.trim() === '' ? {} : { query: query.trim() }),
+    }), [hostRange, coverage, day, group, query])
+    const tallyScope = useMemo<OverviewScope>(() => ({
+      range: hostRange,
+      coverage,
+      ...(day === null ? {} : { day }),
+    }), [hostRange, coverage, day])
+    const summaryScope = useMemo<OverviewScope>(() => ({ range: hostRange, coverage }), [hostRange, coverage])
+    const daysScope = useMemo<OverviewScope>(() => ({ coverage }), [coverage])
+    const summaryState = useOverviewSummary(summaryScope, true)
+    const daysState = useOverviewDays(daysScope, true)
+    const pageState = useOverviewPage({
+      part: 'page',
+      scope: listScope,
       sort,
-    ), [scoped, group, groups, pick, scope, day, sort])
-    const paged = pageOf(visible, page)
-    const kpi = useMemo(() => kpisOf(ranged, book, currency, scope), [ranged, book, currency, scope])
-    const teamTiming = kpi.timing
-    const dayAggregator = useRef<DayAggregator | null>(null)
-    const days = useMemo(
-      () => (dayAggregator.current ??= new DayAggregator()).aggregate(covered, book, currency),
-      [covered, book, currency],
+      page,
+      ...(pick === null ? {} : { pick }),
+    }, true)
+    const skillsState = useOverviewTally({ part: 'tally', scope: tallyScope, tally: 'skills' }, bodyMounted)
+    const toolsState = useOverviewTally({ part: 'tally', scope: tallyScope, tally: 'tools' }, bodyMounted)
+    const cmdsState = useOverviewTally({ part: 'tally', scope: tallyScope, tally: 'cmds' }, bodyMounted)
+    const summary: OverviewSummary | null = summaryState.data?.summary ?? null
+    const pageValue = pageState.data?.page ?? null
+    const pageIndex = pageValue?.index ?? 0
+    const pageCount = pageValue?.count ?? 1
+    const listTotal = pageValue?.total ?? 0
+    const scopeTotal = pageValue?.scopeTotal ?? 0
+    const rows = useMemo<OverviewCardRow[]>(
+      () => (pageValue?.items ?? []).map(row => ({ ...row, current: current.id === row.id })),
+      [pageValue, current.id],
     )
-    const skillStats = useMemo(() => skillLoadsOf(ranged, { scope, day }), [ranged, scope, day])
-    const toolStats = useMemo(() => tallyStatsOf(ranged, { scope, day, field: 'tools' }), [ranged, scope, day])
-    const commandStats = useMemo(() => tallyStatsOf(ranged, { scope, day, field: 'cmds' }), [ranged, scope, day])
+    const chips = useMemo(() => {
+      const base = pageValue?.groups ?? []
+      return group !== null && !base.some(chip => chip.key === group) ? [...base, { key: group, count: 0 }] : base
+    }, [pageValue, group])
+    const teamTiming = summary?.timing ?? null
+    const days = useMemo<Record<string, DayTotals>>(() => {
+      const out: Record<string, DayTotals> = {}
+      for (const entry of daysState.data?.days ?? []) {
+        out[entry.key] = {
+          tokens: entry.tokens,
+          sessions: entry.sessions,
+          cost: entry.costUsd === null ? null : toCurrency(entry.costUsd, currency),
+        }
+      }
+      return out
+    }, [daysState.data, currency])
+    const tokenParts = useMemo(() => {
+      const parts = summary?.tokenParts ?? null
+      if (parts === null) return null
+      let total = 0
+      const shown: { key: string; color: string; value: number }[] = []
+      for (const part of parts) {
+        if (!(part.value > 0)) continue
+        total += part.value
+        shown.push({ key: part.key, color: RING_COLOR[part.key] ?? 'var(--color-gray-400)', value: part.value })
+      }
+      return { parts: shown, total }
+    }, [summary])
+    const skillStats = useMemo(() => [...(skillsState.data?.tally.stats ?? [])], [skillsState.data])
+    const toolStats = useMemo(() => [...(toolsState.data?.tally.stats ?? [])], [toolsState.data])
+    const commandStats = useMemo(() => [...(cmdsState.data?.tally.stats ?? [])], [cmdsState.data])
     const tallyCards: readonly { kind: TallyCardKind; field: TallyField; stats: TallyStat[] }[] = [
       { kind: 'tool', field: 'tools', stats: toolStats },
       { kind: 'command', field: 'cmds', stats: commandStats },
     ]
+    const busy = summaryState.pending || daysState.pending || pageState.pending
     const pickPreset = (range: OverviewRange): void => {
       setPicked(range)
       setCustom(null)
@@ -182,12 +206,19 @@ export function makeOverviewPanel(
       openSessionVia(ctx, id)
     }
     const sessionsLabel = coverage === 'archived' ? t('ov.kpi.archived') : coverage === 'active' ? t('ov.kpi.sessions') : t('ov.kpi.allSessions')
-    const sessionsSub = coverage === 'all'
-      ? t('ov.kpi.inclArchived', { n: ranged.filter(row => row.archived).length })
-      : t('ov.kpi.ofTotal', { n: allRows.length })
+    const sessionsSub = summary === null
+      ? '—'
+      : coverage === 'all'
+        ? t('ov.kpi.inclArchived', { n: summary.archivedScoped })
+        : t('ov.kpi.ofTotal', { n: summary.sessionsTotal })
 
     return (
-      <section className="lc-ov-page" aria-label={t('ov.title')} {...zoneProps}>
+      <section
+        className={'lc-ov-page' + (busy ? ' lc-ov-busy' : '')}
+        aria-label={t('ov.title')}
+        aria-busy={busy || undefined}
+        {...zoneProps}
+      >
         {bubble}
         <div className="lc-ov-pagescroll">
           <div className="lc-ov-pagecontent">
@@ -219,7 +250,7 @@ export function makeOverviewPanel(
               </div>
             </div>
 
-            {rows === null ? (
+            {pageValue === null && pageState.error ? (
               <div className="lc-empty">{t('ov.unavailable')}</div>
             ) : (
               <>
@@ -227,23 +258,23 @@ export function makeOverviewPanel(
                   <div className="lc-ov-kpis">
                     <div className="lc-stat lc-ov-kpi">
                       <span className="lc-stat-label">{sessionsLabel}</span>
-                      <span className="lc-stat-value">{kpi.sessions}</span>
+                      <span className="lc-stat-value">{summary === null ? '—' : summary.sessions}</span>
                       <span className="lc-stat-sub">{sessionsSub}</span>
                     </div>
                     <div className="lc-stat lc-ov-kpi">
                       <span className="lc-stat-label">{t('ov.kpi.tokens')}</span>
-                      <span className="lc-stat-value">{fmt(kpi.tokens)}</span>
-                      <span className="lc-stat-sub">{t('stats.turns')} {fmt(kpi.turns)}</span>
+                      <span className="lc-stat-value">{summary === null ? '—' : fmt(summary.tokens)}</span>
+                      <span className="lc-stat-sub">{t('stats.turns')} {summary === null ? '—' : fmt(summary.turns)}</span>
                     </div>
                     <div className="lc-stat lc-ov-kpi">
                       <span className="lc-stat-label">{t('stats.cost')}</span>
-                      <span className="lc-stat-value">{kpi.cost === null ? '—' : formatCost(kpi.cost, currency)}</span>
-                      <span className="lc-stat-sub">{t('ov.kpi.pricedSub', { n: kpi.costSessions, total: kpi.sessions })}</span>
+                      <span className="lc-stat-value">{summary === null || summary.costUsd === null ? '—' : formatCost(toCurrency(summary.costUsd, currency), currency)}</span>
+                      <span className="lc-stat-sub">{summary === null ? '—' : t('ov.kpi.pricedSub', { n: summary.costSessions, total: summary.sessions })}</span>
                     </div>
                     <div className="lc-stat lc-ov-kpi">
                       <span className="lc-stat-label">{t('stats.cacheHit')}</span>
-                      <span className="lc-stat-value">{kpi.cacheHit === null ? '—' : kpi.cacheHit + '%'}</span>
-                      <span className="lc-stat-sub">{t('ov.kpi.sessionsSub', { n: kpi.usageSessions })}</span>
+                      <span className="lc-stat-value">{summary === null || summary.cacheHit === null ? '—' : summary.cacheHit + '%'}</span>
+                      <span className="lc-stat-sub">{summary === null ? '—' : t('ov.kpi.sessionsSub', { n: summary.usageSessions })}</span>
                     </div>
                     <div className="lc-stat lc-ov-kpi">
                       <span className="lc-stat-label">{t('stats.toolCalls')}</span>
@@ -259,7 +290,7 @@ export function makeOverviewPanel(
                   <OverviewUsage days={days} currency={currency} today={todayKey()} />
                 </div>
                 <div className="lc-ov-stats">
-                  <OverviewTokens tokens={kpi.tokenParts} />
+                  <OverviewTokens tokens={tokenParts} />
                   <StatsTiming timing={teamTiming} />
                 </div>
                 <div className="lc-ov-body" ref={bodyRef}>
@@ -290,7 +321,7 @@ export function makeOverviewPanel(
                       <OverviewSkills
                         stats={skillStats}
                         day={day}
-                        selected={pick?.field === 'skills' ? pick.name : null}
+                        selected={pick !== null && pick.field === 'skills' ? pick.name : null}
                         onSelect={(name) => { setPick(name === null ? null : { field: 'skills', name }) }}
                         catalog={catalog}
                       />
@@ -300,7 +331,7 @@ export function makeOverviewPanel(
                           kind={card.kind}
                           stats={card.stats}
                           day={day}
-                          selected={pick?.field === card.field ? pick.name : null}
+                          selected={pick !== null && pick.field === card.field ? pick.name : null}
                           onSelect={(name) => { setPick(name === null ? null : { field: card.field, name }) }}
                         />
                       ))}
@@ -309,7 +340,7 @@ export function makeOverviewPanel(
                     <div className="lc-ov-list">
                       <div className="lc-ov-list-head">
                         <span className="lc-ov-list-title">{t('ov.list.title')}</span>
-                        <span className="lc-ov-list-count">{visible.length}</span>
+                        <span className="lc-ov-list-count">{listTotal}</span>
                         {day !== null && (
                           <button type="button" className="lc-ov-day-chip" title={t('ov.list.dayClear')} onClick={() => { setDay(null) }}>
                             {t('ov.list.dayFilter', { day })} ×
@@ -356,7 +387,7 @@ export function makeOverviewPanel(
                             type="button"
                             className={'lc-ov-chip' + (group === null ? ' lc-ov-chip-on' : '')}
                             onClick={() => { setGroup(null) }}
-                          >{t('ov.range.all')}<span className="lc-ov-chip-n">{scoped.length}</span></button>
+                          >{t('ov.range.all')}<span className="lc-ov-chip-n">{scopeTotal}</span></button>
                           {chips.map(c => (
                             <button
                               key={c.key}
@@ -368,38 +399,38 @@ export function makeOverviewPanel(
                         </div>
                       )}
 
-                      {visible.length === 0 ? (
-                        <div className="lc-empty">{t(allRows.length === 0 ? 'ov.list.empty' : 'ov.list.noMatch')}</div>
+                      {rows.length === 0 ? (
+                        <div className="lc-empty">{t((summary?.sessionsTotal ?? 0) === 0 ? 'ov.list.empty' : 'ov.list.noMatch')}</div>
                       ) : (
                         <>
                           <div className="lc-ov-grid">
-                            {paged.items.map(row => (
+                            {rows.map(row => (
                               <OverviewCard
                                 key={row.id}
                                 row={row}
-                                {...(groups?.[row.id] !== undefined ? { group: groups[row.id] } : {})}
-                                costLabel={cardCostOf(row, book, currency)}
+                                {...(row.group === undefined ? {} : { group: row.group })}
+                                costLabel={cardCostOf(row, currency)}
                                 now={nowForCards}
                                 onOpen={openOne}
                               />
                             ))}
                           </div>
-                          {paged.count > 1 && (
+                          {pageCount > 1 && (
                             <div className="lc-ov-pager" role="navigation" aria-label={t('ov.list.pager')}>
                               <button
                                 type="button"
                                 className="lc-ov-pager-btn"
-                                disabled={paged.index === 0}
+                                disabled={pageIndex === 0}
                                 aria-label={t('ov.list.prev')}
-                                onClick={() => { setPage(paged.index - 1) }}
+                                onClick={() => { setPage(pageIndex - 1) }}
                               >‹</button>
-                              <span className="lc-ov-pager-n">{t('ov.list.page', { n: paged.index + 1, total: paged.count })}</span>
+                              <span className="lc-ov-pager-n">{t('ov.list.page', { n: pageIndex + 1, total: pageCount })}</span>
                               <button
                                 type="button"
                                 className="lc-ov-pager-btn"
-                                disabled={paged.index === paged.count - 1}
+                                disabled={pageIndex === pageCount - 1}
                                 aria-label={t('ov.list.next')}
-                                onClick={() => { setPage(paged.index + 1) }}
+                                onClick={() => { setPage(pageIndex + 1) }}
                               >›</button>
                             </div>
                           )}
@@ -429,8 +460,15 @@ export function makeOverviewPanel(
   }
 }
 
-function cardCostOf(row: OverviewRow, book: ModelBook | null, currency: CostCurrency): string {
-  if (row.familyCost === null) return '—'
-  const cost = estimateSessionCost(row.familyCost, book, currency)
-  return cost === null ? '—' : formatCost(cost, currency)
+function cardCostOf(row: OverviewCardRow, currency: CostCurrency): string {
+  return row.costUsd === null ? '—' : formatCost(toCurrency(row.costUsd, currency), currency)
+}
+
+function currentSessionOf(snapshot: unknown): { id?: string; cwd?: string } {
+  const state = asRecord(snapshot)
+  const id = typeof state?.current === 'string' ? state.current : undefined
+  if (id === undefined) return {}
+  const row = asRecord(asRecord(state?.byId)?.[id])
+  const cwd = typeof row?.cwd === 'string' && row.cwd !== '' ? row.cwd : undefined
+  return { id, ...(cwd === undefined ? {} : { cwd }) }
 }

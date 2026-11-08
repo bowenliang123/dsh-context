@@ -1,7 +1,7 @@
 import type { ReactElement, ReactNode } from 'react'
 import { IconPlugin, IconSettings } from '../primitives'
 import { siDeepseek, siGithub, type SimpleIcon } from 'simple-icons'
-import { useNewerVersion } from '../latestVersion'
+import { useNewerVersion } from '../versionSource'
 import { PLUGIN_NAME, PLUGIN_REPO, PLUGIN_REPO_SHORT, PLUGIN_VERSION } from '../meta'
 import { openPluginSettings, type ClientCtx } from '../services'
 import type { ViewKit } from '../viewkit'

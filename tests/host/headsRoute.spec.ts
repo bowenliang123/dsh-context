@@ -212,3 +212,234 @@ describe('dsh-context heads route', () => {
     assert.deepEqual(read.value, {})
   })
 })
+
+interface DirectOptions {
+  listed?: unknown
+  listThrows?: boolean
+  persistence?: unknown
+  sessions?: unknown
+  snapshot?: (session: unknown, keys: Set<string>) => unknown
+  cached?: (header: unknown, keys: Set<string>) => unknown
+  observeSession?: (id: string, options: unknown) => Promise<unknown>
+  coldReads?: { admit<T>(read: () => Promise<T>): Promise<T | undefined> }
+  cost?: unknown
+}
+
+async function bootDirect(options: DirectOptions = {}): Promise<{
+  routes: Map<string, RouteBox>
+  calls: { list: number; stat: string[]; cachedHeaders: unknown[] }
+}> {
+  const ctx = new Context()
+  const routes = new Map<string, RouteBox>()
+  const calls = { list: 0, stat: [] as string[], cachedHeaders: [] as unknown[] }
+  ctx.provide('connection', {
+    fetch: {
+      register: (r: never) => {
+        const route = r as { path: string; fetch?: (request: Request) => Promise<Response> }
+        routes.set(route.path, route)
+        return () => {}
+      },
+    },
+  })
+  ctx.provide('sessionQuery', {
+    listSessions: () => {
+      calls.list++
+      if (options.listThrows === true) return Promise.reject(new Error('list failed'))
+      return Promise.resolve(options.listed ?? [])
+    },
+    ...(options.observeSession === undefined ? {} : { observeSession: options.observeSession }),
+  })
+  ctx.provide('sessions', options.sessions ?? { get: () => undefined })
+  ctx.provide('sessionProjections', {
+    snapshot: (session: unknown, keys: Set<string>) => (options.snapshot === undefined ? undefined : options.snapshot(session, keys)),
+  })
+  ctx.provide('sessionProjectionCache', {
+    cachedSnapshot: (header: unknown, keys: Set<string>) => {
+      calls.cachedHeaders.push(header)
+      if (options.cached === undefined) {
+        const id = (header as { id?: string } | undefined)?.id
+        return { asOfSeq: 7, values: { contextTimeline: { ok: true, model: id } } }
+      }
+      return options.cached(header, keys)
+    },
+  })
+  if (options.persistence !== undefined) ctx.provide('sessionPersistence', options.persistence as never)
+  watchHeadsChannel(ctx, {
+    ...(options.coldReads === undefined ? {} : { coldReads: options.coldReads }),
+    ...(options.cost === undefined ? {} : { cost: options.cost as never }),
+  })
+  for (let index = 0; index < 300 && !routes.has(HEADS_ROUTE); index++) await new Promise(resolve => setTimeout(resolve, 1))
+  return { routes, calls }
+}
+
+function statOf(calls: { stat: string[] }, headers: Record<string, unknown>, overrides: Record<string, (id: string) => Promise<unknown>> = {}): unknown {
+  return {
+    stat: async (id: string) => {
+      calls.stat.push(id)
+      const override = overrides[id]
+      if (override !== undefined) return override(id)
+      const header = headers[id]
+      return header === undefined ? undefined : { header }
+    },
+  }
+}
+
+const STAT_HEADER = { version: 4, createdAt: 1, cwd: '/tmp', isSeeded: false }
+
+describe('dsh-context heads route per-id resolution', () => {
+  test('explicit ids resolve through sessionPersistence.stat without listing the corpus', async () => {
+    const harness = await bootDirect({
+      persistence: statOf({ stat: [] }, {
+        'cold-a': { id: 'cold-a', ...STAT_HEADER },
+        'cold-b': { id: 'cold-b', ...STAT_HEADER },
+      }),
+    })
+    const persistence = harness.routes.size
+    assert.equal(persistence, 1)
+    const read = await callRoute(harness.routes, { ids: ['cold-a', 'cold-b', 'missing'] })
+    assert.equal(read.ok, true)
+    assert.deepEqual(Object.keys(read.value ?? {}).sort(), ['cold-a', 'cold-b'])
+    assert.equal(harness.calls.list, 0, 'an explicit id batch never lists the whole corpus')
+    assert.equal(harness.calls.cachedHeaders.length, 2, 'the stored header feeds the cache read')
+  })
+
+  test('a live session skips the per-id stat and a stat failure or junk answer drops only that id', async () => {
+    const calls = { stat: [] as string[] }
+    const harness = await bootDirect({
+      persistence: statOf(calls, { 'cold-ok': { id: 'cold-ok', ...STAT_HEADER } }, {
+        'cold-throw': () => Promise.reject(new Error('corrupt log')),
+        'cold-junk': () => Promise.resolve('junk'),
+        'cold-no-header': () => Promise.resolve({ header: null }),
+      }),
+      sessions: { get: (id: string) => (id === 'live' ? { id, seq: 3 } : undefined) },
+      snapshot: () => ({ values: { contextTimeline: { ok: true, model: 'live' } } }),
+    })
+    const read = await callRoute(harness.routes, { ids: ['live', 'cold-ok', 'cold-throw', 'cold-junk', 'cold-no-header'] })
+    assert.equal(read.ok, true)
+    assert.deepEqual(Object.keys(read.value ?? {}).sort(), ['cold-ok', 'live'])
+    assert.deepEqual(calls.stat, ['cold-ok', 'cold-throw', 'cold-junk', 'cold-no-header'], 'the live id never reaches stat')
+    assert.equal(read.value?.live.head.model, 'live')
+  })
+
+  test('a throwing snapshot or cache read inside the per-id path skips only that id', async () => {
+    const base = { version: 4, createdAt: 1, cwd: '/tmp', isSeeded: false }
+    const throwingSnapshot = await bootDirect({
+      persistence: statOf({ stat: [] }, { 'cold-a': { id: 'cold-a', ...base } }),
+      sessions: { get: (id: string) => (id === 'live' ? { id } : undefined) },
+      snapshot: () => { throw new Error('snapshot broke') },
+    })
+    const liveFailed = await callRoute(throwingSnapshot.routes, { ids: ['live', 'cold-a'] })
+    assert.deepEqual(Object.keys(liveFailed.value ?? {}), ['cold-a'])
+    const throwingCached = await bootDirect({
+      persistence: statOf({ stat: [] }, { 'cold-a': { id: 'cold-a', ...base } }),
+      cached: () => { throw new Error('cache broke') },
+    })
+    const coldFailed = await callRoute(throwingCached.routes, { ids: ['cold-a'] })
+    assert.equal(coldFailed.ok, true)
+    assert.deepEqual(coldFailed.value, {})
+  })
+
+  test('a throwing live lookup skips that id, and a persistence face without stat falls back to the corpus list', async () => {
+    const throwingGet = await bootDirect({
+      persistence: statOf({ stat: [] }, {}),
+      sessions: { get: () => { throw new Error('registry broke') } },
+    })
+    const skipped = await callRoute(throwingGet.routes, { ids: ['a'] })
+    assert.deepEqual(skipped.value, {})
+
+    const fallback = await bootDirect({ persistence: { notStat: true }, listed: [{ header: { id: 'cold-x', ...STAT_HEADER } }] })
+    const read = await callRoute(fallback.routes, { ids: ['cold-x'] })
+    assert.deepEqual(Object.keys(read.value ?? {}), ['cold-x'])
+    assert.equal(fallback.calls.list, 1, 'without a stat face the corpus list is the fallback')
+  })
+
+  test('a non-safe watermark from the per-id cache read is dropped', async () => {
+    const harness = await bootDirect({
+      persistence: statOf({ stat: [] }, { 'cold-a': { id: 'cold-a', ...STAT_HEADER } }),
+      cached: () => ({ asOfSeq: 1.5, values: { contextTimeline: { ok: true } } }),
+    })
+    const read = await callRoute(harness.routes, { ids: ['cold-a'] })
+    assert.equal(read.value?.['cold-a']?.asOfSeq, undefined)
+    assert.equal(read.value?.['cold-a']?.head.ok, true)
+  })
+})
+
+describe('dsh-context heads route cold fallback', () => {
+  const HEAD_EVENTS = [
+    { type: 'request/header', seq: 0, time: 1, data: { header: { config: { model: 'deepseek-v4-flash', provider: 'deepseek' } }, reason: 'initial' } },
+    { type: 'user/message', seq: 1, time: 2, data: { content: [{ type: 'text', text: 'hi' }], source: { kind: 'user' } } },
+  ]
+
+  function observationOf(events: unknown): unknown {
+    return { events, [Symbol.dispose]() {} }
+  }
+
+  const COST = { read: () => ({ usd: 0.5, ready: true }), usd: () => 0.5, ready: () => true }
+
+  test('a session with neither a live snapshot nor a cache row folds the durable head', async () => {
+    const harness = await bootDirect({
+      listed: [],
+      cached: () => undefined,
+      observeSession: () => Promise.resolve(observationOf(HEAD_EVENTS)),
+      cost: COST,
+    })
+    const read = await callRoute(harness.routes, { ids: ['cold-fold'] })
+    const picked = read.value?.['cold-fold']
+    assert.ok(picked !== undefined)
+    assert.equal(picked.head.ok, true)
+    assert.equal(picked.asOfSeq, 1)
+    assert.deepEqual(picked.head.costRead, { usd: 0.5, ready: true })
+  })
+
+  test('an unreadable observation, a non-array event log and a rejecting observe drop only that id', async () => {
+    const harness = await bootDirect({
+      listed: [],
+      cached: () => undefined,
+      observeSession: (id) => Promise.resolve(id === 'bad-shape' ? observationOf('junk') : observationOf(HEAD_EVENTS)),
+    })
+    assert.deepEqual((await callRoute(harness.routes, { ids: ['bad-shape'] })).value, {})
+    const rejecting = await bootDirect({
+      listed: [],
+      cached: () => undefined,
+      observeSession: () => Promise.reject(new Error('down')),
+    })
+    assert.deepEqual((await callRoute(rejecting.routes, { ids: ['x'] })).value, {})
+    const throwingGate = await bootDirect({
+      listed: [],
+      cached: () => undefined,
+      observeSession: () => Promise.resolve(observationOf(HEAD_EVENTS)),
+      coldReads: { admit: () => { throw new Error('gate down') } },
+    })
+    assert.deepEqual((await callRoute(throwingGate.routes, { ids: ['x'] })).value, {})
+  })
+
+  test('an absent observe face never cold-reads', async () => {
+    const harness = await bootDirect({ listed: [], cached: () => undefined })
+    assert.deepEqual((await callRoute(harness.routes, { ids: ['cold-none'] })).value, {})
+  })
+
+  test('a stale live snapshot falls through the stat cache to the durable head', async () => {
+    const harness = await bootDirect({
+      persistence: statOf({ stat: [] }, { 'cold-a': { id: 'cold-a', version: 4, createdAt: 1, cwd: '/tmp', isSeeded: false } }),
+      sessions: { get: () => ({ id: 'cold-a' }) },
+      snapshot: () => ({ values: {} }),
+      cached: () => undefined,
+      observeSession: () => Promise.resolve(observationOf(HEAD_EVENTS)),
+    })
+    const read = await callRoute(harness.routes, { ids: ['cold-a'] })
+    assert.equal(read.value?.['cold-a']?.head.ok, true)
+  })
+
+  test('a throwing live snapshot falls back instead of dropping the id', async () => {
+    const harness = await bootDirect({
+      sessions: { get: () => ({ id: 'cold-b' }) },
+      snapshot: () => { throw new Error('projection gone') },
+      listed: [{ header: { id: 'cold-b', version: 4, createdAt: 1, cwd: '/tmp', isSeeded: false } }],
+      cached: () => undefined,
+      observeSession: () => Promise.resolve(observationOf([])),
+    })
+    const read = await callRoute(harness.routes, { ids: ['cold-b'] })
+    assert.equal(read.value?.['cold-b']?.head.ok, true)
+    assert.equal(read.value?.['cold-b']?.asOfSeq, undefined, 'an empty log carries no watermark')
+  })
+})

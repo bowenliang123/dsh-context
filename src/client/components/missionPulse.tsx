@@ -13,13 +13,12 @@ import {
   type CommsAgent,
   type CommsKindFilter,
 } from '../commsModel'
-import { billedTokensOf, estimateSessionCost, type CostCurrency } from '../cost'
+import { billedTokensOf, toCurrency, type CostCurrency } from '../cost'
 import { agentResolverOf } from '../fleetAgents'
 import type { CommsRow, FleetDelegationRow } from '../fleetDetail'
-import { agentPromptOf, type FleetDetailState } from '../fleetModel'
+import { agentPromptOf, agentReplyOf, type FleetDetailState } from '../fleetModel'
 import type { FleetTeam } from '../fleetTeam'
 import { fmtTime } from '../format'
-import { useModelPrices } from '../modelPrices'
 import { IconChevronDown, IconChevronUp } from '../primitives'
 import {
   pulseDependencyChainOf,
@@ -54,9 +53,13 @@ interface PulseHeaderProps {
   agentCount: number
   running: number | null
   tasks: number
-  messages: number
+  messages: number | null
+  pending: boolean
+  failed: number
+  total: number
   selected: CommsAgent | null
   onClearSelection: () => void
+  onRetry: () => void
   t: ViewKit['t']
 }
 
@@ -83,10 +86,18 @@ const PulseHeader = memo(function PulseHeader(props: PulseHeaderProps): ReactEle
         {stats.map(([key, value, label]) => (
           <div key={key} className={`lc-pulse-stat lc-pulse-stat-${key}`}>
             <dt>{label}</dt>
-            <dd data-pulse-stat={key}>{value ?? '—'}</dd>
+            <dd data-pulse-stat={key} aria-busy={key === 'messages' ? props.pending : undefined}>
+              {value ?? '—'}
+            </dd>
           </div>
         ))}
       </dl>
+      {props.failed > 0 ? (
+        <div className="lc-pulse-work-warning" role="status">
+          {t('fleet.phase.failed')} · {props.failed}/{props.total}
+          <button type="button" className="lc-gran-btn" onClick={props.onRetry}>{t('error.retry')}</button>
+        </div>
+      ) : null}
     </header>
   )
 })
@@ -347,13 +358,11 @@ const PulseTasks = memo(function PulseTasks(props: PulseTasksProps): ReactElemen
                     const owner = item.ownerId !== undefined ? props.agentOf(item.ownerId) : null
                     const ownerName = item.ownerName ?? owner?.name
                     const ownerRole = owner !== null ? roleTextOf(owner, t) : ''
-                    const entry = item.ownerId !== undefined ? props.details.landed.get(item.ownerId)?.detail : null
-                    const full = item.ownerId !== undefined ? props.details.fullLanded.get(item.ownerId) : null
                     const fullPending = item.ownerId !== undefined && props.details.fullPending.has(item.ownerId)
                     const prompt = item.kind === 'agent' && item.ownerId !== undefined
                       ? agentPromptOf(props.details, item.ownerId)
                       : item.description
-                    const reply = !fullPending ? full?.lastReply ?? entry?.lastReply : entry?.lastReply
+                    const reply = item.ownerId !== undefined ? agentReplyOf(props.details, item.ownerId) : undefined
                     const subject = item.kind === 'agent' ? workSubjectOf(prompt, item.subject) : item.subject
                     const dot = taskDotOf(item)
                     const kindLabel = t(item.kind === 'team' ? 'fleet.pulse.teamTask' : 'fleet.pulse.delegation')
@@ -546,7 +555,6 @@ export function MissionPulse(props: MissionPulseProps): ReactElement {
   const [query, setQuery] = useState('')
   const [laneQuery, setLaneQuery] = useState('')
   const [workQuery, setWorkQuery] = useState('')
-  const { book } = useModelPrices()
   const agentOf = useMemo(
     () => agentResolverOf(props.agents, props.titles, props.attested, t),
     [props.agents, props.attested, props.titles, t],
@@ -595,7 +603,9 @@ export function MissionPulse(props: MissionPulseProps): ReactElement {
         model: node.model,
         effort: node.reasoningEffort,
         tokens: billed > 0 ? billed : billedTokensOf(node.costUsage),
-        cost: estimateSessionCost(node.costUsage, book, props.currency),
+        cost: node.costRead != null && node.costRead.ready && node.costRead.usd !== null
+          ? toCurrency(node.costRead.usd, props.currency)
+          : null,
       }
     }
     const communicating = new Set<string>()
@@ -627,7 +637,7 @@ export function MissionPulse(props: MissionPulseProps): ReactElement {
       }),
       links,
     }
-  }, [agentOf, book, props.agents, props.comms, props.currency, props.delegations, props.forest])
+  }, [agentOf, props.agents, props.comms, props.currency, props.delegations, props.forest])
   const visibleWork = useMemo(() => {
     const scoped = selectedAgent === null ? workItems : workItems.filter(item => item.ownerId === selectedAgent)
     const needle = workQuery.trim().toLowerCase()
@@ -644,11 +654,11 @@ export function MissionPulse(props: MissionPulseProps): ReactElement {
     return key === null ? undefined : visibleEvents.find(item => item.key === key)
   }, [selectedDelegationKey, selectedEventKey, visibleEvents])
   const selected = selectedAgent !== null ? agentOf(selectedAgent) : null
-  const messageTotal = useMemo(() => {
-    let total = 0
-    for (const detail of props.landedDetails.values()) total += detail.messagesTotal ?? detail.messages.length
-    return total
-  }, [props.landedDetails])
+  const family = props.details.family
+  const messageTotal = family.messages
+  const familyRecords = family.messages !== null && family.delegations !== null
+    ? family.messages + family.delegations
+    : null
   useEffect(() => {
     if (props.focusMember !== null) setSelectedAgent(props.focusMember)
   }, [props.focusMember])
@@ -659,7 +669,8 @@ export function MissionPulse(props: MissionPulseProps): ReactElement {
   }, [hoveredAgent, props.forest])
   const selectAgent = useCallback((id: string): void => {
     setSelectedAgent(current => current === id ? null : id)
-  }, [])
+    props.details.prioritize(id)
+  }, [props.details])
   const selectEvent = useCallback((row: CommsRow): void => {
     const opening = selectedEventKey !== row.key
     setSelectedEventKey(opening ? row.key : null)
@@ -675,7 +686,10 @@ export function MissionPulse(props: MissionPulseProps): ReactElement {
   const focusTask = useCallback((item: PulseWorkItem): void => {
     const opening = focusedTaskKey !== item.key
     setFocusedTaskKey(opening ? item.key : null)
-    if (opening && item.ownerId !== undefined) props.details.requestFull(item.ownerId)
+    if (item.ownerId !== undefined) {
+      props.details.prioritize(item.ownerId)
+      if (opening) props.details.requestFull(item.ownerId)
+    }
   }, [focusedTaskKey, props.details])
   const focusTaskId = useCallback((id: string): void => {
     const item = workItems.find(work => work.key === `team:${id}`)
@@ -696,8 +710,12 @@ export function MissionPulse(props: MissionPulseProps): ReactElement {
         running={props.forest === null ? null : props.forest.nodes.filter(node => node.running).length}
         tasks={workItems.length}
         messages={messageTotal}
+        pending={family.pending > 0}
+        failed={family.failed}
+        total={family.total}
         selected={selected}
         onClearSelection={clearSelection}
+        onRetry={() => { props.details.retryFamily() }}
         t={t}
       />
       <div className={'lc-pulse-main' + (props.forest !== null ? ' lc-pulse-main-graph' : '')}>
@@ -733,7 +751,8 @@ export function MissionPulse(props: MissionPulseProps): ReactElement {
             selectedDelegationKey={selectedDelegationKey}
             query={laneQuery}
             currency={props.currency}
-            pending={props.details.pending.size > 0 || props.details.historyPending.size > 0}
+            pending={props.details.pending.size > 0 || props.details.historyPending.size > 0 || family.pending > 0}
+            totalRecords={kind === 'all' && query === '' && selectedAgent === null ? familyRecords : null}
             agentOf={agentOf}
             onSelectAgent={selectAgent}
             onSelectEvent={selectEvent}

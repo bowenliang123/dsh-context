@@ -1,6 +1,6 @@
 import { act, createElement as h, type ReactElement } from 'react'
 import assert from 'node:assert/strict'
-import { describe, test, vi, afterEach, beforeEach } from 'vitest'
+import { describe, test, vi, afterEach } from 'vitest'
 import {
   DetailStore,
   detailBytesOf,
@@ -488,99 +488,6 @@ describe('DetailStore', () => {
     assert.equal(calls.length, 3, 'the recovered read lands')
   })
 
-})
-
-describe('detailStoreOf', () => {
-  beforeEach(() => { vi.useFakeTimers() })
-
-  test('the store map stays bounded while an ACTIVE store is never dropped', async () => {
-    stubDetailFetch(() => ({ body: { ok: true, value: detail(1) } }))
-    const held = detailStoreOf('held')
-    const off = held.subscribe(() => {})
-    for (let i = 0; i < 80; i++) await visitStore(`idle-${i}`)
-    assert.equal(detailStoreOf('held'), held, 'the active store keeps its identity (no forked ledger)')
-    off()
-    held.release()
-  })
-
-  test('one store per session, shared by every consumer; reset drops the cache', () => {
-    stubDetailFetch(() => ({ body: { ok: true, value: detail(1) } }))
-    const a = detailStoreOf('s1')
-    assert.equal(a, detailStoreOf('s1'), 'the session key wins, the first fetcher keeps serving')
-    assert.notEqual(a, detailStoreOf('s2'))
-    resetTimelineDetailStores()
-    assert.notEqual(detailStoreOf('s1'), a, 'a reset store is a fresh instance')
-  })
-
-  function countingFetch(): Map<string, number> {
-    const calls = new Map<string, number>()
-    vi.stubGlobal('fetch', async (_url: unknown, init?: { body?: string }) => {
-      if (init?.body === undefined) return { ok: false, status: 404, json: async () => null }
-      const id = (JSON.parse(init.body) as { sessionId: string }).sessionId
-      calls.set(id, (calls.get(id) ?? 0) + 1)
-      return { ok: true, status: 200, json: async () => ({ ok: true, value: detail(1) }) }
-    })
-    return calls
-  }
-
-  async function visitStore(id: string): Promise<DetailStore> {
-    const store = detailStoreOf(id)
-    const off = store.subscribe(() => {})
-    store.request(1)
-    await vi.advanceTimersByTimeAsync(1000)
-    assert.equal(store.hasPayload, true, `store ${id} never landed its read`)
-    off()
-    return store
-  }
-
-  test('the page cache bounds retained payloads; a demoted session reads again', async () => {
-    const calls = countingFetch()
-    const ids = Array.from({ length: 12 }, (_, i) => 'cap-' + i)
-    for (const id of ids) await visitStore(id)
-    assert.equal(detailStoreOf(ids[11]).hasPayload, true, 'the newest visit stays cached')
-    assert.equal(detailStoreOf(ids[0]).hasPayload, false, 'the oldest visit was demoted')
-    await visitStore(ids[11])
-    assert.equal(calls.get(ids[11]), 1, 'a cached re-open reads nothing')
-    await visitStore(ids[0])
-    assert.equal(calls.get(ids[0]), 2, 'a demoted re-open reads once more')
-  })
-
-  test('a mounted store is never demoted', async () => {
-    countingFetch()
-    const ids = Array.from({ length: 12 }, (_, i) => 'live-' + i)
-    const held = detailStoreOf(ids[0])
-    const off = held.subscribe(() => {})
-    held.request(1)
-    await vi.advanceTimersByTimeAsync(1000)
-    assert.equal(held.hasPayload, true, 'the mounted store never landed')
-    for (const id of ids.slice(1)) await visitStore(id)
-    assert.equal(held.active, true)
-    assert.equal(held.hasPayload, true, 'a mounted store keeps its payload')
-    off()
-  })
-
-  test('a burst of opens is trimmed back to the bound on the next open', async () => {
-    countingFetch()
-    const ids = Array.from({ length: 12 }, (_, i) => 'burst-' + i)
-    const offs: (() => void)[] = []
-    const created = ids.map((id) => {
-      const store = detailStoreOf(id)
-      offs.push(store.subscribe(() => {}))
-      store.request(1)
-      return store
-    })
-    await vi.advanceTimersByTimeAsync(1000)
-    for (const [i, store] of created.entries()) {
-      assert.equal(store.hasPayload, true, 'burst store ' + String(i) + ' never landed')
-    }
-    for (const off of offs) off()
-    await visitStore('burst-extra')
-    assert.equal(created[0].hasPayload, false, 'the oldest burst payload is released')
-    assert.equal(created[11].hasPayload, true, 'the newest burst payload survives')
-    await visitStore('burst-extra-2')
-    assert.equal(created[5].hasPayload, false)
-    assert.equal(created[11].hasPayload, true)
-  })
 })
 
 function SourceProbe(props: { sessionId: string; value?: unknown; useProjection?: (key: string) => unknown }): ReactElement {

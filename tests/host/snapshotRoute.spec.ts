@@ -158,6 +158,10 @@ test('without the connection face the route never registers, and the watcher dis
         timing: { wallMs: 10, ttftMs: 'bad', tools: { bash: { calls: 1, ms: 2 } }, calls: 4 },
         lastUser: 'hi',
         systems: [{ seq: 1, time: 1, tokens: 1 }],
+        generatedReasoning: 3,
+        generatedAnswerTokens: 4,
+        generatedCallTokens: 5,
+        costRead: { usd: 1.5, ready: true },
       },
       contextActivity: { days: { '2026-11-01': { tokens: 5, requests: 1 } } },
     }
@@ -172,6 +176,10 @@ test('without the connection face the route never registers, and the watcher dis
     assert.equal('systems' in digest, false)
     assert.deepEqual(digest.timing, { tools: {}, wallMs: 10, calls: 4 })
     assert.equal(digest.lastUser, 'hi')
+    assert.equal(digest.generatedReasoning, 3)
+    assert.equal(digest.generatedAnswerTokens, 4)
+    assert.equal(digest.generatedCallTokens, 5)
+    assert.deepEqual(digest.costRead, { usd: 1.5, ready: true })
     assert.deepEqual(row.contextActivity, { days: { '2026-11-01': { tokens: 5, requests: 1 } } })
     const bare = { ...h.cacheMode }
     bare.values = { contextTimeline: {} }
@@ -269,6 +277,76 @@ test('without the connection face the route never registers, and the watcher dis
     cacheResult = { asOfSeq: 1, values: {} }
     const emptyValues = await callRoute(routes, 42)
     assert.deepEqual(emptyValues.value, {}, 'a non-object body reads as an unfiltered listing; empty served values drop the row')
+  })
+
+  test('a matching revision skips the rows and replies tiny; another ids set still gets its rows', async () => {
+    const ctx = new Context()
+    const routes = new Map<string, RouteBox>()
+    ctx.provide('connection', {
+      fetch: {
+        register: (r: never) => {
+          const route = r as { path: string; fetch?: (request: Request) => Promise<Response> }
+          routes.set(route.path, route)
+          return () => {}
+        },
+      },
+    })
+    const listed = [
+      { header: { id: 'a', version: 4, createdAt: 1, cwd: '/tmp', isSeeded: false } },
+      { header: { id: 'b', version: 4, createdAt: 2, cwd: '/tmp', isSeeded: false } },
+    ]
+    ctx.provide('sessionQuery', { listSessions: () => Promise.resolve(listed) })
+    ctx.provide('sessions', { get: () => undefined })
+    ctx.provide('sessionProjections', { snapshot: () => undefined })
+    ctx.provide('sessionProjectionCache', {
+      cachedSnapshot: (header: { id: string }) => ({ asOfSeq: 5, values: { contextTimeline: { ok: true, model: header.id } } }),
+    })
+    let version = 0
+    const backfill = Object.assign(() => {}, {
+      coverage: () => ({ complete: true, remaining: 0, failed: 0, running: false, total: 0, covered: 0, unsupported: 0 }),
+      version: () => version,
+      foldedSince: (marker: number) => ({ version: marker, ids: [] }),
+    })
+    watchSnapshotRoute(ctx, backfill)
+    await new Promise(resolve => setTimeout(resolve, 2))
+    const first = await callRoute(routes, {}) as { ok: boolean; value: Record<string, unknown>; revision?: string }
+    assert.ok(typeof first.revision === 'string', 'a full reply carries its revision')
+    const revision = first.revision as string
+    const unchanged = await callRoute(routes, { revision }) as { ok: boolean; value: unknown; revision?: string; unchanged?: boolean }
+    assert.deepEqual(unchanged, { ok: true, value: {}, revision, unchanged: true })
+    const subset = await callRoute(routes, { revision, ids: ['a'] }) as { value: Record<string, unknown>; revision?: string }
+    assert.deepEqual(Object.keys(subset.value), ['a'], 'a never-served ids set gets its rows even at the current revision')
+    const repeated = await callRoute(routes, { revision, ids: ['a'] }) as { value: unknown; unchanged?: boolean }
+    assert.deepEqual(repeated, { ok: true, value: {}, revision, unchanged: true })
+    version = 1
+    const moved = await callRoute(routes, { revision, ids: ['a'] }) as { value: Record<string, unknown>; revision?: string; unchanged?: boolean }
+    assert.equal(moved.unchanged, undefined, 'a backfill write invalidates the revision')
+    assert.notEqual(moved.revision, revision)
+    assert.deepEqual(Object.keys(moved.value), ['a'])
+  })
+
+  test('without a backfill handle the route still carries a revision and skips on a match', async () => {
+    const ctx = new Context()
+    const routes = new Map<string, RouteBox>()
+    ctx.provide('connection', {
+      fetch: {
+        register: (r: never) => {
+          const route = r as { path: string; fetch?: (request: Request) => Promise<Response> }
+          routes.set(route.path, route)
+          return () => {}
+        },
+      },
+    })
+    ctx.provide('sessionQuery', { listSessions: () => Promise.resolve([]) })
+    ctx.provide('sessions', { get: () => undefined })
+    ctx.provide('sessionProjections', { snapshot: () => undefined })
+    ctx.provide('sessionProjectionCache', { cachedSnapshot: () => undefined })
+    watchSnapshotRoute(ctx)
+    await new Promise(resolve => setTimeout(resolve, 2))
+    const first = await callRoute(routes, {}) as { revision?: string }
+    assert.ok(typeof first.revision === 'string')
+    const second = await callRoute(routes, { revision: first.revision }) as { unchanged?: boolean }
+    assert.equal(second.unchanged, true)
   })
 
   test('a malformed body fails with the bad-request code', async () => {

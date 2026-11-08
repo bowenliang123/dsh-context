@@ -17,7 +17,17 @@ describe('ContextView — projection guards', () => {
     ]) {
       const m = await mount(h(View, props))
       assert.ok(text(m.container).includes(DICT_EN.loading))
+      assert.ok(queryAll(m.container, '.lc-deferred-skeleton').length >= 5, 'the cold load paints the final card skeleton')
+      assert.ok(query(m.container, '.lc-cols-main').children.length >= 2)
       await m.unmount()
+    }
+
+    const sidebar = await mount(h(View, { host: 'sidebar' }))
+    try {
+      assert.ok(queryAll(sidebar.container, '.lc-deferred-skeleton').length >= 4, 'the sidebar skeleton skips the head row')
+      assert.equal(queryAll(sidebar.container, '.lc-deferred-skeleton .lc-empty').length, 0)
+    } finally {
+      await sidebar.unmount()
     }
 
     const m = await mount(h(View, { useProjection: projectionsFor(timeline()) }))

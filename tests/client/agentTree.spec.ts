@@ -22,8 +22,8 @@ import {
   subagentCostFoldOf,
   type AgentForest,
 } from '../../src/client/agentTree'
-import { mergeCostUsage } from '../../src/client/cost'
-import type { ContextTimeline, SessionCostUsage } from '../../src/shared/types'
+import { mergeCostUsage } from '../../src/shared/pricing'
+import type { ContextTimeline, SessionCostRead, SessionCostUsage } from '../../src/shared/types'
 
 function timeline(total: number, requests = 0): ContextTimeline {
   return {
@@ -123,10 +123,10 @@ describe('agentTurnCompletedOf', () => {
 describe('agentStatsOf', () => {
   test('absent values degrade to empty stats', () => {
     assert.deepEqual(agentStatsOf(undefined), {
-      head: null, requests: 0, billed: null, costUsage: null, durationMs: null, identity: null,
+      head: null, requests: 0, billed: null, costUsage: null, costRead: null, durationMs: null, identity: null,
     })
     assert.deepEqual(agentStatsOf({}), {
-      head: null, requests: 0, billed: null, costUsage: null, durationMs: null, identity: null,
+      head: null, requests: 0, billed: null, costUsage: null, costRead: null, durationMs: null, identity: null,
     })
   })
 
@@ -510,18 +510,42 @@ describe('subagentCostFoldOf', () => {
   const COST_A: SessionCostUsage = { 'deepseek-official': { 'deepseek-v4-flash': { peak: { uncached: 1, cacheRead: 2, cacheWrite: 0, output: 3 } } } }
   const COST_B: SessionCostUsage = { 'zai-coding-cn': { 'glm-5.3-flash': { peak: { uncached: 10, cacheRead: 0, cacheWrite: 20, output: 0 } } } }
 
-  function costRow(parentId: string | undefined, cost?: SessionCostUsage): Record<string, unknown> {
+  function costRow(parentId: string | undefined, cost?: SessionCostUsage, costRead?: SessionCostRead): Record<string, unknown> {
     return row({
       ...(parentId !== undefined ? { parentId, origin: 'subagent' } : {}),
-      projectionValues: { contextTimeline: { ...timeline(100), ...(cost !== undefined ? { cost } : {}) } },
+      projectionValues: {
+        contextTimeline: {
+          ...timeline(100),
+          ...(cost !== undefined ? { cost } : {}),
+          ...(costRead !== undefined ? { costRead } : {}),
+        },
+      },
     })
   }
 
   test('absent snapshot or anchor folds nothing', () => {
-    assert.deepEqual(subagentCostFoldOf(undefined, 's1'), { usage: null, cold: [], count: 0 })
-    assert.deepEqual(subagentCostFoldOf(snap({}), 's1'), { usage: null, cold: [], count: 0 })
-    assert.deepEqual(subagentCostFoldOf(snap({ s1: row({}) }), undefined), { usage: null, cold: [], count: 0 })
-    assert.deepEqual(subagentCostFoldOf(snap({ s1: row({}) }), ''), { usage: null, cold: [], count: 0 })
+    assert.deepEqual(subagentCostFoldOf(undefined, 's1'), { usage: null, cold: [], count: 0, costRead: null })
+    assert.deepEqual(subagentCostFoldOf(snap({}), 's1'), { usage: null, cold: [], count: 0, costRead: { usd: null, ready: true } })
+    assert.deepEqual(subagentCostFoldOf(snap({ s1: row({}) }), undefined), { usage: null, cold: [], count: 0, costRead: null })
+    assert.deepEqual(subagentCostFoldOf(snap({ s1: row({}) }), ''), { usage: null, cold: [], count: 0, costRead: null })
+  })
+
+  test('folds the host cost reads of the subtree: USD sums, faces and misses concat, ready only when every read is ready', () => {
+    const FACE_A = { provider: 'deepseek', model: 'deepseek-v4-flash', rate: { hit: 0.003, miss: 0.15, write: 0.15, out: 0.6 }, via: 'direct' as const, confidence: 'high' as const }
+    const FACE_B = { provider: 'zhipuai', model: 'glm-5.3-flash', rate: { hit: 0.015, miss: 0.075, write: 0.075, out: 0.25 }, via: 'family' as const, confidence: 'medium' as const }
+    const MISS = { provider: 'future', model: 'mystery', reason: 'model-unknown' as const }
+    const byId = {
+      root: costRow(undefined),
+      a: costRow('root', undefined, { usd: 0.5, ready: true, faces: [FACE_A] }),
+      b: costRow('a', undefined, { usd: 0.25, ready: false, faces: [FACE_B], misses: [MISS] }),
+    }
+    assert.deepEqual(subagentCostFoldOf(snap(byId), 'root').costRead, { usd: 0.75, ready: false, faces: [FACE_A, FACE_B], misses: [MISS] })
+    byId.b = costRow('a', undefined, { usd: 0.25, ready: true })
+    assert.deepEqual(subagentCostFoldOf(snap(byId), 'root').costRead, { usd: 0.75, ready: true, faces: [FACE_A] })
+    const nullUsd = { root: costRow(undefined), kid: costRow('root', undefined, { usd: null, ready: true }) }
+    assert.deepEqual(subagentCostFoldOf(snap(nullUsd), 'root').costRead, { usd: null, ready: true })
+    const cold = { root: costRow(undefined), cold: row({ parentId: 'root', origin: 'subagent' }) }
+    assert.equal(subagentCostFoldOf(snap(cold), 'root').costRead, null, 'a cold-only subtree has no read yet')
   })
 
   test('merges the whole descendant subtree, never the current session itself', () => {
@@ -606,8 +630,8 @@ describe('subagentCostFoldOf', () => {
       fork: row({ parentId: 'root', projectionValues: { contextTimeline: { ...timeline(1), cost: COST_B } } }),
       forkKid: row({ parentId: 'fork', origin: 'subagent', projectionValues: { contextTimeline: { ...timeline(1), cost: COST_A } } }),
     }
-    assert.deepEqual(subagentCostFoldOf(snap(byId), 'root'), { usage: null, cold: [], count: 0 })
-    assert.deepEqual(subagentCostFoldOf(snap(byId), 'fork'), { usage: COST_A, cold: [], count: 1 })
+    assert.deepEqual(subagentCostFoldOf(snap(byId), 'root'), { usage: null, cold: [], count: 0, costRead: { usd: null, ready: true } })
+    assert.deepEqual(subagentCostFoldOf(snap(byId), 'fork'), { usage: COST_A, cold: [], count: 1, costRead: { usd: null, ready: true } })
   })
 })
 

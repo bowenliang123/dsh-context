@@ -4,12 +4,15 @@ import { asRecord } from './record'
 import { serviceIdentityOf } from './serviceIdentity'
 import { type ColdReadGate, makeColdReadGate } from './coldRead'
 import { buildTimelineDetail, buildTimelineHead } from './foldWire'
+import { withCost, withDetailCost, type CostSource } from './cost'
 import { DetailShadow, foldLog } from './detailShadow'
 import { failure, leaseOf, mountPostRoute, observeOf, readBody, reply, revisionOf } from './postRoute'
 import type { ContextTimelineDetail, Snapshot } from '../shared/types'
 import type { TimelineState } from './foldState'
 
 export const DETAIL_ROUTE = '/api/dsh-context/detail'
+
+const IDLE_SWEEP_MS = 20_000
 
 const PAYLOAD_CACHE_MAX = 4
 
@@ -19,12 +22,8 @@ interface ColdPayload {
   value: ContextTimelineDetail
 }
 
-function headOfDetail(detail: { rev: number; head?: unknown }): { rev: number; head?: unknown } {
-  return { rev: detail.rev, head: detail.head }
-}
-
-function headPayloadOf(state: TimelineState): { rev: number; head: Snapshot } {
-  return { rev: state.detailRev ?? 0, head: buildTimelineHead(state) }
+function headPayloadOf(state: TimelineState, cost?: CostSource): { rev: number; head: Snapshot } {
+  return { rev: state.detailRev ?? 0, head: withCost(cost, buildTimelineHead(state)) }
 }
 
 export interface DetailChannelGate {
@@ -78,8 +77,24 @@ export function watchDetailChannel(
   coldReads: ColdReadGate = makeColdReadGate(),
   gate: DetailChannelGate = createDetailGate(ctx),
   shadow: DetailShadow = new DetailShadow(ctx, bounds, coldReads, () => observeOf(ctx)),
+  cost?: CostSource,
+  options: { idleSweepMs?: number } = {},
 ): DetailChannelGate {
+  const idleSweepMs = options.idleSweepMs ?? IDLE_SWEEP_MS
   const payloads = new Map<string, ColdPayload>()
+  let sweepTimer: ReturnType<typeof setTimeout> | null = null
+  const touch = (): void => {
+    if (sweepTimer !== null) clearTimeout(sweepTimer)
+    sweepTimer = setTimeout(() => {
+      sweepTimer = null
+      payloads.clear()
+    }, idleSweepMs)
+    ;(sweepTimer as { unref?: () => void }).unref?.()
+  }
+  ctx.effect(() => () => {
+    if (sweepTimer !== null) clearTimeout(sweepTimer)
+    sweepTimer = null
+  }, 'dsh-context: detail payload sweep')
   mountPostRoute({
     ctx,
     deps: ['connection', 'sessions'],
@@ -92,6 +107,7 @@ export function watchDetailChannel(
       if (getSession === undefined) return undefined
 
       return async (request: Request): Promise<Response> => {
+        touch()
         const read = await readBody(request)
         if (!read.ok) return read.response
         const body = read.body
@@ -107,10 +123,10 @@ export function watchDetailChannel(
           if (session !== undefined && session !== null) {
             const state = gate.stateOf(session, 'contextTimeline') as TimelineState | undefined
             if (state === undefined) return reply({ ok: true, value: null })
-            if (headOnly) return reply({ ok: true, value: headPayloadOf(state) })
+            if (headOnly) return reply({ ok: true, value: headPayloadOf(state, cost) })
             const detailState = await shadow.stateOf(sessionId)
             if (detailState === null) return reply({ ok: true, value: null })
-            return reply({ ok: true, value: buildTimelineDetail(detailState, bounds) })
+            return reply({ ok: true, value: withDetailCost(cost, buildTimelineDetail(detailState, bounds)) })
           }
           const observe = observeOf(ctx)
           if (observe === undefined) return reply({ ok: true, value: null })
@@ -125,24 +141,28 @@ export function watchDetailChannel(
                 if (hit !== undefined && hit.revision === revision && hit.persistence === persistence) {
                   payloads.delete(sessionId)
                   payloads.set(sessionId, hit)
-                  return headOnly ? headOfDetail(hit.value) : hit.value
+                  if (headOnly) {
+                    /* v8 ignore next 1 */
+                    return hit.value.head === undefined
+                      ? { rev: hit.value.rev }
+                      : { rev: hit.value.rev, head: withCost(cost, hit.value.head) }
+                  }
+                  return withDetailCost(cost, hit.value)
                 }
               }
               const events = asRecord(observation)?.events
               if (!Array.isArray(events)) return null
               const state = (await foldLog(events, bounds)).state
-              if (revision !== undefined) {
-                const detail = buildTimelineDetail(state, bounds)
-                payloads.delete(sessionId)
-                payloads.set(sessionId, { persistence, revision, value: detail })
-                for (const oldest of payloads.keys()) {
-                  if (payloads.size <= PAYLOAD_CACHE_MAX) break
-                  payloads.delete(oldest)
-                }
-                return headOnly ? headOfDetail(detail) : detail
+              if (headOnly) return headPayloadOf(state, cost)
+              const detail = buildTimelineDetail(state, bounds)
+              if (revision === undefined) return withDetailCost(cost, detail)
+              payloads.delete(sessionId)
+              payloads.set(sessionId, { persistence, revision, value: detail })
+              for (const oldest of payloads.keys()) {
+                if (payloads.size <= PAYLOAD_CACHE_MAX) break
+                payloads.delete(oldest)
               }
-              if (headOnly) return headPayloadOf(state)
-              return buildTimelineDetail(state, bounds)
+              return withDetailCost(cost, detail)
             } finally {
               release()
             }

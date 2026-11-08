@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import { afterEach, describe, test, vi } from 'vitest'
-import { postRoute, postRouteQuietly, RouteError } from '../../src/client/route'
+import { postRoute, postRouteEnvelope, postRouteQuietly, RouteError } from '../../src/client/route'
 
 interface FetchInit {
   method?: string
@@ -126,5 +126,47 @@ describe('postRouteQuietly', () => {
       throw new Error('offline')
     })
     assert.equal(await postRouteQuietly('api/route', {}, decodeNumber, { label: 'quiet' }), null)
+  })
+})
+
+describe('postRouteEnvelope', () => {
+  test('carries the revision and the decoded value of a changed reply', async () => {
+    stubFetch(() => ({ ok: true, status: 200, json: async () => ({ ok: true, value: 4, revision: 'rev-1' }) }))
+    const read = await postRouteEnvelope('api/route', { revision: null }, decodeNumber)
+    assert.deepEqual(read, { value: 4, unchanged: false, revision: 'rev-1' })
+  })
+
+  test('an unchanged reply skips decoding and still reports the revision', async () => {
+    let decoded = 0
+    stubFetch(() => ({ ok: true, status: 200, json: async () => ({ ok: true, value: { stale: true }, revision: 'rev-2', unchanged: true }) }))
+    const read = await postRouteEnvelope('api/route', {}, (value: unknown) => {
+      decoded++
+      return decodeNumber(value)
+    })
+    assert.deepEqual(read, { value: null, unchanged: true, revision: 'rev-2' })
+    assert.equal(decoded, 0)
+  })
+
+  test('an unchanged reply without a revision and a value-less reply with one keep both shapes', async () => {
+    stubFetch(() => ({ ok: true, status: 200, json: async () => ({ ok: true, value: {}, unchanged: true }) }))
+    assert.deepEqual(await postRouteEnvelope('api/route', {}, decodeNumber), { value: null, unchanged: true })
+    stubFetch(() => ({ ok: true, status: 200, json: async () => ({ ok: true, value: null, revision: 'rev-3' }) }))
+    assert.deepEqual(await postRouteEnvelope('api/route', {}, decodeNumber), { value: null, unchanged: false, revision: 'rev-3' })
+  })
+
+  test('an absent value or a hostile revision degrades to null and no revision', async () => {
+    stubFetch(() => ({ ok: true, status: 200, json: async () => ({ ok: true, value: null, revision: 7 }) }))
+    assert.deepEqual(await postRouteEnvelope('api/route', {}, decodeNumber), { value: null, unchanged: false })
+    stubFetch(() => ({ ok: true, status: 200, json: async () => ({ ok: true, value: 4, revision: '' }) }))
+    assert.deepEqual(await postRouteEnvelope('api/route', {}, decodeNumber), { value: 4, unchanged: false })
+  })
+
+  test('a malformed decoded payload throws and transport defects reject', async () => {
+    stubFetch(() => envelope('junk'))
+    await assert.rejects(postRouteEnvelope('api/route', {}, decodeNumber, { label: 'overview' }), /dsh-context: overview read malformed/)
+    stubFetch(() => envelope(null, 502))
+    await assert.rejects(postRouteEnvelope('api/route', {}, decodeNumber), /route HTTP 502/)
+    stubFetch(() => ({ ok: false, status: 500, json: async () => ({}) }))
+    await assert.rejects(postRouteEnvelope('api/route', {}, decodeNumber), RouteError)
   })
 })

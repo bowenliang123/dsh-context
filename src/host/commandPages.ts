@@ -18,6 +18,8 @@ const FOLD_YIELD_EVENTS = 1_000
 
 const STATE_CACHE_MAX = 2
 
+const IDLE_SWEEP_MS = 20_000
+
 interface CommandObservation {
   source?: unknown
   revision?: unknown
@@ -109,8 +111,23 @@ export function watchCommandPageChannel(
   ctx: Context,
   bounds: FoldBounds,
   coldReads: ColdReadGate = makeColdReadGate(),
+  options: { idleSweepMs?: number } = {},
 ): void {
+  const idleSweepMs = options.idleSweepMs ?? IDLE_SWEEP_MS
   const cache = new Map<string, CachedState>()
+  let sweepTimer: ReturnType<typeof setTimeout> | null = null
+  const touch = (): void => {
+    if (sweepTimer !== null) clearTimeout(sweepTimer)
+    sweepTimer = setTimeout(() => {
+      sweepTimer = null
+      cache.clear()
+    }, idleSweepMs)
+    ;(sweepTimer as { unref?: () => void }).unref?.()
+  }
+  ctx.effect(() => () => {
+    if (sweepTimer !== null) clearTimeout(sweepTimer)
+    sweepTimer = null
+  }, 'dsh-context: command page sweep')
   mountPostRoute({
     ctx,
     deps: ['connection', 'sessionQuery'],
@@ -120,6 +137,7 @@ export function watchCommandPageChannel(
       const observe = observeOf(c)
       if (observe === undefined) return undefined
       return async (request: Request): Promise<Response> => {
+        touch()
         const read = await readBody(request)
         if (!read.ok) return read.response
         const body = read.body

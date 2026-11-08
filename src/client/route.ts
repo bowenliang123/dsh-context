@@ -15,12 +15,13 @@ interface RouteOptions {
 
 type RouteDecoder<T> = (value: unknown) => T | null
 
-export async function postRoute<T>(
-  route: string,
-  body: unknown,
-  decode: RouteDecoder<T>,
-  options: RouteOptions = {},
-): Promise<T | null> {
+export interface RouteEnvelope<T> {
+  value: T | null
+  revision?: string
+  unchanged: boolean
+}
+
+async function readEnvelope(route: string, body: unknown, options: RouteOptions): Promise<Record<string, unknown>> {
   const label = options.label ?? route
   const response = await fetch(route, {
     method: 'POST',
@@ -37,10 +38,39 @@ export async function postRoute<T>(
   }
   const envelope = asRecord(parsed)
   if (envelope === null || envelope.ok !== true) throw new RouteError(`${PLUGIN_NAME}: ${label} read failed`)
-  if (envelope.value === null) return null
+  return envelope
+}
+
+function revisionOf(envelope: Record<string, unknown>): string | undefined {
+  const revision = envelope.revision
+  return typeof revision === 'string' && revision !== '' ? revision : undefined
+}
+
+export async function postRouteEnvelope<T>(
+  route: string,
+  body: unknown,
+  decode: RouteDecoder<T>,
+  options: RouteOptions = {},
+): Promise<RouteEnvelope<T>> {
+  const envelope = await readEnvelope(route, body, options)
+  const revision = revisionOf(envelope)
+  if (envelope.unchanged === true) {
+    return { value: null, unchanged: true, ...(revision === undefined ? {} : { revision }) }
+  }
+  if (envelope.value === null) return { value: null, unchanged: false, ...(revision === undefined ? {} : { revision }) }
   const value = decode(envelope.value)
-  if (value === null) throw new RouteError(`${PLUGIN_NAME}: ${label} read malformed`)
-  return value
+  if (value === null) throw new RouteError(`${PLUGIN_NAME}: ${options.label ?? route} read malformed`)
+  return { value, unchanged: false, ...(revision === undefined ? {} : { revision }) }
+}
+
+export async function postRoute<T>(
+  route: string,
+  body: unknown,
+  decode: RouteDecoder<T>,
+  options: RouteOptions = {},
+): Promise<T | null> {
+  const read = await postRouteEnvelope(route, body, decode, options)
+  return read.value
 }
 
 export async function postRouteQuietly<T>(

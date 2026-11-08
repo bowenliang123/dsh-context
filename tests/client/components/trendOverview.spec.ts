@@ -233,6 +233,14 @@ describe('TrendOverview flags and markers', () => {
     await one.unmount()
   })
 
+  test('a turn-less history falls back to turn zero on the flag axis and the strip labels', async () => {
+    const records = [1, 2, 3].map(seq => ({ ...req(seq), turn: undefined } as RequestRecord))
+    const m = await mount(h(TrendOverview, propsOf(records, { granularity: 'turn' })))
+    assert.deepEqual(queryAll(m.container, '.lc-trend-flag-label').map(l => l.textContent), ['0', '0'])
+    assert.deepEqual(queryAll(m.container, '.lc-turn-label').map(l => l.textContent), ['0'])
+    await m.unmount()
+  })
+
   test('turn poles and strip blocks share the absolute, equal-width turn axis rather than step-span widths', async () => {
     const m = await mount(h(TrendOverview, propsOf(aggregateByTurn(steps(10, 2)), { granularity: 'turn' })))
     const flags = queryAll(m.container, '.lc-trend-flag')

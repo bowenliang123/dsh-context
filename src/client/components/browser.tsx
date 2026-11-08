@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactElement, type ReactNode } from 'react'
+import { useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type ReactElement, type ReactNode } from 'react'
 import { assembleCached } from './derivedCache'
 import { UNKNOWN_TOOL_SOURCE, type Category, type ContextHeaders, type ContextTimeline, type HeaderRecord, type HeaderTool, type RequestRecord, type SurfaceNode, type SystemPromptNode } from '../../shared/types'
 import { CATS, CAT_COLOR, partsOf } from '../categories'
@@ -12,10 +12,10 @@ import type { DetailState } from '../timelineSource'
 import { makeDetailNote } from './detailNote'
 import { makeNodeText } from './nodes'
 import { turnStepsOf } from './trendModel'
-import { useRowGeometry, useWindowedRows } from './useRowWindow'
-import { useElementSize } from './useElementMetrics'
+import { useSurfaceWindow } from './useRowWindow'
+import type { SurfaceWindow } from './useRowWindow'
 import { fetchMissNote, useFetchOnMiss } from './fetchOnMiss'
-import { makeNodeRowOf, rowMatches } from './browserRows'
+import { catNodesModelOf, catToolsModelOf, makeNodeRowOf, rowMatches } from './browserRows'
 import type { NodeRow } from './browserRows'
 import { makeAttachmentSection } from './attachments'
 import { makeRichText } from './richText'
@@ -23,7 +23,7 @@ import type { StackedBarProps } from './stackedBar'
 import type { AttachmentOpener, ImageLoader } from '../services'
 import { TextSection, schemaTextOf, RowToolbar, ToolSchema } from './browserToolCard'
 import { revealRowInCard } from '../revealScroll'
-import { NodeContent, byCatOf, msgKindsOf, ROW_KINDS } from './browserNodes'
+import { NodeContent, byCatOf, msgKindsOf } from './browserNodes'
 import type { RowKind } from './browserNodes'
 import { DNA_MIN_BAND, countOf, lastOfTurn, stepStampOf } from './browserHelpers'
 import type { CatFocus } from './browserHelpers'
@@ -32,6 +32,16 @@ export { stepStampOf } from './browserHelpers'
 import { MapIcon, makeBrowserTreemap } from './browserTreemap'
 import type { MapBlock } from '../treemap'
 
+function findRowByKey(root: HTMLElement, key: string): HTMLElement | null {
+  for (const row of root.querySelectorAll<HTMLElement>('[data-lc-key]')) {
+    if (row.dataset.lcKey === key) return row
+  }
+  return null
+}
+
+function safeIdPart(key: string): string {
+  return key.replace(/[^a-zA-Z0-9_-]/g, '_')
+}
 
 export interface ContextBrowserProps {
   locale?: string
@@ -55,6 +65,7 @@ export interface ContextBrowserProps {
   openAttachment?: AttachmentOpener
   detailState?: DetailState
   onDetailRetry?: () => void
+  session?: string
 }
 
 
@@ -111,10 +122,12 @@ export function makeContextBrowser(
       ? Number(openElem.slice(1))
       : null
     const fetchContent = props.fetchContent
+    const sessionScope = props.session
     const miss = useFetchOnMiss(
       openSeq !== null && !convBySeq.has(openSeq) ? openSeq : null,
       fetchContent,
       'dsh-context: targeted history read failed',
+      sessionScope,
     )
     const bySeq = useMemo(() => {
       if (miss.values.size === 0) return convBySeq
@@ -130,32 +143,9 @@ export function makeContextBrowser(
     }, [pinSeq, onOpenCat])
     const rootRef = useRef<HTMLDivElement | null>(null)
     const scrollRef = useRef<HTMLDivElement | null>(null)
-    const flatIndexRef = useRef<Map<string, number>>(new Map())
-    const flatPitchRef = useRef(30)
-    const flatSize = useElementSize(scrollRef, 'client', dna)
-    const flatWide = flatSize.width >= 380
-    const focusScrollRef = useRef(false)
-    const revealFlatKey = useCallback((key: string): boolean => {
-      /* v8 ignore next 1 */
-      if (!dna || scrollRef.current === null) return false
-      const index = flatIndexRef.current.get(key)
-      /* v8 ignore next 1 */
-      if (index === undefined) return false
-      const el = scrollRef.current
-      el.scrollTop = Math.max(0, index * flatPitchRef.current - 40)
-      el.dispatchEvent(new Event('scroll'))
-      const settle = (left: number): void => {
-        /* v8 ignore next 1 */
-        if (left <= 0) return
-        requestAnimationFrame(() => {
-          const row = [...el.querySelectorAll<HTMLElement>('[data-lc-key]')].find(node => node.dataset.lcKey === key) ?? null
-          if (row !== null) revealRowInCard(rootRef.current, row)
-          else settle(left - 1)
-        })
-      }
-      settle(4)
-      return true
-    }, [dna])
+    const idBase = useId()
+    const [focusRowKey, setFocusRowKey] = useState<string | null>(null)
+    const [catRowsEl, setCatRowsEl] = useState<HTMLDivElement | null>(null)
     const nodeFocus = props.nodeFocus
     useEffect(() => {
       if (nodeFocus === null || nodeFocus === undefined) return
@@ -164,7 +154,7 @@ export function makeContextBrowser(
       setOpenElem(nodeFocus.key)
       setRowQuery('')
       setRowKind(null)
-      focusScrollRef.current = true
+      setFocusRowKey(nodeFocus.key)
       if (props.onNodeFocusHandled !== undefined) props.onNodeFocusHandled()
     }, [nodeFocus, props.onNodeFocusHandled, onOpenCat])
     const catFocus = props.catFocus
@@ -176,14 +166,29 @@ export function makeContextBrowser(
       setOpenElem(null)
       setRowQuery(catFocus.query ?? '')
       setRowKind(catFocus.kind ?? null)
+      setFocusRowKey(null)
       if (props.onCatFocusHandled !== undefined) props.onCatFocusHandled()
     }, [catFocus, props.onCatFocusHandled, onOpenCat, dna])
-    useLayoutEffect(() => {
-      if (!focusScrollRef.current) return
-      focusScrollRef.current = false
-      const row = rootRef.current?.querySelector('.lc-br-elem-on') ?? null
-      if (row !== null) revealRowInCard(rootRef.current, row)
-    })
+    useEffect(() => {
+      if (focusRowKey === null) return undefined
+      let frame = 0
+      let attempts = 8
+      const tick = (): void => {
+        /* v8 ignore next 1 */
+        if (rootRef.current === null) return
+        const row = findRowByKey(rootRef.current, focusRowKey)
+        if (row !== null) {
+          revealRowInCard(rootRef.current, row)
+          return
+        }
+        attempts -= 1
+        /* v8 ignore next 1 */
+        if (attempts <= 0) return
+        frame = requestAnimationFrame(tick)
+      }
+      frame = requestAnimationFrame(tick)
+      return () => { cancelAnimationFrame(frame) }
+    }, [focusRowKey])
     const missNote = fetchMissNote(t, fetchContent, miss.state, miss.retry, 'browser.noContent')
 
     const requests = data.requests
@@ -244,6 +249,7 @@ export function makeContextBrowser(
       contentSeq,
       fetchHeader,
       'dsh-context: header content fetch failed',
+      sessionScope,
     )
     const headerContent = epoch.values
     const headerNote = fetchMissNote(t, fetchHeader, epoch.state, epoch.retry, 'browser.headerMetaOnly')
@@ -274,13 +280,102 @@ export function makeContextBrowser(
     )
     const prevByCat = prevView !== null ? byCatOf(prevView) : null
 
-    const byCat = byCatOf(view)
+    const byCat = useMemo(() => byCatOf(view), [view])
 
     const toolHits = new Map<string, number>()
     for (const n of view.nodes) {
       if ((n.cat === 'tool' || n.cat === 'skill') && n.tool !== undefined) toolHits.set(n.tool, (toolHits.get(n.tool) ?? 0) + 1)
     }
     const toolHitsOf = (tool: HeaderTool): number => toolHits.get(tool.name) ?? 0
+
+    const nodeRowOf = useMemo(
+      () => makeNodeRowOf(kit, nodeText, bySeq, openElem),
+      [kit, nodeText, bySeq, openElem],
+    )
+    interface FlatEntry {
+      r: NodeRow
+      pos: number
+    }
+    const flatModel = useMemo(() => {
+      if (!dna) return { entries: [] as FlatEntry[], tokens: 0 }
+      const q = rowQuery.trim().toLowerCase()
+      const entries: FlatEntry[] = []
+      let tokens = 0
+      for (let i = view.nodes.length - 1; i >= 0; i--) {
+        const r = nodeRowOf(view.nodes[i])
+        if (q !== '' && !rowMatches(r, q)) continue
+        entries.push({ r, pos: i + 1 })
+        tokens += r.n.tokens
+      }
+      return { entries, tokens }
+    }, [dna, nodeRowOf, rowQuery, view])
+    const flatKeyOf = useCallback((index: number): string => 'n' + String(flatModel.entries[index].r.n.seq), [flatModel])
+    const flatScope = useSurfaceWindow(scrollRef, {
+      count: flatModel.entries.length,
+      getKey: flatKeyOf,
+      estimateSize: () => 30,
+      minCount: 30,
+      overscan: 240,
+      seed: 10,
+      enabled: dna,
+      focusKey: focusRowKey,
+    })
+    const flatScopeRef = useRef<SurfaceWindow | null>(null)
+    flatScopeRef.current = flatScope
+    const revealFlatKey = useCallback((key: string): boolean => {
+      /* v8 ignore next 1 */
+      const scope = flatScopeRef.current
+      const el = scrollRef.current
+      /* v8 ignore next 1 */
+      if (!dna || scope === null || el === null) return false
+      scope.scrollToKey(key)
+      requestAnimationFrame(() => {
+        const row = findRowByKey(el, key)
+        /* v8 ignore next 1 */
+        if (row !== null) revealRowInCard(rootRef.current, row)
+      })
+      return true
+    }, [dna])
+    const catModel = useMemo(() => {
+      if (openCat === null || openCat === 'system') return null
+      if (openCat === 'tools') {
+        const header = view.header
+        const content = header === null ? undefined : headerContent.get(header.seq)
+        return {
+          kind: 'tools' as const,
+          tools: catToolsModelOf(header?.tools ?? [], content, rowQuery, toolSort, toolHitsOf, breakdown.tools, schemaTextOf),
+        }
+      }
+      if (dna) return null
+      const c = openCat as Category
+      return {
+        kind: 'nodes' as const,
+        nodes: catNodesModelOf(byCat[c] ?? [], c, rowQuery, rowKind, nodeRowOf, breakdown[c] || 0),
+      }
+    }, [breakdown, byCat, dna, headerContent, nodeRowOf, openCat, rowKind, rowQuery, toolSort, view])
+    const catKeyOf = useCallback((index: number): string => {
+      /* v8 ignore next 1 */
+      if (catModel === null) return ''
+      if (catModel.kind === 'tools') return 'tool:' + catModel.tools.shown[index].name
+      return 'n' + String(catModel.nodes.shown[index].n.seq)
+    }, [catModel])
+    const catCount = catModel === null
+      ? 0
+      : catModel.kind === 'tools' ? catModel.tools.shown.length : catModel.nodes.shown.length
+    const catScope = useSurfaceWindow(scrollRef, {
+      count: catCount,
+      getKey: catKeyOf,
+      estimateSize: () => 30,
+      minCount: 30,
+      overscan: 240,
+      seed: 10,
+      initial: 'start',
+      enabled: catModel !== null,
+      leadingEl: catRowsEl,
+      focusKey: focusRowKey,
+    })
+    const catBodyIdOf = (key: string): string => `${idBase}-cat-${safeIdPart(key)}`
+    const rowBodyIdOf = (key: string): string => `${idBase}-row-${safeIdPart(key)}`
 
     const dnaLabel = (it: DnaItem): string => {
       const base = dnaBaseLabel(it, t, catLabel)
@@ -319,7 +414,6 @@ export function makeContextBrowser(
       setRowQuery('')
       setRowKind(null)
       setOpenElem(key)
-      focusScrollRef.current = true
     }
 
     const toolCount = (c: string): number => countOf(view, byCat, c)
@@ -381,17 +475,21 @@ export function makeContextBrowser(
       tokens: number, time: number | undefined, body: ReactNode,
       err = false, trailing: ReactNode = null,
       stamp: { turn: number; step: number; pending: boolean } | null = null,
-      opts?: { open?: boolean; onHover?: (over: boolean) => void },
+      opts?: { open?: boolean; onHover?: (over: boolean) => void; tabIndex?: number; rowRef?: (el: HTMLElement | null) => void },
     ) => {
       const open = opts?.open ?? openElem === key
       const hover = opts?.onHover
+      const bodyId = rowBodyIdOf(key)
       const echo = dna && liveDnaKey !== null
         && (liveDnaKey === key || (key === 'tools' && liveDnaKey.startsWith('tool:')))
       return (
-        <div key={key} data-lc-key={key} className={'lc-br-elem' + (open ? ' lc-br-elem-on' : '') + (echo ? ' lc-br-elem-echo' : '')}>
+        <div key={key} data-lc-key={key} ref={opts?.rowRef} className={'lc-br-elem' + (open ? ' lc-br-elem-on' : '') + (echo ? ' lc-br-elem-echo' : '')}>
           <button
             type="button"
             className="lc-br-elem-row hover:bg-(--dsw-alias-interactive-bg-hover)"
+            tabIndex={opts?.tabIndex}
+            aria-expanded={open}
+            {...(open ? { 'aria-controls': bodyId } : {})}
             onMouseEnter={hover !== undefined ? () => { hover(true) } : undefined}
             onMouseLeave={hover !== undefined ? () => { hover(false) } : undefined}
             onClick={() => { toggleElem(key) }}
@@ -415,7 +513,7 @@ export function makeContextBrowser(
               : null}
             <span className="lc-br-tokens">{'≈' + fmt(tokens)}</span>
           </button>
-          {open ? <div className="lc-br-content">{body}</div> : null}
+          {open ? <div className="lc-br-content" id={bodyId}>{body}</div> : null}
         </div>
       )
     }
@@ -437,9 +535,12 @@ export function makeContextBrowser(
       ))
     }
 
-    const nodeRowOf = makeNodeRowOf(kit, nodeText, bySeq, openElem)
-
-    const messageRow = (r: NodeRow, tag: ReactNode, onHover?: (over: boolean) => void): ReactElement =>
+    const messageRow = (
+      r: NodeRow,
+      tag: ReactNode,
+      onHover?: (over: boolean) => void,
+      opts?: { tabIndex?: number; rowRef?: (el: HTMLElement | null) => void },
+    ): ReactElement =>
       elemRow(`n${r.n.seq}`, tag, r.preview, r.n.tokens, r.n.time,
         <NodeContent
           node={r.n}
@@ -465,7 +566,8 @@ export function makeContextBrowser(
           }}
           hint={r.conv === undefined ? missNote : t('browser.noContent')}
         />,
-        r.rowErr, null, stampFor(r.n.seq), onHover !== undefined ? { onHover } : undefined)
+        r.rowErr, null, stampFor(r.n.seq),
+        { onHover, tabIndex: opts?.tabIndex, rowRef: opts?.rowRef })
 
     const systemPreviewOf = (sys: SystemPromptNode): string =>
       headerContent.get(sys.seq)?.system?.replace(/\s+/g, ' ').trim().slice(0, 80) ?? ''
@@ -475,6 +577,20 @@ export function makeContextBrowser(
       if (content.system === undefined) return <div className="lc-br-note">{t('browser.noSystem')}</div>
       return <TextSection label={catLabel('system')} text={content.system} rich={rich} lines={lineLabel} />
     }
+
+    const rowsBlock = (
+      keys: readonly string[],
+      onKeyDown: (event: ReactKeyboardEvent<HTMLElement>) => void,
+      rowsEl: (el: HTMLDivElement | null) => void,
+      scope: SurfaceWindow,
+      renderRow: (key: string, index: number) => ReactElement,
+    ): ReactElement => (
+      <div className="lc-br-rows" ref={rowsEl} onKeyDown={onKeyDown}>
+        {scope.topPad > 0 ? <div className="lc-row-pad" style={{ height: scope.topPad }} aria-hidden="true" /> : null}
+        {keys.slice(scope.from, scope.to + 1).map((key, offset) => renderRow(key, scope.from + offset))}
+        {scope.bottomPad > 0 ? <div className="lc-row-pad" style={{ height: scope.bottomPad }} aria-hidden="true" /> : null}
+      </div>
+    )
 
     const catBody = (c: string): ReactNode => {
       if (c === 'system') {
@@ -499,34 +615,14 @@ export function makeContextBrowser(
         }
         const content = headerContent.get(view.header.seq)
         const epochStamp = stampFor(view.header.seq)
-        const contentByName = new Map(content?.tools.map(t => [t.name, t]) ?? [])
-        const q = rowQuery.trim().toLowerCase()
-        const shown = view.header.tools
-          .filter((tool: HeaderTool) => {
-            if (q === '') return true
-            if (tool.name.toLowerCase().includes(q)) return true
-            if ((tool.plugin ?? '').toLowerCase().includes(q)) return true
-            const row = contentByName.get(tool.name)
-            if (row === undefined) return false
-            return (row.description ?? '').toLowerCase().includes(q)
-              || schemaTextOf(row.schema).toLowerCase().includes(q)
-          })
-          .sort((a, b) => toolSort === 'count'
-            ? (toolHitsOf(b) - toolHitsOf(a) || (a.name < b.name ? -1 : 1))
-            : toolSort === 'size'
-              ? b.tokens - a.tokens
-              : (a.name < b.name ? -1 : 1))
-        const allPrices = view.header.tools.reduce((sum, tool) => sum + tool.tokens, 0)
-        const shownPrices = shown.reduce((sum, tool) => sum + tool.tokens, 0)
-        /* v8 ignore next 1 */
-        const shownTokens = allPrices > 0 ? Math.round(breakdown.tools * shownPrices / allPrices) : 0
+        const model = catModel !== null && catModel.kind === 'tools' ? catModel.tools : null
         const toolctl = (
           <RowToolbar
             value={rowQuery}
             placeholder={t('tool.search')}
             clearLabel={t('field.clear')}
-            count={shown.length}
-            tokens={shownTokens}
+            count={model?.shown.length ?? 0}
+            tokens={model?.shownTokens ?? 0}
             tip={t('tool.sortTip')}
             onChange={setRowQuery}
           >
@@ -542,7 +638,7 @@ export function makeContextBrowser(
             ))}
           </RowToolbar>
         )
-        if (shown.length === 0) {
+        if (model === null || model.shown.length === 0) {
           return (
             <div>
               {toolctl}
@@ -550,6 +646,7 @@ export function makeContextBrowser(
             </div>
           )
         }
+        const contentByName = model.contentByName
         const toolBody = (tool: HeaderTool): ReactNode => {
           if (content === undefined) return <div className="lc-br-note">{headerNote}</div>
           const row = contentByName.get(tool.name)
@@ -557,10 +654,12 @@ export function makeContextBrowser(
             ? <div className="lc-br-note">{t('browser.notInLog')}</div>
             : <ToolSchema description={row.description} schema={row.schema} rich={rich} lines={lineLabel} labels={labels} />
         }
+        const keys = model.shown.map(tool => 'tool:' + tool.name)
         return (
           <div>
             {toolctl}
-            {shown.map((tool: HeaderTool) => {
+            {rowsBlock(keys, catScope.onKeyDown, setCatRowsEl, catScope, (key, index) => {
+              const tool = model.shown[index]
               const trailing = (
                 <>
                   {tool.plugin !== undefined
@@ -571,32 +670,25 @@ export function makeContextBrowser(
                   <span className="lc-br-hits" title={t('tool.hitsTip')}>{'×' + fmt(toolHitsOf(tool))}</span>
                 </>
               )
-              return elemRow('tool:' + tool.name, null, tool.name, tool.tokens, undefined,
+              return elemRow(key, null, tool.name, tool.tokens, undefined,
                 toolBody(tool),
-                false, trailing, epochStamp)
+                false, trailing, epochStamp, { tabIndex: catScope.tabIndexFor(key), rowRef: catScope.measure(key) })
             })}
           </div>
         )
       }
       /* v8 ignore next 1 */
-      const rows = (byCat[c as Category] ?? []).slice().reverse().map(nodeRowOf)
-      const q = rowQuery.trim().toLowerCase()
-      const matchedRows = q === '' ? rows : rows.filter(r => rowMatches(r, q))
-      const kindCounts = c === 'assistant'
-        ? ROW_KINDS.map(k => ({ k, n: matchedRows.reduce((acc, r) => acc + (r.kinds[k] ? 1 : 0), 0) }))
-        : null
-      const shown = rowKind === null ? matchedRows : matchedRows.filter(r => r.kinds[rowKind])
-      const shownTokens = shown.length === rows.length
-        ? breakdown[c as Category] || 0
-        : shown.reduce((sum, r) => sum + r.n.tokens, 0)
-      const rowctl = kindCounts === null
+      if (catModel === null || catModel.kind !== 'nodes') return <div className="lc-br-note">{t('browser.rowNoMatch')}</div>
+      const model = catModel.nodes
+      const shown = model.shown
+      const rowctl = model.kindCounts === null
         ? (
           <RowToolbar
             value={rowQuery}
             placeholder={t('browser.search.' + c)}
             clearLabel={t('field.clear')}
             count={shown.length}
-            tokens={shownTokens}
+            tokens={model.shownTokens}
             onChange={setRowQuery}
           />
         )
@@ -606,11 +698,11 @@ export function makeContextBrowser(
             placeholder={t('browser.search.' + c)}
             clearLabel={t('field.clear')}
             count={shown.length}
-            tokens={shownTokens}
+            tokens={model.shownTokens}
             tip={t('browser.kindTip')}
             onChange={setRowQuery}
           >
-            {kindCounts.map(({ k, n }) => (
+            {model.kindCounts.map(({ k, n }) => (
               <button
                 key={k}
                 type="button"
@@ -626,10 +718,17 @@ export function makeContextBrowser(
       if (shown.length === 0) {
         return <div>{rowctl}<div className="lc-br-note">{t('browser.rowNoMatch')}</div></div>
       }
+      const keys = shown.map(row => 'n' + String(row.n.seq))
       return (
         <div>
           {rowctl}
-          {shown.map(r => messageRow(r, rowTagNode(r.tag, r.tagNames)))}
+          {rowsBlock(keys, catScope.onKeyDown, setCatRowsEl, catScope, (key, index) => {
+            const row = shown[index]
+            return messageRow(row, rowTagNode(row.tag, row.tagNames), undefined, {
+              tabIndex: catScope.tabIndexFor(key),
+              rowRef: catScope.measure(key),
+            })
+          })}
         </div>
       )
     }
@@ -664,58 +763,30 @@ export function makeContextBrowser(
         breakdown.system, undefined, systemBodyOf(sys), false, null, stampFor(sys.seq),
         { onHover: (over) => { setRowDnaKey(over ? 'system' : null) } })
 
-    interface FlatEntry {
-      r: NodeRow
-      pos: number
+    const flatQ = rowQuery.trim().toLowerCase()
+    const flatSys = view.system
+    const flatSysText = flatSys !== null ? headerContent.get(flatSys.seq)?.system ?? '' : ''
+    const flatTail: ReactElement[] = []
+    let flatTailTokens = 0
+    if (dna && view.header !== null && view.header.tools.some(tool =>
+      tool.name.toLowerCase().includes(flatQ) || (tool.plugin ?? '').toLowerCase().includes(flatQ))) {
+      flatTail.push(toolsGroupRow(view.header))
+      flatTailTokens += breakdown.tools
     }
-    const flatRows = (): { entries: FlatEntry[]; tail: ReactElement[]; count: number; tokens: number } => {
-      const q = rowQuery.trim().toLowerCase()
-      const entries: FlatEntry[] = []
-      let tokens = 0
-      for (let i = view.nodes.length - 1; i >= 0; i--) {
-        const r = nodeRowOf(view.nodes[i])
-        if (q !== '' && !rowMatches(r, q)) continue
-        entries.push({ r, pos: i + 1 })
-        tokens += r.n.tokens
-      }
-      const toolsHit = (view.header?.tools ?? []).some(tool =>
-        tool.name.toLowerCase().includes(q) || (tool.plugin ?? '').toLowerCase().includes(q))
-      const sys = view.system
-      const sysText = sys !== null ? headerContent.get(sys.seq)?.system ?? '' : ''
-      const sysHit = sys !== null && (systemPreviewOf(sys).toLowerCase().includes(q) || sysText.toLowerCase().includes(q))
-      const tail: ReactElement[] = []
-      if (view.header !== null && toolsHit) {
-        tail.push(toolsGroupRow(view.header))
-        tokens += breakdown.tools
-      }
-      if (sys !== null && sysHit) {
-        tail.push(systemRow(sys))
-        tokens += breakdown.system
-      }
-      const keys = new Map<string, number>()
-      for (let i = 0; i < entries.length; i++) keys.set('n' + String(entries[i].r.n.seq), i)
-      flatIndexRef.current = keys
-      return { entries, tail, count: entries.length + tail.length, tokens }
+    if (dna && flatSys !== null
+      && (systemPreviewOf(flatSys).toLowerCase().includes(flatQ) || flatSysText.toLowerCase().includes(flatQ))) {
+      flatTail.push(systemRow(flatSys))
+      flatTailTokens += breakdown.system
     }
-    const flatRowsModel = dna ? flatRows() : null
-    const flat = flatRowsModel ?? { entries: [] as FlatEntry[], tail: [] as ReactElement[], count: 0, tokens: 0 }
-    const flatGeometry = useRowGeometry(
-      scrollRef,
-      dna ? flat.entries.length : 0,
-      '.lc-br-flat > [data-lc-key^="n"]',
-      `${String(flat.entries.length)}|${rowQuery}|${openElem === null ? '' : 'open'}`,
-      dna && openElem === null,
-    )
-    if (flatGeometry !== null) flatPitchRef.current = flatGeometry.pitch
-    const flatRowsOn = dna && flatWide && flatGeometry !== null
-    const flatWindow = useWindowedRows(scrollRef, flat.entries.length, flatGeometry, flatRowsOn)
+    const flatCount = flatModel.entries.length + flatTail.length
+    const flatTokens = flatModel.tokens + flatTailTokens
     const flatToolbar = (): ReactElement => (
       <RowToolbar
         value={rowQuery}
         placeholder={t('browser.search.flat')}
         clearLabel={t('field.clear')}
-        count={flat.count}
-        tokens={flat.tokens}
+        count={flatCount}
+        tokens={flatTokens}
         onChange={setRowQuery}
       />
     )
@@ -829,20 +900,26 @@ export function makeContextBrowser(
         <div className="lc-br-scroll" ref={scrollRef}>
           {dna
             ? (
-              <div className="lc-br-flat">
-                {flatWindow.topPad > 0 ? <div className="lc-row-pad" style={{ height: flatWindow.topPad }} aria-hidden="true" /> : null}
-                {flat.entries.slice(flatWindow.from, flatWindow.to + 1).map(({ r, pos }) => messageRow(r, (
-                  <>
-                    {catChip(r.n.cat)}
-                    <span className="lc-br-pos">#{fmt(pos)}</span>
-                    {rowTagNode(r.tag, r.tagNames)}
-                  </>
-                ), (over) => { setRowDnaKey(over ? 'n' + String(r.n.seq) : null) }))}
-                {flatWindow.bottomPad > 0
-                  ? <div className="lc-row-pad" style={{ height: flatWindow.bottomPad }} aria-hidden="true" />
+              <div className="lc-br-flat" onKeyDown={flatScope.onKeyDown}>
+                {flatScope.topPad > 0 ? <div className="lc-row-pad" style={{ height: flatScope.topPad }} aria-hidden="true" /> : null}
+                {flatModel.entries.slice(flatScope.from, flatScope.to + 1).map(({ r, pos }) => {
+                  const key = 'n' + String(r.n.seq)
+                  return messageRow(r, (
+                    <>
+                      {catChip(r.n.cat)}
+                      <span className="lc-br-pos">#{fmt(pos)}</span>
+                      {rowTagNode(r.tag, r.tagNames)}
+                    </>
+                  ), (over) => { setRowDnaKey(over ? 'n' + String(r.n.seq) : null) }, {
+                    tabIndex: flatScope.tabIndexFor(key),
+                    rowRef: flatScope.measure(key),
+                  })
+                })}
+                {flatScope.bottomPad > 0
+                  ? <div className="lc-row-pad" style={{ height: flatScope.bottomPad }} aria-hidden="true" />
                   : null}
-                {flat.tail}
-                {flat.count === 0 ? <div className="lc-br-note">{t('browser.rowNoMatch')}</div> : null}
+                {flatTail}
+                {flatCount === 0 ? <div className="lc-br-note">{t('browser.rowNoMatch')}</div> : null}
               </div>
             )
             : (
@@ -868,6 +945,8 @@ export function makeContextBrowser(
                         onMouseEnter={linked ? () => { if (props.onHoverKey !== undefined) props.onHoverKey(c.key) } : undefined}
                         onMouseLeave={linked ? () => { if (props.onHoverKey !== undefined) props.onHoverKey(null) } : undefined}
                         /* v8 ignore stop */
+                        aria-expanded={open}
+                        {...(open ? { 'aria-controls': catBodyIdOf(c.key) } : {})}
                         onClick={() => { toggleCat(c.key) }}
                       >
                         <span className={'lc-br-chev' + (open ? ' lc-br-chev-on' : '')} />
@@ -891,7 +970,7 @@ export function makeContextBrowser(
                         </span>
                         <span className="lc-br-pct">{total > 0 ? `${Math.round(v / total * 100)}%` : ''}</span>
                       </button>
-                      {open ? <div className="lc-br-body">{catBody(c.key)}</div> : null}
+                      {open ? <div className="lc-br-body" id={catBodyIdOf(c.key)}>{catBody(c.key)}</div> : null}
                     </div>
                   )
                 })}

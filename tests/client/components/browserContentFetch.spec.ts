@@ -1,6 +1,6 @@
 import { act, createElement as h } from 'react'
 import assert from 'node:assert/strict'
-import { describe, test } from 'vitest'
+import { describe, test, vi } from 'vitest'
 import type { SurfaceNode } from '../../../src/shared/types'
 import type { ConversationNodeLike } from '../../../src/client/services'
 import { click, flush, mount, query, queryAll, surfaceNode, text, type Mounted } from '../helpers/kit'
@@ -157,21 +157,49 @@ describe('ContextBrowser targeted content fetch', () => {
 
   test('a failed read arms the retry button; retrying succeeds', async () => {
     silenceFetchWarn()
-    let calls = 0
-    const fetchContent = async (seq: number) => {
-      calls += 1
-      if (calls === 1) throw new Error('transport down')
-      return { kind: 'user', seq, content: [{ type: 'text', text: 'RETRY BODY' }] } as ConversationNodeLike
+    vi.useFakeTimers()
+    try {
+      let calls = 0
+      let failing = true
+      const fetchContent = async (seq: number) => {
+        calls += 1
+        if (failing) throw new Error('transport down')
+        return { kind: 'user', seq, content: [{ type: 'text', text: 'RETRY BODY' }] } as ConversationNodeLike
+      }
+      const m = await mount(h(Browser, props({ data, convNodes: [], fetchContent })))
+      await openFirstRow(m)
+      await act(async () => { await vi.advanceTimersByTimeAsync(10_000) })
+      const failed = query(m.container, '.lc-br-content')
+      assert.ok(text(failed).includes('Load failed'))
+      assert.equal(calls, 4, 'the bounded auto-retry exhausts before arming the manual retry')
+      failing = false
+      await click(query(failed, '.lc-br-retry'))
+      await act(async () => { await Promise.resolve() })
+      assert.ok(text(query(m.container, '.lc-br-content')).includes('RETRY BODY'))
+      assert.equal(calls, 5)
+      await m.unmount()
+    } finally {
+      vi.useRealTimers()
     }
-    const m = await mount(h(Browser, props({ data, convNodes: [], fetchContent })))
+  })
+
+  test('a session scope change refetches instead of reusing another session value', async () => {
+    const fetched: string[] = []
+    let session = 'A'
+    const fetchContent = async (seq: number) => {
+      fetched.push(session + ':' + String(seq))
+      return { kind: 'user', seq, content: [{ type: 'text', text: session + ' BODY' }] } as ConversationNodeLike
+    }
+    const mountWith = (value: string) => props({ data, convNodes: [], fetchContent, session: value })
+    const m = await mount(h(Browser, mountWith('A')))
     await openFirstRow(m)
     await flush()
-    const failed = query(m.container, '.lc-br-content')
-    assert.ok(text(failed).includes('Load failed'))
-    await click(query(failed, '.lc-br-retry'))
+    assert.ok(text(query(m.container, '.lc-br-content')).includes('A BODY'))
+    session = 'B'
+    await m.update(h(Browser, mountWith('B')))
     await flush()
-    assert.ok(text(query(m.container, '.lc-br-content')).includes('RETRY BODY'))
-    assert.equal(calls, 2)
+    assert.ok(text(query(m.container, '.lc-br-content')).includes('B BODY'))
+    assert.deepEqual(fetched, ['A:5', 'B:5'])
     await m.unmount()
   })
 

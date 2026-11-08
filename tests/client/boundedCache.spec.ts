@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict'
-import { describe, test } from 'vitest'
+import { describe, test, vi } from 'vitest'
 import { BoundedCache, byteSizeOf } from '../../src/client/boundedCache'
 
 describe('byteSizeOf', () => {
@@ -148,5 +148,222 @@ describe('BoundedCache', () => {
     cache.trim({ protect: 'a' })
     assert.equal(cache.bytes, 0)
     assert.equal(cache.size, 2)
+  })
+})
+
+describe('BoundedCache retention', () => {
+  test('every departure reports its reason: replace, trim, delete, clear and dispose', () => {
+    const seen: string[] = []
+    const cache = new BoundedCache<string, number>({
+      maxEntries: 2,
+      onEvict: (_value, key, reason) => { seen.push(`${key}:${reason}`) },
+    })
+    cache.set('a', 1)
+    cache.set('a', 2)
+    cache.set('b', 3)
+    cache.set('c', 4)
+    cache.delete('b')
+    cache.delete('missing')
+    cache.set('d', 5)
+    cache.clear()
+    cache.set('e', 6)
+    cache.dispose()
+    assert.deepEqual(seen, ['a:replace', 'a:trim', 'b:delete', 'c:clear', 'd:clear', 'e:dispose'])
+    assert.equal(cache.size, 0)
+  })
+
+  test('a read past the ttl lazily drops the entry and leaves the timer to be released', () => {
+    let clock = 0
+    const seen: string[] = []
+    const cache = new BoundedCache<string, number>({
+      maxEntries: 4,
+      ttlMs: 100,
+      now: () => clock,
+      onEvict: (_value, key, reason) => { seen.push(`${key}:${reason}`) },
+    })
+    cache.set('a', 1)
+    clock = 99
+    assert.equal(cache.get('a'), 1)
+    clock = 101
+    assert.equal(cache.get('a'), undefined)
+    assert.deepEqual(seen, ['a:ttl'])
+    cache.dispose()
+  })
+
+  test('the single expiry timer evicts without readers and tracks the earliest entry', () => {
+    vi.useFakeTimers()
+    try {
+      const seen: string[] = []
+      const cache = new BoundedCache<string, number>({
+        maxEntries: 8,
+        ttlMs: 100,
+        onEvict: (_value, key, reason) => { seen.push(`${key}:${reason}`) },
+      })
+      cache.set('a', 1)
+      vi.advanceTimersByTime(50)
+      cache.set('b', 2)
+      vi.advanceTimersByTime(50)
+      assert.deepEqual(seen, ['a:ttl'])
+      vi.advanceTimersByTime(50)
+      assert.deepEqual(seen, ['a:ttl', 'b:ttl'])
+      assert.equal(cache.size, 0)
+      const silent = new BoundedCache<string, number>({ maxEntries: 2, ttlMs: 10 })
+      silent.set('x', 1)
+      vi.advanceTimersByTime(10)
+      assert.equal(silent.size, 0)
+      cache.dispose()
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  test('clear and delete cancel the pending expiry timer', () => {
+    vi.useFakeTimers()
+    try {
+      const seen: string[] = []
+      const cache = new BoundedCache<string, number>({
+        maxEntries: 8,
+        ttlMs: 100,
+        onEvict: (_value, key, reason) => { seen.push(`${key}:${reason}`) },
+      })
+      cache.set('a', 1)
+      cache.set('b', 2)
+      cache.delete('b')
+      vi.advanceTimersByTime(100)
+      assert.deepEqual(seen, ['b:delete', 'a:ttl'])
+      cache.set('c', 3)
+      cache.clear()
+      vi.advanceTimersByTime(100)
+      assert.deepEqual(seen, ['b:delete', 'a:ttl', 'c:clear'])
+      cache.dispose()
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  test('the expiry sweep skips a pinned entry and purges the rest', () => {
+    vi.useFakeTimers()
+    try {
+      const seen: string[] = []
+      const cache = new BoundedCache<string, number>({
+        maxEntries: 8,
+        ttlMs: 100,
+        evictable: value => value !== 1,
+        onEvict: (_value, key, reason) => { seen.push(`${key}:${reason}`) },
+      })
+      cache.set('a', 1)
+      cache.set('b', 2)
+      vi.advanceTimersByTime(100)
+      assert.deepEqual(seen, ['b:ttl'])
+      assert.equal(cache.size, 1)
+      cache.dispose()
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  test('a pinned entry skips ttl expiry until it becomes evictable', () => {
+    vi.useFakeTimers()
+    try {
+      let clock = 0
+      let pinned = true
+      const seen: string[] = []
+      const cache = new BoundedCache<string, number>({
+        maxEntries: 8,
+        ttlMs: 100,
+        now: () => clock,
+        evictable: () => !pinned,
+        onEvict: (_value, key, reason) => { seen.push(`${key}:${reason}`) },
+      })
+      cache.set('a', 1)
+      clock = 101
+      vi.advanceTimersByTime(100)
+      assert.equal(cache.size, 1)
+      assert.equal(cache.get('a'), 1, 'a pinned expired entry still reads')
+      pinned = false
+      cache.set('b', 2)
+      vi.advanceTimersByTime(1)
+      assert.deepEqual(seen, ['a:ttl'])
+      assert.equal(cache.size, 1)
+      cache.dispose()
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  test('reweight re-trims after asynchronous payload growth and ignores missing keys', () => {
+    const cache = new BoundedCache<string, { n: number }>({
+      maxEntries: 10,
+      maxBytes: 8,
+      sizeOf: value => value.n,
+    })
+    const grown = { n: 4 }
+    cache.set('a', grown)
+    cache.set('b', { n: 4 })
+    grown.n = 100
+    cache.reweight('a')
+    assert.equal(cache.size, 1)
+    assert.equal(cache.get('b'), undefined)
+    assert.equal(cache.bytes, 100)
+    cache.reweight('missing')
+    assert.equal(cache.size, 1)
+  })
+
+  test('forEach visits every live entry in insertion order', () => {
+    const cache = new BoundedCache<string, number>({ maxEntries: 4 })
+    cache.set('a', 1)
+    cache.set('b', 2)
+    const seen: string[] = []
+    cache.forEach((value, key) => { seen.push(`${key}:${String(value)}`) })
+    assert.deepEqual(seen, ['a:1', 'b:2'])
+  })
+
+  test('the expiry timer is unref-ed when the host timer exposes unref', () => {
+    const unref = vi.fn()
+    const setSpy = vi.spyOn(globalThis, 'setTimeout').mockReturnValue({ unref } as never)
+    const clearSpy = vi.spyOn(globalThis, 'clearTimeout').mockImplementation(() => {})
+    try {
+      const cache = new BoundedCache<string, number>({ maxEntries: 2, ttlMs: 100 })
+      cache.set('a', 1)
+      assert.equal(unref.mock.calls.length, 1)
+      cache.dispose()
+      const bare = new BoundedCache<string, number>({ maxEntries: 2, ttlMs: 100 })
+      bare.set('a', 1)
+      bare.dispose()
+    } finally {
+      setSpy.mockRestore()
+      clearSpy.mockRestore()
+    }
+  })
+})
+
+describe('ttl timer receiver', () => {
+  test('calls unref on the timer object itself, never as a detached function', () => {
+    const fake = { unref: function (this: unknown): void { receiver = this } }
+    let receiver: unknown = 'unset'
+    const real = globalThis.setTimeout
+    vi.stubGlobal('setTimeout', () => fake as unknown as ReturnType<typeof setTimeout>)
+    try {
+      const cache = new BoundedCache<string, number>({ maxEntries: 4, ttlMs: 1_000 })
+      cache.set('a', 1)
+      assert.equal(receiver, fake, 'unref runs with its timer as receiver')
+    } finally {
+      vi.stubGlobal('setTimeout', real)
+    }
+  })
+})
+
+describe('ttl timer handles without unref', () => {
+  test('a handle without unref is scheduled without throwing', () => {
+    const real = globalThis.setTimeout
+    vi.stubGlobal('setTimeout', () => ({}) as unknown as ReturnType<typeof setTimeout>)
+    try {
+      const cache = new BoundedCache<string, number>({ maxEntries: 4, ttlMs: 1_000 })
+      cache.set('a', 1)
+      assert.equal(cache.get('a'), 1)
+      cache.dispose()
+    } finally {
+      vi.stubGlobal('setTimeout', real)
+    }
   })
 })

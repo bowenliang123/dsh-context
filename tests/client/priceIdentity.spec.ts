@@ -9,7 +9,7 @@ import {
   normalizeModelId,
   orgOf,
   suffixKeys,
-} from '../../src/client/priceIdentity'
+} from '../../src/shared/priceIdentity'
 
 describe('path helpers', () => {
   test('lowercases and trims the lookup key', () => {

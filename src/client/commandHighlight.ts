@@ -1,5 +1,5 @@
 import { commandTool } from '../shared/commands'
-import { BoundedCache } from './boundedCache'
+import { makeRetentionCache, registerRetentionCleanup } from './retention'
 import type { CodeHighlighter, HighlightSpan } from '@deepseek-ai/dsh-client-ui-primitives'
 
 type ShellGrammar = 'bash' | 'powershell'
@@ -14,9 +14,9 @@ export function grammarOfTool(tool: string): ShellGrammar | undefined {
 const MAX_LINE_CHARS = 1000
 const LONG_LINE = new RegExp(`^.{${MAX_LINE_CHARS + 1},}`, 'm')
 
-const RUNS_MAX = 600
+const runs = makeRetentionCache<string, readonly HighlightSpan[][]>('commandHighlight')
 
-const runs = new BoundedCache<string, readonly HighlightSpan[][]>({ maxEntries: RUNS_MAX })
+registerRetentionCleanup(() => { runs.dispose() })
 
 export function highlightRuns(highlight: CodeHighlighter, grammar: ShellGrammar, text: string): readonly HighlightSpan[][] | undefined {
   if (LONG_LINE.test(text)) return undefined

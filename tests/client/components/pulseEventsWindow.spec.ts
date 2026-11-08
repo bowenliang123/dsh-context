@@ -23,15 +23,19 @@ function agentOf(id: string): CommsAgent {
 
 function detailsOf(): Parameters<typeof PulseEvents>[0]['details'] {
   return {
+    summary: null,
     landed: new Map(),
     historyLanded: new Map(),
     fullLanded: new Map(),
     pending: new Set(),
     historyPending: new Set(),
     fullPending: new Set(),
-    request: vi.fn(),
-    requestHistory: vi.fn(),
+    facts: new Map(),
+    family: { total: 0, loaded: 0, pending: 0, failed: 0, messages: null, delegations: null },
+    requestFamily: vi.fn(),
     requestFull: vi.fn(),
+    prioritize: vi.fn(),
+    retryFamily: vi.fn(),
   }
 }
 

@@ -19,6 +19,13 @@ export interface CommandLog {
 
 export type CommandFill = Pick<CommandLog, 'status' | 'total'> & { retry?: () => void }
 
+interface LogStore {
+  scope: string
+  fetcher: CommandPageFetcher | undefined
+  known: ReadonlyMap<number, Command>
+  fill: FillState
+}
+
 function knownWithServed(prev: ReadonlyMap<number, Command>, served: readonly Command[]): ReadonlyMap<number, Command> {
   let next: Map<number, Command> | undefined
   for (const rec of served) {
@@ -43,64 +50,78 @@ export function useCommandLog(
   served: readonly Command[],
   floor: number | undefined,
   fetchOlder: CommandPageFetcher | undefined,
+  scope?: string,
 ): CommandLog {
-  const [known, setKnown] = useState<ReadonlyMap<number, Command>>(() => new Map())
-  const [fill, setFill] = useState<FillState>({ status: 'idle' })
+  const scopeKey = scope ?? ''
+  const [store, setStore] = useState<LogStore>(() => ({ scope: scopeKey, fetcher: fetchOlder, known: new Map(), fill: { status: 'idle' } }))
+  const sourceChanged = store.fetcher !== undefined && fetchOlder !== undefined && store.fetcher !== fetchOlder
+  if (store.scope !== scopeKey || sourceChanged) {
+    setStore({ scope: scopeKey, fetcher: fetchOlder, known: new Map(), fill: { status: 'idle' } })
+  } else if (store.fetcher !== fetchOlder) {
+    setStore({ ...store, fetcher: fetchOlder })
+  }
   const cursorTarget = useRef(0)
   useEffect(() => {
     if (served.length === 0 || floor === undefined) return
-    setKnown(prev => knownWithServed(prev, served))
-  }, [served, floor])
+    setStore((prev) => {
+      const known = knownWithServed(prev.known, served)
+      return known === prev.known ? prev : { ...prev, known }
+    })
+  }, [served, floor, scopeKey, fetchOlder])
   const records = useMemo<Command[]>(() => {
-    if (floor === undefined || known.size === 0) return served as Command[]
-    const merged = new Map(known)
+    if (floor === undefined || store.known.size === 0) return served as Command[]
+    const merged = new Map(store.known)
     for (const rec of served) merged.set(rec.seq, rec)
     return [...merged.values()]
-  }, [served, known, floor])
+  }, [served, store.known, floor])
   useEffect(() => {
-    if (fill.status !== 'idle' || floor === undefined || served.length === 0 || fetchOlder === undefined) return
+    if (store.fill.status !== 'idle' || floor === undefined || served.length === 0 || fetchOlder === undefined) return
     const cursor = floor + 1
     cursorTarget.current = cursor
-    setFill({ status: 'loading', cursor })
-  }, [fill.status, floor, served.length, fetchOlder])
+    setStore(prev => ({ ...prev, fill: { status: 'loading', cursor } }))
+  }, [store.fill.status, floor, served.length, fetchOlder, scopeKey])
   useEffect(() => {
-    if (fill.status !== 'loading' || fetchOlder !== undefined) return
-    setFill({ status: 'failed', cursor: fill.cursor })
-  }, [fill, fetchOlder])
-  useEffect(() => {
-    if (fill.status !== 'loading' || fetchOlder === undefined) return
-    const cursor = fill.cursor
+    if (store.fill.status !== 'loading' || fetchOlder === undefined) return
+    const cursor = store.fill.cursor
     let live = true
     const timer = setTimeout(() => {
       void fetchOlder(cursor).then(
         (result) => {
           if (!live) return
-          if (result === null) {
-            setFill({ status: 'failed', cursor })
-            return
-          }
-          if (result.commands.length > 0) setKnown(prev => knownWithPage(prev, result.commands))
-          let oldest = cursor
-          for (const rec of result.commands) if (rec.seq < oldest) oldest = rec.seq
-          if (result.atStart) {
-            setFill({ status: 'done' })
-            return
-          }
-          if (oldest >= cursor) {
-            setFill({ status: 'failed', cursor })
-            return
-          }
-          cursorTarget.current = oldest
-          setFill({ status: 'loading', cursor: oldest, total: result.total })
+          setStore((prev) => {
+            if (result === null) return { ...prev, fill: { status: 'failed', cursor } }
+            const known = result.commands.length > 0 ? knownWithPage(prev.known, result.commands) : prev.known
+            let oldest = cursor
+            for (const rec of result.commands) if (rec.seq < oldest) oldest = rec.seq
+            if (result.atStart) return { ...prev, known, fill: { status: 'done' } }
+            if (oldest >= cursor) return { ...prev, known, fill: { status: 'failed', cursor } }
+            cursorTarget.current = oldest
+            return { ...prev, known, fill: { status: 'loading', cursor: oldest, total: result.total } }
+          })
         },
-        () => { if (live) setFill({ status: 'failed', cursor }) },
+        () => {
+          if (live) setStore(prev => ({ ...prev, fill: { status: 'failed', cursor } }))
+        },
       )
     }, PAGE_PAUSE_MS)
-    return () => { live = false; clearTimeout(timer) }
-  }, [fill, fetchOlder])
+    return () => {
+      live = false
+      clearTimeout(timer)
+    }
+  }, [store.fill, fetchOlder, scopeKey])
+  useEffect(() => {
+    if (store.fill.status !== 'loading' || fetchOlder !== undefined) return
+    const cursor = store.fill.cursor
+    setStore(prev => ({ ...prev, fill: { status: 'failed', cursor } }))
+  }, [store.fill, fetchOlder, scopeKey])
   const retry = useCallback(() => {
-    setFill({ status: 'loading', cursor: cursorTarget.current })
+    setStore((prev) => {
+      if (prev.fill.status !== 'failed') return prev
+      cursorTarget.current = prev.fill.cursor
+      return { ...prev, fill: { status: 'loading', cursor: prev.fill.cursor } }
+    })
   }, [])
+  const fill = store.fill
   return {
     records,
     status: fill.status,

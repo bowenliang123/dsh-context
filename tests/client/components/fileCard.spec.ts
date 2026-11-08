@@ -473,7 +473,7 @@ describe('FileCard — workspace display and system open', () => {
     return hit
   }
 
-  const baseOf = (row: HTMLElement): HTMLElement => query(row, '.lc-fa-path b')
+  const baseOf = (row: HTMLElement): HTMLElement => row.querySelector<HTMLElement>('.lc-fa-path .lc-fa-file') ?? query(row, '.lc-fa-path b')
 
   test('workspace and relative paths display dot-relative and the file name opens on the system; pattern and unresolvable rows stay inert', async () => {
     const opened: string[] = []

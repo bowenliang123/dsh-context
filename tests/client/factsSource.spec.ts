@@ -346,6 +346,173 @@ describe('DetailStore over the facts protocol', () => {
     assert.equal(nullStore.getSnapshot().detail?.nodes.length, 0)
   })
 
+  test('a failed part auto-retries with bounded backoff and lands without user action', async () => {
+    vi.useFakeTimers()
+    try {
+      let attempts = 0
+      const store = storeOf(async () => core(1), async () => {
+        attempts++
+        if (attempts <= 2) throw new Error('offline')
+        return { rev: 1, parts: { nodes: { nodes: [{ seq: 1, cat: 'user', tokens: 1 }], archive: [], droppedNodes: 0 } } }
+      })
+      store.subscribe(() => {})
+      store.request(1)
+      await vi.advanceTimersByTimeAsync(0)
+      assert.equal(store.hasPayload, true, 'the core never landed')
+      store.ensurePart('nodes')
+      await vi.advanceTimersByTimeAsync(0)
+      assert.equal(attempts, 1, 'the first part read failed')
+      assert.equal(store.getSnapshot().pending, true, 'the armed retry keeps the part pending')
+      await vi.advanceTimersByTimeAsync(1_000)
+      assert.equal(attempts, 2, 'the first backoff fired')
+      await vi.advanceTimersByTimeAsync(2_000)
+      assert.equal(attempts, 3, 'the backed-off retry finally lands')
+      assert.equal(store.getSnapshot().detail?.nodes.length, 1)
+      assert.equal(store.getSnapshot().pending, false)
+      store.release()
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  test('the part retry backoff stops after three retries', async () => {
+    vi.useFakeTimers()
+    try {
+      let attempts = 0
+      const store = storeOf(async () => core(1), async () => {
+        attempts++
+        throw new Error('offline')
+      })
+      store.subscribe(() => {})
+      store.request(1)
+      await vi.advanceTimersByTimeAsync(0)
+      store.ensurePart('nodes')
+      await vi.advanceTimersByTimeAsync(0)
+      await vi.advanceTimersByTimeAsync(1_000)
+      await vi.advanceTimersByTimeAsync(2_000)
+      await vi.advanceTimersByTimeAsync(4_000)
+      assert.equal(attempts, 4, 'three backed-off retries ran on top of the first attempt')
+      assert.equal(store.getSnapshot().pending, false, 'the exhausted retries settle')
+      await vi.advanceTimersByTimeAsync(60_000)
+      assert.equal(attempts, 4, 'no retry fires past the bound')
+      store.release()
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  test('a changed window while a retry is armed does not stack a second retry', async () => {
+    vi.useFakeTimers()
+    try {
+      let attempts = 0
+      const store = storeOf(async () => core(1), async () => {
+        attempts++
+        throw new Error('offline')
+      })
+      store.subscribe(() => {})
+      store.request(1)
+      await vi.advanceTimersByTimeAsync(0)
+      store.ensurePart('nodes')
+      await vi.advanceTimersByTimeAsync(0)
+      assert.equal(attempts, 1)
+      store.ensurePart('nodes', { nodesTail: 5 })
+      await vi.advanceTimersByTimeAsync(0)
+      assert.equal(attempts, 2, 'the changed window read once without stacking a timer')
+      await vi.advanceTimersByTimeAsync(1_000)
+      assert.equal(attempts, 3, 'exactly one armed retry fires')
+      store.release()
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  test('a part failure after release arms no retry', async () => {
+    vi.useFakeTimers()
+    try {
+      let rejectPart!: (reason: unknown) => void
+      const store = storeOf(async () => core(1), async () => new Promise((_resolve, reject) => { rejectPart = reject }))
+      store.subscribe(() => {})
+      store.request(1)
+      await vi.advanceTimersByTimeAsync(0)
+      store.ensurePart('nodes')
+      await vi.advanceTimersByTimeAsync(0)
+      store.release()
+      rejectPart(new Error('late'))
+      await vi.advanceTimersByTimeAsync(0)
+      assert.equal(store.getSnapshot().pending, false, 'the stale generation armed no retry')
+      assert.equal(store.getSnapshot().detail, null)
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  test('a part failure after the last subscriber left arms no retry', async () => {
+    vi.useFakeTimers()
+    try {
+      let rejectPart!: (reason: unknown) => void
+      const store = storeOf(async () => core(1), async () => new Promise((_resolve, reject) => { rejectPart = reject }))
+      const off = store.subscribe(() => {})
+      store.request(1)
+      await vi.advanceTimersByTimeAsync(0)
+      store.ensurePart('nodes')
+      await vi.advanceTimersByTimeAsync(0)
+      off()
+      rejectPart(new Error('offline'))
+      await vi.advanceTimersByTimeAsync(0)
+      assert.equal(store.getSnapshot().pending, false, 'a parked store does not arm retries')
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  test('retryDetail refetches a failed wanted part at once', async () => {
+    vi.useFakeTimers()
+    try {
+      let attempts = 0
+      const store = storeOf(async () => core(1), async () => {
+        attempts++
+        if (attempts === 1) throw new Error('offline')
+        return { rev: 1, parts: { nodes: { nodes: [{ seq: 1, cat: 'user', tokens: 1 }], archive: [], droppedNodes: 0 } } }
+      })
+      store.subscribe(() => {})
+      store.request(1)
+      await vi.advanceTimersByTimeAsync(0)
+      store.ensurePart('nodes')
+      await vi.advanceTimersByTimeAsync(0)
+      assert.equal(attempts, 1)
+      store.retry()
+      await vi.advanceTimersByTimeAsync(0)
+      assert.equal(attempts, 2, 'the explicit retry refetched instead of returning early')
+      assert.equal(store.getSnapshot().detail?.nodes.length, 1)
+      store.release()
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  test('a legacy-shaped part response is marked unavailable instead of retried', async () => {
+    vi.useFakeTimers()
+    try {
+      let calls = 0
+      const legacy = { rev: 1, requests: [], events: [], nodes: [], droppedNodes: 0, archive: [] }
+      const store = storeOf(async () => core(1), async () => {
+        calls++
+        return legacy
+      })
+      store.subscribe(() => {})
+      store.request(1)
+      await vi.advanceTimersByTimeAsync(0)
+      store.ensurePart('nodes')
+      await vi.advanceTimersByTimeAsync(0)
+      assert.equal(calls, 1)
+      await vi.advanceTimersByTimeAsync(60_000)
+      assert.equal(calls, 1, 'an unusable shape is not retried')
+      store.release()
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
   test('a slim core series automatically pulls the full requests part', async () => {
     const calls: FactPart[] = []
     const slim = { seq: 1, time: 1, total: 5, turn: 1, step: 0 }

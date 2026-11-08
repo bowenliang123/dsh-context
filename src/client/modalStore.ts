@@ -1,4 +1,4 @@
-import { lruTouch, lruTrim } from './boundedCache'
+import { makeRetentionCache, registerRetentionCleanup, trimRetentionMap } from './retention'
 import type { TokenSpan } from './services'
 
 export interface ModalStore {
@@ -7,16 +7,11 @@ export interface ModalStore {
   set(open: boolean): void
 }
 
-const MODAL_STORES_MAX = 32
-
-const stores = new Map<string, ModalStore>()
+const stores = makeRetentionCache<string, ModalStore>('modalStores')
 
 export function modalStoreOf(sessionId: string): ModalStore {
   const existing = stores.get(sessionId)
-  if (existing !== undefined) {
-    lruTouch(stores, sessionId)
-    return existing
-  }
+  if (existing !== undefined) return existing
   let open = false
   const listeners = new Set<() => void>()
   const store: ModalStore = {
@@ -32,7 +27,6 @@ export function modalStoreOf(sessionId: string): ModalStore {
     },
   }
   stores.set(sessionId, store)
-  lruTrim(stores, MODAL_STORES_MAX)
   return store
 }
 
@@ -44,6 +38,7 @@ const pendingConsume = new Map<string, ConsumeGuard>()
 
 export function setPendingConsume(sessionId: string, guard: ConsumeGuard): void {
   pendingConsume.set(sessionId, guard)
+  trimRetentionMap(pendingConsume, 'modalPendingConsume')
 }
 
 export function takePendingConsume(sessionId: string): ConsumeGuard | undefined {
@@ -51,3 +46,8 @@ export function takePendingConsume(sessionId: string): ConsumeGuard | undefined 
   if (guard !== undefined) pendingConsume.delete(sessionId)
   return guard
 }
+
+registerRetentionCleanup(() => {
+  stores.dispose()
+  pendingConsume.clear()
+})

@@ -6,6 +6,7 @@ import type { DetailChannelGate } from './detail'
 import type { CachedSnapshotFace, SessionsFace, StateProjectionsFace } from './faces'
 import { type ColdReadGate, makeColdReadGate } from './coldRead'
 import { buildTimelineHead, eventsOf, requestRowsOf, serveCommand } from './foldWire'
+import { withCost, type CostSource } from './cost'
 import { TIMING_SPANS_MAX, type TimelineState } from './foldState'
 import { failure, leaseOf, mountPostRoute, observeOf, readBody, reply, revisionOf } from './postRoute'
 import { asRecord } from './record'
@@ -199,6 +200,7 @@ function valueOf(
   request: FactPartRequest,
   kernel: KernelFacts,
   detailState: TimelineState | null,
+  cost?: CostSource,
 ): Record<string, unknown> {
   const { parts, window } = request
   const rev = state.detailRev ?? 0
@@ -209,7 +211,7 @@ function valueOf(
     ...(aligned === null && parts.has('series') ? ['series'] : []),
   ]
   const partsValue: Record<string, unknown> = {
-    ...(parts.has('head') ? { head: buildTimelineHead(state) } : {}),
+    ...(parts.has('head') ? { head: withCost(cost, buildTimelineHead(state)) } : {}),
     ...(parts.has('series') ? { series: requestRowsOf(aligned ?? state) } : {}),
     ...(parts.has('stats') && kernel.values !== undefined ? { stats: kernel.values } : {}),
     ...(aligned === null ? {} : detailPartsOf(aligned, parts, window)),
@@ -228,10 +230,28 @@ export interface FactsChannelDeps {
   coldReads?: ColdReadGate
   detailState?: (id: string) => Promise<TimelineState | null>
   stateCacheMax?: number
+  idleSweepMs?: number
+  cost?: CostSource
 }
+
+const IDLE_SWEEP_MS = 20_000
 
 export function watchFactsChannel(ctx: Context, bounds: FoldBounds, deps: FactsChannelDeps = {}): void {
   const stateCache = new Map<string, ColdState>()
+  const idleSweepMs = deps.idleSweepMs ?? IDLE_SWEEP_MS
+  let sweepTimer: ReturnType<typeof setTimeout> | null = null
+  const touch = (): void => {
+    if (sweepTimer !== null) clearTimeout(sweepTimer)
+    sweepTimer = setTimeout(() => {
+      sweepTimer = null
+      stateCache.clear()
+    }, idleSweepMs)
+    ;(sweepTimer as { unref?: () => void }).unref?.()
+  }
+  ctx.effect(() => () => {
+    if (sweepTimer !== null) clearTimeout(sweepTimer)
+    sweepTimer = null
+  }, 'dsh-context: facts cache sweep')
   const stateCacheMax = deps.stateCacheMax ?? STATE_CACHE_MAX
   const coldReads = deps.coldReads ?? makeColdReadGate()
   const caps = windowCapsOf(bounds)
@@ -270,6 +290,7 @@ export function watchFactsChannel(ctx: Context, bounds: FoldBounds, deps: FactsC
       }
 
       return async (request: Request): Promise<Response> => {
+        touch()
         const getSession = ((): ((id: string) => unknown) | undefined => {
           const sessions = c.get('sessions') as SessionsFace | undefined
           return typeof sessions?.get === 'function' ? sessions.get.bind(sessions) : undefined
@@ -291,7 +312,7 @@ export function watchFactsChannel(ctx: Context, bounds: FoldBounds, deps: FactsC
             const detailState = needsDetail ? await liveDetailState(wanted.sessionId) : null
             return reply({
               ok: true,
-              value: valueOf(state as TimelineState, true, wanted, kernel, detailState),
+              value: valueOf(state as TimelineState, true, wanted, kernel, detailState, deps.cost),
             })
           }
           if (observe === undefined) return reply({ ok: true, value: null })
@@ -308,12 +329,12 @@ export function watchFactsChannel(ctx: Context, bounds: FoldBounds, deps: FactsC
               if (cached !== undefined && cached.revision === revision && cached.persistence === persistence) {
                 rememberState(wanted.sessionId, cached)
                 const kernel = kernelOfCold(c.get('sessionProjectionCache') as CachedSnapshotFace | undefined, header)
-                return valueOf(cached.state, false, wanted, kernel, cached.state)
+                return valueOf(cached.state, false, wanted, kernel, cached.state, deps.cost)
               }
               const state = (await foldLog(events as SessionEvent[], bounds)).state
               rememberState(wanted.sessionId, { persistence, revision, state })
               const kernel = kernelOfCold(c.get('sessionProjectionCache') as CachedSnapshotFace | undefined, header)
-              return valueOf(state, false, wanted, kernel, state)
+              return valueOf(state, false, wanted, kernel, state, deps.cost)
             } finally {
               release()
             }

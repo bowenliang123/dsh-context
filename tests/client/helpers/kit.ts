@@ -93,8 +93,8 @@ export async function fireScroll(el: HTMLElement): Promise<void> {
   })
 }
 
-export async function until(fn: () => boolean, message: string): Promise<void> {
-  for (let i = 0; i < 400; i++) {
+export async function until(fn: () => boolean, message: string, attempts = 400): Promise<void> {
+  for (let i = 0; i < attempts; i++) {
     await act(async () => {
       if (fn()) return
       await new Promise(resolve => setTimeout(resolve, 5))

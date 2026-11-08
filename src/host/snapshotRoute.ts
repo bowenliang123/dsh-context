@@ -1,5 +1,7 @@
 import type { Context } from '@deepseek-ai/cordis'
+import type { BackfillHandle } from './backfill'
 import type { CachedSnapshotFace, ListRecordLike, SessionQueryFace, SnapshotProjectionsFace } from './faces'
+import { corpusRevisionOf } from './overviewCorpus'
 import { asRecord } from './record'
 import { failure, mountPostRoute, readBody, reply } from './postRoute'
 
@@ -51,6 +53,15 @@ function compactTimelineOf(value: unknown): Record<string, unknown> | undefined 
   const timing = compactTimingOf(view.timing)
   if (timing !== undefined) compact.timing = timing
   if (typeof view.lastUser === 'string' && view.lastUser !== '') compact.lastUser = view.lastUser
+  for (const field of ['generatedReasoning', 'generatedAnswerTokens', 'generatedCallTokens'] as const) {
+    const figure = view[field]
+    if (typeof figure === 'number' && Number.isFinite(figure)) compact[field] = figure
+  }
+  const costRead = asRecord(view.costRead)
+  if (costRead !== null) {
+    const usd = typeof costRead.usd === 'number' && Number.isFinite(costRead.usd) ? costRead.usd : null
+    compact.costRead = { usd, ready: costRead.ready === true }
+  }
   return compact
 }
 
@@ -65,7 +76,8 @@ function wantedIdsOf(body: Record<string, unknown>): Set<string> | undefined {
   return wanted.size > 0 ? wanted : undefined
 }
 
-export function watchSnapshotRoute(ctx: Context): void {
+export function watchSnapshotRoute(ctx: Context, backfill?: BackfillHandle): void {
+  let served: { revision: string; keys: Set<string> } | null = null
   mountPostRoute({
     ctx,
     deps: ['connection', 'sessionQuery', 'sessions', 'sessionProjectionCache', 'sessionProjections'],
@@ -84,12 +96,20 @@ export function watchSnapshotRoute(ctx: Context): void {
       return async (request: Request): Promise<Response> => {
         const read = await readBody(request)
         if (!read.ok) return read.response
-        const wanted = read.body !== null && typeof read.body === 'object'
-          ? wantedIdsOf(read.body as Record<string, unknown>)
+        const body = read.body !== null && typeof read.body === 'object' && !Array.isArray(read.body)
+          ? read.body as Record<string, unknown>
           : undefined
+        const wanted = body === undefined ? undefined : wantedIdsOf(body)
+        const requestedRevision = typeof body?.revision === 'string' && body.revision !== '' ? body.revision : undefined
+        const servedKey = wanted === undefined ? 'all' : [...wanted].sort().join('\u0000')
         try {
           const records = await listSessions()
           if (!Array.isArray(records)) return reply({ ok: true, value: {} })
+          const revision = corpusRevisionOf(records, getSession, backfill?.version() ?? 0)
+          if (requestedRevision !== undefined && requestedRevision === revision
+            && served !== null && served.revision === revision && served.keys.has(servedKey)) {
+            return reply({ ok: true, value: {}, revision, unchanged: true })
+          }
           const values: Record<string, Record<string, unknown>> = {}
           for (const record of records as (ListRecordLike | null)[]) {
             const header = asRecord(record?.header)
@@ -112,7 +132,8 @@ export function watchSnapshotRoute(ctx: Context): void {
             if (served.contextActivity !== undefined) picked.contextActivity = served.contextActivity
             if (Object.keys(picked).length > 0) values[id] = picked
           }
-          return reply({ ok: true, value: values })
+          served = { revision, keys: new Set([servedKey]) }
+          return reply({ ok: true, value: values, revision })
         } catch (err) {
           return failure('gateway/internal', err instanceof Error ? err.message : String(err))
         }

@@ -5,7 +5,6 @@ import type { AgentGraphProps } from '../../../src/client/components/agentGraph'
 import { MissionPulse } from '../../../src/client/components/missionPulse'
 import { makeRichText } from '../../../src/client/components/richText'
 import type { AgentForest, AgentNode } from '../../../src/client/agentTree'
-import { resetModelPrices, setModelPricesLoader } from '../../../src/client/modelPrices'
 import type { CommsRow } from '../../../src/client/fleetDetail'
 import type { CommsAgent } from '../../../src/client/commsModel'
 import type { FleetTeam } from '../../../src/client/fleetTeam'
@@ -17,15 +16,19 @@ const graph = () => null
 
 function makeDetails(fullLanded = new Map()) {
   return {
+    summary: null,
     landed: new Map(),
     historyLanded: new Map(),
     fullLanded,
     pending: new Set<string>(),
     historyPending: new Set<string>(),
     fullPending: new Set<string>(),
-    request: vi.fn(),
-    requestHistory: vi.fn(),
+    facts: new Map(),
+    family: { total: 0, loaded: 0, pending: 0, failed: 0, messages: null, delegations: null },
+    requestFamily: vi.fn(),
     requestFull: vi.fn(),
+    prioritize: vi.fn(),
+    retryFamily: vi.fn(),
   }
 }
 
@@ -639,8 +642,10 @@ describe('MissionPulse boundary parties', () => {
     pinBox(list, 0, 640)
     await act(async () => { list.dispatchEvent(new Event('scroll')) })
     await until(() => queryAll(mounted.container, '[data-comms-key]').length < 70, 'event list never windowed')
+    assert.equal(queryAll(mounted.container, '[data-comms-key="child:41:41000:relay"]').length, 0, 'the target row starts outside the window')
     await click(query(mounted.container, '[data-event-key="child:41:41000:relay"]'))
-    assert.equal(list.scrollTop, 29 * 64)
+    await until(() => list.scrollTop > 0, 'the window never scrolled to the selected record')
+    await until(() => queryAll(mounted.container, '[data-comms-key="child:41:41000:relay"]').length === 1, 'the selected record never entered the window')
     list.dispatchEvent(new Event('pointerdown'))
     list.scrollTop = 500
     await mounted.update(pulseOf([...rows]))
@@ -650,10 +655,6 @@ describe('MissionPulse boundary parties', () => {
   })
 
   test('stacks the model, usage and work counts under each agent name', async () => {
-    resetModelPrices()
-    setModelPricesLoader(() => Promise.resolve({
-      deepseek: { models: { 'deepseek-flash': { cost: { input: 0.15, output: 0.6, cache_read: 0.003 } } } },
-    }))
     const node = (id: string, over: Partial<AgentNode>): AgentNode => ({
       id,
       label: id,
@@ -678,7 +679,7 @@ describe('MissionPulse boundary parties', () => {
           model: 'deepseek-flash',
           reasoningEffort: 'high',
           billed: 12_300,
-          costUsage: { deepseek: { 'deepseek-flash': { off: { uncached: 1_000_000, cacheRead: 0, cacheWrite: 0, output: 0 } } } },
+          costRead: { usd: 0.15, ready: true },
         }),
         node('plain', {}),
       ],
@@ -698,7 +699,6 @@ describe('MissionPulse boundary parties', () => {
     assert.ok(!plain.includes('tokens'))
     assert.ok(plain.includes('0 tasks · 1 events'))
     await mounted.unmount()
-    resetModelPrices()
   })
 })
 
@@ -845,5 +845,67 @@ describe('Fleet work board — large owner groups', () => {
     } finally {
       vi.unstubAllGlobals()
     }
+  })
+})
+
+describe('MissionPulse family progress', () => {
+  function familyOf(over: Record<string, number | null>) {
+    return { total: 4, loaded: 2, pending: 2, failed: 0, messages: null, delegations: null, ...over }
+  }
+
+  test('renders an unknown total, a failure note with retry, and the running read state', async () => {
+    const details = makeDetails()
+    ;(details as unknown as { family: unknown }).family = familyOf({ failed: 2, pending: 0 })
+    const retry = vi.fn()
+    ;(details as unknown as { retryFamily: () => void }).retryFamily = retry
+    const mounted = await mount(h(MissionPulse, {
+      graph,
+      forest: null,
+      team: null,
+      details,
+      landedDetails: new Map(),
+      comms: [],
+      delegations: [],
+      agents: new Map(),
+      titles: new Map(),
+      attested: new Map(),
+      focusMember: null,
+      currency: 'usd',
+      onOpen: () => {},
+      onEnter: () => {},
+      rich: makeRichText(kit),
+      t: kit.t,
+    }))
+    assert.equal(query(mounted.container, '[data-pulse-stat="messages"]').textContent, '—')
+    assert.ok(text(query(mounted.container, '.lc-pulse-work-warning')).includes(kit.t('fleet.phase.failed')))
+    await click(query(mounted.container, '.lc-pulse-work-warning button'))
+    assert.equal(retry.mock.calls.length, 1)
+    await mounted.unmount()
+  })
+
+  test('renders the loading empty state while the family is reading and the exact total once known', async () => {
+    const details = makeDetails()
+    ;(details as unknown as { family: unknown }).family = familyOf({ pending: 3, messages: 12, delegations: 2 })
+    const mounted = await mount(h(MissionPulse, {
+      graph,
+      forest: null,
+      team: null,
+      details,
+      landedDetails: new Map(),
+      comms: [],
+      delegations: [],
+      agents: new Map(),
+      titles: new Map(),
+      attested: new Map(),
+      focusMember: null,
+      currency: 'usd',
+      onOpen: () => {},
+      onEnter: () => {},
+      rich: makeRichText(kit),
+      t: kit.t,
+    }))
+    assert.equal(query(mounted.container, '[data-pulse-stat="messages"]').textContent, '12')
+    assert.ok(text(query(mounted.container, '.lc-pulse-timeline')).includes(kit.t('fleet.comms.loading')))
+    await mounted.unmount()
   })
 })

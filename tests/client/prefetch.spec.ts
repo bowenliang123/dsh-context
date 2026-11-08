@@ -102,6 +102,32 @@ describe('useSessionDetailWarm', () => {
 })
 
 describe('useSessionDetailWarm — teardown', () => {
+  test('a mount without a projection seat arms nothing', async () => {
+    vi.useFakeTimers()
+    const { reads } = stubDetail()
+    function Probe(): null {
+      useSessionDetailWarm('s1', undefined)
+      return null
+    }
+    const m = await mount(h(Probe))
+    await act(async () => { await vi.advanceTimersByTimeAsync(1000) })
+    assert.deepEqual(reads, [])
+    await m.unmount()
+  })
+
+  test('a missing session id arms nothing and unmounts cleanly', async () => {
+    vi.useFakeTimers()
+    const { reads } = stubDetail()
+    function Probe(): null {
+      useSessionDetailWarm(undefined, () => ({ detailRev: 2 }))
+      return null
+    }
+    const m = await mount(h(Probe))
+    await act(async () => { await vi.advanceTimersByTimeAsync(1000) })
+    assert.deepEqual(reads, [])
+    await m.unmount()
+  })
+
   test('unmounting before the window cancels the pending warm-up', async () => {
     vi.useFakeTimers()
     const { reads } = stubDetail()

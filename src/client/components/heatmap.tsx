@@ -64,7 +64,7 @@ export function makeHeatmap(kit: ViewKit): (props: HeatmapProps) => ReactElement
     for (const column of columns) {
       for (const cell of column) {
         const entry = byKey[cell.key]
-        if (entry === undefined || (entry.tokens <= 0 && entry.requests <= 0)) continue
+        if (entry === undefined || (entry.tokens <= 0 && entry.sessions <= 0)) continue
         cell.entry = entry
         any = true
         if (entry.sessions > maxSessions) maxSessions = entry.sessions

@@ -1,12 +1,10 @@
 import { previewAddressOf } from './fileActivity'
 import type { AttachmentRef } from '../shared/attachment'
 import { ATTACHMENT_ROUTE } from './apiRoutes'
-import { lruTrim } from './boundedCache'
+import { trimRetentionMap } from './retention'
 import { postRouteQuietly } from './route'
 import { asRecord, openResourceVia } from './services'
 import type { AttachmentLocator, AttachmentOpener, ClientCtx } from './services'
-
-const CACHE_MAX = 32
 
 const paths = new Map<string, string>()
 
@@ -28,7 +26,7 @@ export function makeAttachmentLocator(sessionId: string | undefined): Attachment
     const path = await postRouteQuietly(ATTACHMENT_ROUTE, { sessionId, attachmentId: key }, pathOfValue)
     if (path === null) return null
     paths.set(key, path)
-    lruTrim(paths, CACHE_MAX)
+    trimRetentionMap(paths, 'attachmentPaths')
     return path
   }
 }

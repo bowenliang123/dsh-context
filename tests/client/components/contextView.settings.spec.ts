@@ -1,9 +1,8 @@
 import { createElement as h } from 'react'
 import assert from 'node:assert/strict'
-import { afterEach, beforeEach, describe, test, vi } from 'vitest'
+import { describe, test, vi } from 'vitest'
 import { createContextSettings } from '../../../src/client/settings'
 import type { UseChatLike } from '../../../src/client/services'
-import { resetModelPrices, setModelPricesLoader } from '../../../src/client/modelPrices'
 import { DICT_EN } from '../../../src/client/i18n'
 import { TestClientCtx, TestLocale } from '../helpers/harness'
 import { click, flush, mount, query, queryAll, silenceWindowErrors, text } from '../helpers/kit'
@@ -12,17 +11,7 @@ import { buttonByText, makeView, projectionsFor, richTimeline, settingsWith, T0,
 describe('ContextView — locale and settings', () => {
   const costed = timeline({
     cost: { 'deepseek-official': { 'deepseek-v4-flash': { peak: { uncached: 1000000, output: 500000, cacheRead: 0, cacheWrite: 0 } } } },
-  })
-
-  beforeEach(() => {
-    resetModelPrices()
-    setModelPricesLoader(() => Promise.resolve({
-      deepseek: { models: { 'deepseek-v4-flash': { cost: { input: 0.15, output: 0.6, cache_read: 0.003 } } } },
-    }))
-  })
-
-  afterEach(() => {
-    resetModelPrices()
+    costRead: { usd: 0.45, ready: true },
   })
 
   test('cost prices in USD by default (no locale service), CNY under zh', async () => {

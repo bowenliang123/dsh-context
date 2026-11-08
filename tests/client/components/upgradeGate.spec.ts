@@ -2,6 +2,7 @@ import { createElement as h } from 'react'
 import assert from 'node:assert/strict'
 import { describe, test } from 'vitest'
 import { makeUpgradeGate } from '../../../src/client/components/upgradeGate'
+import { disposeRetention } from '../../../src/client/retention'
 import { click, keydown, makeKit, mount, query, text } from '../helpers/kit'
 
 const kit = makeKit()
@@ -76,5 +77,28 @@ describe('UpgradeGate', () => {
     await click(query(m.container, '.lc-gate-ok'))
     assert.equal(m.container.querySelector('.lc-modal-backdrop'), null)
     await m.unmount()
+  })
+})
+
+describe('UpgradeGate retention', () => {
+  test('the dismissed ledger is bounded and dispose forgets dismissals', async () => {
+    const gate = makeUpgradeGate(makeKit())
+    for (let i = 0; i < 65; i++) {
+      const m = await mount(h(gate, { sessionId: 'gate-cap-' + i, current: '0.1.0', minimum: '0.2.0-rc.2' }))
+      await click(query(m.container, '.lc-gate-ok'))
+      await m.unmount()
+    }
+    const evicted = await mount(h(gate, { sessionId: 'gate-cap-0', current: '0.1.0', minimum: '0.2.0-rc.2' }))
+    assert.ok(evicted.container.querySelector('.lc-modal-backdrop') !== null, 'the oldest dismissal fell out of the ledger')
+    await evicted.unmount()
+
+    const kept = await mount(h(gate, { sessionId: 'gate-cap-64', current: '0.1.0', minimum: '0.2.0-rc.2' }))
+    assert.equal(kept.container.querySelector('.lc-modal-backdrop'), null, 'the newest dismissal survives')
+    await kept.unmount()
+
+    disposeRetention()
+    const forgotten = await mount(h(gate, { sessionId: 'gate-cap-64', current: '0.1.0', minimum: '0.2.0-rc.2' }))
+    assert.ok(forgotten.container.querySelector('.lc-modal-backdrop') !== null, 'dispose forgets dismissals')
+    await forgotten.unmount()
   })
 })

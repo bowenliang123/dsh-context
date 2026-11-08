@@ -1,5 +1,16 @@
 import type { Context } from '@deepseek-ai/cordis'
-import type { FleetDelegation, FleetDescriptor, FleetDetail, FleetMemberInfo, FleetMessage } from '../shared/types'
+import type {
+  FleetBatchRequest,
+  FleetBatchValue,
+  FleetDelegation,
+  FleetDescriptor,
+  FleetDetail,
+  FleetDetailCounts,
+  FleetMemberInfo,
+  FleetMessage,
+  FleetSummary,
+  FleetSummaryMember,
+} from '../shared/types'
 import { type ColdReadGate, makeColdReadGate } from './coldRead'
 import { failure, leaseOf, mountPostRoute, observeOf, readBody, reply } from './postRoute'
 import { asRecord } from './record'
@@ -11,6 +22,7 @@ const MESSAGES_MAX = 80
 const MESSAGE_TEXT_MAX = 400
 const PROMPT_TEXT_MAX = 1600
 const REPLY_TEXT_MAX = 300
+const BATCH_MAX = 16
 
 function detailModeOf(body: unknown): FleetDetailMode {
   if (asRecord(body)?.full === true) return 'full'
@@ -234,6 +246,8 @@ function capsOf(mode: FleetDetailMode): FleetCaps {
   return { promptMax: PROMPT_TEXT_MAX, replyMax: REPLY_TEXT_MAX, messageMax: MESSAGE_TEXT_MAX, listMax: MESSAGES_MAX }
 }
 
+type MemberFact = FleetSummaryMember & { createdAt: number }
+
 class FleetFold {
   private descriptor: FleetDescriptor | undefined
   private initialPrompt: string | undefined
@@ -242,9 +256,68 @@ class FleetFold {
   private readonly messages: FleetMessage[] = []
   private readonly delegationAt = new Map<string, FleetDelegation>()
   private readonly roster = new Map<string, FleetMemberInfo>()
+  private readonly catalogFacts = new Map<string, MemberFact>()
+  private readonly teamFacts = new Map<string, MemberFact>()
   private lastReply: { time: number; text: string } | null = null
 
   constructor(private readonly caps: FleetCaps) {}
+
+  private memberFactOf(id: string, name: string | undefined, createdAt: number): MemberFact {
+    return { id, createdAt, ...(name === undefined ? {} : { name }) }
+  }
+
+  private catalogMemberOf(seq: number, data: Record<string, unknown>): void {
+    const delegation = delegationOf(seq, data)
+    if (delegation === null) return
+    const name = typeof data.name === 'string' && data.name !== '' ? data.name : undefined
+    const fact = this.memberFactOf(delegation.to, name, delegation.time)
+    this.catalogFacts.set(fact.id, {
+      ...fact,
+      mode: delegation.mode,
+      ...(delegation.label !== undefined ? { label: delegation.label } : {}),
+    })
+  }
+
+  private teamMemberOf(data: Record<string, unknown>, time: number): void {
+    const member = asRecord(data.member)
+    if (member === null || typeof member.id !== 'string' || member.id === '' || member.id === data.teamId) return
+    const name = typeof member.name === 'string' && member.name !== '' ? member.name : undefined
+    const fact = this.memberFactOf(member.id, name, time)
+    const description = typeof member.description === 'string' && member.description !== '' ? member.description : undefined
+    const phase = typeof member.phase === 'string' && member.phase !== '' ? member.phase : undefined
+    this.teamFacts.set(fact.id, {
+      ...fact,
+      mode: 'continuable',
+      ...(description === undefined ? {} : { description }),
+      ...(phase === undefined ? {} : { phase }),
+    })
+  }
+
+  members(): FleetSummaryMember[] {
+    const ids = new Set([...this.catalogFacts.keys(), ...this.teamFacts.keys()])
+    const out: MemberFact[] = []
+    for (const id of ids) {
+      const catalog = this.catalogFacts.get(id)
+      const team = this.teamFacts.get(id)
+      out.push({ ...team, ...catalog } as MemberFact)
+    }
+    return out.sort((a, b) => a.createdAt - b.createdAt || a.id.localeCompare(b.id))
+  }
+
+  bytes(): number {
+    let total = 0
+    for (const message of this.messages) {
+      total += message.text.length + (message.report?.length ?? 0) + (message.summary?.length ?? 0)
+        + (message.structured?.length ?? 0) + (message.diagnostic?.length ?? 0) + (message.fromName?.length ?? 0)
+    }
+    total += this.initialPrompt?.length ?? 0
+    total += this.lastReply?.text.length ?? 0
+    for (const delegation of this.delegationAt.values()) total += delegation.label?.length ?? 0
+    for (const member of this.roster.values()) total += member.name.length + member.description.length
+    for (const fact of this.catalogFacts.values()) total += (fact.label?.length ?? 0) + (fact.name?.length ?? 0)
+    for (const fact of this.teamFacts.values()) total += (fact.description?.length ?? 0) + (fact.name?.length ?? 0)
+    return total
+  }
 
   apply(events: readonly unknown[], inheritedEventCount = 0): void {
     for (const entry of events) this.applyEvent(entry, inheritedEventCount)
@@ -263,6 +336,7 @@ class FleetFold {
     if (type === 'subagent/catalog') {
       const delegation = delegationOf(seq, data)
       if (delegation !== null) this.delegationAt.set(delegation.to, delegation)
+      this.catalogMemberOf(seq, data)
       return
     }
     if (type === 'subagent/descriptor') {
@@ -275,6 +349,7 @@ class FleetFold {
       if (delegation !== null && !this.delegationAt.has(delegation.to)) this.delegationAt.set(delegation.to, delegation)
       const member = rosterMemberOf(data)
       if (member !== null) this.roster.set(member.name, member)
+      this.teamMemberOf(data, time)
       return
     }
     if (type === 'assistant/message') {
@@ -351,19 +426,42 @@ interface FoldEntry {
   fold: FleetFold
 }
 
-const FOLD_CACHE_MAX = 8
-
-function revisionOf(observation: unknown): string | undefined {
-  const revision = (observation as { revision?: unknown } | null)?.revision
-  return typeof revision === 'string' && revision !== '' ? revision : undefined
-}
+const FOLD_CACHE_MAX = 32
+const FOLD_BYTES_MAX = 4 * 1024 * 1024
 
 interface ObservationLike {
   source?: unknown
   revision?: unknown
   inheritedEventCount?: unknown
   events?: unknown
+  header?: unknown
   [Symbol.dispose]?: unknown
+}
+
+function revisionOf(observation: unknown): string | undefined {
+  const revision = (observation as { revision?: unknown } | null)?.revision
+  return typeof revision === 'string' && revision !== '' ? revision : undefined
+}
+
+function createdAtOf(observation: ObservationLike | null): number | undefined {
+  const header = asRecord(observation?.header)
+  return typeof header?.createdAt === 'number' && Number.isFinite(header.createdAt) ? header.createdAt : undefined
+}
+
+function inheritedOf(observation: ObservationLike | null): number {
+  const count = observation?.inheritedEventCount
+  return typeof count === 'number' && Number.isFinite(count) ? Math.max(0, count) : 0
+}
+
+function trimFoldCache(cache: Map<string, FoldEntry>): void {
+  let bytes = 0
+  for (const entry of cache.values()) bytes += entry.fold.bytes()
+  while (cache.size > 1 && (cache.size > FOLD_CACHE_MAX || bytes > FOLD_BYTES_MAX)) {
+    const oldest = cache.keys().next().value as string
+    const entry = cache.get(oldest) as FoldEntry
+    cache.delete(oldest)
+    bytes -= entry.fold.bytes()
+  }
 }
 
 function reusable(
@@ -413,15 +511,100 @@ function foldOf(
     inheritedEventCount,
     fold,
   })
-  for (const oldest of cache.keys()) {
-    if (cache.size <= FOLD_CACHE_MAX) break
-    cache.delete(oldest)
-  }
+  trimFoldCache(cache)
   return fold
 }
 
-export function watchFleetChannel(ctx: Context, coldReads: ColdReadGate = makeColdReadGate()): void {
+function countsOf(detail: FleetDetail, readAt: number): FleetDetailCounts {
+  return {
+    readAt,
+    messagesTotal: detail.messagesTotal ?? detail.messages.length,
+    delegationsCount: detail.delegations?.length ?? 0,
+  }
+}
+
+function batchOf(body: unknown): FleetBatchRequest | null {
+  const batch = asRecord(asRecord(body)?.batch)
+  if (batch === null || !Array.isArray(batch.ids)) return null
+  const ids: string[] = []
+  const seen = new Set<string>()
+  for (const entry of batch.ids) {
+    if (typeof entry !== 'string' || entry === '' || seen.has(entry)) continue
+    seen.add(entry)
+    ids.push(entry)
+    if (ids.length >= BATCH_MAX) break
+  }
+  if (ids.length === 0) return null
+  const rootId = typeof batch.rootId === 'string' && batch.rootId !== '' ? batch.rootId : undefined
+  return { ids, mode: batch.mode === 'history' ? 'history' : 'preview', ...(rootId === undefined ? {} : { rootId }) }
+}
+
+interface CountBucket {
+  rootCreatedAt?: number
+  children: Map<string, FleetDetailCounts>
+}
+
+const COUNTS_ROOTS_MAX = 8
+const COUNTS_CHILDREN_MAX = 1024
+
+function bucketOf(counts: Map<string, CountBucket>, rootId: string, rootCreatedAt: number | undefined): CountBucket {
+  const existing = counts.get(rootId)
+  if (existing !== undefined) {
+    counts.delete(rootId)
+    if (existing.rootCreatedAt === rootCreatedAt) {
+      counts.set(rootId, existing)
+      return existing
+    }
+  }
+  const bucket: CountBucket = { ...(rootCreatedAt === undefined ? {} : { rootCreatedAt }), children: new Map() }
+  counts.set(rootId, bucket)
+  while (counts.size > COUNTS_ROOTS_MAX) counts.delete(counts.keys().next().value as string)
+  return bucket
+}
+
+function recordCount(bucket: CountBucket, id: string, counts: FleetDetailCounts): void {
+  bucket.children.delete(id)
+  bucket.children.set(id, counts)
+  while (bucket.children.size > COUNTS_CHILDREN_MAX) bucket.children.delete(bucket.children.keys().next().value as string)
+}
+
+function knownCountsOf(bucket: CountBucket, ids: readonly string[]): Record<string, FleetDetailCounts> {
+  const served: Record<string, FleetDetailCounts> = {}
+  for (const id of ids) {
+    const counts = bucket.children.get(id)
+    if (counts !== undefined) served[id] = counts
+  }
+  return served
+}
+
+const IDLE_SWEEP_MS = 20_000
+
+export interface FleetRouteOptions {
+  idleSweepMs?: number
+}
+
+export function watchFleetChannel(
+  ctx: Context,
+  coldReads: ColdReadGate = makeColdReadGate(),
+  options: FleetRouteOptions = {},
+): void {
+  const idleSweepMs = options.idleSweepMs ?? IDLE_SWEEP_MS
   const cache = new Map<string, FoldEntry>()
+  const counts = new Map<string, CountBucket>()
+  let sweepTimer: ReturnType<typeof setTimeout> | null = null
+  const touch = (): void => {
+    if (sweepTimer !== null) clearTimeout(sweepTimer)
+    sweepTimer = setTimeout(() => {
+      sweepTimer = null
+      cache.clear()
+      counts.clear()
+    }, idleSweepMs)
+    ;(sweepTimer as { unref?: () => void }).unref?.()
+  }
+  ctx.effect(() => () => {
+    if (sweepTimer !== null) clearTimeout(sweepTimer)
+    sweepTimer = null
+  }, 'dsh-context: fleet cache sweep')
   mountPostRoute({
     ctx,
     deps: ['connection'],
@@ -429,25 +612,125 @@ export function watchFleetChannel(ctx: Context, coldReads: ColdReadGate = makeCo
     label: 'dsh-context: fleet route',
     handler: (c) => {
       const persistence = serviceIdentityOf(c.get('sessionPersistence'))
+      const sessions = c.get('sessions') as { get(id: string): unknown } | undefined
+      const liveCreatedAtOf = (rootId: string): number | undefined => {
+        try {
+          const header = asRecord(asRecord(sessions?.get(rootId))?.header)
+          return typeof header?.createdAt === 'number' && Number.isFinite(header.createdAt) ? header.createdAt : undefined
+        } catch {
+          return undefined
+        }
+      }
+      const serveSummary = async (sessionId: string): Promise<Response> => {
+        const observe = observeOf(ctx)
+        if (observe === undefined) return reply({ ok: true, value: null })
+        const value = await coldReads.admit(async () => {
+          const observation = await observe(sessionId, { projectionMode: 'none' }) as ObservationLike | null
+          const events = observation?.events
+          if (!Array.isArray(events)) return null
+          const release = leaseOf(observation)
+          try {
+            const inheritedEventCount = inheritedOf(observation)
+            const isLive = observation?.source === 'live'
+            const revision = isLive ? undefined : revisionOf(observation)
+            const fold = foldOf(cache, sessionId, events, isLive, revision, persistence, cursorOfEvents(events), inheritedEventCount)
+            const detail = fold.serve()
+            const members = fold.members()
+            const rootCreatedAt = createdAtOf(observation)
+            const bucket = bucketOf(counts, sessionId, rootCreatedAt)
+            recordCount(bucket, sessionId, countsOf(detail, Date.now()))
+            const summary: FleetSummary = {
+              rootId: sessionId,
+              ...(rootCreatedAt === undefined ? {} : { rootCreatedAt }),
+              detail,
+              members,
+              familySize: members.length + 1,
+              counts: knownCountsOf(bucket, [sessionId, ...members.map(member => member.id)]),
+            }
+            return summary
+          } finally {
+            release()
+          }
+        })
+        return reply({ ok: true, value: value ?? null })
+      }
+      const serveBatch = async (request: FleetBatchRequest): Promise<Response> => {
+        const observe = observeOf(ctx)
+        if (observe === undefined) {
+          return reply({ ok: true, value: { rows: {}, missing: request.ids, total: request.ids.length } })
+        }
+        const rows: Record<string, FleetDetail> = {}
+        const missing: string[] = []
+        const admitted = await coldReads.admit(async () => {
+          for (const id of request.ids) {
+            try {
+              const observation = await observe(id, { projectionMode: 'none' }) as ObservationLike | null
+              const events = observation?.events
+              if (!Array.isArray(events)) {
+                missing.push(id)
+                continue
+              }
+              const release = leaseOf(observation)
+              try {
+                const inheritedEventCount = inheritedOf(observation)
+                if (request.mode === 'history') {
+                  rows[id] = fleetDetailOfEvents(events, 'history', inheritedEventCount)
+                  continue
+                }
+                const isLive = observation?.source === 'live'
+                const revision = isLive ? undefined : revisionOf(observation)
+                rows[id] = foldOf(cache, id, events, isLive, revision, persistence, cursorOfEvents(events), inheritedEventCount).serve()
+              } finally {
+                release()
+              }
+            } catch {
+              missing.push(id)
+            }
+          }
+          return true
+        })
+        const value: FleetBatchValue = admitted === true
+          ? { rows, missing, total: request.ids.length }
+          : { rows: {}, missing: request.ids, total: request.ids.length }
+        const rootId = request.rootId
+        const bucket = rootId === undefined ? undefined : counts.get(rootId)
+        if (rootId !== undefined && bucket !== undefined) {
+          const liveCreatedAt = liveCreatedAtOf(rootId)
+          if (bucket.rootCreatedAt === undefined || liveCreatedAt === undefined || liveCreatedAt === bucket.rootCreatedAt) {
+            const readAt = Date.now()
+            for (const [id, detail] of Object.entries(rows)) recordCount(bucket, id, countsOf(detail, readAt))
+          }
+        }
+        return reply({ ok: true, value })
+      }
       return async (request: Request): Promise<Response> => {
+        touch()
         const read = await readBody(request)
         if (!read.ok) return read.response
         const body = read.body
-        const sessionId = asRecord(body)?.sessionId
+        const record = asRecord(body)
+        const batch = batchOf(body)
+        if (batch !== null) {
+          try {
+            return await serveBatch(batch)
+          } catch (err) {
+            return failure('gateway/internal', err instanceof Error ? err.message : String(err))
+          }
+        }
+        const sessionId = record?.sessionId
         const mode = detailModeOf(body)
         if (typeof sessionId !== 'string' || sessionId === '') {
           return failure('dsh-context/bad-request', 'missing sessionId')
         }
         try {
+          if (record?.summary === true) return await serveSummary(sessionId)
           const observe = observeOf(ctx)
           if (observe === undefined) return reply({ ok: true, value: null })
           const value = await coldReads.admit(async () => {
             const observation = await observe(sessionId, { projectionMode: 'none' }) as ObservationLike | null
             const events = observation?.events
             if (!Array.isArray(events)) return null
-            const inheritedEventCount = typeof observation?.inheritedEventCount === 'number' && Number.isFinite(observation.inheritedEventCount)
-              ? Math.max(0, observation.inheritedEventCount)
-              : 0
+            const inheritedEventCount = inheritedOf(observation)
             const release = leaseOf(observation)
             try {
               if (mode !== 'preview') return fleetDetailOfEvents(events, mode, inheritedEventCount)

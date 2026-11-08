@@ -4,14 +4,14 @@ import { agentSelfOf } from '../agentTree'
 import { displayCurrencyOf } from '../cost'
 import { mergeComms, mergeDelegations } from '../fleetDetail'
 import { attestedNamesOf, commsAgentsOf } from '../fleetAgents'
-import { useFleetDetails, useFleetModel } from '../fleetModel'
+import { mergedDetailOf, useFleetDetails, useFleetModel } from '../fleetModel'
 import { teamOf } from '../fleetTeam'
 import type { ClientCtx, SessionStandardProps } from '../services'
 import { CONTEXT_VIEW_ID, openChildAsideVia, openSessionVia, projectionOf, seatKeyOf, seedConversationViewVia, unsupportedOf } from '../services'
 import { useFleetMemberFocus } from '../viewFocus'
 import { useContextSession } from '../sessionData'
 import type { ViewKit } from '../viewkit'
-import type { FleetDetail } from '../../shared/types'
+import type { FleetDetail, FleetMemberInfo } from '../../shared/types'
 import { makeAgentGraph } from './agentGraph'
 import { makeDetailNote } from './detailNote'
 import { makeRichText } from './richText'
@@ -48,7 +48,7 @@ export function makeFleetView(
     const { forest, team: rowTeam, titles } = useFleetModel(ctx, heads, sessionId, self, data !== null, 120)
     const teamDirect = projectionOf(props, 'agentTeam', teamOf)
     const team = teamDirect ?? rowTeam
-    const details = useFleetDetails(undefined, { concurrency: 4, refreshDelayMs: 750, scopeKey: sessionId })
+    const details = useFleetDetails(undefined, { scopeKey: sessionId })
     const focusMember = useFleetMemberFocus(sessionId)
     const byId = useMemo(
       () => new Map((forest?.nodes ?? []).map(node => [node.id, node])),
@@ -60,29 +60,43 @@ export function makeFleetView(
       [forest, team],
     )
     const detailStamp = detailNodes.map(node => `${node.id}@${node.updatedAt}`).join(',')
+    const rootNode = forest !== null ? forest.nodes[0] : undefined
+    const rootId = rootNode?.id ?? sessionId ?? ''
+    const rootStamp = rootNode?.updatedAt ?? 0
+    const priority = useMemo(() => {
+      const ids = new Set<string>()
+      if (focusMember !== null) ids.add(focusMember)
+      return ids
+    }, [focusMember])
+    const priorityStamp = [...priority].join(',')
     useEffect(() => {
-      for (const node of detailNodes) details.request(node.id, node.updatedAt)
-    }, [detailNodes, detailStamp])
+      if (rootId === '') return
+      details.requestFamily({ rootId, rootStamp, entries: detailNodes, priority })
+    }, [detailStamp, priorityStamp, rootId, rootStamp])
     const landedDetails = useMemo(() => {
       const map = new Map<string, FleetDetail>()
       for (const node of detailNodes) {
-        const history = details.historyLanded.get(node.id)?.detail
-        if (history !== undefined && history !== null) {
-          map.set(node.id, history)
-          continue
-        }
-        const preview = details.landed.get(node.id)?.detail
-        if (preview !== undefined && preview !== null) map.set(node.id, preview)
+        const detail = mergedDetailOf(details, node.id)
+        if (detail !== null) map.set(node.id, detail)
       }
       return map
     }, [detailNodes, details.landed, details.historyLanded])
+    const delegationSource = useMemo(() => {
+      const map = new Map<string, FleetDetail>()
+      for (const [id, fact] of details.facts) {
+        map.set(id, { messages: [], delegations: [...fact.delegations], truncated: false })
+      }
+      return map
+    }, [details.facts])
     const comms = useMemo(() => mergeComms(landedDetails), [landedDetails])
-    const delegations = useMemo(() => mergeDelegations(landedDetails), [landedDetails])
+    const delegations = useMemo(() => mergeDelegations(delegationSource), [delegationSource])
     const attestedNames = useMemo(() => attestedNamesOf(comms), [comms])
-    const leadDetail = leadId !== undefined ? landedDetails.get(leadId) ?? null : null
+    const leadDetail = leadId !== undefined ? mergedDetailOf(details, leadId) : null
+    const leadRoster: readonly FleetMemberInfo[] | undefined = leadDetail?.roster
+      ?? (leadId === undefined ? undefined : details.facts.get(leadId)?.roster)
     const agents = useMemo(
-      () => commsAgentsOf(forest?.nodes ?? [], team, leadDetail?.roster, attestedNames, t),
-      [attestedNames, forest, leadDetail, team, t],
+      () => commsAgentsOf(forest?.nodes ?? [], team, leadRoster, attestedNames, t),
+      [attestedNames, forest, leadRoster, team, t],
     )
     const open = (id: string): void => {
       const node = byId.get(id)

@@ -4,12 +4,13 @@ import { registerContextCommand } from './command'
 import { makeContextModal } from './components/contextModal'
 import { makeOverviewPanel } from './components/overviewPanel'
 import { resetSessionWarm } from './prefetch'
+import { disposeRetention } from './retention'
 import { resetTimelineDetailStores } from './timelineSource'
 import { clearAttachmentPaths } from './attachmentSource'
 import { makePluginConfigCard } from './components/settingsCard'
 import { watchInsightPage } from './insightPage'
 import { modalStoreOf } from './modalStore'
-import { CONTEXT_VIEW_ID, entrySeated, type ClientCtx } from './services'
+import { CONTEXT_VIEW_ID, asRecord, entrySeated, type ClientCtx } from './services'
 import { createContextSettings, type ConfigFormsFace, type SettingsField } from './settings'
 import { makeContextView } from './components/contextView'
 import { makeContextJumpButton } from './components/contextJump'
@@ -17,6 +18,8 @@ import { makeFleetView } from './components/fleetView'
 import { watchFleetTab } from './fleetTab'
 import { makeAgentHeads } from './agentHeads'
 import { watchHistoryFaces } from './historyPage'
+import { resetVersionSource } from './versionSource'
+import { registerCostRefresh, resetCostRefresh } from './costRefresh'
 import { watchPlacement } from './placement'
 import { watchSidebarContextTab } from './sidebar'
 import { makeViewKit } from './viewkit'
@@ -45,6 +48,22 @@ import './styles/recom.css'
 
 const NS = 'dsh-context'
 
+function refreshCostDependents(ctx: ClientCtx): void {
+  try {
+    const sessions = ctx.get('sessions') as {
+      refresh?(): unknown
+      getSnapshot?(): unknown
+      refreshProjections?(id: string): unknown
+    } | undefined
+    if (sessions === undefined) return
+    void Promise.resolve(sessions.refresh?.()).catch(() => {})
+    const state = asRecord(sessions.getSnapshot?.())
+    const current = typeof state?.current === 'string' ? state.current : undefined
+    if (current !== undefined) void Promise.resolve(sessions.refreshProjections?.(current)).catch(() => {})
+  } catch {
+  }
+}
+
 const JUMP_SLOT = 'conversation.chat.assistant-actions'
 const JUMP_ID = 'context-jump'
 
@@ -60,7 +79,11 @@ function apply(ctx: ClientCtx): void {
     resetSessionWarm()
     resetTimelineDetailStores()
     clearAttachmentPaths()
+    resetVersionSource()
+    resetCostRefresh()
+    disposeRetention()
   }, 'dsh-context: warm-up timers')
+  ctx.effect(() => registerCostRefresh(() => { refreshCostDependents(ctx) }), 'dsh-context: cost refresh')
   watchHistoryFaces(ctx)
   const settings = createContextSettings()
   const heads = makeAgentHeads()

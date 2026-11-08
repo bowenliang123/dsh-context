@@ -90,6 +90,47 @@ describe('dsh-context host plugin', () => {
     assert.deepEqual(body.value.missing, ['nodes'], 'detail parts need an observation face and are reported missing')
   })
 
+  test('mounts the overview route over the live corpus and reports its summary', async () => {
+    const ctx = new Context()
+    const routes = new Map<string, { fetch?: (request: Request) => Promise<Response> }>()
+    ctx.provide('connection', {
+      fetch: {
+        register(route: { path: string; fetch: (request: Request) => Promise<Response> }) {
+          routes.set(route.path, route)
+          return () => { routes.delete(route.path) }
+        },
+      },
+    })
+    ctx.provide('sessionQuery', {
+      listSessions: async () => [...ctx.sessions.list()].map(session => ({ header: session.header, live: true, persisted: true })),
+    })
+    ctx.provide('sessionProjectionCache', { cachedSnapshot: () => undefined })
+    await ctx.plugin(SessionStore)
+    await ctx.plugin(SessionProjectionRegistry)
+    await ctx.plugin(plugin, noConfig)
+    const session = ctx.sessions.create()
+    appendRealEnvelopes(session)
+    const route = await until(() => routes.get('/api/dsh-context/overview'), 'overview route mounted')
+    const response = await route.fetch!(new Request('http://dsh.test/api/dsh-context/overview', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ part: 'summary' }),
+    }))
+    const body = await response.json() as { ok: boolean; value: { summary?: { sessions: number; tokens: number; coverage: { complete: boolean } }; revision?: string } }
+    assert.equal(body.ok, true)
+    assert.equal(body.value.summary?.sessions, 1, 'the live session enters the hosted summary')
+    assert.equal(body.value.summary?.tokens !== undefined && body.value.summary.tokens >= 0, true)
+    assert.equal(typeof body.value.revision, 'string')
+    const unchanged = await route.fetch!(new Request('http://dsh.test/api/dsh-context/overview', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ part: 'summary', revision: body.value.revision }),
+    }))
+    const unchangedBody = await unchanged.json() as { ok: boolean; value: { unchanged?: boolean; summary?: unknown } }
+    assert.equal(unchangedBody.ok, true)
+    assert.equal(unchangedBody.value.unchanged, true, 'a repeated summary at the same revision skips the rows')
+  })
+
   test('module shape is the sessionProjections inject gate, and all three units serve folded views over real appends', async () => {
     assert.equal(name, 'dsh-context')
     assert.deepEqual(inject, ['sessionProjections'])

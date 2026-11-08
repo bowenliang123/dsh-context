@@ -2,7 +2,10 @@ import { useCallback, useSyncExternalStore } from 'react'
 import type { ContextTimeline } from '../shared/types'
 import type { SessionsFaceLike } from './agentTree'
 import { DETAIL_ROUTE, HEADS_ROUTE } from './apiRoutes'
-import { BoundedCache, byteSizeOf } from './boundedCache'
+import { byteSizeOf } from './boundedCache'
+import { subscribeInvalidations } from './invalidation'
+import { registerRetentionCleanup, makeRetentionCache } from './retention'
+import { noteCostPending } from './costRefresh'
 import { postRoute } from './route'
 import { asRecord, timelineOf } from './services'
 
@@ -53,11 +56,11 @@ export async function readHeads(heads: AgentHeads, ids: readonly string[]): Prom
   return result
 }
 
-const HEADS_MAX = 128
-
 const HEAD_BATCH_SIZE = 64
 
-const HEADS_BYTES_MAX = 1024 * 1024
+const HEAD_DETAIL_FALLBACK_MAX = 64
+
+const HEAD_DETAIL_FALLBACK_CONCURRENCY = 4
 
 interface HeadEntry {
   promise: Promise<ContextTimeline | null>
@@ -65,12 +68,30 @@ interface HeadEntry {
 }
 
 export function makeAgentHeads(): AgentHeads {
-  const heads = new BoundedCache<string, HeadEntry>({
-    maxEntries: HEADS_MAX,
-    maxBytes: HEADS_BYTES_MAX,
-    sizeOf: entry => entry.bytes,
-  })
+  const heads = makeRetentionCache<string, HeadEntry>('agentHeads', { sizeOf: entry => entry.bytes })
   const inflight = new Map<string, HeadEntry>()
+  let generation = 0
+  const offInvalidation = subscribeInvalidations((event) => {
+    if (event.kind === 'pricing') {
+      generation++
+      heads.clear()
+      inflight.clear()
+      return
+    }
+    if (event.kind !== 'heads') return
+    generation++
+    if (event.sessionId === undefined) {
+      heads.clear()
+      inflight.clear()
+      return
+    }
+    heads.delete(event.sessionId)
+    inflight.delete(event.sessionId)
+  })
+  registerRetentionCleanup(() => {
+    heads.dispose()
+    offInvalidation()
+  })
   return {
     headOf(id: string): Promise<ContextTimeline | null> {
       const cached = heads.get(id)
@@ -80,13 +101,17 @@ export function makeAgentHeads(): AgentHeads {
       const fetcher = makeHeadFetcher(id)
       const entry: HeadEntry = { promise: Promise.resolve(null), bytes: 0 }
       const pending = fetcher !== undefined ? fetcher() : Promise.resolve(null)
+      const startedAt = generation
       entry.promise = pending.then((head) => {
-        inflight.delete(id)
-        entry.bytes = head === null ? 0 : byteSizeOf(head)
-        heads.set(id, entry)
+        if (inflight.get(id) === entry) inflight.delete(id)
+        if (startedAt === generation) {
+          entry.bytes = head === null ? 0 : byteSizeOf(head)
+          heads.set(id, entry)
+        }
+        noteCostPending(head?.costRead)
         return head
       }, (error: unknown) => {
-        inflight.delete(id)
+        if (inflight.get(id) === entry) inflight.delete(id)
         throw error
       })
       inflight.set(id, entry)
@@ -119,14 +144,18 @@ export function makeAgentHeads(): AgentHeads {
         const pending = makeBatchHeadFetcher(chunk)()
         for (const id of chunk) {
           const entry: HeadEntry = { promise: Promise.resolve(null), bytes: 0 }
+          const startedAt = generation
           entry.promise = pending.then((batch) => {
-            inflight.delete(id)
+            if (inflight.get(id) === entry) inflight.delete(id)
             const head = batch?.get(id) ?? null
-            entry.bytes = head === null ? 0 : byteSizeOf(head)
-            heads.set(id, entry)
+            if (startedAt === generation) {
+              entry.bytes = head === null ? 0 : byteSizeOf(head)
+              heads.set(id, entry)
+            }
+            noteCostPending(head?.costRead)
             return head
           }, (error: unknown) => {
-            inflight.delete(id)
+            if (inflight.get(id) === entry) inflight.delete(id)
             throw error
           })
           inflight.set(id, entry)
@@ -135,12 +164,32 @@ export function makeAgentHeads(): AgentHeads {
       }
       const outcomes = await Promise.allSettled([...entries].map(async ([id, entry]) => ({ id, head: await entry.promise })))
       let failure: unknown
+      const missing: string[] = []
       for (const outcome of outcomes) {
         if (outcome.status === 'rejected') {
           failure = failure ?? outcome.reason
           continue
         }
         if (outcome.value.head !== null) result.set(outcome.value.id, outcome.value.head)
+        else missing.push(outcome.value.id)
+      }
+      const fallbacks = missing.slice(0, HEAD_DETAIL_FALLBACK_MAX)
+      for (let offset = 0; offset < fallbacks.length; offset += HEAD_DETAIL_FALLBACK_CONCURRENCY) {
+        const chunk = fallbacks.slice(offset, offset + HEAD_DETAIL_FALLBACK_CONCURRENCY)
+        const reads = await Promise.allSettled(chunk.map(async (id) => {
+          const startedAt = generation
+          const head = await (makeHeadFetcher(id) as () => Promise<ContextTimeline | null>)()
+          if (head === null) return { id, head: null }
+          if (startedAt === generation) {
+            const entry: HeadEntry = { promise: Promise.resolve(head), bytes: byteSizeOf(head) }
+            heads.set(id, entry)
+          }
+          return { id, head }
+        }))
+        for (const read of reads) {
+          if (read.status === 'rejected') continue
+          if (read.value.head !== null) result.set(read.value.id, read.value.head)
+        }
       }
       if (failure !== undefined) throw new Error(failure instanceof Error ? failure.message : 'heads read failed')
       return result

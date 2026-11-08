@@ -1,6 +1,6 @@
 import { act, createElement as h } from 'react'
 import assert from 'node:assert/strict'
-import { describe, test } from 'vitest'
+import { describe, test, vi } from 'vitest'
 import {
   historyFace, makeContentFetcher, makeHeaderFetcher, pageNodesOf,
   subscribeHistoryFace, watchHistoryFaces, useHistoryFace,
@@ -200,6 +200,25 @@ describe('makeContentFetcher — the per-session targeted read', () => {
     await fetch(200)
     assert.equal(calls.length, 201, 'refreshed and newest entries still replay')
     ctx.dispose()
+  })
+
+  test('a cached page expires after the retention ttl', async () => {
+    vi.useFakeTimers()
+    try {
+      const calls: unknown[] = []
+      const ctx = armHistoryFaces({ session: pageFace([
+        ev('user/message', 3, { content: [{ type: 'text', text: 'TTL BODY' }] }),
+      ], calls) })
+      const fetch = makeContentFetcher(plainOf('ttl'))!
+      await fetch(3)
+      assert.equal(calls.length, 1)
+      vi.advanceTimersByTime(5 * 60_000)
+      await fetch(3)
+      assert.equal(calls.length, 2, 'the expired content is re-read')
+      ctx.dispose()
+    } finally {
+      vi.useRealTimers()
+    }
   })
 
   test('a page without the seq resolves null; an empty records page too', async () => {

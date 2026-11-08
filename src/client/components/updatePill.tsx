@@ -1,5 +1,5 @@
 import type { ReactElement } from 'react'
-import { useNewerVersion } from '../latestVersion'
+import { useNewerVersion } from '../versionSource'
 import { PLUGIN_REPO } from '../meta'
 import type { ViewKit } from '../viewkit'
 

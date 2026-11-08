@@ -1,5 +1,5 @@
 import { pathPartsOf } from '@deepseek-ai/dsh-util-workspace-path'
-import { memo, useEffect, useMemo, useRef, useState, type ComponentType, type MouseEvent, type ReactElement } from 'react'
+import { memo, useCallback, useEffect, useId, useMemo, useRef, useState, type ComponentType, type ReactElement } from 'react'
 import { absPathOf, baseNameOf, displayPathOf, displayStyleOf, glyphOf, mergeByDisplay, surfaceSeqOf, totalsOf } from '../fileActivity'
 import type { FileActivity, FileEntry, FileOp, FileOpKind } from '../fileActivity'
 import type { ContextSettings, DefaultFileSort } from '../settings'
@@ -8,11 +8,12 @@ import type { ViewKit } from '../viewkit'
 import { IconFolderOpen } from '../primitives'
 import { ClearableInput } from './clearableInput'
 import { makeDetailNote } from './detailNote'
-import { useRowWindow } from './useRowWindow'
-import { useElementSize } from './useElementMetrics'
+import { useSurfaceWindow } from './useRowWindow'
 import { remoteStateOf } from './useRemoteState'
 
 export type FileFilter = 'all' | FileOpKind | 'image'
+
+const FILE_ROW_ESTIMATE = 30
 
 function slashPartsOf(path: string): { directory: string; name: string } {
   const trimmed = path.endsWith('/') ? path.slice(0, -1) : path
@@ -64,8 +65,7 @@ export function makeFileCard(kit: ViewKit, settings: ContextSettings): Component
     const [query, setQuery] = useState('')
     const [openPath, setOpenPath] = useState<string | null>(null)
     const listRef = useRef<HTMLDivElement | null>(null)
-    const [rowPitch, setRowPitch] = useState(0)
-    const [rowGap, setRowGap] = useState(0)
+    const idBase = useId()
 
     const filterFocus = props.filterFocus
     useEffect(() => {
@@ -76,60 +76,49 @@ export function makeFileCard(kit: ViewKit, settings: ContextSettings): Component
       if (props.onFilterFocusHandled !== undefined) props.onFilterFocusHandled()
     }, [filterFocus, props.onFilterFocusHandled])
 
-    const q = query.trim().toLowerCase()
-    const displayOf = (e: FileEntry): string => (e.pattern === true ? e.path : displayPathOf(e.path, props.workspace))
-    const countOf = (e: FileEntry): number =>
-      filter === 'read' ? e.reads : filter === 'write' ? e.writes : filter === 'search' ? e.searches : e.ops.length
-    const linesOf = (e: FileEntry): number => e.added + e.removed
-    const byLatest = (a: FileEntry, b: FileEntry): number => b.ops[0].seq - a.ops[0].seq
-    const byPath = (a: FileEntry, b: FileEntry): number => (a.path < b.path ? -1 : 1)
-    const byVolume = (keyOf: (e: FileEntry) => number, tie: (a: FileEntry, b: FileEntry) => number) =>
-      (a: FileEntry, b: FileEntry): number => keyOf(b) - keyOf(a) || tie(a, b)
-    const byName = (a: FileEntry, b: FileEntry): number => {
-      const an = baseNameOf(displayOf(a))
-      const bn = baseNameOf(displayOf(b))
-      return an !== bn ? (an < bn ? -1 : 1) : byPath(a, b)
-    }
-    const comparators: Record<DefaultFileSort, (a: FileEntry, b: FileEntry) => number> = {
-      count: byVolume(countOf, byLatest),
-      lines: byVolume(linesOf, byPath),
-      latest: byLatest,
-      name: byName,
-      path: byPath,
-    }
-    const entries = useMemo(() => mergeByDisplay(activity.entries, props.workspace), [activity.entries, props.workspace])
-    const matched = q === '' ? entries : entries.filter(e => displayOf(e).toLowerCase().includes(q))
-    const shown = matched.filter(e => matches(e, filter)).sort(comparators[sort])
-    const matchedTotals = totalsOf(matched)
-    const shownTotals = totalsOf(shown)
-
-    const listSize = useElementSize(listRef, 'client', shown.length > 0)
-    const listWide = listSize.width >= 380
-    useEffect(() => {
-      setRowPitch(0)
-      setRowGap(0)
-    }, [shown.length, listWide, filter, query, sort, openPath])
-    useEffect(() => {
-      if (!listWide || openPath !== null || rowPitch > 0) return
-      const el = listRef.current
-      /* v8 ignore start */
-      if (el === null) return
-      const items = [...el.querySelectorAll<HTMLElement>('.lc-fa-item')]
-      if (items.length < 2 || items.length !== shown.length) return
-      /* v8 ignore stop */
-      const rects = items.map(item => item.getBoundingClientRect())
-      const first = rects[0]
-      const height = Math.round(first.height)
-      const uniform = height > 4 && rects.every(r => Math.abs(Math.round(r.height) - height) <= 1)
-      if (!uniform) return
-      const pitch = rects[1].top - first.top
-      /* v8 ignore next 1 */
-      if (Number.isFinite(pitch) && pitch > 4) {
-        setRowPitch(Math.round(pitch))
-        setRowGap(Math.max(0, Math.round(pitch - first.height)))
+    const workspace = props.workspace
+    const displayOf = useCallback(
+      (e: FileEntry): string => (e.pattern === true ? e.path : displayPathOf(e.path, workspace)),
+      [workspace],
+    )
+    const entries = useMemo(() => mergeByDisplay(activity.entries, workspace), [activity.entries, workspace])
+    const matched = useMemo(() => {
+      const needle = query.trim().toLowerCase()
+      if (needle === '') return entries
+      return entries.filter(e => displayOf(e).toLowerCase().includes(needle))
+    }, [displayOf, entries, query])
+    const shown = useMemo(() => {
+      const byLatest = (a: FileEntry, b: FileEntry): number => (b.ops[0]?.seq ?? 0) - (a.ops[0]?.seq ?? 0)
+      const byPath = (a: FileEntry, b: FileEntry): number => (a.path < b.path ? -1 : 1)
+      const linesOf = (e: FileEntry): number => e.added + e.removed
+      const keyOf = (e: FileEntry): number =>
+        filter === 'read' ? e.reads : filter === 'write' ? e.writes : filter === 'search' ? e.searches : e.ops.length
+      const byName = (a: FileEntry, b: FileEntry): number => {
+        const an = baseNameOf(displayOf(a))
+        const bn = baseNameOf(displayOf(b))
+        return an !== bn ? (an < bn ? -1 : 1) : byPath(a, b)
       }
-    }, [listWide, openPath, rowPitch, rowGap, shown.length])
-    const rowRange = useRowWindow(listRef, shown.length, rowPitch, listWide && openPath === null && rowPitch > 0)
+      const byVolume = (key: (e: FileEntry) => number, tie: (a: FileEntry, b: FileEntry) => number) =>
+        (a: FileEntry, b: FileEntry): number => key(b) - key(a) || tie(a, b)
+      const comparators: Record<DefaultFileSort, (a: FileEntry, b: FileEntry) => number> = {
+        count: byVolume(keyOf, byLatest),
+        lines: byVolume(linesOf, byPath),
+        latest: byLatest,
+        name: byName,
+        path: byPath,
+      }
+      return matched.filter(e => matches(e, filter)).sort(comparators[sort])
+    }, [displayOf, filter, matched, sort])
+    const matchedTotals = useMemo(() => totalsOf(matched), [matched])
+    const shownTotals = useMemo(() => totalsOf(shown), [shown])
+    const getKey = useCallback((index: number): string => shown[index].path, [shown])
+    const scope = useSurfaceWindow(listRef, {
+      count: shown.length,
+      getKey,
+      estimateSize: () => FILE_ROW_ESTIMATE,
+      overscan: 240,
+      seed: 10,
+    })
     const remote = remoteStateOf(entries.length, props.state, props.onRetry)
     const chips: { key: FileFilter; files: number; ops: number }[] = [
       {
@@ -142,6 +131,7 @@ export function makeFileCard(kit: ViewKit, settings: ContextSettings): Component
       { key: 'search', files: matchedTotals.search.files, ops: matchedTotals.search.ops },
       { key: 'image', files: matchedTotals.image.files, ops: matchedTotals.image.ops },
     ]
+    const bodyIdOf = (index: number): string => `${idBase}-${index}`
 
     const opLine = (op: FileOp): ReactElement => {
       const stamp = props.stampOf?.(surfaceSeqOf(op)) ?? null
@@ -242,95 +232,117 @@ export function makeFileCard(kit: ViewKit, settings: ContextSettings): Component
           ) : shown.length === 0 ? (
             <div className="lc-empty lc-lane">{t(entries.length === 0 ? 'files.empty' : 'files.noMatch')}</div>
           ) : (
-            <div className="lc-fa-list" ref={listRef}>
-              {rowRange.from > 0 ? <div className="lc-row-pad" style={{ height: Math.max(0, rowRange.from * rowPitch - rowGap) }} aria-hidden="true" /> : null}
-              {shown.slice(rowRange.from, rowRange.to + 1).map((e, i) => {
+            <div className="lc-fa-list" ref={listRef} onKeyDown={scope.onKeyDown}>
+              {scope.topPad > 0
+                ? <div className="lc-row-pad" style={{ height: scope.topPad }} aria-hidden="true" />
+                : null}
+              {shown.slice(scope.from, scope.to + 1).map((e, i) => {
+                const index = scope.from + i
                 const open = openPath === e.path
-                const alt = (rowRange.from + i) % 2 === 1
+                const alt = index % 2 === 1
                 const display = displayOf(e)
-                const windows = e.pattern !== true && displayStyleOf(e.path, props.workspace) === 'windows'
+                const windows = e.pattern !== true && displayStyleOf(e.path, workspace) === 'windows'
                 const { directory: dir, name: base } = windows || !display.includes('\\')
                   ? pathPartsOf(display)
                   : slashPartsOf(display)
                 const glyph = glyphOf(e.path, e.form)
-                const abs = e.pattern === true ? undefined : absPathOf(e.path, props.workspace)
+                const abs = e.pattern === true ? undefined : absPathOf(e.path, workspace)
                 const previewable = props.onPreview !== undefined && e.pattern !== true && e.form !== 'dir'
                 const openable = previewable || (abs !== undefined && props.onOpen !== undefined)
+                const bodyId = bodyIdOf(index)
                 return (
-                  <div key={e.path} className={'lc-fa-item' + (open ? ' lc-fa-item-on' : '') + (alt ? ' lc-fa-item-alt' : '')}>
-                    <button
-                      type="button"
-                      className="lc-fa-row hover:bg-(--dsw-alias-interactive-bg-hover) @max-[380px]/lc-card:flex-wrap"
-                      title={e.path}
-                      onClick={() => { setOpenPath(open ? null : e.path) }}
-                    >
-                      <span className={'lc-br-chev' + (open ? ' lc-br-chev-on' : '')} />
-                      <span className="lc-fa-form" title={t(glyph.tip)}>
-                        {glyph.color !== undefined
-                          ? (
-                            <span className="lc-fa-lang" style={{ background: glyph.color, color: glyph.text }}>
-                              {glyph.glyph}
-                            </span>
-                          )
-                          : glyph.glyph}
-                      </span>
-                      <span className="lc-fa-path flex-1 @max-[380px]/lc-card:basis-[calc(100%-46px)]">
-                        {dir !== '' ? <em>{dir}</em> : null}
-                        {openable
-                          ? (
-                            <b
-                              className="lc-fa-file hover:underline"
-                              title={t(previewable ? 'files.preview' : 'files.open')}
-                              onClick={(ev: MouseEvent) => {
-                                ev.stopPropagation()
-                                if (previewable && props.onPreview?.(e) === true) return
-                                if (abs !== undefined) props.onOpen?.(abs)
-                              }}
-                            >
-                              {base}
-                            </b>
-                          )
-                          : <b>{base}</b>}
-                      </span>
-                      {e.reads > 0 ? (
-                        <span className="lc-fa-badge lc-fa-b-read" title={t('files.kind.read')}><i />{fmt(e.reads)}</span>
-                      ) : null}
-                      {e.writes > 0 ? (
-                        <span className="lc-fa-badge lc-fa-b-write" title={t('files.kind.write')}><i />{fmt(e.writes)}</span>
-                      ) : null}
-                      {e.searches > 0 ? (
-                        <span className="lc-fa-badge lc-fa-b-search" title={t('files.kind.search')}><i />{fmt(e.searches)}</span>
-                      ) : null}
-                      {e.added + e.removed > 0 ? <DeltaPair added={e.added} removed={e.removed} /> : null}
-                      {e.ops[0].time !== undefined
-                        ? <span className="lc-fa-time">{fmtTime(e.ops[0].time)}</span>
-                        : null}
-                    </button>
-                    {open ? (
-                      <div className="lc-fa-ops">
-                        {e.ops.map((op, i) => {
-                          const onLocate = props.onLocate
-                          const key = `${op.seq}:${i}`
-                          return onLocate !== undefined
+                  <div key={e.path} className="lc-fa-slot" ref={scope.measure(e.path)}>
+                    <div className={'lc-fa-item' + (open ? ' lc-fa-item-on' : '') + (alt ? ' lc-fa-item-alt' : '')}>
+                      <div
+                        className="lc-fa-row hover:bg-(--dsw-alias-interactive-bg-hover) @max-[380px]/lc-card:flex-wrap"
+                        title={e.path}
+                        onClick={() => { setOpenPath(open ? null : e.path) }}
+                      >
+                        <button
+                          type="button"
+                          className="lc-fa-toggle"
+                          tabIndex={scope.tabIndexFor(e.path)}
+                          aria-expanded={open}
+                          {...(open ? { 'aria-controls': bodyId } : {})}
+                          aria-label={t(open ? 'fleet.collapse' : 'fleet.expand')}
+                          onClick={(ev) => {
+                            ev.stopPropagation()
+                            setOpenPath(open ? null : e.path)
+                          }}
+                        >
+                          <span className={'lc-br-chev' + (open ? ' lc-br-chev-on' : '')} />
+                          <span className="lc-fa-form" title={t(glyph.tip)}>
+                            {glyph.color !== undefined
+                              ? (
+                                <span className="lc-fa-lang" style={{ background: glyph.color, color: glyph.text }}>
+                                  {glyph.glyph}
+                                </span>
+                              )
+                              : glyph.glyph}
+                          </span>
+                        </button>
+                        <span className="lc-fa-path flex-1 @max-[380px]/lc-card:basis-[calc(100%-46px)]">
+                          {dir !== '' ? <em>{dir}</em> : null}
+                          {openable
                             ? (
                               <button
-                                key={key}
                                 type="button"
-                                className="lc-fa-op lc-fa-op-link hover:bg-(--dsw-alias-interactive-bg-hover)"
-                                title={t('files.locate')}
-                                onClick={() => { onLocate(op) }}
+                                className="lc-fa-file hover:underline"
+                                title={t(previewable ? 'files.preview' : 'files.open')}
+                                aria-label={t(previewable ? 'files.preview' : 'files.open') + ' ' + base}
+                                onClick={(ev) => {
+                                  ev.stopPropagation()
+                                  if (previewable && props.onPreview?.(e) === true) return
+                                  if (abs !== undefined) props.onOpen?.(abs)
+                                }}
                               >
-                                {opLine(op)}
+                                {base}
                               </button>
                             )
-                            : <div key={key} className="lc-fa-op">{opLine(op)}</div>
-                        })}
+                            : <b>{base}</b>}
+                        </span>
+                        {e.reads > 0 ? (
+                          <span className="lc-fa-badge lc-fa-b-read" title={t('files.kind.read')}><i />{fmt(e.reads)}</span>
+                        ) : null}
+                        {e.writes > 0 ? (
+                          <span className="lc-fa-badge lc-fa-b-write" title={t('files.kind.write')}><i />{fmt(e.writes)}</span>
+                        ) : null}
+                        {e.searches > 0 ? (
+                          <span className="lc-fa-badge lc-fa-b-search" title={t('files.kind.search')}><i />{fmt(e.searches)}</span>
+                        ) : null}
+                        {e.added + e.removed > 0 ? <DeltaPair added={e.added} removed={e.removed} /> : null}
+                        {e.ops[0]?.time !== undefined
+                          ? <span className="lc-fa-time">{fmtTime(e.ops[0].time)}</span>
+                          : null}
                       </div>
-                    ) : null}
+                      {open ? (
+                        <div className="lc-fa-ops" id={bodyId}>
+                          {e.ops.map((op, opIndex) => {
+                            const onLocate = props.onLocate
+                            const key = `${op.seq}:${opIndex}`
+                            return onLocate !== undefined
+                              ? (
+                                <button
+                                  key={key}
+                                  type="button"
+                                  className="lc-fa-op lc-fa-op-link hover:bg-(--dsw-alias-interactive-bg-hover)"
+                                  title={t('files.locate')}
+                                  onClick={() => { onLocate(op) }}
+                                >
+                                  {opLine(op)}
+                                </button>
+                              )
+                              : <div key={key} className="lc-fa-op">{opLine(op)}</div>
+                          })}
+                        </div>
+                      ) : null}
+                    </div>
                   </div>
                 )
               })}
-              {rowRange.to < shown.length - 1 ? <div className="lc-row-pad" style={{ height: Math.max(0, (shown.length - 1 - rowRange.to) * rowPitch - rowGap) }} aria-hidden="true" /> : null}
+              {scope.bottomPad > 0
+                ? <div className="lc-row-pad" style={{ height: scope.bottomPad }} aria-hidden="true" />
+                : null}
             </div>
           )}
         </div>

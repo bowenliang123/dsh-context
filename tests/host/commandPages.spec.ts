@@ -78,7 +78,7 @@ describe('watchCommandPageChannel gating', () => {
     const fake = fakeCtx({ connection: connectionOf(), sessionQuery: { observeSession: () => Promise.resolve(null) } })
     watchCommandPageChannel(fake.ctx, BOUNDS)
     assert.equal(fake.captured.path, '/api/dsh-context/commands')
-    assert.equal(fake.disposers.length, 1)
+    assert.equal(fake.disposers.length, 2, 'the route mount and the idle sweep both collect their disposer')
     for (const d of fake.disposers) d()
   })
 })
@@ -309,5 +309,22 @@ describe('the command page route', () => {
     } finally {
       timerSpy.mockRestore()
     }
+  })
+})
+
+describe('command page cache idle sweep', () => {
+  test('drops the cached fold after inactivity and dispose clears the armed sweep', async () => {
+    const fake = fakeCtx({
+      connection: connectionOf(),
+      sessionQuery: { observeSession: async () => observationOf(logOf(2), { revision: 'r1' }) },
+    })
+    watchCommandPageChannel(fake.ctx, BOUNDS, undefined, { idleSweepMs: 5 })
+    await call(fake.captured, { sessionId: 's1' })
+    await new Promise(resolve => setTimeout(resolve, 20))
+    await call(fake.captured, { sessionId: 's1' })
+    const third = await call(fake.captured, { sessionId: 's1' }) as { ok: boolean }
+    assert.equal(third.ok, true)
+    fake.dispose()
+    assert.doesNotThrow(() => { fake.dispose() })
   })
 })

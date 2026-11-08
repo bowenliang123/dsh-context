@@ -1,5 +1,8 @@
 import type { Context } from '@deepseek-ai/cordis'
 import { createContextActivityDefinition } from './activity'
+import { createCatalogService } from './catalog'
+import { watchVersionChannel } from './versionRoute'
+import { createCostSource } from './cost'
 import { watchAttachmentChannel } from './attachment'
 import { createToolAttribution } from './attribution'
 import { watchBalanceChannel } from './balance'
@@ -15,6 +18,7 @@ import { watchFactsChannel } from './facts'
 import { watchHeadsChannel } from './headsRoute'
 import { watchFleetChannel } from './fleet'
 import { createContextHeadersDefinition } from './headers'
+import { watchOverviewRoute } from './overview'
 import { watchPromptInjection } from './promptInjection'
 import { watchStepIdentity } from './stepIdentity'
 import { watchSkillCatalog } from './skills'
@@ -32,6 +36,10 @@ export const inject = ['sessionProjections']
 export { Config } from './config'
 export function apply(ctx: Context, config: Config): void {
   const coldReads = makeColdReadGate()
+  const catalog = createCatalogService()
+  const pricing = createCostSource(catalog)
+  ctx.effect(() => () => { catalog.dispose() }, 'dsh-context: catalog cache')
+  watchVersionChannel(ctx, catalog)
   watchBalanceChannel(ctx)
   watchRecomChannel(ctx)
   watchSkillCatalog(ctx)
@@ -49,16 +57,17 @@ export function apply(ctx: Context, config: Config): void {
   const gate = createDetailGate(ctx)
   const bounds = resolveBounds(config)
   const shadow = new DetailShadow(ctx, bounds, coldReads, () => observeOf(ctx))
-  watchDetailChannel(ctx, bounds, coldReads, gate, shadow)
-  watchFactsChannel(ctx, bounds, { gates: gate, coldReads, detailState: id => shadow.stateOf(id) })
+  watchDetailChannel(ctx, bounds, coldReads, gate, shadow, pricing)
+  watchFactsChannel(ctx, bounds, { gates: gate, coldReads, detailState: id => shadow.stateOf(id), cost: pricing })
   watchCommandPageChannel(ctx, resolveBounds(config), coldReads)
-  watchHeadsChannel(ctx)
-  gate.retain('contextTimeline', ctx.sessionProjections.register(createContextTimelineDefinition(config, () => gate.live)))
+  watchHeadsChannel(ctx, { bounds, coldReads, cost: pricing })
+  gate.retain('contextTimeline', ctx.sessionProjections.register(createContextTimelineDefinition(config, () => gate.live, pricing)))
   ctx.sessionProjections.register(createContextHeadersDefinition(name => attribution.ownerOf(name)))
   ctx.sessionProjections.register(createContextActivityDefinition())
   watchTimelineRowSweep(ctx)
-  watchActivityBackfill(ctx, coldReads)
-  watchSnapshotRoute(ctx)
+  const backfill = watchActivityBackfill(ctx, coldReads)
+  watchSnapshotRoute(ctx, backfill)
+  watchOverviewRoute(ctx, pricing, backfill)
   watchPromptInjection(ctx, config)
 }
 

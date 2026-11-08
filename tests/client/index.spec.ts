@@ -1,10 +1,11 @@
 import type { ReactElement } from 'react'
 import assert from 'node:assert/strict'
-import { describe, test } from 'vitest'
+import { describe, test, vi } from 'vitest'
 import { DICTS } from '../../src/client/i18n'
 import { modalStoreOf, type ModalStore } from '../../src/client/modalStore'
 import type { SettingsField, SettingsScopeLike, SettingsState } from '../../src/client/settings'
 import { TestClientCtx, TestSessions, asClientCtx } from './helpers/harness'
+import { noteCostPending, resetCostRefresh } from '../../src/client/costRefresh'
 
 const { name, inject, apply } = (await import('../../src/client/index')) as unknown as {
   name: string
@@ -444,5 +445,79 @@ describe('client entry: second-mount guard', () => {
     applyTo(hostile)
     assert.equal(hostile.slots.of('conversation.view').length, 2)
     hostile.dispose()
+  })
+})
+
+describe('client entry: cost refresh retries', () => {
+  test('a pending cost read refreshes the session list and the current projections', async () => {
+    const calls = { list: 0, projections: [] as string[] }
+    const ctx = new TestClientCtx({
+      services: {
+        sessions: {
+          refresh: () => { calls.list += 1; return Promise.resolve() },
+          getSnapshot: () => ({ current: 's1' }),
+          refreshProjections: (id: string) => { calls.projections.push(id); return Promise.resolve() },
+        },
+      },
+    })
+    applyTo(ctx)
+    vi.useFakeTimers()
+    try {
+      noteCostPending({ usd: null, ready: false })
+      await vi.advanceTimersByTimeAsync(1_500)
+      assert.deepEqual(calls, { list: 1, projections: ['s1'] })
+    } finally {
+      vi.useRealTimers()
+      resetCostRefresh()
+      ctx.dispose()
+    }
+  })
+
+  test('absent or failing session seams never throw from the retry', async () => {
+    const bare = new TestClientCtx()
+    applyTo(bare)
+    vi.useFakeTimers()
+    try {
+      noteCostPending({ usd: null, ready: false })
+      await vi.advanceTimersByTimeAsync(1_500)
+      assert.equal(vi.getTimerCount(), 0)
+    } finally {
+      vi.useRealTimers()
+      resetCostRefresh()
+      bare.dispose()
+    }
+    const throwing = new TestClientCtx({ services: { sessions: { refresh: () => { throw new Error('down') }, getSnapshot: () => null } } })
+    applyTo(throwing)
+    vi.useFakeTimers()
+    try {
+      noteCostPending({ usd: null, ready: false })
+      await vi.advanceTimersByTimeAsync(1_500)
+    } finally {
+      vi.useRealTimers()
+      resetCostRefresh()
+      throwing.dispose()
+    }
+    const noCurrent = new TestClientCtx({ services: { sessions: { refresh: () => Promise.resolve(), getSnapshot: () => ({ current: 7 }), refreshProjections: () => { throw new Error('must not run') } } } })
+    applyTo(noCurrent)
+    vi.useFakeTimers()
+    try {
+      noteCostPending({ usd: null, ready: false })
+      await vi.advanceTimersByTimeAsync(1_500)
+    } finally {
+      vi.useRealTimers()
+      resetCostRefresh()
+      noCurrent.dispose()
+    }
+    const rejecting = new TestClientCtx({ services: { sessions: { refresh: () => Promise.reject(new Error('down')), getSnapshot: () => ({ current: 's1' }), refreshProjections: () => Promise.reject(new Error('down')) } } })
+    applyTo(rejecting)
+    vi.useFakeTimers()
+    try {
+      noteCostPending({ usd: null, ready: false })
+      await vi.advanceTimersByTimeAsync(1_500)
+    } finally {
+      vi.useRealTimers()
+      resetCostRefresh()
+      rejecting.dispose()
+    }
   })
 })

@@ -7,6 +7,7 @@ import { BACKFILL_ROUTE as HOST_BACKFILL_ROUTE } from '../../src/host/backfill'
 import { COMMANDS_ROUTE as HOST_COMMANDS_ROUTE } from '../../src/host/commandPages'
 import { FLEET_ROUTE as HOST_FLEET_ROUTE } from '../../src/host/fleet'
 import { SKILLS_ROUTE as HOST_SKILLS_ROUTE } from '../../src/host/skills'
+import { OVERVIEW_ROUTE as HOST_OVERVIEW_ROUTE } from '../../src/host/overview'
 import {
   ATTACHMENT_ROUTE,
   BACKFILL_ROUTE,
@@ -14,6 +15,7 @@ import {
   COMMANDS_ROUTE,
   DETAIL_ROUTE,
   FLEET_ROUTE,
+  OVERVIEW_ROUTE,
   SKILLS_ROUTE,
 } from '../../src/client/apiRoutes'
 
@@ -27,6 +29,7 @@ describe('apiRoutePairing', () => {
       [HOST_SKILLS_ROUTE, SKILLS_ROUTE],
       [HOST_BACKFILL_ROUTE, BACKFILL_ROUTE],
       [HOST_ATTACHMENT_ROUTE, ATTACHMENT_ROUTE],
+      [HOST_OVERVIEW_ROUTE, OVERVIEW_ROUTE],
     ]) {
       assert.equal(client, host.slice(1), `${host} and ${client} lost their pairing`)
     }

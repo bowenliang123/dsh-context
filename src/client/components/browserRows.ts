@@ -1,10 +1,12 @@
 import { formLabelOf } from '../labels'
-import type { SurfaceNode } from '../../shared/types'
+import type { Category, HeaderEpochContent, HeaderTool, SurfaceNode } from '../../shared/types'
+import type { DefaultToolSort } from '../settings'
 import type { ViewKit } from '../viewkit'
 import type { ConversationNodeLike } from '../services'
 import { attachmentsIn } from '../../shared/attachment'
 import { blockSummaryOf, callNamesOf, callSummaryOf } from '../callSummary'
-import { msgKindsOf, nodeNameOf, reasoningTextOf } from './browserNodes'
+import { ROW_KINDS, msgKindsOf, nodeNameOf, reasoningTextOf } from './browserNodes'
+import type { RowKind } from './browserNodes'
 import { toolErrOf } from './browserToolCard'
 
 export interface NodeRow {
@@ -82,4 +84,73 @@ export function rowMatches(r: NodeRow, q: string): boolean {
   return (r.tag ?? '').toLowerCase().includes(q) || r.preview.toLowerCase().includes(q)
     || (typeof r.n.text === 'string' && r.n.text.toLowerCase().includes(q))
     || r.reasoning.toLowerCase().includes(q)
+}
+
+export interface CatNodesModel {
+  c: Category
+  rows: NodeRow[]
+  matched: NodeRow[]
+  shown: NodeRow[]
+  kindCounts: readonly { k: RowKind; n: number }[] | null
+  shownTokens: number
+}
+
+export function catNodesModelOf(
+  nodes: readonly SurfaceNode[],
+  c: Category,
+  query: string,
+  rowKind: RowKind | null,
+  nodeRowOf: (n: SurfaceNode) => NodeRow,
+  fullTokens: number,
+): CatNodesModel {
+  const rows = nodes.slice().reverse().map(nodeRowOf)
+  const q = query.trim().toLowerCase()
+  const matched = q === '' ? rows : rows.filter(r => rowMatches(r, q))
+  const kindCounts = c === 'assistant'
+    ? ROW_KINDS.map(k => ({ k, n: matched.reduce((acc, r) => acc + (r.kinds[k] ? 1 : 0), 0) }))
+    : null
+  const shown = rowKind === null ? matched : matched.filter(r => r.kinds[rowKind])
+  const shownTokens = shown.length === rows.length
+    ? fullTokens
+    : shown.reduce((sum, r) => sum + r.n.tokens, 0)
+  return { c, rows, matched, shown, kindCounts, shownTokens }
+}
+
+export interface CatToolsModel {
+  shown: HeaderTool[]
+  contentByName: Map<string, HeaderEpochContent['tools'][number]>
+  shownTokens: number
+}
+
+export function catToolsModelOf(
+  tools: readonly HeaderTool[],
+  content: HeaderEpochContent | undefined,
+  query: string,
+  sort: DefaultToolSort,
+  hitsOf: (tool: HeaderTool) => number,
+  fullTokens: number,
+  schemaText: (schema: unknown) => string,
+): CatToolsModel {
+  const contentByName = new Map(content?.tools.map(row => [row.name, row] as const) ?? [])
+  const q = query.trim().toLowerCase()
+  const shown = tools
+    .filter((tool) => {
+      if (q === '') return true
+      if (tool.name.toLowerCase().includes(q)) return true
+      if ((tool.plugin ?? '').toLowerCase().includes(q)) return true
+      const row = contentByName.get(tool.name)
+      if (row === undefined) return false
+      return (row.description ?? '').toLowerCase().includes(q)
+        || schemaText(row.schema).toLowerCase().includes(q)
+    })
+    .sort((a, b) => sort === 'count'
+      ? (hitsOf(b) - hitsOf(a) || (a.name < b.name ? -1 : 1))
+      : sort === 'size'
+        ? b.tokens - a.tokens
+        : (a.name < b.name ? -1 : 1))
+  const allPrices = tools.reduce((sum, tool) => sum + tool.tokens, 0)
+  const shownPrices = shown.reduce((sum, tool) => sum + tool.tokens, 0)
+  /* v8 ignore next 1 */
+  const shownTokens = allPrices > 0 ? Math.round(fullTokens * shownPrices / allPrices) : 0
+  return { shown, contentByName, shownTokens }
 }

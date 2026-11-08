@@ -15,10 +15,12 @@ interface CtxHarness {
   ctx: Context
   emit: (event: string, ...args: unknown[]) => void
   disposed: () => boolean
+  dispose: () => void
 }
 
 function ctxOf(): CtxHarness {
   const listeners = new Map<string, ((...args: unknown[]) => void)[]>()
+  const disposers: (() => void)[] = []
   const ctx = {
     on(event: string, listener: (...args: unknown[]) => void) {
       const known = listeners.get(event) ?? []
@@ -27,9 +29,11 @@ function ctxOf(): CtxHarness {
     },
     effect(fn: () => unknown) {
       const d = fn()
-      return () => {
+      const dispose = (): void => {
         if (typeof d === 'function') (d as () => void)()
       }
+      disposers.push(dispose)
+      return dispose
     },
     get: () => undefined,
   }
@@ -38,7 +42,10 @@ function ctxOf(): CtxHarness {
     emit: (event, ...args) => {
       for (const listener of listeners.get(event) ?? []) listener(...args)
     },
-    disposed: () => false,
+    disposed: () => disposers.length === 0,
+    dispose: () => {
+      for (const dispose of disposers.splice(0)) dispose()
+    },
   }
 }
 
@@ -371,5 +378,17 @@ describe('DetailShadow', () => {
     const harness = ctxOf()
     const shadow = new DetailShadow(harness.ctx, BOUNDS, gate(), () => async () => ({ events: 'junk' }))
     assert.equal(await shadow.stateOf('s1'), null)
+    harness.dispose()
+  })
+})
+
+describe('detail shadow idle sweep', () => {
+  test('an idle shadow drops its entries and keeps serving a reseeded state', async () => {
+    const harness = ctxOf()
+    const shadow = new DetailShadow(harness.ctx, BOUNDS, gate(), () => undefined, 5)
+    assert.equal(await shadow.stateOf('s1'), null)
+    await new Promise(resolve => setTimeout(resolve, 20))
+    assert.equal(await shadow.stateOf('s1'), null)
+    harness.dispose()
   })
 })

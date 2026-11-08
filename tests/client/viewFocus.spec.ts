@@ -1,7 +1,10 @@
 import assert from 'node:assert/strict'
 import { describe, test } from 'vitest'
-import { activateViewTab, openContextSidebar, requestContextFocus, subscribeContextFocus, takeContextFocus } from '../../src/client/viewFocus'
+import { act, createElement as h } from 'react'
+import { activateViewTab, currentFleetMemberFocus, openContextSidebar, requestContextFocus, requestFleetMemberFocus, subscribeContextFocus, takeContextFocus, useFleetMemberFocus } from '../../src/client/viewFocus'
+import { disposeRetention } from '../../src/client/retention'
 import { asClientCtx, TestClientCtx } from './helpers/harness'
+import { mount } from './helpers/kit'
 
 describe('context focus relay', () => {
   test('one request survives until taken; a fresh request replaces it and sessions are isolated', () => {
@@ -108,6 +111,57 @@ describe('activateViewTab', () => {
       assert.equal(trajectory.__clicks(), 0)
     } finally {
       bar.remove()
+    }
+  })
+})
+
+describe('focus relays stay bounded and release on dispose', () => {
+  test('the pending focus map keeps only its newest sixteen sessions', () => {
+    for (let i = 0; i < 17; i++) requestContextFocus('focus-cap-' + i, i)
+    assert.equal(takeContextFocus('focus-cap-0'), null)
+    assert.equal(takeContextFocus('focus-cap-16'), 16)
+  })
+
+  test('the member focus map keeps only its newest eight sessions', () => {
+    for (let i = 0; i < 9; i++) requestFleetMemberFocus('member-cap-' + i, 'm' + i)
+    assert.equal(currentFleetMemberFocus('member-cap-0'), null)
+    assert.equal(currentFleetMemberFocus('member-cap-8'), 'm8')
+  })
+
+  test('dispose clears pending relays and listeners', () => {
+    let hits = 0
+    subscribeContextFocus(() => { hits++ })
+    requestContextFocus('focus-dispose', 3)
+    requestFleetMemberFocus('member-dispose', 'm')
+    disposeRetention()
+    assert.equal(takeContextFocus('focus-dispose'), null)
+    assert.equal(currentFleetMemberFocus('member-dispose'), null)
+    const before = hits
+    requestContextFocus('focus-after-1', 1)
+    requestContextFocus('focus-after-2', 2)
+    assert.equal(hits, before, 'the disposed listeners hear nothing')
+    takeContextFocus('focus-after-1')
+    takeContextFocus('focus-after-2')
+  })
+})
+
+describe('useFleetMemberFocus', () => {
+  test('follows the recorded member and detaches on a session change', async () => {
+    const box: { current: string | null } = { current: null }
+    function Probe(props: { sessionId?: string }): null {
+      box.current = useFleetMemberFocus(props.sessionId)
+      return null
+    }
+    const m = await mount(h(Probe, { sessionId: 'member-session' }))
+    try {
+      assert.equal(box.current, null, 'no focus recorded yet')
+      await act(async () => { requestFleetMemberFocus('member-session', 'm1') })
+      assert.equal(box.current, 'm1')
+      await m.update(h(Probe, { sessionId: '' }))
+      await act(async () => { requestFleetMemberFocus('member-session', 'm2') })
+      assert.equal(box.current, 'm1', 'the detached probe hears nothing')
+    } finally {
+      await m.unmount()
     }
   })
 })

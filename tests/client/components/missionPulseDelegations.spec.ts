@@ -11,15 +11,19 @@ const graph = () => null
 
 function makeDetails(fullLanded = new Map()) {
   return {
+    summary: null,
     landed: new Map(),
     historyLanded: new Map(),
     fullLanded,
     pending: new Set<string>(),
     historyPending: new Set<string>(),
     fullPending: new Set<string>(),
-    request: vi.fn(),
-    requestHistory: vi.fn(),
+    facts: new Map(),
+    family: { total: 0, loaded: 0, pending: 0, failed: 0, messages: null, delegations: null },
+    requestFamily: vi.fn(),
     requestFull: vi.fn(),
+    prioritize: vi.fn(),
+    retryFamily: vi.fn(),
   }
 }
 

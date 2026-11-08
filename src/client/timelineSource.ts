@@ -1,7 +1,9 @@
 import { useEffect, useMemo, useSyncExternalStore } from 'react'
 import type { ContextTimeline, ContextTimelineDetail, RequestRecord, SurfaceNode } from '../shared/types'
 import { DETAIL_ROUTE, FACTS_ROUTE } from './apiRoutes'
-import { BoundedCache } from './boundedCache'
+import { subscribeInvalidations } from './invalidation'
+import { noteCostPending } from './costRefresh'
+import { makeRetentionCache } from './retention'
 import { postRoute } from './route'
 import type { SessionStandardProps } from './services'
 import { asRecord, collectionsOf, projectionOf, timelineOf } from './services'
@@ -183,6 +185,10 @@ const EAGER_DELAY_MS = 16
 
 const CATCH_UP_MS = 1_000
 
+const PART_RETRY_MS = 1_000
+
+const PART_RETRY_LIMIT = 3
+
 function emptyDetail(rev: number, head?: ContextTimeline, requests?: RequestRecord[]): ContextTimelineDetail {
   return {
     rev,
@@ -261,6 +267,8 @@ export class DetailStore {
   private factsDisabled = false
   private readonly wantedParts = new Map<FactPart, FactWindow>()
   private readonly partRev = new Map<FactPart, number>()
+  private readonly partRetries = new Map<FactPart, ReturnType<typeof setTimeout>>()
+  private readonly partFailures = new Map<FactPart, number>()
   private readonly inflightParts = new Set<FactPart>()
   private readonly unavailableParts = new Set<FactPart>()
   private readonly listeners = new Set<() => void>()
@@ -270,6 +278,7 @@ export class DetailStore {
     private readonly fetcher: StoreFetcher | undefined,
     private readonly baseDelay: number = DETAIL_DEBOUNCE_MS,
     private readonly eagerFirst: boolean = false,
+    private readonly onResize?: () => void,
   ) {}
 
   private get facts(): FactsFetchers | undefined {
@@ -298,6 +307,7 @@ export class DetailStore {
         this.resetLedger()
         this.failures = 0
       }
+      this.fetchWantedParts()
     }
     return () => {
       this.listeners.delete(fn)
@@ -337,10 +347,35 @@ export class DetailStore {
     return this.bytes
   }
 
+  refresh(): void {
+    if (!this.active) {
+      this.release()
+      return
+    }
+    this.partRev.clear()
+    this.unavailableParts.clear()
+    this.clearPartRetries()
+    if (this.timer !== null) {
+      clearTimeout(this.timer)
+      this.timer = null
+    }
+    if (this.detail !== null) {
+      this.failed = false
+      this.failures = 0
+      this.wantedRev = Math.max(this.wantedRev, this.acceptedRev)
+    }
+    if (!this.inFlight) void this.fire()
+  }
+
   readonly retry = (): void => {
     this.background = false
     this.failures = 0
-    if (this.detail !== null) return
+    if (this.detail !== null) {
+      this.clearPartRetries()
+      this.unavailableParts.clear()
+      this.fetchWantedParts()
+      return
+    }
     if (this.timer !== null) {
       clearTimeout(this.timer)
       this.timer = null
@@ -350,6 +385,7 @@ export class DetailStore {
 
   private resetLedger(): void {
     this.clearCatchUp()
+    this.clearPartRetries()
     this.catchUpTarget = -1
     this.generation++
     this.acceptedRev = -1
@@ -385,6 +421,7 @@ export class DetailStore {
   private park(): void {
     this.parked = true
     this.clearCatchUp()
+    this.clearPartRetries()
     if (this.timer !== null) {
       clearTimeout(this.timer)
       this.timer = null
@@ -450,22 +487,62 @@ export class DetailStore {
     try {
       const read = await facts.part(part, window)
       if (generation !== this.generation || this.acceptedRev !== rev) return
-      if (read === null || !('parts' in read)) return
+      if (read === null) {
+        this.schedulePartRetry(part)
+        return
+      }
+      if (!('parts' in read)) {
+        this.unavailableParts.add(part)
+        return
+      }
       if (read.rev !== rev) {
         this.wantedRev = Math.max(this.wantedRev, read.rev)
         this.schedule()
         return
       }
-      if (read.missing?.includes(part) === true) this.unavailableParts.add(part)
+      if (read.missing?.includes(part) === true) {
+        this.unavailableParts.add(part)
+        return
+      }
       const merged = mergeFactsInto(this.detail as ContextTimelineDetail, read)
       this.detail = merged
       this.bytes = detailBytesOf(merged)
       this.partRev.set(part, rev)
+      this.clearPartRetry(part)
+      this.onResize?.()
     } catch {
+      if (generation === this.generation && this.acceptedRev === rev) this.schedulePartRetry(part)
     } finally {
       this.inflightParts.delete(part)
       this.emit()
     }
+  }
+
+  private schedulePartRetry(part: FactPart): void {
+    if (!this.active || this.partRetries.has(part)) return
+    const failures = (this.partFailures.get(part) ?? 0) + 1
+    this.partFailures.set(part, failures)
+    if (failures > PART_RETRY_LIMIT) return
+    const delay = PART_RETRY_MS * 2 ** (failures - 1)
+    this.partRetries.set(part, setTimeout(() => {
+      this.partRetries.delete(part)
+      this.fetchWantedParts()
+      this.emit()
+    }, delay))
+  }
+
+  private clearPartRetry(part: FactPart): void {
+    const timer = this.partRetries.get(part)
+    if (timer === undefined) return
+    clearTimeout(timer)
+    this.partRetries.delete(part)
+    this.partFailures.delete(part)
+  }
+
+  private clearPartRetries(): void {
+    for (const timer of this.partRetries.values()) clearTimeout(timer)
+    this.partRetries.clear()
+    this.partFailures.clear()
   }
 
   private async fire(): Promise<void> {
@@ -495,6 +572,7 @@ export class DetailStore {
           this.detail = d
           this.bytes = detailBytesOf(d)
           this.acceptedRev = d.rev
+          this.onResize?.()
           this.unavailableParts.clear()
           this.partRev.clear()
           if (!seriesHasBreakdown(d.requests)) this.ensurePart('requests')
@@ -543,17 +621,13 @@ export class DetailStore {
   }
 
   private emit(): void {
-    const pending = this.timer !== null || this.inFlight || this.inflightParts.size > 0
+    const pending = this.timer !== null || this.inFlight || this.inflightParts.size > 0 || this.partRetries.size > 0
     const next: DetailSnap = { detail: this.detail, failed: this.failed, pending }
     if (next.detail === this.snap.detail && next.failed === this.snap.failed && next.pending === this.snap.pending) return
     this.snap = next
     for (const fn of this.listeners) fn()
   }
 }
-
-const DETAIL_STORES_MAX = 8
-
-const DETAIL_BYTES_MAX = 6 * 1024 * 1024
 
 export function detailBytesOf(detail: ContextTimelineDetail): number {
   return 2048
@@ -566,16 +640,16 @@ export function detailBytesOf(detail: ContextTimelineDetail): number {
     + (detail.spans?.length ?? 0) * 60
 }
 
-const DETAIL_STORE_ENTRIES_MAX = 64
-
-const stores = new BoundedCache<string, DetailStore>({
-  maxEntries: DETAIL_STORE_ENTRIES_MAX,
-  maxBytes: DETAIL_BYTES_MAX,
-  maxWeight: DETAIL_STORES_MAX,
+const stores = makeRetentionCache<string, DetailStore>('detailStores', {
   sizeOf: store => store.byteSize,
   weightOf: store => (store.hasPayload ? 1 : 0),
   evictable: store => !store.active,
   onEvict: (store) => { store.release() },
+})
+
+subscribeInvalidations((event) => {
+  if (event.kind !== 'pricing') return
+  stores.forEach((store) => { store.refresh() })
 })
 
 export function detailStoreOf(sessionId: string): DetailStore {
@@ -586,9 +660,10 @@ export function detailStoreOf(sessionId: string): DetailStore {
   }
   stores.trim({ reserveWeight: 1 })
   const facts = makeFactsFetchers(sessionId)
+  const resize = (): void => { stores.reweight(sessionId) }
   const store = facts === undefined
-    ? new DetailStore(makeDetailFetcher(sessionId), DETAIL_DEBOUNCE_MS, true)
-    : new DetailStore(facts, DETAIL_DEBOUNCE_MS, true)
+    ? new DetailStore(makeDetailFetcher(sessionId), DETAIL_DEBOUNCE_MS, true, resize)
+    : new DetailStore(facts, DETAIL_DEBOUNCE_MS, true, resize)
   stores.set(sessionId, store)
   return store
 }
@@ -632,17 +707,23 @@ export function useTimelineSource(props: SessionStandardProps): TimelineSource {
     const detail = snap.detail
     const retry = store !== null ? store.retry : noopRetry
     const ensurePart = store !== null ? store.ensurePart : noopEnsurePart
-    if (head !== null && !slim) return { data: head, detailState: 'legacy', retryDetail: noopRetry, ensurePart: noopEnsurePart }
+    if (head !== null && !slim) {
+      noteCostPending(head.costRead)
+      return { data: head, detailState: 'legacy', retryDetail: noopRetry, ensurePart: noopEnsurePart }
+    }
     const base = head !== null ? head : detail !== null ? detail.head ?? null : null
     if (base === null) {
       const failed = store !== null && (snap.failed || detail !== null)
       return { data: null, detailState: failed ? 'failed' : 'loading', retryDetail: retry, ensurePart }
     }
     if (detail === null) {
+      noteCostPending(base.costRead)
       return { data: base, detailState: snap.failed ? 'failed' : 'loading', retryDetail: retry, ensurePart }
     }
+    noteCostPending(detail.head?.costRead ?? base.costRead)
     const data: ContextTimeline = {
       ...base,
+      ...(detail.head?.costRead === undefined ? {} : { costRead: detail.head.costRead }),
       requests: detail.requests,
       events: detail.events,
       nodes: detail.nodes,

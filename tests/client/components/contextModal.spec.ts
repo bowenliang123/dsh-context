@@ -73,7 +73,25 @@ describe('ContextModal', () => {
       const loading = await mount(h(ContextModal, { sessionId: sid, useContextModal: OPEN, ...(useProjection !== undefined ? { useProjection } : {}), }))
       assert.ok(text(document.body).includes(DICT_EN.loading), 'no projection hook (or an empty one) shows the loading view')
       assert.ok(document.body.querySelector('.lc-modal-card') !== null)
+      assert.ok(document.body.querySelector('.lc-modal-fill') !== null, 'the modal block keeps its final size class')
+      assert.equal(document.body.querySelectorAll('.lc-modal-skeleton').length, 2, 'the modal paints its final card skeleton')
       await loading.unmount()
+    }
+  })
+
+  test('an open modal without a session id still paints its skeleton', async () => {
+    const ctx = new TestClientCtx({ services: { sessions: new TestSessions() } })
+    const ContextModal = makeContextModal(asClientCtx(ctx), kit, settings)
+    const m = await mount(h(ContextModal, {
+      sessionId: '',
+      useContextModal: OPEN,
+      useProjection: () => timeline(),
+    }))
+    try {
+      assert.ok(document.body.querySelector('.lc-modal-fill') !== null)
+      assert.ok(document.body.querySelector('.lc-br') !== null || text(document.body).includes(DICT_EN.loading))
+    } finally {
+      await m.unmount()
     }
   })
 

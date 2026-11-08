@@ -1,3 +1,5 @@
+import { lruTouch } from '../boundedCache'
+import { trimRetentionMap } from '../retention'
 import { assemble } from '../assemble'
 import type { Assembled } from '../assemble'
 import type { ContextHeaders, ContextTimeline } from '../../shared/types'
@@ -11,9 +13,13 @@ export function cachedByData<T>(owner: object, key: string, compute: () => T): T
     derived.set(owner, values)
   }
   const hit = values.get(key)
-  if (hit !== undefined) return hit as T
+  if (hit !== undefined) {
+    lruTouch(values, key)
+    return hit as T
+  }
   const value = compute()
   values.set(key, value)
+  trimRetentionMap(values, 'derivedOwner')
   return value
 }
 
@@ -33,8 +39,12 @@ export function assembleCached(data: ContextTimeline, headers: ContextHeaders | 
     byHeaders.set(headerKey, bySeq)
   }
   const hit = bySeq.get(seq)
-  if (hit !== undefined) return hit
+  if (hit !== undefined) {
+    lruTouch(bySeq, seq)
+    return hit
+  }
   const value = assemble(data, headers, seq)
   bySeq.set(seq, value)
+  trimRetentionMap(bySeq, 'derivedSeq')
   return value
 }

@@ -1,5 +1,5 @@
 import { estimateSystemTokens } from '../shared/estimate'
-import type { ActivityDay, ActivityTally, ContextActivity, ContextBreakdown, ContextHeaders, ContextPressure, ContextTimeline, CostModelUsage, SystemPromptNode, TimingTotals, TokenUsage, ToolTimingTotals } from '../shared/types'
+import type { ActivityDay, ActivityTally, ContextActivity, ContextBreakdown, ContextHeaders, ContextPressure, ContextTimeline, CostConfidence, CostModelUsage, SystemPromptNode, TimingTotals, TokenUsage, ToolTimingTotals } from '../shared/types'
 
 import { asRecord } from '../shared/decode'
 
@@ -86,6 +86,101 @@ function costOf(value: unknown): ContextTimeline['cost'] | undefined {
   return out
 }
 
+function rateOk(value: unknown): value is { hit: number; miss: number; write: number; out: number } {
+  const rate = asRecord(value)
+  if (rate === null) return false
+  const fields = ['hit', 'miss', 'write', 'out'] as const
+  return fields.every(field => typeof rate[field] === 'number' && Number.isFinite(rate[field]))
+}
+
+function costFaceBaseOk(value: unknown): boolean {
+  const face = asRecord(value)
+  if (face === null) return false
+  if (typeof face.provider !== 'string' || typeof face.model !== 'string') return false
+  if (!rateOk(face.rate)) return false
+  if (typeof face.via !== 'string') return false
+  return face.confidence === 'high' || face.confidence === 'medium' || face.confidence === 'low'
+}
+
+function costFaceOk(value: unknown): boolean {
+  const face = asRecord(value)
+  if (!costFaceBaseOk(value)) return false
+  return face?.canonical === undefined || typeof face.canonical === 'string'
+}
+
+function costMissBaseOk(value: unknown): boolean {
+  const miss = asRecord(value)
+  if (miss === null) return false
+  return typeof miss.provider === 'string' && typeof miss.model === 'string' && typeof miss.reason === 'string'
+}
+
+function costMissOk(value: unknown): boolean {
+  const miss = asRecord(value)
+  if (!costMissBaseOk(value)) return false
+  return miss?.candidates === undefined
+    || (typeof miss.candidates === 'number' && Number.isFinite(miss.candidates) && miss.candidates >= 0)
+}
+
+function costReadOf(value: unknown): ContextTimeline['costRead'] | undefined {
+  const data = asRecord(value)
+  if (data === null || Array.isArray(data)) return undefined
+  const usd = data.usd
+  if (usd !== null && (typeof usd !== 'number' || !Number.isFinite(usd))) return undefined
+  if (typeof data.ready !== 'boolean') return undefined
+  const out: NonNullable<ContextTimeline['costRead']> = { usd, ready: data.ready }
+  if (data.faces !== undefined) {
+    if (!Array.isArray(data.faces)) return undefined
+    const faces: NonNullable<NonNullable<ContextTimeline['costRead']>['faces']> = []
+    for (const entry of data.faces) {
+      if (!costFaceBaseOk(entry)) continue
+      const face = entry as Record<string, unknown>
+      const rate = face.rate as { hit: number; miss: number; write: number; out: number }
+      faces.push({
+        provider: face.provider as string,
+        model: face.model as string,
+        rate: { hit: rate.hit, miss: rate.miss, write: rate.write, out: rate.out },
+        via: face.via as string,
+        confidence: face.confidence as CostConfidence,
+        ...(typeof face.canonical === 'string' ? { canonical: face.canonical } : {}),
+      })
+    }
+    if (faces.length > 0) out.faces = faces
+  }
+  if (data.misses !== undefined) {
+    if (!Array.isArray(data.misses)) return undefined
+    const misses: NonNullable<NonNullable<ContextTimeline['costRead']>['misses']> = []
+    for (const entry of data.misses) {
+      if (!costMissBaseOk(entry)) continue
+      const miss = entry as Record<string, unknown>
+      misses.push({
+        provider: miss.provider as string,
+        model: miss.model as string,
+        reason: miss.reason as string,
+        ...(typeof miss.candidates === 'number' && Number.isFinite(miss.candidates) && miss.candidates >= 0
+          ? { candidates: miss.candidates }
+          : {}),
+      })
+    }
+    if (misses.length > 0) out.misses = misses
+  }
+  return out
+}
+
+function costReadFastOk(value: unknown): boolean {
+  if (value === undefined) return true
+  const data = asRecord(value)
+  if (data === null || Array.isArray(data)) return false
+  if (data.usd !== null && (typeof data.usd !== 'number' || !Number.isFinite(data.usd))) return false
+  if (typeof data.ready !== 'boolean') return false
+  if (data.faces !== undefined) {
+    if (!Array.isArray(data.faces) || data.faces.length === 0 || !data.faces.every(costFaceOk)) return false
+  }
+  if (data.misses !== undefined) {
+    if (!Array.isArray(data.misses) || data.misses.length === 0 || !data.misses.every(costMissOk)) return false
+  }
+  return true
+}
+
 function costFastOk(value: unknown): boolean {
   if (value === undefined) return true
   const data = asRecord(value)
@@ -110,11 +205,13 @@ export function timelineOf(value: unknown): ContextTimeline | null {
     && recordsOnly(data.archive)
     && systemsFastOk(data.systems)
     && timingFastOk(data.timing)
-    && costFastOk(data.cost)) {
+    && costFastOk(data.cost)
+    && costReadFastOk(data.costRead)) {
     return data as unknown as ContextTimeline
   }
   const safeCurrent: Record<string, unknown> = current !== null && typeof current === 'object' ? current as Record<string, unknown> : {}
   const cost = costOf(data.cost)
+  const costRead = costReadOf(data.costRead)
   const timing = timingOf(data.timing)
   const unsupported = unsupportedOf(data.unsupported)
   const counts = countsOf(data.counts)
@@ -164,6 +261,7 @@ export function timelineOf(value: unknown): ContextTimeline | null {
     ...(last !== undefined ? { last } : {}),
     ...(typeof data.detailRev === 'number' && Number.isFinite(data.detailRev) ? { detailRev: data.detailRev } : {}),
     ...(cost !== undefined ? { cost } : {}),
+    ...(costRead !== undefined ? { costRead } : {}),
     ...(timing !== null ? { timing } : {}),
     ...(data.systems !== undefined ? { systems: systemsOf(data.systems) } : {}),
   }

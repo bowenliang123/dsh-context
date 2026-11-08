@@ -13,6 +13,14 @@ import type { RouteBox } from './helpers/backfill'
 
 const settle = (ms = 30): Promise<void> => new Promise(resolve => setTimeout(resolve, ms))
 
+const FAST_PACING = {
+  now: () => performance.now(),
+  sleep: () => Promise.resolve(),
+  minRestMs: 1,
+  workBudgetMs: 1_000_000,
+  roundPauseMs: 1,
+}
+
 function crashTailEvents(filler: number): SessionEvent[] {
   const events: SessionEvent[] = Array.from({ length: filler }, (_, seq) => ({
     type: 'todo/write', seq, time: seq + 1, data: {},
@@ -379,7 +387,7 @@ describe('watchActivityBackfill', () => {
     assert.deepEqual(state.coldSnapshots, ['good'])
   })
 
-  test('the route answers ok and every hit after the first is a no-op (one pass per process)', async () => {
+  test('the route answers ok with coverage, and a later POST reruns the pass over the warm corpus', async () => {
     const ctx = new Context()
     const state = fakeState([{ header: { id: 'a', cwd: '/repo/a' } }])
     let listed = 0
@@ -391,17 +399,75 @@ describe('watchActivityBackfill', () => {
         },
       },
     })
-    const dispose = watchActivityBackfill(ctx)
+    const handle = watchActivityBackfill(ctx, undefined, FAST_PACING)
+    assert.deepEqual(handle.coverage(), { complete: false, remaining: 0, failed: 0, running: false, total: 0, covered: 0, unsupported: 0 })
+    assert.equal(handle.version(), 0)
     const first = await trigger(route)
     assert.equal(route.path, BACKFILL_ROUTE)
-    assert.deepEqual(await first.json(), { ok: true })
-    await until(() => (listed === 1 ? true : undefined), 'the first pass listed the corpus')
+    const firstBody = await first.json() as { ok: boolean; coverage: { running: boolean } }
+    assert.equal(firstBody.ok, true)
+    assert.equal(firstBody.coverage.running, true, 'the reply carries the running coverage')
+    await until(() => (handle.coverage().complete ? true : undefined), 'the first pass finished')
+    assert.deepEqual(handle.coverage(), { complete: true, remaining: 0, failed: 0, running: false, total: 1, covered: 1, unsupported: 0 })
+    assert.equal(handle.version(), 1)
+    state.served.add('a')
     const second = await trigger(route)
-    assert.deepEqual(await second.json(), { ok: true })
+    const secondBody = await second.json() as { ok: boolean; coverage: { complete: boolean; running: boolean } }
+    assert.equal(secondBody.ok, true)
+    await until(() => (listed >= 2 ? true : undefined), 'the verified rerun listed the corpus')
+    await until(() => (!handle.coverage().running ? true : undefined), 'the verified-warm rerun ends without probing')
+    assert.deepEqual(handle.coverage(), { complete: true, remaining: 0, failed: 0, running: false, total: 1, covered: 1, unsupported: 0 })
+    assert.deepEqual(state.coldReads, ['a'], 'the warm session is not read again')
+    assert.equal(handle.version(), 1, 'a skipped pass keeps the revision')
+    ;(state.listed as { header: Record<string, unknown> }[]).push({ header: { id: 'new', cwd: '/repo/new' } })
+    await trigger(route)
+    await until(() => (listed >= 3 ? true : undefined), 'a corpus change starts a new pass')
+    await until(() => (!handle.coverage().running ? true : undefined), 'the corpus-change pass finished')
+    assert.equal(handle.version(), 2, 'the new folded row bumped the version')
+    assert.deepEqual(state.coldReads, ['a', 'new'], 'only the new session was folded')
+    handle()
+  })
+
+  test('a POST during a running pass coalesces into exactly one rerun', async () => {
+    const ctx = new Context()
+    const state = fakeState([{ header: { id: 'slow', cwd: '/repo/slow' } }])
+    let listed = 0
+    let gate: (() => void) | null = null
+    let opens = 0
+    const route = arm(ctx, state, {
+      sessionQuery: {
+        listSessions: async () => {
+          listed++
+          return state.listed
+        },
+      },
+      sessionPersistence: {
+        open: async (id: string) => ({
+          header: { id, version: 1, createdAt: 1, cwd: '/repo', isSeeded: false },
+          inheritedEventCount: 0,
+          read: async () => {
+            opens++
+            if (opens > 1) return { events: [] }
+            return new Promise((resolve) => {
+              gate = () => resolve({ events: [] })
+            })
+          },
+          close: async () => {},
+        }),
+      },
+    })
+    const handle = watchActivityBackfill(ctx, undefined, FAST_PACING)
+    await trigger(route)
+    await until(() => (gate !== null ? true : undefined), 'the first pass opened its log')
+    await trigger(route)
+    await trigger(route)
+    gate!()
+    await until(() => (listed >= 2 ? true : undefined), 'the coalesced rerun listed the corpus')
     await settle()
-    assert.equal(listed, 1, 'the second POST is a no-op')
-    assert.deepEqual(state.coldReads, ['a'])
-    dispose()
+    assert.equal(opens, 1, 'the verified-complete rerun never re-opens cold logs')
+    assert.equal(listed, 2, 'two queued POSTs share one rerun')
+    assert.equal(handle.version(), 1, 'the skipped rerun keeps the version')
+    handle()
   })
 
   test('a route hit BEFORE the cold-path faces compose still launches the pass (either half first)', async () => {
@@ -672,5 +738,45 @@ describe('watchActivityBackfill', () => {
     await settle(30)
     dispose()
     assert.deepEqual(state.coldReads.sort(), ['activity-only', 'fractional', 'missing'])
+  })
+})
+
+describe('watchActivityBackfill — folded session journal', () => {
+  test('folded ids drain once, an equal marker is empty, and overflow reports null', async () => {
+    const ctx = new Context()
+    const state = fakeState([
+      { header: { id: 'a', cwd: '/repo/a' } },
+      { header: { id: 'b', cwd: '/repo/b' } },
+    ])
+    const route = arm(ctx, state, { sessionQuery: { listSessions: async () => state.listed } })
+    const handle = watchActivityBackfill(ctx, undefined, FAST_PACING)
+    await trigger(route)
+    await until(() => (handle.coverage().complete ? true : undefined), 'the first pass finished')
+    const drained = handle.foldedSince(0)
+    assert.equal(drained.version, 2, 'one journal version per folded session')
+    assert.deepEqual([...(drained.ids ?? [])].sort(), ['a', 'b'])
+    assert.deepEqual(handle.foldedSince(drained.version), { version: drained.version, ids: [] })
+    handle()
+
+    const many = new Context()
+    const records = Array.from({ length: 4_100 }, (_, index) => ({ header: { id: `s${index}`, cwd: '/repo/x' } }))
+    const big = fakeState(records)
+    const bigRoute = arm(many, big, {
+      sessionQuery: { listSessions: async () => big.listed },
+      sessionPersistence: {
+        open: async (id: string) => ({
+          header: { id, version: 1, createdAt: 1, cwd: '/repo/x', isSeeded: false },
+          inheritedEventCount: 0,
+          read: async () => ({ events: [] }),
+          close: async () => {},
+        }),
+      },
+    })
+    const bigHandle = watchActivityBackfill(many, undefined, FAST_PACING)
+    await trigger(bigRoute)
+    await until(() => (bigHandle.coverage().complete ? true : undefined), 'the big pass finished')
+    const overflow = bigHandle.foldedSince(0)
+    assert.equal(overflow.ids, null, 'more folded ids than the journal holds report the whole corpus dirty')
+    bigHandle()
   })
 })

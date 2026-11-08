@@ -1,9 +1,17 @@
-import type { FleetDelegation, FleetDetail, FleetDescriptor, FleetMemberInfo, FleetMessage } from '../shared/types'
+import type {
+  FleetDelegation,
+  FleetDetail,
+  FleetDetailCounts,
+  FleetDescriptor,
+  FleetMemberInfo,
+  FleetMessage,
+  FleetSummary,
+  FleetSummaryMember,
+} from '../shared/types'
+import { stringOf } from '../shared/decode'
 import { FLEET_ROUTE } from './apiRoutes'
-import { BoundedCache } from './boundedCache'
 import { postRoute } from './route'
 import { asRecord, numOf } from './services'
-import { stringOf } from '../shared/decode'
 
 function descriptorOf(value: unknown): FleetDescriptor | undefined {
   const rec = asRecord(value)
@@ -115,6 +123,101 @@ export function fleetDetailOf(value: unknown): FleetDetail | null {
   }
 }
 
+function summaryMemberOf(value: unknown): FleetSummaryMember | null {
+  const rec = asRecord(value)
+  if (rec === null) return null
+  const id = stringOf(rec.id)
+  if (id === undefined) return null
+  const createdAt = typeof rec.createdAt === 'number' && Number.isFinite(rec.createdAt) ? rec.createdAt : undefined
+  const mode = rec.mode
+  const label = stringOf(rec.label)
+  const name = stringOf(rec.name)
+  const description = stringOf(rec.description)
+  const phase = stringOf(rec.phase)
+  return {
+    id,
+    ...(createdAt !== undefined ? { createdAt } : {}),
+    ...(mode === 'one-shot' || mode === 'continuable' || mode === 'external' || mode === 'unknown' ? { mode } : {}),
+    ...(label !== undefined ? { label } : {}),
+    ...(name !== undefined ? { name } : {}),
+    ...(description !== undefined ? { description } : {}),
+    ...(phase !== undefined ? { phase } : {}),
+  }
+}
+
+function countsOf(value: unknown): FleetDetailCounts | null {
+  const rec = asRecord(value)
+  if (rec === null) return null
+  const readAt = rec.readAt
+  const messagesTotal = rec.messagesTotal
+  const delegationsCount = rec.delegationsCount
+  if (typeof readAt !== 'number' || !Number.isFinite(readAt)) return null
+  if (typeof messagesTotal !== 'number' || !Number.isFinite(messagesTotal) || messagesTotal < 0) return null
+  if (typeof delegationsCount !== 'number' || !Number.isFinite(delegationsCount) || delegationsCount < 0) return null
+  return { readAt, messagesTotal, delegationsCount }
+}
+
+export function fleetSummaryOf(value: unknown): FleetSummary | null {
+  const rec = asRecord(value)
+  if (rec === null) return null
+  const rootId = stringOf(rec.rootId)
+  const detail = fleetDetailOf(rec.detail)
+  if (rootId === undefined || detail === null) return null
+  const members: FleetSummaryMember[] = []
+  if (Array.isArray(rec.members)) {
+    for (const entry of rec.members) {
+      const member = summaryMemberOf(entry)
+      if (member !== null) members.push(member)
+    }
+  }
+  const counts: Record<string, FleetDetailCounts> = {}
+  const rawCounts = asRecord(rec.counts)
+  if (rawCounts !== null) {
+    for (const id of Object.keys(rawCounts)) {
+      const known = countsOf(rawCounts[id])
+      if (known !== null) counts[id] = known
+    }
+  }
+  const rootCreatedAt = typeof rec.rootCreatedAt === 'number' && Number.isFinite(rec.rootCreatedAt) ? rec.rootCreatedAt : undefined
+  const familySize = typeof rec.familySize === 'number' && Number.isFinite(rec.familySize) ? rec.familySize : members.length + 1
+  return {
+    rootId,
+    ...(rootCreatedAt === undefined ? {} : { rootCreatedAt }),
+    detail,
+    members,
+    familySize,
+    counts,
+  }
+}
+
+export interface FleetBatch {
+  rows: ReadonlyMap<string, FleetDetail>
+  missing: readonly string[]
+  total: number
+}
+
+export function fleetBatchOf(value: unknown): FleetBatch | null {
+  const rec = asRecord(value)
+  if (rec === null) return null
+  const rawRows = asRecord(rec.rows)
+  if (rawRows === null) return null
+  const rows = new Map<string, FleetDetail>()
+  for (const id of Object.keys(rawRows)) {
+    if (id === '') continue
+    const detail = fleetDetailOf(rawRows[id])
+    if (detail !== null) rows.set(id, detail)
+  }
+  const missing: string[] = []
+  if (Array.isArray(rec.missing)) {
+    for (const entry of rec.missing) {
+      const id = stringOf(entry)
+      if (id !== undefined) missing.push(id)
+    }
+  }
+  const total = typeof rec.total === 'number' && Number.isFinite(rec.total) ? rec.total : rows.size + missing.length
+  return { rows, missing, total }
+}
+
 export function makeFleetDetailFetcher(
   sessionId: string,
   full = false,
@@ -129,75 +232,83 @@ export function makeFleetDetailFetcher(
   )
 }
 
-interface FleetDetailEntry {
-  updatedAt: number
-  pending: Promise<FleetDetail | null>
-  size: number
+export function makeFleetSummaryFetcher(
+  sessionId: string,
+  signal?: AbortSignal,
+): (() => Promise<FleetSummary | null>) | undefined {
+  if (sessionId === '') return undefined
+  return () => postRoute(
+    FLEET_ROUTE,
+    { sessionId, summary: true },
+    fleetSummaryOf,
+    { label: 'fleet-summary', ...(signal === undefined ? {} : { signal }) },
+  )
 }
 
-const FLEET_LEDGER_MAX = 64
-const FULL_LEDGER_MAX = 4
-const LEDGER_BYTES_MAX = 4 * 1024 * 1024
-
-function detailBytes(detail: FleetDetail | null): number {
-  if (detail === null) return 0
-  let bytes = (detail.initialPrompt?.length ?? 0) + (detail.lastReply?.text.length ?? 0)
-  for (const message of detail.messages) bytes += message.text.length + (message.report?.length ?? 0) + (message.summary?.length ?? 0)
-  return bytes
-}
-
-function ledgerOf(maxEntries: number): BoundedCache<string, FleetDetailEntry> {
-  return new BoundedCache<string, FleetDetailEntry>({
-    maxEntries,
-    maxBytes: LEDGER_BYTES_MAX,
-    minEntries: 1,
-    sizeOf: entry => entry.size,
-  })
+export function makeFleetBatchFetcher(
+  ids: readonly string[],
+  mode: 'preview' | 'history',
+  rootId?: string,
+  signal?: AbortSignal,
+): (() => Promise<FleetBatch | null>) | undefined {
+  if (ids.length === 0) return undefined
+  return () => postRoute(
+    FLEET_ROUTE,
+    { batch: { ids: [...ids], mode, ...(rootId === undefined ? {} : { rootId }) } },
+    fleetBatchOf,
+    { label: 'fleet-batch', ...(signal === undefined ? {} : { signal }) },
+  )
 }
 
 export class FleetDetailCache {
-  private readonly entries = ledgerOf(FLEET_LEDGER_MAX)
-  private readonly fullEntries = ledgerOf(FULL_LEDGER_MAX)
-  private readonly historyEntries = ledgerOf(FLEET_LEDGER_MAX)
+  private readonly inflight = new Map<string, Promise<unknown>>()
 
   clear(): void {
-    this.entries.clear()
-    this.fullEntries.clear()
-    this.historyEntries.clear()
+    this.inflight.clear()
+  }
+
+  private track<T>(key: string, fetcher: (() => Promise<T | null>) | undefined): Promise<T | null> {
+    const known = this.inflight.get(key) as Promise<T | null> | undefined
+    if (known !== undefined) return known
+    const pending: Promise<T | null> = fetcher !== undefined ? fetcher() : Promise.resolve(null)
+    this.inflight.set(key, pending)
+    void pending.finally(() => {
+      if (this.inflight.get(key) === pending) this.inflight.delete(key)
+    }).catch(() => {})
+    return pending
   }
 
   fetch(id: string, updatedAt: number, full = false): Promise<FleetDetail | null> {
-    const ledger = full ? this.fullEntries : this.entries
-    const known = ledger.get(id)
-    if (known !== undefined && known.updatedAt >= updatedAt) return known.pending
-    const fetcher = makeFleetDetailFetcher(id, full)
-    const pending = fetcher !== undefined
-      ? fetcher().catch((): FleetDetail | null => null)
-      : Promise.resolve(null)
-    const entry: FleetDetailEntry = { updatedAt, pending, size: 0 }
-    ledger.set(id, entry)
-    void pending.then((detail) => {
-      entry.size = detailBytes(detail)
-      ledger.trim()
-    })
-    return pending
+    return this.track(`${full ? 'full' : 'preview'}:${id}:${updatedAt}`, makeFleetDetailFetcher(id, full))
+      .catch((): FleetDetail | null => null)
   }
 
   fetchHistory(id: string, updatedAt: number): Promise<FleetDetail | null> {
-    const known = this.historyEntries.get(id)
-    if (known !== undefined && known.updatedAt >= updatedAt) return known.pending
-    const fetcher = makeFleetDetailFetcher(id, false, true)
-    const pending = fetcher !== undefined
-      ? fetcher().catch((): FleetDetail | null => null)
-      : Promise.resolve(null)
-    const entry: FleetDetailEntry = { updatedAt, pending, size: 0 }
-    this.historyEntries.set(id, entry)
-    void pending.then((detail) => {
-      entry.size = detailBytes(detail)
-      this.historyEntries.trim()
-    })
-    return pending
+    return this.track(`history:${id}:${updatedAt}`, makeFleetDetailFetcher(id, false, true))
+      .catch((): FleetDetail | null => null)
   }
+
+  fetchSummary(sessionId: string, signal?: AbortSignal): Promise<FleetSummary | null> {
+    return this.track(`summary:${sessionId}`, makeFleetSummaryFetcher(sessionId, signal))
+  }
+
+  fetchBatch(
+    ids: readonly string[],
+    mode: 'preview' | 'history',
+    rootId?: string,
+    signal?: AbortSignal,
+  ): Promise<FleetBatch | null> {
+    return this.track(`batch:${mode}:${ids.join(',')}`, makeFleetBatchFetcher(ids, mode, rootId, signal))
+  }
+}
+
+export function detailBytes(detail: FleetDetail | null): number {
+  if (detail === null) return 0
+  let bytes = (detail.initialPrompt?.length ?? 0) + (detail.lastReply?.text.length ?? 0)
+  for (const message of detail.messages) bytes += message.text.length + (message.report?.length ?? 0) + (message.summary?.length ?? 0)
+  for (const delegation of detail.delegations ?? []) bytes += delegation.label?.length ?? 0
+  for (const member of detail.roster ?? []) bytes += member.name.length + member.description.length
+  return bytes
 }
 
 export interface CommsRow extends FleetMessage {

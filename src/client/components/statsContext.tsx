@@ -1,12 +1,14 @@
 import { Fragment, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type KeyboardEvent, type MouseEvent, type ReactElement, type ReactNode } from 'react'
-import type { ContextEventRecord, ContextTimeline, RequestRecord, SessionCostUsage, SurfaceNode, TimelineCounts } from '../../shared/types'
-import { estimateSessionCost, billedTokensOf, formatCost, formatPriceRate, mergeCostUsage, priceLookupsOf, toCurrency } from '../cost'
-import type { CostCurrency, ModelBook, PriceFace, PriceMiss } from '../cost'
+import type {
+  ContextEventRecord, ContextTimeline, CostPriceFace, CostPriceMiss, RequestRecord, SessionCostRead,
+  SessionCostUsage, SurfaceNode, TimelineCounts,
+} from '../../shared/types'
+import { billedTokensOf, formatCost, formatPriceRate, mergeCostUsage, toCurrency, type CostCurrency } from '../cost'
 import { sessionsFaceOf, subagentCostFoldOf } from '../agentTree'
 import { readHeads, useSessionsSnapshot } from '../agentHeads'
+import { subscribeInvalidations } from '../invalidation'
 import type { AgentHeads } from '../agentHeads'
 import type { Translate } from '../i18n'
-import { useModelPrices } from '../modelPrices'
 import { nameColorOf } from '../nameColor'
 import { type ClientCtx } from '../services'
 import { isDeepSeekProvider } from '../../shared/providers'
@@ -14,26 +16,44 @@ import type { ViewKit } from '../viewkit'
 import { IconData } from '../primitives'
 import { useElementSize } from './useElementMetrics'
 
-interface PriceRow { key: string; face: PriceFace }
-interface PriceMissRow { key: string; provider: string; model: string; miss: PriceMiss }
+interface PriceRow { key: string; face: CostPriceFace }
+interface PriceMissRow { key: string; provider: string; model: string; miss: CostPriceMiss }
 
-const BANDS: readonly (readonly [keyof PriceFace['rate'], string])[] = [
+const BANDS: readonly (readonly [keyof CostPriceFace['rate'], string])[] = [
   ['hit', 'stats.costHit'],
   ['miss', 'stats.costMiss'],
   ['write', 'stats.costWrite'],
   ['out', 'stats.costOut'],
 ]
 
-function pricesOf(usage: SessionCostUsage | undefined, book: ModelBook | null): { rows: PriceRow[]; misses: PriceMissRow[] } {
-  if (usage === undefined || book === null) return { rows: [], misses: [] }
-  const rows: PriceRow[] = []
-  const misses: PriceMissRow[] = []
-  for (const lookup of priceLookupsOf(usage, book)) {
-    const key = lookup.provider + '/' + lookup.model
-    if (lookup.face !== null) rows.push({ key, face: lookup.face })
-    else misses.push({ key, provider: lookup.provider, model: lookup.model, miss: lookup.miss })
+function facesStateOf(reads: readonly (SessionCostRead | null | undefined)[]): { rows: PriceRow[]; misses: PriceMissRow[] } {
+  const rows = new Map<string, PriceRow>()
+  const misses = new Map<string, PriceMissRow>()
+  for (const read of reads) {
+    if (read === null || read === undefined) continue
+    for (const face of read.faces ?? []) {
+      const key = face.provider + '/' + face.model
+      if (!rows.has(key)) rows.set(key, { key, face })
+    }
+    for (const miss of read.misses ?? []) {
+      const key = miss.provider + '/' + miss.model
+      if (!misses.has(key)) misses.set(key, { key, provider: miss.provider, model: miss.model, miss })
+    }
   }
-  return { rows, misses }
+  return { rows: [...rows.values()], misses: [...misses.values()] }
+}
+
+function costUsdOf(reads: readonly (SessionCostRead | null | undefined)[]): number | null {
+  let total = 0
+  let any = false
+  for (const read of reads) {
+    if (read === null || read === undefined) continue
+    if (!read.ready) return null
+    if (read.usd === null) continue
+    total += read.usd
+    any = true
+  }
+  return any ? total : null
 }
 
 export function countsOfRecords(requests: readonly RequestRecord[], events: readonly ContextEventRecord[]): TimelineCounts {
@@ -55,6 +75,7 @@ export function countsOfRecords(requests: readonly RequestRecord[], events: read
 export interface SubagentStats {
   usage: SessionCostUsage | null
   count: number
+  costRead: SessionCostRead | null
 }
 
 export function makeSubagentCost(
@@ -69,6 +90,15 @@ export function makeSubagentCost(
       () => subagentCostFoldOf(snapshot, sessionId, landed),
       [snapshot, sessionId, landed],
     )
+    useEffect(() => subscribeInvalidations((event) => {
+      if (event.kind !== 'pricing') return
+      setLanded((prev) => {
+        for (const head of prev.values()) {
+          if (head.costRead?.ready !== true) return new Map()
+        }
+        return prev
+      })
+    }), [])
     useEffect(() => {
       const cold = fold.cold
       if (cold.length === 0) return
@@ -85,7 +115,7 @@ export function makeSubagentCost(
       const [only] = cold
       void heads.headOf(only).then((head) => { land(head, only) }).catch(() => {})
     }, [fold, heads])
-    return { usage: fold.usage, count: fold.count }
+    return { usage: fold.usage, count: fold.count, costRead: fold.costRead }
   }
 }
 
@@ -168,6 +198,7 @@ interface StatsContextProps {
   tools: readonly (readonly [string, number])[]
   commands?: { runs: number; top: readonly (readonly [string, number])[] }
   cost?: SessionCostUsage
+  costRead?: SessionCostRead
   locale: string
   sessionId?: string
 }
@@ -303,15 +334,20 @@ export function makeStatsContext(
   const { t, fmt } = kit
   return function StatsContext(props: StatsContextProps): ReactElement {
     const currency: CostCurrency = props.locale === 'zh' ? 'cny' : 'usd'
-    const { book, failed } = useModelPrices()
     const sub = useSubagentCost(props.sessionId)
     const subUsage = sub.usage
     const usage = mergeCostUsage(props.cost, subUsage) ?? undefined
-    const cost = estimateSessionCost(usage, book, currency)
-    const subCost = estimateSessionCost(subUsage, book, currency)
+    const ownRead = props.costRead
+    const subRead = sub.costRead
+    const familyUsd = costUsdOf([ownRead, subRead])
+    const subUsd = costUsdOf([subRead])
+    const ownUsd = costUsdOf([ownRead])
+    const cost = familyUsd === null ? null : toCurrency(familyUsd, currency)
+    const subCost = subUsd === null ? null : toCurrency(subUsd, currency)
     const fmtRate = (usd: number): string => formatPriceRate(toCurrency(usd, currency), currency)
-    const priceState = pricesOf(usage, book)
-    const subPriceState = pricesOf(subUsage ?? undefined, book)
+    const failed = ownRead !== undefined && !ownRead.ready || subRead !== null && !subRead.ready
+    const priceState = facesStateOf([ownRead, subRead])
+    const subPriceState = facesStateOf([subRead])
     const rows = priceState.rows
     const deepseek = usage !== undefined && Object.keys(usage).some(p => isDeepSeekProvider(p))
     const subDeepseek = subUsage !== null && Object.keys(subUsage).some(p => isDeepSeekProvider(p))
@@ -328,7 +364,7 @@ export function makeStatsContext(
                   <b>{fmtRate(r.face.rate[bucket])}</b>
                 </span>
               ))}
-              <span className="lc-stat-tip-by">{t('stats.costPriceBy', { p: r.face.pid, m: r.face.mid })}</span>
+              <span className="lc-stat-tip-by">{t('stats.costPriceBy', { p: r.face.provider, m: r.face.model })}</span>
             </span>
           ))}
         </span>
@@ -365,7 +401,7 @@ export function makeStatsContext(
     ]
     const costTip: ReactNode = tipFor(priceState, t('stats.costTip'), deepseek)
     const subTip: ReactNode = tipFor(subPriceState, t('stats.subCostTip'), subDeepseek)
-    const ownPriceState = pricesOf(props.cost, book)
+    const ownPriceState = facesStateOf([ownRead])
     const ownDeepseek = props.cost !== undefined && Object.keys(props.cost).some(p => isDeepSeekProvider(p))
     const ownTip: ReactNode = tipFor(ownPriceState, t('stats.ownCostTip'), ownDeepseek)
     const onJump = props.onJump
@@ -414,9 +450,9 @@ export function makeStatsContext(
         </span>
       )
     }
-    const costPids = new Set(rows.map(r => r.face.pid).filter(p => p !== ''))
+    const costPids = new Set(rows.map(r => r.face.provider).filter(p => p !== ''))
     const costHref = costPids.size === 1 ? 'https://models.dev/providers/' + [...costPids][0] + '/' : undefined
-    const ownCost = estimateSessionCost(props.cost, book, currency)
+    const ownCost = ownUsd === null ? null : toCurrency(ownUsd, currency)
     const familyTokens = billedTokensOf(usage)
     const ownTokens = billedTokensOf(props.cost)
     const subTokens = billedTokensOf(subUsage)

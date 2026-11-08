@@ -1,9 +1,14 @@
 import assert from 'node:assert/strict'
 import { afterEach, describe, test, vi } from 'vitest'
 import {
+  detailBytes,
   FleetDetailCache,
+  fleetBatchOf,
   fleetDetailOf,
+  fleetSummaryOf,
+  makeFleetBatchFetcher,
   makeFleetDetailFetcher,
+  makeFleetSummaryFetcher,
   mergeComms,
   mergeDelegations,
   settledVariantOf,
@@ -55,7 +60,7 @@ describe('fleetDetailOf — the sanitizing parse', () => {
     assert.deepEqual(fleetDetailOf({ messages: 'nope', descriptor: { mode: 'weird' }, truncated: 1 }), { messages: [], truncated: false })
   })
 
-  test('roster and lastReply sanitize; malformed entries drop alone', () => {
+  test('roster, lastReply and delegations sanitize; malformed entries drop alone', () => {
     const detail = fleetDetailOf({
       roster: [
         null,
@@ -64,67 +69,115 @@ describe('fleetDetailOf — the sanitizing parse', () => {
         { name: 'bare', description: 1, provider: 2, context: 'sideways' },
       ],
       lastReply: { time: 42, text: '报告完毕' },
+      delegations: [
+        null,
+        { seq: 1, time: 10, to: 'one', mode: 'one-shot', label: 'Inspect' },
+        { seq: 5, time: 50, to: 'bad', mode: 'mystery' },
+        { seq: 6, time: 60, to: '', mode: 'one-shot' },
+      ],
     })
     assert.deepEqual(detail?.roster, [
       { name: 'worker', description: 'duty', provider: 'spawn', context: 'fork' },
       { name: 'bare', description: '' },
     ])
     assert.deepEqual(detail?.lastReply, { time: 42, text: '报告完毕' })
+    assert.deepEqual(detail?.delegations, [{ seq: 1, time: 10, to: 'one', mode: 'one-shot', label: 'Inspect' }])
     assert.equal(fleetDetailOf({ lastReply: { text: 1 } })?.lastReply, undefined)
     assert.equal(fleetDetailOf({ lastReply: 'nope' })?.lastReply, undefined)
     assert.equal(fleetDetailOf({ roster: 'nope' })?.roster, undefined)
-  })
-
-  test('delegations sanitize without becoming messages', () => {
-    const detail = fleetDetailOf({
-      delegations: [
-        null,
-        { seq: 1, time: 10, to: 'one', mode: 'one-shot', label: 'Inspect' },
-        { seq: 2, time: 20, to: 'continuable', mode: 'continuable' },
-        { seq: 3, time: 30, to: 'external', mode: 'external' },
-        { seq: 4, time: 40, to: 'unknown', mode: 'unknown' },
-        { seq: 5, time: 50, to: 'bad', mode: 'mystery' },
-        { seq: 6, time: 60, to: '', mode: 'one-shot' },
-      ],
-    })
-    assert.deepEqual(detail?.delegations, [
-      { seq: 1, time: 10, to: 'one', mode: 'one-shot', label: 'Inspect' },
-      { seq: 2, time: 20, to: 'continuable', mode: 'continuable' },
-      { seq: 3, time: 30, to: 'external', mode: 'external' },
-      { seq: 4, time: 40, to: 'unknown', mode: 'unknown' },
-    ])
-    assert.deepEqual(detail?.messages, [])
     assert.equal(fleetDetailOf({ delegations: 'nope' })?.delegations, undefined)
+    assert.deepEqual(fleetDetailOf({ messages: [], delegations: [] })?.delegations, undefined)
   })
 })
 
-function stubRoute(handler: (body: Record<string, unknown>) => unknown): void {
+describe('fleetSummaryOf and fleetBatchOf — the wire decoders', () => {
+  test('a summary carries the root detail, member facts and known counts', () => {
+    const summary = fleetSummaryOf({
+      rootId: 'root',
+      rootCreatedAt: 1234,
+      detail: { messages: [], messagesTotal: 4, truncated: true },
+      members: [
+        null,
+        { id: '' },
+        { id: 'kid', createdAt: 7, mode: 'continuable', label: 'Inspect', name: 'agent-1', description: 'duty', phase: 'active' },
+        { id: 'bare', createdAt: 'soon', mode: 'mystery', label: 9 },
+      ],
+      familySize: 3,
+      counts: {
+        root: { readAt: 100, messagesTotal: 4, delegationsCount: 2 },
+        kid: { readAt: 90, messagesTotal: 'nope', delegationsCount: 1 },
+        bad: { readAt: Number.NaN, messagesTotal: 1, delegationsCount: 1 },
+      },
+    })
+    assert.ok(summary !== null)
+    assert.equal(summary.rootId, 'root')
+    assert.equal(summary.rootCreatedAt, 1234)
+    assert.equal(summary.detail.messagesTotal, 4)
+    assert.deepEqual(summary.members, [
+      { id: 'kid', createdAt: 7, mode: 'continuable', label: 'Inspect', name: 'agent-1', description: 'duty', phase: 'active' },
+      { id: 'bare' },
+    ])
+    assert.equal(summary.familySize, 3)
+    assert.deepEqual(summary.counts, { root: { readAt: 100, messagesTotal: 4, delegationsCount: 2 } })
+  })
+
+  test('degraded summaries default the family size and reject absent identities', () => {
+    const summary = fleetSummaryOf({ rootId: 'root', detail: { messages: [], truncated: false }, members: [{ id: 'kid' }] })
+    assert.equal(summary?.familySize, 2)
+    assert.equal(summary?.rootCreatedAt, undefined)
+    assert.deepEqual(summary?.counts, {})
+    assert.equal(fleetSummaryOf({ detail: { messages: [], truncated: false } }), null)
+    assert.equal(fleetSummaryOf({ rootId: 'root' }), null)
+    assert.equal(fleetSummaryOf(null), null)
+    assert.equal(fleetSummaryOf(42), null)
+    assert.equal(fleetSummaryOf({ rootId: 'root', detail: null, members: 'nope', counts: null }), null)
+  })
+
+  test('a batch decodes rows, missing and the fallback total', () => {
+    const batch = fleetBatchOf({
+      rows: {
+        a: { messages: [], truncated: false },
+        '': { messages: [], truncated: false },
+        b: null,
+      },
+      missing: ['gone', 42],
+    })
+    assert.ok(batch !== null)
+    assert.deepEqual([...batch.rows.keys()], ['a'])
+    assert.deepEqual(batch.missing, ['gone'])
+    assert.equal(batch.total, 2)
+    assert.equal(fleetBatchOf({ rows: 'nope' }), null)
+    assert.equal(fleetBatchOf(null), null)
+    assert.deepEqual(fleetBatchOf({ rows: {}, missing: 'nope' }), { rows: new Map(), missing: [], total: 0 })
+  })
+})
+
+function stubRoute(handler: (body: Record<string, unknown>) => unknown): Array<Record<string, unknown>> {
+  const bodies: Record<string, unknown>[] = []
   vi.stubGlobal('fetch', (_url: unknown, init: { body: string }) => {
-    const out = handler(JSON.parse(init.body) as Record<string, unknown>)
+    const body = JSON.parse(init.body) as Record<string, unknown>
+    bodies.push(body)
+    const out = handler(body)
     return Promise.resolve({ ok: true, json: () => Promise.resolve(out) } as Response)
   })
+  return bodies
 }
 
-describe('makeFleetDetailFetcher', () => {
-  test('round-trips a detail; null passes through, and a full request posts the full flag', async () => {
+describe('the fleet fetchers', () => {
+  test('round-trips a detail; null passes through, and each mode posts its flag', async () => {
     stubRoute(() => ({ ok: true, value: { messages: [{ kind: 'relay', text: 'yo', seq: 1, time: 1 }], truncated: false } }))
     const detail = await makeFleetDetailFetcher('s1')!()
     assert.equal(detail?.messages[0]?.text, 'yo')
-
     stubRoute(() => ({ ok: true, value: null }))
     assert.equal(await makeFleetDetailFetcher('s1')!(), null)
 
-    const bodies: Record<string, unknown>[] = []
-    stubRoute((body) => {
-      bodies.push(body)
-      return { ok: true, value: null }
-    })
+    const bodies = stubRoute(() => ({ ok: true, value: null }))
     await makeFleetDetailFetcher('s1', true)!()
     await makeFleetDetailFetcher('s1')!()
     await makeFleetDetailFetcher('s1', false, true)!()
     assert.deepEqual(bodies, [{ full: true, sessionId: 's1' }, { sessionId: 's1' }, { history: true, sessionId: 's1' }])
-
     assert.equal(makeFleetDetailFetcher(''), undefined)
+
     vi.stubGlobal('fetch', () => Promise.resolve({ ok: false, status: 503 } as Response))
     await assert.rejects(makeFleetDetailFetcher('s1')!(), /HTTP 503/)
     stubRoute(() => ({ ok: false }))
@@ -134,144 +187,114 @@ describe('makeFleetDetailFetcher', () => {
     vi.stubGlobal('fetch', () => Promise.reject(new Error('offline')))
     await assert.rejects(makeFleetDetailFetcher('s1')!(), /offline/)
   })
+
+  test('summary and batch post their kinds and decode their values', async () => {
+    const bodies = stubRoute((body) => body.summary === true
+      ? { ok: true, value: { rootId: 'root', detail: { messages: [], truncated: false }, members: [], familySize: 1, counts: {} } }
+      : { ok: true, value: { rows: {}, missing: ['x'], total: 1 } })
+    const summary = await makeFleetSummaryFetcher('root')!()
+    assert.equal(summary?.rootId, 'root')
+    const batch = await makeFleetBatchFetcher(['x'], 'preview', 'root')!()
+    assert.deepEqual(batch?.missing, ['x'])
+    assert.deepEqual(bodies, [
+      { sessionId: 'root', summary: true },
+      { batch: { ids: ['x'], mode: 'preview', rootId: 'root' } },
+    ])
+    assert.equal(makeFleetSummaryFetcher(''), undefined)
+    assert.equal(makeFleetBatchFetcher([], 'preview'), undefined)
+    const signal = new AbortController().signal
+    stubRoute(() => ({ ok: true, value: { rows: {}, missing: [], total: 0 } }))
+    const history = await makeFleetBatchFetcher(['a', 'b'], 'history', undefined, signal)!()
+    assert.ok(history !== null)
+  })
 })
 
 describe('FleetDetailCache', () => {
-  test('one in-flight read per (id, stamp); a newer stamp refetches once', async () => {
+  test('memoizes one in-flight read per mode, stamp and batch key, then forgets it', async () => {
     let reads = 0
+    const releases: Array<() => void> = []
     vi.stubGlobal('fetch', () => {
       reads += 1
-      return Promise.resolve({ ok: true, json: () => Promise.resolve({ ok: true, value: null }) } as Response)
+      return new Promise((resolve) => {
+        releases.push(() => { resolve({ ok: true, json: () => Promise.resolve({ ok: true, value: null }) } as Response) })
+      })
     })
     const cache = new FleetDetailCache()
-    const [a, b] = await Promise.all([cache.fetch('s1', 5), cache.fetch('s1', 5)])
-    assert.equal(a, null)
-    assert.equal(b, null)
+    const first = cache.fetch('s1', 5)
+    const second = cache.fetch('s1', 5)
     assert.equal(reads, 1)
-
-    await cache.fetch('s1', 3)
-    assert.equal(reads, 1)
-    await cache.fetch('s1', 6)
+    const full = cache.fetch('s1', 5, true)
     assert.equal(reads, 2)
-  })
-
-  test('the ledger stays bounded; the least recently read member drops first', async () => {
-    const reads: string[] = []
-    vi.stubGlobal('fetch', (_url: unknown, init: { body: string }) => {
-      reads.push(String((JSON.parse(init.body) as { sessionId: string }).sessionId))
-      return Promise.resolve({ ok: true, json: () => Promise.resolve({ ok: true, value: null }) } as Response)
-    })
-    const cache = new FleetDetailCache()
-    for (let i = 0; i < 80; i++) await cache.fetch(`s${i}`, 1)
-    assert.equal(reads.length, 80)
-    await cache.fetch('s79', 1)
-    assert.equal(reads.length, 80, 'the newest member still replays')
-    await cache.fetch('s0', 1)
-    assert.equal(reads.length, 81, 'the evicted oldest member refetches')
-  })
-
-  test('an empty id resolves null without touching the network; a settled failure caches at its stamp and a newer stamp retries', async () => {
-    let reads = 0
-    vi.stubGlobal('fetch', () => {
-      reads += 1
-      return Promise.resolve({ ok: false, status: 500 } as Response)
-    })
-    const cache = new FleetDetailCache()
-    assert.equal(await cache.fetch('', 1), null)
-    assert.equal(reads, 0)
-    assert.equal(await cache.fetch('s1', 1), null)
-    await cache.fetch('s1', 1)
-    assert.equal(reads, 1, 'the failure stays cached at the same stamp')
-    await cache.fetch('s1', 2)
-    assert.equal(reads, 2)
-  })
-
-  test('the full ledger runs beside the excerpt ledger', async () => {
-    const routes: string[] = []
-    vi.stubGlobal('fetch', (_url: unknown, init: { body: string }) => {
-      routes.push(init.body)
-      return Promise.resolve({ ok: true, json: () => Promise.resolve({ ok: true, value: null }) } as Response)
-    })
-    const cache = new FleetDetailCache()
-    await Promise.all([cache.fetch('s1', 5), cache.fetch('s1', 5, true)])
-    assert.equal(routes.length, 2, 'separate ledgers, separate reads')
-    await cache.fetch('s1', 3)
-    await cache.fetch('s1', 3, true)
-    assert.equal(routes.length, 2)
-    await Promise.all([cache.fetch('s1', 6), cache.fetch('s1', 6, true)])
-    assert.equal(routes.length, 4, 'a newer stamp refreshes each ledger on its own')
-  })
-
-  test('history has an independent complete-event ledger and empty ids stay offline', async () => {
-    const bodies: Record<string, unknown>[] = []
-    vi.stubGlobal('fetch', (_url: unknown, init: { body: string }) => {
-      const body = JSON.parse(init.body) as Record<string, unknown>
-      bodies.push(body)
-      return Promise.resolve({ ok: true, json: () => Promise.resolve({ ok: true, value: null }) } as Response)
-    })
-    const cache = new FleetDetailCache()
-    assert.equal(await cache.fetchHistory('', 1), null)
-    assert.equal(bodies.length, 0)
-    await Promise.all([cache.fetchHistory('s1', 2), cache.fetchHistory('s1', 2)])
-    assert.equal(bodies.length, 1)
-    await cache.fetchHistory('s1', 1)
-    assert.equal(bodies.length, 1)
-    await cache.fetchHistory('s1', 3)
-    assert.equal(bodies.length, 2)
-    assert.ok(bodies.every(body => body.history === true))
-    await cache.fetch('s1', 3)
-    assert.equal(bodies.length, 3)
-    assert.equal(bodies[2].full, undefined)
-    assert.equal(bodies[2].history, undefined)
-  })
-
-  test('a failing history read resolves null and stays cached at its stamp', async () => {
-    let reads = 0
-    vi.stubGlobal('fetch', () => {
-      reads += 1
-      return Promise.resolve({ ok: false, status: 503 } as Response)
-    })
-    const cache = new FleetDetailCache()
-    assert.equal(await cache.fetchHistory('s1', 1), null)
-    assert.equal(await cache.fetchHistory('s1', 1), null)
-    assert.equal(reads, 1, 'the failed read replays from the ledger')
-    assert.equal(await cache.fetchHistory('s1', 2), null)
-    assert.equal(reads, 2)
-  })
-
-  test('clear drops every ledger so a reused instance reads fresh', async () => {
-    let reads = 0
-    vi.stubGlobal('fetch', () => {
-      reads += 1
-      return Promise.resolve({ ok: true, json: () => Promise.resolve({ ok: true, value: null }) } as Response)
-    })
-    const cache = new FleetDetailCache()
-    await Promise.all([cache.fetch('s1', 5), cache.fetch('s1', 5, true), cache.fetchHistory('s1', 5)])
-    assert.equal(reads, 3)
+    releases[0]!()
+    releases[1]!()
+    assert.equal(await first, null)
+    assert.equal(await second, null)
+    assert.equal(await full, null)
+    const replay = cache.fetch('s1', 5)
+    assert.equal(reads, 3, 'a settled read is not replayed from a payload ledger')
+    releases[2]!()
+    assert.equal(await replay, null)
+    const history = cache.fetchHistory('s1', 5)
+    releases[3]!()
+    assert.equal(await history, null)
     cache.clear()
-    await Promise.all([cache.fetch('s1', 5), cache.fetch('s1', 5, true), cache.fetchHistory('s1', 5)])
-    assert.equal(reads, 6)
   })
 
-  test('the byte budget evicts the oldest oversized entries and keeps the newest read', async () => {
-    const reads: string[] = []
-    const text = 'x'.repeat(600_000)
-    vi.stubGlobal('fetch', (_url: unknown, init: { body: string }) => {
-      const id = String((JSON.parse(init.body) as { sessionId: string }).sessionId)
-      reads.push(id)
-      const value = { messages: [{ seq: 1, time: 1, kind: 'relay', text }], truncated: false }
-      return Promise.resolve({ ok: true, json: () => Promise.resolve({ ok: true, value }) } as Response)
+  test('batch and summary reads share their in-flight promise and surface transport failures', async () => {
+    let reads = 0
+    const release: Array<() => void> = []
+    vi.stubGlobal('fetch', () => {
+      reads += 1
+      return new Promise((resolve) => {
+        release.push(() => { resolve({ ok: true, json: () => Promise.resolve({ ok: true, value: { rows: {}, missing: [], total: 0 } }) } as Response) })
+      })
     })
     const cache = new FleetDetailCache()
-    for (let i = 0; i < 20; i++) await cache.fetch(`s${i}`, 1)
-    await cache.fetch('s19', 1)
-    assert.equal(reads.length, 20, 'the newest entry replays from the ledger')
-    await cache.fetch('s0', 1)
-    assert.equal(reads.length, 21, 'an entry evicted by bytes refetches')
+    const batch = cache.fetchBatch(['a'], 'preview')
+    const again = cache.fetchBatch(['a'], 'preview')
+    assert.equal(reads, 1)
+    assert.equal(batch, again)
+    assert.equal(await cache.fetchHistory('', 1), null)
+    release.splice(0).forEach(open => { open() })
+    await Promise.all([batch, again])
+
+    vi.stubGlobal('fetch', () => Promise.reject(new Error('offline')))
+    const history = cache.fetchHistory('s1', 2)
+    assert.equal(await history, null, 'a single-session history read fails soft')
+    const full = cache.fetch('s1', 2, true)
+    assert.equal(await full, null, 'a single-session full read fails soft')
+  })
+
+  test('a failed protocol read is reported rather than swallowed', async () => {
+    vi.stubGlobal('fetch', () => Promise.reject(new Error('offline')))
+    const cache = new FleetDetailCache()
+    await assert.rejects(cache.fetchSummary('root'), /offline/)
+    await assert.rejects(cache.fetchBatch(['a'], 'preview'), /offline/)
+    assert.equal(await cache.fetchSummary(''), null)
   })
 })
 
-describe('settledVariantOf', () => {
+describe('detailBytes', () => {
+  test('weighs the retained text and tolerates null', () => {
+    assert.equal(detailBytes(null), 0)
+    const detail: FleetDetail = {
+      initialPrompt: 'prompt',
+      lastReply: { time: 1, text: 'reply' },
+      messages: [
+        { seq: 1, time: 1, kind: 'settled', text: 'text', report: 'report', summary: 'summary' },
+        { seq: 2, time: 2, kind: 'relay', text: 'x' },
+      ],
+      delegations: [{ seq: 3, time: 3, to: 'kid', mode: 'continuable', label: 'label' }],
+      roster: [{ name: 'member', description: 'duty' }],
+      truncated: false,
+    }
+    const bytes = detailBytes(detail)
+    assert.ok(bytes > 0)
+    assert.equal(detailBytes({ messages: [], truncated: false }), 0)
+  })
+})
+
+describe('settledVariantOf, mergeDelegations and mergeComms', () => {
   test('the runtime vocabulary classifies; unknown phrasings pass through', () => {
     assert.equal(settledVariantOf('Background subagent x finished and will do no further work unless you send it more.'), 'finished')
     assert.equal(settledVariantOf('Background subagent x finished. It cannot receive follow-up messages.'), 'finishedFinal')
@@ -281,10 +304,8 @@ describe('settledVariantOf', () => {
     assert.equal(settledVariantOf('Background subagent x failed before it finished.'), 'failed')
     assert.equal(settledVariantOf('some future phrasing'), null)
   })
-})
 
-describe('mergeDelegations', () => {
-  test('keeps the parent log owner as the delegation source', () => {
+  test('delegations keep the parent log owner as their source', () => {
     const rows = mergeDelegations(new Map<string, FleetDetail>([
       ['root', {
         delegations: [{ seq: 4, time: 100, to: 'child', mode: 'continuable', label: 'Inspect' }],
@@ -295,10 +316,8 @@ describe('mergeDelegations', () => {
     ]))
     assert.deepEqual(rows, [{ key: 'root:4:child', seq: 4, time: 100, from: 'root', to: 'child', mode: 'continuable', label: 'Inspect' }])
   })
-})
 
-describe('mergeComms', () => {
-  test('merges per-session messages newest-first with the log owner as recipient, keeping settled fields', () => {
+  test('comms merge per-session messages newest-first with the log owner as recipient', () => {
     const details = new Map<string, FleetDetail>([
       ['a', { messages: [
         { seq: 1, time: 100, kind: 'relay', from: 'b', text: 'question' },
@@ -308,7 +327,7 @@ describe('mergeComms', () => {
       ['empty', { messages: [], truncated: false }],
     ])
     const rows = mergeComms(details)
-    assert.deepEqual(rows.map(r => [r.to, r.time, r.kind]), [
+    assert.deepEqual(rows.map(row => [row.to, row.time, row.kind]), [
       ['a', 300, 'settled'],
       ['b', 200, 'mailbox'],
       ['a', 100, 'relay'],
@@ -336,6 +355,48 @@ describe('mergeComms', () => {
         { seq: 2, time: 50, kind: 'relay', text: 'z' },
       ], truncated: false }],
     ])
-    assert.deepEqual(mergeComms(tied).map(r => r.key), ['a:1:50:relay', 'a:2:50:relay', 'b:1:50:relay'], 'equal instants tie-break on the key')
+    assert.deepEqual(mergeComms(tied).map(row => row.key), ['a:1:50:relay', 'a:2:50:relay', 'b:1:50:relay'], 'equal instants tie-break on the key')
+  })
+})
+
+describe('fleetDetail decoders — hostile edges', () => {
+  test('counts, members, and batch rows reject malformed shapes alone', () => {
+    assert.deepEqual(fleetSummaryOf({
+      rootId: 'root',
+      detail: { messages: [], truncated: false },
+      members: 'nope',
+      counts: {
+        nullEntry: null,
+        noReadAt: { messagesTotal: 1, delegationsCount: 1 },
+        badTotal: { readAt: 1, messagesTotal: 'x', delegationsCount: 1 },
+        negative: { readAt: 1, messagesTotal: -1, delegationsCount: 1 },
+        badDelegations: { readAt: 1, messagesTotal: 1, delegationsCount: 'x' },
+        negativeDelegations: { readAt: 1, messagesTotal: 1, delegationsCount: -1 },
+      },
+    })?.counts, {})
+    assert.deepEqual(fleetBatchOf({ rows: { a: null, b: 42 }, missing: [null, 7] }), {
+      rows: new Map(),
+      missing: [],
+      total: 0,
+    })
+  })
+
+  test('a delegation without a label stays label-free', () => {
+    const detail = fleetDetailOf({ delegations: [{ seq: 1, time: 1, to: 'kid', mode: 'one-shot' }] })
+    assert.deepEqual(detail?.delegations, [{ seq: 1, time: 1, to: 'kid', mode: 'one-shot' }])
+  })
+})
+
+describe('FleetDetailCache — clearing in-flight reads', () => {
+  test('a cleared scope lets the in-flight finally skip the map touch', async () => {
+    let release: () => void = () => {}
+    vi.stubGlobal('fetch', () => new Promise((resolve) => {
+      release = () => { resolve({ ok: true, json: () => Promise.resolve({ ok: true, value: null }) } as Response) }
+    }))
+    const cache = new FleetDetailCache()
+    const pending = cache.fetch('s1', 1)
+    cache.clear()
+    release()
+    assert.equal(await pending, null)
   })
 })

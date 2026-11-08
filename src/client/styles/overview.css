@@ -18,6 +18,8 @@
 .lc-hovertip { position: fixed; z-index: 300; max-width: min(320px, 50vw); white-space: pre-line; }
 
 .lc-ov-first { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; margin-bottom: 10px; }
+.lc-ov-kpis, .lc-ov-stats { transition: opacity 120ms ease-out; }
+.lc-ov-busy .lc-ov-kpis, .lc-ov-busy .lc-ov-stats { opacity: 0.55; }
 .lc-ov-kpis { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
 .lc-ov-kpi { align-items: center; padding: 8px; }
 .lc-ov-kpi .lc-stat-value { font-size: 20px; }

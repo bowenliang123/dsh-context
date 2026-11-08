@@ -36,3 +36,27 @@ describe('derived cache', () => {
     assert.notEqual(assembleCached(data, otherHeaders, null), withHeaders)
   })
 })
+
+describe('derived cache bounds', () => {
+  test('cachedByData keeps its inner map bounded and touches recency on hits', () => {
+    const data = timeline()
+    let calls = 0
+    const compute = () => { calls++; return calls }
+    const first = cachedByData(data, 'k0', compute)
+    for (let i = 1; i < 16; i++) cachedByData(data, 'k' + i, compute)
+    assert.equal(cachedByData(data, 'k0', compute), first, 'a hit replays and refreshes recency')
+    cachedByData(data, 'k16', compute)
+    assert.equal(cachedByData(data, 'k0', compute), first, 'the touched key survived the trim')
+    assert.notEqual(cachedByData(data, 'k1', compute), 2, 'the untouched oldest key was recomputed')
+  })
+
+  test('assembleCached keeps its per-step map bounded', () => {
+    const data = timeline()
+    const first = assembleCached(data, null, 0)
+    for (let seq = 1; seq < 8; seq++) assembleCached(data, null, seq)
+    assert.equal(assembleCached(data, null, 0), first, 'a hit replays and refreshes recency')
+    assembleCached(data, null, 8)
+    assert.equal(assembleCached(data, null, 0), first, 'the touched step survived the trim')
+    assert.notEqual(assembleCached(data, null, 1), first, 'the untouched oldest step was dropped')
+  })
+})

@@ -1,10 +1,11 @@
 import { useEffect } from 'react'
+import { retentionOf } from './retention'
 import { asRecord, seatOf } from './services'
 import { detailStoreOf } from './timelineSource'
 
 const WARM_DELAY_MS = 900
 
-const MAX_PENDING = 32
+const MAX_PENDING = retentionOf('pendingWarm').maxEntries
 
 interface PendingWarm {
   timer: ReturnType<typeof setTimeout>

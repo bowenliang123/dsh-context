@@ -1,8 +1,13 @@
 import { useCallback, useState, type ReactElement } from 'react'
+import { registerRetentionCleanup, trimRetentionMap } from '../retention'
 import type { ViewKit } from '../viewkit'
 import { useEscapeClose } from './escapeClose'
 
-const dismissed = new Set<string>()
+const dismissed = new Map<string, true>()
+
+const DISMISSED_SCOPE = 'upgradeDismissed'
+
+registerRetentionCleanup(() => { dismissed.clear() })
 
 export interface UpgradeGateProps {
   sessionId?: string
@@ -17,7 +22,8 @@ export function makeUpgradeGate(kit: ViewKit): (props: UpgradeGateProps) => Reac
     const [closedFor, setClosedFor] = useState<string | null>(null)
     const closed = closedFor === sessionId || dismissed.has(sessionId)
     const close = useCallback(() => {
-      dismissed.add(sessionId)
+      dismissed.set(sessionId, true)
+      trimRetentionMap(dismissed, DISMISSED_SCOPE)
       setClosedFor(sessionId)
     }, [sessionId])
 

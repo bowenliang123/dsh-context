@@ -1,27 +1,13 @@
 import { act, createElement as h } from 'react'
 import assert from 'node:assert/strict'
-import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest'
+import { afterEach, describe, expect, test, vi } from 'vitest'
 import { makeAgentGraph } from '../../../src/client/components/agentGraph'
 import { DICT_EN } from '../../../src/client/i18n'
-import { resetModelPrices, setModelPricesLoader } from '../../../src/client/modelPrices'
 import { LEAD_HUE, agentForestOf, familyHue, type AgentNode, type AgentSelfStats } from '../../../src/client/agentTree'
 import { TestClientCtx, asClientCtx } from '../helpers/harness'
 import { blur, click, flush, focus, hover, makeKit, mount, query, queryAll, text, unhover, until, wheel } from '../helpers/kit'
 
 const kit = makeKit()
-
-beforeEach(() => {
-  resetModelPrices()
-  setModelPricesLoader(() => new Promise(() => {}))
-})
-
-afterEach(() => {
-  resetModelPrices()
-})
-
-const PROVIDERS = {
-  deepseek: { models: { 'deepseek-v4-flash': { cost: { input: 0.15, output: 0.6, cache_read: 0.003 } } } },
-}
 
 function timeline(total: number, requests = 0): unknown {
   return {
@@ -387,30 +373,30 @@ describe('AgentGraph — the family tree', () => {
   })
 
   const COST_LEDGER = { 'deepseek-official': { 'deepseek-v4-flash': { peak: { uncached: 1_000_000, cacheRead: 0, cacheWrite: 0, output: 500_000 } } } }
+  const COST_READ = { usd: 0.9, ready: true }
 
-  test('the headline prices the consumed tokens once the price book lands', async () => {
-    setModelPricesLoader(() => Promise.resolve(PROVIDERS))
+  test('the headline shows the host cost read; a non-ready read leaves the tokens alone', async () => {
     const rows = family() as {
       worker: { projectionValues: Record<string, unknown> }
     }
-    rows.worker.projectionValues.contextTimeline = { ...(timeline(800, 5) as Record<string, unknown>), cost: COST_LEDGER }
+    rows.worker.projectionValues.contextTimeline = { ...(timeline(800, 5) as Record<string, unknown>), cost: COST_LEDGER, costRead: COST_READ }
     const byId: Record<string, unknown> = {
       ...rows,
       cold: {
         parentId: 'root', origin: 'subagent', running: false, updatedAt: 4,
-        projectionValues: { contextTimeline: { ...(timeline(100, 0) as Record<string, unknown>), cost: COST_LEDGER } },
+        projectionValues: { contextTimeline: { ...(timeline(100, 0) as Record<string, unknown>), cost: COST_LEDGER, costRead: COST_READ } },
       },
     }
     const View = makeView(new FakeSessions(byId))
     const m = await mount(h(View, { sessionId: 'root', self: selfStats() }))
-    await until(() => text(query(m.container, '[data-agent="worker"]')).includes('$0.90'), 'worker cost estimate')
+    await until(() => text(query(m.container, '[data-agent="worker"]')).includes('$0.90'), 'worker cost read')
     assert.ok(text(query(m.container, '[data-agent="worker"]')).includes('150 · $0.90'))
     assert.ok(text(query(m.container, '[data-agent="cold"]')).includes('1.5M · $0.90'))
     await m.unmount()
 
     const ViewZh = makeView(new FakeSessions(byId), { locale: 'zh' })
     const mz = await mount(h(ViewZh, { sessionId: 'root', self: selfStats() }))
-    await until(() => text(query(mz.container, '[data-agent="worker"]')).includes('¥6.00'), 'zh cost estimate')
+    await until(() => text(query(mz.container, '[data-agent="worker"]')).includes('¥6.00'), 'zh cost read')
     assert.ok(text(mz.container).includes('Agent 网络'), 'the zh title')
     assert.ok(text(mz.container).includes('当前'), 'the zh self marker')
     assert.ok(text(mz.container).includes('4 个 Agent'), 'the zh kit localizes the chips')
@@ -425,6 +411,24 @@ describe('AgentGraph — the family tree', () => {
     const mb = await mount(h(makeAgentGraph(asClientCtx(bare), kit), { sessionId: 'root', self: selfStats() }))
     await until(() => text(query(mb.container, '[data-agent="worker"]')).includes('$0.90'), 'usd fallback')
     await mb.unmount()
+
+    const pending = family() as {
+      worker: { projectionValues: Record<string, unknown> }
+    }
+    pending.worker.projectionValues.contextTimeline = { ...(timeline(800, 5) as Record<string, unknown>), cost: COST_LEDGER, costRead: { usd: null, ready: false } }
+    const pendingById: Record<string, unknown> = {
+      ...pending,
+      cold: {
+        parentId: 'root', origin: 'subagent', running: false, updatedAt: 4,
+        projectionValues: { contextTimeline: { ...(timeline(100, 0) as Record<string, unknown>), cost: COST_LEDGER, costRead: { usd: null, ready: false } } },
+      },
+    }
+    const mp = await mount(h(makeView(new FakeSessions(pendingById)), { sessionId: 'root', self: selfStats() }))
+    await flush()
+    assert.ok(text(query(mp.container, '[data-agent="worker"]')).includes('150'), 'the token figure stays')
+    assert.ok(!text(query(mp.container, '[data-agent="worker"]')).includes('$'), 'a non-ready read hides the money figure')
+    assert.ok(text(query(mp.container, '[data-agent="cold"]')).includes('1.5M'))
+    await mp.unmount()
   })
 })
 

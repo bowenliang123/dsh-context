@@ -138,7 +138,11 @@ export function makeContextModal(
                 source.detailState === 'failed' ? (
                   <DetailNote state="failed" onRetry={source.retryDetail} />
                 ) : (
-                  <div className="lc-empty">{t('loading')}</div>
+                  <div className="lc-modal-body">
+                    <div className="lc-card lc-modal-skeleton" style={{ minHeight: 132 }} aria-hidden="true" />
+                    <div className="lc-card lc-modal-skeleton" style={{ minHeight: 320 }} aria-hidden="true" />
+                    <div className="lc-empty">{t('loading')}</div>
+                  </div>
                 )
               ) : (
                 <div className="lc-modal-body">
@@ -161,6 +165,7 @@ export function makeContextModal(
                     detailState={source.detailState}
                     onDetailRetry={source.retryDetail}
                     locale={activeLocale()}
+                    session={sessionId !== '' ? sessionId : undefined}
                   />
                 </div>
               )}

@@ -532,3 +532,15 @@ describe('createDetailGate projection reads', () => {
     assert.equal(gate.stateOf({}, 'contextTimeline'), 'registry')
   })
 })
+
+describe('detail payload cache idle sweep', () => {
+  test('drops cached payloads after inactivity and disposes its timer', async () => {
+    const fake = ctxOf({ connection: { fetch: { register: () => () => {} } }, sessions: sessionsWith(okSession()) })
+    watchDetailChannel(fake.ctx, BOUNDS, undefined, undefined, undefined, undefined, { idleSweepMs: 5 })
+    await call(fake.captured, {})
+    await new Promise(resolve => setTimeout(resolve, 20))
+    await call(fake.captured, {})
+    fake.dispose()
+    assert.doesNotThrow(() => { fake.dispose() })
+  })
+})

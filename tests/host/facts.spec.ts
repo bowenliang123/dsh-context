@@ -589,3 +589,24 @@ describe('cold sessions', () => {
     assert.equal((body.error as { message: string }).message, 'observe exploded')
   })
 })
+
+describe('cold state idle sweep', () => {
+  test('drops the cached fold after inactivity and refolds the next read', async () => {
+    const { fake, calls } = coldCtx({ revision: 'r1', header: { id: 's2' } })
+    watchFactsChannel(fake.ctx, BOUNDS, { coldReads: OPEN_GATE, idleSweepMs: 400 })
+    const first = await call(fake.captured, { sessionId: 's2', parts: ['head'] })
+    assert.equal(first.ok, true)
+    await new Promise(resolve => setTimeout(resolve, 500))
+    const second = await call(fake.captured, { sessionId: 's2', parts: ['head'] })
+    assert.equal(second.ok, true, 'the swept route still serves the next read')
+    assert.equal(calls(), 2)
+  })
+
+  test('dispose clears the armed sweep timer', async () => {
+    const { fake } = coldCtx({ revision: 'r1' })
+    watchFactsChannel(fake.ctx, BOUNDS, { idleSweepMs: 10 })
+    await call(fake.captured, { sessionId: 's2', parts: ['head'] })
+    fake.dispose()
+    assert.doesNotThrow(() => { fake.dispose() })
+  })
+})

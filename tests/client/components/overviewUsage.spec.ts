@@ -11,7 +11,7 @@ const OverviewUsage = makeOverviewUsage(kit)
 const TODAY = '2026-09-16'
 
 function day(over: Partial<DayTotals> = {}): DayTotals {
-  return { tokens: 0, requests: 0, sessions: 0, cost: null, ...over }
+  return { tokens: 0, sessions: 0, cost: null, ...over }
 }
 
 describe('usageWindowOf', () => {
@@ -114,7 +114,7 @@ describe('OverviewUsage', () => {
 
   test('a priced-but-free day draws no bars yet keeps the column (not the empty note)', async () => {
     const m = await mount(h(OverviewUsage, {
-      days: { '2026-09-16': day({ tokens: 0, requests: 2, cost: 0 }) },
+      days: { '2026-09-16': day({ tokens: 0, cost: 0 }) },
       currency: 'usd',
       today: TODAY,
     }))

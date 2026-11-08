@@ -19,3 +19,7 @@ export const BACKFILL_ROUTE = 'api/dsh-context/backfill'
 export const ATTACHMENT_ROUTE = 'api/dsh-context/attachment'
 
 export const SNAPSHOT_ROUTE = 'api/dsh-context/snapshot'
+
+export const OVERVIEW_ROUTE = 'api/dsh-context/overview'
+
+export const VERSION_ROUTE = 'api/dsh-context/version'

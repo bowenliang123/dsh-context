@@ -1,6 +1,6 @@
 import { act, createElement as h } from 'react'
 import assert from 'node:assert/strict'
-import { describe, test } from 'vitest'
+import { describe, test, vi } from 'vitest'
 import type { ContextHeaders, HeaderEpochContent } from '../../../src/shared/types'
 import { headersOf } from '../../../src/client/services'
 import { click, flush, mount, query, queryAll, text } from '../helpers/kit'
@@ -68,26 +68,29 @@ describe('ContextBrowser header epochs', () => {
     await m.unmount()
   })
 
-  test('a failed epoch fetch arms the retry button; retrying succeeds', async () => {
+  test('a failed epoch fetch auto-retries and the retried read renders', async () => {
     silenceFetchWarn()
-    const data = tl({ current: { system: 30, tools: 9, user: 0, inject: 0, skill: 0, assistant: 0, tool: 0, total: 39 } })
-    const pendings: Array<{ resolve: (v: HeaderEpochContent | null) => void; reject: (e: unknown) => void }> = []
-    const deferred: () => Promise<HeaderEpochContent | null> = () =>
-      new Promise((resolve, reject) => { pendings.push({ resolve, reject }) })
-    const m = await mount(h(Browser, props({ data, headers: HEADERS, fetchHeader: deferred })))
-    await click(catRow(m, 'system'))
-    await flush()
-    assert.ok(text(query(m.container, '.lc-br-body')).includes('Loading'), 'the fetch is in flight')
-    await act(async () => { pendings[0]!.reject(new Error('down')) })
-    await flush()
-    assert.ok(text(query(m.container, '.lc-br-body')).includes('Load failed'), 'a rejected read arms the retry')
-    await click(query(m.container, '.lc-br-retry'))
-    await flush()
-    assert.ok(text(query(m.container, '.lc-br-body')).includes('Loading'), 'the retry refetches')
-    await act(async () => { pendings[1]!.resolve(CONTENTS[35]!) })
-    await flush()
-    assert.ok(text(query(m.container, '.lc-br-body')).includes('SYS B'), 'the retried read renders')
-    await m.unmount()
+    vi.useFakeTimers()
+    try {
+      const data = tl({ current: { system: 30, tools: 9, user: 0, inject: 0, skill: 0, assistant: 0, tool: 0, total: 39 } })
+      const pendings: Array<{ resolve: (v: HeaderEpochContent | null) => void; reject: (e: unknown) => void }> = []
+      const deferred: () => Promise<HeaderEpochContent | null> = () =>
+        new Promise((resolve, reject) => { pendings.push({ resolve, reject }) })
+      const m = await mount(h(Browser, props({ data, headers: HEADERS, fetchHeader: deferred })))
+      await click(catRow(m, 'system'))
+      await flush()
+      assert.ok(text(query(m.container, '.lc-br-body')).includes('Loading'), 'the fetch is in flight')
+      await act(async () => { pendings[0]!.reject(new Error('down')) })
+      await act(async () => { await vi.advanceTimersByTimeAsync(1_100) })
+      await flush()
+      assert.equal(pendings.length, 2, 'the bounded retry refetches without user action')
+      await act(async () => { pendings[1]!.resolve(CONTENTS[35]!) })
+      await flush()
+      assert.ok(text(query(m.container, '.lc-br-body')).includes('SYS B'), 'the retried read renders')
+      await m.unmount()
+    } finally {
+      vi.useRealTimers()
+    }
   })
 
   test('a stale epoch fetch resolves and rejects ignored once another epoch takes over', async () => {

@@ -1,6 +1,8 @@
 import assert from 'node:assert/strict'
 import { afterEach, describe, test, vi } from 'vitest'
 import { makeAgentHeads, makeBatchHeadFetcher, makeHeadFetcher, headsOf, readHeads } from '../../src/client/agentHeads'
+import { invalidate, resetInvalidations } from '../../src/client/invalidation'
+import { disposeRetention } from '../../src/client/retention'
 
 function headResponse(model = 'deepseek-v4-flash'): unknown {
   return {
@@ -134,6 +136,17 @@ import type { SessionsFaceLike } from '../../src/client/agentTree'
 import { mount } from './helpers/kit'
 
 describe('useSessionsSnapshot coalescing', () => {
+  test('a missing face reads null and subscribes to nothing', async () => {
+    const box: { current: unknown } = { current: {} }
+    function Probe(): null {
+      box.current = useSessionsSnapshot(null, 0)
+      return null
+    }
+    const m = await mount(h(Probe))
+    assert.equal(box.current, null)
+    await m.unmount()
+  })
+
   test('one trailing notification per window while the snapshot read stays latest-wins', async () => {
     vi.useFakeTimers()
     let snapshot: unknown = { ids: ['a'] }
@@ -265,6 +278,31 @@ describe('headsOf and the batch heads channel', () => {
     assert.deepEqual(bodies.flatMap(body => body.ids), ids)
   })
 
+  test('an invalidation during a batch read drops the batch and keeps callers served', async () => {
+    const pending: { resolve: (value: unknown) => void; reject: (reason: unknown) => void }[] = []
+    let calls = 0
+    vi.stubGlobal('fetch', () => new Promise((resolve, reject) => {
+      calls++
+      pending.push({ resolve, reject })
+    }))
+    const heads = makeAgentHeads()
+    const many = heads.headOfMany!
+    const batch = many.call(heads, ['b1', 'b2'])
+    invalidate('heads')
+    const fresh = many.call(heads, ['b1'])
+    assert.equal(calls, 2)
+    pending[0].resolve(batchResponse(['b1', 'b2']))
+    assert.deepEqual([...(await batch).keys()].sort(), ['b1', 'b2'], 'the caller still receives its read')
+    pending[1].resolve(batchResponse(['b1']))
+    assert.equal((await fresh).get('b1')?.current.total, 1, 'the fresh batch is cached')
+    const failing = many.call(heads, ['b3'])
+    invalidate('heads')
+    pending[2].reject('offline')
+    await assert.rejects(failing, /heads read failed/)
+    disposeRetention()
+    resetInvalidations()
+  })
+
   test('concurrent batches for the same cold ids join the in-flight reads', async () => {
     let release!: () => void
     let calls = 0
@@ -346,5 +384,180 @@ describe('readHeads — the batch-or-single seam', () => {
     assert.deepEqual([...reads.keys()], ['a'])
     await assert.rejects(readHeads({ headOf: (id: string) => id === 'b' ? Promise.reject(new Error('bad')) : Promise.resolve(timeline()) }, ['a', 'b']), /bad/)
     await assert.rejects(readHeads({ headOf: () => Promise.reject('plain') }, ['a']), /heads read failed/)
+  })
+})
+
+describe('makeAgentHeads freshness', () => {
+  afterEach(() => {
+    disposeRetention()
+    resetInvalidations()
+    vi.useRealTimers()
+    vi.unstubAllGlobals()
+  })
+
+  test('heads expire after their ttl so a moved projection is re-read', async () => {
+    vi.useFakeTimers()
+    let calls = 0
+    vi.stubGlobal('fetch', async () => {
+      calls++
+      return headResponse('m' + String(calls))
+    })
+    const heads = makeAgentHeads()
+    assert.equal((await heads.headOf('s1'))?.model, 'm1')
+    assert.equal((await heads.headOf('s1'))?.model, 'm1')
+    assert.equal(calls, 1)
+    vi.advanceTimersByTime(60_000)
+    assert.equal((await heads.headOf('s1'))?.model, 'm2')
+    assert.equal(calls, 2)
+
+    let absent = 0
+    vi.stubGlobal('fetch', async () => {
+      absent++
+      return { ok: true, status: 200, json: async () => ({ ok: true, value: null }) }
+    })
+    assert.equal(await heads.headOf('gone'), null)
+    assert.equal(await heads.headOf('gone'), null)
+    assert.equal(absent, 1)
+    vi.advanceTimersByTime(60_000)
+    assert.equal(await heads.headOf('gone'), null)
+    assert.equal(absent, 2)
+  })
+
+  test('pricing readiness clears the heads so cost-bearing heads refetch', async () => {
+    let calls = 0
+    vi.stubGlobal('fetch', async () => {
+      calls++
+      return headResponse()
+    })
+    const heads = makeAgentHeads()
+    await heads.headOf('priced')
+    invalidate('pricing')
+    await heads.headOf('priced')
+    assert.equal(calls, 2, 'the stale cost-less head was dropped')
+    await heads.headOf('priced')
+    assert.equal(calls, 2, 'the refetched head replays')
+  })
+
+  test('heads invalidation clears only the named session or everything', async () => {
+    const calls: string[] = []
+    vi.stubGlobal('fetch', async (_url: unknown, init: { body: string }) => {
+      calls.push((JSON.parse(init.body) as { sessionId: string }).sessionId)
+      return headResponse()
+    })
+    const heads = makeAgentHeads()
+    await heads.headOf('a')
+    await heads.headOf('b')
+    invalidate('fleet')
+    await heads.headOf('a')
+    assert.deepEqual(calls, ['a', 'b'], 'another kind leaves heads alone')
+    invalidate('heads', { sessionId: 'a' })
+    await heads.headOf('a')
+    await heads.headOf('b')
+    assert.deepEqual(calls, ['a', 'b', 'a'], 'only the named session is re-read')
+    invalidate('heads')
+    await heads.headOf('a')
+    await heads.headOf('b')
+    assert.deepEqual(calls, ['a', 'b', 'a', 'a', 'b'], 'a full invalidation re-reads every head')
+  })
+
+  test('an invalidation during a read drops that result and the next ask re-reads', async () => {
+    const pending: { resolve: (value: unknown) => void; reject: (reason: unknown) => void }[] = []
+    let calls = 0
+    vi.stubGlobal('fetch', () => new Promise((resolve, reject) => {
+      calls++
+      pending.push({ resolve, reject })
+    }))
+    const heads = makeAgentHeads()
+    const first = heads.headOf('s1')
+    invalidate('heads')
+    const second = heads.headOf('s1')
+    assert.equal(calls, 2)
+    pending[0].resolve(headResponse('old'))
+    assert.equal((await first)?.model, 'old', 'the caller still receives its read')
+    pending[1].resolve(headResponse('new'))
+    assert.equal((await second)?.model, 'new')
+    await heads.headOf('s1')
+    assert.equal(calls, 2, 'the fresh result is cached')
+
+    const failing = heads.headOf('bad')
+    invalidate('heads')
+    pending[2].reject(new Error('down'))
+    await assert.rejects(failing)
+  })
+})
+
+describe('makeAgentHeads per-id detail fallback', () => {
+  afterEach(() => { vi.unstubAllGlobals() })
+
+  function stubRoutes(detail: (id: string) => Promise<unknown>, batchIds: (ids: string[]) => void = () => {}): { heads: number; details: string[] } {
+    const log = { heads: 0, details: [] as string[] }
+    vi.stubGlobal('fetch', async (url: unknown, init: { body: string }) => {
+      const body = JSON.parse(init.body) as { ids?: string[]; sessionId?: string }
+      if (String(url).includes('heads')) {
+        log.heads++
+        batchIds(body.ids ?? [])
+        return { ok: true, status: 200, json: async () => ({ ok: true, value: {} }) }
+      }
+      const id = body.sessionId as string
+      log.details.push(id)
+      try {
+        const value = await detail(id)
+        return { ok: true, status: 200, json: async () => ({ ok: true, value }) }
+      } catch {
+        return { ok: false, status: 500, json: async () => ({}) }
+      }
+    })
+    return log
+  }
+
+  test('missing batch heads land through the per-id head read and are cached', async () => {
+    const log = stubRoutes(async id => ({ rev: 1, head: { ok: true, current: { system: 1, tools: 2, user: 3, inject: 0, skill: 0, assistant: 4, tool: 0, total: 10 }, model: 'detail-' + id } }))
+    const heads = makeAgentHeads()
+    const reads = await heads.headOfMany!(['a', 'b'])
+    assert.deepEqual([...reads.keys()].sort(), ['a', 'b'])
+    assert.equal(reads.get('a')?.model, 'detail-a')
+    assert.equal(log.heads, 1)
+    assert.deepEqual(log.details.sort(), ['a', 'b'])
+    log.details.length = 0
+    const again = await heads.headOfMany!(['a', 'b'])
+    assert.equal(again.size, 2)
+    assert.deepEqual(log.details, [], 'the fallback heads replay from the cache')
+  })
+
+  test('a null, failed or capped fallback drops only what cannot land', async () => {
+    stubRoutes(async (id) => {
+      if (id === 'null') return null
+      if (id === 'throw') throw new Error('down')
+      return { rev: 1, head: { ok: true, current: { system: 1, tools: 0, user: 0, inject: 0, skill: 0, assistant: 0, tool: 0, total: 1 } } }
+    })
+    const heads = makeAgentHeads()
+    const reads = await heads.headOfMany!(['ok', 'null', 'throw'])
+    assert.deepEqual([...reads.keys()], ['ok'])
+    const many = Array.from({ length: 80 }, (_, i) => `cap-${i}`)
+    const capped = await makeAgentHeads().headOfMany!(many)
+    assert.equal(capped.size, 64, 'the per-id fallback is capped at one full batch')
+  })
+
+  test('an invalidation while a fallback head is in flight never poisons the cache', async () => {
+    let release!: () => void
+    const gate = new Promise<void>((resolve) => { release = resolve })
+    let detailCalls = 0
+    vi.stubGlobal('fetch', async (url: unknown) => {
+      if (String(url).includes('heads')) {
+        return { ok: true, status: 200, json: async () => ({ ok: true, value: {} }) }
+      }
+      detailCalls++
+      await gate
+      return { ok: true, status: 200, json: async () => ({ ok: true, value: { rev: 1, head: { ok: true, current: { system: 1, tools: 0, user: 0, inject: 0, skill: 0, assistant: 0, tool: 0, total: 1 } } } }) }
+    })
+    const heads = makeAgentHeads()
+    const pending = heads.headOfMany!(['a'])
+    await new Promise(resolve => setTimeout(resolve, 0))
+    invalidate('heads')
+    release()
+    const reads = await pending
+    assert.equal(reads.size, 1, 'the in-flight answer still serves this caller')
+    await heads.headOfMany!(['a'])
+    assert.ok(detailCalls >= 2, 'the invalidated answer is not cached')
   })
 })

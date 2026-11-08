@@ -56,6 +56,7 @@ import type { TrendBand } from '../dna'
 import { activateViewTab, openContextSidebar, subscribeContextFocus, takeContextFocus, useFleetMemberFocus } from '../viewFocus'
 import { revealInScrollParent } from '../revealScroll'
 import { makeErrorBoundary } from './errorBoundary'
+import { trimRetentionMap } from '../retention'
 import { remoteStateOf } from './useRemoteState'
 
 const viewScroll = new Map<string, number>()
@@ -361,6 +362,7 @@ export function makeContextView(
         const scroller = scrollerRef.current
         if (scroller === null) return
         viewScroll.set(sessionId, scroller.scrollTop)
+        trimRetentionMap(viewScroll, 'viewScroll')
       }
     }, [sessionId])
 
@@ -498,10 +500,12 @@ export function makeContextView(
       const records = data.commands
       return cachedByData(data, 'commands', () => commandsOf(records, data.archive))
     }, [data])
+    const sessionKey = typeof sessionId === 'string' && sessionId !== '' ? sessionId : undefined
     const commandLog = useCommandLog(
       commandList,
       data?.commandsFloor,
       source.detailState === 'legacy' ? undefined : fetchOlderCommands,
+      sessionKey,
     )
     const fullCommandList = commandLog.records
     const workspace = typeof ctx.get === 'function' ? workspaceOf(ctx, typeof sessionId === 'string' ? sessionId : undefined) : undefined
@@ -525,7 +529,6 @@ export function makeContextView(
       [canOpenPaths, ctx],
     )
     const previewOpener = useMemo(() => openResourceVia(ctx), [ctx])
-    const sessionKey = typeof sessionId === 'string' ? sessionId : undefined
     const previewFile = useMemo(
       () => previewOpener === undefined
         ? undefined
@@ -598,6 +601,27 @@ export function makeContextView(
     if (!data) {
       return (
         <div className="lc-root" ref={rootRef}>
+          {inSidebar ? null : (
+            <div className="lc-cols lc-head">
+              <div className="lc-card lc-deferred-skeleton" style={{ minHeight: 190 }} aria-hidden="true" />
+              <div className="lc-card lc-deferred-skeleton" style={{ minHeight: 190 }} aria-hidden="true" />
+            </div>
+          )}
+          <div className="lc-cols lc-head">
+            <div className="lc-card lc-deferred-skeleton" style={{ minHeight: 150 }} aria-hidden="true" />
+            <div className="lc-card lc-deferred-skeleton" style={{ minHeight: 150 }} aria-hidden="true" />
+          </div>
+          <div className="lc-cols lc-cols-main">
+            <div className="lc-card lc-deferred-skeleton" style={{ minHeight: 360 }} aria-hidden="true" />
+            <div className="lc-card lc-deferred-skeleton" style={{ minHeight: 360 }} aria-hidden="true" />
+          </div>
+          <div className="lc-cols">
+            <div className="lc-card lc-deferred-skeleton" style={{ minHeight: 450 }} aria-hidden="true" />
+            <div className="lc-card lc-deferred-skeleton" style={{ minHeight: 450 }} aria-hidden="true" />
+          </div>
+          <div className="lc-cols">
+            <div className="lc-card lc-deferred-skeleton" style={{ minHeight: 320 }} aria-hidden="true" />
+          </div>
           {source.detailState === 'failed'
             ? <DetailNote state="failed" onRetry={source.retryDetail} />
             : <div className="lc-empty">{t('loading')}</div>}
@@ -801,6 +825,7 @@ export function makeContextView(
         dna={dna}
         onDnaChange={setDna}
         locale={activeLocale}
+        session={sessionKey}
       />
     )
 
@@ -811,7 +836,7 @@ export function makeContextView(
           <div className="lc-cols lc-head">
             <StatsContext counts={counts} humanInputs={data.humanInputs} answers={data.answers} toolCalls={data.toolCalls}
               files={ioTotals} tools={toolTally} commands={commandBoard}
-              cost={data.cost} locale={activeLocale} sessionId={typeof sessionId === 'string' ? sessionId : undefined}
+              cost={data.cost} costRead={data.costRead} locale={activeLocale} sessionId={typeof sessionId === 'string' ? sessionId : undefined}
               onJump={onJump} onTeamClick={hasFamilyView ? onTeamClick : undefined}
               onToolPick={onToolPick}
               onToolMore={onToolMore}
