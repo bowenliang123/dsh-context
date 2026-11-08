@@ -36,9 +36,6 @@ importers:
       '@deepseek-ai/schemastery':
         specifier: 3.19.0
         version: 3.19.0
-      '@opencode-ai/models':
-        specifier: ^0.0.87
-        version: 0.0.87
       '@shikijs/langs':
         specifier: ^4.5.0
         version: 4.5.0
@@ -439,15 +436,6 @@ packages:
     peerDependencies:
       '@emnapi/core': ^1.7.1 || 2.0.0-beta.2
       '@emnapi/runtime': ^1.7.1 || 2.0.0-beta.2
-
-  '@opencode-ai/models@0.0.87':
-    resolution: {integrity: sha512-FomecGQxiD6Kx/WF9YmviQF6DAnTaL8FUbexZwFrV96CQBJp02QPFs6VWfFJvN9Lfesaly06+kDn2Vx6NHtpXw==}
-    engines: {node: '>=18'}
-    peerDependencies:
-      effect: 4.0.0-beta.83
-    peerDependenciesMeta:
-      effect:
-        optional: true
 
   '@oxc-project/types@0.155.0':
     resolution: {integrity: sha512-SeE8JPwW1xs1tHeNycjUtUBdhorRa8o4jlvjwk49R7/Z291i+4DQa7JJIgOm/TaYQZx+QrPQbVJ/9c8dMIZN8Q==}
@@ -2650,8 +2638,6 @@ snapshots:
       '@emnapi/runtime': 2.0.0-beta.2
       '@tybys/wasm-util': 0.10.4
     optional: true
-
-  '@opencode-ai/models@0.0.87': {}
 
   '@oxc-project/types@0.155.0': {}
 

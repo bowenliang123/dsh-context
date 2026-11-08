@@ -117,7 +117,6 @@
     "@deepseek-ai/dsh-util-code-language": "0.2.0-rc.2",
     "@deepseek-ai/dsh-util-workspace-path": "0.2.0-rc.2",
     "@deepseek-ai/schemastery": "3.19.0",
-    "@opencode-ai/models": "^0.0.87",
     "@shikijs/langs": "^4.5.0",
     "@stylistic/eslint-plugin": "^5.10.0",
     "@tailwindcss/node": "4.3.3",
