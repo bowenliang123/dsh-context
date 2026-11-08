@@ -33,6 +33,7 @@ interface ColdObserveSpec {
   throwOnObserve?: boolean
   throwValue?: unknown
   cache?: unknown
+  persistenceWrapper?: boolean
 }
 
 function coldCtx(spec: ColdObserveSpec = {}): {
@@ -58,7 +59,7 @@ function coldCtx(spec: ColdObserveSpec = {}): {
     },
     sessionPersistence: { id: 'persistence' },
     ...(spec.cache === undefined ? {} : { sessionProjectionCache: spec.cache }),
-  })
+  }, spec.persistenceWrapper === true ? { serviceGetters: { sessionPersistence: () => ({ identity: 'persistence-1' }) } } : {})
   return { fake, calls: () => calls, disposed: () => disposed }
 }
 
@@ -474,6 +475,32 @@ describe('cold sessions', () => {
     assert.equal(disposed(), true)
   })
 
+  test('rejects a non-array cold log without a revision', async () => {
+    const { fake } = coldCtx({ events: { not: 'events' } })
+    watchFactsChannel(fake.ctx, BOUNDS, { coldReads: OPEN_GATE })
+    assert.equal((await call(fake.captured, { sessionId: 's2' })).value, null)
+  })
+
+  test('reuses the cold state when the persistence wrapper object changes but its identity does not', async () => {
+    const events = [...EVENTS]
+    const { fake } = coldCtx({ events, persistenceWrapper: true })
+    watchFactsChannel(fake.ctx, BOUNDS, { coldReads: OPEN_GATE })
+    const first = (await call(fake.captured, { sessionId: 's2', parts: ['head'] })).value as Record<string, unknown>
+    assert.equal((first.parts as { head: { lastUser?: string } }).head.lastUser, 'hi')
+    events.push(userMessage(4, [{ type: 'text', text: 'next' }], { kind: 'user' }) as never)
+    const advanced = (await call(fake.captured, { sessionId: 's2', parts: ['head'] })).value as Record<string, unknown>
+    assert.equal((advanced.parts as { head: { lastUser?: string } }).head.lastUser, 'next')
+  })
+
+  test('caches an empty cold log under the empty cursor', async () => {
+    const { fake } = coldCtx({ events: [] })
+    watchFactsChannel(fake.ctx, BOUNDS, { coldReads: OPEN_GATE })
+    const first = (await call(fake.captured, { sessionId: 's2', parts: ['head'] })).value as Record<string, unknown>
+    assert.equal((first.parts as { head: { ok?: boolean } }).head.ok, true)
+    const second = (await call(fake.captured, { sessionId: 's2', parts: ['head'] })).value as Record<string, unknown>
+    assert.equal((second.parts as { head: { ok?: boolean } }).head.ok, true)
+  })
+
   test('evicts the oldest cached states once the bound is exceeded', async () => {
     const { fake, calls } = coldCtx({ revision: 'r0' })
     watchFactsChannel(fake.ctx, BOUNDS, { coldReads: OPEN_GATE })
@@ -483,7 +510,40 @@ describe('cold sessions', () => {
     assert.equal(calls(), 5)
   })
 
-  test('rebuilds when the revision is absent and evicts the oldest cached states', async () => {
+  test('reuses an observation without a revision until the cold log advances', async () => {
+    const events = [...EVENTS]
+    const { fake } = coldCtx({ events })
+    watchFactsChannel(fake.ctx, BOUNDS, { coldReads: OPEN_GATE })
+    const first = (await call(fake.captured, { sessionId: 's2', parts: ['head'] })).value as Record<string, unknown>
+    assert.equal((first.parts as { head: { lastUser?: string } }).head.lastUser, 'hi')
+    const repeat = (await call(fake.captured, { sessionId: 's2', parts: ['head'] })).value as Record<string, unknown>
+    assert.equal((repeat.parts as { head: { lastUser?: string } }).head.lastUser, 'hi')
+    events.push({ type: 'unknown', time: 1 } as never)
+    const tail = (await call(fake.captured, { sessionId: 's2', parts: ['head'] })).value as Record<string, unknown>
+    assert.equal((tail.parts as { head: { lastUser?: string } }).head.lastUser, 'hi')
+    events.push(userMessage(4, [{ type: 'text', text: 'next' }], { kind: 'user' }) as never)
+    const advanced = (await call(fake.captured, { sessionId: 's2', parts: ['head'] })).value as Record<string, unknown>
+    assert.equal((advanced.parts as { head: { lastUser?: string } }).head.lastUser, 'next', 'a longer log must invalidate the cold cursor cache')
+  })
+
+  test('rejects a non-array cold log without a revision', async () => {
+    const { fake } = coldCtx({ events: { not: 'events' } })
+    watchFactsChannel(fake.ctx, BOUNDS, { coldReads: OPEN_GATE })
+    assert.equal((await call(fake.captured, { sessionId: 's2' })).value, null)
+  })
+
+  test('reuses the cold state when the persistence wrapper object changes but its identity does not', async () => {
+    const events = [...EVENTS]
+    const { fake } = coldCtx({ events, persistenceWrapper: true })
+    watchFactsChannel(fake.ctx, BOUNDS, { coldReads: OPEN_GATE })
+    const first = (await call(fake.captured, { sessionId: 's2', parts: ['head'] })).value as Record<string, unknown>
+    assert.equal((first.parts as { head: { lastUser?: string } }).head.lastUser, 'hi')
+    events.push(userMessage(4, [{ type: 'text', text: 'next' }], { kind: 'user' }) as never)
+    const advanced = (await call(fake.captured, { sessionId: 's2', parts: ['head'] })).value as Record<string, unknown>
+    assert.equal((advanced.parts as { head: { lastUser?: string } }).head.lastUser, 'next')
+  })
+
+  test('evicts the oldest cached states once the bound is exceeded', async () => {
     const { fake, calls } = coldCtx({})
     watchFactsChannel(fake.ctx, BOUNDS, { coldReads: OPEN_GATE })
     for (let i = 0; i < 5; i++) {

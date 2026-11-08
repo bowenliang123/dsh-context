@@ -12,6 +12,18 @@ import { asRecord } from './record'
 
 export const FACTS_ROUTE = '/api/dsh-context/facts'
 
+function persistenceKeyOf(persistence: unknown): unknown {
+  return asRecord(persistence)?.identity ?? persistence
+}
+
+function coldCursorOf(events: readonly unknown[]): string {
+  for (let i = events.length - 1; i >= 0; i--) {
+    const seq = asRecord(events[i])?.seq
+    if (typeof seq === 'number' && Number.isFinite(seq)) return 'cold-seq:' + String(seq)
+  }
+  return 'cold-seq:-1'
+}
+
 const KERNEL_KEYS = ['sessionStats', 'tokenUsage', 'contextBreakdown'] as const
 
 const DETAIL_PARTS = ['requests', 'nodes', 'events', 'files', 'commands', 'spans'] as const
@@ -290,19 +302,19 @@ export function watchFactsChannel(ctx: Context, bounds: FoldBounds, deps: FactsC
             const observation = await observe(wanted.sessionId, { projectionMode: 'none' })
             const release = leaseOf(observation)
             try {
-              const persistence: unknown = c.get('sessionPersistence')
-              const revision = revisionOf(observation)
+              const persistence = persistenceKeyOf(c.get('sessionPersistence'))
+              const events = asRecord(observation)?.events
+              if (!Array.isArray(events)) return null
+              const revision = revisionOf(observation) ?? coldCursorOf(events)
               const header = asRecord(observation)?.header
-              const cached = revision === undefined ? undefined : stateCache.get(wanted.sessionId)
+              const cached = stateCache.get(wanted.sessionId)
               if (cached !== undefined && cached.revision === revision && cached.persistence === persistence) {
                 rememberState(wanted.sessionId, cached)
                 const kernel = kernelOfCold(c.get('sessionProjectionCache') as CachedSnapshotFace | undefined, header)
                 return valueOf(cached.state, false, wanted, kernel, cached.state)
               }
-              const events = asRecord(observation)?.events
-              if (!Array.isArray(events)) return null
               const state = (await foldLog(events as SessionEvent[], bounds)).state
-              if (revision !== undefined) rememberState(wanted.sessionId, { persistence, revision, state })
+              rememberState(wanted.sessionId, { persistence, revision, state })
               const kernel = kernelOfCold(c.get('sessionProjectionCache') as CachedSnapshotFace | undefined, header)
               return valueOf(state, false, wanted, kernel, state)
             } finally {
