@@ -3,6 +3,7 @@ import type { FleetDelegation, FleetDescriptor, FleetDetail, FleetMemberInfo, Fl
 import { type ColdReadGate, makeColdReadGate } from './coldRead'
 import { failure, leaseOf, mountPostRoute, observeOf, readBody, reply } from './postRoute'
 import { asRecord } from './record'
+import { serviceIdentityOf } from './serviceIdentity'
 
 export const FLEET_ROUTE = '/api/dsh-context/fleet'
 
@@ -427,7 +428,7 @@ export function watchFleetChannel(ctx: Context, coldReads: ColdReadGate = makeCo
     path: FLEET_ROUTE,
     label: 'dsh-context: fleet route',
     handler: (c) => {
-      const persistence = c.get('sessionPersistence') as unknown
+      const persistence = serviceIdentityOf(c.get('sessionPersistence'))
       return async (request: Request): Promise<Response> => {
         const read = await readBody(request)
         if (!read.ok) return read.response

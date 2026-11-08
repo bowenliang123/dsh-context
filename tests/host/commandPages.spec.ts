@@ -230,6 +230,28 @@ describe('the command page route', () => {
     assert.equal(((await call(captured, { sessionId: 'cold1' })) as PageValue).value?.total, 1, 'the new identity reuses')
   })
 
+  test('a re-bound persistence wrapper with the same identity reuses the stored fold', async () => {
+    const events = logOf(2)
+    const firstObservation = observationOf(events, { source: 'prepared', revision: 'r1' })
+    const secondObservation = observationOf(events, { source: 'prepared', revision: 'r1' })
+    secondObservation.events = new Proxy(logOf(2), {
+      get: (target, key) => {
+        if (key === 'length') return target.length
+        if (typeof key === 'string' && /^\d+$/.test(key)) throw new Error('the cold fold ran again')
+        return Reflect.get(target, key)
+      },
+    })
+    let calls = 0
+    const { captured } = routeWith(
+      () => Promise.resolve(calls++ === 0 ? firstObservation : secondObservation),
+      () => ({ identity: 'persistence-1', generation: calls }),
+    )
+    assert.equal(((await call(captured, { sessionId: 'cold1' })) as PageValue).value?.total, 2)
+    const reused = (await call(captured, { sessionId: 'cold1' })) as PageValue
+    assert.equal(reused.ok, true, 'the re-bound wrapper keeps the cached fold')
+    assert.equal(reused.value?.total, 2)
+  })
+
   test('an unkeyed stored log refolds per read and a source switch never reuses a keyed fold', async () => {
     let events = logOf(1)
     const unkeyed = routeWith(() => Promise.resolve(observationOf(events, { source: 'prepared' })))

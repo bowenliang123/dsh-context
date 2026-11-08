@@ -9,12 +9,9 @@ import { buildTimelineHead, eventsOf, requestRowsOf, serveCommand } from './fold
 import { TIMING_SPANS_MAX, type TimelineState } from './foldState'
 import { failure, leaseOf, mountPostRoute, observeOf, readBody, reply, revisionOf } from './postRoute'
 import { asRecord } from './record'
+import { serviceIdentityOf } from './serviceIdentity'
 
 export const FACTS_ROUTE = '/api/dsh-context/facts'
-
-function persistenceKeyOf(persistence: unknown): unknown {
-  return asRecord(persistence)?.identity ?? persistence
-}
 
 function coldCursorOf(events: readonly unknown[]): string {
   for (let i = events.length - 1; i >= 0; i--) {
@@ -302,7 +299,7 @@ export function watchFactsChannel(ctx: Context, bounds: FoldBounds, deps: FactsC
             const observation = await observe(wanted.sessionId, { projectionMode: 'none' })
             const release = leaseOf(observation)
             try {
-              const persistence = persistenceKeyOf(c.get('sessionPersistence'))
+              const persistence = serviceIdentityOf(c.get('sessionPersistence'))
               const events = asRecord(observation)?.events
               if (!Array.isArray(events)) return null
               const revision = revisionOf(observation) ?? coldCursorOf(events)

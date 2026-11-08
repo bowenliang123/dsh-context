@@ -7,6 +7,7 @@ import { applyTimeline } from './fold'
 import { createTimelineState } from './foldState'
 import type { CommandStateRecord, TimelineState } from './foldState'
 import { serveCommand } from './foldWire'
+import { serviceIdentityOf } from './serviceIdentity'
 
 export const COMMANDS_ROUTE = '/api/dsh-context/commands'
 
@@ -135,7 +136,7 @@ export function watchCommandPageChannel(
           ? Math.min(PAGE_LIMIT_MAX, Math.max(1, Math.floor(limit)))
           : PAGE_LIMIT
         try {
-          const persistence: unknown = c.get('sessionPersistence')
+          const persistence = serviceIdentityOf(c.get('sessionPersistence'))
           const value = await coldReads.admit(async () => {
             const observation = await observe(sessionId, { projectionMode: 'none' }) as CommandObservation | null
             if (observation === null || typeof observation !== 'object') return null

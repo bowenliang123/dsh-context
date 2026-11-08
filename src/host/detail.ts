@@ -1,6 +1,7 @@
 import type { Context } from '@deepseek-ai/cordis'
 import type { FoldBounds } from './config'
 import { asRecord } from './record'
+import { serviceIdentityOf } from './serviceIdentity'
 import { type ColdReadGate, makeColdReadGate } from './coldRead'
 import { buildTimelineDetail, buildTimelineHead } from './foldWire'
 import { DetailShadow, foldLog } from './detailShadow'
@@ -117,7 +118,7 @@ export function watchDetailChannel(
             const observation = await observe(sessionId, { projectionMode: 'none' })
             const release = leaseOf(observation)
             try {
-              const persistence: unknown = ctx.get('sessionPersistence')
+              const persistence = serviceIdentityOf(ctx.get('sessionPersistence'))
               const revision = revisionOf(observation)
               if (revision !== undefined) {
                 const hit = payloads.get(sessionId)
