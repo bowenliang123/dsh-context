@@ -1,6 +1,6 @@
 # Model pricing mapping
 
-Cost is estimated from [models.dev](https://models.dev) list prices. It is a reference, not a provider invoice. A billed pair is always `(provider, model)`; the resolver picks a listing in this order:
+Cost is estimated from [models.dev](https://models.dev) list prices. It is a reference, not a provider invoice. The plugin host fetches and caches the catalogue (1 h TTL) and resolves every billed `(provider, model)` pair itself; the browser receives the resolved rate face and the priced total, never the full price list. The resolver picks a listing in this order:
 
 ```text
 (provider, model)
