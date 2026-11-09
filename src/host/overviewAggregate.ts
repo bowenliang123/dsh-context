@@ -20,7 +20,8 @@ import type {
   TimingTotals,
 } from '../shared/types'
 import type { CostSource } from './cost'
-import { TIMING_OPTIONAL, numOf, optionalNumOf, type HostRow, type HostTimeline, type WorkspaceState } from './overviewCorpus'
+import { TIMING_OPTIONAL, numOf, optionalNumOf } from './overviewDecode'
+import type { HostRow, HostTimeline, WorkspaceState } from './overviewCorpus'
 import { asRecord } from './record'
 
 const PAGE_SIZE = 12

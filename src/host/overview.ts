@@ -13,12 +13,12 @@ import type {
   OverviewValue,
 } from '../shared/types'
 import type { BackfillHandle } from './backfill'
+import { optionalNumOf } from './overviewDecode'
 import type { CostSource } from './cost'
 import type { CachedSnapshotFace, SessionQueryFace, SnapshotProjectionsFace } from './faces'
 import { createOverviewCache, identityKey, type CachedSession, type DurableIdentity, type OverviewCache } from './overviewCache'
 import {
   buildRows,
-  optionalNumOf,
   revisionOf,
   scanEntriesOf,
   signaturesOf,
