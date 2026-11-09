@@ -289,8 +289,24 @@ function ambiguous(count: number): PriceResolution {
   return { kind: 'unpriced', miss: { reason: 'ambiguous', candidates: count } }
 }
 
+const resolutionMemo = new WeakMap<ModelBook, Map<string, PriceResolution>>()
+
 export function priceResolutionOf(book: ModelBook | null | undefined, provider: string, model: string): PriceResolution {
   if (book === null || book === undefined) return unpriced('book-unavailable')
+  const key = `${provider}\u0000${model}`
+  let memo = resolutionMemo.get(book)
+  if (memo === undefined) {
+    memo = new Map()
+    resolutionMemo.set(book, memo)
+  }
+  const hit = memo.get(key)
+  if (hit !== undefined) return hit
+  const resolution = resolvePriceOf(book, provider, model)
+  memo.set(key, resolution)
+  return resolution
+}
+
+function resolvePriceOf(book: ModelBook, provider: string, model: string): PriceResolution {
   const routed = routedBranch(book, provider)
   if (routed !== null) {
     const match = lookupModel(routed.branch, model)

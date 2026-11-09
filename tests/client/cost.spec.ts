@@ -622,3 +622,17 @@ describe('formatPriceRate', () => {
     assert.equal(formatPriceRate(0.1, 'usd'), '$0.10')
   })
 })
+
+
+describe('priceResolutionOf memoization', () => {
+  test('repeated lookups on the same book return the same resolution; a fresh book re-resolves', () => {
+    const first = priceResolutionOf(BOOK_B, 'deepseek', 'deepseek-v4-flash')
+    const second = priceResolutionOf(BOOK_B, 'deepseek', 'deepseek-v4-flash')
+    assert.equal(second, first, 'the second lookup serves the memoized resolution')
+    const changed = bookOf({ deepseek: { 'deepseek-v4-flash': { hit: 0.01, miss: 0.2, write: 0.2, out: 1 } } })
+    const third = priceResolutionOf(changed, 'deepseek', 'deepseek-v4-flash')
+    assert.notEqual(third, first, 'a new book re-resolves instead of reusing the stale face')
+    assert.equal(third.kind, 'priced')
+    assert.deepEqual(third.kind === 'priced' ? third.face.rate : null, { hit: 0.01, miss: 0.2, write: 0.2, out: 1 })
+  })
+})
