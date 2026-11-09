@@ -283,3 +283,29 @@ describe('readPlatformBalance', () => {
     assert.equal(readPlatformBalance(() => {}), null, 'a reset over refused storage still clears the memory figure')
   })
 })
+
+
+describe('platform balance storage ttl', () => {
+  test('a fresh envelope paints; a stale envelope is dropped and removed', async () => {
+    stubRoute({ ok: true, value: wire(5) })
+    const fresh = new FakeStorage()
+    setPlatformBalanceStorage(fresh)
+    const { onRefresh } = collector()
+    readPlatformBalance(onRefresh)
+    await drain()
+    const raw = fresh.store.get(PLATFORM_BALANCE_STORAGE_KEY)
+    assert.ok(raw !== undefined && JSON.parse(raw).at !== undefined, 'the write carries a timestamp')
+
+    const parsed = JSON.parse(raw) as { at: number; balance: unknown }
+    const replay = new FakeStorage({ [PLATFORM_BALANCE_STORAGE_KEY]: JSON.stringify(parsed) })
+    resetPlatformBalance()
+    setPlatformBalanceStorage(replay)
+    assert.deepEqual(readPlatformBalance(() => {}), wire(5), 'a fresh envelope paints at once')
+
+    const stale = new FakeStorage({ [PLATFORM_BALANCE_STORAGE_KEY]: JSON.stringify({ at: Date.now() - 11 * 60_000, balance: parsed.balance }) })
+    resetPlatformBalance()
+    setPlatformBalanceStorage(stale)
+    assert.equal(readPlatformBalance(() => {}), null, 'a stale envelope never paints')
+    assert.equal(stale.store.has(PLATFORM_BALANCE_STORAGE_KEY), false, 'the stale entry is removed')
+  })
+})

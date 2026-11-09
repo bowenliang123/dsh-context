@@ -92,6 +92,46 @@ afterEach(() => {
   vi.useRealTimers()
 })
 
+describe('balance reads across credentials', () => {
+  test('concurrent reads with different credentials never share one in-flight fetch', async () => {
+    const alpha = ctxOf({
+      connection: { fetch: { register: () => () => {} } },
+      settings: settingsOf({ apiKeyEnv: 'ALPHA_KEY' }),
+      credentials: credentialsOf('sk-alpha'),
+    })
+    const beta = ctxOf({
+      connection: { fetch: { register: () => () => {} } },
+      settings: settingsOf({ apiKeyEnv: 'BETA_KEY' }),
+      credentials: credentialsOf('sk-beta'),
+    })
+    watchBalanceChannel(alpha.ctx)
+    watchBalanceChannel(beta.ctx)
+    const log: { url: string; auth: string }[] = []
+    let release!: () => void
+    const gate = new Promise<void>((resolve) => { release = resolve })
+    setBalanceFetcher(async (url, init) => {
+      const headers = (init.headers ?? {}) as Record<string, string>
+      log.push({ url, auth: headers.authorization })
+      await gate
+      const body = headers.authorization.includes('alpha')
+        ? { is_available: true, balance_infos: [{ currency: 'CNY', total_balance: '1.00', granted_balance: '1.00', topped_up_balance: '0.00' }] }
+        : { is_available: true, balance_infos: [{ currency: 'CNY', total_balance: '2.00', granted_balance: '2.00', topped_up_balance: '0.00' }] }
+      return { ok: true, status: 200, json: async () => body } as unknown as Response
+    })
+    const a = serve(alpha.captured)
+    await Promise.resolve()
+    const b = serve(beta.captured)
+    await Promise.resolve()
+    release()
+    const [x, y] = await Promise.all([a, b])
+    assert.equal(log.length, 2, 'each credential fetches its own balance')
+    assert.equal(log[1]?.auth, 'Bearer sk-beta', 'the second read carries its own key instead of joining the first')
+    assert.notDeepEqual(x, y, 'the answers report their own accounts')
+    assert.equal((x.value as { balances: { total: number }[] }).balances[0]?.total, 1)
+    assert.equal((y.value as { balances: { total: number }[] }).balances[0]?.total, 2)
+  })
+})
+
 describe('balance route registration', () => {
   test('only a usable connection registry mounts the route; absent and rejecting registries leave it unregistered', () => {
     for (const connection of [undefined, {}, { fetch: { register: 42 } }]) {

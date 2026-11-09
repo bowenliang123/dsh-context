@@ -162,15 +162,17 @@ export function setBalanceFetcher(next: BalanceFetcher | null): void {
   fetcher = next ?? defaultFetcher
 }
 
-let inFlight: Promise<PlatformBalance | null> | null = null
+const inFlight = new Map<string, Promise<PlatformBalance | null>>()
 
 export function resetBalance(): void {
-  inFlight = null
+  inFlight.clear()
 }
 
 async function readBalance(facts: DeepSeekFacts): Promise<PlatformBalance | null> {
-  if (inFlight !== null) return inFlight
-  inFlight = (async () => {
+  const key = facts.baseUrl + '\u0000' + facts.apiKey
+  const pending = inFlight.get(key)
+  if (pending !== undefined) return pending
+  const promise = (async () => {
     let value: PlatformBalance | null = null
     try {
       const response = await fetcher(facts.baseUrl + '/user/balance', {
@@ -182,11 +184,11 @@ async function readBalance(facts: DeepSeekFacts): Promise<PlatformBalance | null
     }
     return value
   })()
-  const settled = inFlight
+  inFlight.set(key, promise)
   try {
-    return await settled
+    return await promise
   } finally {
-    inFlight = null
+    inFlight.delete(key)
   }
 }
 
