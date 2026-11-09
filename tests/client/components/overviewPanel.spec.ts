@@ -1,6 +1,6 @@
-import { act, createElement as h, useState } from 'react'
+import { act, createElement as h, Profiler, useCallback, useRef, useState, useSyncExternalStore } from 'react'
 import assert from 'node:assert/strict'
-import { afterEach, describe, test, vi } from 'vitest'
+import { afterEach, beforeEach, describe, test, vi } from 'vitest'
 import { makeOverviewPanel } from '../../../src/client/components/overviewPanel'
 import { resetInvalidations } from '../../../src/client/invalidation'
 import { createContextSettings, type ContextSettings } from '../../../src/client/settings'
@@ -12,7 +12,7 @@ import {
   NOW, TODAY, YESTERDAY, panelDaysValue as daysValueFor, panelRows, panelRowsWithArchivedBeta,
   panelSessionsSnapshot as sessionsSnapshot, panelSummaryRaw as summaryRaw, panelSummaryValue as summaryValueFor, scopeOf,
   panelPageValue as pageValueFor, panelTallies as talliesValue,
-  panelTalliesZero as talliesZero, stubPanelRoutes as stubRoutes, overviewBodies, useHookOf,
+  panelTalliesZero as talliesZero, pinCurrentSession, stubPanelRoutes as stubRoutes, overviewBodies, useHookOf,
 } from '../overview.fixtures'
 import { dayRangeWindow } from '../../../src/client/overview'
 
@@ -122,10 +122,15 @@ function calendarDay(key: string): HTMLElement {
   return el
 }
 
+beforeEach(() => {
+  pinCurrentSession('a')
+})
+
 afterEach(async () => {
   resetInvalidations()
   vi.unstubAllGlobals()
   vi.useRealTimers()
+  localStorage.clear()
   await new Promise(resolve => setTimeout(resolve, 1))
 })
 
@@ -135,7 +140,7 @@ describe('OverviewPanel', () => {
     const calls = stubRoutes()
     const ctx = makeCtx({ refresh: () => { pulls++; return Promise.resolve() } })
     const { m } = await openPanel(ctx)
-    assert.equal(pulls, 1, 'the baseline re-pull fires on mount')
+    assert.equal(pulls, 0, 'the panel reads the live session store without re-listing the corpus')
     assert.equal(calls.filter(c => c.route.endsWith('/snapshot')).length, 0, 'the panel never reads the snapshot route')
     assert.equal(calls.filter(c => c.route.endsWith('/backfill')).length, 0, 'a complete coverage posts no warm-up trigger')
     assert.deepEqual(bodyOf(calls, 'summary')[0], { part: 'summary', scope: { range: '30d', coverage: 'all' } })
@@ -598,13 +603,15 @@ describe('OverviewPanel', () => {
     await flush()
 
     const noCwdCalls = stubRoutes()
+    pinCurrentSession('b')
     const noCwd = await openPanel(makeCtx(), {
-      useSessions: useHookOf({ current: 'b', byId: { b: {} } }),
+      useSessions: useHookOf({ ids: ['b'], byId: { b: {} } }),
     })
     assert.deepEqual(skillsBodyOf(noCwdCalls), { sessionId: 'b' }, 'a session without a cwd still anchors the catalog')
     assert.ok(query(cardWith(noCwd.m.container, 'beta session'), '.lc-ov-current') !== null)
     await noCwd.m.unmount()
 
+    pinCurrentSession(null)
     const bareCalls = stubRoutes()
     const bare = await openPanel(makeCtx(), { useSessions: undefined })
     assert.deepEqual(skillsBodyOf(bareCalls), {}, 'no current session reads the default catalog')
@@ -755,6 +762,7 @@ describe('OverviewPanel', () => {
   test('degraded states: no activity, hostile sessions seat, custom-range requests, and dashes for missing host data', async () => {
     stubRoutes({ days: () => daysValueFor() })
     const ctx = makeCtx()
+    pinCurrentSession(null)
     const hostile = await openPanel(ctx, { useSessions: () => { throw new Error('boom') } })
     assert.equal(cardsOf(hostile.m.container).length, 2, 'a hostile sessions seat never blocks the hosted list')
     assert.equal(queryAll(hostile.m.container, '.lc-ov-current').length, 0)
@@ -882,6 +890,47 @@ describe('OverviewPanel — progressive body', () => {
     assert.ok(queryAll(m.container, '.lc-ov-first .lc-stat-value').length > 0, 'the KPI band is already live')
     assert.equal(bodyOf(calls, 'tally').length, 0, 'the tally parts wait for the tiles to mount')
     assert.equal(bodyOf(calls, 'page').length, 1, 'the list data is already on its way')
+    await m.unmount()
+  })
+})
+
+describe('OverviewPanel — session-store subscription', () => {
+  test('session churn outside the current row never repaints the page', async () => {
+    stubRoutes()
+    pinCurrentSession('b')
+    let snapshot: Record<string, unknown> = { byId: { a: { cwd: '/repo/a' }, b: {} }, ids: ['a', 'b'] }
+    const listeners = new Set<() => void>()
+    const subscribe = (fn: () => void): (() => void) => {
+      listeners.add(fn)
+      return () => { listeners.delete(fn) }
+    }
+    const getSnapshot = (): unknown => snapshot
+    function useSeat<T>(select: (value: unknown) => T): T {
+      const selectRef = useRef(select)
+      selectRef.current = select
+      const cache = useRef<{ has: boolean; value: T | undefined }>({ has: false, value: undefined })
+      const getSelected = useCallback(() => {
+        const next = selectRef.current(getSnapshot())
+        if (!cache.current.has || !Object.is(cache.current.value, next)) cache.current = { has: true, value: next }
+        return cache.current.value as T
+      }, [])
+      return useSyncExternalStore(subscribe, getSelected)
+    }
+    let commits = 0
+    const Panel = makeOverviewPanel(asClientCtx(makeCtx()), makeKit(), settingsWith())
+    const m = await mount(h(Profiler, { id: 'overview', onRender: () => { commits += 1 } }, h(Panel, { useSessions: useSeat })))
+    await flush()
+    await settle(5)
+    commits = 0
+    for (let index = 0; index < 10; index++) {
+      snapshot = { byId: { a: { cwd: '/repo/a', displayTitle: `churn ${index}` }, b: {} }, ids: ['a', 'b'], phase: `p${index}` }
+      await act(async () => { for (const listener of [...listeners]) listener() })
+    }
+    assert.equal(commits, 0, 'rows updating around the current session do not repaint the page')
+    pinCurrentSession('a')
+    snapshot = { byId: { a: { cwd: '/repo/a' }, b: {} }, ids: ['a', 'b'] }
+    await act(async () => { for (const listener of [...listeners]) listener() })
+    assert.ok(commits >= 1, 'switching the current session repaints')
     await m.unmount()
   })
 })

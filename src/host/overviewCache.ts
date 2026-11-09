@@ -11,7 +11,9 @@ export const OVERVIEW_CACHE_FILE = 'overview-cache.v1.json'
 
 const DEFAULT_DEBOUNCE_MS = 2_000
 
-const DEFAULT_STAT_CONCURRENCY = 4
+const DEFAULT_STAT_CONCURRENCY = 16
+
+const DEFAULT_CAPTURE_CONCURRENCY = 4
 
 const TIMING_OPTIONAL = [
   'reasoningMs', 'reasoningBlocks', 'textMs', 'textBlocks',
@@ -76,6 +78,7 @@ export interface OverviewCacheOptions {
   now?: () => number
   debounceMs?: number
   statConcurrency?: number
+  captureConcurrency?: number
 }
 
 export interface OverviewCache {
@@ -298,7 +301,7 @@ function parsedRecords(value: unknown): CachedSession[] {
 async function inBatches<T>(items: readonly T[], size: number, run: (item: T) => Promise<void>): Promise<void> {
   for (let index = 0; index < items.length; index += size) {
     await Promise.all(items.slice(index, index + size).map(run))
-    await new Promise(resolve => setTimeout(resolve, 0))
+    if (index + size < items.length) await new Promise(resolve => setImmediate(resolve))
   }
 }
 
@@ -308,6 +311,7 @@ export function createOverviewCache(options: OverviewCacheOptions = {}): Overvie
   const now = options.now ?? (() => Date.now())
   const debounceMs = options.debounceMs ?? DEFAULT_DEBOUNCE_MS
   const statConcurrency = options.statConcurrency ?? DEFAULT_STAT_CONCURRENCY
+  const captureConcurrency = options.captureConcurrency ?? DEFAULT_CAPTURE_CONCURRENCY
   let timer: ReturnType<typeof setTimeout> | null = null
   let pending: CachedSession[] | null = null
   let disposed = false
@@ -414,7 +418,7 @@ export function createOverviewCache(options: OverviewCacheOptions = {}): Overvie
   const capture = async (ids: readonly string[], host: StatHost): Promise<Map<string, DurableIdentity | null>> => {
     const identities = new Map<string, DurableIdentity | null>()
     const statOf = typeof host.stat === 'function' ? host.stat.bind(host) : undefined
-    await inBatches(ids, statConcurrency, async (id) => {
+    await inBatches(ids, captureConcurrency, async (id) => {
       identities.set(id, await captureOne(id, statOf, fs))
     })
     return identities

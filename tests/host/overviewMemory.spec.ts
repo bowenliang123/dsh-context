@@ -389,6 +389,16 @@ describe('overview memory: disk cache, idle release, incremental updates', () =>
     refreshed.dispose()
   })
 
+  test('concurrent parts sharing one fresh scan refresh the durable identities once', async () => {
+    const harness = await identityBoot({ scanTtlMs: 1 })
+    seedIdentities(harness)
+    await call(harness, { part: 'summary' })
+    await sleep(10)
+    await Promise.all([call(harness, { part: 'days' }), call(harness, { part: 'page' }), call(harness, { part: 'tally' })])
+    assert.equal(harness.cache.refreshCalls, 1, 'the shared scan refreshes once, not once per part')
+    harness.dispose()
+  })
+
   test('cache failures, disposes, disabled idle timers, and post-dispose requests stay contained', async () => {
     const failing: OverviewCache = {
       load: async () => { throw new Error('cache broken') },

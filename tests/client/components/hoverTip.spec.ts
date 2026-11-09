@@ -149,25 +149,25 @@ describe('useHoverTip', () => {
     await m.unmount()
   })
 
-  test('a re-shown tip reuses its measurement while the inputs hold', async () => {
+  test('hovering repaints only the bubble, and a re-shown tip reuses its measurement', async () => {
     let renders = 0
     const m = await mount(h(CountingZone, { onRender: () => { renders += 1 } }))
     const a = query(m.container, '#a')
     pinRect(a, { left: 100, top: 100, width: 40, height: 20 })
 
+    renders = 0
     await mouseover(a)
     assert.equal(bubble()?.style.left, '120px')
+    assert.equal(renders, 0, 'the zone never repaints for a hover')
 
     renders = 0
     await mouseout(a, m.container)
     assert.equal(bubble(), null)
-    assert.equal(renders, 1, 'hiding commits once')
+    assert.equal(renders, 0, 'hiding the bubble leaves the zone untouched')
 
-    renders = 0
     await mouseover(a)
     assert.equal(bubble()?.textContent, 'tip A')
     assert.equal(bubble()?.style.left, '120px', 'the measured spot is reused')
-    assert.equal(renders, 1, 'an equivalent tip does not re-measure')
 
     pinRect(a, { left: 300, top: 100, width: 40, height: 20 })
     await mouseout(a, m.container)
@@ -176,20 +176,46 @@ describe('useHoverTip', () => {
 
     a.setAttribute('data-lc-tip', 'tip A, longer')
     await mouseout(a, m.container)
-    renders = 0
     await mouseover(a)
     assert.equal(bubble()?.textContent, 'tip A, longer')
-    assert.equal(renders, 2, 'a relabelled tip re-measures (show + measure)')
+    assert.equal(bubble()?.style.left, '320px')
 
-    const width = window.innerWidth
-    Object.defineProperty(window, 'innerWidth', { configurable: true, value: width - 400 })
+    await m.unmount()
+  })
+
+  test('a relabelled tip and a changed viewport both re-measure the bubble', async () => {
+    const m = await mount(h(Zone))
+    const a = query(m.container, '#a')
+    pinRect(a, { left: 600, top: 100, width: 40, height: 20 })
+    let widths = 0
+    const descriptor = Object.getOwnPropertyDescriptor(HTMLElement.prototype, 'offsetWidth')
+    Object.defineProperty(HTMLElement.prototype, 'offsetWidth', {
+      configurable: true,
+      get: () => { widths += 1; return 10 },
+    })
     try {
-      await mouseout(a, m.container)
-      renders = 0
       await mouseover(a)
-      assert.equal(renders, 2, 'a changed viewport re-measures (show + measure)')
+      assert.equal(bubble()?.style.left, '615px')
+      widths = 0
+      await mouseout(a, m.container)
+      await mouseover(a)
+      assert.equal(widths, 0, 'an unchanged tip reuses its measurement')
+      a.setAttribute('data-lc-tip', 'tip A, longer')
+      await mouseout(a, m.container)
+      await mouseover(a)
+      assert.equal(widths, 1, 'a relabelled tip re-measures')
+      const width = window.innerWidth
+      Object.defineProperty(window, 'innerWidth', { configurable: true, value: width - 400 })
+      try {
+        await mouseout(a, m.container)
+        await mouseover(a)
+        assert.equal(widths, 2, 'a changed viewport re-measures')
+        assert.equal(bubble()?.style.left, '606px', 'the narrowed viewport re-clamps')
+      } finally {
+        Object.defineProperty(window, 'innerWidth', { configurable: true, value: width })
+      }
     } finally {
-      Object.defineProperty(window, 'innerWidth', { configurable: true, value: width })
+      if (descriptor !== undefined) Object.defineProperty(HTMLElement.prototype, 'offsetWidth', descriptor)
     }
     await m.unmount()
   })

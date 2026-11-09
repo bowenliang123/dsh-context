@@ -118,10 +118,14 @@ export function panelTalliesZero(): ServerTallies {
 export function panelSessionsSnapshot(over: Record<string, unknown> = {}): Record<string, unknown> {
   return {
     ids: ['a', 'b'],
-    current: 'a',
     byId: { a: { cwd: '/repo/alpha' }, b: { cwd: '/repo/beta' } },
     ...over,
   }
+}
+
+export function pinCurrentSession(id: string | null): void {
+  if (id === null) localStorage.removeItem('dsh.sessions.current')
+  else localStorage.setItem('dsh.sessions.current', JSON.stringify({ sessionId: id }))
 }
 
 export const useHookOf = (snapshot: unknown) => (<T>(sel: (s: unknown) => T): T => sel(snapshot))

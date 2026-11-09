@@ -50,7 +50,7 @@ const MAX_QUERY_CHARS = 500
 
 const MAX_REVISION_CHARS = 200
 
-const SCAN_TTL_MS = 750
+const SCAN_TTL_MS = 5_000
 
 const IDLE_MS = 20_000
 
@@ -213,7 +213,7 @@ export interface OverviewRouteOptions {
 interface ScanResult {
   entries: ScanEntry[]
   coldIds: ReadonlySet<string>
-  fresh: boolean
+  identitiesSynced: boolean
 }
 
 export function watchOverviewRoute(
@@ -226,8 +226,7 @@ export function watchOverviewRoute(
   const servedKeysMax = options.servedKeysMax ?? SERVED_KEYS_MAX
   const idleMs = options.idleMs ?? IDLE_MS
   const feed: FeedState = { revision: '', sessions: new Map(), rows: null, served: new Map(), rowsRevision: '' }
-  let scan: ScanEntry[] | null = null
-  let scanColdIds: ReadonlySet<string> | null = null
+  let scanResult: ScanResult | null = null
   let scanAt = 0
   let scanVersion = -1
   let inflight: Promise<ScanResult> | null = null
@@ -252,8 +251,7 @@ export function watchOverviewRoute(
     feed.rowsRevision = ''
     warm = null
     sessionsReady = false
-    scan = null
-    scanColdIds = null
+    scanResult = null
   }
   const resetIdle = (): void => {
     if (idleTimer !== null) clearTimeout(idleTimer)
@@ -302,8 +300,8 @@ export function watchOverviewRoute(
       }
       const awaitScan = async (): Promise<ScanResult> => {
         const version = backfill.version()
-        if (scan !== null && scanColdIds !== null && scanVersion === version && performance.now() - scanAt < scanTtlMs) {
-          return { entries: scan, coldIds: scanColdIds, fresh: false }
+        if (scanResult !== null && scanVersion === version && performance.now() - scanAt < scanTtlMs) {
+          return scanResult
         }
         if (inflight !== null) return inflight
         const promise = (async (): Promise<ScanResult> => {
@@ -313,11 +311,11 @@ export function watchOverviewRoute(
           for (const entry of entries) {
             if (!entry.live) coldIds.add(entry.id)
           }
-          scan = entries
-          scanColdIds = coldIds
+          const next: ScanResult = { entries, coldIds, identitiesSynced: false }
+          scanResult = next
           scanAt = performance.now()
           scanVersion = backfill.version()
-          return { entries, coldIds, fresh: true }
+          return next
         })()
         inflight = promise
         try {
@@ -329,7 +327,7 @@ export function watchOverviewRoute(
 
       const syncIdentities = async (
         coldIds: ReadonlySet<string>,
-        fresh: boolean,
+        refresh: boolean,
         persistentStat: (id: string) => Promise<unknown>,
       ): Promise<Set<string>> => {
         const dirty = new Set<string>()
@@ -339,7 +337,7 @@ export function watchOverviewRoute(
           identitiesReady = true
           warm = loaded.sessions
           for (const id of loaded.rebuild) dirty.add(id)
-        } else if (fresh) {
+        } else if (refresh) {
           const refreshed = await cacheOf().refresh(coldIds, identities)
           const next = new Map<string, DurableIdentity | null>()
           for (const id of coldIds) {
@@ -439,8 +437,9 @@ export function watchOverviewRoute(
         const persistentStat = statOf()
         const identityMode = persistentStat !== undefined
         const dirty = identityMode
-          ? await syncIdentities(coldIds, scanned.fresh, persistentStat)
+          ? await syncIdentities(coldIds, !scanned.identitiesSynced, persistentStat)
           : new Set<string>()
+        if (identityMode) scanned.identitiesSynced = true
         if (identityMode && typeof backfill.foldedSince === 'function') {
           const folded = backfill.foldedSince(foldMarker)
           foldMarker = folded.version

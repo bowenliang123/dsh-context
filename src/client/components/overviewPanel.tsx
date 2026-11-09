@@ -1,15 +1,15 @@
-import { useDeferredValue, useEffect, useMemo, useState, useSyncExternalStore, type ReactElement } from 'react'
+import { useEffect, useMemo, useState, useSyncExternalStore, type ReactElement } from 'react'
 import { formatCost, toCurrency, type CostCurrency } from '../cost'
 import { RING_COLOR } from '../categories'
 import { fmt } from '../format'
 import {
-  dayRangeWindow, rangeWindowOf, refreshSessions, sessionsSnapshotOf, UNGROUPED_KEY,
+  currentSessionOf, dayRangeWindow, rangeWindowOf, UNGROUPED_KEY,
   type DayRange, type DayTotals, type OverviewCoverage, type OverviewRange, type OverviewSort,
   type TallyField, type TallyStat,
 } from '../overview'
 import { useOverviewDays, useOverviewPage, useOverviewSummary, useOverviewTally } from '../overviewSource'
 import type { OverviewRange as HostRange, OverviewScope, OverviewSummary } from '../../shared/types'
-import { asRecord, openPluginSettings, openSessionVia, activeMsOf, seatKeyOf, type ClientCtx } from '../services'
+import { openPluginSettings, openSessionVia, activeMsOf, seatKeyOf, type ClientCtx } from '../services'
 import { readSkillCatalog } from '../skills'
 import type { ContextSettings } from '../settings'
 import type { SkillInfo } from '../../shared/types'
@@ -77,7 +77,6 @@ export function makeOverviewPanel(
   }
 
   function OverviewBody(props: OverviewPanelProps): ReactElement | null {
-    const sessionsSnapshot = useDeferredValue(sessionsSnapshotOf(props))
     const configuredRange = useSyncExternalStore(subscribeSettings, () => settings.defaultOverviewRange())
     const [picked, setPicked] = useState<OverviewRange | null>(null)
     const preset = picked ?? configuredRange
@@ -93,18 +92,16 @@ export function makeOverviewPanel(
     const { zoneProps, bubble } = useHoverTip()
     const [bodyRef, bodyMounted] = useLazyMount()
 
-    const current = useMemo(() => currentSessionOf(sessionsSnapshot), [sessionsSnapshot])
+    const current = currentSessionOf(props)
+    const currentId = current?.id
+    const currentCwd = current?.cwd
     const [catalog, setCatalog] = useState<ReadonlyMap<string, SkillInfo> | null>(null)
     useEffect(() => {
       let alive = true
       setCatalog(null)
-      void readSkillCatalog(current.cwd, current.id).then((next) => { if (alive && next !== null) setCatalog(next) })
+      void readSkillCatalog(currentCwd, currentId).then((next) => { if (alive && next !== null) setCatalog(next) })
       return () => { alive = false }
-    }, [current.cwd, current.id])
-
-    useEffect(() => {
-      refreshSessions(ctx)
-    }, [])
+    }, [currentCwd, currentId])
 
     useEffect(() => { setPage(0) }, [preset, custom, coverage, day, query, group, pick, sort])
 
@@ -157,8 +154,8 @@ export function makeOverviewPanel(
     const listTotal = pageValue?.total ?? 0
     const scopeTotal = pageValue?.scopeTotal ?? 0
     const rows = useMemo<OverviewCardRow[]>(
-      () => (pageValue?.items ?? []).map(row => ({ ...row, current: current.id === row.id })),
-      [pageValue, current.id],
+      () => (pageValue?.items ?? []).map(row => ({ ...row, current: currentId === row.id })),
+      [pageValue, currentId],
     )
     const chips = useMemo(() => {
       const base = pageValue?.groups ?? []
@@ -462,13 +459,4 @@ export function makeOverviewPanel(
 
 function cardCostOf(row: OverviewCardRow, currency: CostCurrency): string {
   return row.costUsd === null ? '—' : formatCost(toCurrency(row.costUsd, currency), currency)
-}
-
-function currentSessionOf(snapshot: unknown): { id?: string; cwd?: string } {
-  const state = asRecord(snapshot)
-  const id = typeof state?.current === 'string' ? state.current : undefined
-  if (id === undefined) return {}
-  const row = asRecord(asRecord(state?.byId)?.[id])
-  const cwd = typeof row?.cwd === 'string' && row.cwd !== '' ? row.cwd : undefined
-  return { id, ...(cwd === undefined ? {} : { cwd }) }
 }

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useLayoutEffect, useRef, useState, type ReactElement } from 'react'
+import { useCallback, useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore, type ReactElement } from 'react'
 import { createPortal } from 'react-dom'
 
 const TIP_ID = 'lc-hovertip-bubble'
@@ -20,6 +20,13 @@ interface Measured {
   top: number
 }
 
+interface TipStore {
+  subscribe: (listener: () => void) => () => void
+  getSnapshot: () => ActiveTip | null
+  show: (anchor: Element) => void
+  hide: () => void
+}
+
 function anchorOf(target: EventTarget | null): Element | null {
   return target instanceof Element ? target.closest('[data-lc-tip]') : null
 }
@@ -34,62 +41,50 @@ function tipOf(anchor: Element): ActiveTip | null {
   return { anchor, label, side, rect, signature }
 }
 
-export interface HoverTipZone {
-  zoneProps: {
-    onMouseOver: (ev: React.MouseEvent) => void
-    onMouseOut: (ev: React.MouseEvent) => void
-    onFocusCapture: (ev: React.FocusEvent) => void
-    onBlurCapture: (ev: React.FocusEvent) => void
-    onScrollCapture: (ev: React.UIEvent) => void
+function createTipStore(): TipStore {
+  let tip: ActiveTip | null = null
+  const listeners = new Set<() => void>()
+  const emit = (): void => {
+    for (const listener of [...listeners]) listener()
   }
-  bubble: ReactElement | null
+  const hide = (): void => {
+    if (tip === null) return
+    tip.anchor.removeAttribute('aria-describedby')
+    tip = null
+    emit()
+  }
+  return {
+    subscribe: (listener) => {
+      listeners.add(listener)
+      return () => { listeners.delete(listener) }
+    },
+    getSnapshot: () => tip,
+    show: (anchor) => {
+      if (tip?.anchor === anchor) return
+      const next = tipOf(anchor)
+      if (next === null) {
+        hide()
+        return
+      }
+      tip?.anchor.removeAttribute('aria-describedby')
+      anchor.setAttribute('aria-describedby', TIP_ID)
+      tip = next
+      emit()
+    },
+    hide,
+  }
 }
 
-export function useHoverTip(): HoverTipZone {
-  const [tip, setTip] = useState<ActiveTip | null>(null)
-  const [measured, setMeasured] = useState<Measured | null>(null)
+function HoverTipBubble(props: { store: TipStore }): ReactElement | null {
+  const tip = useSyncExternalStore(props.store.subscribe, props.store.getSnapshot)
   const bubbleRef = useRef<HTMLDivElement | null>(null)
-
-  const show = useCallback((anchor: Element): void => {
-    setTip((current) => {
-      if (current?.anchor === anchor) return current
-      current?.anchor.removeAttribute('aria-describedby')
-      const next = tipOf(anchor)
-      if (next === null) return null
-      anchor.setAttribute('aria-describedby', TIP_ID)
-      return next
-    })
-  }, [])
-
-  const hide = useCallback((): void => {
-    setTip((current) => {
-      current?.anchor.removeAttribute('aria-describedby')
-      return null
-    })
-  }, [])
-
-  const onMouseOver = useCallback((ev: React.MouseEvent): void => {
-    const anchor = anchorOf(ev.target)
-    if (anchor !== null) show(anchor)
-  }, [show])
-  const onMouseOut = useCallback((ev: React.MouseEvent): void => {
-    if (anchorOf(ev.target) !== null && anchorOf(ev.relatedTarget) === null) hide()
-  }, [hide])
-  const onFocusCapture = useCallback((ev: React.FocusEvent): void => {
-    const anchor = anchorOf(ev.target)
-    if (anchor !== null) show(anchor)
-  }, [show])
-  const onBlurCapture = useCallback((ev: React.FocusEvent): void => {
-    if (anchorOf(ev.target) !== null && anchorOf(ev.relatedTarget) === null) hide()
-  }, [hide])
-  const onScrollCapture = useCallback((): void => { hide() }, [hide])
+  const [measured, setMeasured] = useState<Measured | null>(null)
 
   useEffect(() => {
     if (tip === null) return undefined
-    const retract = (): void => { hide() }
-    window.addEventListener('resize', retract)
-    return () => { window.removeEventListener('resize', retract) }
-  }, [tip, hide])
+    window.addEventListener('resize', props.store.hide)
+    return () => { window.removeEventListener('resize', props.store.hide) }
+  }, [tip, props.store])
 
   useLayoutEffect(() => {
     if (tip === null || measured?.signature === tip.signature) return
@@ -106,20 +101,54 @@ export function useHoverTip(): HoverTipZone {
     setMeasured({ signature: tip.signature, left, top: Math.max(VIEWPORT_MARGIN, top) })
   }, [tip, measured])
 
-  const shown = tip !== null && measured?.signature === tip.signature ? measured : null
+  if (tip === null) return null
+  const shown = measured?.signature === tip.signature ? measured : null
+  return createPortal(
+    <div
+      ref={bubbleRef}
+      id={TIP_ID}
+      role="tooltip"
+      className="lc-tip lc-hovertip"
+      style={shown === null
+        ? { left: 0, top: 0, visibility: 'hidden' }
+        : { left: shown.left, top: shown.top, opacity: 1 }}
+    >{tip.label}</div>,
+    document.body,
+  )
+}
+
+export interface HoverTipZone {
+  zoneProps: {
+    onMouseOver: (ev: React.MouseEvent) => void
+    onMouseOut: (ev: React.MouseEvent) => void
+    onFocusCapture: (ev: React.FocusEvent) => void
+    onBlurCapture: (ev: React.FocusEvent) => void
+    onScrollCapture: (ev: React.UIEvent) => void
+  }
+  bubble: ReactElement
+}
+
+export function useHoverTip(): HoverTipZone {
+  const storeRef = useRef<TipStore | null>(null)
+  if (storeRef.current === null) storeRef.current = createTipStore()
+  const store = storeRef.current
+  const onMouseOver = useCallback((ev: React.MouseEvent): void => {
+    const anchor = anchorOf(ev.target)
+    if (anchor !== null) store.show(anchor)
+  }, [store])
+  const onMouseOut = useCallback((ev: React.MouseEvent): void => {
+    if (anchorOf(ev.target) !== null && anchorOf(ev.relatedTarget) === null) store.hide()
+  }, [store])
+  const onFocusCapture = useCallback((ev: React.FocusEvent): void => {
+    const anchor = anchorOf(ev.target)
+    if (anchor !== null) store.show(anchor)
+  }, [store])
+  const onBlurCapture = useCallback((ev: React.FocusEvent): void => {
+    if (anchorOf(ev.target) !== null && anchorOf(ev.relatedTarget) === null) store.hide()
+  }, [store])
+  const onScrollCapture = useCallback((): void => { store.hide() }, [store])
   return {
     zoneProps: { onMouseOver, onMouseOut, onFocusCapture, onBlurCapture, onScrollCapture },
-    bubble: tip === null ? null : createPortal(
-      <div
-        ref={bubbleRef}
-        id={TIP_ID}
-        role="tooltip"
-        className="lc-tip lc-hovertip"
-        style={shown === null
-          ? { left: 0, top: 0, visibility: 'hidden' }
-          : { left: shown.left, top: shown.top, opacity: 1 }}
-      >{tip.label}</div>,
-      document.body,
-    ),
+    bubble: <HoverTipBubble store={store} />,
   }
 }
