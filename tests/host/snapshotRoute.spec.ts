@@ -305,7 +305,7 @@ test('without the connection face the route never registers, and the watcher dis
     const backfill = Object.assign(() => {}, {
       coverage: () => ({ complete: true, remaining: 0, failed: 0, running: false, total: 0, covered: 0, unsupported: 0 }),
       version: () => version,
-      foldedSince: (marker: number) => ({ version: marker, ids: [] }),
+      foldedSince: (marker: number) => ({ version: marker, ids: [], workerIds: [] }),
     })
     watchSnapshotRoute(ctx, backfill)
     await new Promise(resolve => setTimeout(resolve, 2))

@@ -240,13 +240,19 @@ export function createOverviewCache(options: OverviewCacheOptions = {}): Overvie
     const sessions = new Map<string, HostSession>()
     const identities = new Map<string, DurableIdentity | null>()
     const rebuild = new Set<string>()
-    let file: unknown
+    let records: CachedSession[] = []
     try {
-      file = JSON.parse(await fs.readFile(path))
+      records = parsedRecords(JSON.parse(await fs.readFile(path))).filter(record => currentIds.has(record.session.id))
     } catch {
-      return { sessions, identities, rebuild }
+      records = []
     }
-    const records = parsedRecords(file).filter(record => currentIds.has(record.session.id))
+    if (pending !== null) {
+      const staged = new Map(records.map(record => [record.session.id, record]))
+      for (const record of pending) {
+        if (currentIds.has(record.session.id)) staged.set(record.session.id, record)
+      }
+      records = [...staged.values()]
+    }
     await inBatches(records, statConcurrency, async (record) => {
       const id = record.session.id
       if (known !== undefined) {
@@ -318,7 +324,9 @@ export function createOverviewCache(options: OverviewCacheOptions = {}): Overvie
 
   const save = (records: readonly CachedSession[]): void => {
     if (disposed) return
-    pending = [...records]
+    const merged = new Map((pending ?? []).map(record => [record.session.id, record]))
+    for (const record of records) merged.set(record.session.id, record)
+    pending = [...merged.values()]
     if (timer !== null) clearTimeout(timer)
     timer = setTimeout(() => {
       timer = null

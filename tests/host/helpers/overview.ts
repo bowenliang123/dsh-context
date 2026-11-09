@@ -70,6 +70,7 @@ export interface Harness {
     foldedAvailable: boolean
     foldedVersion: number
     foldedIds: string[] | null
+    workerFoldedIds: string[] | null
     foldCalls: number[]
     savedRecords: CachedSession[]
     cachedSessions: Map<string, HostSession>
@@ -162,12 +163,14 @@ export function fakeBackfill(state: Harness['state']): BackfillHandle {
   }
   if (!state.foldedAvailable) return Object.assign(handle, base)
   return Object.assign(handle, base, {
-    foldedSince: (marker: number): { version: number; ids: string[] | null } => {
+    foldedSince: (marker: number): { version: number; ids: string[] | null; workerIds: string[] | null } => {
       state.foldCalls.push(marker)
-      if (marker === state.foldedVersion) return { version: state.foldedVersion, ids: [] }
+      if (marker === state.foldedVersion) return { version: state.foldedVersion, ids: [], workerIds: [] }
       const ids = state.foldedIds
+      const workerIds = state.workerFoldedIds
       state.foldedIds = []
-      return { version: state.foldedVersion, ids }
+      state.workerFoldedIds = []
+      return { version: state.foldedVersion, ids, workerIds }
     },
   })
 }
@@ -184,6 +187,7 @@ export function fakeState(overrides: Partial<Harness['state']> = {}): Harness['s
     foldedAvailable: true,
     foldedVersion: 0,
     foldedIds: [],
+    workerFoldedIds: [],
     foldCalls: [],
     savedRecords: [],
     cachedSessions: new Map(),
@@ -362,6 +366,7 @@ export function boot(options: BootOptions = {}): Promise<Harness> {
     foldedAvailable: options.foldedAvailable ?? true,
     foldedVersion: 0,
     foldedIds: [],
+    workerFoldedIds: [],
     foldCalls: [],
     savedRecords: [],
     cachedSessions: new Map(),

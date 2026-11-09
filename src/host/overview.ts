@@ -414,6 +414,7 @@ export function watchOverviewRoute(
           ? await syncIdentities(coldIds, !scanned.identitiesSynced, persistentStat)
           : new Set<string>()
         if (identityMode) scanned.identitiesSynced = true
+        const workerFolded: string[] = []
         if (identityMode && typeof backfill.foldedSince === 'function') {
           const folded = backfill.foldedSince(foldMarker)
           foldMarker = folded.version
@@ -424,6 +425,7 @@ export function watchOverviewRoute(
               if (coldIds.has(id)) dirty.add(id)
             }
           }
+          if (folded.workerIds !== null) workerFolded.push(...folded.workerIds)
         }
         if (dirty.size > 0) foldEpoch++
         const backfillVersion = backfill.version()
@@ -453,6 +455,11 @@ export function watchOverviewRoute(
             sessionsReady = true
           }
           for (const id of dirty) feed.sessions.delete(id)
+          const missing = workerFolded.filter(id => coldIds.has(id) && !feed.sessions.has(id))
+          if (missing.length > 0) {
+            const reloaded = await loadColdSessions(new Set(missing))
+            for (const [id, session] of reloaded) feed.sessions.set(id, session)
+          }
           for (const entry of entries) {
             const session = feed.sessions.get(entry.id)
             if (session !== undefined) session.signature = entry.signature

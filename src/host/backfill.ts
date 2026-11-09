@@ -3,8 +3,12 @@ import { performance } from 'node:perf_hooks'
 import type { Context } from '@deepseek-ai/cordis'
 import type { SessionEvent, SessionHeader } from '@deepseek-ai/dsh-session'
 import type { BackfillCoverage } from '../shared/types'
+import type { Config } from './config'
 import { type ColdReadGate, makeColdReadGate } from './coldRead'
-import { revisionOf } from './overviewCorpus'
+import { makeFoldJournal } from './foldJournal'
+import { createFoldPool, type FoldPool } from './foldWorker'
+import { identityKey, type OverviewCache } from './overviewCache'
+import { headerFactsOf, hostSessionOf, revisionOf } from './overviewCorpus'
 import { mountPostRoute, reply } from './postRoute'
 
 export const BACKFILL_ROUTE = '/api/dsh-context/backfill'
@@ -12,6 +16,7 @@ export const BACKFILL_ROUTE = '/api/dsh-context/backfill'
 export interface FoldedSessions {
   version: number
   ids: string[] | null
+  workerIds: string[] | null
 }
 
 export interface BackfillHandle {
@@ -53,9 +58,13 @@ interface PersistenceLike {
 
 const MIN_REST_MS = 25
 
-const FOLDED_IDS_MAX = 4096
-
 const SLICE_EVENTS = 2_000
+
+const MIN_SLICE_EVENTS = 128
+
+const BLOCK_BUDGET_MS = 150
+
+const WORKER_FOLD_MIN_EVENTS = 30_000
 
 const ROUND_WORK_BUDGET_MS = 8_000
 const ROUND_PAUSE_MS = 2_000
@@ -66,7 +75,16 @@ export interface BackfillPacing {
   minRestMs: number
   workBudgetMs: number
   roundPauseMs: number
+  sliceBudgetMs?: number
 }
+
+export interface BackfillOptions {
+  ownCache?: OverviewCache
+  config?: Config
+  pool?: FoldPool
+}
+
+export type { FoldPool }
 
 const DEFAULT_PACING: BackfillPacing = {
   now: () => performance.now(),
@@ -172,6 +190,13 @@ interface SliceOutcome {
   workMs: number
 }
 
+export function nextSliceSize(size: number, costMs: number, budgetMs: number): number {
+  if (costMs <= 0) return Math.min(SLICE_EVENTS, size * 2)
+  if (costMs > budgetMs) return Math.max(MIN_SLICE_EVENTS, Math.floor(size * budgetMs / costMs))
+  if (costMs * 4 < budgetMs) return Math.min(SLICE_EVENTS, size * 2)
+  return size
+}
+
 async function coldSnapshotSliced(
   ctx: Context,
   faces: SlicedFoldFaces,
@@ -180,17 +205,22 @@ async function coldSnapshotSliced(
   signal: AbortSignal,
   rest: (costMs: number) => Promise<void>,
   now: () => number,
+  budgetMs: number,
 ): Promise<SliceOutcome> {
   const { header, inheritedEventCount, events } = log
   let rows: unknown = {}
   let workMs = 0
-  for (let end = SLICE_EVENTS; ; end += SLICE_EVENTS) {
+  let end = 0
+  let size = SLICE_EVENTS
+  for (;;) {
+    end = Math.min(events.length, end + size)
     const last = end >= events.length
     const started = now()
     const restored = asRecord(faces.restore(rows, last ? events : events.slice(0, end), 0, header, inheritedEventCount))
     rows = restored?.checkpoint ?? {}
     const sliceCost = now() - started
     workMs += sliceCost
+    size = nextSliceSize(size, sliceCost, budgetMs)
     if (last) break
     await rest(sliceCost)
     if (signal.aborted) return { outcome: 'aborted', workMs }
@@ -236,6 +266,7 @@ export function watchActivityBackfill(
   ctx: Context,
   coldReads: ColdReadGate = makeColdReadGate(),
   pacing: BackfillPacing = DEFAULT_PACING,
+  options: BackfillOptions = {},
 ): BackfillHandle {
   let requested = false
   let running = false
@@ -243,9 +274,17 @@ export function watchActivityBackfill(
   let launch: (() => void) | null = null
   let version = 0
   let foldedVersion = 0
-  let foldedOverflow = false
-  const foldedIds = new Set<string>()
+  const journal = makeFoldJournal()
   let lastSignature: string | null = null
+  let pool: FoldPool | null = null
+  const workerFor = (): FoldPool => {
+    pool ??= options.pool ?? createFoldPool()
+    return pool
+  }
+  ctx.effect(() => () => {
+    pool?.dispose()
+    pool = null
+  }, 'dsh-context: fold worker pool')
   const coverage: BackfillCoverage = {
     complete: false,
     remaining: 0,
@@ -266,14 +305,9 @@ export function watchActivityBackfill(
     requested = true
     startIfIdle()
   }
-  const noteFolded = (id: string): void => {
+  const noteFolded = (id: string, viaWorker = false): void => {
     foldedVersion++
-    if (foldedOverflow) return
-    foldedIds.add(id)
-    if (foldedIds.size > FOLDED_IDS_MAX) {
-      foldedIds.clear()
-      foldedOverflow = true
-    }
+    journal.note(id, viaWorker)
   }
   const routeFiber = mountPostRoute({
     ctx,
@@ -385,11 +419,32 @@ export function watchActivityBackfill(
           return
         }
         lastSignature = signature
+        const ownCache = options.ownCache
+        const workerConfig = options.config
+        const statCapable = typeof (persistence as unknown as PersistenceLike).stat === 'function'
+        const workerGate = (): { pool: FoldPool; cache: OverviewCache; config: Config } | null =>
+          ownCache !== undefined && workerConfig !== undefined && statCapable
+            ? { pool: workerFor(), cache: ownCache, config: workerConfig }
+            : null
+        const warmIds = new Set<string>()
+        if (ownCache !== undefined && pass.total > 0) {
+          const candidates = new Set<string>()
+          for (const record of listedRecords) {
+            const header = headerOf(record)
+            if (header !== null && typeof header.cwd === 'string') candidates.add(header.id)
+          }
+          const ownWarm = await ownCache.load(candidates)
+          for (const id of ownWarm.sessions.keys()) warmIds.add(id)
+        }
         for (const record of listedRecords) {
           if (abort.signal.aborted) return
           const header = headerOf(record)
           if (header === null || typeof header.cwd !== 'string') continue
           if (isLive(sessions, header.id)) {
+            pass.covered++
+            continue
+          }
+          if (warmIds.has(header.id)) {
             pass.covered++
             continue
           }
@@ -405,11 +460,45 @@ export function watchActivityBackfill(
           }
           const started = pacing.now()
           let slicedWorkMs = 0
+          let workerWallMs = 0
+          let viaWorker = false
           try {
             const admitted = await coldReads.admit(async () => {
               const log = await readColdLog(persistence as unknown as PersistenceLike, header.id, abort.signal)
+              const worker = log.events.length > WORKER_FOLD_MIN_EVENTS && !abort.signal.aborted ? workerGate() : null
+              if (worker !== null) {
+                const facts = headerFactsOf(header as unknown as Record<string, unknown>)
+                /* v8 ignore next 1 */
+                if (facts !== null) {
+                  try {
+                    const host = { stat: (persistence as unknown as PersistenceLike).stat?.bind(persistence) }
+                    const captured = await worker.cache.capture([header.id], host)
+                    const identity = captured.get(header.id) ?? null
+                    const folded1 = await worker.pool.fold(worker.config, log.events)
+                    if (abort.signal.aborted) return 'aborted' as const
+                    worker.cache.save([{
+                      session: hostSessionOf(facts.id, facts, `C${identityKey(identity)}`, {
+                        contextTimeline: folded1.timeline,
+                        contextActivity: folded1.activity,
+                        sessionListMetadata: {
+                          blank: folded1.blank,
+                          ...(folded1.lastPromptAt > 0 ? { lastPromptAt: folded1.lastPromptAt } : {}),
+                        },
+                      }),
+                      identity,
+                    }])
+                    workerWallMs = pacing.now() - started
+                    viaWorker = true
+                    return 'done' as const
+                  } catch (error) {
+                    if (abort.signal.aborted) return 'aborted' as const
+                    ctx.logger.warn(`dsh-context: worker fold for "${header.id}" failed; folding on the host thread instead (${messageOf(error)})`)
+                  }
+                }
+              }
               if (sliceFaces !== null && log.events.length > SLICE_EVENTS) {
-                const sliced = await coldSnapshotSliced(ctx, sliceFaces, sessions, log, abort.signal, rest, pacing.now)
+                const budgetMs = pacing.sliceBudgetMs ?? BLOCK_BUDGET_MS
+                const sliced = await coldSnapshotSliced(ctx, sliceFaces, sessions, log, abort.signal, rest, pacing.now, budgetMs)
                 slicedWorkMs = sliced.workMs
                 return sliced.outcome
               }
@@ -423,8 +512,9 @@ export function watchActivityBackfill(
             if (admitted === 'aborted') return
             if (admitted === 'done') {
               folded++
-              noteFolded(header.id)
+              noteFolded(header.id, viaWorker)
             }
+            if (workerWallMs > 0) slicedWorkMs = workerWallMs
             pass.covered++
           } catch (error: unknown) {
             if (isUnsupportedFormat(error)) {
@@ -491,11 +581,9 @@ export function watchActivityBackfill(
     coverage: (): BackfillCoverage => ({ ...coverage }),
     version: (): number => version,
     foldedSince: (marker: number): FoldedSessions => {
-      if (marker === foldedVersion) return { version: foldedVersion, ids: [] }
-      const ids = foldedOverflow ? null : [...foldedIds]
-      foldedIds.clear()
-      foldedOverflow = false
-      return { version: foldedVersion, ids }
+      if (marker === foldedVersion) return { version: foldedVersion, ids: [], workerIds: [] }
+      const drained = journal.drain()
+      return { version: foldedVersion, ids: drained.ids, workerIds: drained.workerIds }
     },
   })
 }

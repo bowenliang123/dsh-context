@@ -15,7 +15,7 @@ import { activityOf, currentOf, numOf, optionalNumOf, timingOf, usageOf } from '
 
 const OVERVIEW_KEYS = new Set<string>(['contextTimeline', 'contextActivity', 'title', 'sessionListMetadata'])
 
-interface HeaderFacts {
+export interface HeaderFacts {
   id: string
   createdAt: number
   cwd?: string
@@ -100,7 +100,7 @@ function safeGet(get: ((id: string) => unknown) | undefined, id: string): unknow
   }
 }
 
-function headerFactsOf(header: Record<string, unknown>): HeaderFacts | null {
+export function headerFactsOf(header: Record<string, unknown>): HeaderFacts | null {
   if (typeof header.id !== 'string' || header.id === '') return null
   const createdAt = typeof header.createdAt === 'number' && Number.isFinite(header.createdAt) ? header.createdAt : 0
   return {
@@ -281,22 +281,30 @@ function sessionOf(
     values = null
     cacheable = false
   }
+  return { session: hostSessionOf(entry.id, entry.facts, entry.signature, values), cacheable }
+}
+
+export function hostSessionOf(
+  id: string,
+  facts: HeaderFacts,
+  signature: string,
+  values: Record<string, unknown> | null,
+): HostSession {
   const metadata = asRecord(values?.sessionListMetadata)
   const lastPromptAt = optionalNumOf(metadata?.lastPromptAt)
-  const updatedAt = Math.max(entry.facts.createdAt, lastPromptAt ?? 0)
-  const session: HostSession = {
-    id: entry.id,
-    title: titleOf(values?.title, entry.facts.cwd, entry.id),
+  const updatedAt = Math.max(facts.createdAt, lastPromptAt ?? 0)
+  return {
+    id,
+    title: titleOf(values?.title, facts.cwd, id),
     updatedAt,
     blank: metadata?.blank === true,
     timeline: values === null ? null : timelineOf(values.contextTimeline),
     activity: values === null ? null : activityOf(values.contextActivity),
-    signature: entry.signature,
-    ...(entry.facts.cwd === undefined ? {} : { cwd: entry.facts.cwd }),
-    ...(entry.facts.parentSession === undefined ? {} : { parentSession: entry.facts.parentSession }),
-    ...(entry.facts.origin === undefined ? {} : { origin: entry.facts.origin }),
+    signature,
+    ...(facts.cwd === undefined ? {} : { cwd: facts.cwd }),
+    ...(facts.parentSession === undefined ? {} : { parentSession: facts.parentSession }),
+    ...(facts.origin === undefined ? {} : { origin: facts.origin }),
   }
-  return { session, cacheable }
 }
 
 function mergeActivity(members: readonly (ContextActivity | null)[]): ContextActivity | null {

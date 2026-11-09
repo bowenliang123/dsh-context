@@ -755,7 +755,7 @@ describe('watchActivityBackfill — folded session journal', () => {
     const drained = handle.foldedSince(0)
     assert.equal(drained.version, 2, 'one journal version per folded session')
     assert.deepEqual([...(drained.ids ?? [])].sort(), ['a', 'b'])
-    assert.deepEqual(handle.foldedSince(drained.version), { version: drained.version, ids: [] })
+    assert.deepEqual(handle.foldedSince(drained.version), { version: drained.version, ids: [], workerIds: [] })
     handle()
 
     const many = new Context()

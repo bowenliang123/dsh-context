@@ -28,6 +28,8 @@ import { watchTimelineRowSweep } from './sweep'
 import { createContextTimelineDefinition } from './timeline'
 import { detectHarnessVersion } from './version'
 import { meetsBaseline } from '../shared/version'
+import { createOverviewCache } from './overviewCache'
+import { startFoldWorkerChannel } from './foldWorker'
 
 export const name = 'dsh-context'
 
@@ -65,11 +67,14 @@ export function apply(ctx: Context, config: Config): void {
   ctx.sessionProjections.register(createContextHeadersDefinition(name => attribution.ownerOf(name)))
   ctx.sessionProjections.register(createContextActivityDefinition())
   watchTimelineRowSweep(ctx)
-  const backfill = watchActivityBackfill(ctx, coldReads)
+  const cache = createOverviewCache()
+  const backfill = watchActivityBackfill(ctx, coldReads, undefined, { ownCache: cache, config })
   watchSnapshotRoute(ctx, backfill)
-  watchOverviewRoute(ctx, pricing, backfill)
+  watchOverviewRoute(ctx, pricing, backfill, { cache })
   watchPromptInjection(ctx, config)
 }
+
+export { startFoldWorkerChannel }
 
 export type { Category, ContextEventRecord, RequestRecord, Snapshot, ContextTimeline, SurfaceNode } from '../shared/types'
 export type { ActivityDay, ContextActivity, ContextHeaders, HeaderRecord, HeaderTool, ContextTimelineDetail, TimelineCounts, TimelineLast } from '../shared/types'

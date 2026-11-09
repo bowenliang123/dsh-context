@@ -429,7 +429,9 @@ describe('dsh-context overview route', () => {
     assert.ok(evicted.reply.value !== undefined && !('unchanged' in evicted.reply.value), 'the oldest served key was evicted')
     const remembered = await call(harness, { part: 'page', page: 1, revision })
     assert.ok(remembered.reply.value !== undefined && 'unchanged' in remembered.reply.value, 'a recent key stays remembered')
-    test('a held Today revision re-serves the new day at local midnight', async () => {
+  })
+
+  test('a held Today revision re-serves the new day at local midnight', async () => {
     vi.useFakeTimers({ toFake: ['Date'] })
     try {
       vi.setSystemTime(new Date(2026, 10, 8, 23, 59, 50))
@@ -479,6 +481,43 @@ describe('dsh-context overview route', () => {
     } finally {
       vi.useRealTimers()
     }
+  })
+
+  test('a dirty session missing from the feed reloads from the plugin cache', async () => {
+    const harness = await boot({
+      records: [recordOf('a')],
+      values: { a: { contextActivity: { days: { '2026-11-01': dayOf(11, 1) } } } },
+      persistence: { stat: async () => ({ path: '/p/a.jsonl', sizeBytes: 1, mtimeMs: 2 }) },
+      coverage: { complete: true, remaining: 0, failed: 0, running: false, total: 1, covered: 1, unsupported: 0 },
+    })
+    const first = await call(harness, { part: 'summary', scope: { range: 'all' } })
+    assert.equal(summaryOf(first).sessions, 1)
+    harness.cacheMode.values.a = {}
+    harness.state.cachedSessions.set('a', {
+      id: 'a', title: 'Cached', updatedAt: 5, blank: false, timeline: null,
+      activity: { days: { '2026-11-01': dayOf(44, 4) } }, signature: '',
+    })
+    harness.state.foldedVersion = 1
+    harness.state.foldedIds = ['a']
+    harness.state.workerFoldedIds = ['a']
+    const second = await call(harness, { part: 'summary', scope: { range: 'all' } })
+    assert.equal(summaryOf(second).sessions, 1, 'the dirty session reloaded from the plugin cache')
+  })
+
+  test('a null worker journal never reloads from the plugin cache', async () => {
+    const harness = await boot({
+      records: [recordOf('a')],
+      values: { a: { contextActivity: { days: { '2026-11-01': dayOf(11, 1) } } } },
+      persistence: { stat: async () => ({ path: '/p/a.jsonl', sizeBytes: 1, mtimeMs: 2 }) },
+      coverage: { complete: true, remaining: 0, failed: 0, running: false, total: 1, covered: 1, unsupported: 0 },
+    })
+    const first = await call(harness, { part: 'summary', scope: { range: 'all' } })
+    assert.equal(summaryOf(first).sessions, 1)
+    harness.state.foldedVersion = 1
+    harness.state.foldedIds = ['a']
+    harness.state.workerFoldedIds = null
+    const second = await call(harness, { part: 'summary', scope: { range: 'all' } })
+    assert.equal(summaryOf(second).sessions, 1, 'the session refolds from the served projections instead')
   })
 
   test('a clock beyond the day-key range answers with an open relative window', async () => {

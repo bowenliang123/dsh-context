@@ -3,12 +3,48 @@ import { describe, test } from 'vitest'
 import { Context } from '@deepseek-ai/cordis'
 import { SessionProjectionRegistry } from '@deepseek-ai/dsh-session-projection'
 import type { SessionEvent } from '@deepseek-ai/dsh-session'
-import { watchActivityBackfill } from '../../src/host/backfill'
+import { nextSliceSize, watchActivityBackfill } from '../../src/host/backfill'
+import type { FoldPool } from '../../src/host/backfill'
+import { userMessage } from './helpers/events'
 import { createContextTimelineDefinition } from '../../src/host/timeline'
 import { createContextActivityDefinition } from '../../src/host/activity'
 import { createContextHeadersDefinition } from '../../src/host/headers'
+import { activityOf } from '../../src/host/overviewDecode'
+import type { DurableIdentity, OverviewCache } from '../../src/host/overviewCache'
+import type { HostSession } from '../../src/host/overviewCorpus'
+import { inProcessPool } from './helpers/foldWorker'
 import { arm, captureLogs, connectionOf, fakeState, trigger, until } from './helpers/backfill'
 import type { RouteBox } from './helpers/backfill'
+
+interface SavedRecord {
+  session: HostSession
+  identity: DurableIdentity | null
+}
+
+function ownCacheStub(sessions: Map<string, HostSession> = new Map(), captureMissing: string[] = []): OverviewCache & { saved: SavedRecord[] } {
+  const saved: SavedRecord[] = []
+  return {
+    load: async () => ({ sessions, identities: new Map(), rebuild: new Set() }),
+    refresh: async () => ({ identities: new Map(), changed: new Set() }),
+    capture: async (ids: readonly string[]) => new Map(ids
+      .filter(id => !captureMissing.includes(id))
+      .map(id => [id, { path: `/repo/${id}.jsonl`, sizeBytes: 10, mtimeMs: 3 }])),
+    save: (records: readonly SavedRecord[]) => { saved.push(...records) },
+    flush: async () => {},
+    dispose: () => {},
+    saved,
+  } as unknown as OverviewCache & { saved: SavedRecord[] }
+}
+
+function activityReference(events: readonly SessionEvent[]): unknown {
+  const ctx = new Context()
+  const registry = new SessionProjectionRegistry(ctx as never)
+  registry.register(createContextTimelineDefinition({}, () => false) as never)
+  registry.register(createContextActivityDefinition() as never)
+  registry.register(createContextHeadersDefinition() as never)
+  const values = registry.restore({}, events, 0 as never, { id: 'monster', version: 1, createdAt: 1, cwd: '/repo/monster', isSeeded: false } as never, 0 as never).snapshot.values
+  return (values as { contextActivity: unknown }).contextActivity
+}
 
 function fakeEvents(length: number): SessionEvent[] {
   return Array.from({ length }, (_, seq) => ({ type: 'todo/write', seq, time: seq + 1, data: {} })) as unknown as SessionEvent[]
@@ -37,6 +73,7 @@ function armSliced(ctx: Context, eventsById: Map<string, SessionEvent[]>, opts: 
   failWrite?: boolean
   noPrepare?: boolean
   hostileRestoreAt?: number
+  stat?: boolean
 } = {}): SliceRig {
   const route: RouteBox = {}
   const state = fakeState([...eventsById.keys()].map(id => ({ header: { id, cwd: `/repo/${id}` } })))
@@ -71,6 +108,7 @@ function armSliced(ctx: Context, eventsById: Map<string, SessionEvent[]>, opts: 
     },
   })
   ctx.provide('sessionPersistence', {
+    ...(opts.stat === true ? { stat: async (id: string) => ({ path: `/repo/${id}.jsonl`, sizeBytes: 10, mtimeMs: 3 }) } : {}),
     open: async (id: string) => {
       state.coldReads.push(id)
       return {
@@ -254,6 +292,7 @@ describe('the sliced cold fold (issue #145)', () => {
       minRestMs: 25,
       workBudgetMs: 60_000,
       roundPauseMs: 2_000,
+      sliceBudgetMs: 10_000,
     })
     await trigger(rig.route)
     await until(() => (rig.writes.has('monster') ? true : undefined), 'the write-back landed')
@@ -319,6 +358,7 @@ describe('the sliced cold fold (issue #145)', () => {
       minRestMs: 25,
       workBudgetMs: 800,
       roundPauseMs: 2_000,
+      sliceBudgetMs: 10_000,
     })
     await trigger(rig.route)
     await until(() => (rig.writes.has('monster') ? true : undefined), 'the write-back landed')
@@ -329,5 +369,149 @@ describe('the sliced cold fold (issue #145)', () => {
     assert.match(pauses[0].text, /pausing after 1s of fold work; resuming in 2s/)
     const marker = { type: 'session/end-seed', seq: events.length, time: 1, data: {} } as SessionEvent
     assert.deepStrictEqual(rig.writes.get('monster'), referenceRows([...events, marker], 'monster'), 'pauses never change the rows')
+  })
+
+  test('the slice size adapts to the measured cost and still lands the exact rows', async () => {
+    const ctx = new Context()
+    const events = fakeEvents(4_001)
+    const rig = armSliced(ctx, new Map([['monster', events]]))
+    let clock = 0
+    const dispose = watchActivityBackfill(ctx, undefined, {
+      now: () => (clock += 400),
+      sleep: async () => {},
+      minRestMs: 25,
+      workBudgetMs: 60_000,
+      roundPauseMs: 2_000,
+      sliceBudgetMs: 150,
+    })
+    await trigger(rig.route)
+    await until(() => (rig.writes.has('monster') ? true : undefined), 'the write-back landed')
+    dispose()
+    assert.deepEqual(rig.restoreCalls.slice(0, 11), [2_000, 2_750, 3_031, 3_159, 3_287, 3_415, 3_543, 3_671, 3_799, 3_927, 4_001])
+    const marker = { type: 'session/end-seed', seq: events.length, time: 1, data: {} } as SessionEvent
+    assert.deepStrictEqual(rig.writes.get('monster'), referenceRows([...events, marker], 'monster'), 'shrunk slices never change the rows')
+  })
+
+  test('nextSliceSize shrinks over budget, floors, grows when cheap, and holds in band', () => {
+    assert.equal(nextSliceSize(2_000, 400, 150), 750)
+    assert.equal(nextSliceSize(200, 1_000, 150), 128)
+    assert.equal(nextSliceSize(500, 10, 150), 1_000)
+    assert.equal(nextSliceSize(500, 50, 150), 500)
+    assert.equal(nextSliceSize(500, 0, 150), 1_000)
+    assert.equal(nextSliceSize(4_000, 10, 150), 2_000)
+  })
+
+  test('a session over the worker threshold folds off-thread and lands only in the plugin cache', async () => {
+    const ctx = new Context()
+    const events = [...fakeEvents(30_001), userMessage(30_001, [{ type: 'text', text: 'prompt' }], { kind: 'user' }, { time: 500 }) as unknown as SessionEvent]
+    const rig = armSliced(ctx, new Map([['monster', events]]), { stat: true })
+    const ownCache = ownCacheStub()
+    const pool = inProcessPool()
+    const dispose = watchActivityBackfill(ctx, undefined, undefined, { ownCache, config: {}, pool })
+    await trigger(rig.route)
+    await until(() => (ownCache.saved.length === 1 ? true : undefined), 'the plugin-cache row landed')
+    dispose()
+    assert.deepEqual([...rig.writes.keys()], [], 'the harness projection cache stays untouched')
+    assert.deepEqual(rig.restoreCalls, [], 'the host thread never folds')
+    const record = ownCache.saved[0]
+    assert.equal(record.session.id, 'monster')
+    assert.equal(record.session.blank, false, 'the prompt marks the session non-blank')
+    assert.equal(record.session.updatedAt, 500)
+    assert.equal(record.identity?.path, '/repo/monster.jsonl')
+    assert.deepStrictEqual(record.session.activity, activityOf(activityReference(events)))
+    assert.ok(record.session.timeline !== null)
+    pool.dispose()
+  })
+
+  test('a missing durable identity still lands the worker row with an identity-less signature', async () => {
+    const ctx = new Context()
+    const events = fakeEvents(30_001)
+    const rig = armSliced(ctx, new Map([['monster', events]]), { stat: true })
+    const ownCache = ownCacheStub(new Map(), ['monster'])
+    const pool = inProcessPool()
+    const dispose = watchActivityBackfill(ctx, undefined, undefined, { ownCache, config: {}, pool })
+    await trigger(rig.route)
+    await until(() => (ownCache.saved.length === 1 ? true : undefined), 'the plugin-cache row landed')
+    dispose()
+    assert.equal(ownCache.saved[0].identity, null)
+    assert.ok(ownCache.saved[0].session.signature.startsWith('C'))
+    assert.equal(ownCache.saved[0].session.blank, true, 'a promptless session lands blank')
+    pool.dispose()
+  })
+
+  test('oversize sessions without the worker seam fold on the host thread', async () => {
+    const ctx = new Context()
+    const events = fakeEvents(30_001)
+    const rig = armSliced(ctx, new Map([['monster', events]]))
+    const dispose = watchActivityBackfill(ctx, undefined, {
+      now: () => performance.now(),
+      sleep: async () => {},
+      minRestMs: 0,
+      workBudgetMs: 600_000,
+      roundPauseMs: 1_000,
+    })
+    await trigger(rig.route)
+    await until(() => (rig.writes.has('monster') ? true : undefined), 'the host-thread fold landed')
+    dispose()
+    assert.ok(rig.restoreCalls.length > 1, 'the sliced fold ran')
+  })
+
+  test('an abort during a worker fold lands nothing', async () => {
+    const ctx = new Context()
+    const events = fakeEvents(30_001)
+    const rig = armSliced(ctx, new Map([['monster', events]]), { stat: true })
+    const ownCache = ownCacheStub()
+    let rejectFold!: (error: Error) => void
+    const pool = {
+      fold: () => new Promise((_resolve, reject) => { rejectFold = reject }),
+      dispose: () => {},
+    } as unknown as FoldPool
+    const handle = watchActivityBackfill(ctx, undefined, undefined, { ownCache, config: {}, pool })
+    await trigger(rig.route)
+    await until(() => (rejectFold !== undefined ? true : undefined), 'the worker fold started')
+    handle()
+    rejectFold(new Error('worker died'))
+    await new Promise(resolve => setTimeout(resolve, 40))
+    assert.deepEqual(ownCache.saved, [], 'the aborted fold left no plugin-cache row')
+    assert.deepEqual([...rig.writes.keys()], [], 'the aborted fold left no write-back')
+  })
+
+  test('a worker fold failure falls back to the host-thread sliced fold', async () => {
+    const ctx = new Context()
+    const events = fakeEvents(30_001)
+    const rig = armSliced(ctx, new Map([['monster', events]]), { stat: true })
+    const lines = captureLogs(ctx)
+    const ownCache = ownCacheStub()
+    const dispose = watchActivityBackfill(ctx, undefined, {
+      now: () => performance.now(),
+      sleep: async () => {},
+      minRestMs: 0,
+      workBudgetMs: 600_000,
+      roundPauseMs: 1_000,
+    }, { ownCache, config: {} })
+    await trigger(rig.route)
+    await until(() => (rig.writes.has('monster') ? true : undefined), 'the sliced fallback landed')
+    dispose()
+    assert.deepEqual(ownCache.saved, [], 'the failed worker left no plugin-cache row')
+    const warns = lines.filter(l => l.level === 'warn' && l.text.includes('worker fold for "monster" failed'))
+    assert.equal(warns.length, 1)
+  })
+
+  test('a session already warm in the plugin cache skips the read entirely', async () => {
+    const ctx = new Context()
+    const state = fakeState([
+      { header: { id: 'warm', cwd: '/repo/warm' } },
+      { header: { id: 'cold', cwd: '/repo/cold' } },
+      { header: { id: 'nocwd' } },
+    ])
+    const route = arm(ctx, state)
+    const warm = { id: 'warm', title: 'Warm', updatedAt: 1, blank: false, timeline: null, activity: null, signature: '' }
+    const ownCache = ownCacheStub(new Map([['warm', warm]]))
+    const dispose = watchActivityBackfill(ctx, undefined, undefined, { ownCache })
+    await trigger(route)
+    await until(() => (state.coldSnapshots.length === 1 ? true : undefined), 'only the cold session folded')
+    dispose()
+    assert.deepEqual(state.coldReads, ['cold'])
+    assert.deepEqual(state.coldSnapshots, ['cold'])
   })
 })
