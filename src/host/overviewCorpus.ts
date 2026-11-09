@@ -441,18 +441,18 @@ const YIELD_EVERY = 64
 
 export interface BuildRowsResult {
   rows: HostRow[]
+  reusableSessions: Map<string, HostSession>
   rebuilt: number
   incomplete: number
 }
 
 export async function buildRows(
-  feed: RowFeed,
+  sessions: Map<string, HostSession>,
   scan: CorpusScan | { entries: readonly ScanEntry[] },
   workspace: WorkspaceState,
   cache: CachedSnapshotFace,
   projections: SnapshotProjectionsFace,
   ctx: Context,
-  revision: string,
   options: BuildRowsOptions = {},
 ): Promise<BuildRowsResult> {
   const yieldEvery = options.yieldEvery ?? YIELD_EVERY
@@ -462,7 +462,7 @@ export async function buildRows(
   let rebuilt = 0
   let incomplete = 0
   for (const entry of scan.entries) {
-    const cached = feed.sessions.get(entry.id)
+    const cached = sessions.get(entry.id)
     if (cached !== undefined && cached.signature === entry.signature) {
       current.set(entry.id, cached)
       reusable.set(entry.id, cached)
@@ -475,10 +475,7 @@ export async function buildRows(
     rebuilt++
     if (yieldEvery > 0 && rebuilt % yieldEvery === 0) await yieldTo()
   }
-  feed.sessions = reusable
   const rows = rowsOf([...current.values()], workspace, ctx)
-  feed.rows = rows
-  feed.revision = revision
-  return { rows, rebuilt, incomplete }
+  return { rows, reusableSessions: reusable, rebuilt, incomplete }
 }
 

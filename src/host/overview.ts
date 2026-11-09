@@ -486,9 +486,12 @@ export function watchOverviewRoute(
               ...(options.yieldEvery === undefined ? {} : { yieldEvery: options.yieldEvery }),
               ...(options.yieldTo === undefined ? {} : { yieldTo: options.yieldTo }),
             }
-          const built = await buildRows(feed, { entries }, workspace, cacheFace, projections, c, revision, buildOptions)
-          feed.rowsRevision = built.incomplete > 0 ? '' : revision
+          const built = await buildRows(feed.sessions, { entries }, workspace, cacheFace, projections, c, buildOptions)
+          feed.sessions = built.reusableSessions
           rows = built.rows
+          feed.rows = rows
+          feed.revision = revision
+          feed.rowsRevision = built.incomplete > 0 ? '' : revision
           if (identityMode && (dirty.size > 0 || built.rebuilt > 0)) saveCache(coldIds)
         }
         const now = Date.now()
