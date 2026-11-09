@@ -78,6 +78,7 @@ function propsOf(events: PulseTimelineItem[], over: Partial<Parameters<typeof Pu
 
 afterEach(() => {
   vi.restoreAllMocks()
+  vi.unstubAllGlobals()
   restoreLayout()
 })
 
@@ -124,8 +125,15 @@ describe('PulseEvents — stream interactions', () => {
     list.scrollTop = 0
     await act(async () => { list.dispatchEvent(new Event('scroll')) })
     await until(() => queryAll<HTMLElement>(m.container, '.lc-pulse-event-list > li[aria-hidden]').length === 1, 'the window never returned to the top')
+    const frames: FrameRequestCallback[] = []
+    vi.stubGlobal('requestAnimationFrame', (callback: FrameRequestCallback) => {
+      frames.push(callback)
+      return frames.length
+    })
     await m.update(h(PulseEvents, propsOf(events, { selectedItem: events[50] })))
     assert.equal(list.scrollTop, 50 * 64, 'the off-window row is estimated from the measured pitch')
+    assert.ok(frames.length > 0, 'the reveal scheduled a frame')
+    await act(async () => { while (frames.length > 0) frames.shift()?.(0) })
     list.scrollTop = 51 * 64
     await m.update(h(PulseEvents, propsOf(events, { selectedItem: events[51] })))
     assert.equal(list.scrollTop, 51 * 64, 'an estimate already at its target does not scroll again')
