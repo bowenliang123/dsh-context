@@ -159,6 +159,20 @@ describe('useSurfaceWindow — measurement lifecycle', () => {
     vi.unstubAllGlobals()
   })
 
+  test('detaching the scroller resets the applied window instead of re-asserting it', async () => {
+    const options = { estimateSize: estimateAt(20), overscan: 80, hysteresis: 0 }
+    const m = await mount(h(Probe, { count: 60, options }))
+    const el = query<HTMLElement>(m.container, 'div')
+    sizeOf(el, 100)
+    await scrollBy(el, 200)
+    const applied = numbers(el)
+    assert.ok(applied.from > 0, 'the window settled onto the scrolled range')
+    await m.update(h(Probe, { count: 61, attachRef: false, options: { ...options } }))
+    await act(async () => {})
+    assert.deepEqual(numbers(el), { from: 0, to: 11, top: 0, bottom: (61 - 12) * 20 }, 'the detached scroller falls back to the seeded window')
+    await m.unmount()
+  })
+
   test('cancels a queued focus frame on unmount', async () => {
     const cancel = vi.fn()
     vi.stubGlobal('requestAnimationFrame', () => 7)

@@ -169,6 +169,13 @@ describe('CommandPanel row windowing', () => {
       assert.ok(queryAll(m.container, '.lc-cmd-item').length < 400, 'a tall expanded item does not expand the window')
       await act(async () => { query<HTMLElement>(m.container, '.lc-cmd-toggle').click() })
       assert.ok(queryAll(m.container, '.lc-cmd-detail').length === 0)
+      await act(async () => { query<HTMLElement>(m.container, '.lc-cmd-toggle').click() })
+      assert.ok(query(m.container, '.lc-cmd-detail') !== null, 'the collapsed row re-expands')
+      for (let toggle = 0; toggle < 8; toggle++) {
+        await act(async () => { query<HTMLElement>(m.container, '.lc-cmd-toggle').click() })
+        assert.equal(queryAll(m.container, '.lc-cmd-detail').length === 1, toggle % 2 === 1, `toggle ${toggle} alternates the detail`)
+        assert.ok(queryAll(m.container, '.lc-cmd-item').length < 400, 'every toggle keeps the list windowed')
+      }
       await m.unmount()
     } finally {
       vi.unstubAllGlobals()

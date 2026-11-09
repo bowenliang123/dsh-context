@@ -5,6 +5,7 @@ import {
   ROW_WINDOW_OVERSCAN,
   rowWindowFor,
   type SurfaceWindow,
+  type SurfaceWindowOptions,
   type WindowAlign,
 } from '../../../src/client/components/useRowWindow'
 import { mount, query, queryAll, until } from '../helpers/kit'
@@ -200,6 +201,24 @@ describe('useSurfaceWindow — estimated windows', () => {
       pinBox(list, -50, 20)
       await scrollBy(el, 0)
       assert.equal(numbers(el).from, 0, 'a list above the viewport yields the head of the list')
+      await m.unmount()
+    } finally {
+      vi.unstubAllGlobals()
+    }
+  })
+
+  test('an unstable estimateSize identity keeps the window and never loops updates across re-renders', async () => {
+    const unstable = (): Partial<SurfaceWindowOptions> => ({ estimateSize: () => 20, overscan: 80, hysteresis: 0 })
+    const m = await mount(h(Probe, { count: 50, options: unstable() }))
+    const el = query<HTMLElement>(m.container, 'div')
+    try {
+      sizeOf(el, 100)
+      await scrollBy(el, 200)
+      const stable = numbers(el)
+      for (let round = 0; round < 12; round++) {
+        await m.update(h(Probe, { count: 50, options: { ...unstable() } }))
+      }
+      assert.deepEqual(numbers(el), stable, 'the window survives identity churn unchanged')
       await m.unmount()
     } finally {
       vi.unstubAllGlobals()

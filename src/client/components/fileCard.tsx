@@ -14,6 +14,7 @@ import { remoteStateOf } from './useRemoteState'
 export type FileFilter = 'all' | FileOpKind | 'image'
 
 const FILE_ROW_ESTIMATE = 30
+const rowEstimateSize = (): number => FILE_ROW_ESTIMATE
 
 function slashPartsOf(path: string): { directory: string; name: string } {
   const trimmed = path.endsWith('/') ? path.slice(0, -1) : path
@@ -115,7 +116,7 @@ export function makeFileCard(kit: ViewKit, settings: ContextSettings): Component
     const scope = useSurfaceWindow(listRef, {
       count: shown.length,
       getKey,
-      estimateSize: () => FILE_ROW_ESTIMATE,
+      estimateSize: rowEstimateSize,
       overscan: 240,
       seed: 10,
     })

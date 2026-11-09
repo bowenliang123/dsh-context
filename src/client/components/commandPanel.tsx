@@ -61,6 +61,7 @@ export function makeCommandPanel(kit: ViewKit): ComponentType<CommandPanelProps>
   const WINDOW_MIN_ROWS = 100
   const COMMAND_ROW_ESTIMATE = 30
   const RESULT_KEEP_MAX = 8
+  const rowEstimateSize = (): number => COMMAND_ROW_ESTIMATE
 
   function statusGlyphOf(rec: Command): { glyph: string; cls: string; tip: string } {
     if (rec.status === 'running') return { glyph: '⏳', cls: 'run', tip: t('cmds.status.running') }
@@ -184,7 +185,7 @@ export function makeCommandPanel(kit: ViewKit): ComponentType<CommandPanelProps>
     const scope = useSurfaceWindow(listRef, {
       count: shown.length,
       getKey: getRowKey,
-      estimateSize: () => COMMAND_ROW_ESTIMATE,
+      estimateSize: rowEstimateSize,
       minCount: WINDOW_MIN_ROWS,
       overscan: 240,
       seed: 10,

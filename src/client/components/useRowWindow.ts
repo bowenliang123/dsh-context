@@ -164,6 +164,7 @@ export function useSurfaceWindow(
   const inited = useRef(false)
   const [version, setVersion] = useState(0)
   const [range, setRange] = useState<RowRange | null>(null)
+  const appliedRange = useRef<RowRange | null>(null)
   const [activeKey, setActiveKeyState] = useState<string | null>(null)
 
   const offsets = useMemo(() => {
@@ -202,7 +203,10 @@ export function useSurfaceWindow(
     const el = ref.current
     if (el === null) {
       last.current = null
-      setRange(null)
+      if (appliedRange.current !== null) {
+        appliedRange.current = null
+        setRange(null)
+      }
       return
     }
     let viewport = readViewport(el)
@@ -260,9 +264,10 @@ export function useSurfaceWindow(
     to = clampIndex(Math.max(from, to), count)
     const next: RowRange = { from, to: Math.max(from, to) }
     last.current = { scrollTop, viewport, leading, offsets, keys, range: next }
-    setRange(current => (
-      current !== null && current.from === next.from && current.to === next.to ? current : next
-    ))
+    const applied = appliedRange.current
+    if (applied !== null && applied.from === next.from && applied.to === next.to) return
+    appliedRange.current = next
+    setRange(next)
   }, [
     anchorKey, count, enabled, hysteresis, indexOf, initial, keys, measureLeading,
     offsets, overscan, readScroll, readViewport, ref, writeScroll,
@@ -270,6 +275,8 @@ export function useSurfaceWindow(
 
   useLayoutEffect(() => {
     if (!enabled) {
+      if (appliedRange.current === null) return undefined
+      appliedRange.current = null
       setRange(null)
       return undefined
     }
@@ -335,6 +342,7 @@ export function useSurfaceWindow(
     callbacks.current.clear()
     heights.current.clear()
     last.current = null
+    appliedRange.current = null
     pendingFocus.current = null
     inited.current = false
     if (focusFrame.current !== 0) cancelAnimationFrame(focusFrame.current)

@@ -39,11 +39,10 @@ function findRowByKey(root: HTMLElement, key: string): HTMLElement | null {
   return null
 }
 
-function safeIdPart(key: string): string {
-  return key.replace(/[^a-zA-Z0-9_-]/g, '_')
-}
+const safeIdPart = (key: string): string => key.replace(/[^a-zA-Z0-9_-]/g, '_')
 
 const STEP_PICK_MAX = 500
+const nodeEstimateSize = (): number => 30
 
 export interface ContextBrowserProps {
   locale?: string
@@ -329,7 +328,7 @@ export function makeContextBrowser(
     const flatScope = useSurfaceWindow(scrollRef, {
       count: flatModel.entries.length,
       getKey: flatKeyOf,
-      estimateSize: () => 30,
+      estimateSize: nodeEstimateSize,
       minCount: 30,
       overscan: 240,
       seed: 10,
@@ -381,7 +380,7 @@ export function makeContextBrowser(
     const catScope = useSurfaceWindow(scrollRef, {
       count: catCount,
       getKey: catKeyOf,
-      estimateSize: () => 30,
+      estimateSize: nodeEstimateSize,
       minCount: 30,
       overscan: 240,
       seed: 10,
