@@ -1,4 +1,4 @@
-import { copyFile, link, mkdir } from 'node:fs/promises'
+import { copyFile, link, mkdir, readdir, rm, stat } from 'node:fs/promises'
 import { basename, dirname, join } from 'node:path'
 import type { Context } from '@deepseek-ai/cordis'
 import { attachmentOf, isImageName, leafNameOf } from '../shared/attachment'
@@ -8,6 +8,12 @@ import { failure, leaseOf, mountPostRoute, observeOf, readBody, reply } from './
 import { asRecord } from './record'
 
 export const ATTACHMENT_ROUTE = '/api/dsh-context/attachment'
+
+export const PREVIEWS_TTL_MS = 7 * 24 * 60 * 60 * 1000
+
+export const PREVIEWS_MAX_DIRS = 512
+
+const PREVIEWS_SWEEP_DELAY_MS = 60_000
 
 const IMAGE_MEDIA_EXTENSION: Readonly<Record<string, string>> = {
   'image/png': 'png',
@@ -75,7 +81,7 @@ function filePathOf(store: AttachmentStoreFace | undefined, ref: AttachmentRef):
   }
 }
 
-async function imageAliasOf(store: AttachmentStoreFace | undefined, ref: AttachmentRef): Promise<string | null> {
+async function imageAliasOf(store: AttachmentStoreFace | undefined, ref: AttachmentRef, sweeper?: PreviewSweeper): Promise<string | null> {
   if (typeof store?.imageHostPath !== 'function') return null
   let objectPath: string | undefined
   try {
@@ -103,17 +109,101 @@ async function imageAliasOf(store: AttachmentStoreFace | undefined, ref: Attachm
     } catch (err) {
       if (!(err instanceof Error && 'code' in err && err.code === 'EEXIST')) await copyFile(objectPath, alias)
     }
+    sweeper?.schedule(directory)
     return alias
   } catch {
     return null
   }
 }
 
-async function previewPathOf(store: AttachmentStoreFace | undefined, ref: AttachmentRef): Promise<string | null> {
-  return ref.kind === 'file' ? filePathOf(store, ref) : await imageAliasOf(store, ref)
+async function previewPathOf(
+  store: AttachmentStoreFace | undefined,
+  ref: AttachmentRef,
+  sweeper?: PreviewSweeper,
+): Promise<string | null> {
+  return ref.kind === 'file' ? filePathOf(store, ref) : await imageAliasOf(store, ref, sweeper)
 }
 
-export function watchAttachmentChannel(ctx: Context, coldReads: ColdReadGate = makeColdReadGate()): void {
+export interface PreviewSweeper {
+  schedule(directory: string): void
+  sweepNow(directory: string): Promise<void>
+  dispose(): void
+}
+
+export function makePreviewSweeper(
+  now: () => number = Date.now,
+  delayMs: number = PREVIEWS_SWEEP_DELAY_MS,
+  ttlMs: number = PREVIEWS_TTL_MS,
+  maxDirs: number = PREVIEWS_MAX_DIRS,
+): PreviewSweeper {
+  let timer: ReturnType<typeof setTimeout> | null = null
+  const pending = new Set<string>()
+  const clear = (): void => {
+    if (timer !== null) {
+      clearTimeout(timer)
+      timer = null
+    }
+  }
+  const sweep = async (directory: string): Promise<void> => {
+    pending.delete(directory)
+    let entries: string[]
+    try {
+      entries = await readdir(directory)
+    } catch {
+      return
+    }
+    const cutoff = now() - ttlMs
+    const dated: { name: string; mtimeMs: number }[] = []
+    for (const name of entries) {
+      try {
+        const info = await stat(join(directory, name))
+        if (!info.isDirectory()) continue
+        dated.push({ name, mtimeMs: info.mtimeMs })
+      } catch {
+      }
+    }
+    const expired = dated.filter(entry => entry.mtimeMs < cutoff)
+    for (const entry of expired) {
+      try {
+        await rm(join(directory, entry.name), { recursive: true, force: true })
+      } catch {
+      }
+    }
+    const kept = dated.length - expired.length
+    if (kept <= maxDirs) return
+    const removable = dated
+      .filter(entry => entry.mtimeMs >= cutoff)
+      .sort((left, right) => left.mtimeMs - right.mtimeMs)
+      .slice(0, kept - maxDirs)
+    for (const entry of removable) {
+      try {
+        await rm(join(directory, entry.name), { recursive: true, force: true })
+      } catch {
+      }
+    }
+  }
+  return {
+    schedule(directory: string): void {
+      pending.add(directory)
+      clear()
+      timer = setTimeout(() => {
+        timer = null
+        for (const target of pending) void sweep(target)
+        pending.clear()
+      }, delayMs)
+      ;(timer as { unref?: () => void }).unref?.()
+    },
+    sweepNow: sweep,
+    dispose: clear,
+  }
+}
+
+export function watchAttachmentChannel(
+  ctx: Context,
+  coldReads: ColdReadGate = makeColdReadGate(),
+  sweeper: PreviewSweeper = makePreviewSweeper(),
+): void {
+  ctx.effect(() => () => { sweeper.dispose() }, 'dsh-context: attachment previews sweeper')
   mountPostRoute({
     ctx,
     deps: ['connection'],
@@ -143,7 +233,7 @@ export function watchAttachmentChannel(ctx: Context, coldReads: ColdReadGate = m
             if (!Array.isArray(events)) return null
             const ref = referencedAttachmentOf(events, attachmentId)
             if (ref === null) return null
-            const path = await previewPathOf(store, ref)
+            const path = await previewPathOf(store, ref, sweeper)
             return path === null ? null : { path }
           } finally {
             release()

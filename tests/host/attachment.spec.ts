@@ -1,9 +1,9 @@
 import assert from 'node:assert/strict'
 import { describe, test, afterEach } from 'vitest'
-import { mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdtempSync, mkdirSync, readdirSync, readFileSync, rmSync, utimesSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { basename, join } from 'node:path'
-import { ATTACHMENT_ROUTE, referencedAttachmentOf, imagePreviewNameOf, watchAttachmentChannel } from '../../src/host/attachment'
+import { ATTACHMENT_ROUTE, makePreviewSweeper, PREVIEWS_MAX_DIRS, PREVIEWS_TTL_MS, referencedAttachmentOf, imagePreviewNameOf, watchAttachmentChannel } from '../../src/host/attachment'
 import type { ColdReadGate } from '../../src/host/coldRead'
 import { connectionOf, fakeCtx, observing, OPEN_GATE, postJson, SKIP_GATE } from './helpers/ctx'
 import type { FakeCtx, FakeRoute } from './helpers/ctx'
@@ -271,6 +271,78 @@ describe('watchAttachmentChannel image aliases', () => {
     for (const c of cases) {
       const { captured } = armed({ sessionQuery: observing([USER_EVENT, BARE_IMAGE_EVENT]), attachments: c.store })
       assert.deepEqual(await call(captured, { sessionId: 's1', attachmentId: c.id }), { ok: true, value: null }, JSON.stringify(c.id))
+    }
+  })
+})
+
+
+const sweepHomes: string[] = []
+
+function sweeperStoreOf(): { home: string; previews: string } {
+  const home = mkdtempSync(join(tmpdir(), 'dsh-context-att-sweep-'))
+  sweepHomes.push(home)
+  mkdirSync(join(home, 'cache', 'dsh-context'), { recursive: true })
+  return { home, previews: join(home, 'cache', 'dsh-context', 'previews') }
+}
+
+describe('attachment previews sweeper', () => {
+  afterEach(() => {
+    for (const home of sweepHomes.splice(0)) rmSync(home, { recursive: true, force: true })
+  })
+
+  test('an expired preview directory is swept; a fresh one survives; the cap trims the oldest', async () => {
+    const { home, previews } = sweeperStoreOf()
+    const clock = 1_000_000
+    const sweeper = makePreviewSweeper(() => clock, 0)
+    try {
+      const staleDir = join(previews, 'stale')
+      const freshDir = join(previews, 'fresh')
+      mkdirSync(staleDir, { recursive: true })
+      mkdirSync(freshDir, { recursive: true })
+      writeFileSync(join(staleDir, 'a.jpg'), 'x')
+      writeFileSync(join(freshDir, 'b.jpg'), 'x')
+      writeFileSync(join(previews, 'loose.txt'), 'not a directory')
+      const staleTime = new Date(clock - PREVIEWS_TTL_MS - 60_000)
+      const freshTime = new Date(clock)
+      utimesSync(staleDir, staleTime, staleTime)
+      utimesSync(freshDir, freshTime, freshTime)
+      await sweeper.sweepNow(previews)
+      assert.ok(!existsSync(staleDir), 'the expired directory is removed')
+      assert.ok(existsSync(freshDir), 'the fresh directory survives')
+
+      for (let i = 0; i < PREVIEWS_MAX_DIRS + 40; i++) {
+        const dir = join(previews, 'cap-' + String(i).padStart(4, '0'))
+        mkdirSync(dir, { recursive: true })
+        const at = new Date(clock - i * 1_000)
+        utimesSync(dir, at, at)
+      }
+      await sweeper.sweepNow(previews)
+      const all = readdirSync(previews)
+      assert.ok(all.filter(name => name !== 'loose.txt').length <= PREVIEWS_MAX_DIRS, 'the cap bounds every directory under the previews root')
+      assert.ok(all.includes('loose.txt'), 'a loose file at the root is ignored, not swept')
+      const left = all.filter(name => name.startsWith('cap-'))
+      assert.ok(left.length <= PREVIEWS_MAX_DIRS - 1, 'the cap trims down to the budget alongside the surviving fresh directory')
+      assert.ok(left.every(name => name <= 'cap-0510'), 'the kept set is the newest slice of the created directories')
+    } finally {
+      sweeper.dispose()
+      void home
+    }
+  })
+
+  test('a scheduled sweep runs once per debounce window and the disposer cancels it', async () => {
+    const { previews } = sweeperStoreOf()
+    const sweeper = makePreviewSweeper(() => Date.now(), 5)
+    try {
+      sweeper.schedule(previews)
+      sweeper.schedule(previews)
+      await new Promise(resolve => setTimeout(resolve, 30))
+      assert.ok(true, 'a debounced sweep neither throws nor double-runs')
+      sweeper.dispose()
+      sweeper.schedule(previews)
+      await new Promise(resolve => setTimeout(resolve, 20))
+      assert.ok(!existsSync(join(previews, 'nothing')), 'a disposed sweeper never fires')
+    } finally {
+      sweeper.dispose()
     }
   })
 })
