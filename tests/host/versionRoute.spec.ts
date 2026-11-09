@@ -72,8 +72,16 @@ describe('version route', () => {
     assert.equal(response.headers.get('cache-control'), 'no-store')
     assert.deepEqual(await response.json(), {
       ok: true,
-      value: { ready: true, failed: false, checkedAt: 7, current: '0.82.2', latest: '0.84.0' },
+      value: { ready: true, failed: false, checkedAt: 7, current: '0.82.2', updateAvailable: true, latest: '0.84.0' },
     })
+  })
+
+  test('the host-side compare marks a same-version registry read as no update', async () => {
+    const mounted = mountableCtx()
+    watchVersionChannel(mounted.ctx, serviceOf({ value: '0.82.2', ready: true, failed: false, checkedAt: 7 }))
+    const response = await mounted.route.fetch!(new Request('http://dsh.test' + VERSION_ROUTE, { method: 'POST' }))
+    const body = await response.json() as { value: Record<string, unknown> }
+    assert.equal(body.value.updateAvailable, false)
   })
 
   test('answers without a latest version when the registry check is not ready', async () => {
@@ -81,7 +89,7 @@ describe('version route', () => {
     watchVersionChannel(mounted.ctx, serviceOf({ value: null, ready: false, failed: true, checkedAt: 5 }))
     const response = await mounted.route.fetch!(new Request('http://dsh.test' + VERSION_ROUTE, { method: 'POST' }))
     const body = await response.json() as { value: Record<string, unknown> }
-    assert.deepEqual(body.value, { ready: false, failed: true, checkedAt: 5, current: '0.82.2' })
+    assert.deepEqual(body.value, { ready: false, failed: true, checkedAt: 5, current: '0.82.2', updateAvailable: null })
     assert.ok(!('latest' in body.value))
   })
 
@@ -92,6 +100,7 @@ describe('version route', () => {
     const body = await response.json() as { value: Record<string, unknown> }
     assert.equal(body.value.current, null)
     assert.equal(body.value.latest, '0.91.0')
+    assert.equal(body.value.updateAvailable, null, 'no current version means no host-side compare')
   })
 
   test('isolates a throwing service behind the internal error reply', async () => {

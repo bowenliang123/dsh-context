@@ -3,6 +3,7 @@ import { VERSION_ROUTE } from './apiRoutes'
 import { postRoute } from './route'
 import { asRecord } from './services'
 import { PLUGIN_VERSION } from './meta'
+import { isNewerRelease } from '../shared/version'
 
 const CACHE_TTL_MS = 60 * 60 * 1000
 
@@ -15,6 +16,7 @@ interface VersionRead {
   failed: boolean
   checkedAt: number
   current: string | null
+  updateAvailable: boolean | null
   latest?: string
 }
 
@@ -22,32 +24,22 @@ function versionOf(value: unknown): VersionRead | null {
   const data = asRecord(value)
   if (data === null || Array.isArray(data)) return null
   if (typeof data.ready !== 'boolean' || typeof data.failed !== 'boolean' || typeof data.checkedAt !== 'number') return null
+  const current = typeof data.current === 'string' ? data.current : null
+  const latest = typeof data.latest === 'string' && data.latest !== '' ? data.latest : undefined
   return {
     ready: data.ready,
     failed: data.failed,
     checkedAt: data.checkedAt,
-    current: typeof data.current === 'string' ? data.current : null,
-    ...(typeof data.latest === 'string' && data.latest !== '' ? { latest: data.latest } : {}),
+    current,
+    ...(typeof data.updateAvailable === 'boolean'
+      ? { updateAvailable: data.updateAvailable }
+      : { updateAvailable: latest !== undefined && current !== null ? isNewerRelease(latest, current) : null }),
+    ...(latest === undefined ? {} : { latest }),
   }
 }
 
 let cached: { at: number; read: VersionRead | null } | null = null
 let inflight: Promise<VersionRead | null> | null = null
-
-function parseVersion(version: string): number[] {
-  return version.replace(/^v/, '').split('-', 1)[0].split('.').map(n => parseInt(n, 10) || 0)
-}
-
-export function isNewerVersion(latest: string, current: string): boolean {
-  const a = parseVersion(latest)
-  const b = parseVersion(current)
-  for (let i = 0; i < Math.max(a.length, b.length); i++) {
-    const x = a[i] ?? 0
-    const y = b[i] ?? 0
-    if (x !== y) return x > y
-  }
-  return false
-}
 
 function ttlOf(read: VersionRead | null): number {
   return read?.ready === true ? CACHE_TTL_MS : RETRY_MS
@@ -84,7 +76,10 @@ export function useNewerVersion(): string | null {
       void readVersion().then((entry) => {
         if (!on) return
         if (entry?.ready === true && entry.latest !== undefined) {
-          if (isNewerVersion(entry.latest, PLUGIN_VERSION)) setLatest(entry.latest)
+          if (entry.updateAvailable === true
+            || (entry.updateAvailable === null && isNewerRelease(entry.latest, PLUGIN_VERSION))) {
+            setLatest(entry.latest)
+          }
           return
         }
         attempts++

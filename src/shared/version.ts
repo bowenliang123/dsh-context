@@ -40,3 +40,10 @@ export function meetsBaseline(version: string, baseline: string = BASELINE_DSH_V
   if (v === null || b === null) return true
   return compareParsed(v, b) >= 0
 }
+
+export function isNewerRelease(latest: string, current: string): boolean {
+  const a = parseVersion(latest)
+  const b = parseVersion(current)
+  if (a === null || b === null) return false
+  return compareParsed(a, b) > 0
+}

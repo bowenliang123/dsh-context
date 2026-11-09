@@ -1,11 +1,12 @@
 import { act, createElement as h } from 'react'
 import assert from 'node:assert/strict'
 import { afterEach, describe, test, vi } from 'vitest'
-import { isNewerVersion } from '../../src/client/versionSource'
+import { isNewerRelease } from '../../src/shared/version'
 import { cleanupMounts, flush, mount } from './helpers/kit'
 
 const HOUR_MS = 60 * 60 * 1000
 const RETRY_MS = 30_000
+const RETRY_MAX = 5
 const ROUTE = 'api/dsh-context/version'
 
 interface Call {
@@ -74,28 +75,54 @@ afterEach(async () => {
   delete (globalThis as Record<string, unknown>).__DSH_CTX_VERSION__
 })
 
-describe('isNewerVersion', () => {
-  test('segments compare numerically, ignoring a v prefix, pre-release suffixes, padding, and garbage', () => {
-    assert.equal(isNewerVersion('1.2.3', '1.2.2'), true)
-    assert.equal(isNewerVersion('1.2.3', '1.2.3'), false)
-    assert.equal(isNewerVersion('1.2.2', '1.2.3'), false)
-    assert.equal(isNewerVersion('v1.3.0', '1.2.9'), true)
-    assert.equal(isNewerVersion('1.3.0-rc.1', '1.3.0'), false)
-    assert.equal(isNewerVersion('1.3.0-rc.1', '1.2.0'), true)
-    assert.equal(isNewerVersion('1.2', '1.2.1'), false)
-    assert.equal(isNewerVersion('1.2.1', '1.2'), true)
-    assert.equal(isNewerVersion('x.y', '0.0.0'), false)
+describe('isNewerRelease (the shared host-side compare)', () => {
+  test('release channels rank above pre-releases; the v prefix and garbage stay handled', () => {
+    assert.equal(isNewerRelease('1.2.3', '1.2.2'), true)
+    assert.equal(isNewerRelease('1.2.3', '1.2.3'), false)
+    assert.equal(isNewerRelease('1.2.2', '1.2.3'), false)
+    assert.equal(isNewerRelease('v1.3.0', '1.2.9'), true)
+    assert.equal(isNewerRelease('1.3.0-rc.1', '1.3.0'), false, 'an rc stays below its release')
+    assert.equal(isNewerRelease('1.3.0', '1.3.0-rc.1'), true, 'a release outranks the rc the client parser used to miss')
+    assert.equal(isNewerRelease('1.3.0-rc.1', '1.2.0'), true)
+    assert.equal(isNewerRelease('1.2.1', '1.2'), false, 'an unparsable current never reports newer')
+    assert.equal(isNewerRelease('x.y', '0.0.0'), false)
   })
 })
 
 describe('the version route', () => {
-  test('posts an empty body to the version route, decodes ready/current/latest, and paints a newer version', async () => {
+  test('posts an empty body, trusts the served updateAvailable flag, and paints a newer version', async () => {
     const module = await fresh('1.0.0')
-    const { calls } = stubVersion(() => versionBody({ current: '1.0.0', latest: '1.2.3' }))
+    const { calls } = stubVersion(() => versionBody({ current: '1.0.0', latest: '1.2.3', updateAvailable: true }))
     const p = await probe(module)
     assert.equal(p.settled(), '1.2.3')
     assert.deepEqual(calls, [{ url: ROUTE, body: {} }])
     await p.unmount()
+  })
+
+  test('a served updateAvailable of false hides an upgrade even when latest is numerically newer', async () => {
+    const module = await fresh('1.0.0')
+    stubVersion(() => versionBody({ current: '1.0.0', latest: '1.2.3', updateAvailable: false }))
+    const p = await probe(module)
+    assert.equal(p.settled(), '', 'the host-side decision wins')
+    await p.unmount()
+  })
+
+  test('a payload without updateAvailable falls back to the shared compare against the build version', async () => {
+    const module = await fresh('1.0.0')
+    stubVersion(() => ({ ready: true, failed: false, checkedAt: 1, current: '1.0.0', latest: '1.2.3' }))
+    const p = await probe(module)
+    assert.equal(p.settled(), '1.2.3')
+    await p.unmount()
+    const older = await fresh('1.2.3')
+    stubVersion(() => ({ ready: true, failed: false, checkedAt: 1, current: '1.2.3', latest: '1.3.0-rc.1' }))
+    const q = await probe(older)
+    assert.equal(q.settled(), '1.3.0-rc.1', 'an rc above the current build still counts on the fallback path')
+    await q.unmount()
+    const same = await fresh('1.2.3')
+    stubVersion(() => ({ ready: true, failed: false, checkedAt: 1, current: '1.2.3', latest: '1.2.3' }))
+    const r = await probe(same)
+    assert.equal(r.settled(), '', 'a fallback compare against an equal latest stays quiet')
+    await r.unmount()
   })
 
   test('a dev build never checks the version route and paints nothing', async () => {
@@ -120,6 +147,28 @@ describe('the version route', () => {
       assert.equal(calls.length, 1, 'a ready answer stops the polling')
       await p.unmount()
     }
+  })
+
+  test('a payload with no current version falls back to comparing against the build version', async () => {
+    const module = await fresh('1.0.0')
+    stubVersion(() => ({ ready: true, failed: false, checkedAt: 1, current: null, latest: '9.9.9' }))
+    const p = await probe(module)
+    assert.equal(p.settled(), '9.9.9', 'a null current compares the served latest against the build')
+    await p.unmount()
+  })
+
+  test('a ready reply without a latest version never paints and the ladder gives up', async () => {
+    vi.useFakeTimers()
+    const module = await fresh('1.0.0')
+    const { calls } = stubVersion(() => ({ ready: true, failed: false, checkedAt: 1, current: '1.0.0' }))
+    const p = await probe(module)
+    assert.equal(p.settled(), '', 'no latest means nothing to paint')
+    await advance(RETRY_MS * (RETRY_MAX + 2))
+    assert.equal(p.settled(), '', 'a ready answer stays cached through the whole retry ladder')
+    await advance(2 * 60 * 60 * 1000)
+    assert.equal(p.settled(), '', 'a latest-less ready reply never paints and the ladder has stopped')
+    assert.equal(calls.length, 1, 'the ready cache meant exactly one network read')
+    await p.unmount()
   })
 
   test('a not-ready reply retries after 30s and paints once the host turns ready', async () => {
