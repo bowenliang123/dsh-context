@@ -1,6 +1,6 @@
 .lc-ov-page { display: flex; flex-direction: column; width: 100%; height: 100%; min-width: 0; min-height: 0; overflow: hidden; box-sizing: border-box; background: var(--lc-canvas, var(--dsw-alias-bg-base)); color: var(--dsw-alias-label-primary); font-size: 13px; container: lc-ov / inline-size; }
 .lc-ov-pagescroll { flex: 1 1 auto; min-height: 0; overflow-y: auto; scrollbar-gutter: stable; }
-.lc-ov-pagecontent { padding: 0 clamp(16px, 2.5cqi, 32px) 48px; }
+.lc-ov-pagecontent { padding: 0 10px 10px; }
 .lc-ov-page .lc-card { padding: 10px 12px; }
 .lc-ov-pagehead { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; padding-top: 28px; margin-bottom: 24px; }
 [data-platform='darwin'] .lc-ov-pagehead { padding-top: calc(28px + var(--dsh-frame-top-clearance, 0px)); }

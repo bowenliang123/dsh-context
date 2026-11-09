@@ -1,3 +1,4 @@
+.lc-root:has(> .lc-pulse) { padding: 10px; }
 .lc-pulse {
   --lc-pulse-violet: var(--color-violet-500, var(--dsw-alias-state-business-primary));
   --lc-pulse-cyan: var(--color-teal-500, var(--dsw-alias-brand-primary));
