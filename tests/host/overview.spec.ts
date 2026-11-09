@@ -1,9 +1,9 @@
 import assert from 'node:assert/strict'
 import { Context } from '@deepseek-ai/cordis'
-import { describe, test } from 'vitest'
+import { describe, test, vi } from 'vitest'
 import { watchOverviewRoute, OVERVIEW_ROUTE } from '../../src/host/overview'
 import type { ContextTimeline, SessionCostUsage } from '../../src/shared/types'
-import { boot, call, summaryOf, pageOf, revisionOf, recordOf, usageOf, timelineOf, timingOf, dayOf, costOfUsage, fakeCost, fakeBackfill, fakeState, tokenPartsOf, usageTotalsOf, sortedParts, type RouteBox } from './helpers/overview'
+import { boot, call, summaryOf, pageOf, revisionOf, recordOf, unwrap, usageOf, timelineOf, timingOf, dayOf, costOfUsage, fakeCost, fakeBackfill, fakeState, tokenPartsOf, usageTotalsOf, sortedParts, type RouteBox } from './helpers/overview'
 
 describe('dsh-context overview route', () => {
 
@@ -429,5 +429,67 @@ describe('dsh-context overview route', () => {
     assert.ok(evicted.reply.value !== undefined && !('unchanged' in evicted.reply.value), 'the oldest served key was evicted')
     const remembered = await call(harness, { part: 'page', page: 1, revision })
     assert.ok(remembered.reply.value !== undefined && 'unchanged' in remembered.reply.value, 'a recent key stays remembered')
+    test('a held Today revision re-serves the new day at local midnight', async () => {
+    vi.useFakeTimers({ toFake: ['Date'] })
+    try {
+      vi.setSystemTime(new Date(2026, 10, 8, 23, 59, 50))
+      const harness = await boot({
+        records: [recordOf('a', { createdAt: new Date(2026, 10, 8, 20, 0, 0).getTime() })],
+        values: {
+          a: {
+            contextTimeline: timelineOf({ total: 900, turns: 1, cost: usageOf(900) }),
+            contextActivity: { days: { '2026-11-08': dayOf(900, 1) } },
+            title: 'Overnight',
+            sessionListMetadata: { blank: false, lastPromptAt: new Date(2026, 10, 8, 23, 0, 0).getTime() },
+          },
+        },
+      })
+      const before = await call(harness, { part: 'summary', scope: { range: 'today' } })
+      assert.equal(summaryOf(before).sessions, 1)
+      const revision = revisionOf(before)
+      vi.setSystemTime(new Date(2026, 10, 9, 0, 0, 20))
+      const held = unwrap(await call(harness, { part: 'summary', scope: { range: 'today' }, revision }))
+      assert.ok(held.value !== undefined && 'summary' in held.value, 'the midnight poll re-serves the new day')
+      assert.equal(held.value.summary.sessions, 0)
+      const steady = unwrap(await call(harness, { part: 'summary', scope: { range: 'today' }, revision: held.value.revision }))
+      assert.ok(steady.value !== undefined && 'unchanged' in steady.value, 'the same-day poll stays unchanged')
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  test('a held All-time revision stays unchanged across local midnight', async () => {
+    vi.useFakeTimers({ toFake: ['Date'] })
+    try {
+      vi.setSystemTime(new Date(2026, 10, 8, 23, 59, 50))
+      const harness = await boot({
+        records: [recordOf('a', { createdAt: new Date(2026, 10, 8, 20, 0, 0).getTime() })],
+        values: {
+          a: {
+            contextTimeline: timelineOf({ total: 900, turns: 1, cost: usageOf(900) }),
+            contextActivity: { days: { '2026-11-08': dayOf(900, 1) } },
+          },
+        },
+      })
+      const before = await call(harness, { part: 'summary', scope: { range: 'all' } })
+      const revision = revisionOf(before)
+      vi.setSystemTime(new Date(2026, 10, 9, 0, 0, 20))
+      const after = await call(harness, { part: 'summary', scope: { range: 'all' }, revision })
+      assert.ok(after.reply.value !== undefined && 'unchanged' in after.reply.value, 'All time is day-independent')
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  test('a clock beyond the day-key range answers with an open relative window', async () => {
+    vi.useFakeTimers({ toFake: ['Date'] })
+    try {
+      vi.setSystemTime(new Date(10_000, 0, 1))
+      const harness = await boot({ records: [], values: {} })
+      const reply = await call(harness, { part: 'summary', scope: { range: 'today' } })
+      assert.ok(reply.reply.value !== undefined && 'summary' in reply.reply.value)
+    } finally {
+      vi.useRealTimers()
+    }
   })
 })

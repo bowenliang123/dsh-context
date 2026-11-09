@@ -1,4 +1,5 @@
 import type { Context } from '@deepseek-ai/cordis'
+import { dayKeyOf } from '../shared/days'
 import type {
   BackfillCoverage,
   OverviewCoverage,
@@ -434,7 +435,10 @@ export function watchOverviewRoute(
         const pricingKey = cost.ready() ? `ready${cost.version?.() ?? 0}` : 'cold'
         const revision = revisionOf([corpusRevision, workspace.signature, coverageKey, pricingKey, `f${foldEpoch}`])
         if (feed.revision !== revision) feed.served.clear()
-        const requestKey = requestKeyOf(parsed)
+        const now = Date.now()
+        const filters = filtersOf(parsed, now)
+        const timeKey = filters.window.start === null ? '' : dayKeyOf(filters.window.start) ?? ''
+        const requestKey = requestKeyOf(parsed, timeKey)
         if (dirty.size === 0 && parsed.revision !== undefined
           && parsed.revision === revision && servedOf(feed, requestKey)) {
           return { revision, unchanged: true }
@@ -467,8 +471,6 @@ export function watchOverviewRoute(
           feed.rowsRevision = built.incomplete > 0 ? '' : revision
           if (identityMode && (dirty.size > 0 || built.rebuilt > 0)) saveCache(coldIds)
         }
-        const now = Date.now()
-        const filters = filtersOf(parsed, now)
         const open = filters.day === null && filters.window.start === null && filters.window.end === null
         const value = valueOf(parsed, revision, cost, {
           allRows: rows,
@@ -502,9 +504,9 @@ export function watchOverviewRoute(
   return dispose
 }
 
-function requestKeyOf(parsed: ParsedRequest): string {
+function requestKeyOf(parsed: ParsedRequest, timeKey: string): string {
   return JSON.stringify([
-    parsed.part, parsed.scope, parsed.sort, parsed.page, parsed.tally, parsed.pick,
+    parsed.part, parsed.scope, parsed.sort, parsed.page, parsed.tally, parsed.pick, timeKey,
   ])
 }
 
