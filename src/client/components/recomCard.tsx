@@ -13,12 +13,16 @@ const shapeOf = (value: RecomRead): string =>
   [value.degraded ? '1' : '0', value.recom.id, value.recom.name, value.recom.url, value.recom.icon,
     textKeyOf(value.recom.slogan), textKeyOf(value.recom.promotion), textKeyOf(value.recom.tooltip)].join('\u0001')
 
+const RECOM_TTL_MS = 30 * 60_000
+
 let latest: RecomRead | null = null
+let latestAt = 0
 let pool: Recom[] | null = null
 let inFlight: Promise<RecomRead> | null = null
 
 export function resetRecomCache(): void {
   latest = null
+  latestAt = 0
   pool = null
   inFlight = null
 }
@@ -52,6 +56,7 @@ function loadRecom(): Promise<RecomRead> {
     pool = read.degraded ? null : read.recoms
     const recom = read.recoms[Math.floor(Math.random() * read.recoms.length)]
     latest = { recom, degraded: read.degraded }
+    latestAt = Date.now()
     return latest
   })
   const tracked = request.finally(() => {
@@ -75,7 +80,7 @@ export function makeRecomCard(kit: ViewKit, ctx: ClientCtx): () => ReactElement 
     useEffect(() => {
       const cached = latest
       latest = state
-      if (pool !== null) return
+      if (pool !== null && !state.degraded && Date.now() - latestAt < RECOM_TTL_MS) return
       let active = true
       void loadRecom().then((next) => {
         if (!active) return

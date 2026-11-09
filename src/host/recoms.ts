@@ -4,6 +4,10 @@ import { mountPostRoute, reply } from './postRoute'
 
 export const RECOM_ROUTE = '/api/dsh-context/recom'
 
+export const RECOM_TTL_MS = 60 * 60 * 1000
+
+const RECOM_FAILURE_BACKOFF_MS = 30_000
+
 const FETCH_TIMEOUT_MS = 5_000
 
 type RecomFetcher = (url: string, init: RequestInit) => Promise<Response>
@@ -32,14 +36,36 @@ export async function readRecoms(): Promise<RecomsRead> {
   return { recoms: [DEFAULT_RECOM], degraded: true }
 }
 
-export function watchRecomChannel(ctx: Context): void {
+export interface RecomChannelOptions {
+  ttlMs?: number
+  now?: () => number
+}
+
+export function watchRecomChannel(ctx: Context, options: RecomChannelOptions = {}): void {
+  const now = options.now ?? (() => Date.now())
+  const ttlMs = options.ttlMs ?? RECOM_TTL_MS
+  let slot: { read: RecomsRead; at: number } | null = null
+  let inflight: Promise<RecomsRead> | null = null
+  const load = async (): Promise<RecomsRead> => {
+    try {
+      const read = await readRecoms()
+      slot = { read, at: now() }
+      return read
+    } finally {
+      inflight = null
+    }
+  }
   mountPostRoute({
     ctx,
     deps: ['connection'],
     path: RECOM_ROUTE,
     label: 'dsh-context: recom route',
     handler: () => async (): Promise<Response> => {
-      const read = await readRecoms()
+      if (slot !== null && now() - slot.at < (slot.read.degraded ? RECOM_FAILURE_BACKOFF_MS : ttlMs)) {
+        return reply({ ok: true, value: slot.read.recoms, degraded: slot.read.degraded })
+      }
+      inflight ??= load()
+      const read = await inflight
       return reply({ ok: true, value: read.recoms, degraded: read.degraded })
     },
   })

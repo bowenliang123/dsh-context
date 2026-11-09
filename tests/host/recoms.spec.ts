@@ -93,20 +93,54 @@ describe('recom route', () => {
       }
       assert.doesNotThrow(() => watchRecomChannel(ctx as unknown as Context))
     }
+    let clock = 1_000
     let route: { path: string; fetch: () => Promise<Response> } | undefined
     const ctx = {
       get: () => ({ fetch: { register: (next: typeof route) => { route = next; return () => {} } } }),
       effect: (fn: () => unknown) => fn(),
       inject(_deps: string[], cb: (c: unknown) => void) { cb(ctx) },
     }
-    setRecomFetcher(async () => response([recom('route'), recom('second')]))
-    watchRecomChannel(ctx as unknown as Context)
+    const calls: string[] = []
+    setRecomFetcher(async () => {
+      calls.push('ok')
+      return response([recom('route'), recom('second')])
+    })
+    watchRecomChannel(ctx as unknown as Context, { now: () => clock })
     assert.equal(route?.path, RECOM_ROUTE)
     const reply = await route?.fetch()
     assert.equal(reply?.headers.get('cache-control'), 'no-store')
     assert.deepEqual(await reply?.json(), { ok: true, value: [recom('route'), recom('second')], degraded: false })
-    setRecomFetcher(async () => { throw new Error('down') })
+    setRecomFetcher(async () => {
+      calls.push('down')
+      throw new Error('down')
+    })
+    const cached = await route?.fetch()
+    assert.deepEqual(await cached?.json(), { ok: true, value: [recom('route'), recom('second')], degraded: false }, 'a fresh slot answers from the TTL cache')
+    assert.deepEqual(calls, ['ok'])
+    clock += 60 * 60 * 1000
     const fallback = await route?.fetch()
     assert.deepEqual(await fallback?.json(), { ok: true, value: [DEFAULT_RECOM], degraded: true })
+    assert.deepEqual(calls, ['ok', 'down', 'down'], 'the expired slot refetched the primary and the mirror')
+    const backoff = await route?.fetch()
+    assert.deepEqual(await backoff?.json(), { ok: true, value: [DEFAULT_RECOM], degraded: true }, 'a degraded slot serves the default during the backoff window')
+    assert.deepEqual(calls, ['ok', 'down', 'down'], 'the backoff window skips the network')
+    clock += 30_000
+    setRecomFetcher(async () => {
+      calls.push('ok')
+      return response([recom('after-backoff')])
+    })
+    const recovered = await route?.fetch()
+    assert.deepEqual(await recovered?.json(), { ok: true, value: [recom('after-backoff')], degraded: false }, 'the backoff window expires into a fresh read')
+
+    setRecomFetcher(async () => response([recom('default-now')]))
+    let plainRoute: { path: string; fetch: () => Promise<Response> } | undefined
+    const plainCtx = {
+      get: () => ({ fetch: { register: (next: typeof plainRoute) => { plainRoute = next; return () => {} } } }),
+      effect: (fn: () => unknown) => fn(),
+      inject(_deps: string[], cb: (c: unknown) => void) { cb(plainCtx) },
+    }
+    watchRecomChannel(plainCtx as unknown as Context)
+    const plain = await plainRoute?.fetch()
+    assert.deepEqual(await plain?.json(), { ok: true, value: [recom('default-now')], degraded: false }, 'the default wall clock serves the same protocol')
   })
 })

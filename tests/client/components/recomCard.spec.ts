@@ -216,3 +216,60 @@ describe('RecomCard', () => {
     await second.unmount()
   })
 })
+
+
+describe('RecomCard cache ttl', () => {
+  test('a degraded read is not served from cache on the next mount', async () => {
+    const RecomCard = card('en')
+    resetRecomCache()
+    let calls = 0
+    vi.stubGlobal('fetch', async () => {
+      calls += 1
+      return calls === 1
+        ? { ok: false, json: async () => ({}) }
+        : { ok: true, json: async () => ({ value: [remoteRecom()], degraded: false }) }
+    })
+    try {
+      const first = await mount(h(RecomCard, {}))
+      await flush()
+      assert.equal(calls, 1)
+      await first.unmount()
+      const second = await mount(h(RecomCard, {}))
+      await flush()
+      assert.equal(calls, 2, 'a degraded read revalidates immediately')
+      await second.unmount()
+    } finally {
+      vi.unstubAllGlobals()
+      resetRecomCache()
+    }
+  })
+
+  test('a mount inside the TTL window keeps the pool; past the TTL it refetches', async () => {
+    const RecomCard = card('en')
+    resetRecomCache()
+    let calls = 0
+    vi.stubGlobal('fetch', async () => {
+      calls += 1
+      return { ok: true, json: async () => ({ value: [{ ...remoteRecom(), id: 'x' + String(calls) }], degraded: false }) }
+    })
+    try {
+      const first = await mount(h(RecomCard, {}))
+      await flush()
+      assert.equal(calls, 1)
+      const second = await mount(h(RecomCard, {}))
+      await flush()
+      assert.equal(calls, 1, 'a fresh cache answers the next mount without a network read')
+      await first.unmount()
+      await second.unmount()
+      const spy = vi.spyOn(Date, 'now').mockReturnValue(Date.now() + 31 * 60_000)
+      const third = await mount(h(RecomCard, {}))
+      await flush()
+      assert.ok(calls >= 2, 'a mount past the TTL refetches')
+      spy.mockRestore()
+      await third.unmount()
+    } finally {
+      vi.unstubAllGlobals()
+      resetRecomCache()
+    }
+  })
+})
