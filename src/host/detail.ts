@@ -6,13 +6,12 @@ import { type ColdReadGate, makeColdReadGate } from './coldRead'
 import { buildTimelineDetail, buildTimelineHead } from './foldWire'
 import { withCost, withDetailCost, type CostSource } from './cost'
 import { DetailShadow, foldLog } from './detailShadow'
+import { makeFoldCache } from './foldCache'
 import { failure, leaseOf, mountPostRoute, observeOf, readBody, reply, revisionOf } from './postRoute'
 import type { ContextTimelineDetail, Snapshot } from '../shared/types'
 import type { TimelineState } from './foldState'
 
 export const DETAIL_ROUTE = '/api/dsh-context/detail'
-
-const IDLE_SWEEP_MS = 20_000
 
 const PAYLOAD_CACHE_MAX = 4
 
@@ -80,21 +79,7 @@ export function watchDetailChannel(
   cost?: CostSource,
   options: { idleSweepMs?: number } = {},
 ): DetailChannelGate {
-  const idleSweepMs = options.idleSweepMs ?? IDLE_SWEEP_MS
-  const payloads = new Map<string, ColdPayload>()
-  let sweepTimer: ReturnType<typeof setTimeout> | null = null
-  const touch = (): void => {
-    if (sweepTimer !== null) clearTimeout(sweepTimer)
-    sweepTimer = setTimeout(() => {
-      sweepTimer = null
-      payloads.clear()
-    }, idleSweepMs)
-    ;(sweepTimer as { unref?: () => void }).unref?.()
-  }
-  ctx.effect(() => () => {
-    if (sweepTimer !== null) clearTimeout(sweepTimer)
-    sweepTimer = null
-  }, 'dsh-context: detail payload sweep')
+  const payloads = makeFoldCache<ColdPayload>(ctx, { maxEntries: PAYLOAD_CACHE_MAX, idleMs: options.idleSweepMs })
   mountPostRoute({
     ctx,
     deps: ['connection', 'sessions'],
@@ -107,7 +92,7 @@ export function watchDetailChannel(
       if (getSession === undefined) return undefined
 
       return async (request: Request): Promise<Response> => {
-        touch()
+        payloads.touch()
         const read = await readBody(request)
         if (!read.ok) return read.response
         const body = read.body
@@ -137,10 +122,8 @@ export function watchDetailChannel(
               const persistence = serviceIdentityOf(ctx.get('sessionPersistence'))
               const revision = revisionOf(observation)
               if (revision !== undefined) {
-                const hit = payloads.get(sessionId)
-                if (hit !== undefined && hit.revision === revision && hit.persistence === persistence) {
-                  payloads.delete(sessionId)
-                  payloads.set(sessionId, hit)
+                const hit = payloads.get(sessionId, cached => cached.revision === revision && cached.persistence === persistence)
+                if (hit !== undefined) {
                   if (headOnly) {
                     /* v8 ignore next 1 */
                     return hit.value.head === undefined
@@ -156,12 +139,7 @@ export function watchDetailChannel(
               if (headOnly) return headPayloadOf(state, cost)
               const detail = buildTimelineDetail(state, bounds)
               if (revision === undefined) return withDetailCost(cost, detail)
-              payloads.delete(sessionId)
               payloads.set(sessionId, { persistence, revision, value: detail })
-              for (const oldest of payloads.keys()) {
-                if (payloads.size <= PAYLOAD_CACHE_MAX) break
-                payloads.delete(oldest)
-              }
               return withDetailCost(cost, detail)
             } finally {
               release()

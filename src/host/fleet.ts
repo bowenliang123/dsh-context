@@ -12,7 +12,8 @@ import type {
   FleetSummaryMember,
 } from '../shared/types'
 import { type ColdReadGate, makeColdReadGate } from './coldRead'
-import { failure, leaseOf, mountPostRoute, observeOf, readBody, reply } from './postRoute'
+import { failure, leaseOf, mountPostRoute, observeOf, readBody, reply, revisionOf } from './postRoute'
+import { makeFoldCache, type FoldCache } from './foldCache'
 import { asRecord } from './record'
 import { serviceIdentityOf } from './serviceIdentity'
 
@@ -438,11 +439,6 @@ interface ObservationLike {
   [Symbol.dispose]?: unknown
 }
 
-function revisionOf(observation: unknown): string | undefined {
-  const revision = (observation as { revision?: unknown } | null)?.revision
-  return typeof revision === 'string' && revision !== '' ? revision : undefined
-}
-
 function createdAtOf(observation: ObservationLike | null): number | undefined {
   const header = asRecord(observation?.header)
   return typeof header?.createdAt === 'number' && Number.isFinite(header.createdAt) ? header.createdAt : undefined
@@ -451,17 +447,6 @@ function createdAtOf(observation: ObservationLike | null): number | undefined {
 function inheritedOf(observation: ObservationLike | null): number {
   const count = observation?.inheritedEventCount
   return typeof count === 'number' && Number.isFinite(count) ? Math.max(0, count) : 0
-}
-
-function trimFoldCache(cache: Map<string, FoldEntry>): void {
-  let bytes = 0
-  for (const entry of cache.values()) bytes += entry.fold.bytes()
-  while (cache.size > 1 && (cache.size > FOLD_CACHE_MAX || bytes > FOLD_BYTES_MAX)) {
-    const oldest = cache.keys().next().value as string
-    const entry = cache.get(oldest) as FoldEntry
-    cache.delete(oldest)
-    bytes -= entry.fold.bytes()
-  }
 }
 
 function reusable(
@@ -480,7 +465,7 @@ function reusable(
 }
 
 function foldOf(
-  cache: Map<string, FoldEntry>,
+  cache: FoldCache<FoldEntry>,
   sessionId: string,
   events: readonly unknown[],
   live: boolean,
@@ -489,14 +474,12 @@ function foldOf(
   cursor: number,
   inheritedEventCount: number,
 ): FleetFold {
-  const entry = cache.get(sessionId)
-  if (entry !== undefined && reusable(entry, live, revision, persistence, events, cursor)) {
+  const entry = cache.get(sessionId, cached => reusable(cached, live, revision, persistence, events, cursor))
+  if (entry !== undefined) {
     const from = live ? entry.count : events.length
     if (from < events.length) entry.fold.apply(events.slice(from), entry.inheritedEventCount)
     entry.count = events.length
     entry.cursor = cursor
-    cache.delete(sessionId)
-    cache.set(sessionId, entry)
     return entry.fold
   }
   const fold = new FleetFold(capsOf('preview'))
@@ -511,7 +494,6 @@ function foldOf(
     inheritedEventCount,
     fold,
   })
-  trimFoldCache(cache)
   return fold
 }
 
@@ -577,8 +559,6 @@ function knownCountsOf(bucket: CountBucket, ids: readonly string[]): Record<stri
   return served
 }
 
-const IDLE_SWEEP_MS = 20_000
-
 export interface FleetRouteOptions {
   idleSweepMs?: number
 }
@@ -588,23 +568,14 @@ export function watchFleetChannel(
   coldReads: ColdReadGate = makeColdReadGate(),
   options: FleetRouteOptions = {},
 ): void {
-  const idleSweepMs = options.idleSweepMs ?? IDLE_SWEEP_MS
-  const cache = new Map<string, FoldEntry>()
   const counts = new Map<string, CountBucket>()
-  let sweepTimer: ReturnType<typeof setTimeout> | null = null
-  const touch = (): void => {
-    if (sweepTimer !== null) clearTimeout(sweepTimer)
-    sweepTimer = setTimeout(() => {
-      sweepTimer = null
-      cache.clear()
-      counts.clear()
-    }, idleSweepMs)
-    ;(sweepTimer as { unref?: () => void }).unref?.()
-  }
-  ctx.effect(() => () => {
-    if (sweepTimer !== null) clearTimeout(sweepTimer)
-    sweepTimer = null
-  }, 'dsh-context: fleet cache sweep')
+  const cache = makeFoldCache<FoldEntry>(ctx, {
+    maxEntries: FOLD_CACHE_MAX,
+    maxBytes: FOLD_BYTES_MAX,
+    bytesOf: entry => entry.fold.bytes(),
+    idleMs: options.idleSweepMs,
+    onSweep: () => { counts.clear() },
+  })
   mountPostRoute({
     ctx,
     deps: ['connection'],
@@ -704,7 +675,7 @@ export function watchFleetChannel(
         return reply({ ok: true, value })
       }
       return async (request: Request): Promise<Response> => {
-        touch()
+        cache.touch()
         const read = await readBody(request)
         if (!read.ok) return read.response
         const body = read.body

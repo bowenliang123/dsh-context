@@ -1,7 +1,8 @@
 import type { Context } from '@deepseek-ai/cordis'
 import type { CommandPage } from '../shared/types'
 import { type ColdReadGate, makeColdReadGate } from './coldRead'
-import { failure, leaseOf, mountPostRoute, observeOf, readBody, reply } from './postRoute'
+import { failure, leaseOf, mountPostRoute, observeOf, readBody, reply, revisionOf } from './postRoute'
+import { makeFoldCache, type FoldCache } from './foldCache'
 import type { FoldBounds } from './config'
 import { applyTimeline } from './fold'
 import { createTimelineState } from './foldState'
@@ -17,8 +18,6 @@ const PAGE_LIMIT_MAX = 1_000
 const FOLD_YIELD_EVENTS = 1_000
 
 const STATE_CACHE_MAX = 2
-
-const IDLE_SWEEP_MS = 20_000
 
 interface CommandObservation {
   source?: unknown
@@ -36,24 +35,19 @@ interface CachedState {
   state: TimelineState
 }
 
-function revisionOf(observation: CommandObservation): string | undefined {
-  const revision = observation.revision
-  return typeof revision === 'string' && revision !== '' ? revision : undefined
-}
-
 function cursorOf(observation: CommandObservation): number {
   const cursor = observation.cursor
   return typeof cursor === 'number' && Number.isFinite(cursor) ? cursor : -1
 }
 
 function reusable(
-  entry: CachedState | undefined,
+  entry: CachedState,
   live: boolean,
   revision: string | undefined,
   cursor: number,
   persistence: unknown,
 ): boolean {
-  if (entry === undefined || entry.live !== live || entry.cursor > cursor) return false
+  if (entry.live !== live || entry.cursor > cursor) return false
   return live || (entry.revision === revision && entry.persistence === persistence)
 }
 
@@ -74,7 +68,7 @@ async function readPage(
   beforeSeq: number | undefined,
   limit: number,
   bounds: FoldBounds,
-  cache: Map<string, CachedState>,
+  cache: FoldCache<CachedState>,
   sessionId: string,
   persistence: unknown,
 ): Promise<CommandPage | null> {
@@ -82,10 +76,9 @@ async function readPage(
   const revision = live ? undefined : revisionOf(observation)
   const cursor = cursorOf(observation)
   const keyed = live || revision !== undefined
-  const cached = cache.get(sessionId)
-  const reuse = keyed && reusable(cached, live, revision, cursor, persistence)
-  let state = reuse && cached !== undefined ? cached.state : createTimelineState()
-  let cut = reuse && cached !== undefined ? cached.cursor : -1
+  const cached = keyed ? cache.get(sessionId, entry => reusable(entry, live, revision, cursor, persistence)) : undefined
+  let state = cached?.state ?? createTimelineState()
+  let cut = cached?.cursor ?? -1
   if (cut < cursor) {
     if (!Array.isArray(observation.events)) return null
     const fullBounds: FoldBounds = { ...bounds, maxCommands: Number.MAX_SAFE_INTEGER }
@@ -97,12 +90,7 @@ async function readPage(
     }
   }
   if (keyed) {
-    cache.delete(sessionId)
     cache.set(sessionId, { live, persistence, ...(revision !== undefined ? { revision } : {}), cursor: cut, state })
-    for (const oldest of cache.keys()) {
-      if (cache.size <= STATE_CACHE_MAX) break
-      cache.delete(oldest)
-    }
   }
   return pageOf(state, beforeSeq, limit)
 }
@@ -113,21 +101,10 @@ export function watchCommandPageChannel(
   coldReads: ColdReadGate = makeColdReadGate(),
   options: { idleSweepMs?: number } = {},
 ): void {
-  const idleSweepMs = options.idleSweepMs ?? IDLE_SWEEP_MS
-  const cache = new Map<string, CachedState>()
-  let sweepTimer: ReturnType<typeof setTimeout> | null = null
-  const touch = (): void => {
-    if (sweepTimer !== null) clearTimeout(sweepTimer)
-    sweepTimer = setTimeout(() => {
-      sweepTimer = null
-      cache.clear()
-    }, idleSweepMs)
-    ;(sweepTimer as { unref?: () => void }).unref?.()
-  }
-  ctx.effect(() => () => {
-    if (sweepTimer !== null) clearTimeout(sweepTimer)
-    sweepTimer = null
-  }, 'dsh-context: command page sweep')
+  const cache = makeFoldCache<CachedState>(ctx, {
+    maxEntries: STATE_CACHE_MAX,
+    idleMs: options.idleSweepMs,
+  })
   mountPostRoute({
     ctx,
     deps: ['connection', 'sessionQuery'],
@@ -137,7 +114,7 @@ export function watchCommandPageChannel(
       const observe = observeOf(c)
       if (observe === undefined) return undefined
       return async (request: Request): Promise<Response> => {
-        touch()
+        cache.touch()
         const read = await readBody(request)
         if (!read.ok) return read.response
         const body = read.body
