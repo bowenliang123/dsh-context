@@ -1,8 +1,7 @@
 import { act, createElement as h, useState } from 'react'
 import assert from 'node:assert/strict'
-import { afterEach, beforeEach, describe, test, vi } from 'vitest'
+import { afterEach, describe, test, vi } from 'vitest'
 import { makeOverviewPanel } from '../../../src/client/components/overviewPanel'
-import { resetOverviewRevision } from '../../../src/client/overviewSource'
 import { resetInvalidations } from '../../../src/client/invalidation'
 import { createContextSettings, type ContextSettings } from '../../../src/client/settings'
 import type { DefaultOverviewRange } from '../../../src/shared/types'
@@ -123,12 +122,7 @@ function calendarDay(key: string): HTMLElement {
   return el
 }
 
-beforeEach(() => {
-  resetOverviewRevision()
-})
-
 afterEach(async () => {
-  resetOverviewRevision()
   resetInvalidations()
   vi.unstubAllGlobals()
   vi.useRealTimers()

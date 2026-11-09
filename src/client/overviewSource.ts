@@ -229,10 +229,14 @@ interface PartOptions<T> {
   pick: (value: OverviewValue) => T | null
 }
 
-let lastRevision: string | null = null
+interface HeldPart<T> {
+  key: string
+  revision: string
+  value: T
+}
 
-export function resetOverviewRevision(): void {
-  lastRevision = null
+function heldFor<T>(held: HeldPart<T> | null, key: string): HeldPart<T> | null {
+  return held !== null && held.key === key ? held : null
 }
 
 function useOverviewPart<T>(options: PartOptions<T>): PartState<T> {
@@ -240,11 +244,15 @@ function useOverviewPart<T>(options: PartOptions<T>): PartState<T> {
   const key = request === null ? '' : JSON.stringify(request)
   const pickRef = useRef(pick)
   pickRef.current = pick
-  const [data, setData] = useState<T | null>(null)
+  const [held, setHeld] = useState<HeldPart<T> | null>(null)
+  const heldRef = useRef<HeldPart<T> | null>(null)
   const [pending, setPending] = useState(false)
   const [stale, setStale] = useState(false)
   const [error, setError] = useState(false)
-  const [revision, setRevision] = useState<string | null>(null)
+  const hold = (next: HeldPart<T>): void => {
+    heldRef.current = next
+    setHeld(next)
+  }
 
   useEffect(() => {
     if (!enabled || request === null) {
@@ -271,7 +279,8 @@ function useOverviewPart<T>(options: PartOptions<T>): PartState<T> {
       live.inFlight = true
       setPending(true)
       try {
-        const body: OverviewRequest = { ...request, revision: lastRevision }
+        const heldPart = heldFor(heldRef.current, key)
+        const body: OverviewRequest = { ...request, revision: heldPart === null ? null : heldPart.revision }
         const read = await postRoute(OVERVIEW_ROUTE, body, overviewValueOf, { label: 'overview ' + request.part })
         if (stopped()) return
         if (read === null) {
@@ -279,8 +288,6 @@ function useOverviewPart<T>(options: PartOptions<T>): PartState<T> {
           setStale(true)
           return
         }
-        lastRevision = read.revision
-        setRevision(read.revision)
         setError(false)
         if ('unchanged' in read) {
           notePricingPending(pricingReady.current)
@@ -291,7 +298,7 @@ function useOverviewPart<T>(options: PartOptions<T>): PartState<T> {
         notePricingPending(read.pricingReady)
         const picked = pickRef.current(read)
         if (picked === null) return
-        setData(picked)
+        hold({ key, revision: read.revision, value: picked })
         setStale(false)
       } catch {
         if (!stopped()) {
@@ -300,7 +307,7 @@ function useOverviewPart<T>(options: PartOptions<T>): PartState<T> {
         }
       } finally {
         live.inFlight = false
-        setPending(false)
+        if (!stopped()) setPending(false)
         if (queued() && !stopped()) {
           live.queued = false
           void fetchNow()
@@ -327,7 +334,14 @@ function useOverviewPart<T>(options: PartOptions<T>): PartState<T> {
     }
   }, [key, enabled])
 
-  return { data, pending, stale, error, revision }
+  const heldPart = heldFor(held, key)
+  return {
+    data: heldPart === null ? null : heldPart.value,
+    pending,
+    stale,
+    error,
+    revision: heldPart === null ? null : heldPart.revision,
+  }
 }
 
 const pickSummary = (value: OverviewValue): { summary: OverviewSummary; pricingReady: boolean } | null =>
@@ -390,5 +404,3 @@ export function useOverviewPage(request: Omit<OverviewRequest, 'revision'> | nul
 export function useOverviewTally(request: Omit<OverviewRequest, 'revision'> | null, enabled: boolean): PartState<{ tally: OverviewTally; pricingReady: boolean }> {
   return useOverviewPart({ request: enabled ? request : null, enabled, pick: pickTally })
 }
-
-export const OVERVIEW_POLL_MS = POLL_MS
