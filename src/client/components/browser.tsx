@@ -43,6 +43,8 @@ function safeIdPart(key: string): string {
   return key.replace(/[^a-zA-Z0-9_-]/g, '_')
 }
 
+const STEP_PICK_MAX = 500
+
 export interface ContextBrowserProps {
   locale?: string
   data: ContextTimeline
@@ -193,14 +195,6 @@ export function makeContextBrowser(
 
     const requests = data.requests
     const stepsOf = useMemo(() => turnStepsOf(requests), [requests])
-    const pickOptions = useMemo(
-      () => requests.slice().reverse().map(r => (
-        <option key={r.seq} value={String(r.seq)}>
-          {t('detail.step', { t: r.turn ?? 0, s: r.step ?? 0, n: stepsOf(r.turn) })}
-        </option>
-      )),
-      [requests, stepsOf, t, props.locale],
-    )
     const stampOf = useMemo(() => stepStampOf(requests), [requests])
     const pendingStamp = useMemo(() => {
       let hasReq = false
@@ -231,6 +225,28 @@ export function makeContextBrowser(
     const req = hoverReq ?? (sel === 'live' ? null : requests.find(r => r.seq === sel) ?? null)
     const actual = req ?? requests.reduce<RequestRecord | null>((a, r) => (a === null || r.seq > a.seq ? r : a), null)
     const seq = req !== null ? req.seq : null
+    const pickOptions = useMemo(() => {
+      const option = (r: RequestRecord): ReactElement => (
+        <option key={r.seq} value={String(r.seq)}>
+          {t('detail.step', { t: r.turn ?? 0, s: r.step ?? 0, n: stepsOf(r.turn) })}
+        </option>
+      )
+      const count = requests.length
+      if (count <= STEP_PICK_MAX) return requests.slice().reverse().map(option)
+      const newest = requests.slice(count - STEP_PICK_MAX)
+      const selSeq = typeof sel === 'number' && (seq === null || seq < newest[0].seq) ? seq : null
+      if (selSeq === null) return newest.slice().reverse().map(option)
+      let low = 0
+      let high = count - 1
+      let idx = count - 1
+      while (low <= high) {
+        const mid = (low + high) >> 1
+        if (requests[mid].seq >= selSeq) { idx = mid; high = mid - 1 } else low = mid + 1
+      }
+      const from = Math.max(0, idx - (STEP_PICK_MAX >> 1))
+      const picked = requests.slice(from, Math.min(count, from + STEP_PICK_MAX))
+      return picked.slice().reverse().map(option)
+    }, [requests, stepsOf, t, props.locale, sel, seq])
     const linked = req === null && props.onHoverKey !== undefined
     const linkKey = linked && props.hoverKey !== null && props.hoverKey !== 'free'
       ? props.hoverKey

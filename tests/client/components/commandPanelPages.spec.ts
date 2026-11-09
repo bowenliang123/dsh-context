@@ -6,6 +6,7 @@ import type { Command } from '../../../src/client/commands'
 import type { CommandPageFetcher } from '../../../src/client/commandPages'
 import { useCommandLog } from '../../../src/client/components/useCommandLog'
 import { click, mount, query, queryAll, settle, text, until } from '../helpers/kit'
+import { typeInto } from './commandPanelHarness'
 import { Panel, cmd, rowTexts } from './commandPanelHarness'
 
 function page(commands: CommandPage['commands'], atStart: boolean, total: number): CommandPage {
@@ -234,5 +235,59 @@ describe('CommandPanel — incremental history fill', () => {
     await until(() => latePager.mock.calls.length === 1, 'the late read never started')
     await lateMount.unmount()
     await act(async () => { late.reject(new Error('unmounted')) })
+  })
+})
+
+
+describe('CommandPanel — bounded bursts and auto-resume', () => {
+  test('a budget-paused fill resumes automatically when the search needs the full history', async () => {
+    const calls: number[] = []
+    let seq = 4_000
+    const fetchOlder = async (beforeSeq: number): Promise<CommandPage | null> => {
+      calls.push(beforeSeq)
+      seq -= 1
+      return page([cmd(seq, { cmd: `deep-${String(seq)}` })], false, 5_000)
+    }
+    const m = await mount(h(PagedPanel, {
+      commands: [cmd(4_001, { cmd: 'echo recent' })],
+      floor: 4_000,
+      fetchOlder,
+    }))
+    try {
+      await until(() => calls.length === 12, 'the burst never paused at the budget')
+      const rowsBefore = rowTexts(m.container).length
+      await typeInto(m.container, 'input.lc-fa-search', 'deep-')
+      await until(() => calls.length > 12, 'the search never resumed the paused fill')
+      await until(() => rowTexts(m.container).length > rowsBefore + 2, 'the resumed fill never landed more rows')
+      assert.ok(rowTexts(m.container).some(row => row.includes('deep-')), 'history rows joined the filtered list')
+    } finally {
+      await m.unmount()
+    }
+  })
+
+  test('a resumed burst stays bounded and the coverage note clears only at the head', async () => {
+    let seq = 4_000
+    const calls: number[] = []
+    const fetchOlder = async (beforeSeq: number): Promise<CommandPage | null> => {
+      calls.push(beforeSeq)
+      seq -= 1
+      return page([cmd(seq, { cmd: `old-${String(seq)}` })], false, 5_000)
+    }
+    const m = await mount(h(PagedPanel, {
+      commands: [cmd(4_001, { cmd: 'echo recent' })],
+      floor: 4_000,
+      fetchOlder,
+    }))
+    try {
+      await until(() => calls.length === 12, 'the burst never paused at the budget')
+      await until(() => calls.length > 12, 'the visible oldest row never auto-resumed the walk')
+      const note = text(m.container)
+      assert.ok(note.includes('Covering') || note.includes('Loading earlier runs'), 'the ongoing fill keeps a coverage note')
+      const atMid = calls.length
+      await act(async () => { await new Promise(resolve => setTimeout(resolve, 60)) })
+      assert.ok(calls.length >= atMid, 'the walk keeps advancing without user action')
+    } finally {
+      await m.unmount()
+    }
   })
 })

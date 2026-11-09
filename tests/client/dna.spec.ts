@@ -1,11 +1,12 @@
 import assert from 'node:assert/strict'
 import { describe, test } from 'vitest'
-import { deltaBandsOf, deltaTotalsOf, dnaBaseLabel, dnaOf, trendBandsOf } from '../../src/client/dna'
+import { deltaBandsOf, deltaTotalsOf, dnaBaseLabel, dnaDeltaMaximaOf, dnaOf, trendBandsOf } from '../../src/client/dna'
 import type { TrendBand } from '../../src/client/dna'
 import { CAT_COLOR } from '../../src/client/categories'
 import { makeKit, surfaceNode } from './helpers/kit'
+import { assemble } from '../../src/client/assemble'
 import type { Assembled } from '../../src/client/assemble'
-import type { HeaderRecord, HeaderTool, SurfaceNode, SystemPromptNode } from '../../src/shared/types'
+import type { ContextHeaders, ContextTimeline, HeaderRecord, HeaderTool, RequestRecord, SurfaceNode, SystemPromptNode } from '../../src/shared/types'
 
 function asm(over: Partial<Assembled>): Assembled {
   return { live: true, header: null, system: null, nodes: [], missingLive: 0, approximate: false, ...over }
@@ -174,5 +175,184 @@ describe('deltaTotalsOf', () => {
     assert.deepEqual(deltaTotalsOf([band('a', -4)], [band('a', 0)]), { up: 0, down: 4 })
     assert.deepEqual(deltaTotalsOf([], [band('a', -4)]), { up: 4, down: 0 })
     assert.deepEqual(deltaTotalsOf([], [band('a', 0)]), { up: 0, down: 0 })
+  })
+})
+
+
+describe('dnaDeltaMaximaOf', () => {
+  const nodeOf = (seq: number, tokens: number, cat: SurfaceNode['cat'] = 'assistant'): SurfaceNode => surfaceNode({ seq, tokens, cat })
+  const current = { system: 0, tools: 0, user: 0, inject: 0, skill: 0, assistant: 0, tool: 0, total: 0 }
+  const timeline = (over: Partial<ContextTimeline> = {}): ContextTimeline => ({
+    ok: true,
+    current,
+    requests: [],
+    events: [],
+    nodes: [],
+    droppedNodes: 0,
+    archive: [],
+    ...over,
+  })
+  const reqAt = (seq: number): RequestRecord => ({
+    time: seq, seq, total: 100, system: 10, tools: 5, user: 20, inject: 5, skill: 0, assistant: 40, tool: 20,
+  })
+  const reference = (data: ContextTimeline, headers: ContextHeaders | null, requests: RequestRecord[]): { up: number; down: number } => {
+    let up = 0
+    let down = 0
+    let prev: TrendBand[] | null = null
+    for (const req of requests) {
+      const totals = deltaTotalsOf(trendBandsOf(assemble(data, headers, req.seq)), prev)
+      if (totals.up > up) up = totals.up
+      if (totals.down > down) down = totals.down
+      prev = trendBandsOf(assemble(data, headers, req.seq))
+    }
+    return { up, down }
+  }
+
+  test('empty requests stay at zero', () => {
+    assert.deepEqual(dnaDeltaMaximaOf(timeline(), null, []), { up: 0, down: 0 })
+  })
+
+  test('matches the band fold on a plain growing surface', () => {
+    const data = timeline({ nodes: [nodeOf(1, 50), nodeOf(2, 70), nodeOf(3, 20, 'tool'), nodeOf(4, 90)] })
+    const requests = [reqAt(1), reqAt(2), reqAt(3), reqAt(4), reqAt(4)]
+    assert.deepEqual(dnaDeltaMaximaOf(data, null, requests), reference(data, null, requests))
+  })
+
+  test('matches the band fold across system prompt refreshes, including zero-token epochs', () => {
+    const data = timeline({
+      nodes: [nodeOf(1, 50), nodeOf(2, 30), nodeOf(3, 80)],
+      systems: [system({ seq: 1, tokens: 100 }), system({ seq: 3, tokens: 0 }), system({ seq: 5, tokens: 140 })],
+    })
+    const requests = [reqAt(1), reqAt(3), reqAt(5), reqAt(6), reqAt(9)]
+    assert.deepEqual(dnaDeltaMaximaOf(data, null, requests), reference(data, null, requests))
+  })
+
+  test('matches the band fold across header epochs with changing tool schemas', () => {
+    const data = timeline({ nodes: [nodeOf(2, 40), nodeOf(4, 60, 'user'), nodeOf(6, 25, 'tool')] })
+    const headers: ContextHeaders = { headers: [header({ seq: 1, tools: [tool('bash', 30), tool('read', 12)] }), header({ seq: 5, tools: [tool('bash', 44)] })] }
+    const requests = [reqAt(1), reqAt(2), reqAt(5), reqAt(6), reqAt(7)]
+    assert.deepEqual(dnaDeltaMaximaOf(data, headers, requests), reference(data, headers, requests))
+  })
+
+  test('a negative node token falls back to the exact band fold instead of the surface fast path', () => {
+    const data = timeline({ nodes: [nodeOf(1, 50), nodeOf(2, -30), nodeOf(3, 70)] })
+    const requests = [reqAt(1), reqAt(2), reqAt(3)]
+    assert.deepEqual(dnaDeltaMaximaOf(data, null, requests), reference(data, null, requests))
+  })
+
+  test('an archive, unsorted nodes, or non-monotonic requests fall back to the exact band fold', () => {
+    const archived = timeline({ nodes: [nodeOf(5, 40)], archive: [{ ...nodeOf(1, 70), gone: 4 }] })
+    const requests = [reqAt(1), reqAt(2), reqAt(5)]
+    assert.deepEqual(dnaDeltaMaximaOf(archived, null, requests), reference(archived, null, requests))
+    const unsorted = timeline({ nodes: [nodeOf(3, 20), nodeOf(1, 50), nodeOf(2, 70)] })
+    assert.deepEqual(dnaDeltaMaximaOf(unsorted, null, requests), reference(unsorted, null, requests))
+    const backwards = timeline({ nodes: [nodeOf(1, 50), nodeOf(2, 70)] })
+    const descending = [reqAt(3), reqAt(2), reqAt(1)]
+    assert.deepEqual(dnaDeltaMaximaOf(backwards, null, descending), reference(backwards, null, descending))
+  })
+
+  test('a removed negative-token tool lands its refund on the up arm like the band fold', () => {
+    const data = timeline({ nodes: [] })
+    const headers: ContextHeaders = { headers: [header({ seq: 1, tools: [tool('bash', -30)] }), header({ seq: 4, tools: [] })] }
+    const requests = [reqAt(2), reqAt(4), reqAt(5)]
+    assert.deepEqual(dnaDeltaMaximaOf(data, headers, requests), reference(data, headers, requests))
+  })
+
+  test('a removed zero-token tool evaluates the leftover arms with no effect', () => {
+    const data = timeline({ nodes: [] })
+    const headers: ContextHeaders = { headers: [header({ seq: 1, tools: [tool('bash', 0)] }), header({ seq: 4, tools: [] })] }
+    const requests = [reqAt(2), reqAt(4), reqAt(5)]
+    assert.deepEqual(dnaDeltaMaximaOf(data, headers, requests), { up: 0, down: 0 })
+    assert.deepEqual(dnaDeltaMaximaOf(data, headers, requests), reference(data, headers, requests))
+  })
+
+  test('a tool whose tokens shrink between header epochs lands the drop on the down arm', () => {
+    const data = timeline({ nodes: [] })
+    const headers: ContextHeaders = { headers: [header({ seq: 1, tools: [tool('bash', 40)] }), header({ seq: 4, tools: [tool('bash', 10)] })] }
+    const requests = [reqAt(2), reqAt(4), reqAt(5)]
+    assert.deepEqual(dnaDeltaMaximaOf(data, headers, requests), { up: 0, down: 30 })
+    assert.deepEqual(dnaDeltaMaximaOf(data, headers, requests), reference(data, headers, requests))
+  })
+
+  test('negative token deltas and header removals land on the down arm like the band fold', () => {
+    const data = timeline({ nodes: [nodeOf(1, 50, 'tool'), nodeOf(3, 20)] })
+    const headers: ContextHeaders = { headers: [header({ seq: 1, tools: [tool('bash', 40)] }), header({ seq: 4, tools: [] })] }
+    const requests = [reqAt(2), reqAt(4), reqAt(5)]
+    assert.deepEqual(dnaDeltaMaximaOf(data, headers, requests), reference(data, headers, requests))
+  })
+})
+
+
+describe('dnaDeltaMaximaOf randomized parity', () => {
+  const current = { system: 0, tools: 0, user: 0, inject: 0, skill: 0, assistant: 0, tool: 0, total: 0 }
+  const reqAt = (seq: number): RequestRecord => ({
+    time: seq, seq, total: 100, system: 10, tools: 5, user: 20, inject: 5, skill: 0, assistant: 40, tool: 20,
+  })
+  const CATS_POOL: SurfaceNode['cat'][] = ['user', 'assistant', 'tool', 'inject', 'skill']
+
+  test('the fast path and the fallback agree across 300 randomized scenarios', () => {
+    let seed = 0x2f6e2b1
+    const rand = (n: number): number => {
+      seed = Math.imul(seed ^ (seed >>> 15), 0x2c1b3c6d) >>> 0
+      return seed % n
+    }
+    for (let scenario = 0; scenario < 300; scenario++) {
+      const nodeCount = rand(12)
+      const nodes: SurfaceNode[] = Array.from({ length: nodeCount }, (_, i) => ({
+        seq: i + 1,
+        cat: CATS_POOL[rand(CATS_POOL.length)],
+        tokens: rand(120),
+      }))
+      if (rand(4) === 0) nodes.reverse()
+      const archive: SurfaceNode[] = []
+      if (rand(3) === 0 && nodes.length > 1) {
+        archive.push({ ...nodes[0], gone: nodes[nodes.length - 1].seq })
+      }
+      const systems: SystemPromptNode[] = []
+      if (rand(2) === 0) {
+        for (let i = 0; i < 1 + rand(3); i++) systems.push({ seq: 1 + rand(10), time: i, tokens: rand(4) === 0 ? 0 : 20 + rand(200) })
+      }
+      const headers: ContextHeaders = { headers: [] }
+      if (rand(3) !== 0) {
+        for (let i = 0; i < 1 + rand(3); i++) {
+          const tools: HeaderTool[] = []
+          for (let k = 0; k < rand(4); k++) tools.push({ name: `t${k + rand(3)}`, tokens: rand(80) })
+          headers.headers.push({ seq: 1 + rand(10), time: i, tools })
+        }
+      }
+      const requestCount = rand(10)
+      let seq = 1 + rand(4)
+      const requests: RequestRecord[] = []
+      for (let i = 0; i < requestCount; i++) {
+        requests.push(reqAt(seq))
+        seq += rand(4) === 0 ? 0 : 1 + rand(3)
+        if (rand(10) === 0) seq = Math.max(1, seq - 2)
+      }
+      const data: ContextTimeline = {
+        ok: true,
+        current,
+        requests: [],
+        events: [],
+        nodes,
+        droppedNodes: archive.length > 0 ? 1 : 0,
+        archive,
+        ...(systems.length > 0 ? { systems } : {}),
+      }
+      let up = 0
+      let down = 0
+      let prev: TrendBand[] | null = null
+      for (const req of requests) {
+        const bands = trendBandsOf(assemble(data, headers, req.seq))
+        const totals = deltaTotalsOf(bands, prev)
+        if (totals.up > up) up = totals.up
+        if (totals.down > down) down = totals.down
+        prev = bands
+      }
+      assert.deepEqual(
+        dnaDeltaMaximaOf(data, headers, requests),
+        { up, down },
+        `scenario ${scenario}: nodes=${JSON.stringify(nodes)} archive=${JSON.stringify(archive)} systems=${JSON.stringify(systems)} headers=${JSON.stringify(headers.headers)} requests=${JSON.stringify(requests.map(r => r.seq))}`,
+      )
+    }
   })
 })

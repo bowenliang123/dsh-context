@@ -19,6 +19,8 @@ import { useSurfaceWindow } from './useRowWindow'
 import { remoteStateOf } from './useRemoteState'
 import type { CommandFill } from './useCommandLog'
 
+const RESUME_NEAR_START = 12
+
 export interface CommandPanelProps {
   commands: Command[]
   stats?: CommandStats
@@ -161,7 +163,8 @@ export function makeCommandPanel(kit: ViewKit): ComponentType<CommandPanelProps>
       () => scoped.slice().sort((a, b) => (sort === 'slowest' ? bySlowest(a.rec, b.rec) : byLatest(a.rec, b.rec))),
       [scoped, sort],
     )
-    const tally = props.stats ?? tallyOfCommands(commands)
+    const fallbackTally = useMemo(() => tallyOfCommands(commands), [commands])
+    const tally = props.stats ?? fallbackTally
     const counts = useMemo(() => ({
       all: picked.length,
       failed: picked.filter(view => matchesFilter(view.rec, 'failed')).length,
@@ -186,6 +189,12 @@ export function makeCommandPanel(kit: ViewKit): ComponentType<CommandPanelProps>
       overscan: 240,
       seed: 10,
     })
+    const demandsHistory = q !== '' || filter !== 'all' || sort === 'slowest' || programPick !== null
+    const resumeFill = props.fill?.resume
+    useEffect(() => {
+      if (fillStatus !== 'paused' || resumeFill === undefined) return
+      if (demandsHistory || shown.length - 1 - scope.to <= RESUME_NEAR_START) resumeFill()
+    }, [fillStatus, demandsHistory, scope.to, shown.length, resumeFill])
     const bodyIdOf = (index: number): string => `${idBase}-${index}`
     const [progQuery, setProgQuery] = useState('')
     const railPreview = (cmd: string): string => {

@@ -1,7 +1,10 @@
 import assert from 'node:assert/strict'
-import { act, createElement as h } from 'react'
+import { act, createElement as h, type ReactElement } from 'react'
 import { afterAll, beforeAll, describe, test, vi } from 'vitest'
 import { makeCommandPanel } from '../../../src/client/components/commandPanel'
+import { useCommandLog } from '../../../src/client/components/useCommandLog'
+import type { CommandPageFetcher } from '../../../src/client/commandPages'
+import type { CommandPage } from '../../../src/shared/types'
 import type { Command } from '../../../src/client/commands'
 import { makeKit, mount, query, queryAll, text, until } from '../helpers/kit'
 import { restoreLayout, stubClientSizes } from '../helpers/layout'
@@ -84,6 +87,36 @@ function activeTitle(): string | null {
   if (!(active instanceof Element)) return null
   return active.closest<HTMLElement>('.lc-cmd-item')?.querySelector<HTMLElement>('.lc-cmd-cmd')?.textContent ?? null
 }
+
+function PagedWindow(props: { commands: Command[]; fetchOlder?: CommandPageFetcher }): ReactElement {
+  const log = useCommandLog(props.commands, props.commands.length > 0 ? props.commands[0].seq - 1 : undefined, props.fetchOlder)
+  return h(Panel, { commands: log.records, floor: props.commands.length > 0 ? props.commands[0].seq - 1 : undefined, fill: log })
+}
+
+describe('CommandPanel fill pause away from the history tail', () => {
+  test('a paused burst stays paused at the newest head and resumes when the tail nears', async () => {
+    const calls: number[] = []
+    const fetchOlder = async (beforeSeq: number): Promise<CommandPage> => {
+      const seq = beforeSeq - 1
+      calls.push(seq)
+      return { commands: [{ seq, time: T0 + (seq % 100) * 1000, tool: 'bash', cmd: `echo old-${String(seq)}`, start: T0 + (seq % 100) * 1000, end: T0 + (seq % 100) * 1000 + 10, status: 'completed' as const, err: false }], atStart: false, total: 5_000 }
+    }
+    const served = commandsOf(400).map(cmd => ({ ...cmd, seq: cmd.seq + 100 }))
+    const m = await mount(h(PagedWindow, { commands: served, fetchOlder }))
+    try {
+      await until(() => calls.length === 12, 'the burst never paused at the budget', 800)
+      await act(async () => { await new Promise(resolve => setTimeout(resolve, 80)) })
+      assert.equal(calls.length, 12, 'the newest head does not demand older history')
+      const list = query<HTMLElement>(m.container, '.lc-cmd-list')
+      list.scrollTop = 12_000
+      await act(async () => { list.dispatchEvent(new Event('scroll')) })
+      await until(() => calls.length > 12, 'the tail proximity never resumed the walk', 800)
+      await m.unmount()
+    } finally {
+      await m.unmount()
+    }
+  })
+})
 
 describe('CommandPanel row windowing', () => {
   test('never mounts the full list: the window follows the scroll with full-height pads', async () => {

@@ -4,6 +4,7 @@ import { afterEach, describe, test, vi } from 'vitest'
 import type { Command } from '../../../src/client/commands'
 import type { CommandPageFetcher } from '../../../src/client/commandPages'
 import { useCommandLog } from '../../../src/client/components/useCommandLog'
+import { FILL_MAX_KNOWN } from '../../../src/client/components/useCommandLog'
 import type { CommandLog } from '../../../src/client/components/useCommandLog'
 import type { CommandPage } from '../../../src/shared/types'
 import { mount, until } from '../helpers/kit'
@@ -303,6 +304,103 @@ describe('useCommandLog fill edges', () => {
     try {
       await until(() => log?.status === 'done', 'the fill never reached the log head')
       assert.deepEqual(bodies().sort(), ['eight', 'six', 'ten'])
+    } finally {
+      await m.unmount()
+    }
+  })
+})
+
+
+describe('useCommandLog fill budget and cap', () => {
+  test('a burst stops at the page budget, reports paused, and resume() walks the rest', async () => {
+    const calls: number[] = []
+    let seq = 10_000
+    const fetchPage = async (beforeSeq: number): Promise<CommandPage | null> => {
+      calls.push(beforeSeq)
+      seq -= 1
+      return page([cmd(seq, 'row ' + String(seq))], false, 5_000)
+    }
+    const m = await mount(h(Probe, { commands: [cmd(10_001, 'served')], floor: 10_000, fetchOlder: fetchPage, scope: 's' }))
+    try {
+      await until(() => log?.status === 'paused', 'the burst never paused at the budget')
+      assert.equal(calls.length, 12, 'the burst consumed exactly the page budget')
+      const pausedRecords = bodies().length
+      await act(async () => { log?.resume() })
+      await until(() => calls.length > 12, 'resume never fetched again')
+      await act(async () => { log?.resume() })
+      await until(() => bodies().length > pausedRecords + 1, 'the resumed burst never landed more rows')
+      assert.equal(log?.status === 'paused' || log?.status === 'loading' || log?.status === 'done', true)
+    } finally {
+      await m.unmount()
+    }
+  })
+
+  test('the known ledger stops at the cap and keeps every listed row', async () => {
+    const rows = Array.from({ length: 60 }, (_, i) => cmd(i + 1, 'row ' + String(i + 1)))
+    let cursor = 100
+    let served = 0
+    const fetchPage = async (): Promise<CommandPage | null> => {
+      const out: Command[] = []
+      for (let i = 0; i < 50; i++) {
+        cursor -= 1
+        out.push(cmd(cursor, 'old ' + String(cursor)))
+      }
+      served += out.length
+      return { commands: out, atStart: false, total: 10_000 }
+    }
+    const m = await mount(h(Probe, { commands: rows, floor: 100, fetchOlder: fetchPage, scope: 's' }))
+    try {
+      await until(() => log?.status === 'paused', 'the burst never paused at the budget')
+      for (let round = 0; round < 200 && (log?.records.length ?? 0) < FILL_MAX_KNOWN; round++) {
+        await act(async () => { log?.resume() })
+        await act(async () => { await new Promise(resolve => setTimeout(resolve, 45)) })
+      }
+      const atCap = log?.records.length ?? 0
+      assert.ok(atCap >= FILL_MAX_KNOWN, 'the ledger never reached the cap')
+      const callsAtCap = served
+      await act(async () => { log?.resume() })
+      await act(async () => { await new Promise(resolve => setTimeout(resolve, 45)) })
+      assert.equal(served, callsAtCap, 'a capped ledger refuses to erase what the list shows')
+      assert.equal(log?.records.length, atCap, 'the capped set stays whole')
+      assert.equal(log?.status, 'paused', 'the cap parks the walk instead of trimming the listed rows')
+    } finally {
+      await m.unmount()
+    }
+  })
+})
+
+
+describe('useCommandLog stale results after a lost pager', () => {
+  test('a page landing after the pager was lost changes nothing and a rejection does neither', async () => {
+    let resolvePage: ((value: CommandPage | null) => void) | undefined
+    let rejectPage: ((reason: unknown) => void) | undefined
+    const pending = (): Promise<CommandPage | null> => new Promise((resolve, reject) => { resolvePage = resolve; rejectPage = reject })
+    const m = await mount(h(Probe, { commands: [cmd(10, 'served')], floor: 9, fetchOlder: pending, scope: 's' }))
+    try {
+      await until(() => resolvePage !== undefined, 'the fill never started')
+      await m.update(h(Probe, { commands: [cmd(10, 'served')], floor: 9, fetchOlder: undefined, scope: 's' }))
+      await until(() => log?.status === 'failed', 'losing the pager never failed the fill')
+      await act(async () => { resolvePage?.(page([cmd(8, 'late')], true, 2)) })
+      assert.deepEqual(bodies(), ['served'], 'the late page never landed')
+      await act(async () => { rejectPage?.(new Error('late rejection')) })
+      assert.equal(log?.status, 'failed', 'the late rejection changed nothing')
+      assert.deepEqual(bodies(), ['served'])
+    } finally {
+      await m.unmount()
+    }
+  })
+
+  test('losing the pager together with the scope keeps the reset ledger idle instead of failed', async () => {
+    let resolvePage: ((value: CommandPage | null) => void) | undefined
+    const pending = (): Promise<CommandPage | null> => new Promise((resolve) => { resolvePage = resolve })
+    const m = await mount(h(Probe, { commands: [cmd(10, 'A10')], floor: 9, fetchOlder: pending, scope: 'A' }))
+    try {
+      await until(() => resolvePage !== undefined, 'the fill never started')
+      await m.update(h(Probe, { commands: [cmd(10, 'B10')], floor: 9, fetchOlder: undefined, scope: 'B' }))
+      await act(async () => { await new Promise(resolve => setTimeout(resolve, 40)) })
+      assert.equal(log?.status, 'idle', 'the scope switch reset the ledger and no pager means no new fill')
+      await act(async () => { resolvePage?.(page([cmd(8, 'late A')], true, 2)) })
+      assert.deepEqual(bodies(), ['B10'], 'the stale page never joined the new scope')
     } finally {
       await m.unmount()
     }

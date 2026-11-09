@@ -1,9 +1,9 @@
 import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type ReactElement, type UIEvent } from 'react'
 import type { Category, ContextEventRecord, RequestRecord } from '../../shared/types'
 import { CATS } from '../categories'
-import { deltaBandsOf, deltaTotalsOf, dnaBaseLabel } from '../dna'
+import { bandsMaximaOf, deltaBandsOf, deltaTotalsOf, dnaBaseLabel } from '../dna'
 import { lruTouch, lruTrim } from '../boundedCache'
-import type { DnaDelta, TrendBand } from '../dna'
+import type { DeltaMaxima, DnaDelta, TrendBand } from '../dna'
 import { containHorizontalOverscroll } from '../overscroll'
 import { scrollToPos } from '../revealScroll'
 import type { ViewKit } from '../viewkit'
@@ -38,6 +38,7 @@ export interface TrendChartProps {
   durationCurve?: boolean
   dna?: TrendBand[][] | null
   dnaAt?: ((seq: number) => TrendBand[]) | null
+  deltaMaxima?: DeltaMaxima | null
   onPickBand?: (seq: number, band: { key: string; cat: Category | 'system' | 'tools' }) => void
   onSelect: (seq: number | null) => void
   onHover: (seq: number | null) => void
@@ -288,16 +289,17 @@ export function makeTrendChart(kit: ViewKit): (props: TrendChartProps) => ReactE
         : { total, up, down, activeMs })
     }
     const dnaMaxima = useMemo(() => {
-      const rawBandAt = (idx: number): TrendBand[] => {
-        const seq = requests[idx].seq
-        return dnaAt !== null ? dnaAt(seq) : (dnaArray as TrendBand[][])[idx]
+      if (dnaArray !== null) {
+        if (!dnaDeltaOn) return { up: 0, down: 0 }
+        return bandsMaximaOf(dnaArray)
       }
+      if (props.deltaMaxima !== undefined && props.deltaMaxima !== null) return props.deltaMaxima
       let up = 0
       let down = 0
-      if (dnaDeltaOn && (!adaptive || visMax === null)) {
+      if (dnaDeltaOn && dnaAt !== null && (!adaptive || visMax === null)) {
         let prev: TrendBand[] | null = null
         for (let i = 0; i < requests.length; i++) {
-          const bands = rawBandAt(i)
+          const bands = dnaAt(requests[i].seq)
           const totals = deltaTotalsOf(bands, prev)
           if (totals.up > up) up = totals.up
           if (totals.down > down) down = totals.down
@@ -305,7 +307,7 @@ export function makeTrendChart(kit: ViewKit): (props: TrendChartProps) => ReactE
         }
       }
       return { up, down }
-    }, [requests, dnaDeltaOn, bandAt, dnaAt, dnaArray, adaptive, visMax])
+    }, [requests, dnaDeltaOn, dnaAt, dnaArray, adaptive, visMax, props.deltaMaxima])
     let maxTotal = 1
     let maxUp = 0
     let maxDown = 0

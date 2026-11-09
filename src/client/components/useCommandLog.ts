@@ -4,10 +4,15 @@ import type { CommandPageFetcher } from '../commandPages'
 
 const PAGE_PAUSE_MS = 30
 
+export const FILL_PAGE_BUDGET = 12
+
+export const FILL_MAX_KNOWN = 4_000
+
 type FillState =
   | { status: 'idle' }
   | { status: 'done' }
-  | { status: 'loading'; cursor: number; total?: number }
+  | { status: 'loading'; cursor: number; total?: number; budget: number }
+  | { status: 'paused'; cursor: number; total?: number }
   | { status: 'failed'; cursor: number }
 
 export interface CommandLog {
@@ -15,9 +20,10 @@ export interface CommandLog {
   status: FillState['status']
   total?: number
   retry: () => void
+  resume: () => void
 }
 
-export type CommandFill = Pick<CommandLog, 'status' | 'total'> & { retry?: () => void }
+export type CommandFill = Pick<CommandLog, 'status' | 'total'> & { retry?: () => void; resume?: () => void }
 
 interface LogStore {
   scope: string
@@ -78,11 +84,12 @@ export function useCommandLog(
     if (store.fill.status !== 'idle' || floor === undefined || served.length === 0 || fetchOlder === undefined) return
     const cursor = floor + 1
     cursorTarget.current = cursor
-    setStore(prev => ({ ...prev, fill: { status: 'loading', cursor } }))
+    setStore(prev => ({ ...prev, fill: { status: 'loading', cursor, budget: FILL_PAGE_BUDGET } }))
   }, [store.fill.status, floor, served.length, fetchOlder, scopeKey])
   useEffect(() => {
     if (store.fill.status !== 'loading' || fetchOlder === undefined) return
     const cursor = store.fill.cursor
+    const budgetAtStart = store.fill.budget
     let live = true
     const timer = setTimeout(() => {
       void fetchOlder(cursor).then(
@@ -96,7 +103,13 @@ export function useCommandLog(
             if (result.atStart) return { ...prev, known, fill: { status: 'done' } }
             if (oldest >= cursor) return { ...prev, known, fill: { status: 'failed', cursor } }
             cursorTarget.current = oldest
-            return { ...prev, known, fill: { status: 'loading', cursor: oldest, total: result.total } }
+            if (known.size >= FILL_MAX_KNOWN) {
+              return { ...prev, known, fill: { status: 'paused', cursor: oldest, total: result.total } }
+            }
+            const budget = budgetAtStart - 1
+            return budget > 0
+              ? { ...prev, known, fill: { status: 'loading', cursor: oldest, total: result.total, budget } }
+              : { ...prev, known, fill: { status: 'paused', cursor: oldest, total: result.total } }
           })
         },
         () => {
@@ -118,14 +131,23 @@ export function useCommandLog(
     setStore((prev) => {
       if (prev.fill.status !== 'failed') return prev
       cursorTarget.current = prev.fill.cursor
-      return { ...prev, fill: { status: 'loading', cursor: prev.fill.cursor } }
+      return { ...prev, fill: { status: 'loading', cursor: prev.fill.cursor, budget: FILL_PAGE_BUDGET } }
     })
   }, [])
+  const resume = useCallback(() => {
+    setStore((prev) => {
+      if (prev.fill.status !== 'paused' || fetchOlder === undefined) return prev
+      if (prev.known.size >= FILL_MAX_KNOWN) return prev
+      cursorTarget.current = prev.fill.cursor
+      return { ...prev, fill: { status: 'loading', cursor: prev.fill.cursor, total: prev.fill.total, budget: FILL_PAGE_BUDGET } }
+    })
+  }, [fetchOlder])
   const fill = store.fill
   return {
     records,
     status: fill.status,
     ...(fill.status === 'loading' && fill.total !== undefined ? { total: fill.total } : {}),
     retry,
+    resume,
   }
 }

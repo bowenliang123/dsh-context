@@ -154,3 +154,41 @@ describe('ContextBrowser open-category reporting', () => {
   })
 })
 
+
+
+describe('ContextBrowser step picker bounds', () => {
+  test('a long session caps the option list to the newest steps and follows an older selection', async () => {
+    const requests = Array.from({ length: 600 }, (_, i) => req({ seq: i + 1, turn: i + 1, step: 0 }))
+    const data = tl({ requests, nodes: [surfaceNode({ seq: 1, tokens: 5 })] })
+    const m = await mount(h(Browser, props({ data, headers: null })))
+    try {
+      let options = queryAll(m.container, 'select.lc-br-pick option')
+      assert.equal(options.length, 501, 'live view lists the live option plus the newest 500 steps')
+      await m.update(h(Browser, props({ data, headers: null, pinSeq: 40 })))
+      options = queryAll(m.container, 'select.lc-br-pick option')
+      assert.equal(options.length, 501, 'an old selection re-anchors the option window around it')
+      const select = query<HTMLSelectElement>(m.container, 'select.lc-br-pick')
+      assert.equal(select.value, '40', 'the pinned old step stays selectable in the windowed list')
+      assert.ok(text(select).includes('Turn 260'), 'the window centers on the pinned step')
+      await m.update(h(Browser, props({ data, headers: null, pinSeq: null })))
+      options = queryAll(m.container, 'select.lc-br-pick option')
+      assert.equal(query<HTMLSelectElement>(m.container, 'select.lc-br-pick').value, 'live')
+      assert.ok(options.length <= 501)
+    } finally {
+      await m.unmount()
+    }
+  })
+
+  test('a session at or below the cap lists every step', async () => {
+    const requests = Array.from({ length: 500 }, (_, i) => req({ seq: i + 1, turn: i + 1, step: 0 }))
+    const data = tl({ requests, nodes: [surfaceNode({ seq: 1, tokens: 5 })] })
+    const m = await mount(h(Browser, props({ data, headers: null })))
+    try {
+      const options = queryAll(m.container, 'select.lc-br-pick option')
+      assert.equal(options.length, 501)
+      assert.ok(text(query(m.container, 'select.lc-br-pick')).includes('Turn 1 ·'))
+    } finally {
+      await m.unmount()
+    }
+  })
+})

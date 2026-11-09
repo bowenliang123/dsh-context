@@ -46,11 +46,10 @@ import { makeTrendChart } from './trendChart'
 import { aggregateByTurn, attachMarkers, boundaryIndex, jumpTargetOf, turnStepsOf } from './trendModel'
 import { makeTrendOverview } from './trendOverview'
 import { stepStampOf } from './browserHelpers'
-import { cachedByData } from './derivedCache'
-import { assemble } from '../assemble'
+import { assembleCached, cachedByData } from './derivedCache'
 import { useLazyMount } from './useLazyMount'
 import { useConversationSurface } from './useConversationSurface'
-import { trendBandsOf } from '../dna'
+import { dnaDeltaMaximaOf, trendBandsOf } from '../dna'
 import type { TrendBand } from '../dna'
 
 import { activateViewTab, openContextSidebar, subscribeContextFocus, takeContextFocus, useFleetMemberFocus } from '../viewFocus'
@@ -385,14 +384,18 @@ export function makeContextView(
     const dnaCacheOwner = useMemo(() => ({ data, headers }), [data, headers])
     const dnaBands = useMemo(
       () => (dnaEager
-        ? cachedByData(dnaCacheOwner, `dna:${granularity}`, () => displayRequests.map(req => trendBandsOf(assemble(data, headers, req.seq))))
+        ? cachedByData(dnaCacheOwner, `dna:${granularity}`, () => displayRequests.map(req => trendBandsOf(assembleCached(data, headers, req.seq))))
         : null),
       [dnaEager, dnaCacheOwner, data, headers, displayRequests, granularity],
     )
     const dnaAt = useMemo(() => {
       if (!dnaAllowed || displayRequests.length <= DNA_LAZY_MIN) return null
-      return (seq: number): TrendBand[] => trendBandsOf(assemble(data, headers, seq))
+      return (seq: number): TrendBand[] => trendBandsOf(assembleCached(data, headers, seq))
     }, [dnaAllowed, data, headers, displayRequests.length])
+    const deltaMaxima = useMemo(() => {
+      if (!dnaAllowed || trendMode !== 'delta') return null
+      return cachedByData(dnaCacheOwner, `dnaDeltaMax:${granularity}`, () => dnaDeltaMaximaOf(data, headers, displayRequests))
+    }, [dnaAllowed, trendMode, dnaCacheOwner, data, headers, displayRequests, granularity])
     const revealBand = useCallback((seq: number, band: { key: string; cat: Category | 'system' | 'tools' }): void => {
       setNodeFocus({ step: seq, key: band.key, cat: band.cat })
     }, [])
@@ -780,6 +783,7 @@ export function makeContextView(
                     adaptive={adaptive}
                     dna={dnaBands}
                     dnaAt={dnaAt}
+                    deltaMaxima={deltaMaxima}
                     onPickBand={revealBand}
                     onPickTurn={(turn) => { setGranularity('turn'); setFocusTurn(turn) }}
                     onFocusTurnHandled={() => { setFocusTurn(null) }}

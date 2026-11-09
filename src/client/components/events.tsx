@@ -66,8 +66,16 @@ export function makeEventText(t: Translate): {
 }
 
 function syncTitles(root: HTMLElement): void {
-  for (const el of root.querySelectorAll<HTMLElement>('.lc-event-label')) {
-    el.title = el.scrollWidth > el.clientWidth ? el.textContent || '' : ''
+  const labels = root.querySelectorAll<HTMLElement>('.lc-event-label')
+  const clipped: HTMLElement[] = []
+  for (const el of labels) {
+    if (el.scrollWidth > el.clientWidth) clipped.push(el)
+  }
+  for (const el of labels) {
+    el.title = ''
+  }
+  for (const el of clipped) {
+    el.title = el.textContent || ''
   }
 }
 
@@ -83,12 +91,20 @@ export function makeEventList(kit: ViewKit): (props: EventListProps) => ReactEle
       syncTitles(root)
     }, [props.events])
     useEffect(() => {
+      let frame = 0
       const onResize = (): void => {
-        const root = rootRef.current
-        if (root !== null) syncTitles(root)
+        if (frame !== 0) return
+        frame = requestAnimationFrame(() => {
+          frame = 0
+          const root = rootRef.current
+          if (root !== null) syncTitles(root)
+        })
       }
       window.addEventListener('resize', onResize)
-      return () => { window.removeEventListener('resize', onResize) }
+      return () => {
+        window.removeEventListener('resize', onResize)
+        if (frame !== 0) cancelAnimationFrame(frame)
+      }
     }, [])
     const remote = remoteStateOf(props.events.length, props.state, props.onRetry)
     if (remote.kind === 'loading') return <DetailNote state="loading" className="lc-empty lc-lane" />

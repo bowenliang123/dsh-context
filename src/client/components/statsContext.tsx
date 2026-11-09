@@ -222,6 +222,7 @@ function useFittedChips(tally: readonly unknown[]) {
   const rowRef = useRef<HTMLDivElement | null>(null)
   const gaugeRef = useRef<HTMLDivElement | null>(null)
   const chipGaugeRef = useRef<HTMLDivElement | null>(null)
+  const widthsRef = useRef<{ tally: readonly unknown[]; widths: number[]; moreWidths: number[] } | null>(null)
   const [shown, setShown] = useState(count)
 
   const fit = useCallback(() => {
@@ -236,14 +237,28 @@ function useFittedChips(tally: readonly unknown[]) {
       setShown(count)
       return
     }
-    const widths = Array.from(gauge.children, el => el.getBoundingClientRect().width)
+    let cached = widthsRef.current
+    if (cached !== null && cached.tally === tally) {
+      const first = gauge.children[0] as HTMLElement | undefined
+      if (first === undefined || first.getBoundingClientRect().width !== cached.widths[0]) cached = null
+    } else {
+      cached = null
+    }
+    if (cached === null) {
+      cached = {
+        tally,
+        widths: Array.from(gauge.children, el => el.getBoundingClientRect().width),
+        moreWidths: Array.from(chipGauge.children, el => el.getBoundingClientRect().width),
+      }
+      widthsRef.current = cached
+    }
+    const { widths, moreWidths } = cached
     let whole = 0
     for (let i = 0; i < count; i++) whole += widths[i] + (i === 0 ? 0 : CHIP_GAP)
     if (whole <= width) {
       setShown(count)
       return
     }
-    const moreWidths = Array.from(chipGauge.children, el => el.getBoundingClientRect().width)
     let pills = 0
     for (let n = count - 1; n >= 0; n--) {
       let used = moreWidths[count - n - 1] + n * CHIP_GAP

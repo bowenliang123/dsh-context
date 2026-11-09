@@ -909,3 +909,71 @@ describe('makeSubagentCost — batch head channel', () => {
     await m.unmount()
   })
 })
+
+
+describe('StatsContext chip width cache', () => {
+  class PipeRO {
+    static all: { el: HTMLElement; fire: () => void }[] = []
+    private readonly cb: ResizeObserverCallback
+    constructor(cb: ResizeObserverCallback) { this.cb = cb }
+    observe(el: Element): void {
+      PipeRO.all.push({ el: el as HTMLElement, fire: () => { this.cb([], this as unknown as ResizeObserver) } })
+    }
+
+    unobserve(): void {}
+    disconnect(): void {}
+  }
+
+  function stubLane(chipWidth: number, moreWidth: number, rowWidth: number): () => void {
+    const real = Element.prototype.getBoundingClientRect
+    const rect = (w: number): DOMRect => ({ width: w, height: 0, top: 0, left: 0, right: w, bottom: 0, x: 0, y: 0, toJSON: () => ({}) } as DOMRect)
+    Element.prototype.getBoundingClientRect = function (this: Element): DOMRect {
+      const isChip = this.classList.contains('lc-ledger-chip')
+      const isRow = this.classList.contains('lc-ledger-chips')
+      if (!isChip && !isRow) return real.call(this)
+      if (isRow) return rect(rowWidth)
+      return rect(this.classList.contains('lc-ledger-chip-more') ? moreWidth : chipWidth)
+    }
+    return () => { Element.prototype.getBoundingClientRect = real }
+  }
+
+  test('the width table is reused across row resizes and re-measured when the first chip shifts', async () => {
+    vi.stubGlobal('ResizeObserver', PipeRO)
+    const restore = stubLane(100, 40, 260)
+    try {
+      const m = await mount(h(StatsContext, { counts: NO_COUNTS, files: NO_FILES, locale: 'en', tools: [['read', 8], ['bash', 3], ['grep', 2]] }))
+      const row = query(m.container, '.lc-ledger-out-chips') as HTMLElement
+      const entry = PipeRO.all.find(e => e.el === row)
+      assert.ok(entry !== undefined, 'the row width observer never attached')
+      Object.defineProperty(row, 'clientWidth', { value: 260, configurable: true })
+      entry.fire()
+      await flush()
+      assert.deepEqual(chipsOf(row), ['read8', 'bash3', '+1 more'], 'the first measured fit folds')
+      entry.fire()
+      await flush()
+      assert.deepEqual(chipsOf(row), ['read8', 'bash3', '+1 more'], 'an unchanged width keeps the fitted row')
+      restore()
+      const wider = stubLane(100, 40, 320)
+      Object.defineProperty(row, 'clientWidth', { value: 320, configurable: true })
+      try {
+        entry.fire()
+        await flush()
+        assert.deepEqual(chipsOf(row), ['read8', 'bash3', 'grep2'], 'the cached width table serves the wider row')
+      } finally {
+        wider()
+      }
+      const shifted = stubLane(170, 40, 320)
+      Object.defineProperty(row, 'clientWidth', { value: 321, configurable: true })
+      try {
+        entry.fire()
+        await flush()
+        assert.deepEqual(chipsOf(row), ['read8', '+2 more'], 'a shifted first chip re-measures the whole table')
+      } finally {
+        shifted()
+      }
+      await m.unmount()
+    } finally {
+      vi.unstubAllGlobals()
+    }
+  })
+})

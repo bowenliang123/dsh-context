@@ -2,7 +2,7 @@ import assert from 'node:assert/strict'
 import { act, createElement as h } from 'react'
 import { describe, test } from 'vitest'
 import type { TrendBand } from '../../../src/client/dna'
-import { flush, mount, queryAll } from '../helpers/kit'
+import { flush, mount, query, queryAll } from '../helpers/kit'
 import { capDnaRuns, snapDnaRuns } from '../../../src/client/components/trendDnaBars'
 import { TrendChart, bars, propsOf, req, viewport } from './trendChartHarness'
 
@@ -147,5 +147,26 @@ describe('TrendChart lazy DNA bands', () => {
     assert.ok(rereadCount <= 400, `a re-render re-reads at most the window (${rereadCount} of ${rereadReqs.length})`)
     assert.ok(rereadCount < rereadReqs.length, 'the whole-log walk never re-runs on a hover/scroll re-render')
     await reread.unmount()
+  })
+})
+
+
+describe('TrendChart lazy DNA maxima with adaptive window', () => {
+  test('an adaptive window skips the full-history maxima walk and scales from the visible window', async () => {
+    const lazy = lazyBands()
+    const reqs = requestList(60)
+    const m = await mount(h(TrendChart, propsOf(reqs, { dnaAt: lazy.at, mode: 'delta', adaptive: true })))
+    try {
+      const callsAfterMount = lazy.calls.size
+      assert.ok(callsAfterMount > 0, 'the first paint resolves the pre-measure maxima through the lazy accessor')
+      await m.update(h(TrendChart, propsOf(reqs.map(r => ({ ...r })), { dnaAt: lazy.at, mode: 'delta', adaptive: true })))
+      const total = lazy.calls.size
+      await m.update(h(TrendChart, propsOf(reqs.map(r => ({ ...r, total: r.total + 5 })), { dnaAt: lazy.at, mode: 'delta', adaptive: true })))
+      assert.ok(lazy.calls.size >= total, 'the lazy accessor keeps serving the visible window')
+      assert.notEqual(query(m.container, '.lc-axis-top')?.textContent ?? '', '', 'the adaptive chart keeps an axis')
+      void callsAfterMount
+    } finally {
+      await m.unmount()
+    }
   })
 })

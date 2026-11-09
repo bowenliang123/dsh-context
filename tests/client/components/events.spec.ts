@@ -2,10 +2,11 @@ import { act, createElement as h } from 'react'
 import assert from 'node:assert/strict'
 import { describe, test } from 'vitest'
 import { makeEventList, makeEventText } from '../../../src/client/components/events'
+import { settle } from '../helpers/kit'
 import { fmtTime } from '../../../src/client/format'
 import type { ContextEventRecord } from '../../../src/shared/types'
 import { DICT_EN } from '../../../src/client/i18n'
-import { click, flush, makeKit, mount, query, queryAll, text } from '../helpers/kit'
+import { click,  makeKit, mount, query, queryAll, text } from '../helpers/kit'
 
 const kit = makeKit()
 const { eventLabel, eventLabelParts, eventAt } = makeEventText(kit.t)
@@ -127,11 +128,34 @@ describe('EventList', () => {
     labels[0].textContent = ''
     await act(async () => {
       window.dispatchEvent(new Event('resize'))
+      window.dispatchEvent(new Event('resize'))
     })
+    await settle(20)
     assert.equal(labels[0].getAttribute('title'), '')
     assert.equal(labels[1].getAttribute('title'), 'Notice')
-    await flush()
     await m.unmount()
+  })
+
+  test('a resize while the list shows a remote state syncs nothing (no root yet)', async () => {
+    const m = await mount(h(EventList, { events: [], state: 'loading' }))
+    await act(async () => {
+      window.dispatchEvent(new Event('resize'))
+    })
+    await settle(20)
+    assert.ok(text(m.container).length > 0, 'the loading note stays painted')
+    await m.unmount()
+  })
+
+  test('unmounting with a resize frame pending cancels it without touching a detached root', async () => {
+    const events = [ev({ seq: 1, kind: 'prune' })]
+    const m = await mount(h(EventList, { events }))
+    Object.defineProperty(query(m.container, '.lc-event-label'), 'scrollWidth', { value: 100, configurable: true })
+    await act(async () => {
+      window.dispatchEvent(new Event('resize'))
+      await m.unmount()
+    })
+    await settle(20)
+    assert.ok(true, 'the cancelled frame never touched the detached root')
   })
 
   test('a resize while the list is empty (no rows, no root) does not throw; empty → non-empty → empty stays stable', async () => {
@@ -147,6 +171,7 @@ describe('EventList', () => {
     await act(async () => {
       window.dispatchEvent(new Event('resize'))
     })
+    await settle(20)
     assert.equal(label.getAttribute('title'), 'Tool output pruned')
     await m.update(h(EventList, { events: [] }))
     assert.ok(text(m.container).includes('No context events yet'))
