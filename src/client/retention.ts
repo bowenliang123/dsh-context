@@ -1,7 +1,7 @@
 import { BoundedCache, lruTrim } from './boundedCache'
 import type { BoundedCacheOptions } from './boundedCache'
 
-export type RetentionScope = 'global' | 'session' | 'address'
+export type RetentionScope = 'global' | 'session' | 'address' | 'owner'
 
 export interface RetentionPolicy {
   scope: RetentionScope
@@ -24,7 +24,6 @@ export const RETENTION = {
   fleetPreview: { scope: 'session', maxEntries: 64, maxBytes: 4 * MIB, minEntries: 1, ttlMs: 5 * MINUTE },
   fleetHistory: { scope: 'session', maxEntries: 64, maxBytes: 4 * MIB, minEntries: 1, ttlMs: 5 * MINUTE },
   fleetFull: { scope: 'session', maxEntries: 4, maxBytes: 4 * MIB, minEntries: 1, ttlMs: 5 * MINUTE },
-  overviewRows: { scope: 'global', maxEntries: 12, ttlMs: MINUTE },
   commandHighlight: { scope: 'global', maxEntries: 600, ttlMs: 10 * MINUTE },
   commandResults: { scope: 'session', maxEntries: 8 },
   contentMissValues: { scope: 'session', maxEntries: 32 },
@@ -37,8 +36,8 @@ export const RETENTION = {
   upgradeDismissed: { scope: 'session', maxEntries: 64 },
   viewScroll: { scope: 'session', maxEntries: 32 },
   attachmentPaths: { scope: 'session', maxEntries: 32 },
-  derivedOwner: { scope: 'global', maxEntries: 16 },
-  derivedSeq: { scope: 'global', maxEntries: 8 },
+  derivedOwner: { scope: 'owner', maxEntries: 16 },
+  derivedSeq: { scope: 'owner', maxEntries: 8 },
   statsLanded: { scope: 'session', maxEntries: 256 },
 } as const satisfies Record<string, RetentionPolicy>
 

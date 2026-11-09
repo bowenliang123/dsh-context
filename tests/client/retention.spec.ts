@@ -12,10 +12,12 @@ describe('retention policies', () => {
       assert.ok(policy.maxBytes === undefined || policy.maxBytes > 0, name)
       assert.ok(policy.maxWeight === undefined || policy.maxWeight > 0, name)
       assert.ok(policy.ttlMs === undefined || policy.ttlMs > 0, name)
-      assert.ok(policy.scope === 'global' || policy.scope === 'session' || policy.scope === 'address', name)
+      assert.ok(policy.scope === 'global' || policy.scope === 'session' || policy.scope === 'address' || policy.scope === 'owner', name)
     }
     assert.equal(retentionOf('agentHeads').ttlMs, 60_000)
     assert.equal(retentionOf('detailStores').maxWeight, 8)
+    assert.equal(retentionOf('derivedOwner').scope, 'owner')
+    assert.equal(retentionOf('derivedSeq').scope, 'owner')
   })
 
   test('the factory applies policy bounds and lets hooks override behavior', () => {
