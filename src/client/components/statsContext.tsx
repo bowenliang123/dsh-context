@@ -1,7 +1,7 @@
 import { Fragment, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type KeyboardEvent, type MouseEvent, type ReactElement, type ReactNode } from 'react'
 import type {
-  ContextEventRecord, ContextTimeline, CostPriceFace, CostPriceMiss, RequestRecord, SessionCostRead,
-  SessionCostUsage, SurfaceNode, TimelineCounts,
+  ContextTimeline, CostPriceFace, CostPriceMiss, SessionCostRead,
+  SessionCostUsage, TimelineCounts,
 } from '../../shared/types'
 import { billedTokensOf, formatCost, formatPriceRate, mergeCostUsage, toCurrency, type CostCurrency } from '../cost'
 import { sessionsFaceOf, subagentCostFoldOf } from '../agentTree'
@@ -54,22 +54,6 @@ function costUsdOf(reads: readonly (SessionCostRead | null | undefined)[]): numb
     any = true
   }
   return any ? total : null
-}
-
-export function countsOfRecords(requests: readonly RequestRecord[], events: readonly ContextEventRecord[]): TimelineCounts {
-  const turns = new Set<number>()
-  for (const req of requests) turns.add(req.turn ?? 0)
-  let injects = 0
-  let compactions = 0
-  let prunes = 0
-  const skills = new Set<string>()
-  for (const ev of events) {
-    if (ev.kind === 'inject') injects++
-    else if (ev.kind === 'compaction') compactions++
-    else if (ev.kind === 'prune') prunes++
-    if (ev.sub === 'skill' && typeof ev.name === 'string' && ev.name !== '') skills.add(ev.name)
-  }
-  return { turns: turns.size, steps: requests.length, injects, compactions, prunes, skills: skills.size }
 }
 
 export interface SubagentStats {
@@ -126,16 +110,6 @@ const EVENT_PILLS: readonly { kind: StatsEventKind; tally: 'injects' | 'compacti
   { kind: 'compaction', tally: 'compactions', cls: 'lc-kind-compaction' },
   { kind: 'prune', tally: 'prunes', cls: 'lc-kind-prune' },
 ]
-
-export function toolTallyOf(nodes: readonly SurfaceNode[]): [string, number][] {
-  const tally = new Map<string, number>()
-  for (const n of nodes) {
-    if (n.cat !== 'tool' && !(n.cat === 'skill' && n.tool !== undefined)) continue
-    if (typeof n.tool !== 'string' || n.tool === '') continue
-    tally.set(n.tool, (tally.get(n.tool) ?? 0) + 1)
-  }
-  return [...tally].sort((a, b) => b[1] - a[1] || (a[0] < b[0] ? -1 : 1))
-}
 
 export type StatsJump = 'turns' | 'steps' | 'skills' | 'answers' | 'inputs' | 'read' | 'write' | 'search' | 'image'
 

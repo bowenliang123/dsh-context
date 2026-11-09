@@ -132,10 +132,9 @@ function retainedCountsOf(state: TimelineState): NonNullable<Snapshot['counts']>
   }
 }
 
-export function buildTimelineHead(state: TimelineState): Snapshot {
-  const result = headFieldsOf(state)
+function countsOf(state: TimelineState): NonNullable<Snapshot['counts']> {
   const totals = state.totals
-  result.counts = totals !== undefined
+  return totals !== undefined
     ? {
       turns: totals.turns,
       steps: totals.steps,
@@ -145,6 +144,11 @@ export function buildTimelineHead(state: TimelineState): Snapshot {
       skills: skillNamesCountOf(state),
     }
     : retainedCountsOf(state)
+}
+
+export function buildTimelineHead(state: TimelineState): Snapshot {
+  const result = headFieldsOf(state)
+  result.counts = countsOf(state)
   const last = state.requests.at(-1)
   if (last !== undefined) {
     result.last = { seq: last.seq, total: last.total, ...(typeof last.prompt === 'number' ? { prompt: last.prompt } : {}) }
@@ -158,5 +162,7 @@ export function buildTimelineDetail(state: TimelineState, bounds: FoldBounds): C
 }
 
 export function buildTimelineView(state: TimelineState, bounds: FoldBounds): Snapshot {
-  return { ...headFieldsOf(state), ...detailCollectionsOf(state, bounds) }
+  const result: Snapshot = { ...headFieldsOf(state), ...detailCollectionsOf(state, bounds) }
+  result.counts = countsOf(state)
+  return result
 }

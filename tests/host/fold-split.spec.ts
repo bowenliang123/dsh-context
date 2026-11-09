@@ -123,12 +123,12 @@ describe('the split wire generation (definition slim flag)', () => {
     const inlineView = inline.wire.view(state)
     assert.equal(inline.wire.viewSchema.safeParse(inlineView).success, true, 'the inline value validates on the same schema')
     assert.equal(inlineView.detailRev, undefined)
-    assert.equal(inlineView.counts, undefined)
     assert.ok(inlineView.nodes.length > 0)
     assert.ok(inlineView.requests.length > 0)
     const head = buildTimelineHead(state)
     const detail = buildTimelineDetail(state, resolveBounds({}))
-    const { counts: _counts, last: _last, detailRev: _rev, ...headScalars } = head
+    assert.deepEqual(inlineView.counts, head.counts, 'the inline value carries the full-session counters')
+    const { last: _last, detailRev: _rev, ...headScalars } = head
     const { rev: _detailRev, head: _detailHead, ...collections } = detail
     assert.deepEqual(inlineView, { ...headScalars, ...collections })
   })

@@ -7,7 +7,7 @@ import { makeAgentHeads } from '../../../src/client/agentHeads'
 import { resetTimelineDetailStores } from '../../../src/client/timelineSource'
 import { createContextSettings } from '../../../src/client/settings'
 import type { UseChatLike } from '../../../src/client/services'
-import type { ContextTimeline } from '../../../src/shared/types'
+import type { ContextEventRecord, ContextTimeline, RequestRecord, SurfaceNode, TimelineCounts } from '../../../src/shared/types'
 import { TestClientCtx, asClientCtx } from '../helpers/harness'
 import { makeKit, mount, query, queryAll, text } from '../helpers/kit'
 
@@ -21,8 +21,34 @@ afterEach(() => {
   resetTimelineDetailStores()
 })
 
+function countsOf(requests: readonly RequestRecord[], events: readonly ContextEventRecord[]): TimelineCounts {
+  const turns = new Set<number>()
+  for (const request of requests) turns.add(request.turn ?? 0)
+  let injects = 0
+  let compactions = 0
+  let prunes = 0
+  const skills = new Set<string>()
+  for (const event of events) {
+    if (event.kind === 'inject') injects++
+    else if (event.kind === 'compaction') compactions++
+    else if (event.kind === 'prune') prunes++
+    if (event.sub === 'skill' && typeof event.name === 'string' && event.name !== '') skills.add(event.name)
+  }
+  return { turns: turns.size, steps: requests.length, injects, compactions, prunes, skills: skills.size }
+}
+
+function tallyOf(nodes: readonly SurfaceNode[]): Record<string, number> {
+  const tally: Record<string, number> = {}
+  for (const node of nodes) {
+    if (node.cat !== 'tool' && !(node.cat === 'skill' && node.tool !== undefined)) continue
+    if (typeof node.tool !== 'string' || node.tool === '') continue
+    tally[node.tool] = (tally[node.tool] ?? 0) + 1
+  }
+  return tally
+}
+
 export function timeline(over: Record<string, unknown> = {}): ContextTimeline {
-  return {
+  const view = {
     ok: true,
     current: { system: 100, tools: 200, user: 300, inject: 50, skill: 0, assistant: 400, tool: 150, total: 1200 },
     requests: [],
@@ -32,6 +58,9 @@ export function timeline(over: Record<string, unknown> = {}): ContextTimeline {
     archive: [],
     ...over,
   } as ContextTimeline
+  if (view.counts === undefined) view.counts = countsOf(view.requests, view.events)
+  if (view.toolTally === undefined) view.toolTally = tallyOf(view.nodes)
+  return view
 }
 
 export const T0 = 1700000000000

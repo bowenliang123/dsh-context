@@ -1,5 +1,5 @@
 import { createElement as h, startTransition, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactElement } from 'react'
-import type { Category, ContextEventRecord, RequestRecord, SurfaceNode } from '../../shared/types'
+import type { Category, ContextEventRecord, RequestRecord, SurfaceNode, TimelineCounts } from '../../shared/types'
 import { TrendReserved } from './trendReserved'
 import { briefNodes, briefOf } from '../brief'
 import { headlineOf } from '../headline'
@@ -37,7 +37,7 @@ import { makePluginInfo } from './pluginInfo'
 import { makeRecomCard } from './recomCard'
 import { makeUpgradeGate } from './upgradeGate'
 import { makeRequestDetail } from './requestDetail'
-import { countsOfRecords, makeStatsContext, makeSubagentCost, toolTallyOf } from './statsContext'
+import { makeStatsContext, makeSubagentCost } from './statsContext'
 import type { StatsEventKind, StatsJump } from './statsContext'
 import { makeStatsTiming } from './statsTiming'
 import { makeStatsTokens } from './statsTokens'
@@ -65,6 +65,7 @@ const HOVER_DELAY_MS = 140
 const HOVER_LOCK_MS = 320
 const DNA_HOVER_DELAY = 220
 const DNA_LAZY_MIN = 512
+const NO_COUNTS: TimelineCounts = { turns: 0, steps: 0, injects: 0, compactions: 0, prunes: 0, skills: 0 }
 function revealCard(root: HTMLElement | null, selector: string): void {
   /* v8 ignore start */
   const card = root?.querySelector(selector) ?? null
@@ -367,7 +368,7 @@ export function makeContextView(
 
     const requests = data ? data.requests : []
     const events = data ? data.events : []
-    const counts = data?.counts ?? countsOfRecords(requests, events)
+    const counts = data?.counts ?? NO_COUNTS
     const kindCounts: Record<string, number | undefined> = { inject: counts.injects, compaction: counts.compactions, prune: counts.prunes }
     const shownEvents = pickedKinds.length === EVENT_KINDS.length ? events : events.filter(e => pickedKinds.includes(e.kind))
     const displayRequests = useMemo(
@@ -494,10 +495,7 @@ export function makeContextView(
       },
       [data, briefList, convOf],
     )
-    const toolTally = useMemo(() => {
-      if (data?.toolTally !== undefined) return tallyEntriesOf(data.toolTally)
-      return data ? cachedByData(data, 'toolTally', () => toolTallyOf(data.nodes)) : []
-    }, [data])
+    const toolTally = useMemo(() => tallyEntriesOf(data?.toolTally), [data?.toolTally])
     const commandList = useMemo(() => {
       if (data === null || data.commands === undefined) return []
       const records = data.commands
