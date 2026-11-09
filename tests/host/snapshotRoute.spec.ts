@@ -5,7 +5,7 @@ import SessionStore from '@deepseek-ai/dsh-session'
 import type { Session } from '@deepseek-ai/dsh-session'
 import SessionProjectionRegistry from '@deepseek-ai/dsh-session-projection'
 import { apply, inject, name } from '../../src/host/index'
-import { watchSnapshotRoute, SNAPSHOT_ROUTE } from '../../src/host/snapshotRoute'
+import { watchSnapshotRoute, SNAPSHOT_IDS_MAX, SNAPSHOT_ROUTE } from '../../src/host/snapshotRoute'
 import type {} from '../../src/shared/types'
 
 const plugin = { name, inject, apply } as never
@@ -83,7 +83,7 @@ function appendRealEnvelopes(session: Session): void {
   } as never, { surfaceOp: 'append' })
 }
 
-async function callRoute(routes: Map<string, RouteBox>, body: unknown): Promise<{ ok: boolean; value?: Record<string, Record<string, unknown>>; error?: { code: string; message?: string } }> {
+async function callRoute(routes: Map<string, RouteBox>, body: unknown): Promise<{ ok: boolean; value?: Record<string, Record<string, unknown>>; error?: { code: string; message?: string }; revision?: string; unchanged?: boolean }> {
   const route = routes.get(SNAPSHOT_ROUTE)
   assert.ok(route !== undefined && route.fetch !== undefined, 'the snapshot route registered')
   const response = await route.fetch(new Request(`http://dsh.test${SNAPSHOT_ROUTE}`, {
@@ -354,5 +354,24 @@ test('without the connection face the route never registers, and the watcher dis
     const result = await callRoute(routes, 'not json')
     assert.equal(result.ok, false)
     assert.equal(result.error?.code, 'dsh-context/bad-request')
+  })
+})
+
+
+
+describe('snapshot ids cap', () => {
+  test('an oversized ids list is refused rather than silently truncated', async () => {
+    const h = await bootWithRoutes()
+    const sessions: Session[] = []
+    for (let i = 0; i < SNAPSHOT_IDS_MAX; i++) {
+      const session = h.createSession()
+      appendRealEnvelopes(session)
+      sessions.push(session)
+    }
+    const exact = await callRoute(h.routes, { ids: sessions.map(session => session.header.id) })
+    assert.equal(exact.ok, true, 'exactly the cap still serves')
+    const over = await callRoute(h.routes, { ids: [...sessions.map(session => session.header.id), 'one-too-many'] })
+    assert.equal(over.ok, false)
+    assert.equal(over.error?.code, 'dsh-context/bad-request')
   })
 })

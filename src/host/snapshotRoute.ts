@@ -7,6 +7,8 @@ import { failure, mountPostRoute, readBody, reply } from './postRoute'
 
 export const SNAPSHOT_ROUTE = '/api/dsh-context/snapshot'
 
+export const SNAPSHOT_IDS_MAX = 256
+
 const SNAPSHOT_KEYS = new Set<string>(['contextTimeline', 'contextActivity'])
 
 function compactCountsOf(value: unknown): Record<string, number> | undefined {
@@ -66,12 +68,13 @@ function compactTimelineOf(value: unknown): Record<string, unknown> | undefined 
 }
 
 
-function wantedIdsOf(body: Record<string, unknown>): Set<string> | undefined {
+function wantedIdsOf(body: Record<string, unknown>): Set<string> | null | undefined {
   const ids = body.ids
   if (!Array.isArray(ids)) return undefined
   const wanted = new Set<string>()
   for (const id of ids) {
     if (typeof id === 'string' && id !== '') wanted.add(id)
+    if (wanted.size > SNAPSHOT_IDS_MAX) return null
   }
   return wanted.size > 0 ? wanted : undefined
 }
@@ -100,6 +103,9 @@ export function watchSnapshotRoute(ctx: Context, backfill?: BackfillHandle): voi
           ? read.body as Record<string, unknown>
           : undefined
         const wanted = body === undefined ? undefined : wantedIdsOf(body)
+        if (wanted === null) {
+          return failure('dsh-context/bad-request', `at most ${String(SNAPSHOT_IDS_MAX)} ids per request`)
+        }
         const requestedRevision = typeof body?.revision === 'string' && body.revision !== '' ? body.revision : undefined
         const servedKey = wanted === undefined ? 'all' : [...wanted].sort().join('\u0000')
         try {
