@@ -70,6 +70,7 @@ describe('postRoute', () => {
     await assert.rejects(postRoute('api/route', {}, decodeNumber), (error: unknown) => {
       assert.ok(error instanceof RouteError)
       assert.match(error.message, /route HTTP 404/)
+      assert.equal(error.status, 404)
       return true
     })
   })

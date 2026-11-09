@@ -2,7 +2,7 @@ import { PLUGIN_NAME } from './meta'
 import { asRecord } from './wire'
 
 export class RouteError extends Error {
-  constructor(message: string) {
+  constructor(message: string, readonly status?: number) {
     super(message)
     this.name = 'RouteError'
   }
@@ -29,7 +29,7 @@ async function readEnvelope(route: string, body: unknown, options: RouteOptions)
     body: JSON.stringify(body),
     ...(options.signal === undefined ? {} : { signal: options.signal }),
   })
-  if (!response.ok) throw new RouteError(`${PLUGIN_NAME}: ${label} route HTTP ${response.status}`)
+  if (!response.ok) throw new RouteError(`${PLUGIN_NAME}: ${label} route HTTP ${response.status}`, response.status)
   let parsed: unknown
   try {
     parsed = await response.json()

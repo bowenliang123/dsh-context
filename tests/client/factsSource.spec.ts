@@ -9,6 +9,7 @@ import {
   resetTimelineDetailStores,
 } from '../../src/client/timelineSource'
 import type { FactPart, FactsRead } from '../../src/client/timelineSource'
+import { RouteError } from '../../src/client/route'
 import type { ContextTimelineDetail } from '../../src/shared/types'
 import { until } from './helpers/kit'
 
@@ -31,6 +32,10 @@ function series(rev: number): Record<string, unknown>[] {
 
 function core(rev: number): FactsRead {
   return { rev, live: true, asOfSeq: rev, parts: { head: head(rev) as never, series: series(rev) as never } }
+}
+
+function emptyDetail(rev: number): ContextTimelineDetail {
+  return { rev, requests: [], events: [], nodes: [], droppedNodes: 0, archive: [] }
 }
 
 function factsResponse(rev: number, parts: Record<string, unknown>, missing?: string[]): unknown {
@@ -539,17 +544,161 @@ describe('DetailStore over the facts protocol', () => {
       droppedNodes: 0,
       archive: [],
     }
+    let coreCalls = 0
     let legacyReads = 0
     const store = new DetailStore({
-      core: async () => ({ rev: 1, live: true, parts: { head: head(1) as never }, missing: ['series'] }),
+      core: async () => {
+        coreCalls++
+        return { rev: 1, live: true, parts: { head: head(1) as never }, missing: ['series'] }
+      },
       part: async () => null,
       legacy: async () => { legacyReads++; return legacyDetail },
     }, 0)
     store.subscribe(() => {})
     store.request(1)
     await until(() => store.hasPayload, 'the fallback detail never landed')
+    assert.equal(coreCalls, 1)
     assert.equal(legacyReads, 1)
     assert.equal(store.getSnapshot().detail?.requests.length, 3)
+    store.request(2)
+    await until(() => legacyReads === 2, 'the latched legacy route never served the next read')
+    assert.equal(coreCalls, 1, 'a missing series is not retried every read')
+    store.release()
+  })
+
+  test('a transient core failure falls back once and keeps the facts path armed', async () => {
+    const legacyDetail: ContextTimelineDetail = {
+      rev: 1,
+      requests: [{ seq: 1, time: 1, total: 1 }] as never,
+      events: [],
+      nodes: [],
+      droppedNodes: 0,
+      archive: [],
+    }
+    let coreCalls = 0
+    let legacyReads = 0
+    const store = new DetailStore({
+      core: async () => {
+        coreCalls++
+        if (coreCalls === 1) throw new RouteError('offline', 500)
+        return { rev: 1, live: true, parts: { head: head(1) as never, series: series(1) as never } }
+      },
+      part: async () => null,
+      legacy: async () => { legacyReads++; return legacyDetail },
+    }, 0)
+    store.subscribe(() => {})
+    store.request(1)
+    await until(() => store.hasPayload, 'the fallback detail never landed')
+    assert.equal(coreCalls, 1)
+    assert.equal(legacyReads, 1)
+    store.request(2)
+    await until(() => coreCalls === 2, 'the facts path never retried')
+    await until(() => store.getSnapshot().detail?.head?.counts !== undefined, 'the facts payload never replaced the fallback')
+    assert.equal(legacyReads, 1, 'the legacy route was not latched')
+    store.release()
+  })
+
+  test('a plain core failure is transient and retries facts', async () => {
+    let coreCalls = 0
+    let legacyReads = 0
+    const store = new DetailStore({
+      core: async () => {
+        coreCalls++
+        if (coreCalls === 1) throw new Error('offline')
+        return core(1)
+      },
+      part: async () => null,
+      legacy: async () => { legacyReads++; return emptyDetail(1) },
+    }, 0)
+    store.subscribe(() => {})
+    store.request(1)
+    await until(() => store.hasPayload, 'the fallback never landed')
+    store.request(2)
+    await until(() => coreCalls === 2, 'the facts path never retried')
+    await until(() => store.getSnapshot().detail?.head?.counts !== undefined, 'the facts payload never replaced the fallback')
+    assert.equal(legacyReads, 1)
+    store.release()
+  })
+
+  test('a null core read that the legacy route can serve does not latch facts', async () => {
+    let coreCalls = 0
+    let legacyReads = 0
+    const store = new DetailStore({
+      core: async () => {
+        coreCalls++
+        if (coreCalls === 1) return null
+        return core(1)
+      },
+      part: async () => null,
+      legacy: async () => { legacyReads++; return emptyDetail(1) },
+    }, 0)
+    store.subscribe(() => {})
+    store.request(1)
+    await until(() => store.hasPayload, 'the legacy fallback never landed')
+    assert.equal(coreCalls, 1)
+    assert.equal(legacyReads, 1)
+    store.request(2)
+    await until(() => coreCalls === 2, 'the facts path never retried')
+    await until(() => store.getSnapshot().detail?.head?.counts !== undefined, 'the facts payload never replaced the fallback')
+    assert.equal(legacyReads, 1)
+    store.release()
+  })
+
+  test('a missing facts route latches the legacy detail route', async () => {
+    const legacyDetail = emptyDetail(1)
+    let coreCalls = 0
+    let legacyReads = 0
+    const store = new DetailStore({
+      core: async () => {
+        coreCalls++
+        throw new RouteError('missing', 404)
+      },
+      part: async () => null,
+      legacy: async () => { legacyReads++; return legacyDetail },
+    }, 0)
+    store.subscribe(() => {})
+    store.request(1)
+    await until(() => store.hasPayload, 'the legacy detail never landed')
+    assert.equal(coreCalls, 1)
+    assert.equal(legacyReads, 1)
+    store.request(2)
+    await until(() => legacyReads === 2, 'the latched legacy route never served the next read')
+    assert.equal(coreCalls, 1, 'a missing facts route is not retried')
+    store.release()
+  })
+
+  test('a legacy-shaped core response latches the legacy route without a second read', async () => {
+    let coreCalls = 0
+    let legacyReads = 0
+    const store = new DetailStore({
+      core: async () => {
+        coreCalls++
+        return emptyDetail(1) as never
+      },
+      part: async () => null,
+      legacy: async () => { legacyReads++; return emptyDetail(1) },
+    }, 0)
+    store.subscribe(() => {})
+    store.request(1)
+    await until(() => store.hasPayload, 'the legacy-shaped core never landed')
+    assert.equal(coreCalls, 1)
+    assert.equal(legacyReads, 0, 'the legacy route was not called for the same read')
+    store.request(2)
+    await until(() => legacyReads === 1, 'the latched legacy route never served the next read')
+    assert.equal(coreCalls, 1, 'a legacy-shaped facts route is not retried')
+    store.release()
+  })
+
+  test('a missing facts route without a legacy fetcher fails cleanly', async () => {
+    const store = new DetailStore({
+      core: async () => { throw new RouteError('missing', 404) },
+      part: async () => null,
+    }, 0)
+    store.subscribe(() => {})
+    store.request(1)
+    await until(() => store.getSnapshot().failed, 'the missing route never settled')
+    assert.equal(store.getSnapshot().detail, null)
+    store.release()
   })
 
   test('fails when the core read is empty and no legacy fetcher exists', async () => {

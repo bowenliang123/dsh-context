@@ -4,7 +4,7 @@ import { DETAIL_ROUTE, FACTS_ROUTE } from './apiRoutes'
 import { subscribeInvalidations } from './invalidation'
 import { noteCostPending } from './costRefresh'
 import { makeRetentionCache } from './retention'
-import { postRoute } from './route'
+import { postRoute, RouteError } from './route'
 import type { SessionStandardProps } from './services'
 import { asRecord, collectionsOf, projectionOf, timelineOf } from './services'
 
@@ -256,7 +256,7 @@ export class DetailStore {
   private background = false
   private catchUp: ReturnType<typeof setTimeout> | null = null
   private catchUpTarget = -1
-  private factsDisabled = false
+  private factsUnavailable = false
   private readonly wantedParts = new Map<FactPart, FactWindow>()
   private readonly partRev = new Map<FactPart, number>()
   private readonly partRetries = new Map<FactPart, ReturnType<typeof setTimeout>>()
@@ -282,7 +282,7 @@ export class DetailStore {
   }
 
   readonly ensurePart = (part: FactPart, window: FactWindow = {}): void => {
-    if (this.facts === undefined || this.factsDisabled) return
+    if (this.facts === undefined || this.factsUnavailable) return
     const prev = this.wantedParts.get(part)
     const same = prev !== undefined && sameWindow(prev, window)
     if (same && this.partRev.get(part) === this.acceptedRev) return
@@ -447,28 +447,49 @@ export class DetailStore {
 
   private fetchWantedParts(): void {
     const facts = this.facts
-    if (facts === undefined || this.detail === null || this.acceptedRev < 0 || this.factsDisabled) return
+    if (facts === undefined || this.detail === null || this.acceptedRev < 0 || this.factsUnavailable) return
     for (const [part, window] of this.wantedParts) {
       if (this.unavailableParts.has(part) || this.inflightParts.has(part) || this.partRev.get(part) === this.acceptedRev) continue
       void this.fetchPart(facts, part, window)
     }
   }
 
-  private async fetchCore(): Promise<ContextTimelineDetail | null> {
-    const facts = this.facts
-    if (facts !== undefined && !this.factsDisabled) {
-      const read = await facts.core()
-      if (read === null) return null
-      if ('missing' in read && read.missing?.includes('series') === true) return null
-      if (!('parts' in read)) {
-        this.factsDisabled = true
-        this.wantedParts.clear()
-        return read
-      }
-      return detailFromFacts(read)
-    }
+  private disableFacts(): void {
+    this.factsUnavailable = true
+    this.wantedParts.clear()
+  }
+
+  private async legacyRead(): Promise<ContextTimelineDetail | null> {
     const legacy = this.legacy
     return legacy === undefined ? null : legacy()
+  }
+
+  private async fetchCore(): Promise<{ detail: ContextTimelineDetail | null; disable: boolean }> {
+    const facts = this.facts
+    if (facts !== undefined && !this.factsUnavailable) {
+      let read: CoreRead | null = null
+      let threw = false
+      try {
+        read = await facts.core()
+      } catch (error: unknown) {
+        threw = true
+        if (error instanceof RouteError && error.status === 404) {
+          return { detail: await this.legacyRead(), disable: true }
+        }
+      }
+      if (!threw) {
+        if (read === null) {
+          const detail = await this.legacyRead()
+          return { detail, disable: detail === null }
+        }
+        if (!('parts' in read)) return { detail: read, disable: true }
+        if ('missing' in read && read.missing?.includes('series') === true) {
+          return { detail: await this.legacyRead(), disable: true }
+        }
+        return { detail: detailFromFacts(read), disable: false }
+      }
+    }
+    return { detail: await this.legacyRead(), disable: false }
   }
 
   private async fetchPart(facts: FactsFetchers, part: FactPart, window: FactWindow): Promise<void> {
@@ -550,15 +571,10 @@ export class DetailStore {
     const generation = this.generation
     this.emit()
     try {
-      const d = await this.fetchCore()
+      const read = await this.fetchCore()
       if (generation !== this.generation) return
-      if (d === null && this.facts !== undefined && !this.factsDisabled) {
-        this.factsDisabled = true
-        this.wantedParts.clear()
-        this.failures = 0
-        this.wantedRev = Math.max(this.wantedRev, this.targetRev, 0)
-        return
-      }
+      if (read.disable) this.disableFacts()
+      const d = read.detail
       if (d !== null) {
         if (d.rev >= this.acceptedRev || d.rev === this.targetRev) {
           this.detail = d
@@ -594,15 +610,8 @@ export class DetailStore {
       }
     } catch {
       if (generation === this.generation) {
-        if (this.facts !== undefined && !this.factsDisabled) {
-          this.factsDisabled = true
-          this.wantedParts.clear()
-          this.failures = 0
-          this.wantedRev = Math.max(this.wantedRev, this.targetRev, 0)
-        } else {
-          this.failed = this.detail === null
-          this.failures++
-        }
+        this.failed = this.detail === null
+        this.failures++
       }
     } finally {
       this.inFlight = false
