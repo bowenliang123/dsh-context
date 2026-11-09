@@ -1,7 +1,8 @@
 import assert from 'node:assert/strict'
 import { describe, test } from 'vitest'
 import { SKILLS_ROUTE, watchSkillCatalog } from '../../src/host/skills'
-import { connectionOf, fakeCtx, postJson } from './helpers/ctx'
+import { connectionOf, fakeCtx, OPEN_GATE, postJson, SKIP_GATE } from './helpers/ctx'
+import type { ColdReadGate } from '../../src/host/coldRead'
 import type { FakeCtx, FakeRoute } from './helpers/ctx'
 
 interface CtxSpec {
@@ -24,9 +25,10 @@ function registryOf(rows: unknown, log?: unknown[]): { list: (options: unknown) 
   }
 }
 
-function queryOf(observation: unknown, opts: { throws?: boolean; disposed?: string[] } = {}): { observeSession: (id: string) => Promise<unknown> } {
+function queryOf(observation: unknown, opts: { throws?: boolean; disposed?: string[]; log?: unknown[] } = {}): { observeSession: (id: string, options: unknown) => Promise<unknown> } {
   return {
-    observeSession: async () => {
+    observeSession: async (_id: string, options: unknown) => {
+      opts.log?.push(options)
       if (opts.throws === true) throw new Error('no such session')
       const obs = observation as Record<string, unknown>
       if (obs !== null && typeof obs === 'object' && opts.disposed !== undefined && !(Symbol.dispose in obs)) {
@@ -45,8 +47,12 @@ const ROWS = [
 const serve = (captured: FakeRoute, body: unknown = {}): Promise<Record<string, unknown>> => postJson(captured, SKILLS_ROUTE, body)
 
 function armed(spec: Omit<CtxSpec, 'connection'> = {}): FakeRoute {
+  return armedWith(OPEN_GATE, spec)
+}
+
+function armedWith(gate: ColdReadGate, spec: Omit<CtxSpec, 'connection'> = {}): FakeRoute {
   const fake = fakeCtx({ connection: connectionOf(), ...spec })
-  watchSkillCatalog(fake.ctx)
+  watchSkillCatalog(fake.ctx, gate)
   return fake.captured
 }
 
@@ -68,6 +74,24 @@ describe('skills route registration', () => {
 })
 
 describe('skills route: the session-addressed resolution', () => {
+  test('a cold session reads its view through the cold-read gate with projections off, from the durable header', async () => {
+    const observed: unknown[] = []
+    const captured = armed({
+      skills: registryOf(ROWS),
+      sessionQuery: queryOf(
+        { header: { cwd: '/repo/cold', agentPreset: 'preset-x' } },
+        { log: observed },
+      ),
+      agents: { get: () => undefined },
+      agentPresets: {
+        acquireScope: async (id?: string) => ({ key: 'scope-key', ...(id === undefined ? {} : {}) }),
+      },
+    })
+    const reply = await serve(captured, { sessionId: 'cold-1' })
+    assert.deepEqual(observed, [{ projectionMode: 'none' }], 'the observation skips every projection fold')
+    assert.deepEqual((reply.value as { skills: unknown[] }).skills.length, 2, 'the header preset still scopes the read')
+  })
+
   test('the session’s observation overrides the body cwd and feeds the preset to the scope lease', async () => {
     const listLog: unknown[] = []
     const disposed: string[] = []
@@ -75,7 +99,7 @@ describe('skills route: the session-addressed resolution', () => {
     const captured = armed({
       skills: registryOf(ROWS, listLog),
       sessionQuery: queryOf(
-        { header: { cwd: '/repo/from-session' }, projections: { values: { agentPreset: 'deep' } } },
+        { header: { cwd: '/repo/from-session', agentPreset: 'deep' } },
         { disposed },
       ),
       agents: { get: () => undefined },
@@ -221,5 +245,28 @@ describe('skills route outcomes', () => {
     const reply = await serve(armed({ skills: registry }))
     const value = reply.value as { skills: unknown[] }
     assert.equal(value.skills.length, 500)
+  })
+})
+
+
+describe('skills route cold-read gate', () => {
+  test('a shed cold read answers with the preset-less registry view and never throws', async () => {
+    const captured = armedWith(SKIP_GATE, {
+      skills: registryOf(ROWS),
+      sessionQuery: queryOf({ header: { cwd: '/repo/cold', agentPreset: 'preset-x' } }),
+      agents: { get: () => undefined },
+      agentPresets: { acquireScope: async () => ({ key: 'scope-key' }) },
+    })
+    const reply = await serve(captured, { sessionId: 'cold-1' })
+    assert.equal(reply.ok, true)
+    assert.equal((reply.value as { skills: unknown[] }).skills.length, 2, 'the registry view still serves without the observation')
+    const listLog: unknown[] = []
+    const scoped = armedWith(SKIP_GATE, {
+      skills: registryOf(ROWS, listLog),
+      sessionQuery: queryOf({ header: { cwd: '/repo/cold' } }),
+      agents: { get: () => undefined },
+    })
+    await serve(scoped, { sessionId: 'cold-2' })
+    assert.deepEqual(listLog, [{}], 'no preset and no observation leaves the default scope')
   })
 })
