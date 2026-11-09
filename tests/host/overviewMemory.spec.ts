@@ -202,6 +202,17 @@ describe('overview memory: disk cache, idle release, incremental updates', () =>
     harness.dispose()
   })
 
+  test('an idle release resets the scan window', async () => {
+    const harness = await identityBoot({ idleMs: 5, scanTtlMs: 10_000 })
+    seedIdentities(harness)
+    const first = await call(harness, { part: 'summary' })
+    const reads = harness.calls.list
+    await sleep(20)
+    await call(harness, { part: 'summary', revision: revisionOf(first) })
+    assert.ok(harness.calls.list > reads, 'the released scan was not reused')
+    harness.dispose()
+  })
+
   test('a pre-populated disk cache serves the first paint without any projection read', async () => {
     const harness = await identityBoot()
     harness.state.cachedSessions.set('a', hostSessionOf('a', { tokens: 10 }))

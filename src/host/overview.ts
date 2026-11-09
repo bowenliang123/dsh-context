@@ -1,5 +1,4 @@
 import type { Context } from '@deepseek-ai/cordis'
-import { performance } from 'node:perf_hooks'
 import type {
   BackfillCoverage,
   OverviewCoverage,
@@ -26,7 +25,6 @@ import {
   type HostRow,
   type HostSession,
   type RowFeed,
-  type ScanEntry,
   type WorkspaceState,
 } from './overviewCorpus'
 import {
@@ -41,6 +39,7 @@ import {
   windowOf,
   type Filters,
 } from './overviewAggregate'
+import { makeScanWindow, type ScanResult } from './overviewScan'
 import { asRecord } from './record'
 import { failure, mountPostRoute, readBody, reply } from './postRoute'
 
@@ -210,12 +209,6 @@ export interface OverviewRouteOptions {
   cachePath?: string
 }
 
-interface ScanResult {
-  entries: ScanEntry[]
-  coldIds: ReadonlySet<string>
-  identitiesSynced: boolean
-}
-
 export function watchOverviewRoute(
   ctx: Context,
   cost: CostSource,
@@ -226,10 +219,7 @@ export function watchOverviewRoute(
   const servedKeysMax = options.servedKeysMax ?? SERVED_KEYS_MAX
   const idleMs = options.idleMs ?? IDLE_MS
   const feed: FeedState = { revision: '', sessions: new Map(), rows: null, served: new Map(), rowsRevision: '' }
-  let scanResult: ScanResult | null = null
-  let scanAt = 0
-  let scanVersion = -1
-  let inflight: Promise<ScanResult> | null = null
+  const scanWindow = makeScanWindow(scanTtlMs)
   let materializeTail: Promise<void> = Promise.resolve()
   let identities = new Map<string, DurableIdentity | null>()
   let identitiesReady = false
@@ -251,7 +241,7 @@ export function watchOverviewRoute(
     feed.rowsRevision = ''
     warm = null
     sessionsReady = false
-    scanResult = null
+    scanWindow.reset()
   }
   const resetIdle = (): void => {
     if (idleTimer !== null) clearTimeout(idleTimer)
@@ -298,32 +288,15 @@ export function watchOverviewRoute(
         if (persistence === null || typeof persistence.stat !== 'function') return undefined
         return (persistence.stat as (id: string) => Promise<unknown>).bind(persistence)
       }
-      const awaitScan = async (): Promise<ScanResult> => {
-        const version = backfill.version()
-        if (scanResult !== null && scanVersion === version && performance.now() - scanAt < scanTtlMs) {
-          return scanResult
+      const awaitScan = (): Promise<ScanResult> => scanWindow.read(async () => {
+        const listed: unknown = await listSessions()
+        const entries = scanEntriesOf(listed, getSession)
+        const coldIds = new Set<string>()
+        for (const entry of entries) {
+          if (!entry.live) coldIds.add(entry.id)
         }
-        if (inflight !== null) return inflight
-        const promise = (async (): Promise<ScanResult> => {
-          const listed: unknown = await listSessions()
-          const entries = scanEntriesOf(listed, getSession)
-          const coldIds = new Set<string>()
-          for (const entry of entries) {
-            if (!entry.live) coldIds.add(entry.id)
-          }
-          const next: ScanResult = { entries, coldIds, identitiesSynced: false }
-          scanResult = next
-          scanAt = performance.now()
-          scanVersion = backfill.version()
-          return next
-        })()
-        inflight = promise
-        try {
-          return await promise
-        } finally {
-          inflight = null
-        }
-      }
+        return { entries, coldIds, identitiesSynced: false }
+      }, () => backfill.version())
 
       const syncIdentities = async (
         coldIds: ReadonlySet<string>,
