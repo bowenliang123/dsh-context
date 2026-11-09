@@ -1,7 +1,7 @@
 import { z } from 'zod'
 import type { SessionEvent } from '@deepseek-ai/dsh-session'
 import type { WiredProjection } from './projection'
-import { skillNameOf } from './fold'
+import { dispatchedSkillOf, skillNameOf } from './fold'
 import { addBilledUsage, copyCostUsage, durOf, tokenCountOf } from './foldMetering'
 import type { BilledUsage, UsageLike } from './foldMetering'
 import { costUsageSchema } from './timeline'
@@ -25,6 +25,7 @@ interface ToolStart {
   start: number
   day: string
   name?: string
+  transport?: true
 }
 
 export interface ActivityState {
@@ -46,6 +47,7 @@ const toolStartSchema = z.object({
   start: z.number().nonnegative(),
   day: z.string(),
   name: z.string().optional(),
+  transport: z.literal(true).optional(),
 }).strict()
 
 const activityDaySchema = z.object({
@@ -121,7 +123,7 @@ function bumpTally(
   time: number,
   cap: number,
 ): Record<string, ActivityTally> | null {
-  const prev = table?.[name]
+  const prev = table !== undefined && Object.hasOwn(table, name) ? table[name] : undefined
   if (prev !== undefined) {
     return { ...table, [name]: { n: prev.n + 1, last: Math.max(prev.last, time) } }
   }
@@ -143,11 +145,16 @@ function withTally(
   return table === null ? state : withDayEntry(state, key, { ...copyDay(prev), [field]: table })
 }
 
+function toolStartOf(state: ActivityState, callId: string): ToolStart | undefined {
+  const starts = state.toolStarts
+  return starts !== undefined && Object.hasOwn(starts, callId) ? starts[callId] : undefined
+}
+
 function withToolStart(state: ActivityState, callId: string, name: string | undefined, start: number): ActivityState {
   if (!Number.isFinite(start) || start < 0) return state
   const day = dayKeyOf(state.stepStart ?? start)
   if (day === null) return state
-  const prev = state.toolStarts?.[callId]
+  const prev = toolStartOf(state, callId)
   if (prev !== undefined && prev.start === start && prev.day === day && prev.name === name) return state
   const starts: Record<string, ToolStart | undefined> = {
     ...state.toolStarts,
@@ -160,16 +167,27 @@ function withToolStart(state: ActivityState, callId: string, name: string | unde
   return { ...state, toolStarts }
 }
 
+function markTransport(state: ActivityState, callId: string): ActivityState {
+  const prev = toolStartOf(state, callId)
+  if (prev === undefined || prev.transport === true) return state
+  return {
+    ...state,
+    toolStarts: { ...state.toolStarts, [callId]: { ...prev, transport: true } },
+  }
+}
+
 function bookToolResult(state: ActivityState, callId: string, end: number): ActivityState {
   const starts = state.toolStarts
-  const start = starts?.[callId]
+  const start = toolStartOf(state, callId)
   if (starts === undefined || start === undefined) return state
   const byKey: Record<string, ActivityDay | undefined> = state.days
   const day = byKey[start.day]
-  const timed = withDayPatch(state, start.day, {
-    toolCalls: (day?.toolCalls ?? 0) + 1,
-    toolsMs: (day?.toolsMs ?? 0) + durOf(start.start, end),
-  })
+  const timed = start.transport === true
+    ? state
+    : withDayPatch(state, start.day, {
+      toolCalls: (day?.toolCalls ?? 0) + 1,
+      toolsMs: (day?.toolsMs ?? 0) + durOf(start.start, end),
+    })
   const kept = Object.fromEntries(Object.entries(starts).filter(([id]) => id !== callId))
   const next = { ...timed }
   if (Object.keys(kept).length > 0) next.toolStarts = kept
@@ -264,8 +282,30 @@ export function applyActivity(state: ActivityState, event: SessionEvent): Activi
   }
   const eventType: string = event.type
   if (eventType === 'tool/ptc-dispatch-start') {
-    const data = event.data as { name?: unknown; arguments?: unknown } | null | undefined
-    return bookCommandRun(state, typeof data?.name === 'string' ? data.name : undefined, data?.arguments, event.time)
+    const data = event.data as { parentCallId?: unknown; subCallId?: unknown; name?: unknown; arguments?: unknown } | null | undefined
+    const subCallId = typeof data?.subCallId === 'string' && data.subCallId !== '' ? data.subCallId : undefined
+    const name = typeof data?.name === 'string' && data.name !== '' ? data.name : undefined
+    const parentCallId = typeof data?.parentCallId === 'string' && data.parentCallId !== '' ? data.parentCallId : undefined
+    const started = subCallId === undefined ? state : withToolStart(state, subCallId, name, event.time)
+    const marked = subCallId !== undefined && parentCallId !== undefined && toolStartOf(started, subCallId) !== undefined
+      ? markTransport(started, parentCallId)
+      : started
+    return bookCommandRun(marked, name, data?.arguments, event.time)
+  }
+  if (eventType === 'tool/ptc-dispatch') {
+    const data = event.data as {
+      subCallId?: unknown
+      name?: unknown
+      arguments?: unknown
+      isError?: unknown
+      content?: unknown
+    } | null | undefined
+    const subCallId = typeof data?.subCallId === 'string' && data.subCallId !== '' ? data.subCallId : undefined
+    const name = typeof data?.name === 'string' && data.name !== '' ? data.name : undefined
+    const next = subCallId === undefined ? state : bookToolResult(state, subCallId, event.time)
+    if (name !== 'skill' || data?.isError === true) return next
+    const loaded = dispatchedSkillOf(data)
+    return loaded === '' ? next : bookSkillLoad(next, loaded, event.time)
   }
   if (event.type === 'tool/result') {
     const message = (event.data as { message?: unknown } | null | undefined)?.message
@@ -331,7 +371,7 @@ export function createContextActivityDefinition(): WiredProjection<'contextActiv
         }])),
       }),
     },
-    stateVersion: 6,
+    stateVersion: 7,
   }
 }
 

@@ -342,7 +342,12 @@ const timelineStateSchema = z.object({
   stepRequestSeq: z.number().optional(),
   stepBeats: z.array(z.number()).optional(),
   stepBeatsFull: z.boolean().optional(),
-  callNames: z.record(z.string(), z.object({ name: z.string(), start: z.number(), argsRaw: z.string().optional() }).strict()),
+  callNames: z.record(z.string(), z.object({
+    name: z.string(),
+    start: z.number(),
+    argsRaw: z.string().optional(),
+    transport: z.literal(true).optional(),
+  }).strict()),
   pendingShadowedSeqs: z.array(z.number()).optional(),
   pendingShadowEventSeq: z.number().optional(),
   detailRev: z.number().int().nonnegative().optional(),
@@ -355,13 +360,14 @@ const timelineStateSchema = z.object({
   spans: z.array(timingSpanSchema),
   stepSpans: z.array(timingSpanSchema).optional(),
   pendingCodeOps: z.record(z.string(), z.array(fileOpSchema)).optional(),
+  pendingCodeStarts: z.record(z.string(), z.number()).optional(),
   toolTally: tallySchema.optional(),
   programTally: tallySchema.optional(),
   commandCalls: z.array(z.string()).optional(),
   commandCallsOverflow: z.boolean().optional(),
 }) as unknown as z.ZodType<TimelineState>
 
-export const TIMELINE_STATE_VERSION = 41
+export const TIMELINE_STATE_VERSION = 42
 
 export function createContextTimelineDefinition(
   config: Config,

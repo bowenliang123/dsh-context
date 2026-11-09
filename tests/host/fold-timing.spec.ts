@@ -4,6 +4,8 @@ import type { TimelineEvent } from '../../src/host/fold'
 import {
   assistantAttempt,
   assistantMessage,
+  codeDispatch,
+  codeDispatchStart,
   stepEnd,
   stepStart,
   toolCall,
@@ -152,6 +154,127 @@ describe('timing — tool call durations', () => {
     assert.equal(Object.keys(state.timing?.tools ?? {}).length, 16)
     assert.equal(state.timing?.tools.t0, undefined, 'the cheapest tally left the ranking')
     assert.equal(state.timing?.tools.t16?.ms, 5_000, 'the newest name, costlier than the evicted minimum, survived')
+  })
+})
+
+describe('timing — PTC sub-dispatches', () => {
+  const runCode = (seq: number, time: number): TimelineEvent => ({
+    type: 'tool/call', seq, time, data: { callId: 'rc1', name: 'run_code', arguments: '{}' },
+  })
+
+  test('a dispatch pair prices the inner call and leaves its run_code envelope out', () => {
+    const { state } = driveTimeline([
+      runCode(1, 1_000),
+      codeDispatchStart(2, { rootCallId: 'rc1', subCallId: 'rc1:ptc:1', name: 'read', arguments: { file_path: 'a.ts' }, time: 2_000 }),
+      codeDispatch(3, { rootCallId: 'rc1', subCallId: 'rc1:ptc:1', name: 'read', arguments: { file_path: 'a.ts' }, content: text('a'), time: 5_000 }),
+      toolResult(4, { callId: 'rc1', content: text('done'), time: 9_000 }),
+    ])
+    assert.deepEqual(state.timing, {
+      wallMs: 0, ttftMs: 0, genMs: 0, calls: 0, toolsMs: 3_000, toolBusyMs: 0, toolCalls: 1,
+      tools: { read: { calls: 1, ms: 3_000 } },
+    })
+    assert.deepEqual(state.toolTally, { read: 1, run_code: 1 }, 'the envelope stays the transport row')
+    assert.equal(state.pendingCodeStarts, undefined, 'the settle consumed its start')
+  })
+
+  test('a program that dispatched nothing keeps its envelope as the tool run', () => {
+    const { state } = driveTimeline([
+      runCode(1, 1_000),
+      toolResult(2, { callId: 'rc1', content: text('x'), time: 3_500 }),
+    ])
+    assert.equal(state.timing?.toolCalls, 1)
+    assert.equal(state.timing?.toolsMs, 2_500)
+    assert.deepEqual(state.timing?.tools, { run_code: { calls: 1, ms: 2_500 } })
+  })
+
+  test('a successful skill dispatch notes the loaded name; a failed one does not', () => {
+    const base = { rootCallId: 'rc1', subCallId: 'rc1:ptc:1', name: 'skill' }
+    const drive = driveTimeline([
+      runCode(1, 0),
+      codeDispatchStart(2, { ...base, arguments: { name: 'tdd' }, time: 100 }),
+      codeDispatch(3, { ...base, arguments: { name: 'tdd' }, content: text('<skill_content name="tdd">…</skill_content>'), time: 400 }),
+    ])
+    assert.deepEqual(drive.state.totals?.skills, { tdd: true })
+    const head = timelineDef({}, true).wire.view(drive.state)
+    assert.equal(head.counts?.skills, 1)
+    const fallback = driveTimeline([
+      runCode(1, 0),
+      codeDispatchStart(2, { ...base, arguments: {}, time: 100 }),
+      codeDispatch(3, { ...base, arguments: {}, content: text('<skill_content name="ponytail">…</skill_content>'), time: 400 }),
+    ])
+    assert.deepEqual(fallback.state.totals?.skills, { ponytail: true }, 'the content names the load when the arguments do not')
+    const failed = driveTimeline([
+      runCode(1, 0),
+      codeDispatchStart(2, { ...base, arguments: { name: 'tdd' }, time: 100 }),
+      codeDispatch(3, { ...base, arguments: { name: 'tdd' }, isError: true, content: text('unknown skill'), time: 400 }),
+    ])
+    assert.deepEqual(failed.state.totals?.skills, {}, 'a failed load is no load')
+    assert.deepEqual(failed.state.toolTally, { skill: 1 }, 'the tool run still tallies')
+  })
+
+  test('an unpaired dispatch settle books the name tally but no timing', () => {
+    const { state } = driveTimeline([
+      runCode(1, 0),
+      codeDispatch(2, { rootCallId: 'rc1', subCallId: 'rc1:ptc:9', name: 'read', content: text('a'), time: 500 }),
+    ])
+    assert.equal(state.timing, undefined)
+    assert.deepEqual(state.toolTally, { read: 1 })
+  })
+
+  test('dispatched starts stay bounded when the program never settles them', () => {
+    const events: TimelineEvent[] = [runCode(1, 0)]
+    for (let i = 0; i < 210; i++) {
+      events.push(codeDispatchStart(10 + i, {
+        rootCallId: 'rc1',
+        subCallId: `rc1:ptc:${i}`,
+        name: 'read',
+        arguments: {},
+        time: 10 + i,
+      }))
+    }
+    const { state } = driveTimeline(events)
+    assert.equal(Object.keys(state.pendingCodeStarts ?? {}).length, 200)
+    assert.equal(Object.hasOwn(state.pendingCodeStarts ?? {}, 'rc1:ptc:9'), false, 'the oldest start was evicted')
+    assert.equal(state.pendingCodeStarts?.['rc1:ptc:209'], 219)
+  })
+
+  test('a malformed dispatch envelope leaves the fold unchanged', () => {
+    const { def, state } = driveTimeline([runCode(1, 0)])
+    for (const event of [
+      { type: 'tool/ptc-dispatch-start', seq: 2, time: 1, data: null },
+      { type: 'tool/ptc-dispatch-start', seq: 2, time: 1, data: { rootCallId: 'rc1', subCallId: 7, name: 'read' } },
+      { type: 'tool/ptc-dispatch-start', seq: 2, time: 1, data: { rootCallId: 7, subCallId: 's', name: 'read' } },
+      { type: 'tool/ptc-dispatch', seq: 2, time: 1, data: null },
+      { type: 'tool/ptc-dispatch', seq: 2, time: 1, data: { rootCallId: 7, name: 'read' } },
+    ] as TimelineEvent[]) {
+      assertStable(state, event, def)
+    }
+    const fresh = driveTimeline([])
+    assertStable(fresh.state, {
+      type: 'tool/ptc-dispatch-start',
+      seq: 1,
+      time: Number.NaN,
+      data: { rootCallId: 'rc1', subCallId: 's', name: 'read', arguments: {} },
+    }, fresh.def)
+    const buffered = fresh.def.apply(fresh.state, {
+      type: 'tool/ptc-dispatch-start',
+      seq: 1,
+      time: Number.NaN,
+      data: { rootCallId: 'rc1', subCallId: 's', name: 'bash', arguments: { command: 'git status' } },
+    })
+    assert.equal(buffered.pendingCodeStarts, undefined, 'an unreadable start records no timing')
+    assert.equal(buffered.pendingCodeCmds?.rc1.length, 1, 'the command still buffers')
+    const envelope = driveTimeline([runCode(1, 1_000)])
+    const marked = envelope.def.apply(envelope.state, {
+      type: 'tool/ptc-dispatch-start',
+      seq: 2,
+      time: Number.NaN,
+      data: { rootCallId: 'rc1', parentCallId: 'rc1', subCallId: 's', name: 'read', arguments: {} },
+    })
+    assert.equal(marked.callNames.rc1.transport, undefined, 'an unreadable start marks no transport')
+    const settled = envelope.def.apply(marked, toolResult(3, { callId: 'rc1', content: text('x'), time: 4_000 }))
+    assert.equal(settled.timing?.toolCalls, 1, 'the envelope still counts')
+    assert.equal(settled.timing?.toolsMs, 3_000)
   })
 })
 

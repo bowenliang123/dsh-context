@@ -187,7 +187,7 @@ export interface TimelineState {
   stepBeatsFull?: boolean
   spans: TimingSpan[]
   stepSpans?: TimingSpan[]
-  callNames: Record<string, { name: string; start: number; argsRaw?: string }>
+  callNames: Record<string, { name: string; start: number; argsRaw?: string; transport?: true }>
   pendingShadowedSeqs?: number[]
   pendingShadowEventSeq?: number
   fileOps: FileOpRecord[]
@@ -201,6 +201,7 @@ export interface TimelineState {
   commandCallsOverflow?: boolean
   pendingCodeCmds?: Record<string, CommandStateRecord[]>
   pendingCodeOps?: Record<string, FileOpRecord[]>
+  pendingCodeStarts?: Record<string, number>
 }
 
 export function trimToLastTurns(requests: SlimRequestRecord[], maxTurns: number): SlimRequestRecord[] {

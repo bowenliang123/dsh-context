@@ -31,7 +31,7 @@ describe('contextActivity unit: shape', () => {
   test('the definition contract holds and both schemas accept every folded field', () => {
     const def = createContextActivityDefinition()
     assert.equal(def.key, 'contextActivity')
-    assert.equal(def.stateVersion, 6, 'the daily turns/tool/wall/per-tool/per-command tallies are the sixth shape')
+    assert.equal(def.stateVersion, 7, 'the PTC dispatch pair books its own tool run and skill load over the transport row')
     assert.deepEqual(def.init(), { days: {} })
     let state = applyActivity(def.init(), requestHeader('deepseek-v4', 'deepseek-official'))
     state = applyActivity(state, stepStart(at(0)))
@@ -49,6 +49,8 @@ describe('contextActivity unit: shape', () => {
     assert.equal(def.stateSchema.safeParse({ days: {}, model: 'm', provider: 'p', stepStart: 1 }).success, true)
     assert.equal(def.stateSchema.safeParse({ days: {}, lastTurn: 3, toolStarts: { c1: { start: 1, day: '2026-01-01' } } }).success, true)
     assert.equal(def.stateSchema.safeParse({ days: {}, toolStarts: { c1: { start: 1, day: '2026-01-01', name: 'read' } } }).success, true)
+    assert.equal(def.stateSchema.safeParse({ days: {}, toolStarts: { c1: { start: 1, day: '2026-01-01', transport: true } } }).success, true)
+    assert.equal(def.stateSchema.safeParse({ days: {}, toolStarts: { c1: { start: 1, day: '2026-01-01', transport: 'yes' } } }).success, false)
     assert.equal(def.stateSchema.safeParse({ days: {}, toolStarts: { c1: { start: -1, day: '2026-01-01' } } }).success, false)
     assert.equal(def.stateSchema.safeParse({ days: { '2026-01-01': { tokens: 0, requests: 0, turns: 1, toolCalls: 2, toolsMs: 1.5, wallMs: 2 } } }).success, true)
     assert.equal(def.stateSchema.safeParse({ days: { '2026-01-01': { tokens: 0, requests: 0, turns: 1.5 } } }).success, false)
@@ -593,6 +595,128 @@ describe('applyActivity: the per-day command table', () => {
     assert.deepEqual(capped.days['2026-01-01'].cmds, state.days['2026-01-01'].cmds, 'the 65th distinct program books nothing')
     const again = applyActivity(capped, commandCall(at(0), 'y', 'bash', { command: 'prog0' }))
     assert.equal(again.days['2026-01-01'].cmds?.prog0.n, 2, 'a booked program still grows')
+  })
+})
+
+function ptcStart(time: number, data: unknown): SessionEvent {
+  return { type: 'tool/ptc-dispatch-start', seq: 1, time, data } as never
+}
+
+function ptcDispatch(time: number, data: unknown): SessionEvent {
+  return { type: 'tool/ptc-dispatch', seq: 1, time, data } as never
+}
+
+function dispatchPair(name: string, args: unknown, content?: unknown, isError = false): SessionEvent[] {
+  const base = { rootCallId: 'rc1', parentCallId: 'rc1', subCallId: 'rc1:ptc:1', name }
+  return [
+    ptcStart(at(0) + 1_000, { ...base, arguments: args }),
+    ptcDispatch(at(0) + 2_500, { ...base, arguments: args, isError, content: content ?? [] }),
+  ]
+}
+
+describe('applyActivity: the PTC dispatch pair', () => {
+  test('a dispatch pair books its own run and tally; the enclosing run_code stays a transport row', () => {
+    let state = applyActivity({ days: {} }, stepStart(at(0)))
+    state = applyActivity(state, toolCall(at(0), 'rc1', 'run_code'))
+    for (const event of dispatchPair('read', { file_path: 'a.ts' })) state = applyActivity(state, event)
+    state = applyActivity(state, toolResultAt(at(0) + 6_000, 'rc1'))
+    const day = state.days['2026-01-01']
+    assert.equal(day.toolCalls, 1, 'the inner dispatch counts, not the transport envelope')
+    assert.equal(day.toolsMs, 1_500)
+    assert.deepEqual(day.tools, {
+      read: { n: 1, last: at(0) + 2_500 },
+      run_code: { n: 1, last: at(0) + 6_000 },
+    })
+    assert.equal(state.toolStarts, undefined, 'both pending starts were consumed')
+  })
+
+  test('a program that dispatched nothing keeps its own envelope as the run', () => {
+    let state = applyActivity({ days: {} }, toolCall(at(0), 'rc1', 'run_code'))
+    state = applyActivity(state, toolResultAt(at(0) + 2_000, 'rc1'))
+    const day = state.days['2026-01-01']
+    assert.equal(day.toolCalls, 1)
+    assert.equal(day.toolsMs, 2_000)
+    assert.deepEqual(day.tools, { run_code: { n: 1, last: at(0) + 2_000 } })
+  })
+
+  test('a dispatch folded without its call still books the inner run', () => {
+    let state = applyActivity({ days: {} }, ptcStart(at(0), { rootCallId: 'rc1', subCallId: 'rc1:ptc:1', name: 'read', arguments: {} }))
+    state = applyActivity(state, ptcDispatch(at(0) + 100, { subCallId: 'rc1:ptc:1', name: 'read', isError: false, content: [] }))
+    assert.equal(state.days['2026-01-01'].toolCalls, 1)
+    assert.equal(state.days['2026-01-01'].toolsMs, 100)
+    assert.deepEqual(state.days['2026-01-01'].tools, { read: { n: 1, last: at(0) + 100 } })
+  })
+
+  test('a successful skill dispatch books its loaded name from the arguments, the content as fallback', () => {
+    const run = (args: unknown, content: unknown, isError = false): ReturnType<typeof applyActivity> => {
+      let state: ReturnType<typeof applyActivity> = { days: {} }
+      for (const event of dispatchPair('skill', args, content, isError)) state = applyActivity(state, event)
+      return state
+    }
+    const named = run({ name: 'tdd' }, [])
+    assert.deepEqual(named.days['2026-01-01'].skills, { tdd: { n: 1, last: at(0) + 2_500 } })
+    assert.deepEqual(named.days['2026-01-01'].tools, { skill: { n: 1, last: at(0) + 2_500 } })
+    const stringified = run(JSON.stringify({ name: 'tdd' }), [])
+    assert.deepEqual(stringified.days['2026-01-01'].skills, { tdd: { n: 1, last: at(0) + 2_500 } })
+    const fallback = run({ name: 7 }, [{ type: 'text', text: '<skill_content name="ponytail">…</skill_content>' }])
+    assert.deepEqual(fallback.days['2026-01-01'].skills, { ponytail: { n: 1, last: at(0) + 2_500 } })
+    const failed = run({ name: 'tdd' }, [], true)
+    assert.equal(failed.days['2026-01-01'].skills, undefined, 'a failed load is no load')
+    assert.equal(failed.days['2026-01-01'].toolCalls, 1, 'the run itself still counts')
+    const anonymous = run({ name: 7 }, [])
+    assert.equal(anonymous.days['2026-01-01'].skills, undefined, 'an unnamable load books nothing')
+    assert.equal(anonymous.days['2026-01-01'].toolCalls, 1)
+    for (const name of ['__proto__', 'constructor']) {
+      const reserved = run({ name }, [])
+      assert.equal(reserved.days['2026-01-01'].skills?.[name].n, 1, `${name} books as an ordinary own name`)
+      assert.equal(Object.getPrototypeOf(reserved.days['2026-01-01'].skills), Object.prototype)
+      assert.equal(contextActivitySchema.safeParse(reserved).success, true)
+    }
+    let read = applyActivity({ days: {} }, ptcStart(at(0), { subCallId: 'rl', name: 'read', arguments: {} }))
+    read = applyActivity(read, ptcDispatch(at(0) + 100, {
+      subCallId: 'rl',
+      name: 'read',
+      content: [{ type: 'text', text: '<skill_content name="tdd">…</skill_content>' }],
+    }))
+    assert.equal(read.days['2026-01-01'].skills, undefined, 'only the skill tool books a load')
+    assert.deepEqual(read.days['2026-01-01'].tools, { read: { n: 1, last: at(0) + 100 } })
+  })
+
+  test('hostile or unpaired dispatch payloads stay inert', () => {
+    const state = applyActivity({ days: {} }, assistantMessage(at(0), { inputTokens: 1 }))
+    for (const event of [
+      ptcStart(at(0), null),
+      ptcStart(at(0), {}),
+      ptcStart(at(0), { name: 'read', arguments: {} }),
+      ptcStart(at(0), { subCallId: 7, name: 'read', arguments: {} }),
+      ptcStart(at(0), { subCallId: '', name: 'read', arguments: {} }),
+      ptcDispatch(at(0), null),
+      ptcDispatch(at(0), {}),
+      ptcDispatch(at(0), { name: 'read' }),
+      ptcDispatch(at(0), { subCallId: 'ghost', name: 'read' }),
+    ]) {
+      assert.ok(applyActivity(state, event) === state, JSON.stringify(event.data))
+    }
+    const unpaired = applyActivity(state, ptcDispatch(at(0), { subCallId: 'ghost', name: 'skill', arguments: { name: 'tdd' } }))
+    assert.deepEqual(unpaired.days['2026-01-01'].skills, { tdd: { n: 1, last: at(0) } }, 'a lost start still leaves the load record')
+    assert.equal(unpaired.days['2026-01-01'].toolCalls, undefined, 'but no run without a start')
+  })
+
+  test('an unusable start never blinds its envelope', () => {
+    const run = (start: SessionEvent): ReturnType<typeof applyActivity> => {
+      let state = applyActivity({ days: {} }, toolCall(at(0), 'rc1', 'run_code'))
+      state = applyActivity(state, start)
+      return applyActivity(state, toolResultAt(at(0) + 1_000, 'rc1'))
+    }
+    for (const start of [
+      ptcStart(at(0), { parentCallId: 'rc1', subCallId: 7, name: 'read', arguments: {} }),
+      ptcStart(Number.NaN, { parentCallId: 'rc1', subCallId: 'rc1:ptc:1', name: 'read', arguments: {} }),
+    ]) {
+      const day = run(start).days['2026-01-01']
+      assert.equal(day.toolCalls, 1, 'the envelope still counts')
+      assert.equal(day.toolsMs, 1_000)
+      assert.deepEqual(day.tools, { run_code: { n: 1, last: at(0) + 1_000 } })
+    }
   })
 })
 
