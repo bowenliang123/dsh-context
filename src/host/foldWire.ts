@@ -3,6 +3,7 @@ import { attachTurnSpans } from '../shared/turnSpans'
 import { copyCostUsage } from './foldMetering'
 import type { FoldBounds } from './config'
 import type { CommandStateRecord, TimelineState } from './foldState'
+import { surfaceWindowOf } from './foldState'
 
 export function serveCommand(rec: CommandStateRecord): CommandRecord {
   const copy: CommandStateRecord = { ...rec }
@@ -81,12 +82,13 @@ export function eventsOf(state: TimelineState, requests: readonly RequestRecord[
 
 function detailCollectionsOf(state: TimelineState, bounds: FoldBounds): Omit<ContextTimelineDetail, 'rev'> {
   const requests = requestRowsOf(state)
+  const window = surfaceWindowOf(state, bounds.maxNodes)
   const result: Omit<ContextTimelineDetail, 'rev'> = {
     requests,
     events: eventsOf(state, requests),
-    nodes: [],
-    droppedNodes: 0,
-    archive: state.archived.map(n => ({ ...n })),
+    nodes: window.nodes,
+    droppedNodes: window.droppedNodes,
+    archive: window.archive.map(node => ({ ...node })),
     fileOps: state.fileOps.map(o => ({ ...o })),
     ...(state.fileOpsFloor !== undefined ? { fileOpsFloor: state.fileOpsFloor } : {}),
     commands: state.commands.map(serveCommand),
@@ -94,18 +96,8 @@ function detailCollectionsOf(state: TimelineState, bounds: FoldBounds): Omit<Con
     ...(state.commandStats !== undefined ? { commandStats: { ...state.commandStats } } : {}),
     spans: state.spans.map(s => ({ ...s })),
   }
-  const overflowCount = Math.max(0, state.surface.length - bounds.maxNodes)
-  const overflow = state.surface.slice(0, overflowCount)
-  const tail = state.surface.slice(overflowCount)
-  const pinned = overflow.filter(n => n.cat === 'inject' || n.cat === 'skill')
-  result.nodes = pinned.length > 0 ? [...pinned, ...tail] : tail
-  result.droppedNodes = overflowCount - pinned.length
-  if (result.droppedNodes > 0) {
-    let floor = 0
-    for (const n of overflow) if (n.cat !== 'inject' && n.cat !== 'skill') floor = Math.max(floor, n.seq)
-    result.surfaceFloor = floor
-  }
-  if (state.archiveFloor !== undefined) result.archiveFloor = state.archiveFloor
+  if (window.surfaceFloor !== undefined) result.surfaceFloor = window.surfaceFloor
+  if (window.archiveFloor !== undefined) result.archiveFloor = window.archiveFloor
   return result
 }
 

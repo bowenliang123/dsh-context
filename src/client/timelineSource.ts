@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useSyncExternalStore } from 'react'
-import type { ContextTimeline, ContextTimelineDetail, RequestRecord, SurfaceNode } from '../shared/types'
+import type { ContextTimeline, ContextTimelineDetail, RequestRecord, SurfaceNode, SurfaceNodeWindow } from '../shared/types'
 import { DETAIL_ROUTE, FACTS_ROUTE } from './apiRoutes'
 import { subscribeInvalidations } from './invalidation'
 import { noteCostPending } from './costRefresh'
@@ -23,7 +23,7 @@ interface FactParts {
   head?: ContextTimeline
   series?: RequestRecord[]
   requests?: RequestRecord[]
-  nodes?: { nodes: SurfaceNode[]; archive: SurfaceNode[]; droppedNodes: number; surfaceFloor?: number; archiveFloor?: number }
+  nodes?: SurfaceNodeWindow
   events?: ContextTimeline['events']
   files?: { fileOps: NonNullable<ContextTimeline['fileOps']>; fileOpsFloor?: number }
   commands?: { commands: NonNullable<ContextTimeline['commands']>; commandsFloor?: number; commandStats?: ContextTimeline['commandStats'] }
@@ -47,7 +47,7 @@ function rowsOf(value: unknown): Record<string, unknown>[] | undefined {
   return value.filter((entry): entry is Record<string, unknown> => entry !== null && typeof entry === 'object')
 }
 
-function nodesPartOf(value: unknown): FactParts['nodes'] | undefined {
+function nodesPartOf(value: unknown): SurfaceNodeWindow | undefined {
   const data = asRecord(value)
   if (data === null) return undefined
   const nodes = rowsOf(data.nodes) as SurfaceNode[] | undefined
@@ -221,15 +221,7 @@ function mergeFactsInto(detail: ContextTimelineDetail, facts: FactsRead): Contex
     ...detail,
     ...(parts.requests === undefined ? {} : { requests: parts.requests }),
     ...(parts.events === undefined ? {} : { events: parts.events }),
-    ...(parts.nodes === undefined
-      ? {}
-      : {
-        nodes: parts.nodes.nodes,
-        archive: parts.nodes.archive,
-        droppedNodes: parts.nodes.droppedNodes,
-        ...(parts.nodes.surfaceFloor === undefined ? {} : { surfaceFloor: parts.nodes.surfaceFloor }),
-        ...(parts.nodes.archiveFloor === undefined ? {} : { archiveFloor: parts.nodes.archiveFloor }),
-      }),
+    ...(parts.nodes === undefined ? {} : parts.nodes),
     ...(parts.files === undefined
       ? {}
       : {

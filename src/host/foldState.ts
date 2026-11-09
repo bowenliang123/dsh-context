@@ -1,4 +1,4 @@
-import type { Category, CommandRecord, CommandStats, ContextEventRecord, FileOpRecord, SessionCostUsage, SurfaceNode, SystemPromptNode, TimingSpan, TimingTotals } from '../shared/types'
+import type { Category, CommandRecord, CommandStats, ContextEventRecord, FileOpRecord, SessionCostUsage, SurfaceNode, SurfaceNodeWindow, SystemPromptNode, TimingSpan, TimingTotals } from '../shared/types'
 import type { SlimRequestRecord } from '../shared/types'
 import type { FoldBounds } from './config'
 
@@ -202,6 +202,29 @@ export interface TimelineState {
   pendingCodeCmds?: Record<string, CommandStateRecord[]>
   pendingCodeOps?: Record<string, FileOpRecord[]>
   pendingCodeStarts?: Record<string, number>
+}
+
+export function surfaceWindowOf(state: TimelineState, tail: number): SurfaceNodeWindow {
+  const overflowCount = Math.max(0, state.surface.length - tail)
+  const overflow = state.surface.slice(0, overflowCount)
+  const kept = state.surface.slice(overflowCount)
+  const pinned = overflow.filter(node => node.cat === 'inject' || node.cat === 'skill')
+  const nodes = pinned.length > 0 ? [...pinned, ...kept] : kept
+  const droppedNodes = overflowCount - pinned.length
+  const window: SurfaceNodeWindow = {
+    nodes,
+    droppedNodes,
+    archive: state.archived,
+  }
+  if (droppedNodes > 0) {
+    let floor = 0
+    for (const node of overflow) {
+      if (node.cat !== 'inject' && node.cat !== 'skill') floor = Math.max(floor, node.seq)
+    }
+    window.surfaceFloor = floor
+  }
+  if (state.archiveFloor !== undefined) window.archiveFloor = state.archiveFloor
+  return window
 }
 
 export function trimToLastTurns(requests: SlimRequestRecord[], maxTurns: number): SlimRequestRecord[] {

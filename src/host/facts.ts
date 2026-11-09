@@ -8,10 +8,11 @@ import { type ColdReadGate, makeColdReadGate } from './coldRead'
 import { makeFoldCache } from './foldCache'
 import { buildTimelineHead, eventsOf, requestRowsOf, serveCommand } from './foldWire'
 import { withCost, type CostSource } from './cost'
-import { TIMING_SPANS_MAX, type TimelineState } from './foldState'
+import { TIMING_SPANS_MAX, surfaceWindowOf, type TimelineState } from './foldState'
 import { failure, leaseOf, mountPostRoute, observeOf, readBody, reply, revisionOf } from './postRoute'
 import { asRecord } from './record'
 import { serviceIdentityOf } from './serviceIdentity'
+import type { SurfaceNodeWindow } from '../shared/types'
 
 export const FACTS_ROUTE = '/api/dsh-context/facts'
 
@@ -141,28 +142,13 @@ function windowFloorOf(items: readonly { seq: number }[], tail: number, floor: n
   return Math.max(floor ?? 0, items[items.length - tail - 1].seq)
 }
 
-function surfacePartOf(state: TimelineState, tail: number): Record<string, unknown> {
-  const surface = state.surface
-  const overflowCount = Math.max(0, surface.length - tail)
-  const overflow = overflowCount > 0 ? surface.slice(0, overflowCount) : []
-  const kept = surface.slice(overflowCount)
-  const pinned = overflow.filter(node => node.cat === 'inject' || node.cat === 'skill')
-  const nodes = pinned.length > 0 ? [...pinned, ...kept] : kept
-  const droppedNodes = overflowCount - pinned.length
-  const part: Record<string, unknown> = {
-    nodes: nodes.map(node => ({ ...node })),
-    droppedNodes,
-    archive: state.archived.map(node => ({ ...node })),
+function surfacePartOf(state: TimelineState, tail: number): SurfaceNodeWindow {
+  const window = surfaceWindowOf(state, tail)
+  return {
+    ...window,
+    nodes: window.nodes.map(node => ({ ...node })),
+    archive: window.archive.map(node => ({ ...node })),
   }
-  if (droppedNodes > 0) {
-    let floor = 0
-    for (const node of overflow) {
-      if (node.cat !== 'inject' && node.cat !== 'skill') floor = Math.max(floor, node.seq)
-    }
-    part.surfaceFloor = floor
-  }
-  if (state.archiveFloor !== undefined) part.archiveFloor = state.archiveFloor
-  return part
 }
 
 function detailPartsOf(state: TimelineState, parts: ReadonlySet<string>, window: FactWindow): Record<string, unknown> {

@@ -196,7 +196,15 @@ export interface PluginSettings {
 
 export type SettingsField = keyof PluginSettings
 
-export interface Snapshot {
+export interface SurfaceNodeWindow {
+  nodes: SurfaceNode[]
+  droppedNodes: number
+  archive: SurfaceNode[]
+  surfaceFloor?: number
+  archiveFloor?: number
+}
+
+export interface Snapshot extends SurfaceNodeWindow {
   ok: boolean
   unsupported?: {
     current: string
@@ -238,11 +246,6 @@ export interface Snapshot {
   cost?: SessionCostUsage
   timing?: TimingTotals
   systems?: SystemPromptNode[]
-  nodes: SurfaceNode[]
-  droppedNodes: number
-  archive: SurfaceNode[]
-  surfaceFloor?: number
-  archiveFloor?: number
   fileOps?: FileOpRecord[]
   fileOpsFloor?: number
   commands?: CommandRecord[]
@@ -284,16 +287,11 @@ export interface SessionCostRead {
   misses?: CostPriceMiss[]
 }
 
-export interface ContextTimelineDetail {
+export interface ContextTimelineDetail extends SurfaceNodeWindow {
   rev: number
   head?: ContextTimeline
   requests: RequestRecord[]
   events: ContextEventRecord[]
-  nodes: SurfaceNode[]
-  droppedNodes: number
-  archive: SurfaceNode[]
-  surfaceFloor?: number
-  archiveFloor?: number
   fileOps?: FileOpRecord[]
   fileOpsFloor?: number
   commands?: CommandRecord[]
