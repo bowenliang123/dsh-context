@@ -515,7 +515,7 @@ describe('EventList', () => {
     const events: ContextEventRecord[] = [
       ev({ seq: 1, time, kind: 'inject', form: 'notice', tokens: 50, turn: 1, step: 1 }),
       ev({ seq: 2, time, kind: 'model', from: 'a', to: 'b' }),
-      ev({ seq: 3, time, kind: 'compaction', count: 2, tokens: 100 }),
+      ev({ seq: 3, time, kind: 'compaction', count: 2, tokens: 100, grossTokens: 102 }),
       ev({ seq: 4, time, kind: 'mystery' as never }),
       ev({ seq: 5, time, kind: 'inject', tokens: 0 }),
     ]
@@ -534,6 +534,7 @@ describe('EventList', () => {
     const down = query(rows[2], '.lc-event-tokens')
     assert.ok(down.className.includes('lc-down'))
     assert.equal(down.textContent, '−100')
+    assert.equal(down.getAttribute('title'), 'Removed 102; 100 net after the summary replacement')
     assert.equal(queryAll(rows[2], '.lc-event-at').length, 0)
 
     assert.ok(query(rows[3], '.lc-event-icon svg') instanceof SVGElement)
@@ -548,6 +549,12 @@ describe('EventList', () => {
     assert.equal(up.textContent, '+50')
     assert.equal(query(rows[4], '.lc-event-at').textContent, 'T1 S1')
     assert.equal(query(rows[4], '.lc-event-time').textContent, fmtTime(time))
+    await m.unmount()
+  })
+
+  test('equal gross and net tokens omit the tooltip', async () => {
+    const m = await mount(h(EventList, { events: [ev({ seq: 1, kind: 'compaction', tokens: 60, grossTokens: 60 })] }))
+    assert.equal(query(m.container, '.lc-event-tokens').getAttribute('title'), null)
     await m.unmount()
   })
 

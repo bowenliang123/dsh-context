@@ -1,4 +1,4 @@
-import type { ContextHeaders, ContextTimeline, HeaderRecord, SurfaceNode, SystemPromptNode } from '../shared/types'
+import type { ContextHeaders, HeaderRecord, SurfaceNode, SystemPromptNode } from './types'
 
 export interface Assembled {
   live: boolean
@@ -7,6 +7,15 @@ export interface Assembled {
   nodes: SurfaceNode[]
   missingLive: number
   approximate: boolean
+}
+
+export interface AssembleSource {
+  nodes: SurfaceNode[]
+  archive: SurfaceNode[]
+  systems?: SystemPromptNode[]
+  droppedNodes?: number
+  surfaceFloor?: number
+  archiveFloor?: number
 }
 
 export function headerAt(headers: ContextHeaders | null, seq: number | null): HeaderRecord | null {
@@ -19,7 +28,7 @@ export function headerAt(headers: ContextHeaders | null, seq: number | null): He
 }
 
 export function systemAt(
-  data: ContextTimeline,
+  data: Pick<AssembleSource, 'systems'>,
   header: HeaderRecord | null,
   seq: number | null,
 ): SystemPromptNode | null {
@@ -37,7 +46,7 @@ export function systemAt(
     : null
 }
 
-export function assemble(data: ContextTimeline, headers: ContextHeaders | null, seq: number | null): Assembled {
+export function assemble(data: AssembleSource, headers: ContextHeaders | null, seq: number | null): Assembled {
   const live = seq === null
   let nodes: SurfaceNode[]
   if (live) {
@@ -54,10 +63,11 @@ export function assemble(data: ContextTimeline, headers: ContextHeaders | null, 
   }
   nodes.sort((a, b) => a.seq - b.seq)
 
+  const droppedNodes = data.droppedNodes ?? 0
   let missingLive = 0
-  if (data.droppedNodes > 0) {
+  if (droppedNodes > 0) {
     if (live || (data.surfaceFloor !== undefined && seq > data.surfaceFloor)) {
-      missingLive = data.droppedNodes
+      missingLive = droppedNodes
     }
   }
   const approximate = !live

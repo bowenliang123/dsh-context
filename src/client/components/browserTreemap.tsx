@@ -1,5 +1,5 @@
 import { useRef, useState, type CSSProperties, type ReactElement } from 'react'
-import type { Assembled } from '../assemble'
+import type { Assembled } from '../../shared/assemble'
 import { CAT_COLOR } from '../categories'
 import type { ViewKit } from '../viewkit'
 import { mapOf, squarify, type MapBlock, type MapCat } from '../treemap'

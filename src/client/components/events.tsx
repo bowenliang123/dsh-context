@@ -135,7 +135,12 @@ export function makeEventList(kit: ViewKit): (props: EventListProps) => ReactEle
               )}
               {at !== null ? <span className="lc-event-at">{at}</span> : null}
               {ev.tokens ? (
-                <span className={'lc-event-tokens' + (ev.kind === 'inject' ? ' lc-up' : ' lc-down')}>
+                <span
+                  className={'lc-event-tokens' + (ev.kind === 'inject' ? ' lc-up' : ' lc-down')}
+                  title={ev.grossTokens !== undefined && ev.grossTokens !== ev.tokens
+                    ? t('ev.compactionGross', { gross: fmt(ev.grossTokens), net: fmt(ev.tokens) })
+                    : undefined}
+                >
                   {(ev.kind === 'inject' ? '+' : '−') + fmt(ev.tokens)}
                 </span>
               ) : null}

@@ -1,7 +1,7 @@
 import { lruTouch } from '../boundedCache'
 import { trimRetentionMap } from '../retention'
-import { assemble } from '../assemble'
-import type { Assembled } from '../assemble'
+import { assemble } from '../../shared/assemble'
+import type { Assembled } from '../../shared/assemble'
 import type { ContextHeaders, ContextTimeline } from '../../shared/types'
 
 const derived = new WeakMap<object, Map<string, unknown>>()

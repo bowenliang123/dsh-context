@@ -281,7 +281,13 @@ function applySurface(
       if (shadowEventSeq !== undefined) {
         const removedSum = removed.reduce((sum, n) => sum + n.tokens, 0)
         const i = st.events.findIndex(e => e.seq === shadowEventSeq)
-        if (i >= 0) st.events[i] = { ...st.events[i], tokens: Math.max(0, removedSum - node.tokens) }
+        if (i >= 0) {
+          st.events[i] = {
+            ...st.events[i],
+            tokens: Math.max(0, removedSum - node.tokens),
+            ...(st.events[i].kind === 'compaction' ? { grossTokens: removedSum } : {}),
+          }
+        }
       }
       return node
     }

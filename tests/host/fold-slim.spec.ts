@@ -2,7 +2,7 @@ import assert from 'node:assert/strict'
 import { describe, test } from 'vitest'
 import { resolveBounds, type FoldBounds } from '../../src/host/config'
 import { applyTimeline, type TimelineEvent } from '../../src/host/fold'
-import { createTimelineState, deriveHeadState, noteCommandCall, trimState, trimHeadState, type TimelineState } from '../../src/host/foldState'
+import { archiveWindowOf, createTimelineState, deriveHeadState, noteCommandCall, trimState, trimHeadState, type TimelineState } from '../../src/host/foldState'
 import { jobRegistered, jobSettled, planMode } from './helpers/events'
 
 const FULL: FoldBounds = resolveBounds({})
@@ -63,7 +63,7 @@ describe('head state slimming', () => {
     assert.equal(derived.commandCalls?.at(-1), 'sub-call')
   })
 
-  test('non-head trim still ages the archive window and records the floor', () => {
+  test('the fold ages out removals before the oldest request; the payload adds the transport window', () => {
     const st = createTimelineState()
     st.requests.push({ seq: 10, time: 1, total: 1 })
     st.archived.push(
@@ -72,8 +72,11 @@ describe('head state slimming', () => {
       { seq: 3, cat: 'user', tokens: 1, gone: 12 },
     )
     trimState(st, { ...FULL, maxArchiveNodes: 1 })
-    assert.deepEqual(st.archived.map(n => n.seq), [3])
+    assert.deepEqual(st.archived.map(n => n.seq), [3], 'gone 5/6 <= oldest retained request seq 10')
     assert.equal(st.archiveFloor, 6)
+    const window = archiveWindowOf(st, 1)
+    assert.deepEqual(window.archive.map(n => n.seq), [3])
+    assert.equal(window.archiveFloor, 6)
     const capped = createTimelineState()
     capped.requests.push({ seq: 0, time: 1, total: 1 })
     capped.archived.push(
@@ -82,18 +85,40 @@ describe('head state slimming', () => {
       { seq: 3, cat: 'user', tokens: 1, gone: 7 },
     )
     trimState(capped, { ...FULL, maxArchiveNodes: 2 })
-    assert.deepEqual(capped.archived.map(n => n.seq), [2, 3])
-    assert.equal(capped.archiveFloor, 5)
+    assert.deepEqual(capped.archived.map(n => n.seq), [1, 2, 3], 'every removal postdates the oldest request')
+    const cappedWindow = archiveWindowOf(capped, 2)
+    assert.deepEqual(cappedWindow.archive.map(n => n.seq), [2, 3])
+    assert.equal(cappedWindow.archiveFloor, 5)
+    const floored = createTimelineState()
+    floored.requests.push({ seq: 0, time: 1, total: 1 })
+    floored.archiveFloor = 4
+    floored.archived.push(
+      { seq: 1, cat: 'user', tokens: 1, gone: 5 },
+      { seq: 2, cat: 'user', tokens: 1, gone: 6 },
+    )
+    const flooredWindow = archiveWindowOf(floored, 1)
+    assert.deepEqual(flooredWindow.archive.map(n => n.seq), [2])
+    assert.equal(flooredWindow.archiveFloor, 5, 'the payload floor takes the max of the fold and window floors')
+    const floorOnly = createTimelineState()
+    floorOnly.archiveFloor = 4
+    floorOnly.archived.push(
+      { seq: 1, cat: 'user', tokens: 1 },
+      { seq: 2, cat: 'user', tokens: 1 },
+    )
+    const floorOnlyWindow = archiveWindowOf(floorOnly, 1)
+    assert.deepEqual(floorOnlyWindow.archive.map(n => n.seq), [2])
+    assert.equal(floorOnlyWindow.archiveFloor, 4, 'a gone-less drop keeps the fold floor')
     const floorless = createTimelineState()
     floorless.archived.push({ seq: 1, cat: 'user', tokens: 1 }, { seq: 2, cat: 'user', tokens: 1 })
     trimState(floorless, { ...FULL, maxArchiveNodes: 1 })
-    assert.deepEqual(floorless.archived.map(n => n.seq), [2])
-    assert.equal(floorless.archiveFloor, undefined)
+    const floorlessWindow = archiveWindowOf(floorless, 1)
+    assert.deepEqual(floorlessWindow.archive.map(n => n.seq), [2])
+    assert.equal(floorlessWindow.archiveFloor, undefined)
     const unaged = createTimelineState()
     unaged.requests.push({ seq: 10, time: 1, total: 1 })
     unaged.archived.push({ seq: 1, cat: 'user', tokens: 1 })
     trimState(unaged, { ...FULL, maxArchiveNodes: 2 })
-    assert.deepEqual(unaged.archived.map(n => n.seq), [1], 'a `gone`-less entry never ages out by request seq')
+    assert.deepEqual(archiveWindowOf(unaged, 2).archive.map(n => n.seq), [1], 'a `gone`-less entry never ages out by request seq')
   })
 
   test('job events bump the detail revision when the head command row was trimmed', () => {

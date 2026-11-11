@@ -483,6 +483,7 @@ export interface ContextEventRecord {
   kind: 'compaction' | 'prune' | 'inject' | 'model' | 'mode'
   form?: string
   tokens?: number
+  grossTokens?: number
   count?: number
   sub?: string
   name?: string

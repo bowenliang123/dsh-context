@@ -10,7 +10,7 @@ import type { ContextSettings } from '../settings'
 import { contextBreakdownOf, contextPressureOf, conversationNodesOf, headersOf, imageLoaderOf, projectionOf, seatKeyOf, seatOf, sessionAddressOf, workspaceOf } from '../services'
 import { makeContentFetcher, makeHeaderFetcher, useHistoryFace } from '../historyPage'
 import { useSessionDetailWarm } from '../prefetch'
-import { useTimelineSource } from '../timelineSource'
+import { makeDeltaFetcher, useTimelineSource } from '../timelineSource'
 import type { ViewKit } from '../viewkit'
 import { useConversationSurface } from './useConversationSurface'
 import { makeContextBrowser } from './browser'
@@ -91,6 +91,10 @@ export function makeContextModal(
         : undefined),
       [ctx, sessionId, historyFace],
     )
+    const fetchDelta = useMemo(
+      () => (sessionId !== '' ? makeDeltaFetcher(sessionId) : undefined),
+      [sessionId],
+    )
 
     const close = useCallback(() => {
       if (sessionId === '') return
@@ -158,6 +162,7 @@ export function makeContextModal(
                     convNodes={convNodes}
                     fetchContent={fetchContent}
                     fetchHeader={fetchHeader}
+                    fetchDelta={fetchDelta}
                     loadImage={loadImage}
                     openAttachment={openAttachment}
                     hoverKey={hoverCat}

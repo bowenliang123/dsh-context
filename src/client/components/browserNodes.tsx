@@ -1,6 +1,6 @@
 import type { ReactElement, ReactNode } from 'react'
 import type { Category, SurfaceNode } from '../../shared/types'
-import type { Assembled } from '../assemble'
+import type { Assembled } from '../../shared/assemble'
 import type { ConversationNodeLike } from '../services'
 import type { AttachmentKit } from './attachments'
 import type { RichKit } from './richText'

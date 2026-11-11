@@ -1,10 +1,13 @@
 import { useEffect, useMemo, useSyncExternalStore } from 'react'
-import type { ContextTimeline, ContextTimelineDetail, RequestRecord, SurfaceNode, SurfaceNodeWindow } from '../shared/types'
-import { DETAIL_ROUTE, FACTS_ROUTE } from './apiRoutes'
+import type { ContextTimeline, ContextTimelineDetail, HeaderRecord, HeaderTool, RequestRecord, SurfaceNode, SurfaceNodeWindow, SystemPromptNode } from '../shared/types'
+import { CATS } from '../shared/categories'
+import type { ContextDelta } from '../shared/delta'
+import type { IncrementCat } from '../shared/increment'
+import { DELTA_ROUTE, DETAIL_ROUTE, FACTS_ROUTE } from './apiRoutes'
 import { subscribeInvalidations } from './invalidation'
 import { noteCostPending } from './costRefresh'
 import { makeRetentionCache } from './retention'
-import { postRoute, RouteError } from './route'
+import { postRoute, postRouteQuietly, RouteError } from './route'
 import type { SessionStandardProps } from './services'
 import { asRecord, collectionsOf, projectionOf, timelineOf } from './services'
 
@@ -142,6 +145,76 @@ export function makeDetailFetcher(
 ): (() => Promise<ContextTimelineDetail | null>) | undefined {
   if (sessionId === '') return undefined
   return () => postRoute(DETAIL_ROUTE, { sessionId }, detailOf, { label: 'detail' })
+}
+
+export type DeltaFetcher = (seq: number | null, baseSeq: number | null) => Promise<ContextDelta | null>
+
+function countRecordOf(value: unknown): Record<IncrementCat, number> | null {
+  const record = asRecord(value)
+  if (record === null) return null
+  const out = {} as Record<IncrementCat, number>
+  for (const cat of CATS) {
+    const n = numOf(record[cat.key])
+    if (n === undefined) return null
+    out[cat.key] = n
+  }
+  return out
+}
+
+function nullableOf(value: unknown): Record<string, unknown> | null | undefined {
+  if (value === null) return null
+  return asRecord(value) ?? undefined
+}
+
+export function deltaOf(value: unknown): ContextDelta | null {
+  const data = asRecord(value)
+  if (data === null) return null
+  const added = rowsOf(data.added) as SurfaceNode[] | undefined
+  const viewNodes = rowsOf(data.viewNodes) as SurfaceNode[] | undefined
+  const viewHeader = nullableOf(data.viewHeader)
+  const viewSystem = nullableOf(data.viewSystem)
+  const system = nullableOf(data.system)
+  const tools = rowsOf(data.tools) as HeaderTool[] | undefined
+  const header = nullableOf(data.header)
+  const counts = countRecordOf(data.counts)
+  const tokens = countRecordOf(data.tokens)
+  const removedCounts = countRecordOf(data.removedCounts)
+  const tokenUp = countRecordOf(data.tokenUp)
+  const tokenDown = countRecordOf(data.tokenDown)
+  const items = numOf(data.items)
+  const total = numOf(data.total)
+  if (added === undefined || viewNodes === undefined
+    || viewHeader === undefined || viewSystem === undefined || system === undefined
+    || tools === undefined || header === undefined
+    || counts === null || tokens === null || removedCounts === null
+    || tokenUp === null || tokenDown === null
+    || items === undefined || total === undefined) return null
+  return {
+    added,
+    viewNodes,
+    viewHeader: viewHeader as HeaderRecord | null,
+    viewSystem: viewSystem as SystemPromptNode | null,
+    system: system as SystemPromptNode | null,
+    tools,
+    header: header as HeaderRecord | null,
+    counts,
+    tokens,
+    removedCounts,
+    tokenUp,
+    tokenDown,
+    items,
+    total,
+  }
+}
+
+export function makeDeltaFetcher(sessionId: string): DeltaFetcher | undefined {
+  if (sessionId === '') return undefined
+  return (seq, baseSeq) => postRouteQuietly(
+    DELTA_ROUTE,
+    { sessionId, seq, baseSeq },
+    deltaOf,
+    { label: 'delta' },
+  )
 }
 
 type CoreRead = FactsRead | ContextTimelineDetail

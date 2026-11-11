@@ -286,8 +286,10 @@ function richState(): TimelineState {
     { seq: 4, cat: 'inject', tokens: 4 },
     { seq: 5, cat: 'tool', tokens: 5 },
   ]
-  state.archived = [{ seq: 2, cat: 'tool', tokens: 2, gone: 6 }]
-  state.archiveFloor = 2
+  state.archived = [
+    { seq: 1, cat: 'tool', tokens: 1, gone: 2 },
+    { seq: 2, cat: 'tool', tokens: 2, gone: 6 },
+  ]
   state.requests = [{ seq: 5, time: 10, total: 5, turn: 1, step: 2, prompt: 4, system: 1, tools: 1, user: 1, inject: 0, assistant: 1, tool: 1 } as never]
   state.events = [{ seq: 4, time: 9, kind: 'inject', form: 'context', tokens: 4 }]
   state.fileOps = [{ seq: 5, path: 'x.ts', kind: 'read', tool: 'read', err: false, added: 0, removed: 0 }]

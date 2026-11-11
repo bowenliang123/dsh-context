@@ -216,8 +216,8 @@ describe('surfaceOp variants', () => {
       userMessage(5, text('bbbbbbbb'), undefined, { surfaceOp: { op: 'replace', startSeq: 1, endSeq: 2 } }),
     ])
     assert.deepEqual(
-      [state.surface.map(n => n.seq), state.sums.user, state.archived.map(n => [n.seq, n.gone]), state.events[0].tokens],
-      [[5, 3], 22, [[1, 5], [2, 5]], 14],
+      [state.surface.map(n => n.seq), state.sums.user, state.archived.map(n => [n.seq, n.gone]), state.events[0].tokens, state.events[0].grossTokens],
+      [[5, 3], 22, [[1, 5], [2, 5]], 14, 24],
       'removed nodes archived as stamped copies, the replacement lands at the replaced position, the metering row rewritten net-freed',
     )
     assertPlainJson(state)
@@ -227,6 +227,7 @@ describe('surfaceOp variants', () => {
       userMessage(3, text('x'.repeat(400)), undefined, { surfaceOp: { op: 'replace', startSeq: 1, endSeq: 1 } }),
     ]).state
     assert.equal(clamped.events[0].tokens, 0)
+    assert.equal(clamped.events[0].grossTokens, undefined, 'a prune has no summary replacement')
     assert.equal(clamped.sums.user, 108)
   })
 
@@ -571,7 +572,7 @@ describe('buildTimelineView serving window', () => {
     assert.equal(view.surfaceFloor, 3, 'the floor is the newest unserved non-inject seq')
   })
 
-  test('without overflow the served nodes are a plain tail copy; no floors ride, and an existing archiveFloor passes through', () => {
+  test('without overflow the served nodes are a plain tail copy; no floors ride, and the payload derives the archive floor', () => {
     const { state, view } = driveTimeline([
       userMessage(1, [{ type: 'text', text: 'a' }]),
       userMessage(2, [{ type: 'text', text: 'b' }]),
@@ -582,8 +583,12 @@ describe('buildTimelineView serving window', () => {
     assert.equal('surfaceFloor' in view, false)
     assert.equal('archiveFloor' in view, false)
     const archived = createTimelineState()
-    archived.archiveFloor = 7
-    assert.equal(timelineDef({}).wire.view(archived).archiveFloor, 7)
+    archived.requests.push({ seq: 5, time: 1, total: 0 })
+    archived.archived.push(
+      { seq: 1, cat: 'user', tokens: 1, gone: 2 },
+      { seq: 2, cat: 'user', tokens: 1, gone: 6 },
+    )
+    assert.equal(timelineDef({}).wire.view(archived).archiveFloor, 2)
   })
 
   test('an overflow made only of injects drops nothing and sets no floor', () => {

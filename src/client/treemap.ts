@@ -1,5 +1,5 @@
 import type { Category, SurfaceNode } from '../shared/types'
-import type { Assembled } from './assemble'
+import type { Assembled } from '../shared/assemble'
 import { MESSAGE_CATS } from './categories'
 import type { Translate } from './i18n'
 import { formLabelOf } from './labels'

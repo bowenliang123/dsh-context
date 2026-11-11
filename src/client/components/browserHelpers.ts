@@ -1,4 +1,4 @@
-import type { Assembled } from '../assemble'
+import type { Assembled } from '../../shared/assemble'
 import type { Category, RequestRecord, SurfaceNode } from '../../shared/types'
 import type { DefaultDeltaBase } from '../settings'
 import type { RowKind } from './browserNodes'

@@ -1,14 +1,13 @@
 import { useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type ReactElement, type ReactNode } from 'react'
 import { assembleCached } from './derivedCache'
-import { UNKNOWN_TOOL_SOURCE, type Category, type ContextHeaders, type ContextTimeline, type HeaderRecord, type HeaderTool, type RequestRecord, type SurfaceNode, type SystemPromptNode } from '../../shared/types'
+import { UNKNOWN_TOOL_SOURCE, type Category, type HeaderRecord, type HeaderTool, type RequestRecord, type SurfaceNode, type SystemPromptNode } from '../../shared/types'
 import { CATS, CAT_COLOR, partsOf } from '../categories'
 import { dnaBaseLabel, dnaOf } from '../dna'
 import type { DnaItem } from '../dna'
-import type { ContentFetcher, ConversationNodeLike, HeaderFetcher } from '../services'
+import type { ConversationNodeLike } from '../services'
 import type { ContextSettings, DefaultDeltaBase, DefaultToolSort } from '../settings'
 import type { ViewKit } from '../viewkit'
 import { IconBrowse } from '../primitives'
-import type { DetailState } from '../timelineSource'
 import { makeDetailNote } from './detailNote'
 import { makeNodeText } from './nodes'
 import { turnStepsOf } from './trendModel'
@@ -20,47 +19,21 @@ import type { NodeRow } from './browserRows'
 import { makeAttachmentSection } from './attachments'
 import { makeRichText } from './richText'
 import type { StackedBarProps } from './stackedBar'
-import type { AttachmentOpener, ImageLoader } from '../services'
 import { TextSection, schemaTextOf, RowToolbar, ToolSchema } from './browserToolCard'
 import { revealRowInCard } from '../revealScroll'
 import { NodeContent, byCatOf, msgKindsOf } from './browserNodes'
 import type { RowKind } from './browserNodes'
 import { DNA_MIN_BAND, STEP_PICK_MAX, baseRequestOf, countOf, findRowByKey, nodeEstimateSize, safeIdPart, stepStampOf } from './browserHelpers'
-import type { CatFocus } from './browserHelpers'
 export type { CatFocus } from './browserHelpers'
 export { stepStampOf } from './browserHelpers'
 import { useLinkedToggle } from './useLinkedToggle'
-import { incrementHas, incrementOf } from './browserIncrement'
-import type { IncrementCat } from './browserIncrement'
+import { incrementHas, incrementOf } from '../../shared/increment'
+import type { IncrementCat } from '../../shared/increment'
 import { MapIcon, makeBrowserTreemap } from './browserTreemap'
 import type { MapBlock } from '../treemap'
-
-export interface ContextBrowserProps {
-  locale?: string
-  data: ContextTimeline
-  headers: ContextHeaders | null
-  convNodes?: readonly ConversationNodeLike[]
-  fetchContent?: ContentFetcher
-  fetchHeader?: HeaderFetcher
-  previewSeq?: number | null
-  pinSeq?: number | null
-  dna?: boolean
-  onDnaChange?: (on: boolean) => void
-  delta?: boolean
-  onDeltaChange?: (on: boolean) => void
-  nodeFocus?: { step: number | 'live'; key: string; cat: Category | 'system' | 'tools' } | null
-  onNodeFocusHandled?: () => void
-  catFocus?: CatFocus | null
-  onCatFocusHandled?: () => void
-  hoverKey?: string | null
-  onHoverKey?: (key: string | null) => void
-  onOpenCat?: (cat: string | null) => void
-  loadImage?: ImageLoader
-  openAttachment?: AttachmentOpener
-  detailState?: DetailState
-  onDetailRetry?: () => void
-  session?: string
-}
+import type { ContextBrowserProps } from './browserProps'
+import { useBrowserDelta } from './useBrowserDelta'
+export type { ContextBrowserProps } from './browserProps'
 
 export function makeContextBrowser(
   kit: ViewKit,
@@ -242,15 +215,30 @@ export function makeContextBrowser(
     const linkKey = linked && props.hoverKey !== null && props.hoverKey !== 'free'
       ? props.hoverKey
       : null
-    const view = useMemo(() => assembleCached(data, headers, seq), [data, headers, seq])
-
     const refReq = baseRequestOf(requests, req, deltaBase)
     const hasBase = requests.length > 0
+    const fetchDelta = props.fetchDelta
+    const baseSeq = refReq === null ? null : refReq.seq
+    const localView = useMemo(() => assembleCached(data, headers, seq), [data, headers, seq])
     const prevView = useMemo(() => (refReq !== null ? assembleCached(data, headers, refReq.seq) : null), [data, headers, refReq])
+    const localDiff = useMemo(() => incrementOf(localView, prevView), [localView, prevView])
+    const deltaRead = useBrowserDelta({
+      fetchDelta,
+      seq,
+      baseSeq,
+      session: props.session,
+      revision: data.detailRev ?? 0,
+      localView,
+      prevView,
+      localDiff,
+    })
+    const view = deltaRead.view ?? localView
     const byCat = useMemo(() => byCatOf(view), [view])
-    const diff = useMemo(() => incrementOf(view, prevView), [view, prevView])
+    const diff = deltaRead.diff
     const inc = delta ? diff : null
     const badges = hasBase ? diff : null
+    const approximate = deltaRead.approximate
+    const deltaPending = deltaRead.pending
     const shownView = inc !== null ? { ...view, system: inc.system, header: inc.header, nodes: inc.nodes } : view
     const shownByCat = inc !== null ? inc.byCat : byCat
 
@@ -878,7 +866,10 @@ export function makeContextBrowser(
           {view.missingLive > 0
             ? <div className="lc-br-note">{t('browser.missingLive', { n: view.missingLive })}</div>
             : null}
-          {view.approximate
+          {deltaPending
+            ? <div className="lc-br-note">{t('browser.deltaPending')}</div>
+            : null}
+          {approximate
             ? <div className="lc-br-note">{t('browser.approx')}</div>
             : null}
           {props.detailState === 'loading'

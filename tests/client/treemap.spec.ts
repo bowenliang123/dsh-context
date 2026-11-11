@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import { describe, test, afterEach, vi } from 'vitest'
 import { mapOf, squarify } from '../../src/client/treemap'
-import { type Assembled } from '../../src/client/assemble'
+import { type Assembled } from '../../src/shared/assemble'
 import { type HeaderRecord, type SurfaceNode } from '../../src/shared/types'
 import { makeKit, surfaceNodeAt, cleanupMounts, flush, mount } from './helpers/kit'
 import { act, createElement as h } from 'react'

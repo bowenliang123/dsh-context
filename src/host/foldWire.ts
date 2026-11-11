@@ -82,7 +82,7 @@ export function eventsOf(state: TimelineState, requests: readonly RequestRecord[
 
 function detailCollectionsOf(state: TimelineState, bounds: FoldBounds): Omit<ContextTimelineDetail, 'rev'> {
   const requests = requestRowsOf(state)
-  const window = surfaceWindowOf(state, bounds.maxNodes)
+  const window = surfaceWindowOf(state, bounds.maxNodes, bounds.maxArchiveNodes)
   const result: Omit<ContextTimelineDetail, 'rev'> = {
     requests,
     events: eventsOf(state, requests),

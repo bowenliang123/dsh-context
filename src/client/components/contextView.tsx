@@ -7,6 +7,7 @@ import type { ContextViewProps } from '../services'
 import { conversationNodesOf, headersOf, imageLoaderOf, projectionOf, seatKeyOf, seatOf, sessionAddressOf, unsupportedOf } from '../services'
 import type { ClientCtx, ConversationNodeLike } from '../services'
 import { makeContentFetcher, makeHeaderFetcher, useHistoryFace } from '../historyPage'
+import { makeDeltaFetcher } from '../timelineSource'
 import { useContextSession } from '../sessionData'
 import { makeDetailNote } from './detailNote'
 import { canOpenPathsOf, openPathVia, openResourceVia, workspaceOf } from '../services'
@@ -243,6 +244,10 @@ export function makeContextView(
         ? makeHeaderFetcher(() => sessionAddressOf(ctx, sessionId))
         : undefined),
       [ctx, sessionId, historyFace],
+    )
+    const fetchDelta = useMemo(
+      () => (typeof sessionId === 'string' && sessionId !== '' ? makeDeltaFetcher(sessionId) : undefined),
+      [sessionId],
     )
     const fetchOlderCommands = useMemo(
       () => (typeof sessionId === 'string' && sessionId !== '' ? makeCommandPager(sessionId) : undefined),
@@ -816,6 +821,7 @@ export function makeContextView(
         convNodes={convNodes}
         fetchContent={fetchContent}
         fetchHeader={fetchHeader}
+        fetchDelta={fetchDelta}
         previewSeq={hoveredSeq}
         pinSeq={pinnedReq !== null ? pinnedReq.seq : null}
         hoverKey={hoverCat}

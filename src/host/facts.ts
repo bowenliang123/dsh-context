@@ -142,8 +142,8 @@ function windowFloorOf(items: readonly { seq: number }[], tail: number, floor: n
   return Math.max(floor ?? 0, items[items.length - tail - 1].seq)
 }
 
-function surfacePartOf(state: TimelineState, tail: number): SurfaceNodeWindow {
-  const window = surfaceWindowOf(state, tail)
+function surfacePartOf(state: TimelineState, tail: number, archiveTail: number): SurfaceNodeWindow {
+  const window = surfaceWindowOf(state, tail, archiveTail)
   return {
     ...window,
     nodes: window.nodes.map(node => ({ ...node })),
@@ -151,11 +151,11 @@ function surfacePartOf(state: TimelineState, tail: number): SurfaceNodeWindow {
   }
 }
 
-function detailPartsOf(state: TimelineState, parts: ReadonlySet<string>, window: FactWindow): Record<string, unknown> {
+function detailPartsOf(state: TimelineState, parts: ReadonlySet<string>, window: FactWindow, archiveTail: number): Record<string, unknown> {
   const out: Record<string, unknown> = {}
   const requests = parts.has('requests') || parts.has('events') ? requestRowsOf(state) : []
   if (parts.has('requests')) out.requests = tailOf(requests, window.requestsTail)
-  if (parts.has('nodes')) out.nodes = surfacePartOf(state, window.nodesTail)
+  if (parts.has('nodes')) out.nodes = surfacePartOf(state, window.nodesTail, archiveTail)
   if (parts.has('events')) out.events = tailOf(eventsOf(state, requests), window.eventsTail)
   if (parts.has('files')) {
     const fileOpsFloor = windowFloorOf(state.fileOps, window.filesTail, state.fileOpsFloor)
@@ -186,6 +186,7 @@ function valueOf(
   request: FactPartRequest,
   kernel: KernelFacts,
   detailState: TimelineState | null,
+  archiveTail: number,
   cost?: CostSource,
 ): Record<string, unknown> {
   const { parts, window } = request
@@ -200,7 +201,7 @@ function valueOf(
     ...(parts.has('head') ? { head: withCost(cost, buildTimelineHead(state)) } : {}),
     ...(parts.has('series') ? { series: requestRowsOf(aligned ?? state) } : {}),
     ...(parts.has('stats') && kernel.values !== undefined ? { stats: kernel.values } : {}),
-    ...(aligned === null ? {} : detailPartsOf(aligned, parts, window)),
+    ...(aligned === null ? {} : detailPartsOf(aligned, parts, window, archiveTail)),
   }
   return {
     rev,
@@ -276,7 +277,7 @@ export function watchFactsChannel(ctx: Context, bounds: FoldBounds, deps: FactsC
             const detailState = needsDetail ? await liveDetailState(wanted.sessionId) : null
             return reply({
               ok: true,
-              value: valueOf(state as TimelineState, true, wanted, kernel, detailState, deps.cost),
+              value: valueOf(state as TimelineState, true, wanted, kernel, detailState, bounds.maxArchiveNodes, deps.cost),
             })
           }
           if (observe === undefined) return reply({ ok: true, value: null })
@@ -292,12 +293,12 @@ export function watchFactsChannel(ctx: Context, bounds: FoldBounds, deps: FactsC
               const cached = stateCache.get(wanted.sessionId, entry => entry.revision === revision && entry.persistence === persistence)
               if (cached !== undefined) {
                 const kernel = kernelOfCold(c.get('sessionProjectionCache') as CachedSnapshotFace | undefined, header)
-                return valueOf(cached.state, false, wanted, kernel, cached.state, deps.cost)
+                return valueOf(cached.state, false, wanted, kernel, cached.state, bounds.maxArchiveNodes, deps.cost)
               }
               const state = (await foldLog(events as SessionEvent[], bounds)).state
               stateCache.set(wanted.sessionId, { persistence, revision, state })
               const kernel = kernelOfCold(c.get('sessionProjectionCache') as CachedSnapshotFace | undefined, header)
-              return valueOf(state, false, wanted, kernel, state, deps.cost)
+              return valueOf(state, false, wanted, kernel, state, bounds.maxArchiveNodes, deps.cost)
             } finally {
               release()
             }

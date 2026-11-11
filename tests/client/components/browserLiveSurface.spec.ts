@@ -108,7 +108,7 @@ describe('ContextBrowser live surface', () => {
     assert.ok(text(m.container).includes('approximate'), 'seq below the archive floor is approximate')
     await pickStep(m, '10')
     assert.ok(text(m.container).includes('2 earlier messages are also part of the context'))
-    assert.ok(!text(m.container).includes('approximate'), 'seq at/after the archive floor is exact')
+    assert.ok(text(m.container).includes('approximate'), 'a diff baseline below the archive floor stays approximate')
     await m.unmount()
   })
 

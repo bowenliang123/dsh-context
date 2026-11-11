@@ -104,7 +104,10 @@ describe('trimState archive pruning', () => {
     assert.equal(drive.states[4].archived.length, 1, 'the removal postdates the oldest retained request: kept')
     assert.deepEqual(drive.state.requests.map(r => r.seq), [4, 5], 'the request trim opens the pruning window')
     assert.equal(drive.state.archived.length, 0, 'gone 3 <= oldest retained request seq 4')
-    assert.equal(drive.state.archiveFloor, 3, 'the floor names the newest dropped removal')
+    assert.equal(drive.state.archiveFloor, 3, 'the fold names the newest dropped removal')
+    const payload = buildTimelineDetail(drive.state, resolveBounds({ maxKeptTurns: 2 }))
+    assert.deepEqual(payload.archive, [])
+    assert.equal(payload.archiveFloor, 3, 'the payload keeps the fold floor')
     assertStatesPlainJson(drive)
   })
 
@@ -120,9 +123,14 @@ describe('trimState archive pruning', () => {
       compaction(8, 'prune', { shadowedSeqs: [7], shadowedTokenCount: 9 }),
       userMessage(9, [{ type: 'text', text: 'f' }], undefined, { surfaceOp: { op: 'replace', startSeq: 7, endSeq: 7 } }),
     ], { maxArchiveNodes: 1 })
-    assert.equal(drive.states[6].archiveFloor, 3, 'the first drop sets the floor (no existing one)')
-    assert.deepEqual(drive.state.archived.map(n => n.seq), [7], 'only the newest removal survives')
-    assert.equal(drive.state.archiveFloor, 6, 'the second drop takes the max with the existing floor')
+    assert.deepEqual(drive.state.archived.map(n => n.seq), [1, 4, 7], 'the fold keeps every removal')
+    const bounds = resolveBounds({ maxArchiveNodes: 1 })
+    const first = buildTimelineDetail(drive.states[6], bounds)
+    assert.equal(first.archiveFloor, 3, 'the first payload drop sets the floor')
+    assert.deepEqual(first.archive.map(n => n.seq), [4], 'only the newest removal rides the payload')
+    const last = buildTimelineDetail(drive.state, bounds)
+    assert.deepEqual(last.archive.map(n => n.seq), [7], 'the newest removal still rides the payload')
+    assert.equal(last.archiveFloor, 6, 'the payload floor names the newest dropped removal')
     assertStatesPlainJson(drive)
   })
 })
@@ -135,7 +143,7 @@ describe('trimState restored-state defenses', () => {
     st.archived.push({ seq: 1, cat: 'user', tokens: 9 })
     const next = def.apply(st, planMode(10, { active: true }))
     assert.deepEqual(next.archived, [], 'detail collections are refold-only head-side')
-    assert.equal(next.archiveFloor, undefined)
+    assert.equal('archiveFloor' in next, false)
     const capped = timelineDef({ maxArchiveNodes: 1 })
     const restored = createTimelineState()
     restored.archived.push(

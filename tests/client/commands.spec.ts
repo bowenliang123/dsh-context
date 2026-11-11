@@ -17,7 +17,7 @@ import { type CodeHighlighter, type HighlightSpan } from '@deepseek-ai/dsh-clien
 import { postRoute, postRouteEnvelope, postRouteQuietly, RouteError } from '../../src/client/route'
 import { briefNodes, briefOf } from '../../src/client/brief'
 import { ATTACHMENT_ROUTE, BACKFILL_ROUTE, BALANCE_ROUTE, COMMANDS_ROUTE, DETAIL_ROUTE, FLEET_ROUTE, SKILLS_ROUTE, VERSION_ROUTE } from '../../src/client/apiRoutes'
-import { assemble, headerAt, systemAt } from '../../src/client/assemble'
+import { assemble, headerAt, systemAt } from '../../src/shared/assemble'
 
 describe('commands', () => {
 

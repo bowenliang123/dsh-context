@@ -61,6 +61,7 @@ const contextEventSchema = z.object({
   kind: z.enum(['compaction', 'prune', 'inject', 'model', 'mode']),
   form: z.string().optional(),
   tokens: z.number().optional(),
+  grossTokens: z.number().optional(),
   count: z.number().optional(),
   sub: z.string().optional(),
   name: z.string().optional(),

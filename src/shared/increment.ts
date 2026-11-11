@@ -1,7 +1,7 @@
-import type { Category, HeaderRecord, HeaderTool, SurfaceNode, SystemPromptNode } from '../../shared/types'
-import type { Assembled } from '../assemble'
-import { CATS } from '../categories'
-import type { PartsPart } from '../categories'
+import type { Category, HeaderRecord, HeaderTool, SurfaceNode, SystemPromptNode } from './types'
+import type { Assembled } from './assemble'
+import { CATS } from './categories'
+import type { PartsPart } from './categories'
 
 export type IncrementCat = Category | 'system' | 'tools'
 

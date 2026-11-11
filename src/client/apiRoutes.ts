@@ -1,5 +1,7 @@
 export const DETAIL_ROUTE = 'api/dsh-context/detail'
 
+export const DELTA_ROUTE = 'api/dsh-context/delta'
+
 export const FACTS_ROUTE = 'api/dsh-context/facts'
 
 export const HEADS_ROUTE = 'api/dsh-context/heads'
