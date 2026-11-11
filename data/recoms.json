@@ -21,7 +21,7 @@
     "id": "zilliz-cloud",
     "name": "Zilliz Cloud",
     "url": "https://cloud.zilliz.com.cn/signup?utm_source=dsh_context",
-    "icon": "https://avatars.githubusercontent.com/u/18416694?v=4",
+    "icon": "https://cdn.simpleicons.org/zilliz",
     "slogan": {
       "zh": "Milvus原厂，全能 AI 检索。",
       "en": "Original Milvus Creator, full AI search."
