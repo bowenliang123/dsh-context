@@ -782,6 +782,27 @@ describe('TrendChart entrance rise', () => {
     assert.notEqual(query(m.container, '.lc-bar[data-seq="2"]'), reusedSeq)
     await m.unmount()
   })
+
+  test('switching total ↔ delta remounts every bar so the entrance rise replays', async () => {
+    function ModeHarness(props: { requests: RequestRecord[] }) {
+      const [mode, setMode] = useState<'total' | 'delta'>('total')
+      return h('div', null,
+        h('button', { onClick: () => { setMode(m => (m === 'total' ? 'delta' : 'total')) } }, 'flip-mode'),
+        h(TrendChart, { ...propsOf(props.requests), mode }))
+    }
+    const reqs = [req(1, { turn: 1, step: 0 }), req(2, { turn: 1, step: 1 })]
+    const m = await mount(h(ModeHarness, { requests: reqs }))
+    const totalBar = bars(m.container)[0]
+    assert.ok(query(totalBar, '.lc-bar-stack').className.includes('animate-lc-bar-in'))
+    await click(query(m.container, 'button'))
+    const deltaBar = bars(m.container)[0]
+    assert.notEqual(deltaBar, totalBar)
+    assert.ok(query(deltaBar, '.lc-bar-up').className.includes('animate-lc-bar-in'))
+    await click(query(m.container, 'button'))
+    assert.notEqual(bars(m.container)[0], deltaBar)
+    assert.ok(query(bars(m.container)[0], '.lc-bar-stack').className.includes('animate-lc-bar-in'))
+    await m.unmount()
+  })
 })
 
 describe('attachMarkers', () => {

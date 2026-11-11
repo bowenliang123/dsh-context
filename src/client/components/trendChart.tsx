@@ -645,7 +645,7 @@ export function makeTrendChart(kit: ViewKit): (props: TrendChartProps) => ReactE
                 const i = shownFrom + k
                 return (
                   <ChartBar
-                    key={`${req.seq}:${props.granularity}`}
+                    key={`${req.seq}:${props.granularity}:${props.mode}`}
                     req={req}
                     marker={markers[i]}
                     selected={props.selectedSeq === req.seq}
