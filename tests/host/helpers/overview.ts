@@ -104,6 +104,8 @@ export interface BootOptions {
   persistence?: unknown
   cache?: OverviewCache
   idleMs?: number
+  captureDelayMs?: number
+  capturePollMs?: number
   yieldEvery?: number
   yieldTo?: () => Promise<void>
   cachePath?: string
@@ -431,6 +433,8 @@ export function boot(options: BootOptions = {}): Promise<Harness> {
     scanTtlMs: options.scanTtlMs ?? 0,
     ...(options.servedKeysMax === undefined ? {} : { servedKeysMax: options.servedKeysMax }),
     ...(options.idleMs === undefined ? {} : { idleMs: options.idleMs }),
+    ...(options.captureDelayMs === undefined ? {} : { captureDelayMs: options.captureDelayMs }),
+    ...(options.capturePollMs === undefined ? {} : { capturePollMs: options.capturePollMs }),
     ...(options.yieldEvery === undefined ? {} : { yieldEvery: options.yieldEvery }),
     ...(options.yieldTo === undefined ? {} : { yieldTo: options.yieldTo }),
     ...(options.cachePath === undefined ? {} : { cachePath: options.cachePath }),

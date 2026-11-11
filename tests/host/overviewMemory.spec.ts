@@ -93,13 +93,13 @@ describe('overview memory: disk cache, idle release, incremental updates', () =>
     const ids = Array.from({ length: 130 }, (_, index) => `s${index}`)
     const records = ids.map(id => recordOf(id))
     const values = Object.fromEntries(ids.map(id => [id, valuesOf(10)]))
-    const harness = await boot({ persistence: PERSISTENCE, records, values })
+    const harness = await boot({ persistence: PERSISTENCE, records, values, captureDelayMs: 5, capturePollMs: 5 })
     for (const id of ids) harness.state.captureIdentities.set(id, identityOf(id))
     const first = await call(harness, { part: 'summary' })
     assert.equal(summaryOf(first).sessions, 130)
     const second = await call(harness, { part: 'summary' })
     assert.equal(summaryOf(second).sessions, 130)
-    await sleep(800)
+    await sleep(50)
     assert.equal(harness.cache.captureCalls.length, 1, 'one background pass captured every new id')
     assert.deepEqual(harness.cache.captureCalls[0].ids.sort(), [...ids].sort())
     assert.ok(harness.cache.saveCalls >= 1, 'the captured identities reach the disk cache')
@@ -114,14 +114,16 @@ describe('overview memory: disk cache, idle release, incremental updates', () =>
       persistence: PERSISTENCE,
       records: ids.map(id => recordOf(id)),
       values: Object.fromEntries(ids.map(id => [id, valuesOf(10)])),
+      captureDelayMs: 5,
+      capturePollMs: 5,
     })
     for (const id of ids) harness.state.captureIdentities.set(id, identityOf(id))
     harness.state.coverage.running = true
     await call(harness, { part: 'summary' })
-    await sleep(800)
+    await sleep(50)
     assert.equal(harness.cache.captureCalls.length, 0, 'the capture waits while the backfill pass runs')
     harness.state.coverage.running = false
-    await sleep(1_500)
+    await sleep(80)
     assert.equal(harness.cache.captureCalls.length, 1, 'the capture starts once the backfill pass finishes')
     harness.dispose()
   })
@@ -132,14 +134,16 @@ describe('overview memory: disk cache, idle release, incremental updates', () =>
       persistence: PERSISTENCE,
       records: ids.map(id => recordOf(id)),
       values: Object.fromEntries(ids.map(id => [id, valuesOf(10)])),
+      captureDelayMs: 5,
+      capturePollMs: 5,
     })
     for (const id of ids) harness.state.captureIdentities.set(id, identityOf(id))
     harness.state.coverage = { ...harness.state.coverage, complete: false, running: false }
     await call(harness, { part: 'summary' })
-    await sleep(800)
+    await sleep(50)
     assert.equal(harness.cache.captureCalls.length, 0, 'an unverified backfill holds the capture back')
     harness.state.coverage = { ...harness.state.coverage, complete: true }
-    await sleep(1_500)
+    await sleep(80)
     assert.equal(harness.cache.captureCalls.length, 1)
     harness.dispose()
 
@@ -147,12 +151,14 @@ describe('overview memory: disk cache, idle release, incremental updates', () =>
       persistence: PERSISTENCE,
       records: ids.map(id => recordOf(id)),
       values: Object.fromEntries(ids.map(id => [id, valuesOf(10)])),
+      captureDelayMs: 5,
+      capturePollMs: 5,
     })
     for (const id of ids) disposed.state.captureIdentities.set(id, identityOf(id))
     disposed.state.coverage = { ...disposed.state.coverage, complete: false, running: true }
     await call(disposed, { part: 'summary' })
     disposed.dispose()
-    await sleep(1_200)
+    await sleep(80)
     assert.equal(disposed.cache.captureCalls.length, 0, 'a disposed route never captures')
   })
 
@@ -162,11 +168,13 @@ describe('overview memory: disk cache, idle release, incremental updates', () =>
       persistence: PERSISTENCE,
       records: ids.map(id => recordOf(id)),
       values: Object.fromEntries(ids.map(id => [id, valuesOf(10)])),
+      captureDelayMs: 5,
+      capturePollMs: 5,
     })
     harness.state.captureThrows = true
     const first = await call(harness, { part: 'summary' })
     assert.equal(summaryOf(first).sessions, 130)
-    await sleep(800)
+    await sleep(50)
     assert.equal(harness.cache.captureCalls.length, 1)
     const second = await call(harness, { part: 'summary' })
     assert.equal(summaryOf(second).sessions, 130, 'the route keeps serving after a capture failure')

@@ -204,6 +204,8 @@ export interface OverviewRouteOptions {
   scanTtlMs?: number
   servedKeysMax?: number
   idleMs?: number
+  captureDelayMs?: number
+  capturePollMs?: number
   yieldEvery?: number
   yieldTo?: () => Promise<void>
   cache?: OverviewCache
@@ -219,6 +221,8 @@ export function watchOverviewRoute(
   const scanTtlMs = options.scanTtlMs ?? SCAN_TTL_MS
   const servedKeysMax = options.servedKeysMax ?? SERVED_KEYS_MAX
   const idleMs = options.idleMs ?? IDLE_MS
+  const captureDelayMs = options.captureDelayMs ?? CAPTURE_DELAY_MS
+  const capturePollMs = options.capturePollMs ?? CAPTURE_BACKFILL_POLL_MS
   const feed: FeedState = { revision: '', sessions: new Map(), rows: null, served: new Map(), rowsRevision: '' }
   const scanWindow = makeScanWindow(scanTtlMs)
   let materializeTail: Promise<void> = Promise.resolve()
@@ -394,14 +398,14 @@ export function watchOverviewRoute(
           if (coverage.running || !coverage.complete) {
             /* v8 ignore next 1 */
             if (Date.now() - startedAt < CAPTURE_MAX_WAIT_MS) {
-              const timer = setTimeout(waitForBackfill, CAPTURE_BACKFILL_POLL_MS)
+              const timer = setTimeout(waitForBackfill, capturePollMs)
               ;(timer as { unref?: () => void }).unref?.()
               return
             }
           }
           runCapture()
         }
-        setTimeout(waitForBackfill, CAPTURE_DELAY_MS)
+        setTimeout(waitForBackfill, captureDelayMs)
       }
 
       const materialize = async (parsed: ParsedRequest, scanned: ScanResult): Promise<OverviewValue> => {
