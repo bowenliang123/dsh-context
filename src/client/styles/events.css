@@ -15,6 +15,6 @@
 .lc-event-jump { border: 0; background: transparent; color: inherit; font: inherit; text-align: left; padding: 0; cursor: pointer; }
 .lc-event-jump:hover { text-decoration: underline; }
 .lc-event-at { flex: none; color: var(--dsw-alias-label-secondary); font-size: 11px; white-space: nowrap; }
-.lc-event-tokens { color: var(--dsw-alias-state-success-primary); font-weight: 600; white-space: nowrap; }
-.lc-event-tokens.lc-up { color: var(--dsw-alias-state-warn-primary); }
+.lc-event-tokens { color: var(--dsw-alias-state-warn-primary); font-weight: 600; white-space: nowrap; }
+.lc-event-tokens.lc-up { color: var(--dsw-alias-state-success-primary); }
 .lc-event-time { color: var(--dsw-alias-label-secondary); font-size: 12px; }
