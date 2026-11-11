@@ -134,7 +134,7 @@ export function makeContextView(
     const [granularity, setGranularity] = useState<'step' | 'turn'>(() => settings.defaultGranularity())
     const [trendMode, setTrendMode] = useState<'total' | 'delta'>(() => settings.defaultTrendMode())
     const [dna, setDna] = useState(false)
-    const [adaptive, setAdaptive] = useState(false)
+    const [adaptive, setAdaptive] = useState(trendMode === 'delta')
     const [overview, setOverview] = useState(false)
     const overviewAutoAt = overviewThresholdOf(settings.overviewAutoSteps())
     const overviewAutoFired = useRef(new Set<string | undefined>())
@@ -146,6 +146,11 @@ export function makeContextView(
       setDna(false)
       setAdaptive(false)
     }, [data, sessionId, overviewAutoAt])
+    const switchTrendMode = (mode: 'total' | 'delta'): void => {
+      if (mode === trendMode) return
+      setTrendMode(mode)
+      if (mode === 'delta' && !overview) setAdaptive(true)
+    }
     const [durationCurve, setDurationCurve] = useState(() => settings.defaultDurationCurve() === 'show')
     const [focusTurn, setFocusTurn] = useState<number | null>(null)
     const [focusSeq, setFocusSeq] = useState<number | null>(null)
@@ -738,11 +743,11 @@ export function makeContextView(
             <div className="lc-gran" title={t('gran.modeHint')}>
               <button
                 className={'lc-gran-btn' + (trendMode === 'total' ? ' lc-gran-on' : '')}
-                onClick={() => { setTrendMode('total') }}
+                onClick={() => { switchTrendMode('total') }}
               >{t('gran.total')}</button>
               <button
                 className={'lc-gran-btn' + (trendMode === 'delta' ? ' lc-gran-on' : '')}
-                onClick={() => { setTrendMode('delta') }}
+                onClick={() => { switchTrendMode('delta') }}
               >{t('gran.delta')}</button>
             </div>
           </div>
@@ -827,7 +832,7 @@ export function makeContextView(
         dna={dna}
         onDnaChange={setDna}
         delta={trendMode === 'delta'}
-        onDeltaChange={(on) => { setTrendMode(on ? 'delta' : 'total') }}
+        onDeltaChange={(on) => { switchTrendMode(on ? 'delta' : 'total') }}
         locale={activeLocale}
         session={sessionKey}
       />

@@ -414,6 +414,7 @@ describe('ContextView — locale and settings', () => {
     }))
     assert.ok(buttonByText(m.container, DICT_EN['gran.turn']).className.includes('lc-gran-on'))
     assert.ok(buttonByText(m.container, DICT_EN['gran.delta']).className.includes('lc-gran-on'))
+    assert.ok(buttonByText(m.container, DICT_EN['trend.adaptive']).className.includes('lc-gran-on'), 'Adaptive follows the Delta default')
     assert.ok(!buttonByText(m.container, DICT_EN['trend.duration']).className.includes('lc-gran-on'))
     assert.equal(queryAll(m.container, '.lc-bar').length, 2)
     assert.deepEqual(queryAll(m.container, '.lc-fa-row').map(r => r.title), ['/a.ts', '/z.ts'])

@@ -661,10 +661,12 @@ describe('ContextView — interactions', () => {
     await m.unmount()
   })
 
-  test('the browser incremental switch and the trend Delta switch move as one', async () => {
+  test('Delta arms Adaptive and links the browser switch; Overview suppresses the link', async () => {
     const m = await mountRich('sv-trend-delta-link')
     const trendDelta = () => buttonByText(m.container, DICT_EN['gran.delta'])
     const browserDelta = () => query(m.container, '.lc-br-delta-ctl .lc-gran-btn')
+    const adaptive = () => buttonByText(m.container, DICT_EN['trend.adaptive'])
+    const overview = () => buttonByText(m.container, DICT_EN['trend.overview'])
     assert.ok(!browserDelta().className.includes('lc-gran-on'), 'off at mount')
     assert.equal(query(m.container, '.lc-br-delta-ctl').getAttribute('title'), DICT_EN['browser.deltaTip'])
     assert.equal(query(m.container, '.lc-br-dna-ctl').nextElementSibling, query(m.container, '.lc-br-delta-ctl'), 'the switch sits right of DNA mode')
@@ -672,7 +674,18 @@ describe('ContextView — interactions', () => {
     await click(trendDelta())
     assert.ok(trendDelta().className.includes('lc-gran-on'))
     assert.ok(browserDelta().className.includes('lc-gran-on'), 'the browser follows the trend Delta')
+    assert.ok(adaptive().className.includes('lc-gran-on'), 'Delta arms Adaptive')
     assert.ok(text(query(m.container, '.lc-br-meta')).includes('Added ≈'))
+
+    await click(buttonByText(m.container, DICT_EN['gran.total']))
+    assert.ok(!trendDelta().className.includes('lc-gran-on'))
+    assert.ok(adaptive().className.includes('lc-gran-on'), 'leaving Delta keeps Adaptive as set')
+
+    await click(trendDelta())
+    await click(adaptive())
+    assert.ok(!adaptive().className.includes('lc-gran-on'), 'Adaptive stays switchable under Delta')
+    await click(trendDelta())
+    assert.ok(!adaptive().className.includes('lc-gran-on'), 're-clicking the active Delta chip keeps the opt-out')
 
     await click(browserDelta())
     assert.ok(!trendDelta().className.includes('lc-gran-on'), 'the trend follows the browser switch')
@@ -681,6 +694,16 @@ describe('ContextView — interactions', () => {
     await click(browserDelta())
     assert.ok(browserDelta().className.includes('lc-gran-on'), 'the browser can switch it back on')
     assert.ok(trendDelta().className.includes('lc-gran-on'), 'the trend follows that direction too')
+    assert.ok(adaptive().className.includes('lc-gran-on'), 'the linked switch arms Adaptive too')
+
+    await click(overview())
+    assert.ok(overview().className.includes('lc-gran-on'))
+    assert.ok(!adaptive().className.includes('lc-gran-on'), 'Overview clears Adaptive')
+    await click(buttonByText(m.container, DICT_EN['gran.total']))
+    await click(trendDelta())
+    assert.ok(overview().className.includes('lc-gran-on'), 'Overview keeps the face')
+    assert.ok(!adaptive().className.includes('lc-gran-on'), 'Overview suppresses the Delta-to-Adaptive link')
+
     await click(buttonByText(m.container, DICT_EN['gran.total']))
     assert.ok(!trendDelta().className.includes('lc-gran-on'))
     assert.ok(!browserDelta().className.includes('lc-gran-on'))
