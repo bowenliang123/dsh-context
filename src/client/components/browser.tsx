@@ -244,21 +244,17 @@ export function makeContextBrowser(
       : null
     const view = useMemo(() => assembleCached(data, headers, seq), [data, headers, seq])
 
-    const lastReq = requests.at(-1) ?? null
     const refReq = baseRequestOf(requests, req, deltaBase)
-    const zeroBase = refReq === null && lastReq !== null
-    const prevView = useMemo(
-      () => (refReq !== null ? assembleCached(data, headers, refReq.seq) : null),
-      [data, headers, refReq],
-    )
-    const prevByCat = prevView !== null ? byCatOf(prevView) : null
+    const hasBase = requests.length > 0
+    const prevView = useMemo(() => (refReq !== null ? assembleCached(data, headers, refReq.seq) : null), [data, headers, refReq])
     const byCat = useMemo(() => byCatOf(view), [view])
-    const inc = useMemo(() => (delta ? incrementOf(view, prevView) : null), [delta, view, prevView])
+    const diff = useMemo(() => incrementOf(view, prevView), [view, prevView])
+    const inc = delta ? diff : null
+    const badges = hasBase ? diff : null
     const shownView = inc !== null ? { ...view, system: inc.system, header: inc.header, nodes: inc.nodes } : view
     const shownByCat = inc !== null ? inc.byCat : byCat
 
     const toolsElemOpen = (): boolean => openElem === 'tools' || (openElem !== null && openElem.startsWith('tool:'))
-
     const fetchHeader = props.fetchHeader
     const headerSeq = shownView.header !== null ? shownView.header.seq : null
     const systemSeq = shownView.system !== null ? shownView.system.seq : null
@@ -941,13 +937,11 @@ export function makeContextBrowser(
               <div className="lc-br-cats">
                 {CATS.map((c) => {
                   const count = toolCount(c.key)
-                  const fullCount = inc !== null ? countOf(view, byCat, c.key) : count
                   const v = catTokensOf(c.key)
-                  const fullTokens = inc !== null ? breakdown[c.key] || 0 : v
-                  const prevCount = zeroBase ? 0 : prevView !== null && prevByCat !== null ? countOf(prevView, prevByCat, c.key) : null
-                  const countDelta = prevCount !== null ? fullCount - prevCount : null
-                  const prevTokens = zeroBase ? 0 : refReq !== null ? (refReq[c.key] || 0) : null
-                  const tokenDelta = prevTokens !== null ? fullTokens - prevTokens : null
+                  const countUp = badges !== null ? badges.counts[c.key] : 0
+                  const countDown = badges !== null ? badges.removed[c.key] : 0
+                  const tokenUp = badges !== null ? badges.tokenUp[c.key] : 0
+                  const tokenDown = badges !== null ? badges.tokenDown[c.key] : 0
                   const openable = count > 0 || headerlessOpenable(c.key)
                   const open = openCat === c.key && openable
                   return (
@@ -956,6 +950,7 @@ export function makeContextBrowser(
                         type="button"
                         className={'lc-br-cat-row hover:bg-(--dsw-alias-interactive-bg-hover)'
                           + (open ? ' lc-br-cat-open' : '')
+                          + (countUp + countDown + tokenUp + tokenDown > 0 ? ' lc-br-cat-diff' : '')
                           + (linked && props.hoverKey === c.key ? ' lc-br-cat-on' : '')}
                         /* v8 ignore start */
                         onMouseEnter={linked ? () => { if (props.onHoverKey !== undefined) props.onHoverKey(c.key) } : undefined}
@@ -970,17 +965,19 @@ export function makeContextBrowser(
                         <span className="lc-br-cat-label">{catLabel(c.key)}</span>
                         <span className="lc-br-count-grp">
                           <span className="lc-br-cat-count">{t('browser.items', { n: count })}</span>
-                          {countDelta !== null && countDelta !== 0 ? (
-                            <span className={'lc-br-delta lc-br-delta-' + (countDelta > 0 ? 'up' : 'down')}>
-                              {`${countDelta > 0 ? '+' : ''}${countDelta}`}
-                            </span>
+                          {countUp > 0 ? (
+                            <span className="lc-br-delta lc-br-delta-up">{`+${countUp}`}</span>
+                          ) : null}
+                          {countDown > 0 ? (
+                            <span className="lc-br-delta lc-br-delta-down">{`-${countDown}`}</span>
                           ) : null}
                         </span>
                         <span className="lc-br-tokens-grp">
-                          {tokenDelta !== null && tokenDelta !== 0 ? (
-                            <span className={'lc-br-tdelta lc-br-tdelta-' + (tokenDelta > 0 ? 'up' : 'down')}>
-                              {(tokenDelta > 0 ? '+' : '') + fmt(tokenDelta)}
-                            </span>
+                          {tokenUp > 0 ? (
+                            <span className="lc-br-tdelta lc-br-tdelta-up">{'+' + fmt(tokenUp)}</span>
+                          ) : null}
+                          {tokenDown > 0 ? (
+                            <span className="lc-br-tdelta lc-br-tdelta-down">{'-' + fmt(tokenDown)}</span>
                           ) : null}
                           <span className="lc-br-tokens">{'≈' + fmt(v)}</span>
                         </span>

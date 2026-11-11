@@ -47,6 +47,34 @@ describe('incrementOf', () => {
     assert.equal(inc.items, 4)
     assert.equal(inc.total, 155)
     assert.deepEqual(inc.parts.map(p => p.value), [100, 25, 0, 0, 0, 20, 10])
+    assert.deepEqual(inc.removed, { system: 0, tools: 0, user: 0, inject: 0, skill: 0, assistant: 0, tool: 0 })
+    assert.equal(inc.tokenUp.system, 100)
+    assert.equal(inc.tokenUp.tools, 25)
+    assert.equal(inc.tokenUp.assistant, 20)
+    assert.equal(inc.tokenUp.tool, 10)
+    assert.deepEqual(inc.tokenDown, { system: 0, tools: 0, user: 0, inject: 0, skill: 0, assistant: 0, tool: 0 })
+  })
+
+  test('shared items contribute only their token delta; removed items land in the down side', () => {
+    const view = asm({
+      nodes: [node(1, 'user', 9)],
+      system: system(2, 100),
+      header: header(3, [tool('bash', 9)]),
+    })
+    const base = asm({
+      nodes: [node(1, 'user', 5)],
+      system: system(2, 80),
+      header: header(3, [tool('bash', 5), tool('write', 7)]),
+    })
+    const inc = incrementOf(view, base)
+    assert.equal(inc.counts.user, 0)
+    assert.equal(inc.tokens.user, 0)
+    assert.equal(inc.tokenUp.user, 4)
+    assert.equal(inc.tokenUp.system, 20)
+    assert.equal(inc.tokenUp.tools, 4)
+    assert.equal(inc.removed.tools, 1)
+    assert.equal(inc.tokenDown.tools, 7)
+    assert.equal(inc.tokenDown.user, 0)
   })
 
   test('an unchanged base adds nothing; a missing base adds the whole view', () => {
@@ -61,6 +89,8 @@ describe('incrementOf', () => {
     assert.equal(same.header, null)
     assert.equal(same.system, null)
     assert.deepEqual(same.parts.map(p => p.value), [0, 0, 0, 0, 0, 0, 0])
+    assert.deepEqual(same.tokenUp, { system: 0, tools: 0, user: 0, inject: 0, skill: 0, assistant: 0, tool: 0 })
+    assert.deepEqual(same.tokenDown, same.tokenUp)
 
     const all = incrementOf(view, null)
     assert.equal(all.items, 3)
@@ -69,10 +99,12 @@ describe('incrementOf', () => {
     assert.equal(all.system?.tokens, 10)
   })
 
-  test('a header-less current view adds no tools, and a retained base header hides the unchanged names', () => {
+  test('a header-less current view removes the base tools; a retained base header hides the unchanged names', () => {
     const noHeader = incrementOf(asm({ nodes: [node(1, 'user', 1)] }), asm({ header: header(1, [tool('bash', 5)]) }))
     assert.equal(noHeader.counts.tools, 0)
     assert.equal(noHeader.header, null)
+    assert.equal(noHeader.removed.tools, 1)
+    assert.equal(noHeader.tokenDown.tools, 5)
   })
 
   test('a base node skipped by the current view still advances the merge past the gap', () => {
@@ -81,6 +113,30 @@ describe('incrementOf', () => {
       asm({ nodes: [node(1, 'user', 5), node(2, 'tool', 10)] }),
     )
     assert.deepEqual(inc.nodes.map(n => n.seq), [3])
+    assert.equal(inc.removed.tool, 1)
+    assert.equal(inc.tokenDown.tool, 10)
+    assert.equal(inc.tokenUp.assistant, 10)
+  })
+
+  test('token decreases, a removed system, and trailing removals land on the down side', () => {
+    const decreased = incrementOf(
+      asm({ nodes: [node(1, 'user', 5)], system: system(9, 80), header: header(1, [tool('bash', 5)]) }),
+      asm({ nodes: [node(1, 'user', 9)], system: system(9, 100), header: header(1, [tool('bash', 9)]) }),
+    )
+    assert.equal(decreased.tokenDown.user, 4)
+    assert.equal(decreased.tokenDown.system, 20)
+    assert.equal(decreased.tokenDown.tools, 4)
+
+    const goneSystem = incrementOf(asm({}), asm({ system: system(9, 100) }))
+    assert.equal(goneSystem.removed.system, 1)
+    assert.equal(goneSystem.tokenDown.system, 100)
+
+    const tail = incrementOf(
+      asm({ nodes: [node(1, 'user', 10)] }),
+      asm({ nodes: [node(1, 'user', 10), node(2, 'tool', 15)] }),
+    )
+    assert.equal(tail.removed.tool, 1)
+    assert.equal(tail.tokenDown.tool, 15)
   })
 
   test('incrementHas resolves every item key the browser and trend share', () => {
@@ -143,11 +199,18 @@ function cat(m: Mounted, key: keyof typeof ROW): HTMLElement {
   return queryAll(m.container, '.lc-br-cat')[ROW[key]]
 }
 
-function rowPills(m: Mounted, key: keyof typeof ROW): { count: string | null; tokens: string | null } {
+function rowPills(m: Mounted, key: keyof typeof ROW): { countUp: string | null; countDown: string | null; tokenUp: string | null; tokenDown: string | null } {
   const row = cat(m, key)
-  const count = row.querySelector<HTMLElement>('.lc-br-delta')
-  const tokens = row.querySelector<HTMLElement>('.lc-br-tdelta')
-  return { count: count === null ? null : text(count), tokens: tokens === null ? null : text(tokens) }
+  const pill = (selector: string): string | null => {
+    const el = row.querySelector<HTMLElement>(selector)
+    return el === null ? null : text(el)
+  }
+  return {
+    countUp: pill('.lc-br-delta-up'),
+    countDown: pill('.lc-br-delta-down'),
+    tokenUp: pill('.lc-br-tdelta-up'),
+    tokenDown: pill('.lc-br-tdelta-down'),
+  }
 }
 
 describe('ContextBrowser incremental mode', () => {
@@ -163,16 +226,16 @@ describe('ContextBrowser incremental mode', () => {
     assert.ok(text(query(m.container, '.lc-br-meta')).includes('Added ≈ 60 of 275'))
 
     assert.ok(text(cat(m, 'user')).includes('1 Items'))
-    assert.deepEqual(rowPills(m, 'user'), { count: '+1', tokens: '+20' })
+    assert.deepEqual(rowPills(m, 'user'), { countUp: '+1', countDown: null, tokenUp: '+20', tokenDown: null })
     assert.ok(text(cat(m, 'user')).includes('≈20'))
     assert.ok(text(cat(m, 'user')).includes('33%'))
     assert.ok(text(cat(m, 'tool')).includes('1 Items'))
-    assert.deepEqual(rowPills(m, 'tool'), { count: '+1', tokens: '+40' })
+    assert.deepEqual(rowPills(m, 'tool'), { countUp: '+1', countDown: null, tokenUp: '+40', tokenDown: null })
     assert.ok(text(cat(m, 'tool')).includes('67%'))
 
     assert.ok(text(cat(m, 'inject')).includes('0 Items'), 'an unchanged category stays at zero additions')
     assert.ok(cat(m, 'inject').className.includes('lc-br-cat-empty'))
-    assert.deepEqual(rowPills(m, 'inject'), { count: null, tokens: null })
+    assert.deepEqual(rowPills(m, 'inject'), { countUp: null, countDown: null, tokenUp: null, tokenDown: null })
     assert.ok(text(cat(m, 'inject')).includes('≈0'))
     assert.deepEqual(queryAll(m.container, '.lc-stacked-seg').map(seg => seg.style.width.slice(0, 4)), ['33.3', '66.6'])
 
@@ -191,7 +254,7 @@ describe('ContextBrowser incremental mode', () => {
     assert.ok(turnBtn !== undefined)
     await click(turnBtn)
     assert.ok(text(cat(m, 'user')).includes('2 Items'))
-    assert.deepEqual(rowPills(m, 'user'), { count: '+2', tokens: '+30' })
+    assert.deepEqual(rowPills(m, 'user'), { countUp: '+2', countDown: null, tokenUp: '+30', tokenDown: null })
     assert.ok(text(cat(m, 'inject')).includes('1 Items'))
     await m.unmount()
   })
@@ -208,6 +271,7 @@ describe('ContextBrowser incremental mode', () => {
     await m.update(linked(false))
     assert.ok(!deltaButton(m).className.includes('lc-gran-on'))
     assert.ok(text(cat(m, 'user')).includes('2 Items'), 'the full category is back')
+    assert.deepEqual(rowPills(m, 'user'), { countUp: '+1', countDown: null, tokenUp: '+20', tokenDown: null })
     await m.unmount()
 
     const lone = await mount(h(Browser, props({ data, headers, delta: true })))
@@ -286,7 +350,7 @@ describe('ContextBrowser incremental mode', () => {
     await m.unmount()
   })
 
-  test('added counts and net diff pills diverge when the baseline dropped an item', async () => {
+  test('split badges separate additions from removals in both modes', async () => {
     const shrinking = tl({
       current: { system: 0, tools: 0, user: 30, inject: 0, skill: 0, assistant: 0, tool: 0, total: 30 },
       requests: [
@@ -299,10 +363,17 @@ describe('ContextBrowser incremental mode', () => {
     const m = await mount(h(Browser, props({ data: shrinking, headers: null, delta: true, onDeltaChange: () => {} })))
     await pickStep(m, '20')
     assert.ok(text(cat(m, 'user')).includes('1 Items'), 'one item was added')
-    assert.deepEqual(rowPills(m, 'user'), { count: null, tokens: '+13' }, 'the net item count is unchanged; tokens grew by 13')
+    assert.deepEqual(rowPills(m, 'user'), { countUp: '+1', countDown: '-1', tokenUp: '+20', tokenDown: '-7' })
     assert.ok(text(cat(m, 'user')).includes('≈20'), 'the added item carries its own 20 tokens')
     assert.ok(text(cat(m, 'user')).includes('100%'))
     await m.unmount()
+
+    const full = await mount(h(Browser, props({ data: shrinking, headers: null })))
+    await pickStep(full, '20')
+    assert.ok(text(cat(full, 'user')).includes('2 Items'), 'the full category returns outside incremental mode')
+    assert.ok(text(cat(full, 'user')).includes('≈30'))
+    assert.deepEqual(rowPills(full, 'user'), { countUp: '+1', countDown: '-1', tokenUp: '+20', tokenDown: '-7' })
+    await full.unmount()
   })
 
   test('the block map and its empty state stay increment-scoped', async () => {

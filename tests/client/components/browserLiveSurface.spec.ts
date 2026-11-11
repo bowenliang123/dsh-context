@@ -39,7 +39,7 @@ describe('ContextBrowser live surface', () => {
         req({ seq: 20, turn: 1, step: 1, prompt: 800 }),
         req({ seq: 7, time: 500, turn: undefined, step: undefined }),
       ],
-      nodes: [surfaceNode({ seq: 1, text: 'hello' })],
+      nodes: [surfaceNode({ seq: 1, tokens: 50, text: 'hello' })],
     })
     const m = await mount(h(Browser, props({ data })))
     assert.ok(text(query(m.container, '.lc-card-title-text')).includes('Context Browser'))
@@ -141,7 +141,7 @@ describe('ContextBrowser live surface', () => {
 
   test('delta pills follow the picked baseline; a predecessor-less step diffs against zero', async () => {
     const data = tl({
-      current: { system: 1, tools: 2, user: 99, inject: 0, skill: 0, assistant: 0, tool: 0, total: 102 },
+      current: { system: 1, tools: 2, user: 60, inject: 0, skill: 0, assistant: 0, tool: 0, total: 63 },
       requests: [
         req({ seq: 1, turn: 1, step: 0, system: 1, tools: 2, user: 10, total: 13 }),
         req({ seq: 2, turn: 1, step: 1, system: 1, tools: 2, user: 20, total: 23 }),
@@ -149,9 +149,13 @@ describe('ContextBrowser live surface', () => {
         req({ seq: 4, turn: 2, step: 1, system: 1, tools: 2, user: 40, total: 43 }),
         req({ seq: 5, turn: 3, step: 0, system: 1, tools: 2, user: 50, total: 53 }),
       ],
-      nodes: [0, 1, 2, 3, 4, 5].map(seq => surfaceNode({ seq, tokens: seq })),
+      nodes: [0, 1, 2, 3, 4, 5].map(seq => surfaceNode({ seq, tokens: 10 })),
+      systems: [{ seq: 0, time: 1, tokens: 1 }],
     })
-    const m = await mount(h(Browser, props({ data })))
+    const headers: ContextHeaders = {
+      headers: [{ seq: 0, time: 1, systemTokens: 1, tools: [{ name: 'bash', tokens: 2 }] }],
+    }
+    const m = await mount(h(Browser, props({ data, headers })))
     const userRow = (): HTMLElement => queryAll(m.container, '.lc-br-cat')[ROW.user]
     await pickStep(m, '4')
     const countPills = queryAll(userRow(), '.lc-br-delta')
@@ -176,22 +180,22 @@ describe('ContextBrowser live surface', () => {
     await pickStep(m, 'live')
     await clickDeltaBase(m, 'prev step')
     assert.equal(text(query(userRow(), '.lc-br-delta')), '+1')
-    assert.equal(text(query(userRow(), '.lc-br-tdelta')), '+49')
+    assert.equal(text(query(userRow(), '.lc-br-tdelta')), '+10')
     await clickDeltaBase(m, 'prev turn')
     assert.equal(text(query(userRow(), '.lc-br-delta')), '+2')
-    assert.equal(text(query(userRow(), '.lc-br-tdelta')), '+59')
+    assert.equal(text(query(userRow(), '.lc-br-tdelta')), '+20')
     await clickDeltaBase(m, 'prev step')
     assert.equal(text(query(userRow(), '.lc-br-delta')), '+1')
-    assert.equal(text(query(userRow(), '.lc-br-tdelta')), '+49')
+    assert.equal(text(query(userRow(), '.lc-br-tdelta')), '+10')
     await m.unmount()
   })
 
   test('shrinking categories render downward pills', async () => {
     const data = tl({
-      current: { system: 0, tools: 0, user: 15, inject: 0, skill: 0, assistant: 0, tool: 0, total: 15 },
+      current: { system: 0, tools: 0, user: 10, inject: 0, skill: 0, assistant: 0, tool: 0, total: 10 },
       requests: [
         req({ seq: 2, turn: 1, step: 1, user: 25, total: 25 }),
-        req({ seq: 3, turn: 2, step: 0, user: 15, total: 15 }),
+        req({ seq: 3, turn: 2, step: 0, user: 10, total: 10 }),
       ],
       nodes: [surfaceNode({ seq: 1, tokens: 10, text: 'kept' })],
       archive: [surfaceNode({ seq: 0, tokens: 15, text: 'pruned away', gone: 3 })],
@@ -202,7 +206,7 @@ describe('ContextBrowser live surface', () => {
     assert.equal(text(countPill), '-1', 'the archived node left the step’s surface')
     assert.ok(countPill.className.includes('lc-br-delta-down'))
     const tokenPill = query(m.container, '.lc-br-tdelta')
-    assert.equal(text(tokenPill), '-10')
+    assert.equal(text(tokenPill), '-15')
     assert.ok(tokenPill.className.includes('lc-br-tdelta-down'))
     await m.unmount()
   })
