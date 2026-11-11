@@ -73,6 +73,7 @@ Complete ALL of these before ANY commit:
 - Review the full diff independently: every change necessary, correct, and not over-engineered.
 - Clean up generated temporary files and temporary or unhelpful comments.
 - Load the [code-review](https://github.com/mattpocock/skills/blob/main/skills/engineering/code-review/SKILL.md) skill, run it to review all the changes.
+  - Skip the "Under 400 words" in the prompt for subagents. 
   - Independently verify or follow each of its suggestions until ALL of its multi-axis analysis are done. 
   - Tell its subagents to skip typecheck, lint, and test coverage, which the main agent covers.
   - Tell its subagent about background information and related files (and line numbers if collected), eg. user's purposes / intention, untouched but related in-project files, or the facts or related evidences in dsh, in order to skip time for re-collecting them.
