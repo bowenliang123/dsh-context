@@ -19,6 +19,7 @@ import type { CommsRow, FleetDelegationRow } from '../fleetDetail'
 import { agentPromptOf, agentReplyOf, type FleetDetailState } from '../fleetModel'
 import type { FleetTeam } from '../fleetTeam'
 import { fmtTime } from '../format'
+import { SkeletonRows } from './skeleton'
 import { IconChevronDown, IconChevronUp } from '../primitives'
 import {
   pulseDependencyChainOf,
@@ -49,7 +50,7 @@ import { AgentAvatar, roleTextOf } from './commsAgent'
 import type { RichKit } from './richText'
 import { Section } from './section'
 
-interface PulseHeaderProps {
+export interface PulseHeaderProps {
   agentCount: number
   running: number | null
   tasks: number
@@ -58,12 +59,12 @@ interface PulseHeaderProps {
   failed: number
   total: number
   selected: CommsAgent | null
-  onClearSelection: () => void
-  onRetry: () => void
+  onClearSelection?: () => void
+  onRetry?: () => void
   t: ViewKit['t']
 }
 
-const PulseHeader = memo(function PulseHeader(props: PulseHeaderProps): ReactElement {
+export const PulseHeader = memo(function PulseHeader(props: PulseHeaderProps): ReactElement {
   const { t } = props
   const stats = [
     ['agents', props.agentCount, t('fleet.pulse.agents')],
@@ -78,7 +79,9 @@ const PulseHeader = memo(function PulseHeader(props: PulseHeaderProps): ReactEle
         <div className="lc-pulse-title-row">
           <span className="lc-pulse-beacon" aria-hidden="true"><i /><i /><i /></span>
           <h2>{t('fleet.pulse.title')}</h2>
-          {props.selected !== null ? <PulseSelectionPill agent={props.selected} onClear={props.onClearSelection} t={t} /> : null}
+          {props.selected !== null && props.onClearSelection !== undefined
+            ? <PulseSelectionPill agent={props.selected} onClear={props.onClearSelection} t={t} />
+            : null}
         </div>
         <p>{t('fleet.pulse.subtitle')}</p>
       </div>
@@ -176,6 +179,7 @@ interface PulseTasksProps {
   onEnter: (id: string) => void
   rich: RichKit
   t: ViewKit['t']
+  pending?: boolean
 }
 
 const WORK_GROUP_HEAD_H = 34
@@ -517,6 +521,8 @@ const PulseTasks = memo(function PulseTasks(props: PulseTasksProps): ReactElemen
           })}
           {scope.bottomPad > 0 ? <div aria-hidden="true" style={{ height: scope.bottomPad }} /> : null}
         </div>
+      ) : props.pending === true ? (
+        <SkeletonRows rows={5} className="lc-pulse-tasks-skel" />
       ) : <div className="lc-empty">{t(props.items.length === 0 ? 'fleet.tasks.noTeam' : 'fleet.tasks.noMatch')}</div>}
     </section>
   )
@@ -784,6 +790,7 @@ export function MissionPulse(props: MissionPulseProps): ReactElement {
             onEnter={props.onEnter}
             rich={props.rich}
             t={t}
+            pending={family.pending > 0 || props.details.pending.size > 0}
           />
         </div>
       </div>

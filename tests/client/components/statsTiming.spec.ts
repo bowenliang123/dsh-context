@@ -39,17 +39,24 @@ function pctSum(container: HTMLElement): number {
 }
 
 describe('StatsTiming', () => {
-  test('absent timing renders the empty state; a zero-with-live-call timing renders every slot dimmed', async () => {
+  test('absent timing keeps the zero slot layout; a zero-with-live-call timing renders every slot dimmed', async () => {
     for (const timing of [
       null,
       { wallMs: 0, ttftMs: 0, genMs: 0, calls: 0, toolsMs: 0, toolCalls: 0, tools: {} },
     ] as const) {
       const m = await mount(h(StatsTiming, { timing }))
-      assert.ok(text(m.container).includes('No timing data yet'))
-      assert.equal(queryAll(m.container, '.lc-sl-row').length, 0)
-      assert.equal(queryAll(m.container, '.lc-donut').length, 0)
+      assert.ok(!text(m.container).includes('No timing data yet'), 'the zero layout replaces the empty claim')
+      assert.equal(queryAll(m.container, '.lc-sl-row').length, 4, 'every timing slot stays laid out at zero')
+      assert.ok(queryAll(m.container, '.lc-sl-row').every(r => r.className.includes('lc-sl-row-dim')))
+      assert.equal(query(m.container, '.lc-donut-center b').textContent, '—')
+      assert.equal(queryAll(m.container, '.lc-tstrip').length, 0, 'a settled session paints no strip frame')
       await m.unmount()
     }
+    const awaiting = await mount(h(StatsTiming, { timing: null, reserve: true }))
+    assert.ok(query(awaiting.container, '.lc-tstrip') !== null, 'the pending card reserves the strip height')
+    assert.equal(queryAll(awaiting.container, '.lc-tstrip-seg').length, 0)
+    assert.deepEqual(queryAll(awaiting.container, '.lc-sl-sub').map(n => n.textContent), ['—', '—', '—', '—'], 'unknown counts stay dashes')
+    await awaiting.unmount()
     const zero = await mount(h(StatsTiming, { timing: { wallMs: 0, ttftMs: 0, genMs: 0, calls: 2, toolsMs: 0, toolCalls: 0, tools: {} } }))
     assert.deepEqual(queryAll(zero.container, '.lc-sl-label').map(n => n.textContent), ['TTFT', 'LLM Gen', 'Tool runs', 'Overhead'])
     assert.ok(queryAll(zero.container, '.lc-sl-row').every(r => r.className.includes('lc-sl-row-dim')))
@@ -248,13 +255,17 @@ describe('StatsTiming — the session-time strip', () => {
     { kind: 'other', start: 46_000, end: 51_000 },
   ]
 
-  test('an absent or empty spans collection paints no strip (the aggregate overview card)', async () => {
+  test('an absent or empty spans collection keeps the strip frame while pending and drops it once settled', async () => {
     const collections: (TimingSpan[] | undefined)[] = [undefined, []]
     for (const spans of collections) {
-      const m = await mount(h(StatsTiming, { timing: TIMING, spans }))
-      assert.equal(queryAll(m.container, '.lc-sl-row').length, 4, 'the rows still render')
-      assert.equal(queryAll(m.container, '.lc-tstrip').length, 0)
-      await m.unmount()
+      const settled = await mount(h(StatsTiming, { timing: TIMING, spans }))
+      assert.equal(queryAll(settled.container, '.lc-sl-row').length, 4, 'the rows still render')
+      assert.equal(queryAll(settled.container, '.lc-tstrip').length, 0, 'a settled read paints no frame')
+      await settled.unmount()
+      const pending = await mount(h(StatsTiming, { timing: TIMING, spans, reserve: true }))
+      assert.equal(queryAll(pending.container, '.lc-tstrip').length, 1, 'the frame reserves the strip height')
+      assert.equal(queryAll(pending.container, '.lc-tstrip-seg').length, 0)
+      await pending.unmount()
     }
   })
 
@@ -762,10 +773,12 @@ describe('detailNote', () => {
 const DetailNote = makeDetailNote(makeKit())
 
 describe('DetailNote', () => {
-  test('the loading strip names the pending read', async () => {
+  test('the loading strip paints the pending bar in the default well', async () => {
     const m = await mount(h(DetailNote, { state: 'loading' as const }))
-    assert.equal(text(m.container), DICT_EN['detail.loading'])
-    assert.equal(query(m.container, 'div').className, 'lc-empty', 'the default well class')
+    const note = query(m.container, 'div')
+    assert.equal(note.className, 'lc-empty', 'the default well class')
+    assert.equal(note.getAttribute('aria-busy'), 'true')
+    assert.ok(query(note, '.lc-skel-note') !== null, 'the bar replaces the text claim')
     await m.unmount()
   })
 

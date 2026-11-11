@@ -761,7 +761,8 @@ describe('FleetView Mission Pulse states', () => {
     const View = makeView(ctx)
     const m = await mount(h(View, { sessionId: 'sv-cold', useProjection: () => undefined }))
 
-    assert.equal(query(m.container, '.lc-empty').textContent, DICT_EN['loading'])
+    assert.equal(query(m.container, '.lc-pulse').getAttribute('aria-busy'), 'true', 'the cold pulse lays out its shape')
+    assert.ok(queryAll(m.container, '.lc-loading-lane').length >= 2, 'both boards reserve their lanes')
     await act(async () => { await new Promise(resolve => setTimeout(resolve, 20)) })
     await act(async () => { release() })
     await until(() => text(m.container).includes(DICT_EN['detail.loadFailed']), 'the failure never surfaced')

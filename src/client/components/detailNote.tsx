@@ -1,5 +1,6 @@
 import { type ReactElement } from 'react'
 import type { ViewKit } from '../viewkit'
+import { SkeletonBar } from './skeleton'
 
 export function makeDetailNote(kit: ViewKit): (props: {
   state: 'loading' | 'failed'
@@ -13,7 +14,13 @@ export function makeDetailNote(kit: ViewKit): (props: {
     className?: string
   }): ReactElement {
     const cls = props.className ?? 'lc-empty'
-    if (props.state === 'loading') return <div className={cls}>{t('detail.loading')}</div>
+    if (props.state === 'loading') {
+      return (
+        <div className={cls} role="status" aria-busy="true">
+          <SkeletonBar className="lc-skel-note" />
+        </div>
+      )
+    }
     return (
       <div className={cls}>
         {props.onRetry !== undefined

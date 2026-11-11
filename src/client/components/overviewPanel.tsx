@@ -8,6 +8,7 @@ import {
   type TallyField, type TallyStat,
 } from '../overview'
 import { useOverviewDays, useOverviewPage, useOverviewSummary, useOverviewTally } from '../overviewSource'
+import type { PartState } from '../overviewSource'
 import type { OverviewRange as HostRange, OverviewScope, OverviewSummary } from '../../shared/types'
 import { openPluginSettings, openSessionVia, activeMsOf, seatKeyOf, type ClientCtx } from '../services'
 import { readSkillCatalog } from '../skills'
@@ -47,6 +48,12 @@ const PICK_FILTER: Record<TallyField, { label: string; clear: string }> = {
   tools: { label: 'ov.list.toolFilter', clear: 'ov.list.toolClear' },
   cmds: { label: 'ov.list.commandFilter', clear: 'ov.list.commandClear' },
 }
+
+function awaitingValueOf<T>(state: PartState<T>): boolean {
+  return state.data === null && !state.error
+}
+
+const SESSION_SKELETON = Array.from({ length: 12 }, (_, index) => index)
 
 export function makeOverviewPanel(
   ctx: ClientCtx,
@@ -192,6 +199,9 @@ export function makeOverviewPanel(
       { kind: 'tool', field: 'tools', stats: toolStats },
       { kind: 'command', field: 'cmds', stats: commandStats },
     ]
+    const summaryLoading = awaitingValueOf(summaryState)
+    const daysLoading = awaitingValueOf(daysState)
+    const pageLoading = awaitingValueOf(pageState)
     const busy = summaryState.pending || daysState.pending || pageState.pending
     const pickPreset = (range: OverviewRange): void => {
       setPicked(range)
@@ -284,10 +294,10 @@ export function makeOverviewPanel(
                       <span className="lc-stat-sub">{t('ov.kpi.wallSub', { n: fmt(teamTiming?.calls ?? 0) })}</span>
                     </div>
                   </div>
-                  <OverviewUsage days={days} currency={currency} today={todayKey()} />
+                  <OverviewUsage days={days} currency={currency} today={todayKey()} pending={daysLoading} />
                 </div>
                 <div className="lc-ov-stats">
-                  <OverviewTokens tokens={tokenParts} />
+                  <OverviewTokens tokens={tokenParts} pending={summaryLoading} />
                   <StatsTiming timing={teamTiming} />
                 </div>
                 <div className="lc-ov-body" ref={bodyRef}>
@@ -313,7 +323,7 @@ export function makeOverviewPanel(
                             </div>
                           </span>
                         </div>
-                        <Heatmap days={days} metric={metric} selected={day} onSelect={setDay} today={todayKey()} />
+                        <Heatmap days={days} metric={metric} selected={day} onSelect={setDay} today={todayKey()} pending={daysLoading} />
                       </div>
                       <OverviewSkills
                         stats={skillStats}
@@ -321,6 +331,7 @@ export function makeOverviewPanel(
                         selected={pick !== null && pick.field === 'skills' ? pick.name : null}
                         onSelect={(name) => { setPick(name === null ? null : { field: 'skills', name }) }}
                         catalog={catalog}
+                        pending={awaitingValueOf(skillsState)}
                       />
                       {tallyCards.map(card => (
                         <OverviewTally
@@ -330,6 +341,7 @@ export function makeOverviewPanel(
                           day={day}
                           selected={pick !== null && pick.field === card.field ? pick.name : null}
                           onSelect={(name) => { setPick(name === null ? null : { field: card.field, name }) }}
+                          pending={card.kind === 'tool' ? awaitingValueOf(toolsState) : awaitingValueOf(cmdsState)}
                         />
                       ))}
                     </div>
@@ -396,7 +408,11 @@ export function makeOverviewPanel(
                         </div>
                       )}
 
-                      {rows.length === 0 ? (
+                      {pageLoading ? (
+                        <div className="lc-ov-grid" aria-hidden="true">
+                          {SESSION_SKELETON.map(i => <div key={i} className="lc-card lc-ov-skel-card" />)}
+                        </div>
+                      ) : rows.length === 0 ? (
                         <div className="lc-empty">{t((summary?.sessionsTotal ?? 0) === 0 ? 'ov.list.empty' : 'ov.list.noMatch')}</div>
                       ) : (
                         <>
@@ -441,7 +457,9 @@ export function makeOverviewPanel(
                       <div className="lc-card lc-deferred-skeleton lc-ov-tile" aria-hidden="true" />
                       <div className="lc-card lc-deferred-skeleton lc-ov-tile" aria-hidden="true" />
                     </div>
-                    <div className="lc-card lc-deferred-skeleton" style={{ minHeight: 320 }} aria-hidden="true" />
+                    <div className="lc-ov-grid" aria-hidden="true">
+                      {SESSION_SKELETON.map(i => <div key={i} className="lc-card lc-ov-skel-card" />)}
+                    </div>
                   </>)}
                 </div>
               </>

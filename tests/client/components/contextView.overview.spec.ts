@@ -162,16 +162,21 @@ describe('ContextView — projection guards', () => {
       { useProjection: () => undefined },
     ]) {
       const m = await mount(h(View, props))
-      assert.ok(text(m.container).includes(DICT_EN.loading))
-      assert.ok(queryAll(m.container, '.lc-deferred-skeleton').length >= 5, 'the cold load paints the final card skeleton')
+      assert.equal(queryAll(m.container, '.lc-empty').length, 0, 'no text mask covers the cold layout')
+      assert.equal(queryAll(m.container, '.lc-deferred-skeleton').length, 0)
+      assert.ok(queryAll(m.container, '.lc-loading-lane').length >= 2, 'the event and file lanes reserve their rows')
       assert.ok(query(m.container, '.lc-cols-main').children.length >= 2)
+      for (const key of ['overview.title', 'stats.title', 'tokens.title', 'timing.title', 'trend.title', 'browser.title', 'events.title', 'files.title'] as const) {
+        assert.ok(text(m.container).includes(DICT_EN[key]), `the ${key} card keeps its frame`)
+      }
       await m.unmount()
     }
 
     const sidebar = await mount(h(View, { host: 'sidebar' }))
     try {
-      assert.ok(queryAll(sidebar.container, '.lc-deferred-skeleton').length >= 4, 'the sidebar skeleton skips the head row')
-      assert.equal(queryAll(sidebar.container, '.lc-deferred-skeleton .lc-empty').length, 0)
+      assert.ok(!text(sidebar.container).includes(DICT_EN['stats.title']), 'the sidebar keeps its head-row omission')
+      assert.ok(text(sidebar.container).includes(DICT_EN['tokens.title']))
+      assert.ok(queryAll(sidebar.container, '.lc-loading-lane').length >= 2)
     } finally {
       await sidebar.unmount()
     }
@@ -187,7 +192,7 @@ describe('ContextView — projection guards', () => {
     const View = makeView(new TestClientCtx())
     const m = await mount(h(View, { sessionId: 'sv-cold-fail', useProjection: () => undefined }))
     await until(() => text(m.container).includes(DICT_EN['detail.loadFailed']), 'the failure note never surfaced')
-    assert.ok(!text(m.container).includes(DICT_EN.loading), 'no spinner remains once failed')
+    assert.equal(queryAll(m.container, '.lc-loading-lane, .lc-skel-plot').length, 0, 'the failure notes replace the placeholders')
     await act(async () => {
       buttonByText(m.container, DICT_EN['detail.loadFailed']).click()
     })
@@ -637,16 +642,18 @@ describe('ContextView below-fold lazy mount', () => {
       useChat: (selector => selector({ legacy: { nodes: [] } })) as UseChatLike,
     }))
     try {
-      assert.equal(queryAll(m.container, '.lc-deferred-skeleton').length, 4)
-      assert.equal(queryAll(m.container, '.lc-fa-card').length, 0)
+      assert.equal(queryAll(m.container, '.lc-loading-lane').length, 3, 'the three cards reserve their bodies')
+      assert.equal(queryAll(m.container, '.lc-events').length, 0)
+      assert.equal(queryAll(m.container, '.lc-fa-list').length, 0)
       await act(async () => {
         for (const callback of observer.callbacks) callback([{ isIntersecting: true } as IntersectionObserverEntry], {} as IntersectionObserver)
       })
       assert.equal(idle.length, 3)
       await act(async () => { for (const run of idle) run() })
       await flush()
-      assert.equal(queryAll(m.container, '.lc-deferred-skeleton').length, 0)
-      assert.equal(queryAll(m.container, '.lc-fa-card').length, 1)
+      assert.equal(queryAll(m.container, '.lc-loading-lane').length, 0)
+      assert.equal(queryAll(m.container, '.lc-events').length, 1)
+      assert.equal(queryAll(m.container, '.lc-fa-list').length, 1)
       assert.equal(queryAll(m.container, '.lc-cmd-card').length, 1)
 
       await m.unmount()
@@ -659,9 +666,10 @@ describe('ContextView below-fold lazy mount', () => {
       }))
       const pill = queryAll(second.container, '.lc-ledger-in-chips .lc-ledger-chip').find(el => text(el).startsWith(DICT_EN['files.kind.read']))
       assert.ok(pill !== undefined)
+      assert.equal(queryAll(second.container, '.lc-fa-list').length, 0, 'the card body waits for the mount')
       await click(pill)
       await flush()
-      assert.equal(queryAll(second.container, '.lc-fa-card').length, 1, 'the jump mounts the lazy card')
+      assert.equal(queryAll(second.container, '.lc-fa-list').length, 1, 'the jump mounts the lazy card')
       await second.unmount()
     } finally {
       await m.unmount()

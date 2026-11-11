@@ -4,6 +4,7 @@ import type { AgentNode } from '../agentTree'
 import { fmtDurationCompact, modelLabelOf } from '../agentTree'
 import { type CommsRow } from '../fleetDetail'
 import { CommsParties, commsTextOf } from './commsRow'
+import { SkeletonRows } from './skeleton'
 import { tasksOfOwnerId, teamMemberOf, type FleetTeam } from '../fleetTeam'
 import { fmtTime } from '../format'
 import type { FleetDetail, FleetMemberInfo } from '../../shared/types'
@@ -190,7 +191,7 @@ export function AgentInspector(props: AgentInspectorProps): ReactElement {
         </div>
       ) : null}
 
-      {props.detail === undefined ? <div className="lc-inspector-loading">{t('fleet.detailLoading')}</div> : null}
+      {props.detail === undefined ? <div className="lc-inspector-loading" role="status" aria-busy="true"><SkeletonRows rows={3} /></div> : null}
 
       {props.comms.length > 0 ? (
         <div className="lc-inspector-section">

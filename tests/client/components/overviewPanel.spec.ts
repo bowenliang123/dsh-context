@@ -796,13 +796,21 @@ describe('OverviewPanel', () => {
     assert.equal(kpiValues[4], '0', 'no tool calls without timing')
     assert.equal(kpiValues[5], '—', 'no active time without timing')
     assert.ok(text(noTimeline.m.container).includes('No billed tokens in this range'))
-    assert.ok(text(noTimeline.m.container).includes('No timing data yet'))
+    assert.ok(!text(noTimeline.m.container).includes('No timing data yet'), 'the timing card lays out zeros instead')
+    assert.equal(queryAll(noTimeline.m.container, '.lc-sl-row').length, 4, 'the zero timing slots stay in place')
     await noTimeline.m.unmount()
 
     stubRoutes({ rows: panelRows().map(row => ({ ...row, costUsd: null })) })
     const unpriced = await openPanel(ctx)
     assert.equal(miniValues(cardWith(unpriced.m.container, 'alpha session'))[2], '—')
     await unpriced.m.unmount()
+  })
+
+  test('a failed summary read with an empty page states the empty claim instead of stalling', async () => {
+    stubRoutes({ summary: () => null, rows: [] })
+    const { m } = await openPanel(makeCtx())
+    assert.ok(text(m.container).includes('No sessions yet'), 'the list names the empty scope')
+    await m.unmount()
   })
 
   test('the zh locale renders translated chrome and CNY cost from the host USD; a bare locale falls back to USD', async () => {
@@ -884,9 +892,8 @@ describe('OverviewPanel — progressive body', () => {
     vi.stubGlobal('IntersectionObserver', IdleObserver)
     const calls = stubRoutes()
     const { m } = await openPanel(makeCtx())
-    assert.equal(queryAll(m.container, '.lc-ov-grid').length, 0, 'the body has not mounted')
     assert.equal(queryAll(m.container, '.lc-ov-tiles > .lc-deferred-skeleton').length, 4, 'the tile row reserves its four cards')
-    assert.equal(queryAll(m.container, '.lc-ov-body > .lc-deferred-skeleton').length, 1, 'the session list reserves its block')
+    assert.equal(queryAll(m.container, '.lc-ov-grid > .lc-ov-skel-card').length, 12, 'the session list reserves its card grid')
     assert.ok(queryAll(m.container, '.lc-ov-first .lc-stat-value').length > 0, 'the KPI band is already live')
     assert.equal(bodyOf(calls, 'tally').length, 0, 'the tally parts wait for the tiles to mount')
     assert.equal(bodyOf(calls, 'page').length, 1, 'the list data is already on its way')

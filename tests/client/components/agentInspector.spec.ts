@@ -231,7 +231,7 @@ describe('AgentInspector — the fleet-detail sections', () => {
 
   test('an in-flight read notes itself; a detail without descriptor hides the section', async () => {
     const m = await mount(h(AgentInspector, propsOf({ detail: undefined })))
-    assert.ok(text(m.container).includes(DICT_EN['fleet.detailLoading']))
+    assert.ok(query(m.container, '.lc-inspector-loading .lc-skel-rows') !== null, 'the panel reserves its rows while reading')
     await m.unmount()
     const m2 = await mount(h(AgentInspector, propsOf({ detail: { detail: { messages: [], truncated: false } } })))
     assert.ok(!text(m2.container).includes(DICT_EN['fleet.config']))

@@ -8,6 +8,7 @@ import type { ViewKit } from '../viewkit'
 import { IconFolderOpen } from '../primitives'
 import { ClearableInput } from './clearableInput'
 import { makeDetailNote } from './detailNote'
+import { LoadingLane } from './skeleton'
 import { useSurfaceWindow } from './useRowWindow'
 import { remoteStateOf } from './useRemoteState'
 
@@ -227,7 +228,7 @@ export function makeFileCard(kit: ViewKit, settings: ContextSettings): Component
             </span>
           </div>
           {remote.kind === 'loading' ? (
-            <DetailNote state="loading" className="lc-empty lc-lane" />
+            <LoadingLane />
           ) : remote.kind === 'failed' ? (
             <DetailNote state="failed" onRetry={remote.retry} className="lc-empty lc-lane" />
           ) : shown.length === 0 ? (

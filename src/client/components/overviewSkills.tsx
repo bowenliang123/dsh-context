@@ -7,6 +7,7 @@ import { copySkillPath } from '../skills'
 import { nameColorOf } from '../nameColor'
 import { IconCheck, IconCopy, IconSkill } from '../primitives'
 import type { ViewKit } from '../viewkit'
+import { SkeletonRows } from './skeleton'
 import { TallyCard, TallyRow, shareOf } from './overviewTally'
 
 const MAX_ROWS = 20
@@ -68,6 +69,7 @@ export interface OverviewSkillsProps {
   selected?: string | null
   onSelect?: (name: string | null) => void
   catalog?: ReadonlyMap<string, SkillInfo> | null
+  pending?: boolean
 }
 
 export function makeOverviewSkills(kit: ViewKit): (props: OverviewSkillsProps) => ReactElement {
@@ -210,7 +212,9 @@ export function makeOverviewSkills(kit: ViewKit): (props: OverviewSkillsProps) =
       >
         {!pinnedRowVisible && detailBlock}
         {stats.length === 0 ? (
-          <div className="lc-empty">{t('ov.skills.empty')}</div>
+          props.pending === true
+            ? <SkeletonRows rows={6} className="lc-ov-tallies-skel" />
+            : <div className="lc-empty">{t('ov.skills.empty')}</div>
         ) : (
           <div className="lc-ov-tallies" role="group" aria-label={t('stats.skills')}>
             {stats.slice(0, MAX_ROWS).map((s) => {

@@ -40,6 +40,7 @@ import { rowWindowFor, useColumnWindow, type RowRange } from './useRowWindow'
 import { useScrollMetrics } from './useElementMetrics'
 import { ClearableInput } from './clearableInput'
 import { AgentAvatar, channelStyle } from './commsAgent'
+import { SkeletonRows } from './skeleton'
 
 interface PulseTimelineProps {
   lanes: PulseLaneInput[]
@@ -590,13 +591,13 @@ export const PulseTimeline = memo(function PulseTimeline(props: PulseTimelinePro
           </div>
         </div>
       ) : null}
-      {visibleIds.length === 0 || laneItems.length === 0 ? (
+      {props.pending && shownRecords === 0 ? (
+        <div className="lc-pulse-timeline-loading" aria-hidden="true"><SkeletonRows rows={6} /></div>
+      ) : visibleIds.length === 0 || laneItems.length === 0 ? (
         <div className="lc-empty lc-pulse-timeline-empty">
           {searching && visibleIds.length === 0
             ? t('fleet.pulse.noLaneMatch')
-            : props.pending && shownRecords === 0
-              ? t('fleet.comms.loading')
-              : recordTotal > 0 || agentSelected ? t('fleet.pulse.emptyTimeline') : t('fleet.comms.empty')}
+            : recordTotal > 0 || agentSelected ? t('fleet.pulse.emptyTimeline') : t('fleet.comms.empty')}
         </div>
       ) : null}
     </section>

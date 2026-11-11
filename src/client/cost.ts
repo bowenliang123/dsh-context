@@ -8,8 +8,8 @@ export function formatCost(amount: number, currency: CostCurrency): string {
   return symbol + (amount >= 1 ? amount.toFixed(2) : amount.toPrecision(2))
 }
 
-export function displayCurrencyOf(locale: LocaleService): CostCurrency {
-  return typeof locale.getLocale === 'function' && locale.getLocale().active === 'zh' ? 'cny' : 'usd'
+export function displayCurrencyOf(locale: LocaleService | undefined): CostCurrency {
+  return locale !== undefined && typeof locale.getLocale === 'function' && locale.getLocale().active === 'zh' ? 'cny' : 'usd'
 }
 
 export function formatPriceRate(amount: number, currency: CostCurrency): string {

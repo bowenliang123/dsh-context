@@ -2,7 +2,7 @@ import { useEffect, useId, useState, type ReactElement } from 'react'
 import { DEFAULT_RECOM, recomsOfPayload, type Recom, type RecomRead, type RecomsRead, type RecomText } from '../../shared/recoms'
 import { RECOM_ROUTE } from '../apiRoutes'
 import { IconShare } from '../primitives'
-import type { ClientCtx } from '../services'
+import type { ClientCtx, LocaleService } from '../services'
 import type { ViewKit } from '../viewkit'
 
 const UNCACHED_STATE: RecomRead = { recom: DEFAULT_RECOM, degraded: false }
@@ -73,7 +73,8 @@ function initialState(): RecomRead {
 export function makeRecomCard(kit: ViewKit, ctx: ClientCtx): () => ReactElement {
   return function RecomCard(): ReactElement {
     kit.useLocaleTick()
-    const locale = ctx.locale.getLocale?.().active === 'zh' ? 'zh' : 'en'
+    const localeSvc = ctx.locale as LocaleService | undefined
+    const locale = typeof localeSvc?.getLocale === 'function' && localeSvc.getLocale().active === 'zh' ? 'zh' : 'en'
     const [state, setState] = useState<RecomRead>(initialState)
     const [iconState, setIconState] = useState<'loading' | 'loaded' | 'failed'>('loading')
     const tooltipId = useId()

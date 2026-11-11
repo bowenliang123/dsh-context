@@ -11,6 +11,7 @@ import type { DetailState } from '../timelineSource'
 import type { ViewKit } from '../viewkit'
 import { ClearableInput } from './clearableInput'
 import { makeDetailNote } from './detailNote'
+import { LoadingLane } from './skeleton'
 import { makeRichText } from './richText'
 import { IconApi, IconShare } from '../primitives'
 import { Section } from './section'
@@ -577,7 +578,7 @@ export function makeCommandPanel(kit: ViewKit): ComponentType<CommandPanelProps>
             </div>
             {fillNote}
             {remote.kind === 'loading' ? (
-              <DetailNote state="loading" className="lc-empty lc-lane" />
+              <LoadingLane className="lc-cmd-lane" />
             ) : remote.kind === 'failed' ? (
               <DetailNote state="failed" onRetry={remote.retry} className="lc-empty lc-lane" />
             ) : shown.length === 0 ? (

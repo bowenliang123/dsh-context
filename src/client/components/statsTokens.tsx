@@ -43,7 +43,7 @@ export function makeStatsTokens(kit: ViewKit, Donut: (props: DonutProps) => Reac
       answers: props.generatedAnswerTokens,
       calls: props.generatedCallTokens,
     })
-    const shown = total > 0 ? parts.filter(p => p.value > 0) : parts
+    const shown = parts.some(p => p.value > 0) ? parts.filter(p => p.value > 0) : parts
     const rows = tokenRowsOf(kit, shown, total)
     return (
       <div className="lc-card lc-col-donut flex-1 min-w-[min(360px,100%)]">

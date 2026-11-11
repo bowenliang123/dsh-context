@@ -633,6 +633,7 @@ export function barSegments(parts: PartsPart[], pct: number | null, fallbackColo
 }
 
 export function sessionsFaceOf(ctx: { get(name: string): unknown }): SessionsFaceLike | null {
+  if (typeof ctx.get !== 'function') return null
   const rec = asRecord(ctx.get('sessions'))
   if (rec === null) return null
   const list = asRecord(rec.list)

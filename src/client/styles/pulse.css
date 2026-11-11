@@ -75,6 +75,9 @@
 
 .lc-pulse-timeline, .lc-pulse-tasks, .lc-pulse-events { min-width: 0; border-color: var(--dsw-alias-border-l2); background: var(--dsw-alias-bg-layer-1); }
 .lc-pulse-events { max-height: 620px; }
+.lc-pulse-graph-skel { height: 100%; min-height: 413px; }
+.lc-pulse-board-skel { height: 413px; }
+.lc-pulse-events-skel { height: 620px; }
 .lc-pulse-timeline, .lc-pulse-tasks { display: flex; flex-direction: column; max-height: 413px; }
 .lc-pulse-timeline > .lc-card-title, .lc-pulse-tasks > .lc-card-title, .lc-pulse-tasks > .lc-pulse-work-warning { flex: none; }
 .lc-pulse-timeline.lc-card > .lc-card-title { margin-bottom: 0; padding-bottom: 10px; border-bottom: 0; }
@@ -153,6 +156,9 @@
 .lc-pulse-delegation-actions { display: flex; align-items: center; justify-content: flex-end; flex-wrap: wrap; gap: 5px; padding-top: 12px; }
 .lc-pulse-delegation-actions .lc-inspector-btn { display: inline-flex; align-items: center; justify-content: center; }
 .lc-pulse-timeline-empty { flex: none; margin-top: 7px; }
+.lc-pulse-timeline-loading { flex: none; margin-top: 7px; min-height: 300px; }
+.lc-pulse-tasks-skel { padding: 2px 0; }
+.lc-pulse-tasks-skel > .lc-skel-bar { height: 18px; }
 
 .lc-pulse-work-filters { display: flex; flex-wrap: wrap; align-self: flex-start; gap: 2px; max-width: 100%; margin: 0 0 8px; padding: 2px; border: var(--lc-line-fine, 1px solid var(--dsw-alias-border-l2)); border-radius: 7px; background: var(--lc-control-track); }
 .lc-pulse-work-filters .lc-gran-btn { font-size: 10px; padding: 3px 7px; }

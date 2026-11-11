@@ -651,7 +651,7 @@ describe('FileCard — workspace display and system open', () => {
 describe('FileCard — the split generation detail states', () => {
   test('a pending detail read shows the loading note; a failed one arms its retry, or keeps the plain empty claim without one', async () => {
     const m = await mount(h(FileCard, { activity: richActivity({ entries: [] }), state: 'loading', onRetry: () => {}, }))
-    assert.ok(text(m.container).includes('Loading history'))
+    assert.ok(query(m.container, '.lc-loading-lane') !== null, 'a pending read paints the loading lane')
     assert.ok(!text(m.container).includes('No file reads'))
     await m.unmount()
 

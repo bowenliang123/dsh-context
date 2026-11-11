@@ -6,12 +6,17 @@ import { SliceList } from './sliceList'
 import type { DonutProps } from './donut'
 import { tokenRowsOf } from './tokenRows'
 import { IconDatabase } from '../primitives'
+import { SkeletonRows } from './skeleton'
 
 export function makeOverviewTokens(kit: ViewKit, Donut: (props: DonutProps) => ReactElement): (props: {
   tokens: { parts: TokenPartTotal[]; total: number } | null
+  pending?: boolean
 }) => ReactElement {
   const { t, fmt } = kit
-  return function OverviewTokens(props: { tokens: { parts: TokenPartTotal[]; total: number } | null }): ReactElement {
+  return function OverviewTokens(props: {
+    tokens: { parts: TokenPartTotal[]; total: number } | null
+    pending?: boolean
+  }): ReactElement {
     const [hoverKey, setHoverKey] = useState<string | null>(null)
     const tokens = props.tokens
     const total = tokens?.total ?? 0
@@ -26,7 +31,14 @@ export function makeOverviewTokens(kit: ViewKit, Donut: (props: DonutProps) => R
           </span>
         </div>
         {shown.length === 0
-          ? <div className="lc-empty">{t('ov.stats.empty')}</div>
+          ? (props.pending === true
+            ? (
+              <div className="lc-donut-row flex items-center justify-start gap-3 min-w-0 @max-[320px]/lc-card:gap-2 @max-[240px]/lc-card:flex-wrap">
+                <span className="lc-skel-donut" aria-hidden="true" />
+                <SkeletonRows rows={6} />
+              </div>
+            )
+            : <div className="lc-empty">{t('ov.stats.empty')}</div>)
           : (
             <div className="lc-donut-row flex items-center justify-start gap-3 min-w-0 @max-[320px]/lc-card:gap-2 @max-[240px]/lc-card:flex-wrap">
               <Donut

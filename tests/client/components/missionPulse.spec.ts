@@ -905,7 +905,7 @@ describe('MissionPulse family progress', () => {
       t: kit.t,
     }))
     assert.equal(query(mounted.container, '[data-pulse-stat="messages"]').textContent, '12')
-    assert.ok(text(query(mounted.container, '.lc-pulse-timeline')).includes(kit.t('fleet.comms.loading')))
+    assert.ok(query(mounted.container, '.lc-pulse-timeline-loading .lc-skel-rows') !== null, 'the timeline reserves its rows while reading')
     await mounted.unmount()
   })
 })

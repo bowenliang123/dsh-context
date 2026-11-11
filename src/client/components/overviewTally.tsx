@@ -3,6 +3,7 @@ import { nameColorOf } from '../nameColor'
 import type { TallyStat } from '../overview'
 import { IconApi, IconInspect, type IconComponent } from '../primitives'
 import type { ViewKit } from '../viewkit'
+import { SkeletonRows } from './skeleton'
 
 const MAX_ROWS = 24
 
@@ -115,6 +116,7 @@ export interface OverviewTallyProps {
   day?: string | null
   selected?: string | null
   onSelect?: (name: string | null) => void
+  pending?: boolean
 }
 
 export function makeOverviewTally(kit: ViewKit): (props: OverviewTallyProps) => ReactElement {
@@ -136,7 +138,9 @@ export function makeOverviewTally(kit: ViewKit): (props: OverviewTallyProps) => 
         summary={t(face.summary, { n: fmt(stats.length), runs: fmt(total) })}
       >
         {stats.length === 0 ? (
-          <div className="lc-empty">{t(face.empty)}</div>
+          props.pending === true
+            ? <SkeletonRows rows={6} className="lc-ov-tallies-skel" />
+            : <div className="lc-empty">{t(face.empty)}</div>
         ) : (
           <div className="lc-ov-tallies" role="group" aria-label={title}>
             {shown.map((s) => {

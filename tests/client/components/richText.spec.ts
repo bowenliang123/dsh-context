@@ -587,7 +587,7 @@ describe('EventList', () => {
       window.dispatchEvent(new Event('resize'))
     })
     await settle(20)
-    assert.ok(text(m.container).length > 0, 'the loading note stays painted')
+    assert.ok(query(m.container, '.lc-loading-lane') !== null, 'the loading lane stays painted')
     await m.unmount()
   })
 
@@ -691,7 +691,7 @@ describe('EventList', () => {
 describe('EventList — the split generation detail states', () => {
   test('a pending read shows the loading note; a failed read arms the retry, or falls back to the empty claim', async () => {
     const loading = await mount(h(EventList, { events: [], state: 'loading', onRetry: () => {} }))
-    assert.ok(text(loading.container).includes(DICT_EN['detail.loading']))
+    assert.ok(query(loading.container, '.lc-loading-lane') !== null, 'a pending read paints the loading lane')
     assert.ok(!text(loading.container).includes('No context events yet'))
     await loading.unmount()
 

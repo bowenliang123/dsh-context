@@ -4,11 +4,13 @@ import { type DayTotals } from '../overview'
 import { shiftDayKey } from '../../shared/days'
 import type { ViewKit } from '../viewkit'
 import { IconData } from '../primitives'
+import { SkeletonPlot } from './skeleton'
 
 export interface OverviewUsageProps {
   days: Record<string, DayTotals>
   currency: CostCurrency
   today: string
+  pending?: boolean
 }
 
 export function usageWindowOf(today: string): string[] {
@@ -52,7 +54,13 @@ export function makeOverviewUsage(kit: ViewKit): (props: OverviewUsageProps) => 
           </span>
         </div>
         {empty || window.length === 0
-          ? <div className="lc-empty">{t('ov.usage.empty')}</div>
+          ? (props.pending === true
+            ? (
+              <div className="lc-ov-usage-plot lc-ov-usage-plot-skel" aria-hidden="true">
+                <div className="lc-ov-usage-grid"><SkeletonPlot /></div>
+              </div>
+            )
+            : <div className="lc-empty">{t('ov.usage.empty')}</div>)
           : (
             <>
               <div className="lc-ov-usage-plot" role="group" aria-label={t('ov.usage.title')}>

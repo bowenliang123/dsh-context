@@ -6,7 +6,10 @@ import type { Translate } from '../i18n'
 import type { DetailState } from '../timelineSource'
 import type { ViewKit } from '../viewkit'
 import { makeDetailNote } from './detailNote'
+import { LoadingLane } from './skeleton'
 import { remoteStateOf } from './useRemoteState'
+
+export const EVENT_KINDS = ['inject', 'compaction', 'prune', 'model'] as const
 
 const EVENT_ICONS: Record<string, string> = { compaction: '✂', prune: '✂', mode: '⇄' }
 
@@ -107,7 +110,7 @@ export function makeEventList(kit: ViewKit): (props: EventListProps) => ReactEle
       }
     }, [])
     const remote = remoteStateOf(props.events.length, props.state, props.onRetry)
-    if (remote.kind === 'loading') return <DetailNote state="loading" className="lc-empty lc-lane" />
+    if (remote.kind === 'loading') return <LoadingLane />
     if (remote.kind === 'failed') return <DetailNote state="failed" onRetry={remote.retry} className="lc-empty lc-lane" />
     if (remote.kind === 'empty') return <div className="lc-empty lc-lane">{t('events.empty')}</div>
     const sorted = props.events.slice().reverse()

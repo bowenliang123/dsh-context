@@ -446,7 +446,8 @@ describe('CommandPanel — the result block', () => {
     const deferred = new Promise(resolve => { release = resolve })
     const m = await mount(h(Panel, { commands: [cmd(1, { resultSeq: 2 })], fetchContent: () => deferred as Promise<null>, }))
     await click(query(m.container, '.lc-cmd-row'))
-    assert.ok(text(query(m.container, '.lc-cmd-result-note')).includes('Loading history…'))
+    assert.ok(query(m.container, '.lc-cmd-result-note .lc-skel-note') !== null, 'a pending read paints the loading bar')
+    assert.ok(!text(query(m.container, '.lc-cmd-result-note')).includes('Loading history'))
     const resultCard = queryAll(m.container, '.lc-cmd-detail .lc-ts-card')[1]
     assert.equal(queryAll(resultCard, '.lc-rich-copy, .lc-find-btn').length, 0, 'a note-only result card carries no actions')
     await act(async () => { release(null) })
@@ -485,7 +486,7 @@ describe('CommandPanel — empty and channel states', () => {
     assert.ok(text(empty.container).includes('No commands executed in this session'))
     await empty.unmount()
     const loading = await mount(h(Panel, { commands: [], state: 'loading' }))
-    assert.equal(queryAll(loading.container, '.lc-detail-note, .lc-empty').length, 1)
+    assert.equal(queryAll(loading.container, '.lc-lane.lc-loading-lane.lc-cmd-lane').length, 1, 'the loading lane reserves the log body')
     assert.equal(queryAll(loading.container, '.lc-cmd-rail').length, 0, 'a pending channel owns the full width')
     await loading.unmount()
     const failed = await mount(h(Panel, { commands: [], state: 'failed', onRetry: () => {} }))

@@ -75,10 +75,11 @@ describe('ContextModal', () => {
       ['sm-load2', () => undefined],
     ] as const) {
       const loading = await mount(h(ContextModal, { sessionId: sid, useContextModal: OPEN, ...(useProjection !== undefined ? { useProjection } : {}), }))
-      assert.ok(text(document.body).includes(DICT_EN.loading), 'no projection hook (or an empty one) shows the loading view')
+      assert.ok(text(document.body).includes(DICT_EN['overview.title']), 'no projection hook (or an empty one) keeps the zero layout')
+      assert.ok(text(document.body).includes(DICT_EN['browser.title']))
       assert.ok(document.body.querySelector('.lc-modal-card') !== null)
       assert.ok(document.body.querySelector('.lc-modal-fill') !== null, 'the modal block keeps its final size class')
-      assert.equal(document.body.querySelectorAll('.lc-modal-skeleton').length, 2, 'the modal paints its final card skeleton')
+      assert.equal(document.body.querySelectorAll('.lc-modal-skeleton').length, 0)
       await loading.unmount()
     }
   })
@@ -93,7 +94,7 @@ describe('ContextModal', () => {
     }))
     try {
       assert.ok(document.body.querySelector('.lc-modal-fill') !== null)
-      assert.ok(document.body.querySelector('.lc-br') !== null || text(document.body).includes(DICT_EN.loading))
+      assert.ok(document.body.querySelector('.lc-br') !== null, 'the browser keeps its card shape without a session id')
     } finally {
       await m.unmount()
     }
@@ -121,7 +122,7 @@ describe('ContextModal', () => {
     const ContextModal = makeContextModal(asClientCtx(ctx), kit, settings)
     const m = await mount(h(ContextModal, { sessionId: 'sm-cold-fail', useContextModal: OPEN, useProjection: () => undefined, }))
     await until(() => text(document.body).includes(DICT_EN['detail.loadFailed']), 'the failure note never surfaced')
-    assert.ok(!text(document.body).includes(DICT_EN.loading), 'no spinner remains once failed')
+    assert.ok(document.body.querySelector('.lc-modal-card') !== null, 'the modal keeps its frame once failed')
     await act(async () => {
       const hit = queryAll(document.body, 'button').find(b => text(b) === DICT_EN['detail.loadFailed'])
       if (hit === undefined) throw new Error('retry button not found')
@@ -139,7 +140,6 @@ describe('ContextModal', () => {
       useProjection: (key: string) =>
         key === 'contextTimeline' ? { current: 'junk', requests: 'nope', nodes: 7, archive: null } : undefined,
     }))
-    assert.ok(!text(document.body).includes(DICT_EN.loading))
     assert.ok(text(document.body).includes(DICT_EN['overview.title']))
     assert.ok(document.body.querySelector('.lc-br-cats') !== null)
     await m.unmount()
@@ -386,10 +386,10 @@ describe('ContextModal — the split generation', () => {
     })
     const m = await mount(h(ContextModal, { sessionId: 'sm-slim', useContextModal: OPEN, useProjection: (key: string) => (key === 'contextTimeline' ? head : undefined), }))
     assert.ok(text(document.body).includes(DICT_EN['overview.title']))
-    assert.ok(text(document.body).includes(DICT_EN['detail.loading']))
+    assert.ok(document.body.querySelector('.lc-br-note .lc-skel-note') !== null, 'the browser reserves its loading bar')
     await act(async () => { await new Promise(resolve => setTimeout(resolve, 20)) })
     await act(async () => { release() })
-    await until(() => !text(document.body).includes(DICT_EN['detail.loading']), 'the modal detail never landed')
+    await until(() => document.body.querySelector('.lc-br-note .lc-skel-note') === null, 'the modal detail never landed')
     assert.equal(queryAll(document.body, '.lc-br-pick option').length, 2, 'live + the one served step')
     assert.ok(text(document.body).includes('1 Item'), 'the assistant section counts the served node')
     await m.unmount()
