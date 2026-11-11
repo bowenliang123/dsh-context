@@ -31,13 +31,13 @@ describe('dsh-context overview route', () => {
     const values = {
       a: {
         contextTimeline: timelineOf({ total: 100, turns: 2, cost: firstUsage, timing: timingOf(1_000, 3, 400), lastUser: 'first' }),
-        contextActivity: { days: { '2026-11-01': dayOf(120, 2, { cost: firstCost, turns: 2, skills: ['s1'] }) } },
+        contextActivity: { days: { '2026-11-01': dayOf(120, 2, { cost: firstCost, turns: 2, toolCalls: 2, skills: ['s1'] }) } },
         title: 'Alpha',
         sessionListMetadata: { blank: false, lastPromptAt: 1_000 },
       },
       b: {
         contextTimeline: timelineOf({ total: 200, turns: 3, cost: secondUsage, timing: timingOf(500, 1, 100) }),
-        contextActivity: { days: { '2026-11-02': dayOf(80, 1, { cost: secondCost, turns: 3 }) } },
+        contextActivity: { days: { '2026-11-02': dayOf(80, 1, { cost: secondCost, turns: 3, toolCalls: 1, toolsMs: 200, wallMs: 500 }) } },
         title: 'Beta',
         sessionListMetadata: { blank: false, lastPromptAt: 2_000 },
       },
@@ -49,11 +49,12 @@ describe('dsh-context overview route', () => {
     })
     const reply = await call(harness, { part: 'summary' })
     const summary = summaryOf(reply)
-    const merged = { deepseek: { 'deepseek-v4-flash': { off: { uncached: 130, cacheRead: 55, cacheWrite: 10, output: 27 } } } }
+    const merged = { deepseek: { 'deepseek-v4-flash': { off: { uncached: 70, cacheRead: 22, cacheWrite: 5, output: 13 } } } }
     const expectedParts: { key: string; value: number }[] = []
     for (const valuesOfSession of [values.a, values.b]) {
       const timeline = valuesOfSession.contextTimeline as unknown as ContextTimeline
-      const parts = tokenPartsOf(timeline, timeline.cost as SessionCostUsage)
+      const cost = Object.values(valuesOfSession.contextActivity.days)[0].cost as SessionCostUsage
+      const parts = tokenPartsOf(timeline, cost)
       for (const part of parts) {
         const prev = expectedParts.find(entry => entry.key === part.key)
         if (prev === undefined) expectedParts.push({ ...part })
@@ -72,7 +73,7 @@ describe('dsh-context overview route', () => {
     assert.equal(summary.costUsd, costOfUsage(merged))
     assert.equal(summary.costSessions, 2)
     assert.equal(summary.usageSessions, 2)
-    assert.equal(summary.cacheHit, '28.20')
+    assert.equal(summary.cacheHit, '22.68')
     assert.deepEqual(summary.tokenParts?.map(part => part.key), sortedParts(expectedParts).map(part => part.key))
     for (const part of summary.tokenParts ?? []) {
       const expected = expectedParts.find(entry => entry.key === part.key)
@@ -82,6 +83,7 @@ describe('dsh-context overview route', () => {
     assert.equal(summary.timing?.wallMs, 1_500)
     assert.equal(summary.timing?.toolCalls, 4)
     assert.equal(summary.timing?.tools.bash.calls, 4)
+    assert.deepEqual(summary.windowTiming, { calls: 3, toolCalls: 3, toolsMs: 200, wallMs: 500 })
     assert.equal(summary.coverage.complete, true)
     assert.equal(summary.coverage.total, 2)
   })
@@ -118,6 +120,7 @@ describe('dsh-context overview route', () => {
     assert.equal(summary.turns, 1 + 2 + 0)
     assert.equal(summary.timing?.wallMs, 300)
     assert.equal(summary.timing?.toolCalls, 3)
+    assert.deepEqual(summary.windowTiming, { calls: 3, toolCalls: 0, toolsMs: 0, wallMs: 0 })
     assert.equal(summary.costUsd, costOfUsage({ deepseek: { 'deepseek-v4-flash': { off: { uncached: 30, cacheRead: 0, cacheWrite: 0, output: 3 } } } }))
     const page = pageOf(await call(harness, { part: 'page' }))
     const rootRow = page.items.find(row => row.id === 'root')
@@ -126,7 +129,7 @@ describe('dsh-context overview route', () => {
     assert.equal(rootRow.turns, 1, 'the page card keeps the root session turns')
   })
 
-  test('summary windows usage and turns from the activity ledger, and a day window scopes it', async () => {
+  test('summary bills the activity ledger for every scope, so windows add up', async () => {
     const harness = await boot({
       records: [recordOf('a')],
       values: {
@@ -134,8 +137,8 @@ describe('dsh-context overview route', () => {
           contextTimeline: timelineOf({ total: 50, turns: 9, cost: usageOf(999, 0, 0, 999) }),
           contextActivity: {
             days: {
-              '2026-10-01': dayOf(10, 1, { turns: 1, cost: usageOf(10, 0, 0, 1) }),
-              '2026-11-01': dayOf(20, 2, { turns: 2, cost: usageOf(20, 0, 0, 2) }),
+              '2026-10-01': dayOf(10, 1, { turns: 1, cost: usageOf(10, 0, 0, 1), toolCalls: 1 }),
+              '2026-11-01': dayOf(20, 2, { turns: 2, cost: usageOf(20, 0, 0, 2), toolCalls: 2, toolsMs: 30, wallMs: 40 }),
             },
           },
           sessionListMetadata: { blank: false, lastPromptAt: 2_000 },
@@ -143,14 +146,37 @@ describe('dsh-context overview route', () => {
       },
     })
     const all = summaryOf(await call(harness, { part: 'summary' }))
-    assert.ok(Math.abs(all.tokens - 1998) <= 2, 'the open scope bills the whole timeline cost')
-    assert.equal(all.turns, 9)
+    assert.equal(all.tokens, 33, 'the open scope sums every retained day')
+    assert.equal(all.turns, 3)
+    assert.deepEqual(all.windowTiming, { calls: 3, toolCalls: 3, toolsMs: 30, wallMs: 40 })
     const ranged = summaryOf(await call(harness, { part: 'summary', scope: { range: { start: Date.UTC(2026, 9, 20), end: Date.UTC(2026, 10, 5) } } }))
     assert.equal(ranged.tokens, 22, 'a bounded scope bills only its window days')
     assert.equal(ranged.turns, 2)
+    assert.equal(ranged.windowTiming.toolCalls, 2)
     const day = summaryOf(await call(harness, { part: 'summary', scope: { day: '2026-11-01' } }))
     assert.equal(day.tokens, 22)
     assert.equal(day.turns, 2)
+    assert.ok(all.tokens >= ranged.tokens)
+    assert.ok(ranged.tokens >= day.tokens)
+  })
+
+  test('summary keeps a session whose timeline is missing on the activity ledger', async () => {
+    const harness = await boot({
+      records: [recordOf('a')],
+      values: {
+        a: {
+          contextActivity: { days: { '2026-11-01': dayOf(20, 2, { turns: 2, cost: usageOf(20, 0, 0, 2), toolCalls: 1 }) } },
+          sessionListMetadata: { blank: false, lastPromptAt: 2_000 },
+        },
+      },
+    })
+    const all = summaryOf(await call(harness, { part: 'summary' }))
+    assert.equal(all.tokens, 22)
+    assert.equal(all.costSessions, 1)
+    assert.equal(all.usageSessions, 1)
+    assert.equal(all.tokenParts, null)
+    const ranged = summaryOf(await call(harness, { part: 'summary', scope: { range: 'today' } }))
+    assert.equal(ranged.tokens, 0)
   })
 
   test('days returns host-priced day totals in key order and skips empty days', async () => {
@@ -216,7 +242,7 @@ describe('dsh-context overview route', () => {
       liveValues: {
         live: {
           contextTimeline: timelineOf({ total: 42, turns: 3, cost: usageOf(10, 0, 0, 2) }),
-          contextActivity: { days: { '2026-11-01': dayOf(12, 1, { turns: 3 }) } },
+          contextActivity: { days: { '2026-11-01': dayOf(12, 1, { turns: 3, cost: usageOf(10, 0, 0, 2) }) } },
           title: 'Live',
           sessionListMetadata: { blank: false, lastPromptAt: 5_000 },
         },
@@ -277,7 +303,7 @@ describe('dsh-context overview route', () => {
   test('pricing not ready keeps money null and marks the reply', async () => {
     const harness = await boot({
       records: [recordOf('a')],
-      values: { a: { contextTimeline: timelineOf({ cost: usageOf(10, 0, 0, 1) }) } },
+      values: { a: { contextActivity: { days: { '2026-11-01': dayOf(11, 1, { cost: usageOf(10, 0, 0, 1) }) } } } },
       costReady: false,
     })
     const result = await call(harness, { part: 'summary' })
@@ -442,7 +468,7 @@ describe('dsh-context overview route', () => {
         records: [recordOf('a', { createdAt: new Date(2026, 10, 8, 20, 0, 0).getTime() })],
         values: {
           a: {
-            contextTimeline: timelineOf({ total: 900, turns: 1, cost: usageOf(900) }),
+            contextTimeline: timelineOf({ total: 900, turns: 1 }),
             contextActivity: { days: { '2026-11-08': dayOf(900, 1) } },
             title: 'Overnight',
             sessionListMetadata: { blank: false, lastPromptAt: new Date(2026, 10, 8, 23, 0, 0).getTime() },
@@ -471,7 +497,7 @@ describe('dsh-context overview route', () => {
         records: [recordOf('a', { createdAt: new Date(2026, 10, 8, 20, 0, 0).getTime() })],
         values: {
           a: {
-            contextTimeline: timelineOf({ total: 900, turns: 1, cost: usageOf(900) }),
+            contextTimeline: timelineOf({ total: 900, turns: 1 }),
             contextActivity: { days: { '2026-11-08': dayOf(900, 1) } },
           },
         },
@@ -486,7 +512,7 @@ describe('dsh-context overview route', () => {
     }
   })
 
-  test('a dirty session missing from the feed reloads from the plugin cache', async () => {
+  test('a dirty session missing from the feed reloads a complete plugin cache record', async () => {
     const harness = await boot({
       records: [recordOf('a')],
       values: { a: { contextActivity: { days: { '2026-11-01': dayOf(11, 1) } } } },
@@ -495,16 +521,20 @@ describe('dsh-context overview route', () => {
     })
     const first = await call(harness, { part: 'summary', scope: { range: 'all' } })
     assert.equal(summaryOf(first).sessions, 1)
+    assert.equal(harness.state.savedRecords.length, 0, 'a snapshot with only one projection is never cached')
     harness.cacheMode.values.a = {}
     harness.state.cachedSessions.set('a', {
-      id: 'a', title: 'Cached', updatedAt: 5, blank: false, timeline: null,
-      activity: { days: { '2026-11-01': dayOf(44, 4) } }, signature: '',
+      id: 'a', title: 'Cached', updatedAt: 5, blank: false,
+      timeline: { current: null, total: 10, turns: 1 },
+      activity: { days: { '2026-11-01': dayOf(44, 4, { cost: usageOf(44) }) } },
+      signature: '',
     })
     harness.state.foldedVersion = 1
     harness.state.foldedIds = ['a']
     harness.state.workerFoldedIds = ['a']
     const second = await call(harness, { part: 'summary', scope: { range: 'all' } })
     assert.equal(summaryOf(second).sessions, 1, 'the dirty session reloaded from the plugin cache')
+    assert.equal(summaryOf(second).tokens, 44)
   })
 
   test('a null worker journal never reloads from the plugin cache', async () => {

@@ -169,7 +169,6 @@ interface FeedView {
   workspace: WorkspaceState
   coverage: BackfillCoverage
   filters: Filters
-  open: boolean
 }
 
 function valueOf(parsed: ParsedRequest, revision: string, cost: CostSource, data: FeedView): OverviewValue {
@@ -178,7 +177,7 @@ function valueOf(parsed: ParsedRequest, revision: string, cost: CostSource, data
     return {
       revision,
       pricingReady,
-      summary: summaryOf(data.allRows, data.rows, data.filters, cost, data.coverage, data.open),
+      summary: summaryOf(data.allRows, data.rows, data.filters, cost, data.coverage),
     }
   }
   if (parsed.part === 'days') {
@@ -482,7 +481,6 @@ export function watchOverviewRoute(
           feed.rowsRevision = built.incomplete > 0 ? '' : revision
           if (identityMode && (dirty.size > 0 || built.rebuilt > 0)) saveCache(coldIds)
         }
-        const open = filters.day === null && filters.window.start === null && filters.window.end === null
         const value = valueOf(parsed, revision, cost, {
           allRows: rows,
           rows: rows.filter(row => matches(row, filters)),
@@ -490,7 +488,6 @@ export function watchOverviewRoute(
           workspace,
           coverage: backfill.coverage(),
           filters,
-          open,
         })
         rememberServed(feed, requestKey, servedKeysMax)
         return value

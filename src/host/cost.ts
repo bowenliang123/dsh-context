@@ -10,6 +10,7 @@ import type { CatalogService } from './catalog'
 export interface CostSource {
   read(usage: SessionCostUsage | null | undefined): SessionCostRead | undefined
   usd(usage: SessionCostUsage | null | undefined): number | null
+  complete(usage: SessionCostUsage | null | undefined): boolean
   ready(): boolean
   version?(): number
 }
@@ -62,6 +63,14 @@ export function createCostSource(catalog: CatalogService): CostSource {
       if (usage === null || usage === undefined) return null
       catalog.ensure()
       return calculateSessionCost(usage, catalog.book())
+    },
+    complete(usage: SessionCostUsage | null | undefined): boolean {
+      if (usage === null || usage === undefined) return false
+      catalog.ensure()
+      const book = catalog.book()
+      if (book === null) return false
+      const lookups = priceLookupsOf(usage, book)
+      return lookups.length > 0 && lookups.every(lookup => lookup.face !== null)
     },
     version(): number {
       return catalog.pricesVersion()

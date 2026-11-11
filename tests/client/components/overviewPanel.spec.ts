@@ -2,12 +2,13 @@ import { act, createElement as h, Profiler, useCallback, useRef, useState, useSy
 import assert from 'node:assert/strict'
 import { afterEach, beforeEach, describe, test, vi } from 'vitest'
 import { makeOverviewPanel } from '../../../src/client/components/overviewPanel'
+import { makeCtx, openPanel, propsOf, settingsWith } from './overviewPanelHarness'
 import { resetInvalidations } from '../../../src/client/invalidation'
 import { createContextSettings, type ContextSettings } from '../../../src/client/settings'
 import type { DefaultOverviewRange } from '../../../src/shared/types'
 import { dayKeyOf } from '../../../src/shared/days'
 import { TestClientCtx, asClientCtx } from '../helpers/harness'
-import { click, flush, hover, makeKit, mount, query, queryAll, settle, text, unhover, type Mounted } from '../helpers/kit'
+import { click, flush, hover, makeKit, mount, query, queryAll, settle, text, unhover } from '../helpers/kit'
 import {
   NOW, TODAY, YESTERDAY, panelDaysValue as daysValueFor, panelRows, panelRowsWithArchivedBeta,
   panelSessionsSnapshot as sessionsSnapshot, panelSummaryRaw as summaryRaw, panelSummaryValue as summaryValueFor, scopeOf,
@@ -53,18 +54,6 @@ function skillsBodyOf(calls: readonly RequestCall[]): Record<string, unknown> {
   return last
 }
 
-function settingsWith(range?: DefaultOverviewRange): ContextSettings {
-  const settings = createContextSettings()
-  if (range !== undefined) {
-    settings.attach({
-      getSnapshot: () => ({ status: 'ready', value: { defaultOverviewRange: range }, writable: true }),
-      subscribe: () => () => {},
-      set: () => Promise.resolve(),
-    })
-  }
-  return settings
-}
-
 function writableSettings(range: DefaultOverviewRange = '30d', writable = true): {
   settings: ContextSettings
   sets: { field: string; value: unknown }[]
@@ -83,37 +72,6 @@ function writableSettings(range: DefaultOverviewRange = '30d', writable = true):
     },
   })
   return { settings, sets }
-}
-
-function makeCtx(sessions: Record<string, unknown> = {}): TestClientCtx {
-  return new TestClientCtx({ services: { sessions } })
-}
-
-function propsOf(over: Record<string, unknown> = {}): Record<string, unknown> {
-  return { useSessions: useHookOf(sessionsSnapshot()), ...over }
-}
-
-async function openPanel(
-  ctx: TestClientCtx,
-  props: Record<string, unknown> = {},
-  settings: ContextSettings = settingsWith(),
-): Promise<{ m: Mounted; Panel: ReturnType<typeof makeOverviewPanel> }> {
-  const Panel = makeOverviewPanel(asClientCtx(ctx), makeKit(), settings)
-  const m = await mount(h(Panel, propsOf(props)))
-  await flush()
-  await settle(5)
-  return { m, Panel }
-}
-
-async function openPanelFake(
-  ctx: TestClientCtx,
-  props: Record<string, unknown> = {},
-  settings: ContextSettings = settingsWith(),
-): Promise<{ m: Mounted; Panel: ReturnType<typeof makeOverviewPanel> }> {
-  const Panel = makeOverviewPanel(asClientCtx(ctx), makeKit(), settings)
-  const m = await mount(h(Panel, propsOf(props)))
-  await act(async () => { await vi.advanceTimersByTimeAsync(1) })
-  return { m, Panel }
 }
 
 function calendarDay(key: string): HTMLElement {
@@ -160,10 +118,10 @@ describe('OverviewPanel', () => {
     assert.ok(query(m.container, '.lc-ov-first > .lc-card.lc-ov-usage') !== null, 'the usage chart rides the row')
     const values = queryAll(m.container, '.lc-stat-value').map(el => el.textContent)
     assert.deepEqual(values, ['2', '1.8k', '$1.50', '33.33%', '14', '3m0s'])
-    assert.ok(text(m.container).includes('tool runs 30.0s'), 'the tool calls cell qualifies with the host busy union')
-    assert.ok(text(m.container).includes('8 model calls'), 'the active-time cell qualifies with the host family call count')
+    assert.ok(text(m.container).includes('tool runs 40.0s'), 'the tool calls cell qualifies with the windowed tool time')
+    assert.ok(text(m.container).includes('8 model calls'), 'the active-time cell qualifies with the windowed call count')
     const subs = queryAll(m.container, '.lc-stat-sub').map(el => el.textContent)
-    assert.deepEqual(subs.slice(0, 4), ['incl. 0 archived', 'Turns 5', '1 of 2 sessions priced', 'across 1 sessions'])
+    assert.deepEqual(subs.slice(0, 4), ['incl. 0 archived', 'Turns 5', '1 of 1 sessions priced', 'across 1 sessions'])
     const statsCards = queryAll(m.container, '.lc-ov-stats > .lc-card')
     assert.equal(statsCards.length, 2)
     assert.equal(query(statsCards[0], '.lc-donut-center b').textContent, '1.8k', 'the hosted token parts total rides the donut')
@@ -196,7 +154,7 @@ describe('OverviewPanel', () => {
     const page = query(m.container, '.lc-ov-page')
     assert.equal(page.getAttribute('aria-busy'), 'true')
     assert.ok(page.className.includes('lc-ov-busy'))
-    assert.deepEqual(queryAll(m.container, '.lc-stat-value').map(el => el.textContent), ['—', '—', '—', '—', '0', '—'])
+    assert.deepEqual(queryAll(m.container, '.lc-stat-value').map(el => el.textContent), ['—', '—', '—', '—', '—', '—'])
     await act(async () => { releaseSummary?.(summaryValueFor({ scope: { range: '30d', coverage: 'all' } })) })
     await flush()
     await settle(1)
@@ -773,7 +731,11 @@ describe('OverviewPanel', () => {
       summary: () => ({
         revision: 's1',
         pricingReady: true,
-        summary: summaryRaw({ sessions: 1, sessionsTotal: 1, tokens: 0, turns: 0, costUsd: null, costSessions: 0, usageSessions: 0, cacheHit: null, tokenParts: null, timing: null }),
+        summary: summaryRaw({
+          sessions: 1, sessionsTotal: 1, tokens: 0, turns: 0, costUsd: null, costSessions: 0, usageSessions: 0,
+          cacheHit: null, tokenParts: null, timing: null,
+          windowTiming: { calls: 0, toolCalls: 0, toolsMs: 0, wallMs: 0 },
+        }),
       }),
       rows: [{
         id: 'x',
@@ -866,20 +828,6 @@ describe('OverviewPanel', () => {
     await settle(1)
     assert.equal(query(pagePending.m.container, '.lc-ov-page').getAttribute('aria-busy'), null)
     await pagePending.m.unmount()
-  })
-
-  test('an incomplete coverage posts the warm-up backfill route from the summary hook', async () => {
-    vi.useFakeTimers()
-    const incomplete = { complete: false, running: false, remaining: 2, failed: 0, total: 3, covered: 1, unsupported: 0 }
-    const calls = stubRoutes({
-      summary: () => ({ revision: 's0', pricingReady: true, summary: summaryRaw({ coverage: incomplete }) }),
-    })
-    const { m } = await openPanelFake(makeCtx())
-    assert.equal(calls.filter(c => c.route.endsWith('/overview')).length, 6, 'summary, days, page, and three tallies fetched once')
-    assert.equal(calls.filter(c => c.route.endsWith('/backfill')).length, 0)
-    await act(async () => { await vi.advanceTimersByTimeAsync(2_000) })
-    assert.equal(calls.filter(c => c.route.endsWith('/backfill')).length, 1, 'the incomplete coverage posted the backfill route')
-    await m.unmount()
   })
 })
 

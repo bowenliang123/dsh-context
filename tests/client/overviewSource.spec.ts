@@ -7,8 +7,19 @@ import { cleanupMounts, flush, mount, settle, type Mounted } from './helpers/kit
 import { BASE_COVERAGE, coverageOf, daysValue, pageValue, summaryRaw, summaryValue, tallyValue } from './helpers/overviewWire'
 import { currentSessionOf, projectOf, UNGROUPED_KEY } from '../../src/client/overviewModel'
 import { dayRangeWindow, orderedDayRange, rangeWindowOf } from '../../src/client/overviewQuery'
+import { foldStateOf } from '../../src/client/overviewSource'
 
 describe('overviewSource', () => {
+
+test('foldStateOf classifies a running pass before a stale complete flag', () => {
+  assert.equal(foldStateOf(null), 'idle')
+  assert.equal(foldStateOf(coverageOf()), 'idle')
+  assert.equal(foldStateOf(coverageOf({ complete: true, running: true })), 'running')
+  assert.equal(foldStateOf(coverageOf({ complete: false, running: true })), 'running')
+  assert.equal(foldStateOf(coverageOf({ complete: false, total: 0, remaining: 0 })), 'starting')
+  assert.equal(foldStateOf(coverageOf({ complete: false, total: 3, remaining: 2 })), 'folding')
+  assert.equal(foldStateOf(coverageOf({ complete: false, total: 3, remaining: 0, failed: 1 })), 'stalled')
+})
 
 const OVERVIEW_ROUTE = 'api/dsh-context/overview'
 
@@ -603,6 +614,53 @@ describe('summary coverage auto-backfill', () => {
     await advance(2_000)
     assert.deepEqual(backfills.map(c => [c.route, c.method]), [[BACKFILL_ROUTE, 'POST']])
     assert.equal(calls.filter(c => c.route === OVERVIEW_ROUTE).length, 1)
+    await probe.m.unmount()
+  })
+
+  test('a running pass waits for the poll, and an exhausted or failed corpus stops the loader', async () => {
+    vi.useFakeTimers()
+    const mod = await fresh()
+    let coverage = coverageOf({ complete: false, running: true, remaining: 2, covered: 1 })
+    let backfills = 0
+    stubRoutes((call) => {
+      if (call.route === BACKFILL_ROUTE) {
+        backfills++
+        return undefined
+      }
+      return summaryValue({ summary: summaryRaw({ coverage }) })
+    })
+    const probe = await mountSummary(mod, { range: 'all' })
+    await advance(0)
+    await advance(20_000)
+    assert.equal(backfills, 0, 'a running pass is left to finish')
+    coverage = coverageOf({ complete: false, remaining: 0, failed: 1, total: 3, covered: 2 })
+    mod.invalidation.invalidate('overview')
+    await advance(250)
+    await advance(20_000)
+    assert.equal(backfills, 0, 'an exhausted pass with failures does not loop')
+    coverage = coverageOf({ complete: false, remaining: 1, covered: 1 })
+    mod.invalidation.invalidate('overview')
+    await advance(250)
+    await advance(2_000)
+    assert.equal(backfills, 1, 'a later foldable pass requests a fresh run')
+    await probe.m.unmount()
+  })
+
+  test('an unlisted corpus requests its first pass', async () => {
+    vi.useFakeTimers()
+    const mod = await fresh()
+    let backfills = 0
+    stubRoutes((call) => {
+      if (call.route === BACKFILL_ROUTE) {
+        backfills++
+        return undefined
+      }
+      return summaryValue({ summary: summaryRaw({ coverage: coverageOf({ complete: false, remaining: 0, total: 0, covered: 0 }) }) })
+    })
+    const probe = await mountSummary(mod, { range: 'all' })
+    await advance(0)
+    await advance(2_000)
+    assert.equal(backfills, 1, 'an unlisted corpus posts the first pass')
     await probe.m.unmount()
   })
 

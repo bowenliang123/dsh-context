@@ -3,7 +3,7 @@ import { homedir } from 'node:os'
 import { dirname, join } from 'node:path'
 import type { HostSession, HostTimeline } from './overviewCorpus'
 import { asRecord } from './record'
-import { activityOf, currentOf, numOf, optionalNumOf, timingOf, usageOf } from './overviewDecode'
+import { activityOf, currentOf, numOf, optionalNumOf, timingOf } from './overviewDecode'
 
 export const OVERVIEW_CACHE_FORMAT = 1
 
@@ -119,8 +119,6 @@ function timelineOf(value: unknown): HostTimeline | null {
   if (maxOutputTokens !== undefined) timeline.maxOutputTokens = maxOutputTokens
   if (typeof data.model === 'string' && data.model !== '') timeline.model = data.model
   if (typeof data.lastUser === 'string' && data.lastUser !== '') timeline.lastUser = data.lastUser
-  const cost = usageOf(data.cost)
-  if (cost !== undefined) timeline.cost = cost
   const timing = timingOf(data.timing)
   if (timing !== undefined) timeline.timing = timing
   for (const field of ['generatedReasoning', 'generatedAnswerTokens', 'generatedCallTokens'] as const) {
@@ -255,10 +253,11 @@ export function createOverviewCache(options: OverviewCacheOptions = {}): Overvie
     }
     await inBatches(records, statConcurrency, async (record) => {
       const id = record.session.id
+      const complete = record.session.timeline !== null && record.session.activity !== null
       if (known !== undefined) {
         const expected = known.get(id) ?? null
         identities.set(id, expected)
-        if (record.identity !== null && sameIdentity(record.identity, expected)) sessions.set(id, record.session)
+        if (complete && record.identity !== null && sameIdentity(record.identity, expected)) sessions.set(id, record.session)
         else rebuild.add(id)
         return
       }
@@ -271,7 +270,8 @@ export function createOverviewCache(options: OverviewCacheOptions = {}): Overvie
         const info = await fs.stat(record.identity.path)
         if (info.size === record.identity.sizeBytes && info.mtimeMs === record.identity.mtimeMs) {
           identities.set(id, record.identity)
-          sessions.set(id, record.session)
+          if (complete) sessions.set(id, record.session)
+          else rebuild.add(id)
           return
         }
         identities.set(id, { path: record.identity.path, sizeBytes: info.size, mtimeMs: info.mtimeMs })

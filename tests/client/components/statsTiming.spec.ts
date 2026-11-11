@@ -67,6 +67,7 @@ describe('StatsTiming', () => {
   test('the donut center shows the wall total; rows lead with shares', async () => {
     const m = await mount(h(StatsTiming, { timing: TIMING }))
     assert.ok(text(m.container).includes('Timing Stats'))
+    assert.equal(queryAll(m.container, '.lc-card-sub').length, 0)
     assert.equal(query(m.container, '.lc-donut-center b').textContent, '10m0s')
     assert.equal(query(m.container, '.lc-donut-center span').textContent, 'Active Time')
     assert.deepEqual(rowOf(m.container, 0), { pct: '16.7%', label: 'TTFT', count: '1m40s · 10 calls', dim: false })
@@ -81,6 +82,10 @@ describe('StatsTiming', () => {
     const zh = await mount(h(makeStatsTiming(makeKit('zh'), Donut), { timing: TIMING }))
     assert.ok(text(zh.container).includes('耗时统计'))
     await zh.unmount()
+
+    const noted = await mount(h(StatsTiming, { timing: TIMING, note: 'Session lifetime' }))
+    assert.equal(query(noted.container, '.lc-card-sub').textContent, 'Session lifetime')
+    await noted.unmount()
   })
 
   test('parallel tool overlap: the busy union prices once; the per-call sum never inflates the share', async () => {

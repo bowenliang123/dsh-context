@@ -28,6 +28,7 @@ export function summaryRaw(over: Record<string, unknown> = {}): Record<string, u
     cacheHit: '33.33',
     tokenParts: [{ key: 'system', value: 100 }, { key: 'tools', value: 20 }],
     timing: { wallMs: 1000, ttftMs: 0, genMs: 0, calls: 2, toolsMs: 0, toolCalls: 0, tools: {} },
+    windowTiming: { calls: 2, toolCalls: 0, toolsMs: 0, wallMs: 1000 },
     coverage: coverageOf(),
     ...over,
   }

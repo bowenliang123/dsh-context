@@ -50,7 +50,6 @@ function sessionOf(id: string, options: { signature?: string; activity?: HostSes
         maxOutputTokens: 8_192,
         model: 'deepseek-v4-flash',
         lastUser: 'hello',
-        cost: { deepseek: { model: { off: { uncached: 10, cacheRead: 2, cacheWrite: 1, output: 5 } } } },
         timing: {
           wallMs: 100,
           ttftMs: 10,
@@ -252,9 +251,9 @@ describe('overviewCache', () => {
     ])
     fs.stats.set('/logs/full', { size: 1, mtimeMs: 1 })
     const loaded = await cache.load(new Set(['full', 'abs']))
-    assert.deepEqual([...loaded.sessions.keys()], ['full'])
-    assert.equal(loaded.sessions.get('full')?.timeline, null, 'a hostile timeline degrades to null')
-    assert.equal(loaded.sessions.get('full')?.activity, null, 'a hostile activity ledger degrades to null')
+    assert.deepEqual([...loaded.sessions.keys()], [], 'a hostile or incomplete record is never served')
+    assert.deepEqual([...loaded.rebuild], ['full'])
+    assert.deepEqual(loaded.identities.get('full'), identityOf('/logs/full', 1, 1))
   })
 
   test('refresh keeps equal identities, records changed ones, and treats stat failures as unvalidatable', async () => {
@@ -404,13 +403,13 @@ describe('overviewCache', () => {
     const base = sessionOf('base')
     storeFile(fs, PATH, [
       { session: base, identity: identityOf('/logs/base', 1, 1) },
-      { session: { ...base, id: 'minimal', timeline: { total: 1, turns: 0, current: null }, activity: null, cwd: '', parentSession: '', origin: 'fork' }, identity: identityOf('/logs/minimal', 1, 1) },
-      { session: { ...base, id: 'hostile-current', timeline: { current: 'junk', total: 'x', turns: 'y', steps: 'z' }, activity: { days: 'junk' } }, identity: identityOf('/logs/hostile-current', 1, 1) },
+      { session: { ...base, id: 'minimal', timeline: { total: 1, turns: 0, current: null }, activity: { days: {} }, cwd: '', parentSession: '', origin: 'fork' }, identity: identityOf('/logs/minimal', 1, 1) },
+      { session: { ...base, id: 'hostile-current', timeline: { current: 'junk', total: 'x', turns: 'y', steps: 'z' }, activity: { days: {} } }, identity: identityOf('/logs/hostile-current', 1, 1) },
       {
         session: {
           ...base,
           id: 'hostile-activity',
-          timeline: null,
+          timeline: { current: null, total: 0, turns: 0 },
           activity: {
             days: {
               '2026-11-01': { tokens: 'x', requests: 1, cost: 'junk', turns: 'no', toolCalls: 2, toolsMs: null, skills: 'junk' },
@@ -460,25 +459,24 @@ describe('overviewCache', () => {
     assert.equal(minimal.parentSession, undefined)
     assert.equal(minimal.origin, undefined)
     assert.equal(minimal.timeline?.current, null)
-    assert.equal(minimal.activity, null)
+    assert.deepEqual(minimal.activity, { days: {} })
     const hostileCurrent = loaded.sessions.get('hostile-current')
     assert.ok(hostileCurrent !== undefined)
     assert.equal(hostileCurrent.timeline?.total, 0)
     assert.equal(hostileCurrent.timeline?.turns, 0)
-    assert.equal(hostileCurrent.activity, null)
+    assert.deepEqual(hostileCurrent.activity, { days: {} })
     const hostileActivity = loaded.sessions.get('hostile-activity')
     assert.ok(hostileActivity !== undefined)
     assert.equal(hostileActivity.activity?.days['2026-11-01'].tokens, 0)
     assert.equal(hostileActivity.activity?.days['2026-11-01'].toolCalls, 2)
     assert.equal(hostileActivity.activity?.days['2026-11-01'].skills, undefined)
     assert.ok(hostileActivity.activity?.days['2026-11-02'].cost !== undefined)
-    assert.equal(hostileActivity.timeline, null)
+    assert.equal(hostileActivity.timeline?.current, null)
     const junkTallies = loaded.sessions.get('junk-tallies')
     assert.ok(junkTallies !== undefined)
     assert.ok(junkTallies.timeline !== null)
     assert.equal(junkTallies.timeline?.current?.system, 1)
     assert.equal(junkTallies.timeline?.steps, 0)
-    assert.equal(junkTallies.timeline?.cost, undefined)
     assert.equal(junkTallies.timeline?.timing, undefined)
     assert.deepEqual(junkTallies.activity?.days['2026-11-01'].skills, { good: { n: 1, last: 2 } })
     assert.equal(junkTallies.activity?.days['2026-11-01'].tools, undefined)
@@ -486,7 +484,6 @@ describe('overviewCache', () => {
     assert.ok(fullTiming !== undefined)
     assert.deepEqual(fullTiming.timeline?.timing?.tools.bash, { calls: 1, ms: 2 })
     assert.equal(fullTiming.timeline?.timing?.reasoningMs, undefined)
-    assert.ok(fullTiming.timeline?.cost !== undefined)
     const child = loaded.sessions.get('child')
     assert.ok(child !== undefined)
     assert.equal(child.parentSession, 'parent')
@@ -519,6 +516,29 @@ describe('overviewCache', () => {
     const refreshed = await cache.refresh(new Set(['a']), new Map())
     assert.equal(refreshed.identities.size, 0)
     assert.equal(refreshed.changed.size, 0)
+  })
+
+  test('a record missing either projection is never reused and is rebuilt', async () => {
+    const fs = fakeFs()
+    const cache = createOverviewCache({ path: PATH, fs, statConcurrency: 1 })
+    storeFile(fs, PATH, [
+      { session: sessionOf('complete'), identity: identityOf('/logs/complete', 1, 1) },
+      { session: sessionOf('no-timeline', { timeline: null }), identity: identityOf('/logs/no-timeline', 1, 1) },
+      { session: sessionOf('no-activity', { activity: null }), identity: identityOf('/logs/no-activity', 1, 1) },
+    ])
+    for (const id of ['complete', 'no-timeline', 'no-activity']) fs.stats.set(`/logs/${id}`, { size: 1, mtimeMs: 1 })
+    const loaded = await cache.load(new Set(['complete', 'no-timeline', 'no-activity']))
+    assert.deepEqual([...loaded.sessions.keys()], ['complete'])
+    assert.deepEqual([...loaded.rebuild].sort(), ['no-activity', 'no-timeline'])
+    assert.deepEqual(loaded.identities.get('no-timeline'), identityOf('/logs/no-timeline', 1, 1))
+    const known = new Map<string, DurableIdentity | null>([
+      ['complete', identityOf('/logs/complete', 1, 1)],
+      ['no-timeline', identityOf('/logs/no-timeline', 1, 1)],
+      ['no-activity', identityOf('/logs/no-activity', 1, 1)],
+    ])
+    const matched = await cache.load(new Set(['complete', 'no-timeline', 'no-activity']), known)
+    assert.deepEqual([...matched.sessions.keys()], ['complete'])
+    assert.deepEqual([...matched.rebuild].sort(), ['no-activity', 'no-timeline'])
   })
 
   test('a staged save is readable before the write debounce lands, and later saves merge by id', async () => {

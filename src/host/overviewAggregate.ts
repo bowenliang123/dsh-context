@@ -4,7 +4,6 @@ import { mergeCostUsage } from '../shared/pricing'
 import type {
   ActivityDay,
   BackfillCoverage,
-  ContextActivity,
   OverviewCoverage,
   OverviewDay,
   OverviewGroupCount,
@@ -20,9 +19,8 @@ import type {
   TimingTotals,
 } from '../shared/types'
 import type { CostSource } from './cost'
-import { TIMING_OPTIONAL, numOf, optionalNumOf } from './overviewDecode'
-import type { HostRow, HostTimeline, WorkspaceState } from './overviewCorpus'
-import { asRecord } from './record'
+import { TIMING_OPTIONAL, optionalNumOf } from './overviewDecode'
+import { activityTotalsOf, type HostRow, type HostTimeline, type WorkspaceState } from './overviewCorpus'
 
 const PAGE_SIZE = 12
 
@@ -135,52 +133,22 @@ export function matches(row: HostRow, filters: Filters): boolean {
   return true
 }
 
-function usageTotalsOf(usage: SessionCostUsage | null | undefined): UsageTotals | null {
-  if (usage === null || usage === undefined) return null
+function usageTotalsOf(usage: SessionCostUsage): UsageTotals {
   const totals: UsageTotals = { input: 0, cacheRead: 0, cacheWrite: 0, output: 0, total: 0 }
-  let any = false
-  for (const provider of Object.keys(usage)) {
-    const models = asRecord(usage[provider])
-    if (models === null) continue
-    for (const model of Object.keys(models)) {
-      const periods = asRecord(models[model])
-      if (periods === null) continue
+  for (const models of Object.values(usage)) {
+    for (const periods of Object.values(models)) {
       for (const period of ['peak', 'off'] as const) {
-        const bucket = asRecord(periods[period])
-        if (bucket === null) continue
-        totals.input += numOf(bucket.uncached)
-        totals.cacheRead += numOf(bucket.cacheRead)
-        totals.cacheWrite += numOf(bucket.cacheWrite)
-        totals.output += numOf(bucket.output)
-        any = true
+        const bucket = periods[period]
+        if (bucket === undefined) continue
+        totals.input += bucket.uncached
+        totals.cacheRead += bucket.cacheRead
+        totals.cacheWrite += bucket.cacheWrite
+        totals.output += bucket.output
       }
     }
   }
-  if (!any) return null
   totals.total = totals.input + totals.cacheRead + totals.cacheWrite + totals.output
   return totals
-}
-
-function windowUsageOf(activity: ContextActivity | null, filters: Filters): SessionCostUsage | null {
-  if (activity === null) return null
-  const admit = dayPredicate(filters)
-  let usage: SessionCostUsage | null = null
-  for (const [key, day] of Object.entries(activity.days)) {
-    if (!admit(key)) continue
-    usage = mergeCostUsage(usage, day.cost)
-  }
-  return usage
-}
-
-function windowTurnsOf(activity: ContextActivity | null, filters: Filters): number {
-  if (activity === null) return 0
-  const admit = dayPredicate(filters)
-  let turns = 0
-  for (const [key, day] of Object.entries(activity.days)) {
-    if (!admit(key)) continue
-    turns += day.turns ?? 0
-  }
-  return turns
 }
 
 function tokenUsageOf(totals: UsageTotals): {
@@ -244,20 +212,17 @@ function cacheHitOf(totals: UsageTotals | null): string | null {
   return `${Math.floor(scaled / 100)}.${String(scaled % 100).padStart(2, '0')}`
 }
 
-function partsOf(rows: readonly HostRow[], filters: Filters, open: boolean): { parts: OverviewPartTotal[]; total: number } | null {
+function partsOf(rows: readonly HostRow[], admit: (key: string) => boolean): OverviewPartTotal[] | null {
   const sums = new Map<string, number>()
   let any = false
-  let total = 0
   for (const row of rows) {
     for (const member of row.family) {
-      const usage = open ? member.timeline?.cost : windowUsageOf(member.activity, filters)
-      const totals = usageTotalsOf(usage)
-      if (totals === null) continue
+      const usage = activityTotalsOf(member.activity, admit).usage
+      if (usage === null) continue
       const current = member.timeline?.current
       if (current === null || current === undefined) continue
       any = true
-      total += totals.total
-      const parts = billedParts(current, null, tokenUsageOf(totals), {
+      const parts = billedParts(current, null, tokenUsageOf(usageTotalsOf(usage)), {
         reasoning: member.timeline?.generatedReasoning,
         answers: member.timeline?.generatedAnswerTokens,
         calls: member.timeline?.generatedCallTokens,
@@ -275,7 +240,7 @@ function partsOf(rows: readonly HostRow[], filters: Filters, open: boolean): { p
     if (value === undefined || value <= 0) continue
     parts.push({ key, value })
   }
-  return { parts, total }
+  return parts
 }
 
 export function summaryOf(
@@ -284,39 +249,42 @@ export function summaryOf(
   filters: Filters,
   cost: CostSource,
   coverage: BackfillCoverage,
-  open: boolean,
 ): OverviewSummary {
-  const split = partsOf(rows, filters, open)
+  const admit = dayPredicate(filters)
+  const tokenParts = partsOf(rows, admit)
   let usage: SessionCostUsage | null = null
   let turns = 0
+  const windowTiming = { calls: 0, toolCalls: 0, toolsMs: 0, wallMs: 0 }
   let costSessions = 0
   let usageSessions = 0
   let sessionsArchived = 0
   for (const row of rows) {
-    const rowUsage = open ? row.familyCost : windowUsageOf(row.activity, filters)
-    usage = mergeCostUsage(usage, rowUsage)
-    turns += open
-      ? row.family.reduce((sum, member) => sum + (member.timeline?.turns ?? 0), 0)
-      : windowTurnsOf(row.activity, filters)
-    if (cost.usd(rowUsage) !== null) costSessions++
-    if (usageTotalsOf(rowUsage) !== null) usageSessions++
+    const totals = activityTotalsOf(row.activity, admit)
+    usage = mergeCostUsage(usage, totals.usage)
+    turns += totals.turns
+    windowTiming.calls += totals.calls
+    windowTiming.toolCalls += totals.toolCalls
+    windowTiming.toolsMs += totals.toolsMs
+    windowTiming.wallMs += totals.wallMs
+    if (cost.complete(totals.usage)) costSessions++
+    if (totals.usage !== null) usageSessions++
     if (row.archived) sessionsArchived++
   }
-  const totals = usageTotalsOf(usage)
-  const splitTotal = split === null ? null : split.parts.reduce((sum, part) => sum + part.value, 0)
+  const usageTotals = usage === null ? null : usageTotalsOf(usage)
   return {
     sessions: rows.length,
     sessionsTotal: allRows.length,
     sessionsArchived,
     archivedScoped: sessionsArchived,
-    tokens: splitTotal ?? totals?.total ?? 0,
+    tokens: usageTotals?.total ?? 0,
     turns,
     costUsd: cost.usd(usage),
     costSessions,
     usageSessions,
-    cacheHit: cacheHitOf(totals),
-    tokenParts: split === null ? null : split.parts,
+    cacheHit: cacheHitOf(usageTotals),
+    tokenParts,
     timing: timingSumOf(rows),
+    windowTiming,
     coverage,
   }
 }
@@ -345,7 +313,7 @@ export function daysOf(allRows: readonly HostRow[], coverage: OverviewCoverage, 
 
 export function sortOf(rows: readonly HostRow[], sort: OverviewSort): HostRow[] {
   const copy = [...rows]
-  if (sort === 'tokens') copy.sort((left, right) => right.tokens - left.tokens)
+  if (sort === 'tokens') copy.sort((left, right) => right.totals.tokens - left.totals.tokens)
   else if (sort === 'context') {
     copy.sort((left, right) => (right.session.timeline?.total ?? -1) - (left.session.timeline?.total ?? -1))
   } else {
@@ -380,11 +348,11 @@ export function pageRowOf(row: HostRow, cost: CostSource): OverviewPageRow {
     updatedAt: session.updatedAt,
     running: row.running,
     archived: row.archived,
-    tokens: row.tokens,
+    tokens: row.totals.tokens,
     turns: timeline?.turns ?? 0,
     parts: compositionPartsOf(timeline),
     total: timeline?.total ?? 0,
-    costUsd: cost.usd(row.familyCost),
+    costUsd: cost.usd(row.totals.usage),
   }
   if (session.cwd !== undefined) pageRow.cwd = session.cwd
   if (row.group !== undefined) pageRow.group = row.group

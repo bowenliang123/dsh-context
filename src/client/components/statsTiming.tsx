@@ -45,6 +45,7 @@ export interface StatsTimingProps {
   spans?: TimingSpan[]
   locale?: string
   reserve?: boolean
+  note?: string
 }
 
 export function makeStatsTiming(kit: ViewKit, Donut: (props: DonutProps) => ReactElement): (props: StatsTimingProps) => ReactElement {
@@ -134,6 +135,7 @@ export function makeStatsTiming(kit: ViewKit, Donut: (props: DonutProps) => Reac
             <IconClock size={14} />
             {t('timing.title')}
           </span>
+          {props.note !== undefined && <span className="lc-card-sub">{props.note}</span>}
           {tps !== null && (
             <span className="lc-card-rate" title={t('timing.tpsTip')}>{t('timing.tps', { tps })}</span>
           )}

@@ -216,7 +216,6 @@ describe('dsh-context overview route', () => {
           contextTimeline: {
             current: { system: 1, assistant: 2, assistantReasoning: 1, assistantAnswerTokens: 1, assistantCallTokens: 0, total: 3 },
             counts: { turns: 1 },
-            cost: { deepseek: 7, other: { model: 7 }, odd: { model: { off: 'junk' } }, blank: { model: {} } },
             timing: { wallMs: 10, ttftMs: 1, genMs: 8, calls: 1, toolsMs: 2, toolCalls: 1, tools: { bash: 'junk', read: { calls: 1 }, grep: { calls: 1, ms: 3 } } },
             generatedReasoning: 1,
             generatedAnswerTokens: 2,
@@ -246,7 +245,6 @@ describe('dsh-context overview route', () => {
           },
         },
         empty: {
-          contextTimeline: { cost: usageOf(10, 0, 0, 0) },
           contextActivity: { days: { '2026-11-03': { tokens: 0, requests: 0, skills: { x: { n: 1, last: 1 } } } } },
         },
       },
@@ -336,7 +334,11 @@ describe('dsh-context overview route', () => {
       workspace: hostileItems,
       liveValues: { a: { title: 7 } },
       values: {
-        b: { title: 'Bee', contextTimeline: { cost: usageOf(3, 0, 0, 0) } },
+        b: {
+          title: 'Bee',
+          contextTimeline: timelineOf({ cost: usageOf(3, 0, 0, 0) }),
+          contextActivity: { days: { '2026-11-01': dayOf(30, 1, { cost: usageOf(30, 0, 0, 0) }) } },
+        },
         'bad-time': { title: '/', contextTimeline: timelineOf() },
       },
     })
@@ -524,7 +526,17 @@ describe('dsh-context overview route', () => {
     assert.equal(summary.timing?.toolBusyMs, undefined, 'an incomplete toolBusy set is dropped')
     const outputOnly = await boot({
       records: [recordOf('a')],
-      values: { a: { contextTimeline: timelineOf({ cost: { deepseek: { model: { off: { uncached: 0, cacheRead: 0, cacheWrite: 0, output: 5 } } } } }) } },
+      values: {
+        a: {
+          contextActivity: {
+            days: {
+              '2026-11-01': dayOf(5, 1, {
+                cost: { deepseek: { model: { off: { uncached: 0, cacheRead: 0, cacheWrite: 0, output: 5 } } } },
+              }),
+            },
+          },
+        },
+      },
     })
     const cacheFree = summaryOf(await call(outputOnly, { part: 'summary' }))
     assert.equal(cacheFree.cacheHit, null, 'an output-only usage has no cache ratio')

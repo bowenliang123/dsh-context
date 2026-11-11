@@ -349,6 +349,7 @@ describe('overviewValueOf', () => {
         cacheHit: '33.33',
         tokenParts: [{ key: 'system', value: 100 }, { key: 'tools', value: 20 }],
         timing: { wallMs: 1000, ttftMs: 0, genMs: 0, calls: 2, toolsMs: 0, toolCalls: 0, tools: {} },
+        windowTiming: { calls: 2, toolCalls: 0, toolsMs: 0, wallMs: 1000 },
         coverage: BASE_COVERAGE,
       },
     })
@@ -364,6 +365,7 @@ describe('overviewValueOf', () => {
         costUsd: null,
         costSessions: 0,
         usageSessions: 0,
+        windowTiming: { calls: 0, toolCalls: 0, toolsMs: 0, wallMs: 0 },
         coverage: BASE_COVERAGE,
       },
     }))
@@ -400,6 +402,11 @@ describe('overviewValueOf', () => {
       ['costSessions', { costSessions: null }],
       ['usageSessions', { usageSessions: '1' }],
       ['costUsd', { costUsd: 'free' }],
+      ['windowTiming absent', { windowTiming: undefined }],
+      ['windowTiming calls', { windowTiming: { calls: '1', toolCalls: 0, toolsMs: 0, wallMs: 0 } }],
+      ['windowTiming toolCalls', { windowTiming: { calls: 0, toolCalls: -1, toolsMs: 0, wallMs: 0 } }],
+      ['windowTiming toolsMs', { windowTiming: { calls: 0, toolCalls: 0, toolsMs: '1', wallMs: 0 } }],
+      ['windowTiming wallMs', { windowTiming: { calls: 0, toolCalls: 0, toolsMs: 0, wallMs: -1 } }],
       ['coverage absent', { coverage: undefined }],
       ['coverage complete', { coverage: { ...BASE_COVERAGE, complete: 'yes' } }],
       ['coverage running', { coverage: { ...BASE_COVERAGE, running: 1 } }],

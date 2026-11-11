@@ -27,7 +27,6 @@ function hostSessionOf(id: string, options: { turns?: number; tokens?: number } 
       current: currentOf(tokens * 10),
       total: tokens * 10,
       turns: options.turns ?? 1,
-      cost: usageOf(tokens, 0, 0, 1),
     },
     activity: { days: { '2026-11-01': day } },
   }

@@ -61,6 +61,17 @@ describe('host cost source', () => {
     assert.equal(cost.ready(), false)
   })
 
+  test('complete requires every model to resolve a price', () => {
+    const cost = createCostSource(catalogOf(bookOf()))
+    assert.equal(cost.complete(undefined), false)
+    assert.equal(cost.complete(null), false)
+    assert.equal(cost.complete({}), false)
+    assert.equal(cost.complete(USING), true)
+    assert.equal(cost.complete({ ghost: { phantom: { peak: { uncached: 1, cacheRead: 0, cacheWrite: 0, output: 0 } } } }), false)
+    assert.equal(cost.complete({ ...USING, ghost: { phantom: { peak: { uncached: 1, cacheRead: 0, cacheWrite: 0, output: 0 } } } }), false)
+    assert.equal(createCostSource(catalogOf(null)).complete(USING), false)
+  })
+
   test('computes USD with the DeepSeek peak factor and resolves price faces', () => {
     const cost = createCostSource(catalogOf(bookOf()))
     assert.equal(cost.ready(), true)

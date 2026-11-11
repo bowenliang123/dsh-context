@@ -150,6 +150,7 @@ export function panelSummaryRaw(over: Record<string, unknown> = {}): Record<stri
       { key: 'zero', value: 0 },
     ],
     timing: { wallMs: 180_000, ttftMs: 2_000, genMs: 60_000, calls: 8, toolsMs: 40_000, toolBusyMs: 30_000, toolCalls: 14, tools: {} },
+    windowTiming: { calls: 8, toolCalls: 14, toolsMs: 40_000, wallMs: 180_000 },
     coverage: COMPLETE_COVERAGE,
     ...over,
   }

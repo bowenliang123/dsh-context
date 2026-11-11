@@ -154,6 +154,7 @@ export function fakeCost(ready: boolean): CostSource {
     ready: () => ready,
     read: (usage) => ({ usd: ready ? costOfUsage(usage) : null, ready }),
     usd: (usage) => (ready ? costOfUsage(usage) : null),
+    complete: (usage) => ready && usage !== null && costOfUsage(usage) !== null,
   }
 }
 
@@ -334,13 +335,15 @@ export function timingOf(wallMs: number, toolCalls: number, toolsMs: number): Ti
   }
 }
 
-export function dayOf(tokens: number, requests: number, options: { cost?: SessionCostUsage; turns?: number; toolCalls?: number; skills?: string[]; tools?: string[]; cmds?: string[] } = {}): ActivityDay {
+export function dayOf(tokens: number, requests: number, options: { cost?: SessionCostUsage; turns?: number; toolCalls?: number; toolsMs?: number; wallMs?: number; skills?: string[]; tools?: string[]; cmds?: string[] } = {}): ActivityDay {
   return {
     tokens,
     requests,
     ...(options.cost === undefined ? {} : { cost: options.cost }),
     ...(options.turns === undefined ? {} : { turns: options.turns }),
     ...(options.toolCalls === undefined ? {} : { toolCalls: options.toolCalls }),
+    ...(options.toolsMs === undefined ? {} : { toolsMs: options.toolsMs }),
+    ...(options.wallMs === undefined ? {} : { wallMs: options.wallMs }),
     ...(options.skills === undefined ? {} : { skills: Object.fromEntries(options.skills.map(name => [name, { n: 1, last: 10 }])) }),
     ...(options.tools === undefined ? {} : { tools: Object.fromEntries(options.tools.map(name => [name, { n: 1, last: 20 }])) }),
     ...(options.cmds === undefined ? {} : { cmds: Object.fromEntries(options.cmds.map(name => [name, { n: 1, last: 30 }])) }),

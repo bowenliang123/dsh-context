@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import type {
   BackfillCoverage, OverviewDay, OverviewPage, OverviewPartTotal, OverviewRequest, OverviewScope,
-  OverviewSummary, OverviewTally, OverviewTallyStat, OverviewValue, TimingTotals,
+  OverviewSummary, OverviewTally, OverviewTallyStat, OverviewTimingWindow, OverviewValue, TimingTotals,
 } from '../shared/types'
 import { BACKFILL_ROUTE, OVERVIEW_ROUTE } from './apiRoutes'
 import { postRoute } from './route'
@@ -49,6 +49,17 @@ function timingOf(value: unknown): TimingTotals | null {
   return asRecord(value) === null ? null : value as TimingTotals
 }
 
+function windowTimingOf(value: unknown): OverviewTimingWindow | null {
+  const data = asRecord(value)
+  if (data === null) return null
+  const calls = nonNegativeOf(data.calls)
+  const toolCalls = nonNegativeOf(data.toolCalls)
+  const toolsMs = nonNegativeOf(data.toolsMs)
+  const wallMs = nonNegativeOf(data.wallMs)
+  if (calls === null || toolCalls === null || toolsMs === null || wallMs === null) return null
+  return { calls, toolCalls, toolsMs, wallMs }
+}
+
 function coverageOf(value: unknown): BackfillCoverage | null {
   const data = asRecord(value)
   if (data === null) return null
@@ -82,8 +93,9 @@ function summaryOf(value: unknown): OverviewSummary | null {
   const costSessions = nonNegativeOf(data.costSessions)
   const usageSessions = nonNegativeOf(data.usageSessions)
   const coverage = coverageOf(data.coverage)
+  const windowTiming = windowTimingOf(data.windowTiming)
   if (sessions === null || sessionsTotal === null || tokens === null || turns === null
-    || costSessions === null || usageSessions === null || coverage === null) return null
+    || costSessions === null || usageSessions === null || coverage === null || windowTiming === null) return null
   if (costUsd === null && data.costUsd !== null) return null
   const cacheHit = data.cacheHit === null ? null : stringOf(data.cacheHit) ?? null
   return {
@@ -99,6 +111,7 @@ function summaryOf(value: unknown): OverviewSummary | null {
     cacheHit,
     tokenParts: data.tokenParts === null ? null : partsOf(data.tokenParts),
     timing: timingOf(data.timing),
+    windowTiming,
     coverage,
   }
 }
@@ -360,6 +373,16 @@ export interface OverviewSummaryState extends PartState<{ summary: OverviewSumma
   coverage: BackfillCoverage | null
 }
 
+export type FoldState = 'idle' | 'starting' | 'running' | 'folding' | 'stalled'
+
+export function foldStateOf(coverage: BackfillCoverage | null): FoldState {
+  if (coverage === null) return 'idle'
+  if (coverage.running) return 'running'
+  if (coverage.complete) return 'idle'
+  if (coverage.total === 0) return 'starting'
+  return coverage.remaining > 0 ? 'folding' : 'stalled'
+}
+
 export function useOverviewSummary(scope: OverviewScope | null, enabled: boolean): OverviewSummaryState {
   const state = useOverviewPart({
     request: enabled && scope !== null ? { part: 'summary', scope } : null,
@@ -367,14 +390,15 @@ export function useOverviewSummary(scope: OverviewScope | null, enabled: boolean
     pick: pickSummary,
   })
   const coverage = state.data?.summary.coverage ?? null
+  const fold = foldStateOf(coverage)
   const attempts = useRef(0)
-  const coverageKey = coverage === null ? '' : [coverage.complete, coverage.running, coverage.remaining, coverage.covered].join(',')
-  const progressKey = coverage === null ? '' : [coverage.remaining, coverage.covered].join(',')
+  const coverageKey = coverage === null ? '' : [coverage.complete, coverage.running, coverage.remaining, coverage.covered, coverage.total].join(',')
+  const progressKey = coverage === null ? '' : [coverage.complete, coverage.remaining, coverage.covered, coverage.total].join(',')
   useEffect(() => {
     attempts.current = 0
   }, [progressKey])
   useEffect(() => {
-    if (!enabled || coverage === null || coverage.complete) return
+    if (!enabled || (fold !== 'starting' && fold !== 'folding')) return
     if (attempts.current >= BACKFILL_MAX_ATTEMPTS) return
     const delay = Math.min(BACKFILL_RETRY_MS * 2 ** attempts.current, BACKFILL_RETRY_MAX_MS)
     attempts.current += 1
@@ -382,10 +406,7 @@ export function useOverviewSummary(scope: OverviewScope | null, enabled: boolean
       void fetch(BACKFILL_ROUTE, { method: 'POST' }).catch(() => {})
     }, delay)
     return () => { clearTimeout(timer) }
-  }, [enabled, coverageKey])
-  useEffect(() => {
-    if (coverage?.complete === true) attempts.current = 0
-  }, [coverage?.complete])
+  }, [enabled, coverageKey, fold])
   return { ...state, coverage }
 }
 
