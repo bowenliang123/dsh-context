@@ -132,33 +132,30 @@ describe('TrendChart delta mode', () => {
   const grown = req(2, { turn: 1, step: 1, system: 110, tools: 60, user: 40, inject: 30, assistant: 50, tool: 70, total: 360 })
   const shrunk = req(3, { turn: 2, step: 0, system: 90, tools: 40, user: 20, inject: 10, assistant: 30, tool: 50, total: 240 })
 
-  test('diverging stacks pile positive deltas up and hang negatives down off a solid zero line, zeroing an absent arm', async () => {
+  test('positive stacks fill the plot height and a shrinking step carries no arm', async () => {
     const m = await mount(h(TrendChart, propsOf([base, grown, shrunk], { mode: 'delta' })))
 
     assert.equal(query(m.container, '.lc-axis-top').textContent, '+60')
-    assert.equal(queryAll(m.container, '.lc-axis-q3').length, 0)
-    assert.equal(query(m.container, '.lc-axis-q1').textContent, '-75')
-    assert.equal(query(m.container, '.lc-axis-mid').textContent, '0')
-    assert.equal(query(m.container, '.lc-axis-mid').style.top, `${13 + 37}px`)
-    assert.equal(query(m.container, '.lc-axis-bot').textContent, '-120')
-    assert.equal(query(m.container, '.lc-grid-zero').style.top, `${18 + 37}px`)
-    assert.equal(queryAll(m.container, '.lc-grid-q3').length, 0)
+    assert.equal(query(m.container, '.lc-axis-q3').textContent, '+45')
+    assert.equal(query(m.container, '.lc-axis-q1').textContent, '+15')
+    assert.equal(query(m.container, '.lc-axis-mid').textContent, '+30')
+    assert.equal(query(m.container, '.lc-axis-bot').textContent, '0')
+    assert.equal(query(m.container, '.lc-grid-zero').style.top, '')
+    assert.ok(query(m.container, '.lc-grid-q3'))
     assert.ok(query(m.container, '.lc-grid-q1'))
+    assert.ok(query(m.container, '.lc-grid-mid'))
 
     const bs = bars(m.container)
     assert.equal(queryAll(bs[0], '.lc-bar-up > div').length, 0)
-    assert.equal(queryAll(bs[0], '.lc-bar-down > div').length, 0)
     const up2 = queryAll(bs[1], '.lc-bar-up > div')
     assert.equal(up2.length, 6)
-    assert.equal(up2[0].style.height, `${Math.round(10 * CHART_H / 180)}px`)
+    assert.equal(up2[0].style.height, `${Math.round(10 * CHART_H / 60)}px`)
     assertColor(up2[0].style.background, CATS[0].color)
     assert.equal(queryAll(bs[1], '.lc-bar-down > div').length, 0)
-    const down3 = queryAll(bs[2], '.lc-bar-down > div')
-    assert.equal(down3.length, 6)
-    assert.equal(down3[0].style.height, `${Math.round(20 * CHART_H / 180)}px`)
     assert.equal(queryAll(bs[2], '.lc-bar-up > div').length, 0)
-    assert.equal(query(bs[1], '.lc-bar-up').style.bottom, '75px')
-    assert.equal(query(bs[2], '.lc-bar-down').style.top, '37px')
+    assert.equal(queryAll(bs[2], '.lc-bar-down > div').length, 0)
+    assert.equal(query(bs[1], '.lc-bar-up').style.bottom, '0px')
+    assert.equal(queryAll(m.container, '.lc-bar-down').length, 0)
 
     await m.update(h(TrendChart, propsOf([base, grown, shrunk], { mode: 'delta', hoveredSeq: 2 })))
     assert.deepEqual(
@@ -177,36 +174,35 @@ describe('TrendChart delta mode', () => {
     assert.equal(query(up.container, '.lc-axis-top').textContent, '+300')
     assert.equal(query(up.container, '.lc-axis-q3').textContent, '+225')
     assert.equal(query(up.container, '.lc-axis-q1').textContent, '+75')
+    assert.equal(query(up.container, '.lc-axis-mid').textContent, '+150')
     assert.equal(query(up.container, '.lc-axis-bot').textContent, '0')
-    assert.ok(query(up.container, '.lc-grid-q3'))
-    assert.ok(query(up.container, '.lc-grid-q1'))
     const upSegs = queryAll(bars(up.container)[1]!, '.lc-bar-up > div')
     assert.equal(upSegs.length, 6)
     assert.equal(upSegs[0]!.style.height, `${Math.round(100 * CHART_H / 300)}px`)
     await up.unmount()
     const down = await mount(h(TrendChart, propsOf([baseReq, zeroReq], { mode: 'delta' })))
     assert.equal(query(down.container, '.lc-axis-top').textContent, '0')
-    assert.equal(query(down.container, '.lc-axis-q3').textContent, '-75')
-    assert.equal(query(down.container, '.lc-axis-q1').textContent, '-225')
-    assert.equal(query(down.container, '.lc-axis-bot').textContent, '-300')
-    assert.ok(query(down.container, '.lc-grid-q3'))
-    assert.ok(query(down.container, '.lc-grid-q1'))
-    assert.equal(queryAll(bars(down.container)[1]!, '.lc-bar-down > div').length, 6)
+    assert.equal(query(down.container, '.lc-axis-q3').textContent, '0')
+    assert.equal(query(down.container, '.lc-axis-q1').textContent, '0')
+    assert.equal(query(down.container, '.lc-axis-mid').textContent, '0')
+    assert.equal(query(down.container, '.lc-axis-bot').textContent, '0')
+    assert.equal(queryAll(bars(down.container)[1]!, '.lc-bar-up > div').length, 0)
+    assert.equal(queryAll(down.container, '.lc-bar-down').length, 0)
     await down.unmount()
   })
 
-  test('a quarter mark landing on the zero label drops itself; the opposite mark keeps its place', async () => {
+  test('the positive delta axis keeps its quarter marks', async () => {
     const flat = req(1, { turn: 1, step: 0, system: 0, tools: 30, user: 0, inject: 0, assistant: 0, tool: 0, total: 30 })
     const mixed = req(2, { turn: 1, step: 1, system: 90, tools: 0, user: 0, inject: 0, assistant: 0, tool: 0, total: 90 })
     const m = await mount(h(TrendChart, propsOf([flat, mixed], { mode: 'delta' })))
     assert.equal(query(m.container, '.lc-axis-top').textContent, '+90')
-    assert.equal(query(m.container, '.lc-axis-q3').textContent, '+60')
-    assert.equal(queryAll(m.container, '.lc-axis-q1').length, 0)
-    assert.equal(query(m.container, '.lc-axis-mid').textContent, '0')
-    assert.equal(query(m.container, '.lc-axis-mid').style.top, `${13 + 84}px`)
-    assert.equal(query(m.container, '.lc-axis-bot').textContent, '-30')
+    assert.equal(query(m.container, '.lc-axis-q3').textContent, '+68')
+    assert.equal(query(m.container, '.lc-axis-q1').textContent, '+23')
+    assert.equal(query(m.container, '.lc-axis-mid').textContent, '+45')
+    assert.equal(query(m.container, '.lc-axis-bot').textContent, '0')
     assert.ok(query(m.container, '.lc-grid-q3'))
-    assert.equal(queryAll(m.container, '.lc-grid-q1').length, 0)
+    assert.ok(query(m.container, '.lc-grid-q1'))
+    assert.ok(query(m.container, '.lc-grid-mid'))
     await m.unmount()
   })
 })
@@ -445,7 +441,7 @@ describe('TrendChart DNA mode', () => {
     await m.unmount()
   })
 
-  test('DNA + delta diffs each item against the previous bar — new items rise, removed items hang', async () => {
+  test('DNA + delta shows only rising items; removed items carry no strip', async () => {
     const rs = [
       req(1, { turn: 1, step: 0, total: 300 }),
       req(2, { turn: 1, step: 1, total: 300 }),
@@ -464,58 +460,58 @@ describe('TrendChart DNA mode', () => {
     const m = await mount(h(TrendChart, propsOf(rs, {
       dna: ds,
       mode: 'delta',
-      hoveredSeq: 4,
+      hoveredSeq: 3,
       adaptive: true,
       onPickBand: (seq, band) => { picks.push([seq, band.key]) },
     })))
     const dnaDivs = queryAll(m.container, '.lc-bar-dna')
-    assert.equal(dnaDivs.length, 4, 'the first bar has no baseline and carries no strip')
+    assert.equal(dnaDivs.length, 3, 'only the rising bars carry a strip')
     assert.equal(query(m.container, '.lc-axis-top').textContent, '+150')
-    assert.equal(query(m.container, '.lc-axis-mid').textContent, '0')
-    assert.equal(query(m.container, '.lc-axis-bot').textContent, '-210')
+    assert.equal(query(m.container, '.lc-axis-q3').textContent, '+113')
+    assert.equal(query(m.container, '.lc-axis-q1').textContent, '+38')
+    assert.equal(query(m.container, '.lc-axis-mid').textContent, '+75')
+    assert.equal(query(m.container, '.lc-axis-bot').textContent, '0')
 
-    assert.equal(dnaDivs[0].style.height, '19px')
-    assert.equal(dnaDivs[0].style.bottom, '65px')
+    assert.equal(dnaDivs[0].style.height, '45px')
+    assert.equal(dnaDivs[0].style.bottom, '0px')
     assert.ok(dnaDivs[0].style.background.includes('var(--color-blue-500) 0%, var(--color-blue-500) 100%'))
 
-    assert.equal(dnaDivs[1].style.height, '47px')
+    assert.equal(dnaDivs[1].style.height, '112px')
+    assert.equal(dnaDivs[1].style.bottom, '0px')
     const g3 = dnaDivs[1].style.background
     assert.ok(g3.includes('var(--color-blue-500) 0%, var(--color-blue-500) 20%'), g3)
     assert.ok(g3.includes('var(--color-teal-500) 20%, var(--color-teal-500) 100%'), g3)
 
-    assert.equal(dnaDivs[2].style.height, '90px')
+    assert.equal(dnaDivs[2].style.height, '60px')
     assert.equal(dnaDivs[2].style.bottom, '0px')
-    assert.equal(dnaDivs[2].style.transformOrigin, '50% 72.41%')
-    const g4 = dnaDivs[2].style.background
-    assert.ok(g4.includes('var(--color-teal-500) 0%, var(--color-teal-500) 41.38%'), g4)
-    assert.ok(g4.includes('var(--color-blue-500) 41.38%, var(--color-blue-500) 72.41%'), g4)
-    assert.ok(g4.includes('var(--color-green-500) 72.41%, var(--color-green-500) 100%'), g4)
+    assert.ok(dnaDivs[2].style.background.includes('var(--color-green-500) 0%, var(--color-green-500) 100%'))
 
-    assert.equal(dnaDivs[3].style.height, '25px')
-    assert.equal(dnaDivs[3].style.bottom, '40px')
-
-    await move(dnaDivs[2], 40)
+    stubBarRect(dnaDivs[1])
     const tipText = () => query(m.container, '.lc-chart-tip').textContent ?? ''
-    assert.ok(tipText().includes(kit.t('trend.dnaItem', { label: 'bash', n: '-120' })))
-    stubBarRect(dnaDivs[2])
-    await move(dnaDivs[2], 0)
-    assert.ok(tipText().includes(kit.t('trend.dnaItem', { label: kit.catLabel('user'), n: '+40' })), 'the very top is the last up band')
-    await move(dnaDivs[2], 55)
-    assert.ok(tipText().includes(kit.t('trend.dnaItem', { label: kit.catLabel('assistant'), n: '-90' })), 'the down arm walks read order from the zero line')
-    await act(async () => { dnaDivs[2].dispatchEvent(new MouseEvent('click', { bubbles: true, clientY: 55 })) })
-    assert.deepEqual(picks, [[4, 'a1']])
+    await move(dnaDivs[1], 100)
+    assert.ok(tipText().includes(kit.t('trend.dnaItem', { label: kit.catLabel('assistant'), n: '+30' })))
+    await move(dnaDivs[1], 0)
+    assert.ok(tipText().includes(kit.t('trend.dnaItem', { label: 'bash', n: '+120' })), 'the very top is the last up band')
+    await act(async () => { dnaDivs[1].dispatchEvent(new MouseEvent('click', { bubbles: true, clientY: 100 })) })
+    assert.deepEqual(picks, [[3, 'a1']])
 
     stubBarRect(dnaDivs[1])
     await move(dnaDivs[1], 0)
     const slices = queryAll(m.container, '.lc-dna-slice')
-    assert.equal(slices.length, 2)
-    assert.equal(slices[0].style.bottom, `${Math.round(65 + 30 * 112 / 360)}px`)
-    assert.equal(slices[0].style.height, `${Math.max(1, Math.round(120 * 112 / 360))}px`)
-    assert.equal(slices[1].style.bottom, `${Math.round(65 - 210 * 112 / 360)}px`)
-    assert.equal(slices[1].style.height, `${Math.max(1, Math.round(120 * 112 / 360))}px`)
+    assert.equal(slices.length, 1, 'a removed item leaves no lifetime slice')
+    assert.equal(slices[0].style.bottom, `${Math.round(30 * 112 / 150)}px`)
+    assert.equal(slices[0].style.height, `${Math.max(1, Math.round(120 * 112 / 150))}px`)
     await unhover(dnaDivs[1])
     assert.equal(queryAll(m.container, '.lc-dna-slice').length, 0)
     await m.unmount()
+
+    const noPick = await mount(h(TrendChart, propsOf(rs, { dna: ds, mode: 'delta' })))
+    const noPickBar = query(noPick.container, '.lc-bar-dna')
+    await move(noPickBar, 0)
+    stubBarRect(noPickBar)
+    await act(async () => { noPickBar.dispatchEvent(new MouseEvent('click', { bubbles: true, clientY: 0 })) })
+    assert.equal(queryAll(noPick.container, '.lc-bar-dna').length, 3, 'a bar without a pick handler stays inert')
+    await noPick.unmount()
 
     const downOnlyReqs = [req(1, { turn: 1, step: 0, total: 300 }), req(2, { turn: 1, step: 1, total: 260 })]
     const downOnlyBands = [
@@ -523,11 +519,7 @@ describe('TrendChart DNA mode', () => {
       dnaBands([['sys', 'system', 100]]),
     ]
     const downOnly = await mount(h(TrendChart, propsOf(downOnlyReqs, { dna: downOnlyBands, mode: 'delta', hoveredSeq: 2 })))
-    const dnaDiv = query(downOnly.container, '.lc-bar-dna')
-    stubBarRect(dnaDiv)
-    await act(async () => { dnaDiv.dispatchEvent(new MouseEvent('click', { bubbles: true, clientY: 0 })) })
-    await move(dnaDiv, 0)
-    assert.ok((query(downOnly.container, '.lc-chart-tip').textContent ?? '').includes(kit.t('trend.dnaItem', { label: kit.catLabel('user'), n: '-200' })))
+    assert.equal(queryAll(downOnly.container, '.lc-bar-dna').length, 0, 'a purely removing step carries no strip')
     await downOnly.unmount()
   })
 

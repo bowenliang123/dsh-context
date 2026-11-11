@@ -91,26 +91,22 @@ export function preprocessTrend(
   return { requests: delta ? base.map((req, i) => deltaOf(req, i > 0 ? base[i - 1] : null)) : base, focus }
 }
 
-export function trendMaxima(requests: RequestRecord[], delta: boolean): { maxTotal: number; maxUp: number; maxDown: number } {
+export function trendMaxima(requests: RequestRecord[], delta: boolean): { maxTotal: number; maxUp: number } {
   let maxTotal = 1
   let maxUp = 0
-  let maxDown = 0
   if (delta) {
     for (const req of requests) {
       let up = 0
-      let down = 0
       for (const c of CATS) {
         const d = req[c.key] || 0
         if (d > 0) up += d
-        else down -= d
       }
       if (up > maxUp) maxUp = up
-      if (down > maxDown) maxDown = down
     }
   } else {
     for (const req of requests) if (req.total > maxTotal) maxTotal = req.total
   }
-  return { maxTotal, maxUp, maxDown }
+  return { maxTotal, maxUp }
 }
 
 export function trendTipRows(

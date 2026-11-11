@@ -30,23 +30,19 @@ const CHART_H = 112
 
 const PLOT_TOP = 18
 
-const yOf = (cum: number, scale: number, baseline: number, dir: 1 | -1): number =>
-  Math.round((baseline - dir * cum * scale) * 100) / 100
+const yOf = (cum: number, scale: number, baseline: number): number =>
+  Math.round((baseline - cum * scale) * 100) / 100
 
 interface RibbonBand {
   cat: Category | 'system' | 'tools'
   upper: number[]
   lower: number[]
-  dir: 1 | -1
   points: string
 }
 
 interface RibbonGeometry {
   maxTotal: number
   maxUp: number
-  maxDown: number
-  upPx: number
-  span: number
   maxActiveMs: number
   baseline: number
   scale: number
@@ -60,26 +56,21 @@ function ribbonGeometry(requests: RequestRecord[], delta: boolean, durationOn: b
   const geo: RibbonGeometry = {
     maxTotal: 1,
     maxUp: 0,
-    maxDown: 0,
-    upPx: 0,
-    span: 1,
     maxActiveMs: 0,
-    baseline: 0,
+    baseline: CHART_H,
     scale: 1,
     bands: [],
     durationRuns: [],
     durationDots: [],
   }
   if (n === 0) return geo
-  ;({ maxTotal: geo.maxTotal, maxUp: geo.maxUp, maxDown: geo.maxDown } = trendMaxima(requests, delta))
-  const span = Math.max(1, geo.maxUp + geo.maxDown)
+  ;({ maxTotal: geo.maxTotal, maxUp: geo.maxUp } = trendMaxima(requests, delta))
+  const span = Math.max(1, geo.maxUp)
   const deltaScale = CHART_H / span
-  geo.span = span
-  geo.upPx = Math.round(geo.maxUp * deltaScale)
   const u = n > 1 ? n - 1 : 1
   const xs: number[] = n === 1 ? [0, u] : Array.from({ length: n }, (_, i) => i)
   const cumAt = (v: number[], x: number): number => v[n === 1 ? 0 : x]
-  const ribbon = (cat: RibbonBand['cat'], upper: number[], lower: number[], dir: 1 | -1): void => {
+  const ribbon = (cat: RibbonBand['cat'], upper: number[], lower: number[]): void => {
     let width = 0
     for (let i = 0; i < n; i++) {
       const d = Math.abs(upper[i] - lower[i])
@@ -87,34 +78,25 @@ function ribbonGeometry(requests: RequestRecord[], delta: boolean, durationOn: b
     }
     if (width <= 0) return
     const pts: string[] = []
-    for (const x of xs) pts.push(`${x},${yOf(cumAt(upper, x), geo.scale, geo.baseline, dir)}`)
-    for (let k = xs.length - 1; k >= 0; k--) pts.push(`${xs[k]},${yOf(cumAt(lower, xs[k]), geo.scale, geo.baseline, dir)}`)
-    geo.bands.push({ cat, upper: [...upper], lower: [...lower], dir, points: pts.join(' ') })
+    for (const x of xs) pts.push(`${x},${yOf(cumAt(upper, x), geo.scale, geo.baseline)}`)
+    for (let k = xs.length - 1; k >= 0; k--) pts.push(`${xs[k]},${yOf(cumAt(lower, xs[k]), geo.scale, geo.baseline)}`)
+    geo.bands.push({ cat, upper: [...upper], lower: [...lower], points: pts.join(' ') })
   }
   if (delta) {
-    geo.baseline = geo.upPx
     geo.scale = deltaScale
     const up = new Array<number>(n).fill(0)
-    const down = new Array<number>(n).fill(0)
     for (const c of CATS) {
       const upPrev = up.slice()
-      const downPrev = down.slice()
-      for (let i = 0; i < n; i++) {
-        const d = requests[i][c.key] || 0
-        up[i] += Math.max(0, d)
-        down[i] += Math.max(0, -d)
-      }
-      ribbon(c.key, up, upPrev, 1)
-      ribbon(c.key, downPrev, down, -1)
+      for (let i = 0; i < n; i++) up[i] += Math.max(0, requests[i][c.key] || 0)
+      ribbon(c.key, up, upPrev)
     }
   } else {
-    geo.baseline = CHART_H
     geo.scale = CHART_H / geo.maxTotal
     const acc = new Array<number>(n).fill(0)
     for (const c of CATS) {
       const prev = acc.slice()
       for (let i = 0; i < n; i++) acc[i] += requests[i][c.key] || 0
-      ribbon(c.key, acc, prev, 1)
+      ribbon(c.key, acc, prev)
     }
   }
   if (durationOn) {
@@ -137,7 +119,7 @@ function ribbonGeometry(requests: RequestRecord[], delta: boolean, durationOn: b
         flushRun()
         continue
       }
-      run.push([i, yOf(m, scale, CHART_H, 1)])
+      run.push([i, yOf(m, scale, CHART_H)])
     }
     flushRun()
   }
@@ -150,8 +132,8 @@ function bandAt(geo: RibbonGeometry, f: number, n: number, y: number): RibbonBan
   const t = f - i0
   const at = (v: number[]): number => v[i0] + (v[i1] - v[i0]) * t
   for (const band of geo.bands) {
-    const a = yOf(at(band.upper), geo.scale, geo.baseline, band.dir)
-    const b = yOf(at(band.lower), geo.scale, geo.baseline, band.dir)
+    const a = yOf(at(band.upper), geo.scale, geo.baseline)
+    const b = yOf(at(band.lower), geo.scale, geo.baseline)
     if (y >= Math.min(a, b) && y <= Math.max(a, b)) return band.cat
   }
   return null
@@ -178,8 +160,6 @@ function wideQuartiles(groups: { count: number }[]): number[] {
 export function makeTrendOverview(kit: ViewKit): (props: TrendOverviewProps) => ReactElement | null {
   const { eventLabel, eventAt } = kit
 
-  const Q3_TOP = 41
-  const Q1_TOP = 97
   const fmtSigned = (v: number): string => (v > 0 ? '+' : '') + kit.fmt(v)
 
   return function TrendOverview(props: TrendOverviewProps): ReactElement | null {
@@ -217,8 +197,9 @@ export function makeTrendOverview(kit: ViewKit): (props: TrendOverviewProps) => 
     const flagRecords = [...new Set(FLAG_FRACS.map(q => Math.round(q * (n - 1))))].filter(idx => idx > 0)
     const flagLabel = (idx: number): number => (props.granularity === 'step' ? idx + 1 : requests[idx].turn ?? 0)
     const flagGroups = wideQuartiles(groups)
-    const q3Clear = Math.abs(Q3_TOP - 13 - geo.upPx) >= 11
-    const q1Clear = Math.abs(Q1_TOP - 13 - geo.upPx) >= 11
+    const q3Value = Math.round(geo.maxUp * 3 / 4)
+    const q1Value = Math.round(geo.maxUp / 4)
+    const midValue = Math.round(geo.maxUp / 2)
 
     let wash: { left: string; right: string } | null = null
     if (props.activeTurn !== null) {
@@ -308,14 +289,10 @@ export function makeTrendOverview(kit: ViewKit): (props: TrendOverviewProps) => 
           {delta ? (
             <>
               <span className="lc-axis-top">{fmtSigned(geo.maxUp)}</span>
-              {q3Clear
-                ? <span className="lc-axis-q3">{fmtSigned(Math.round(geo.maxUp - geo.span / 4))}</span>
-                : null}
-              <span className="lc-axis-mid" style={{ top: `${13 + geo.upPx}px` }}>{'0'}</span>
-              {q1Clear
-                ? <span className="lc-axis-q1">{fmtSigned(Math.round(geo.maxUp - 3 * geo.span / 4))}</span>
-                : null}
-              <span className="lc-axis-bot">{fmtSigned(-geo.maxDown)}</span>
+              <span className="lc-axis-q3">{fmtSigned(q3Value)}</span>
+              <span className="lc-axis-mid">{fmtSigned(midValue)}</span>
+              <span className="lc-axis-q1">{fmtSigned(q1Value)}</span>
+              <span className="lc-axis-bot">{'0'}</span>
             </>
           ) : (
             <>
@@ -344,10 +321,10 @@ export function makeTrendOverview(kit: ViewKit): (props: TrendOverviewProps) => 
               onClick={onClick}
             >
               <div className="lc-grid lc-grid-top" />
-              {(!delta || q3Clear) ? <div className="lc-grid lc-grid-q3" /> : null}
-              {(!delta || q1Clear) ? <div className="lc-grid lc-grid-q1" /> : null}
-              {!delta ? <div className="lc-grid lc-grid-mid" /> : null}
-              <div className="lc-grid lc-grid-zero" style={delta ? { top: `${PLOT_TOP + geo.upPx}px` } : undefined} />
+              <div className="lc-grid lc-grid-q3" />
+              <div className="lc-grid lc-grid-q1" />
+              <div className="lc-grid lc-grid-mid" />
+              <div className="lc-grid lc-grid-zero" />
               {geo.bands.length > 0 || geo.durationRuns.length > 0 || geo.durationDots.length > 0 ? (
                 <svg
                   className={'lc-duration lc-fit-svg' + RISE_CLASS}

@@ -1,6 +1,6 @@
 import { memo, type CSSProperties, type ReactElement } from 'react'
 import type { Category } from '../../shared/types'
-import type { DnaDelta, TrendBand } from '../dna'
+import type { DeltaBand, TrendBand } from '../dna'
 
 export const RISE_CLASS = ' animate-lc-bar-in motion-reduce:animate-none'
 
@@ -111,9 +111,8 @@ export const DnaBar = function DnaBar(props: DnaBarProps): ReactElement | null {
 
 
 interface DnaDeltaBarProps {
-  d: DnaDelta
+  bands: DeltaBand[]
   scale: number
-  zeroBottom: number
   enterIndex: number
   rise: boolean
   seq: number
@@ -122,36 +121,29 @@ interface DnaDeltaBarProps {
 }
 
 export const DnaDeltaBar = function DnaDeltaBar(props: DnaDeltaBarProps): ReactElement | null {
-  let upSum = 0
-  for (const b of props.d.up) upSum += b.tokens
-  let downSum = 0
-  for (const b of props.d.down) downSum -= b.tokens
-  const gradSpan = upSum + downSum
-  if (gradSpan === 0) return null
+  let sum = 0
+  for (const b of props.bands) sum += b.tokens
+  if (sum === 0) return null
   const runs: { color: string; from: number; to: number }[] = []
   const pushRun = (color: string, mag: number, at: number): number => {
-    const from = Math.round(at / gradSpan * 10000) / 100
-    const to = Math.round((at + mag) / gradSpan * 10000) / 100
+    const from = Math.round(at / sum * 10000) / 100
+    const to = Math.round((at + mag) / sum * 10000) / 100
     const last = runs.length > 0 ? runs[runs.length - 1] : null
     if (last !== null && last.color === color && last.to === from) last.to = to
     else runs.push({ color, from, to })
     return at + mag
   }
   let acc = 0
-  for (let i = props.d.down.length - 1; i >= 0; i--) acc = pushRun(props.d.down[i].color, -props.d.down[i].tokens, acc)
-  for (const b of props.d.up) acc = pushRun(b.color, b.tokens, acc)
+  for (const b of props.bands) acc = pushRun(b.color, b.tokens, acc)
   const stops = capDnaRuns(runs, DNA_MAX_STOPS)
-  const height = Math.max(1, Math.round(gradSpan * props.scale))
+  const height = Math.max(1, Math.round(sum * props.scale))
   const hitAt = (e: { clientY: number; currentTarget: HTMLDivElement }): { key: string; cat: Category | 'system' | 'tools' } => {
     const rect = e.currentTarget.getBoundingClientRect()
     const frac = rect.height > 0 ? Math.min(1, Math.max(0, 1 - (e.clientY - rect.top) / rect.height)) : 0
-    const pos = frac * gradSpan - downSum
-    const useUp = pos >= 0 && props.d.up.length > 0
-    const arm = useUp ? props.d.up : props.d.down
-    const p = useUp ? pos : -pos
-    let hit = arm[0]
-    for (const b of arm) {
-      if (b.off > p) break
+    const pos = frac * sum
+    let hit = props.bands[0]
+    for (const b of props.bands) {
+      if (b.off > pos) break
       hit = b
     }
     return hit
@@ -161,10 +153,9 @@ export const DnaDeltaBar = function DnaDeltaBar(props: DnaDeltaBarProps): ReactE
       className={'lc-bar-dna' + (props.rise ? RISE_CLASS : '')}
       style={{
         position: 'absolute',
-        bottom: `${Math.round(props.zeroBottom - downSum * props.scale)}px`,
+        bottom: 0,
         height: `${height}px`,
         background: 'linear-gradient(to top, ' + stops.map(r => `${r.color} ${r.from}%, ${r.color} ${r.to}%`).join(', ') + ')',
-        transformOrigin: `50% ${Math.round(downSum / gradSpan * 10000) / 100}%`,
         '--lc-i': Math.min(props.enterIndex, STAGGER_CAP),
       } as CSSProperties}
       onMouseMove={(e) => { props.onHit(hitAt(e).key) }}

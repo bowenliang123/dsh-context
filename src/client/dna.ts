@@ -50,7 +50,7 @@ export function trendBandsOf(view: Assembled): TrendBand[] {
   return bands
 }
 
-type DeltaBand =
+export type DeltaBand =
   | { key: string; cat: 'system' | 'tools'; tokens: number; off: number; color: string }
   | { key: string; cat: Category; tokens: number; off: number; color: string; node: SurfaceNode }
 

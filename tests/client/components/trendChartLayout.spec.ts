@@ -77,10 +77,13 @@ describe('TrendChart adaptive scale (the title-adjacent toggle)', () => {
     const m = await mount(h(TrendChart, propsOf(reqs, { mode: 'delta', adaptive: true })))
     await flush()
     assert.equal(query(m.container, '.lc-axis-top').textContent, '+10')
-    assert.equal(query(m.container, '.lc-axis-bot').textContent, '-30')
-    assert.equal(query(m.container, '.lc-axis-mid').style.top, `${13 + 28}px`)
-    assert.equal(queryAll(bars(m.container)[29], '.lc-bar-up > div')[0].style.height, `${Math.round(10 * CHART_H / 40)}px`)
-    assert.equal(queryAll(bars(m.container)[20], '.lc-bar-down > div')[0].style.height, `${Math.round(30 * CHART_H / 40)}px`)
+    assert.equal(query(m.container, '.lc-axis-q3').textContent, '+8')
+    assert.equal(query(m.container, '.lc-axis-q1').textContent, '+3')
+    assert.equal(query(m.container, '.lc-axis-mid').textContent, '+5')
+    assert.equal(query(m.container, '.lc-axis-bot').textContent, '0')
+    assert.equal(queryAll(bars(m.container)[29], '.lc-bar-up > div')[0].style.height, `${CHART_H}px`)
+    assert.equal(queryAll(bars(m.container)[20], '.lc-bar-up > div').length, 0, 'the decreasing step carries no up arm')
+    assert.equal(queryAll(m.container, '.lc-bar-down').length, 0, 'delta mode has no down arm')
     await m.unmount()
 
     const flat = [step(0, 100)]
@@ -90,7 +93,7 @@ describe('TrendChart adaptive scale (the title-adjacent toggle)', () => {
     await flush()
     await scrollTo(query<LayoutEl>(m2.container, '.lc-chart-scroll'), 0)
     assert.equal(query(m2.container, '.lc-axis-top').textContent, '+500')
-    assert.equal(query(m2.container, '.lc-axis-mid').style.top, `${13 + CHART_H}px`)
+    assert.equal(query(m2.container, '.lc-axis-mid').textContent, '+250')
     await m2.unmount()
   })
 
@@ -526,11 +529,11 @@ describe('TrendChart category hover-link', () => {
     assert.equal(query(m.container, '.lc-chart').getAttribute('data-catdim'), 'tools')
 
     const big = req(4, { turn: 3, step: 0, system: 200, tools: 100, user: 60, inject: 40, skill: 30, assistant: 80, tool: 120 })
-    await m.update(h(TrendChart, propsOf([big, r1], { mode: 'delta', hoverCat: 'user' })))
+    await m.update(h(TrendChart, propsOf([r1, big], { mode: 'delta', hoverCat: 'user' })))
     const deltaChart = query(m.container, '.lc-chart')
     assert.equal(deltaChart.getAttribute('data-catdim'), 'user')
     assert.deepEqual(
-      queryAll(deltaChart, '.lc-bar-down > .lc-cat-seg').map(s => s.getAttribute('data-cat')),
+      queryAll(deltaChart, '.lc-bar-up > .lc-cat-seg').map(s => s.getAttribute('data-cat')),
       CATS.map(c => c.key),
     )
     await m.unmount()
@@ -587,16 +590,18 @@ describe('TrendChart category focus (the browser open category)', () => {
     const shrunk = req(3, { turn: 2, step: 0, system: 90, tools: 50, user: 30, inject: 20, assistant: 40, tool: 60, total: 290 })
     const m = await mount(h(TrendChart, propsOf([base, grown, shrunk], { mode: 'delta', focusCat: 'system' })))
     assert.equal(query(m.container, '.lc-axis-top').textContent, '+30')
-    assert.equal(query(m.container, '.lc-axis-bot').textContent, '-40')
+    assert.equal(query(m.container, '.lc-axis-q3').textContent, '+23')
+    assert.equal(query(m.container, '.lc-axis-q1').textContent, '+8')
+    assert.equal(query(m.container, '.lc-axis-mid').textContent, '+15')
+    assert.equal(query(m.container, '.lc-axis-bot').textContent, '0')
     const bs = bars(m.container)
     assert.equal(queryAll(bs[0], '.lc-bar-up > div').length, 0)
     const up = queryAll(bs[1], '.lc-bar-up > div')
     assert.equal(up.length, 1)
     assert.equal(up[0].getAttribute('data-cat'), 'system')
-    assert.equal(up[0].style.height, `${Math.round(30 * CHART_H / 70)}px`)
-    const down = queryAll(bs[2], '.lc-bar-down > div')
-    assert.equal(down.length, 1)
-    assert.equal(down[0].style.height, `${Math.round(40 * CHART_H / 70)}px`)
+    assert.equal(up[0].style.height, `${CHART_H}px`)
+    assert.equal(queryAll(bs[2], '.lc-bar-up > div').length, 0, 'the shrinking step carries no up arm')
+    assert.equal(queryAll(bs[2], '.lc-bar-down > div').length, 0)
 
     await m.update(h(TrendChart, propsOf([base, grown, shrunk], { mode: 'delta', focusCat: 'system', hoveredSeq: 2 })))
     assert.ok(query(m.container, '.lc-chart-tip').textContent!.includes(kit.t('tip.delta', { n: '+30' })))
