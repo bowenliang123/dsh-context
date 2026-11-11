@@ -228,6 +228,17 @@ Les boutons de préréglage d’Analyse du contexte enregistrent le choix comme 
 
 ![La carte des paramètres de Contexte](https://raw.githubusercontent.com/bowenliang123/dsh-context/main/docs/settings.png)
 
+## Recommandations
+
+L'en-tête de l'onglet **Context** (deuxième colonne, à côté de la carte **Plugin Info**) affiche une carte de recommandation : un nom de marque, un slogan d'une ligne, une ligne promotionnelle précédée de `✦`, une infobulle de remerciement au survol et un lien qui s'ouvre dans un nouvel onglet. Elle n'apparaît que dans l'onglet Context en session ; le panneau **Contexte** de la barre latérale droite ne l'affiche pas.
+
+- **Contenu récupéré à l'exécution** — les données de la carte ne sont pas incluses dans le paquet. `POST api/dsh-context/recom` lit le fichier `data/recoms.json` du dépôt (d'abord raw.githubusercontent.com, puis gh-proxy.org, avec un délai de 5 s ; mise en cache pendant une heure, avec repli sur l'entrée DeepSeek intégrée en cas d'échec). Le contenu de l'emplacement peut donc changer sans nouvelle version.
+- **Rotation aléatoire** — chaque ouverture choisit une entrée au hasard ; un clic passe à la suivante.
+- **Possiblement commercial** — les entrées actuelles incluent des produits tiers, et le lien Zilliz Cloud porte un paramètre d'attribution `utm_source=dsh_context`.
+- **Aucune désactivation** — la carte des paramètres n'a pas d'interrupteur pour cet emplacement et la carte n'a pas de bouton de fermeture. Pour l'éviter, réglez l'entrée du panneau de contexte sur le panneau de la barre latérale : il affiche le même tableau de bord sans cette carte.
+
+L'emplacement est indépendant des fonctionnalités, des statistiques et de l'analyse de contexte du plugin, et n'affecte aucune métrique.
+
 ## Bon à savoir
 
 - **Empreinte du cache** — le plugin n’enregistre dans le cache de projection de dsh qu’un résumé compact par session : composition, compteurs, coût et durée, informations sur le modèle. Les détails volumineux par événement, textes de surface, répartitions des requêtes, opérations sur les fichiers, programmes de commandes et plages, sont reconstitués à partir du journal durable lorsqu’un panneau en a besoin, afin que le cache reste petit même sur les longues sessions. Les vues détaillées sont bornées : étapes 1500 · tours 300 · événements 400 · nœuds de surface 2000 · archive 400 · opérations sur fichiers 400 · commandes 400.

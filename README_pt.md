@@ -228,6 +228,17 @@ Os botões de predefinição dos Insights de contexto gravam a escolha como padr
 
 ![O cartão de configurações do Contexto](https://raw.githubusercontent.com/bowenliang123/dsh-context/main/docs/settings.png)
 
+## Recomendações
+
+O cabeçalho da aba **Context** (segunda coluna, ao lado do cartão **Plugin Info**) exibe um cartão de recomendação: nome da marca, um slogan de uma linha, uma linha promocional com `✦`, uma dica de agradecimento ao passar o mouse e um link que abre em nova aba. Ele aparece apenas na aba Context dentro da sessão; o painel **Contexto** da barra lateral direita não o exibe.
+
+- **Conteúdo obtido em tempo de execução** — os dados do cartão não vêm no pacote. `POST api/dsh-context/recom` lê o `data/recoms.json` do repositório (primeiro raw.githubusercontent.com, depois gh-proxy.org, com timeout de 5 s; cache de uma hora e, em caso de falha, retorno à entrada DeepSeek embutida). Por isso o conteúdo do espaço pode mudar sem uma nova versão.
+- **Rotação aleatória** — cada abertura escolhe uma entrada ao acaso; clicar avança para a próxima.
+- **Possivelmente comercial** — as entradas atuais incluem produtos de terceiros, e o link da Zilliz Cloud carrega um parâmetro de atribuição `utm_source=dsh_context`.
+- **Sem opção de desativar** — o cartão de configurações não tem interruptor para ele e o cartão não tem botão de fechar. Para evitá-lo, defina a entrada do painel de contexto como o painel da barra lateral: ele mostra o mesmo painel sem este cartão.
+
+O espaço é independente dos recursos, das estatísticas e da análise de contexto do plugin, e não afeta nenhuma métrica.
+
 ## Informações úteis
 
 - **Pegada do cache** — o plugin salva checkpoints apenas de um resumo compacto por sessão (composição, contagens, custo/tempo, informações do modelo) no cache de projeção do dsh; os detalhes pesados por evento (texto das superfícies, detalhamentos de requisições, operações de arquivos, programas de comandos, intervalos) são reconstituídos a partir do log durável quando um painel precisa deles, para que o cache permaneça pequeno mesmo em sessões longas. As visualizações de detalhes são limitadas (etapas 1500 · turnos 300 · eventos 400 · nós de superfície 2000 · arquivo 400 · operações de arquivos 400 · comandos 400).

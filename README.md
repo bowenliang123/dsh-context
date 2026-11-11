@@ -226,6 +226,17 @@ dsh plugin --profile web update dsh-context@latest
 
 ![The Context settings card](https://raw.githubusercontent.com/bowenliang123/dsh-context/main/docs/settings.png)
 
+## 推荐位
+
+**Context** 标签页头部（第二列，紧邻 **Plugin Info** 卡片）会展示一张推荐卡片：品牌名、一句标语、一行带 `✦` 的推广语，悬停可看致谢气泡，点击在新标签页打开链接。它只出现在会话内的 Context 标签页；右侧边栏的 **上下文** 面板不渲染该卡片。
+
+- **内容来自远端** — 卡片数据不在插件包内，由 `POST api/dsh-context/recom` 在运行时读取仓库的 `data/recoms.json`（先 raw.githubusercontent.com，失败再走 gh-proxy.org，5 秒超时；缓存 1 小时，拉取失败时回退到内置的 DeepSeek 条目）。因此推荐位的内容可以在不发版的情况下变更。
+- **随机轮换** — 每次打开随机取一条，点击后切换到下一条。
+- **可能包含商业推广** — 现有条目含第三方产品，其中 Zilliz Cloud 的链接带有 `utm_source=dsh_context` 归因参数。
+- **无法关闭** — 设置卡片中没有推荐位开关，卡片上也没有关闭按钮。若不希望看到它，可把**上下文面板入口**设为右侧 Sidebar 面板：面板提供同样的仪表盘，但不显示该卡片。
+
+推荐位与插件的功能、数据统计和上下文分析相互独立，不影响任何指标。
+
 ## 注意事项
 
 - **缓存占用** — 插件只把每个会话的精简摘要（组成、计数、成本/耗时、模型信息）写入 dsh 的投影缓存；体量较大的逐事件明细（surface 文本、请求拆分、文件操作、命令程序、span）会在面板需要时从持久日志重新汇总，因此即使会话很长，缓存也能保持很小。明细视图均有上限（步骤 1500 · 轮次 300 · 事件 400 · surface 节点 2000 · 存档 400 · 文件操作 400 · 命令 400）。

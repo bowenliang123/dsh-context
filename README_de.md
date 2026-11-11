@@ -227,6 +227,17 @@ Die Voreinstellungs-Schaltflächen von Kontext-Einblicke schreiben die Auswahl a
 
 ![Die Einstellungen-Karte „Kontext“](https://raw.githubusercontent.com/bowenliang123/dsh-context/main/docs/settings.png)
 
+## Empfehlungen
+
+Der Kopf des **Context**-Tabs (zweite Spalte, neben der Karte **Plugin Info**) zeigt eine Empfehlungskarte: Markenname, einzeiliger Slogan, eine `✦`-Promo-Zeile, einen Danke-Tooltip beim Überfahren und einen Link, der in einem neuen Tab öffnet. Sie erscheint nur im Context-Tab innerhalb einer Sitzung; das **Kontext**-Panel in der rechten Seitenleiste rendert sie nicht.
+
+- **Zur Laufzeit geladen** — die Kartendaten sind nicht im Paket enthalten. `POST api/dsh-context/recom` liest die `data/recoms.json` des Repositories (zuerst raw.githubusercontent.com, dann gh-proxy.org, 5 s Timeout; eine Stunde zwischengespeichert, bei Fehlschlag Rückfall auf den eingebauten DeepSeek-Eintrag). Der Inhalt des Platzes kann sich daher ohne Release ändern.
+- **Zufällige Rotation** — bei jedem Öffnen wird ein Eintrag zufällig gewählt; ein Klick wechselt zum nächsten.
+- **Möglicherweise kommerziell** — die aktuellen Einträge enthalten Produkte Dritter, und der Zilliz-Cloud-Link trägt einen Attributionsparameter `utm_source=dsh_context`.
+- **Keine Abschaltung** — die Einstellungen-Karte hat keinen Schalter dafür und die Karte keinen Schließen-Button. Um sie zu vermeiden, stelle den Eintrag des Kontextpanels auf das Seitenleisten-Panel: es zeigt dasselbe Dashboard ohne diese Karte.
+
+Der Platz ist unabhängig von den Funktionen, Statistiken und der Kontextanalyse des Plugins und beeinflusst keine Kennzahl.
+
 ## Gut zu wissen
 
 - **Cache-Fußabdruck** — das Plugin speichert nur eine kompakte Zusammenfassung pro Sitzung (Zusammensetzung, Zählungen, Kosten/Zeit, Modellinfo) im Projektions-Cache von dsh; die schweren Details pro Ereignis (Oberflächentext, Anfrageaufschlüsselungen, Dateivorgänge, Befehlprogramme, Spannen) werden bei Bedarf aus dem dauerhaften Protokoll neu gefaltet, sodass der Cache auch bei langen Sitzungen klein bleibt. Detailansichten sind begrenzt (Schritte 1500 · Runden 300 · Ereignisse 400 · Oberflächenknoten 2000 · Archiv 400 · Dateivorgänge 400 · Befehle 400).

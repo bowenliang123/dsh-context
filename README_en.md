@@ -228,6 +228,17 @@ The Context Insights preset buttons write the pick back as the stored default; e
 
 ![The Context settings card](https://raw.githubusercontent.com/bowenliang123/dsh-context/main/docs/settings.png)
 
+## Recommendations
+
+The **Context** tab's header (second column, beside the **Plugin Info** card) carries a recommendation card: a brand name, a one-line slogan, a `✦` promo line, a thank-you tooltip on hover, and a link that opens in a new tab. It appears on the in-session Context tab only — the right-sidebar **Context** panel does not render it.
+
+- **Fetched at runtime** — the card data is not shipped in the package. `POST api/dsh-context/recom` reads the repository's `data/recoms.json` (raw.githubusercontent.com first, then gh-proxy.org, 5 s timeout; cached for an hour, falling back to the built-in DeepSeek entry). The slot's content can therefore change without a release.
+- **Randomised** — each open picks one entry at random; clicking advances to the next.
+- **Possibly commercial** — current entries include third-party products, and the Zilliz Cloud link carries a `utm_source=dsh_context` attribution parameter.
+- **No opt-out** — the settings card has no toggle for it and the card has no close button. To avoid it, set the context panel entry to the sidebar panel: it renders the same dashboard without this card.
+
+The slot is independent of the plugin's features, statistics and context analysis, and affects no metric.
+
 ## Good to know
 
 - **Cache footprint** — the plugin checkpoints only a compact per-session summary (composition, counts, cost/timing, model info) into dsh's projection cache; the heavy per-event details (surface text, request breakdowns, file ops, command programs, spans) are refolded from the durable log when a panel needs them, so the cache stays small even on long sessions. Detail views are bounded (steps 1500 · turns 300 · events 400 · surface nodes 2000 · archive 400 · file ops 400 · commands 400).

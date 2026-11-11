@@ -228,6 +228,17 @@ Los botones de preset de Análisis del contexto guardan la selección como valor
 
 ![La tarjeta de configuración de Contexto](https://raw.githubusercontent.com/bowenliang123/dsh-context/main/docs/settings.png)
 
+## Recomendaciones
+
+La cabecera de la pestaña **Context** (segunda columna, junto a la tarjeta **Plugin Info**) muestra una tarjeta de recomendación: un nombre de marca, un eslogan de una línea, una línea promocional con `✦`, una información emergente de agradecimiento al pasar el cursor y un enlace que se abre en una pestaña nueva. Solo aparece en la pestaña Context dentro de la sesión; el panel **Contexto** de la barra lateral derecha no la muestra.
+
+- **Contenido obtenido en tiempo de ejecución** — los datos de la tarjeta no se incluyen en el paquete. `POST api/dsh-context/recom` lee el `data/recoms.json` del repositorio (primero raw.githubusercontent.com, luego gh-proxy.org, con 5 s de tiempo de espera; se almacena en caché una hora y, si falla, se recurre a la entrada DeepSeek integrada). Por eso el contenido del espacio puede cambiar sin publicar una versión.
+- **Rotación aleatoria** — cada apertura elige una entrada al azar; al hacer clic se pasa a la siguiente.
+- **Posiblemente comercial** — las entradas actuales incluyen productos de terceros, y el enlace de Zilliz Cloud lleva un parámetro de atribución `utm_source=dsh_context`.
+- **Sin opción de desactivarlo** — la tarjeta de ajustes no tiene interruptor para él y la tarjeta no tiene botón de cierre. Para evitarlo, ajusta la entrada del panel de contexto al panel de la barra lateral: muestra el mismo panel sin esta tarjeta.
+
+El espacio es independiente de las funciones, las estadísticas y el análisis de contexto del plugin, y no afecta a ninguna métrica.
+
 ## Conviene saber
 
 - **Huella de caché**: el plugin solo guarda puntos de control con un resumen compacto por sesión (composición, recuentos, coste/tiempo e información del modelo) en la caché de proyecciones de dsh; los detalles pesados por evento (texto de superficie, desgloses de solicitudes, operaciones de archivos, programas de comandos e intervalos) se reconstruyen a partir del registro persistente cuando un panel los necesita, de modo que la caché sigue siendo pequeña incluso en sesiones largas. Las vistas de detalle están limitadas (pasos 1500 · turnos 300 · eventos 400 · nodos de superficie 2000 · archivo 400 · operaciones de archivos 400 · comandos 400).
