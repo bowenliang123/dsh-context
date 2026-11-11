@@ -31,10 +31,14 @@ describe.skipIf(staging.artifactsMissing())('compat matrix — bundle requires v
 })
 
 describe.skipIf(reasons.length > 0)('compat matrix — real dsh sources per baseline', () => {
+  beforeAll(() => {
+    staging.primeBaselines(BASELINES)
+  })
+
   describe.each(BASELINES)('$id (tag $tag, cordis $cordis)', (baseline) => {
     let report: staging.DriverReport
-    beforeAll(() => {
-      report = staging.runDriver(baseline)
+    beforeAll(async () => {
+      report = await staging.runDriver(baseline)
     }, 60_000)
 
     test('host: all three projection values served through the wire', () => {
@@ -55,8 +59,8 @@ describe.skipIf(reasons.length > 0)('compat matrix — real dsh sources per base
       assert.equal(report.developerRestoreMatches, true)
     })
 
-    test('admission: the tag gate admits this manifest and refuses the dropped 0.1.7 line', () => {
-      const admission = staging.evaluateAdmission(baseline)
+    test('admission: the tag gate admits this manifest and refuses the dropped 0.1.7 line', async () => {
+      const admission = await staging.evaluateAdmission(baseline)
       assert.deepEqual(admission.baseline, { admitted: true, requirements: null }, 'a supported release needs no exemption')
       assert.equal(admission.dropped.admitted, false, 'the dropped 0.1.7 line is refused')
       assert.ok(Object.keys(admission.dropped.requirements ?? {}).length > 0, 'the refusal names its unmet requirement')
@@ -73,218 +77,227 @@ describe.skipIf(reasons.length > 0)('compat matrix — real dsh sources per base
       assert.equal(report.poisonedSnapshotThrows, true)
     })
 
-    test('settings: the retired register face stays gone (the plugin never calls it)', () => {
+    test('settings: the retired register face stays gone (the plugin never calls it)', async () => {
       assert.equal(
-        staging.dshHasString(baseline.tag, 'register(', baseline.settings.serviceFile),
+        await staging.dshHasString(baseline.tag, 'register(', baseline.settings.serviceFile),
         baseline.settings.register,
         'the settings service register face',
       )
     })
 
-    test('balance: the settings face and the DeepSeek provider row the facts fold reads', () => {
+    test('balance: the settings face and the DeepSeek provider row the facts fold reads', async () => {
       const balance = baseline.balance
-      assert.equal(
+      const [getFace, describeFace, redact, directory, stockHits, providerHits] = await Promise.all([
         staging.dshHasString(baseline.tag, balance.settingsGetNeedle, balance.settingsFile),
-        balance.settingsGetPresent,
-        'the settings service get face',
-      )
-      assert.equal(
         staging.dshHasString(baseline.tag, balance.settingsDescribeNeedle, balance.settingsFile),
-        true,
-        'the settings service describe face',
-      )
-      assert.equal(
         staging.dshHasString(baseline.tag, balance.settingsRedactNeedle, balance.settingsFile),
-        true,
-        'the settings service redaction option',
-      )
-      assert.equal(
         staging.dshHasString(baseline.tag, balance.providerDirectory.needle, balance.providerDirectory.file),
-        true,
-        'the llm provider directory face',
-      )
-      for (const id of balance.stockIds.ids) {
-        assert.equal(
+        Promise.all(balance.stockIds.ids.map(id =>
           staging.dshHasString(baseline.tag, `id: ${id}$`, balance.stockIds.file),
-          true,
-          `the DeepSeek stock entry id: ${id}`,
-        )
+        )),
+        Promise.all(balance.providerFiles.map(provider =>
+          Promise.all(provider.needles.map(needle =>
+            staging.dshHasString(baseline.tag, needle, provider.file),
+          )),
+        )),
+      ])
+      assert.equal(getFace, balance.settingsGetPresent, 'the settings service get face')
+      assert.equal(describeFace, true, 'the settings service describe face')
+      assert.equal(redact, true, 'the settings service redaction option')
+      assert.equal(directory, true, 'the llm provider directory face')
+      for (const [index, id] of balance.stockIds.ids.entries()) {
+        assert.equal(stockHits[index], true, `the DeepSeek stock entry id: ${id}`)
       }
-      for (const provider of balance.providerFiles) {
-        for (const needle of provider.needles) {
-          assert.equal(staging.dshHasString(baseline.tag, needle, provider.file), true, `provider seam: ${needle}`)
+      for (const [pIndex, provider] of balance.providerFiles.entries()) {
+        for (const [nIndex, needle] of provider.needles.entries()) {
+          assert.equal(providerHits[pIndex][nIndex], true, `provider seam: ${needle}`)
         }
       }
     })
 
-    test('host: the sliced cold fold faces exist (else the backfill falls back to whole-log blocks)', () => {
+    test('host: the sliced cold fold faces exist (else the backfill falls back to whole-log blocks)', async () => {
       const fold = baseline.backfillFold
-      for (const [file, needle] of [
+      const needles = [
         [fold.registryFile, '  restore('],
         [fold.registryFile, '  hydrate('],
         [fold.storeFile, '  prepare('],
         [fold.cacheFile, '  async write('],
         [fold.cacheFile, '  coldSnapshot('],
-      ] as const) {
-        assert.equal(staging.dshHasString(baseline.tag, needle, file), true, `sliced-fold seam: ${needle} in ${file}`)
+      ] as const
+      const hits = await Promise.all(needles.map(([file, needle]) =>
+        staging.dshHasString(baseline.tag, needle, file),
+      ))
+      for (const [index, [file, needle]] of needles.entries()) {
+        assert.equal(hits[index], true, `sliced-fold seam: ${needle} in ${file}`)
       }
     })
 
     for (const slot of staging.SLOT_SEAMS) {
-      test(`client: slot "${slot}" exists`, () => {
-        assert.equal(staging.dshHasString(baseline.tag, slot, 'packages/client/*/src/**'), true)
+      test(`client: slot "${slot}" exists`, async () => {
+        assert.equal(await staging.dshHasString(baseline.tag, slot, 'packages/client/*/src/**'), true)
       })
     }
 
-    test('client: the preferences card seat and transport match the generation', () => {
+    test('client: the preferences card seat and transport match the generation', async () => {
       const settings = baseline.settings
+      const [cardSlot, transport] = await Promise.all([
+        Promise.all(settings.cardSlotFiles.map(pattern =>
+          staging.dshHasString(baseline.tag, `'${settings.cardSlot}'`, pattern),
+        )),
+        staging.dshHasString(baseline.tag, `'${settings.transport}'`, settings.transportFile),
+      ])
       assert.equal(
-        settings.cardSlotFiles.some(pattern =>
-          staging.dshHasString(baseline.tag, `'${settings.cardSlot}'`, pattern)),
+        cardSlot.some(present => present),
         true,
         `the card slot "${settings.cardSlot}" is declared on this generation`,
       )
-      assert.equal(
-        staging.dshHasString(baseline.tag, `'${settings.transport}'`, settings.transportFile),
-        settings.transportPresent,
-        `the settings transport "${settings.transport}"`,
-      )
+      assert.equal(transport, settings.transportPresent, `the settings transport "${settings.transport}"`)
     })
 
-    test('client: the app frame carries the inline sidebar-leading grid track (modal dock seam, dockMeasure.ts)', () => {
+    test('client: the app frame carries the inline sidebar-leading grid track (modal dock seam, dockMeasure.ts)', async () => {
       assert.equal(
-        staging.dshHasString(baseline.tag, 'px minmax(', 'packages/client/ui-layout/src/client/AppFrame.tsx'),
+        await staging.dshHasString(baseline.tag, 'px minmax(', 'packages/client/ui-layout/src/client/AppFrame.tsx'),
         true,
       )
     })
 
-    test('client: finalized-nodes seat (useChat ChatSnapshot)', () => {
-      assert.equal(staging.dshHasString(baseline.tag, 'useChat', 'packages/client/ui-chat/src/client/contract/slots.ts'), true)
+    test('client: finalized-nodes seat (useChat ChatSnapshot)', async () => {
+      assert.equal(await staging.dshHasString(baseline.tag, 'useChat', 'packages/client/ui-chat/src/client/contract/slots.ts'), true)
     })
 
-    test('client: durable-image loader service', () => {
-      assert.equal(staging.dshHasString(baseline.tag, baseline.client.imageFaceMethod, 'packages/client/*/src/**'), true)
+    test('client: durable-image loader service', async () => {
+      assert.equal(await staging.dshHasString(baseline.tag, baseline.client.imageFaceMethod, 'packages/client/*/src/**'), true)
     })
 
-    test('client: the gateway history face of this generation', () => {
-      assert.equal(staging.dshHasString(baseline.tag, "'remote.session'", 'packages/api/*/src/**'), true)
-      assert.equal(
+    test('client: the gateway history face of this generation', async () => {
+      const [remote, envelope] = await Promise.all([
+        staging.dshHasString(baseline.tag, "'remote.session'", 'packages/api/*/src/**'),
         staging.dshHasString(baseline.tag, 'records: frame.records', 'packages/api/session-controller/src/client/transport.ts'),
-        true,
-        'the history page envelope key',
-      )
+      ])
+      assert.equal(remote, true)
+      assert.equal(envelope, true, 'the history page envelope key')
     })
 
-    test('detail channel: the Connection RPC faces and the registry state read faces exist', () => {
+    test('detail channel: the Connection RPC faces and the registry state read faces exist', async () => {
       const dc = baseline.client.detailChannel
-      assert.equal(staging.dshHasString(baseline.tag, dc.hostRpcNeedle, dc.hostRpcFile), true, 'host RPC registry face')
-      assert.equal(staging.dshHasString(baseline.tag, dc.clientRpcNeedle, dc.clientRpcFile), true, 'browser RPC caller face')
-      assert.equal(staging.dshHasString(baseline.tag, dc.registryNeedle, dc.registryFile), true, 'registry stateOf face')
-      assert.equal(staging.dshHasString(baseline.tag, dc.fallbackStateOfNeedle, dc.registryFile), true, 'registry keyed stateOf fallback')
-      assert.equal(
+      const [hostRpc, clientRpc, registry, fallback, awaitable] = await Promise.all([
+        staging.dshHasString(baseline.tag, dc.hostRpcNeedle, dc.hostRpcFile),
+        staging.dshHasString(baseline.tag, dc.clientRpcNeedle, dc.clientRpcFile),
+        staging.dshHasString(baseline.tag, dc.registryNeedle, dc.registryFile),
+        staging.dshHasString(baseline.tag, dc.fallbackStateOfNeedle, dc.registryFile),
         staging.dshHasString(baseline.tag, 'Promise<ProjectionHandle<S>>', dc.registryFile),
-        dc.awaitableRegister,
-        'the registration return the gate retains a handle from',
-      )
+      ])
+      assert.equal(hostRpc, true, 'host RPC registry face')
+      assert.equal(clientRpc, true, 'browser RPC caller face')
+      assert.equal(registry, true, 'registry stateOf face')
+      assert.equal(fallback, true, 'registry keyed stateOf fallback')
+      assert.equal(awaitable, dc.awaitableRegister, 'the registration return the gate retains a handle from')
     })
 
-    test('client: the right Sidebar tab seam', () => {
+    test('client: the right Sidebar tab seam', async () => {
       const sidebar = baseline.client.sidebar
-      assert.equal(staging.dshHasString(baseline.tag, sidebar.serviceNeedle, sidebar.serviceFile), true, 'tab-type registry service')
-      assert.equal(staging.dshHasString(baseline.tag, sidebar.slotNeedle, sidebar.slotFile), true, 'keyed body seat')
-      assert.equal(staging.dshHasString(baseline.tag, sidebar.titleSlotNeedle, sidebar.slotFile), true, 'keyed chip-title seat')
-      assert.equal(staging.dshHasString(baseline.tag, sidebar.nav.needle, sidebar.nav.file), true, 'resource navigation face (openResource)')
+      const [service, slot, titleSlot, nav] = await Promise.all([
+        staging.dshHasString(baseline.tag, sidebar.serviceNeedle, sidebar.serviceFile),
+        staging.dshHasString(baseline.tag, sidebar.slotNeedle, sidebar.slotFile),
+        staging.dshHasString(baseline.tag, sidebar.titleSlotNeedle, sidebar.slotFile),
+        staging.dshHasString(baseline.tag, sidebar.nav.needle, sidebar.nav.file),
+      ])
+      assert.equal(service, true, 'tab-type registry service')
+      assert.equal(slot, true, 'keyed body seat')
+      assert.equal(titleSlot, true, 'keyed chip-title seat')
+      assert.equal(nav, true, 'resource navigation face (openResource)')
     })
 
-    test('client: the right Sidebar guide-entry contract (the contribution\'s shape)', () => {
-      for (const field of baseline.client.sidebar.guideEntry.fields) {
-        assert.equal(staging.dshHasString(baseline.tag, field, baseline.client.sidebar.guideEntry.file), true, `guide-entry field: ${field}`)
+    test('client: the right Sidebar guide-entry contract (the contribution\'s shape)', async () => {
+      const guide = baseline.client.sidebar.guideEntry
+      const hits = await Promise.all(guide.fields.map(field =>
+        staging.dshHasString(baseline.tag, field, guide.file),
+      ))
+      for (const [index, field] of guide.fields.entries()) {
+        assert.equal(hits[index], true, `guide-entry field: ${field}`)
       }
     })
 
-    test('client: the session-jump seam of this generation (issue #90)', () => {
+    test('client: the session-jump seam of this generation (issue #90)', async () => {
       const nav = baseline.client.sessionNav
-      assert.equal(
+      const [workspace, sessions] = await Promise.all([
         staging.dshHasString(baseline.tag, nav.workspaceNeedle, nav.workspaceFile),
-        true,
-        'the view-owner navigation verb (uiWorkspace.openSession)',
-      )
-      assert.equal(
         staging.dshHasString(baseline.tag, 'open(id: SessionId): void', nav.sessionsFile),
-        nav.sessionsOpen,
-        'the retired sessions-service selection verb',
-      )
+      ])
+      assert.equal(workspace, true, 'the view-owner navigation verb (uiWorkspace.openSession)')
+      assert.equal(sessions, nav.sessionsOpen, 'the retired sessions-service selection verb')
     })
 
-    test('client: the subagent history-address resolver (issue #193)', () => {
+    test('client: the subagent history-address resolver (issue #193)', async () => {
       const seam = baseline.client.subagentAddress
-      assert.equal(
+      const [address, summary] = await Promise.all([
         staging.dshHasString(baseline.tag, seam.needle, seam.file),
-        true,
-        'the sessions direct-parent resolver (subagentAddress)',
-      )
-      assert.equal(
         staging.dshHasString(baseline.tag, seam.summaryNeedle, seam.file),
-        seam.summaryFallback,
-        'the listed-summary fallback',
-      )
+      ])
+      assert.equal(address, true, 'the sessions direct-parent resolver (subagentAddress)')
+      assert.equal(summary, seam.summaryFallback, 'the listed-summary fallback')
     })
 
-    test('client: the Plugins-panel navigator the settings jump rides', () => {
+    test('client: the Plugins-panel navigator the settings jump rides', async () => {
       const nav = baseline.client.pluginsNav
-      assert.equal(
+      const [panel, tabReset, tabsSlot] = await Promise.all([
         staging.dshHasString(baseline.tag, nav.needle, nav.file),
-        true,
-        'the panel-owned openBundle verb (pluginNavigation)',
-      )
-      assert.equal(
         staging.dshHasString(baseline.tag, nav.tabResetNeedle, nav.file),
-        nav.tabReset,
-        'the navigator resets the remembered tab to Installed',
-      )
-      assert.equal(
         staging.dshHasString(baseline.tag, nav.tabsSlotNeedle, nav.tabsSlotFile),
-        nav.tabsSlot,
-        'the contributed-tab slot the reset guards',
-      )
+      ])
+      assert.equal(panel, true, 'the panel-owned openBundle verb (pluginNavigation)')
+      assert.equal(tabReset, nav.tabReset, 'the navigator resets the remembered tab to Installed')
+      assert.equal(tabsSlot, nav.tabsSlot, 'the contributed-tab slot the reset guards')
     })
 
-    test('client: the first-level insight page seam (keyed main panel + sidebar panel list)', () => {
+    test('client: the first-level insight page seam (keyed main panel + sidebar panel list)', async () => {
       const page = baseline.client.insightPage
-      assert.equal(staging.dshHasString(baseline.tag, page.panellistNeedle, page.panellistFile), true, 'the sidebar panel-list seat')
-      assert.equal(staging.dshHasString(baseline.tag, page.mainNeedle, page.mainFile), true, 'the layout\'s keyed main panel seat')
+      const [panellist, main] = await Promise.all([
+        staging.dshHasString(baseline.tag, page.panellistNeedle, page.panellistFile),
+        staging.dshHasString(baseline.tag, page.mainNeedle, page.mainFile),
+      ])
+      assert.equal(panellist, true, 'the sidebar panel-list seat')
+      assert.equal(main, true, 'the layout\'s keyed main panel seat')
     })
 
-    test('client: the slot-ledger read of the second-mount guard (dsh-context#137)', () => {
+    test('client: the slot-ledger read of the second-mount guard (dsh-context#137)', async () => {
       const ledger = baseline.client.ledger
       assert.equal(
-        staging.dshHasString(baseline.tag, ledger.needle, ledger.file),
+        await staging.dshHasString(baseline.tag, ledger.needle, ledger.file),
         true,
         'the raw SlotCore.entries view',
       )
     })
 
-    test('client: MarkdownText chrome prop', () => {
-      assert.equal(staging.dshHasString(baseline.tag, baseline.client.markdownChrome, 'packages/client/ui-primitives/src/markdown/MarkdownText.tsx'), true)
+    test('client: MarkdownText chrome prop', async () => {
+      assert.equal(await staging.dshHasString(baseline.tag, baseline.client.markdownChrome, 'packages/client/ui-primitives/src/markdown/MarkdownText.tsx'), true)
     })
 
-    test('client: the JsonTree faces the rich-text JSON body rides', () => {
+    test('client: the JsonTree faces the rich-text JSON body rides', async () => {
       const tree = baseline.client.jsonTree
-      for (const needle of tree.needles) {
-        assert.equal(staging.dshHasString(baseline.tag, needle, tree.file), true, `JsonTree seam: ${needle}`)
+      const hits = await Promise.all(tree.needles.map(needle =>
+        staging.dshHasString(baseline.tag, needle, tree.file),
+      ))
+      for (const [index, needle] of tree.needles.entries()) {
+        assert.equal(hits[index], true, `JsonTree seam: ${needle}`)
       }
     })
 
-    test('client: the command panel\'s coloring seam', () => {
-      for (const { file, needle, what } of baseline.client.codeHighlight) {
-        assert.equal(staging.dshHasString(baseline.tag, needle, file), true, `${what} (${needle})`)
+    test('client: the command panel\'s coloring seam', async () => {
+      const hits = await Promise.all(baseline.client.codeHighlight.map(({ file, needle }) =>
+        staging.dshHasString(baseline.tag, needle, file),
+      ))
+      for (const [index, { needle, what }] of baseline.client.codeHighlight.entries()) {
+        assert.equal(hits[index], true, `${what} (${needle})`)
       }
     })
 
-    test('client: the icon seams resolve on this generation (primitives.ts)', () => {
-      for (const name of staging.ICON_SEAMS) {
-        const present = staging.dshHasString(baseline.tag, name, 'packages/client/ui-primitives/src/**')
-        assert.equal(present, true, `icon seam: ${name}`)
+    test('client: the icon seams resolve on this generation (primitives.ts)', async () => {
+      const hits = await Promise.all(staging.ICON_SEAMS.map(name =>
+        staging.dshHasString(baseline.tag, name, 'packages/client/ui-primitives/src/**'),
+      ))
+      for (const [index, name] of staging.ICON_SEAMS.entries()) {
+        assert.equal(hits[index], true, `icon seam: ${name}`)
       }
     })
 
@@ -294,33 +307,30 @@ describe.skipIf(reasons.length > 0)('compat matrix — real dsh sources per base
       assert.deepEqual(missing, [])
     })
 
-    test('host: the step-boundary identity guard seam (issue #51)', () => {
+    test('host: the step-boundary identity guard seam (issue #51)', async () => {
       const sg = baseline.stepGuard
-      for (const needle of sg.loopNeedles) {
-        assert.equal(staging.dshHasString(baseline.tag, needle, sg.loopFile), true, `loop seam: ${needle}`)
-      }
-      assert.equal(
+      const [loops, prepend] = await Promise.all([
+        Promise.all(sg.loopNeedles.map(needle => staging.dshHasString(baseline.tag, needle, sg.loopFile))),
         staging.dshHasString(baseline.tag, 'prepend: true', sg.prependProofFile),
-        true,
-        'the prepend listener option the guard rides',
-      )
+      ])
+      for (const [index, needle] of sg.loopNeedles.entries()) {
+        assert.equal(loops[index], true, `loop seam: ${needle}`)
+      }
+      assert.equal(prepend, true, 'the prepend listener option the guard rides')
     })
 
-    test('host: the system-prompt injection seam', () => {
+    test('host: the system-prompt injection seam', async () => {
       const prompt = baseline.prompt
-      assert.equal(
+      const [section, anchors, loaderVolatile] = await Promise.all([
         staging.dshHasString(baseline.tag, prompt.sectionNeedle, prompt.serviceFile),
-        true,
-        'the ordered-section face',
-      )
-      for (const anchor of prompt.orderAnchors) {
-        assert.equal(staging.dshHasString(baseline.tag, anchor, prompt.serviceFile), true, `order anchor: ${anchor}`)
-      }
-      assert.equal(
+        Promise.all(prompt.orderAnchors.map(anchor => staging.dshHasString(baseline.tag, anchor, prompt.serviceFile))),
         staging.dshHasString(baseline.tag, prompt.loaderVolatileNeedle, prompt.loaderVolatileFile),
-        true,
-        'the loader volatile-only commit',
-      )
+      ])
+      assert.equal(section, true, 'the ordered-section face')
+      for (const [index, anchor] of prompt.orderAnchors.entries()) {
+        assert.equal(anchors[index], true, `order anchor: ${anchor}`)
+      }
+      assert.equal(loaderVolatile, true, 'the loader volatile-only commit')
     })
 
     test('client: platform module table answers every bundle require', async () => {

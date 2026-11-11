@@ -1,9 +1,10 @@
-import { spawnSync } from 'node:child_process'
+import { execFile, spawnSync } from 'node:child_process'
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import type { Baseline } from '../baselines'
+import { promisify } from 'node:util'
 
 export const REPO = resolve(dirname(fileURLToPath(import.meta.url)), '../..')
 export const DSH_REPO = process.env.DSH_REPO || join(homedir(), 'dev', 'deepseek-harness')
@@ -28,15 +29,27 @@ export function skipReasons(): string[] {
   return reasons
 }
 
+const execFileP = promisify(execFile)
+
+const GIT_MAX_BUFFER = 16 * 1024 * 1024
+
 export function dshShow(tag: string, path: string): string {
   const run = spawnSync('git', ['-C', DSH_REPO, 'show', `${tag}:${path}`], { encoding: 'utf8', maxBuffer: 16 * 1024 * 1024 })
   if (run.status !== 0) throw new Error(`git show ${tag}:${path} failed: ${(run.stderr ?? '').trim().slice(0, 300)}`)
   return run.stdout
 }
 
-export function dshHasString(tag: string, pattern: string, pathspec: string): boolean {
-  const run = spawnSync('git', ['-C', DSH_REPO, 'grep', '-l', pattern, tag, '--', pathspec], { encoding: 'utf8' })
-  return run.status === 0 && run.stdout.trim() !== ''
+const hasStringCache = new Map<string, Promise<boolean>>()
+
+export function dshHasString(tag: string, pattern: string, pathspec: string): Promise<boolean> {
+  const key = `${tag}\u0000${pattern}\u0000${pathspec}`
+  let cached = hasStringCache.get(key)
+  if (cached === undefined) {
+    cached = execFileP('git', ['-C', DSH_REPO, 'grep', '-l', pattern, tag, '--', pathspec], { maxBuffer: GIT_MAX_BUFFER })
+      .then(run => run.stdout.trim() !== '', () => false)
+    hasStringCache.set(key, cached)
+  }
+  return cached
 }
 
 export function stageFile(baseline: Baseline, tagPath: string, localName: string): string {
@@ -131,15 +144,38 @@ process.stdout.write('ADMISSION-JSON ' + JSON.stringify({
 `
 }
 
-export function evaluateAdmission(baseline: Baseline): AdmissionReport {
-  ensureHostDeps(baseline)
-  stageFile(baseline, 'packages/boot/app-boot/src/plugin-compatibility.ts', join('boot', 'plugin-compatibility.ts'))
-  const driver = join(STAGE, baseline.id, 'admission.mjs')
-  writeFileSync(driver, admissionSource(`file://${join(REPO, 'package.json')}`, baseline.version, '0.1.7-rc.2'))
-  const run = spawnSync(process.execPath, [driver], { cwd: STAGE, encoding: 'utf8', timeout: 60_000 })
-  const line = (run.stdout ?? '').split('\n').find(l => l.startsWith('ADMISSION-JSON '))
-  if (line === undefined) throw new Error(`admission driver failed: ${(run.stderr ?? run.stdout ?? '').trim().slice(0, 400)}`)
-  return JSON.parse(line.slice('ADMISSION-JSON '.length)) as AdmissionReport
+const admissionCache = new Map<string, Promise<AdmissionReport>>()
+
+export function evaluateAdmission(baseline: Baseline): Promise<AdmissionReport> {
+  let cached = admissionCache.get(baseline.id)
+  if (cached === undefined) {
+    cached = (async () => {
+      ensureHostDeps(baseline)
+      stageFile(baseline, 'packages/boot/app-boot/src/plugin-compatibility.ts', join('boot', 'plugin-compatibility.ts'))
+      const driver = join(STAGE, baseline.id, 'admission.mjs')
+      writeFileSync(driver, admissionSource(`file://${join(REPO, 'package.json')}`, baseline.version, '0.1.7-rc.2'))
+      const stdout = await runNode(driver, 'admission driver failed')
+      return parseDriverOutput<AdmissionReport>(stdout, 'ADMISSION-JSON ', 'admission driver failed')
+    })()
+    admissionCache.set(baseline.id, cached)
+  }
+  return cached
+}
+
+async function runNode(script: string, what: string): Promise<string> {
+  try {
+    const run = await execFileP(process.execPath, [script], { cwd: STAGE, timeout: 60_000, maxBuffer: GIT_MAX_BUFFER })
+    return run.stdout
+  } catch (err) {
+    const run = err as { stderr?: string; stdout?: string }
+    throw new Error(`${what}: ${(run.stderr ?? run.stdout ?? '').trim().slice(0, 400)}`)
+  }
+}
+
+function parseDriverOutput<T>(stdout: string, marker: string, what: string): T {
+  const line = stdout.split('\n').find(l => l.startsWith(marker))
+  if (line === undefined) throw new Error(`${what}: no ${marker.trim()} output`)
+  return JSON.parse(line.slice(marker.length)) as T
 }
 
 export interface DriverReport {
@@ -309,27 +345,39 @@ process.stdout.write('DRIVER-JSON ' + JSON.stringify({
 `
 }
 
-export function runDriver(baseline: Baseline): DriverReport {
-  ensureHostDeps(baseline)
-  const registryFile = 'packages/session/session-projection/src/index.ts'
-  const fiberState = constEnumMembers(baseline.tag, 'vendor/cordis/src/fiber.ts', 'FiberState')
-  const registry = dshShow(baseline.tag, registryFile)
-  stageSource(
-    baseline,
-    join('registry', 'index.ts'),
-    fiberState === undefined ? registry : inlineConstEnum(registry, 'FiberState', fiberState),
-  )
-  stageFile(baseline, 'packages/session/session-projection/src/types.ts', join('registry', 'types.ts'))
-  stageFile(baseline, 'packages/util/values/src/index.ts', join('dsh', 'index.ts'))
-  stageFileIfPresent(baseline, 'packages/util/values/src/partial-json.ts', join('dsh', 'partial-json.ts'))
-  const driver = join(STAGE, baseline.id, 'driver.mjs')
-  writeFileSync(driver, driverSource(`file://${join(REPO, 'lib', 'index.js')}`))
-  const run = spawnSync(process.execPath, [driver], { cwd: STAGE, encoding: 'utf8', timeout: 60_000 })
-  const line = (run.stdout ?? '').split('\n').find(l => l.startsWith('DRIVER-JSON '))
-  if (line === undefined) {
-    throw new Error(`driver failed: ${(run.stderr ?? run.stdout ?? '').trim().slice(0, 400)}`)
+const driverCache = new Map<string, Promise<DriverReport>>()
+
+export function runDriver(baseline: Baseline): Promise<DriverReport> {
+  let cached = driverCache.get(baseline.id)
+  if (cached === undefined) {
+    cached = (async () => {
+      ensureHostDeps(baseline)
+      const registryFile = 'packages/session/session-projection/src/index.ts'
+      const fiberState = constEnumMembers(baseline.tag, 'vendor/cordis/src/fiber.ts', 'FiberState')
+      const registry = dshShow(baseline.tag, registryFile)
+      stageSource(
+        baseline,
+        join('registry', 'index.ts'),
+        fiberState === undefined ? registry : inlineConstEnum(registry, 'FiberState', fiberState),
+      )
+      stageFile(baseline, 'packages/session/session-projection/src/types.ts', join('registry', 'types.ts'))
+      stageFile(baseline, 'packages/util/values/src/index.ts', join('dsh', 'index.ts'))
+      stageFileIfPresent(baseline, 'packages/util/values/src/partial-json.ts', join('dsh', 'partial-json.ts'))
+      const driver = join(STAGE, baseline.id, 'driver.mjs')
+      writeFileSync(driver, driverSource(`file://${join(REPO, 'lib', 'index.js')}`))
+      const stdout = await runNode(driver, 'driver failed')
+      return parseDriverOutput<DriverReport>(stdout, 'DRIVER-JSON ', 'driver failed')
+    })()
+    driverCache.set(baseline.id, cached)
   }
-  return JSON.parse(line.slice('DRIVER-JSON '.length)) as DriverReport
+  return cached
+}
+
+export function primeBaselines(baselines: readonly Baseline[]): void {
+  for (const baseline of baselines) {
+    runDriver(baseline).catch(() => {})
+    evaluateAdmission(baseline).catch(() => {})
+  }
 }
 
 export function moduleRequiresOf(source: string): string[] {
