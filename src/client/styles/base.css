@@ -38,6 +38,7 @@ body:not([data-ds-dark-theme]) .lc-stat { box-shadow: var(--lc-shadow-tile); }
 .lc-card.lc-deferred-skeleton { background: var(--dsw-alias-bg-layer-2); }
 .lc-trend-mods { margin-left: 0; flex: none; }
 .lc-gran-btn { border: 0; background: transparent; color: var(--dsw-alias-label-secondary); font-size: 11px; line-height: 1; padding: 3px 8px; border-radius: 5px; cursor: pointer; font-family: inherit; white-space: nowrap; transition: background-color var(--ds-transition-duration, 0.2s) var(--ds-ease-in-out, ease-in-out), color var(--ds-transition-duration, 0.2s) var(--ds-ease-in-out, ease-in-out); }
+.lc-trend-ctl .lc-gran-btn { transition: none; }
 .lc-gran-btn:hover { background: var(--dsw-alias-interactive-bg-hover); color: var(--dsw-alias-label-primary); }
 .lc-gran-btn:disabled { opacity: 0.4; cursor: not-allowed; }
 .lc-gran-btn:disabled:hover { color: var(--dsw-alias-label-secondary); }
