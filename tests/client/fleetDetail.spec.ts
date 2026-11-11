@@ -1,19 +1,19 @@
+// @vitest-environment node
+
 import assert from 'node:assert/strict'
 import { afterEach, describe, test, vi } from 'vitest'
-import {
-  detailBytes,
-  FleetDetailCache,
-  fleetBatchOf,
-  fleetDetailOf,
-  fleetSummaryOf,
-  makeFleetBatchFetcher,
-  makeFleetDetailFetcher,
-  makeFleetSummaryFetcher,
-  mergeComms,
-  mergeDelegations,
-  settledVariantOf,
-} from '../../src/client/fleetDetail'
-import type { FleetDetail } from '../../src/shared/types'
+import { detailBytes, FleetDetailCache, fleetBatchOf, fleetDetailOf, fleetSummaryOf, makeFleetBatchFetcher, makeFleetDetailFetcher, makeFleetSummaryFetcher, mergeComms, mergeDelegations, settledVariantOf, type CommsRow } from '../../src/client/fleetDetail'
+import { type FleetDetail, type FleetMemberInfo } from '../../src/shared/types'
+import { LEAD_HUE, familyHue, type AgentNode } from '../../src/client/agentTree'
+import { agentResolverOf, attestedNamesOf, commsAgentsOf, fallbackAgentOf } from '../../src/client/fleetAgents'
+import { NAME_PARTY_PREFIX, NEUTRAL_HUE, UNKNOWN_PARTY } from '../../src/client/commsModel'
+import { type FleetTeam, memberIdByName, taskOwnerIdOf, tasksOfOwnerId, teammateNameOf, teamMemberOf, teamOf } from '../../src/client/fleetTeam'
+import { makeKit } from './helpers/kit'
+import { clearAttachmentPaths, makeAttachmentLocator, makeAttachmentOpener, pathOfValue } from '../../src/client/attachmentSource'
+import { type AttachmentRef } from '../../src/shared/attachment'
+import { asClientCtx, TestClientCtx } from './helpers/harness'
+
+describe('fleetDetail', () => {
 
 afterEach(() => {
   vi.restoreAllMocks()
@@ -399,4 +399,421 @@ describe('FleetDetailCache — clearing in-flight reads', () => {
     release()
     assert.equal(await pending, null)
   })
+})
+})
+
+describe('fleetAgents', () => {
+
+const kit = makeKit()
+
+function nodeOf(id: string, over: Partial<AgentNode> = {}): AgentNode {
+  return {
+    id, label: id, depth: 0, family: 0, isCurrent: false, running: false, completed: false,
+    subagent: false, updatedAt: 0, head: null, requests: 0, billed: null, costUsage: null,
+    durationMs: null, identity: null, ...over,
+  }
+}
+
+function commsRow(over: Partial<CommsRow> & { key: string; to: string; time: number; text: string }): CommsRow {
+  return { seq: 1, kind: 'relay', ...over }
+}
+
+describe('attestedNamesOf', () => {
+  test('the newest name per sender wins; a row needs both an id and a name', () => {
+    const names = attestedNamesOf([
+      commsRow({ key: '1', to: 'a', time: 4, text: 'x', from: 'w1', fromName: 'host-cleaner' }),
+      commsRow({ key: '2', to: 'a', time: 3, text: 'x', from: 'w1', fromName: 'renamed' }),
+      commsRow({ key: '3', to: 'a', time: 2, text: 'x', fromName: 'legacy' }),
+      commsRow({ key: '4', to: 'a', time: 1, text: 'x', from: 'w2' }),
+      commsRow({ key: '5', to: 'a', time: 0, text: 'x' }),
+    ])
+    assert.deepEqual([...names.entries()], [['w1', 'host-cleaner']])
+  })
+})
+
+const TEAM: FleetTeam = {
+  members: [
+    { id: 'root', name: 'lead', role: 'lead', phase: 'active' },
+    { id: 'w1', name: 'worker-bee', role: 'teammate', phase: 'active' },
+    { id: 'w3', name: 'tests-a', role: 'teammate', phase: 'active' },
+    { id: 'w9', name: 'ghost-nine', role: 'teammate', phase: 'active' },
+    { id: 'w10', name: 'ghost-plain', role: 'teammate', phase: 'active' },
+    { id: 'w6', name: 'w6', role: 'teammate', phase: 'active' },
+    { id: 'remote-lead', name: 'lead', role: 'lead', phase: 'active' },
+  ],
+  tasks: [],
+}
+
+const ROSTER: FleetMemberInfo[] = [
+  { name: 'worker-bee', description: 'schema duty' },
+  { name: 'tests-a', description: 'tests-a' },
+  { name: 'ghost-nine', description: 'ghost duty' },
+  { name: 'ghost-plain', description: '' },
+  { name: 'w6', description: '' },
+]
+
+describe('commsAgentsOf — team branch', () => {
+  test('roster names, duties, and the lead hue resolve over attested names and node labels', () => {
+    const agents = commsAgentsOf(
+      [
+        nodeOf('root', { label: 'Main Agent', isCurrent: true }),
+        nodeOf('w1', { label: 'worker-duty', family: 1 }),
+        nodeOf('w2', { label: 'side-quest', family: 2 }),
+        nodeOf('w3', { label: 'tests-a', family: 3 }),
+        nodeOf('w4', { label: 'cold-scout', family: 4 }),
+        nodeOf('w6', { label: 'w6', family: 6 }),
+      ],
+      TEAM,
+      ROSTER,
+      new Map([
+        ['root', 'lead'],
+        ['w1', 'bee'],
+        ['w2', 'side-quest'],
+        ['w3', 'tests-a'],
+        ['w9', 'ghost-attested'],
+      ]),
+      kit.t,
+    )
+    assert.deepEqual(agents.get('root'), {
+      id: 'root', name: 'Lead', role: 'lead', self: true, hue: LEAD_HUE, initials: 'LE2', description: 'Main Agent',
+    })
+    assert.deepEqual(agents.get('w1'), {
+      id: 'w1', name: 'worker-bee', role: 'teammate', self: false, hue: familyHue(1), initials: 'WB', description: 'schema duty',
+    })
+    assert.deepEqual(agents.get('w2'), {
+      id: 'w2', name: 'side-quest', role: 'teammate', self: false, hue: familyHue(2), initials: 'SQ',
+    })
+    assert.deepEqual(agents.get('w3'), {
+      id: 'w3', name: 'tests-a', role: 'teammate', self: false, hue: familyHue(2), initials: 'TA',
+    })
+    assert.deepEqual(agents.get('w4'), {
+      id: 'w4', name: 'cold-scout', role: 'subagent', self: false, hue: familyHue(4), initials: 'CS',
+    })
+    assert.deepEqual(agents.get('w6'), {
+      id: 'w6', name: 'w6', role: 'teammate', self: false, hue: familyHue(5), initials: 'W6',
+    })
+    assert.deepEqual(agents.get('w9'), {
+      id: 'w9', name: 'ghost-nine', role: 'teammate', self: false, hue: familyHue(3), initials: 'GN', description: 'ghost duty',
+    })
+    assert.deepEqual(agents.get('w10'), {
+      id: 'w10', name: 'ghost-plain', role: 'teammate', self: false, hue: familyHue(4), initials: 'GP',
+    })
+    assert.deepEqual(agents.get('remote-lead'), {
+      id: 'remote-lead', name: 'Lead', role: 'lead', self: false, hue: LEAD_HUE, initials: 'LE1',
+    })
+  })
+})
+
+describe('commsAgentsOf — no team', () => {
+  test('attested leads and teammates, current agents, and plain subagents all resolve', () => {
+    const agents = commsAgentsOf(
+      [
+        nodeOf('root', { label: 'Main Agent', isCurrent: true, family: 0 }),
+        nodeOf('w2', { label: 'side-quest', family: 2 }),
+        nodeOf('w3', { label: 'side-quest', family: 3 }),
+        nodeOf('w4', { label: 'cold-scout', family: 4 }),
+        nodeOf('solo', { label: 'Solo session', isCurrent: true, family: 0 }),
+      ],
+      null,
+      undefined,
+      new Map([
+        ['root', 'lead'],
+        ['w2', 'scout'],
+        ['w3', 'side-quest'],
+      ]),
+      kit.t,
+    )
+    assert.deepEqual(agents.get('root'), {
+      id: 'root', name: 'Lead', role: 'lead', self: true, hue: LEAD_HUE, initials: 'LE', description: 'Main Agent',
+    })
+    assert.deepEqual(agents.get('w2'), {
+      id: 'w2', name: 'scout', role: 'teammate', self: false, hue: familyHue(2), initials: 'SC', description: 'side-quest',
+    })
+    assert.deepEqual(agents.get('w3'), {
+      id: 'w3', name: 'side-quest', role: 'teammate', self: false, hue: familyHue(3), initials: 'SQ',
+    })
+    assert.deepEqual(agents.get('w4'), {
+      id: 'w4', name: 'cold-scout', role: 'subagent', self: false, hue: familyHue(4), initials: 'CS',
+    })
+    assert.deepEqual(agents.get('solo'), {
+      id: 'solo', name: 'Solo session', role: 'agent', self: true, hue: LEAD_HUE, initials: 'SS',
+    })
+  })
+})
+
+describe('fallback identity', () => {
+  const titles = new Map([['session-titled', 'Titled Session']])
+  const attested = new Map([['session-attested', 'legacy-worker']])
+
+  test('a mailbox name, an attested id, a session title, an unknown party, and a short id each resolve', () => {
+    assert.deepEqual(fallbackAgentOf(NAME_PARTY_PREFIX + 'Bee', titles, attested, kit.t), {
+      id: NAME_PARTY_PREFIX + 'Bee', name: 'Bee', role: 'other', self: false, hue: NEUTRAL_HUE,
+    })
+    assert.deepEqual(fallbackAgentOf('session-attested', titles, attested, kit.t), {
+      id: 'session-attested', name: 'legacy-worker', role: 'other', self: false, hue: NEUTRAL_HUE,
+    })
+    assert.deepEqual(fallbackAgentOf('session-titled', titles, attested, kit.t), {
+      id: 'session-titled', name: 'Titled Session', role: 'other', self: false, hue: NEUTRAL_HUE,
+      description: 'session-titled',
+    })
+    assert.deepEqual(fallbackAgentOf(UNKNOWN_PARTY, titles, attested, kit.t), {
+      id: UNKNOWN_PARTY, name: kit.t('fleet.comms.unknown'), role: 'other', self: false, hue: NEUTRAL_HUE,
+    })
+    assert.deepEqual(fallbackAgentOf('deadbeef-0000-1111-2222-333333333333', titles, attested, kit.t), {
+      id: 'deadbeef-0000-1111-2222-333333333333', name: kit.t('fleet.comms.agentId', { id: 'deadbeef…' }), role: 'other', self: false, hue: NEUTRAL_HUE,
+    })
+    const known = new Map([['root', { id: 'root', name: 'Lead', role: 'lead' as const, self: true, hue: LEAD_HUE }]])
+    const resolve = agentResolverOf(known, titles, attested, kit.t)
+    assert.equal(resolve('root').name, 'Lead')
+    assert.equal(resolve('session-attested').name, 'legacy-worker')
+  })
+})
+})
+
+describe('fleetTeam', () => {
+
+function teamValue(over: Record<string, unknown> = {}): Record<string, unknown> {
+  return {
+    members: [
+      { id: 'root', name: 'lead', role: 'lead', phase: 'active' },
+      { id: 'w1', name: 'worker-bee', role: 'teammate', phase: 'active' },
+      { id: 'w2', name: 'flaky-one', role: 'teammate', phase: 'failed', error: 'provider blew up' },
+    ],
+    tasks: [
+      { id: 'task-1', subject: 'schema parsing', description: 'parse the spec', status: 'completed', ownerName: 'worker-bee', blockedBy: [], writeScopes: ['src/api/'], ready: false, writeScopeWarnings: [] },
+      { id: 'task-2', subject: 'wire the view', description: '', status: 'in_progress', ownerName: 'worker-bee', blockedBy: ['task-1'], writeScopes: [], ready: false, writeScopeWarnings: ['overlap with task-3'] },
+      { id: 'task-3', subject: 'polish', description: '', status: 'pending', blockedBy: ['task-2'], writeScopes: [], ready: false },
+      { id: 'task-4', subject: 'docs', description: '', status: 'pending', blockedBy: [], writeScopes: [], ready: true },
+    ],
+    ...over,
+  }
+}
+
+describe('teamOf — the sanitizing parse', () => {
+  test('a well-formed projection parses whole; optional fields stay absent rather than materializing empty', () => {
+    const team = teamOf(teamValue({ failure: 'bad record' }))
+    assert.ok(team !== null)
+    assert.equal(team.members.length, 3)
+    assert.equal(team.tasks.length, 4)
+    assert.equal(team.failure, 'bad record')
+    assert.deepEqual(team.tasks[1].warnings, ['overlap with task-3'])
+
+    const bare = teamOf({ members: [{ id: 'r', name: 'lead', role: 'lead', phase: 'active' }] })
+    assert.ok(bare !== null)
+    assert.equal(bare.members[0].error, undefined)
+    assert.equal(bare.failure, undefined)
+    assert.deepEqual(bare.tasks, [])
+
+    const modern = teamOf({
+      enabled: true,
+      tasks: [{ id: 'task-7', subject: 'modern', description: '', status: 'pending', ownerId: 'w1', blockedBy: [], writeScopes: [], ready: true }],
+    })
+    assert.ok(modern !== null)
+    assert.deepEqual(modern.members, [])
+    assert.equal(modern.tasks[0].ownerId, 'w1')
+    assert.equal(modern.tasks[0].subject, 'modern')
+    assert.deepEqual(teamOf({ tasks: [] })?.tasks, [])
+    assert.equal(teamOf({ enabled: false, tasks: [] }), null)
+
+    assert.equal(teamOf(undefined), null)
+    assert.equal(teamOf(null), null)
+    assert.equal(teamOf('team'), null)
+    assert.equal(teamOf({}), null)
+    assert.equal(teamOf({ members: 'nope' }), null)
+  })
+
+  test('malformed members and tasks drop alone', () => {
+    const team = teamOf({
+      members: [
+        null,
+        42,
+        { id: '', name: 'x', role: 'teammate', phase: 'active' },
+        { id: 'x', name: '', role: 'teammate', phase: 'active' },
+        { id: 'x', name: 'x', role: 'captain', phase: 'active' },
+        { id: 'x', name: 'x', role: 'teammate', phase: 'zombie' },
+        { id: 'w9', name: 'nine', role: 'teammate', phase: 'provisioning', error: '' },
+      ],
+      tasks: [
+        null,
+        'task',
+        { id: '', subject: 's', status: 'pending' },
+        { id: 'task-9', subject: '', status: 'pending' },
+        { id: 'task-9', subject: 's', status: 'deleted' },
+        { id: 'task-10', subject: 'kept', description: 7, status: 'pending', blockedBy: ['a', 1, ''], writeScopes: 'nope', ready: 'yes', revision: 'r' },
+      ],
+      failure: 42,
+    })
+    assert.ok(team !== null)
+    assert.deepEqual(team.members, [{ id: 'w9', name: 'nine', role: 'teammate', phase: 'provisioning' }])
+    assert.equal(team.tasks.length, 1)
+    assert.deepEqual(team.tasks[0], {
+      id: 'task-10', subject: 'kept', description: '', status: 'pending',
+      blockedBy: ['a'], writeScopes: [], ready: false, warnings: [],
+    })
+    assert.equal(team.failure, undefined)
+  })
+
+})
+
+describe('fleetTeam helpers', () => {
+  const team = teamOf(teamValue()) as FleetTeam
+
+  test('the helpers join by id and by name, name teammates only, and keep board order', () => {
+    assert.equal(teamMemberOf(team, 'w1')?.name, 'worker-bee')
+    assert.equal(teamMemberOf(team, 'nobody'), null)
+    assert.equal(teamMemberOf(null, 'w1'), null)
+    const current = { isCurrent: true, id: 'w1' } as never
+    const teammate = { isCurrent: false, id: 'w1' } as never
+    const lead = { isCurrent: false, id: 'root' } as never
+    const outsider = { isCurrent: false, id: 's9' } as never
+    assert.equal(teammateNameOf(team, teammate), 'worker-bee')
+    assert.equal(teammateNameOf(team, current), undefined)
+    assert.equal(teammateNameOf(team, lead), undefined, 'the lead card keeps the session title')
+    assert.equal(teammateNameOf(team, outsider), undefined)
+    assert.equal(teammateNameOf(null, teammate), undefined)
+    assert.equal(memberIdByName(team, 'worker-bee'), 'w1')
+    assert.equal(memberIdByName(team, 'ghost'), undefined)
+    assert.equal(memberIdByName(team, undefined), undefined)
+    assert.equal(memberIdByName(null, 'worker-bee'), undefined)
+    assert.equal(taskOwnerIdOf(team, team.tasks[0]), 'w1')
+    assert.deepEqual(tasksOfOwnerId(team, 'w1').map(task => task.id), ['task-1', 'task-2'])
+    assert.deepEqual(tasksOfOwnerId(team, 'nobody'), [])
+    assert.deepEqual(tasksOfOwnerId(null, 'w1'), [])
+  })
+})
+})
+
+describe('attachmentSource', () => {
+
+const FILE: AttachmentRef = { kind: 'file', attachmentId: 'sha256:f1', name: 'report.md', bytes: 47320 }
+const ALIAS = '/home/me/.dsh/attachments/v1/files/a3/a3f0/report.md'
+
+interface Call {
+  url: string
+  body: unknown
+}
+
+function stubFetch(answer: (call: Call) => unknown): Call[] {
+  const calls: Call[] = []
+  vi.stubGlobal('fetch', async (url: string, init: { body?: string }) => {
+    const call: Call = { url, body: init.body === undefined ? undefined : JSON.parse(init.body) }
+    calls.push(call)
+    return answer(call)
+  })
+  return calls
+}
+
+function json(value: unknown, ok = true): { ok: boolean; json: () => Promise<unknown> } {
+  return { ok, json: () => Promise.resolve(value) }
+}
+
+afterEach(() => {
+  clearAttachmentPaths()
+  vi.unstubAllGlobals()
+  vi.restoreAllMocks()
+})
+
+describe('pathOfValue', () => {
+  test('proves the envelope down to a non-empty string path', () => {
+    assert.equal(pathOfValue({ path: ALIAS }), ALIAS)
+    assert.equal(pathOfValue({ path: '' }), null)
+    assert.equal(pathOfValue({ path: 42 }), null)
+    assert.equal(pathOfValue({}), null)
+    assert.equal(pathOfValue(null), null)
+    assert.equal(pathOfValue('path'), null)
+  })
+})
+
+describe('makeAttachmentLocator', () => {
+  test('no session means no locator; otherwise one read resolves the path and the next click reuses it', async () => {
+    assert.equal(makeAttachmentLocator(undefined), undefined)
+    assert.equal(makeAttachmentLocator(''), undefined)
+    const calls = stubFetch(() => json({ ok: true, value: { path: ALIAS } }))
+    const locate = makeAttachmentLocator('s1')!
+    assert.equal(await locate(FILE), ALIAS)
+    assert.equal(await locate(FILE), ALIAS)
+    assert.equal(calls.length, 1, 'the second read is served from the cache')
+    assert.equal(calls[0].url, 'api/dsh-context/attachment')
+    assert.deepEqual(calls[0].body, { sessionId: 's1', attachmentId: 'sha256:f1' })
+  })
+
+  test('every refusal resolves null, and none of them is cached', async () => {
+    const answers: ((call: Call) => unknown)[] = [
+      () => json({ ok: true, value: null }),
+      () => json({ ok: false, error: { code: 'x' } }),
+      () => json({ ok: true, value: { path: '' } }),
+      () => ({ ok: false, json: () => Promise.resolve({}) }),
+      () => ({ ok: true, json: () => Promise.reject(new Error('bad json')) }),
+      () => {
+        throw new Error('offline')
+      },
+      () => json('not-an-envelope'),
+    ]
+    for (const answer of answers) {
+      clearAttachmentPaths()
+      const calls = stubFetch(answer)
+      const locate = makeAttachmentLocator('s1')!
+      assert.equal(await locate(FILE), null)
+      assert.equal(await locate(FILE), null)
+      assert.equal(calls.length, 2, 'a failed resolution is retried, never cached')
+      vi.unstubAllGlobals()
+    }
+  })
+
+  test('the cache is bounded: the oldest path is dropped first', async () => {
+    const calls = stubFetch(call => json({ ok: true, value: { path: `${ALIAS}#${String((call.body as { attachmentId: string }).attachmentId)}` } }))
+    const locate = makeAttachmentLocator('s1')!
+    for (let i = 0; i < 33; i++) {
+      await locate({ kind: 'file', attachmentId: `sha256:f${String(i)}`, name: 'x.md' })
+    }
+    assert.equal(calls.length, 33)
+    await locate({ kind: 'file', attachmentId: 'sha256:f0', name: 'x.md' })
+    assert.equal(calls.length, 34)
+    await locate({ kind: 'file', attachmentId: 'sha256:f32', name: 'x.md' })
+    assert.equal(calls.length, 34)
+  })
+})
+
+describe('makeAttachmentOpener', () => {
+  test('without a session or a preview column there is no opener; otherwise a resolved path opens the session file address', async () => {
+    stubFetch(() => json({ ok: true, value: { path: ALIAS } }))
+    const bare = new TestClientCtx()
+    assert.equal(makeAttachmentOpener(asClientCtx(bare), undefined, undefined), undefined)
+    assert.equal(makeAttachmentOpener(asClientCtx(bare), '', undefined), undefined)
+    assert.equal(makeAttachmentOpener(asClientCtx(bare), 's1', undefined), undefined)
+    stubFetch(() => json({ ok: true, value: { path: ALIAS } }))
+    const opened: string[] = []
+    const ctx = new TestClientCtx({ services: { sidebarRight: { openResource: (address: string) => { opened.push(address) } } } })
+    const open = makeAttachmentOpener(asClientCtx(ctx), 's1', '/work/repo')!
+    assert.equal(await open(FILE), true)
+    assert.equal(opened.length, 1)
+    assert.ok(opened[0].startsWith('dsh-resource://file/session/s1/'), opened[0])
+    assert.ok(opened[0].endsWith('report.md'), opened[0])
+    assert.ok(opened[0].includes('/home/me/.dsh/attachments/v1/files/a3/a3f0/'), 'an absolute path outside the workspace stays absolute')
+  })
+
+  test('an unresolved path and a refused address both report false', async () => {
+    stubFetch(() => json({ ok: true, value: null }))
+    const refused: string[] = []
+    const ctx = new TestClientCtx({ services: { sidebarRight: { openResource: (address: string) => { refused.push(address) } } } })
+    const open = makeAttachmentOpener(asClientCtx(ctx), 's1', undefined)!
+    assert.equal(await open(FILE), false)
+    assert.deepEqual(refused, [], 'nothing to open, the column is never called')
+
+    clearAttachmentPaths()
+    vi.unstubAllGlobals()
+    stubFetch(() => json({ ok: true, value: { path: ALIAS } }))
+    const throwing = new TestClientCtx({
+      services: {
+        sidebarRight: {
+          openResource: () => {
+            throw new Error('no viewer claims it')
+          },
+        },
+      },
+    })
+    const openThrowing = makeAttachmentOpener(asClientCtx(throwing), 's1', undefined)!
+    assert.equal(await openThrowing(FILE), false)
+  })
+})
 })

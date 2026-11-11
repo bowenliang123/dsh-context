@@ -1,11 +1,14 @@
 import assert from 'node:assert/strict'
 import { describe, test } from 'vitest'
-import { buildTimelineHead, createTimelineState, trimToLastTurns } from '../../src/host/fold'
-import type { TimelineEvent } from '../../src/host/fold'
-import type { TimelineState } from '../../src/host/foldState'
-import type { RequestRecord } from '../../src/shared/types'
-import { assistantMessage, compaction, planMode, toolCall, toolResult, userMessage } from './helpers/events'
-import { assertStatesPlainJson, driveTimeline, timelineDef } from './helpers/projection'
+import { buildTimelineHead, createTimelineState, trimToLastTurns, type TimelineEvent, buildTimelineDetail } from '../../src/host/fold'
+import { type TimelineState } from '../../src/host/foldState'
+import { type RequestRecord } from '../../src/shared/types'
+import { assistantMessage, compaction, planMode, toolCall, toolResult, userMessage, stepEnd, stepStart, assistantAttempt, header } from './helpers/events'
+import { assertStatesPlainJson, driveTimeline, timelineDef, assertPlainJson, assertStable, requestsOf } from './helpers/projection'
+import { resolveBounds } from '../../src/host/config'
+import { estimateSystemContent } from '../../src/shared/estimate'
+
+describe('fold-retention', () => {
 
 function req(seq: number, turn?: number, step?: number): RequestRecord {
   const r: RequestRecord = { seq, time: seq * 1000, system: 0, tools: 0, user: 0, inject: 0, assistant: 0, tool: 0, total: 0 }
@@ -292,4 +295,478 @@ describe('the full-session head counters', () => {
     assert.deepEqual(parsed, structuredClone(drive.state))
     assert.equal((parsed as TimelineState).totals?.turns, 1)
   })
+})
+})
+
+describe('fold-spans', () => {
+
+const text = (t: string) => [{ type: 'text', text: t }]
+
+const chunkRec = (time: number, chunk: unknown): unknown => ({ type: 'chunk', time, chunk })
+
+const toolCallAt = (seq: number, callId: string, time: number): TimelineEvent => ({
+  type: 'tool/call', seq, time, data: { callId, name: 'bash', arguments: '{}' },
+})
+
+describe('spans — the step flush', () => {
+  test('a full step tiles gapless: TTFT, the decode blocks in stream order, the tool window, residue fills the holes', () => {
+    const stream = [
+      chunkRec(200, { type: 'block-start', index: 0, blockType: 'reasoning' }),
+      { type: 'reasoning-chunks', time0: 210, index: 0, dt: [], texts: ['think'] },
+      chunkRec(700, { type: 'block-start', index: 0, blockType: 'text' }),
+      { type: 'text-chunks', time0: 710, index: 1, dt: [], texts: ['answer'] },
+      chunkRec(1_200, { type: 'block-start', index: 0, blockType: 'tool-call' }),
+      { type: 'tool-call-chunks', time0: 1_210, index: 2, dt: [], id: 'c1', args: ['{}'] },
+    ]
+    const { state } = driveTimeline([
+      stepStart(1, { time: 0 }),
+      assistantMessage(2, { time: 2_000, stream }),
+      toolCallAt(3, 'c1', 2_500),
+      toolResult(4, { callId: 'c1', content: text('ok'), time: 3_000 }),
+      stepEnd(5, { time: 4_000 }),
+    ])
+    assert.deepEqual(state.spans, [
+      { kind: 'ttft', start: 0, end: 210 },
+      { kind: 'reasoning', start: 210, end: 700 },
+      { kind: 'text', start: 700, end: 1_200 },
+      { kind: 'toolarg', start: 1_200, end: 2_000 },
+      { kind: 'other', start: 2_000, end: 2_500 },
+      { kind: 'tools', start: 2_500, end: 3_000 },
+      { kind: 'other', start: 3_000, end: 4_000 },
+    ])
+    assert.equal(Object.hasOwn(state, 'stepStart'), false, 'step/end consumed the pending slot')
+    assert.equal(Object.hasOwn(state, 'stepSpans'), false, '…and the span accumulator (never undefined-valued)')
+  })
+
+  test('the wait ends at the first token; an earlier marker stays inside the wait', () => {
+    const { state } = driveTimeline([
+      stepStart(1, { time: 0 }),
+      assistantMessage(2, {
+        time: 900,
+        stream: [
+          chunkRec(100, { type: 'block-start', index: 0, blockType: 'reasoning' }),
+          { type: 'reasoning-chunks', time0: 110, index: 0, dt: [], texts: ['x'] },
+        ],
+      }),
+      stepEnd(3, { time: 1_000 }),
+    ])
+    assert.deepEqual(state.spans, [
+      { kind: 'ttft', start: 0, end: 110 },
+      { kind: 'reasoning', start: 110, end: 900 },
+      { kind: 'other', start: 900, end: 1_000 },
+    ])
+    assert.deepEqual([state.timing?.ttftMs, state.timing?.genMs, state.timing?.reasoningMs], [110, 790, 790])
+  })
+
+  test('a redacted reasoning block moves to the wait; only the surviving decode block splits', () => {
+    const { state } = driveTimeline([
+      stepStart(1, { time: 0 }),
+      assistantMessage(2, {
+        time: 1_063,
+        stream: [
+          chunkRec(364, { type: 'block-start', index: 0, blockType: 'reasoning' }),
+          chunkRec(952, { type: 'block-start', index: 1, blockType: 'tool-call' }),
+          { type: 'tool-call-chunks', time0: 952, index: 1, dt: [0], id: 'c1', args: ['{', '}'] },
+        ],
+      }),
+      toolCallAt(3, 'c1', 1_064),
+      toolResult(4, { callId: 'c1', content: text('ok'), time: 1_095 }),
+      stepEnd(5, { time: 1_095 }),
+    ])
+    assert.deepEqual(
+      [state.timing?.ttftMs, state.timing?.genMs, state.timing?.reasoningMs, state.timing?.toolArgMs],
+      [952, 111, undefined, 111],
+      'the marker lead stays in the wait; the surviving block splits the generation window',
+    )
+    assert.equal(state.timing?.reasoningBlocks, undefined, 'the redacted block left the split with its span')
+    assert.equal(state.timing?.toolArgBlocks, 1)
+    assert.equal(
+      (state.timing?.reasoningMs ?? 0) + (state.timing?.textMs ?? 0) + (state.timing?.toolArgMs ?? 0),
+      state.timing?.genMs,
+      'the decode buckets partition the generation window exactly — no double count',
+    )
+    assert.deepEqual(state.spans, [
+      { kind: 'ttft', start: 0, end: 952 },
+      { kind: 'toolarg', start: 952, end: 1_063 },
+      { kind: 'other', start: 1_063, end: 1_064 },
+      { kind: 'tools', start: 1_064, end: 1_095 },
+    ])
+  })
+
+  test('a backwards marker cannot make the decode buckets overlap the generation window', () => {
+    const { state } = driveTimeline([
+      stepStart(1, { time: 0 }),
+      assistantMessage(2, {
+        time: 3_000,
+        stream: [
+          chunkRec(900, { type: 'block-start', index: 0, blockType: 'reasoning' }),
+          chunkRec(2_000, { type: 'block-start', index: 1, blockType: 'text' }),
+          chunkRec(1_000, { type: 'block-start', index: 2, blockType: 'tool-call' }),
+          chunkRec(1_500, { type: 'block-start', index: 3, blockType: 'text' }),
+          { type: 'tool-call-chunks', time0: 1_100, index: 2, dt: [], id: 'c1', args: ['{}'] },
+        ],
+      }),
+      stepEnd(3, { time: 3_000 }),
+    ])
+    assert.deepEqual(
+      [state.timing?.ttftMs, state.timing?.genMs, state.timing?.reasoningMs, state.timing?.textMs, state.timing?.toolArgMs],
+      [1_100, 1_900, 900, 1_000, undefined],
+    )
+    assert.deepEqual(state.spans, [
+      { kind: 'ttft', start: 0, end: 1_100 },
+      { kind: 'reasoning', start: 1_100, end: 2_000 },
+      { kind: 'text', start: 2_000, end: 3_000 },
+    ])
+  })
+
+  test('blocks stamped wholly past the message instant drop out of the tile', () => {
+    const { state } = driveTimeline([
+      stepStart(1, { time: 0 }),
+      assistantMessage(2, {
+        time: 300,
+        stream: [
+          chunkRec(100, { type: 'text-delta', text: 'x' }),
+          chunkRec(400, { type: 'block-start', index: 0, blockType: 'text' }),
+          chunkRec(500, { type: 'block-start', index: 1, blockType: 'reasoning' }),
+        ],
+      }),
+      stepEnd(3, { time: 600 }),
+    ])
+    assert.deepEqual(state.spans, [
+      { kind: 'ttft', start: 0, end: 100 },
+      { kind: 'other', start: 100, end: 600 },
+    ])
+  })
+
+  test('without model slices the generation window falls to the residue fill', () => {
+    const marked = driveTimeline([
+      stepStart(1, { time: 0 }),
+      assistantMessage(2, {
+        time: 1_000,
+        stream: [chunkRec(100, { type: 'text-delta', text: 'x' })],
+      }),
+      stepEnd(3, { time: 1_400 }),
+    ]).state
+    assert.deepEqual(marked.spans, [
+      { kind: 'ttft', start: 0, end: 100 },
+      { kind: 'other', start: 100, end: 1_400 },
+    ])
+    const unstamped = driveTimeline([
+      stepStart(1, { time: 0 }),
+      assistantMessage(2, { time: 1_000 }),
+      stepEnd(3, { time: 1_400 }),
+    ]).state
+    assert.deepEqual(unstamped.spans, [{ kind: 'other', start: 0, end: 1_400 }])
+  })
+
+  test('idle time BETWEEN steps carries no span', () => {
+    const step = (seq: number, start: number): TimelineEvent[] => [
+      stepStart(seq, { time: start }),
+      assistantMessage(seq + 1, { time: start + 1_000, stream: [chunkRec(start + 100, { type: 'text-delta', text: 'x' })] }),
+      stepEnd(seq + 2, { time: start + 1_400 }),
+    ]
+    const { state } = driveTimeline([...step(1, 0), ...step(4, 10_000)])
+    assert.deepEqual(state.spans, [
+      { kind: 'ttft', start: 0, end: 100 },
+      { kind: 'other', start: 100, end: 1_400 },
+      { kind: 'ttft', start: 10_000, end: 10_100 },
+      { kind: 'other', start: 10_100, end: 11_400 },
+    ])
+  })
+
+  test('parallel tool runs paint their UNION, never double wall time — same-instant and shadowed windows included', () => {
+    const { state } = driveTimeline([
+      stepStart(1, { time: 0 }),
+      assistantMessage(2, { time: 1_000 }),
+      toolCallAt(3, 'c1', 2_000),
+      toolCallAt(4, 'c2', 2_000),
+      toolCallAt(5, 'c3', 2_000),
+      toolResult(6, { callId: 'c1', content: text('ok'), time: 3_000 }),
+      toolResult(7, { callId: 'c2', content: text('ok'), time: 3_000 }),
+      toolResult(8, { callId: 'c3', content: text('ok'), time: 3_500 }),
+      stepEnd(9, { time: 4_000 }),
+    ])
+    assert.deepEqual(state.spans, [
+      { kind: 'other', start: 0, end: 2_000 },
+      { kind: 'tools', start: 2_000, end: 3_000 },
+      { kind: 'tools', start: 3_000, end: 3_500 },
+      { kind: 'other', start: 3_500, end: 4_000 },
+    ])
+    assert.equal(state.timing?.toolsMs, 1_000 + 1_000 + 1_500)
+    assert.equal(state.timing?.toolBusyMs, 1_500, 'the busy union, never the per-call sum')
+    assert.equal(state.timing?.toolCalls, 3)
+  })
+
+  test('spans clamp into the step window; a window wholly outside drops', () => {
+    const past = driveTimeline([
+      stepStart(1, { time: 0 }),
+      toolCallAt(2, 'c1', 3_000),
+      toolResult(3, { callId: 'c1', content: text('ok'), time: 5_000 }),
+      stepEnd(4, { time: 4_000 }),
+    ])
+    assert.deepEqual(past.state.spans, [
+      { kind: 'other', start: 0, end: 3_000 },
+      { kind: 'tools', start: 3_000, end: 4_000 },
+    ])
+    assert.equal(past.state.timing?.toolBusyMs, 1_000, 'clip the busy union into the step window')
+    assert.equal(past.state.timing?.toolsMs, 2_000, 'the per-call sum still prices the whole run')
+    const before = driveTimeline([
+      stepStart(1, { time: 3_000 }),
+      toolCallAt(2, 'c1', 100),
+      toolResult(3, { callId: 'c1', content: text('ok'), time: 200 }),
+      stepEnd(4, { time: 4_000 }),
+    ])
+    assert.deepEqual(before.state.spans, [{ kind: 'other', start: 3_000, end: 4_000 }])
+    assert.equal(before.state.timing?.toolBusyMs, 0, 'no painted window, no busy time')
+  })
+
+  test('a zero-width step flushes nothing but bumps the detail revision', () => {
+    const { state } = driveTimeline([
+      stepStart(1, { time: 5_000 }),
+      stepEnd(2, { time: 5_000 }),
+    ])
+    assert.deepEqual(state.spans, [])
+    assert.equal(state.detailRev, 1, 'open tabs refetch the strip')
+  })
+
+  test('a tool result folded without an open step prices the totals but paints no span', () => {
+    const { state } = driveTimeline([
+      toolCallAt(1, 'c1', 1_000),
+      toolResult(2, { callId: 'c1', content: text('ok'), time: 2_000 }),
+    ])
+    assert.equal(state.timing?.toolsMs, 1_000)
+    assert.deepEqual(state.spans, [])
+  })
+
+  test('a second step/start supersedes the open accumulator — its un-flushed spans die with it', () => {
+    const { state } = driveTimeline([
+      stepStart(1, { time: 0 }),
+      assistantMessage(2, { time: 1_000, stream: [chunkRec(100, { type: 'text-delta', text: 'x' })] }),
+      stepStart(3, { time: 10_000 }),
+      assistantMessage(4, { time: 11_000, stream: [chunkRec(10_100, { type: 'text-delta', text: 'y' })] }),
+      stepEnd(5, { time: 11_400 }),
+    ])
+    assert.deepEqual(state.spans, [
+      { kind: 'ttft', start: 10_000, end: 10_100 },
+      { kind: 'other', start: 10_100, end: 11_400 },
+    ])
+  })
+})
+
+describe('spans — retention, wire, and schema faces', () => {
+  test('the collection keeps the newest tail past the 2_000-span cap', () => {
+    const events: TimelineEvent[] = []
+    for (let i = 0; i < 41; i++) {
+      const start = i * 10_000
+      const stream: unknown[] = [chunkRec(start + 100, { type: 'text-delta', text: 'x' })]
+      for (let m = 0; m < 48; m++) {
+        stream.push(chunkRec(start + 100 + m * 10, { type: 'block-start', index: 0, blockType: m % 2 === 0 ? 'text' : 'reasoning' }))
+      }
+      events.push(
+        stepStart(i * 3 + 1, { time: start }),
+        assistantMessage(i * 3 + 2, { time: start + 1_000, stream }),
+        stepEnd(i * 3 + 3, { time: start + 1_400 }),
+      )
+    }
+    const { state } = driveTimeline(events)
+    assert.equal(state.spans.length, 2_000)
+    assert.deepEqual(state.spans[0], { kind: 'ttft', start: 10_000, end: 10_100 }, 'the oldest step left the window')
+    assert.deepEqual(state.spans.at(-1), { kind: 'other', start: 401_000, end: 401_400 })
+  })
+
+  test('the inline wire view serves COPIES; the slim head omits the collection whole', () => {
+    const events: TimelineEvent[] = [
+      stepStart(1, { time: 0 }),
+      assistantMessage(2, { time: 1_000, stream: [chunkRec(100, { type: 'text-delta', text: 'x' })] }),
+      stepEnd(3, { time: 1_400 }),
+    ]
+    const drive = driveTimeline(events)
+    assert.deepEqual(drive.view.spans, drive.state.spans)
+    assert.notEqual(drive.view.spans, drive.state.spans, 'the served array never aliases the state')
+    assert.notEqual(drive.view.spans?.[0], drive.state.spans[0], '…nor its items')
+    const detail = buildTimelineDetail(drive.state, resolveBounds({}))
+    assert.deepEqual(detail.spans, drive.state.spans)
+    assert.notEqual(detail.spans[0], drive.state.spans[0])
+    const slimDef = timelineDef({}, true)
+    let slimState = slimDef.init()
+    for (const ev of events) slimState = slimDef.apply(slimState, ev)
+    assert.equal(Object.hasOwn(slimDef.wire.view(slimState), 'spans'), false)
+  })
+
+  test('every intermediate state stays plain JSON and validates against the state schema; a spans-less state fails it (the v23 gate)', () => {
+    const drive = driveTimeline([
+      stepStart(1, { time: 0 }),
+      assistantMessage(2, { time: 1_000, stream: [chunkRec(100, { type: 'text-delta', text: 'x' })] }),
+      toolCallAt(3, 'c1', 1_100),
+      toolResult(4, { callId: 'c1', content: text('ok'), time: 1_200 }),
+      stepEnd(5, { time: 1_400 }),
+      stepStart(6, { time: 2_000 }),
+      assistantMessage(7, { time: 3_000, stream: [chunkRec(2_100, { type: 'text-delta', text: 'y' })] }),
+    ])
+    for (const state of drive.states) {
+      assertPlainJson(state)
+      drive.def.stateSchema.parse(structuredClone(state))
+    }
+    const stale = structuredClone(drive.state) as unknown as Record<string, unknown>
+    delete stale.spans
+    assert.throws(() => drive.def.stateSchema.parse(stale))
+  })
+})
+})
+
+describe('fold-dialect', () => {
+
+const text = (t: string) => [{ type: 'text', text: t }]
+
+const token = (time: number, t = 'x') => ({ type: 'chunk', time, chunk: { type: 'text-delta', text: t } })
+
+describe('system/message — the system prompt as a surface node', () => {
+  test('an appended system prompt prices into systemTokens and the request total; a later header never clears it', () => {
+    const prompt = 'You are an agent. '.repeat(20)
+    const { state, view } = driveTimeline([
+      header(1, { tools: [] }),
+      { type: 'system/message', seq: 2, time: 2000, data: { turn: 1, step: 1, message: { content: text(prompt) } }, surfaceOp: 'append' },
+      userMessage(3, text('hi'), { kind: 'user' }),
+      assistantMessage(4, { turn: 1, step: 1 }),
+    ])
+    const price = estimateSystemContent(text(prompt))
+    assert.equal(state.systemTokens, price)
+    assert.deepEqual(state.systems, [{ seq: 2, time: 2000, tokens: price }])
+    assert.equal(requestsOf(state)[0].system, price, 'the request record snapshots the prompt in force')
+    assert.deepEqual(view.systems, [{ seq: 2, time: 2000, tokens: price }], 'the wire carries the live prompt nodes')
+    assert.equal(view.current.total, price + state.sums.user + state.sums.assistant, 'the prompt joins the composition total')
+    const headerOnly = driveTimeline([
+      { type: 'system/message', seq: 1, time: 1000, data: { message: { content: text(prompt) } }, surfaceOp: 'append' },
+      header(2, { tools: [] }),
+      header(3, { tools: [] }),
+    ]).state
+    assert.equal(headerOnly.systemTokens, price, 'headers carry no prompt, so they never clear log-sourced nodes')
+    assert.equal(headerOnly.systems?.length, 1)
+    const malformed = driveTimeline([
+      { type: 'system/message', seq: 1, time: 1000, data: null as never, surfaceOp: 'append' },
+      { type: 'system/message', seq: 2, time: 2000, data: { message: 'not-a-record' }, surfaceOp: 'append' },
+      { type: 'system/message', seq: 3, time: 3000, data: { message: { content: text('real prompt') } }, surfaceOp: 'append' },
+    ]).state
+    assert.deepEqual(malformed.systems?.map(n => n.tokens), [0, 0, estimateSystemContent(text('real prompt'))])
+    assert.equal(malformed.systemTokens, estimateSystemContent(text('real prompt')))
+  })
+
+  test('an empty node is dormant: it keeps its position without clearing a live prompt', () => {
+    const prompt = 'prompt '.repeat(10)
+    const { state } = driveTimeline([
+      { type: 'system/message', seq: 1, time: 1000, data: { message: { content: text(prompt) } }, surfaceOp: 'append' },
+      { type: 'system/message', seq: 2, time: 2000, data: { message: { content: [] } }, surfaceOp: 'append' },
+    ])
+    assert.equal(state.systemTokens, estimateSystemContent(text(prompt)), 'the last NONEMPTY node stays effective')
+    assert.equal(state.systems?.length, 2)
+    assert.equal(state.systems?.[1].tokens, 0)
+  })
+
+  test('a replacement swaps or starts the node list and reprices (startSeq/endSeq)', () => {
+    const first = 'first '.repeat(10)
+    const second = 'second prompt text '.repeat(10)
+    const existing = driveTimeline([
+      { type: 'system/message', seq: 1, time: 1000, data: { message: { content: text(first) } }, surfaceOp: 'append' },
+      { type: 'system/message', seq: 2, time: 2000, data: { message: { content: text(second) } }, surfaceOp: { op: 'replace', startSeq: 1, endSeq: 1 } },
+    ])
+    assert.deepEqual(existing.state.systems, [{ seq: 2, time: 2000, tokens: estimateSystemContent(text(second)) }])
+    assert.equal(existing.state.systemTokens, estimateSystemContent(text(second)))
+    assert.deepEqual(existing.view.systems, existing.state.systems)
+    const fresh = driveTimeline([
+      { type: 'system/message', seq: 4, time: 4000, data: { message: { content: text('q') } }, surfaceOp: { op: 'replace', startSeq: 1, endSeq: 1 } },
+    ])
+    assert.deepEqual(fresh.state.systems, [{ seq: 4, time: 4000, tokens: estimateSystemContent(text('q')) }])
+    assert.equal(fresh.state.systemTokens, estimateSystemContent(text('q')))
+  })
+
+  test('a system replacement removes only the claimed nodes — ordinary surface nodes included (hostile log)', () => {
+    const claimed = driveTimeline([
+      userMessage(1, text('aaaa'), { kind: 'user' }),
+      { type: 'system/message', seq: 2, time: 2000, data: { message: { content: text('p') } }, surfaceOp: 'append' },
+      userMessage(3, text('bbbb'), { kind: 'user' }),
+      userMessage(9, text('cccc'), { kind: 'user' }),
+      { type: 'system/message', seq: 10, time: 3000, data: { message: { content: text('q') } }, surfaceOp: { op: 'replace', startSeq: 1, endSeq: 3 } },
+    ]).state
+    assert.deepEqual(claimed.surface.map(n => n.seq), [9], 'the claimed nodes left the surface, the later one stayed')
+    assert.equal(claimed.sums.user, claimed.surface.reduce((sum, n) => sum + n.tokens, 0))
+    assert.deepEqual(claimed.archived.map(n => [n.seq, n.gone]), [[1, 10], [3, 10]])
+    assert.deepEqual(claimed.systems, [{ seq: 10, time: 3000, tokens: estimateSystemContent(text('q')) }])
+    const outside = driveTimeline([
+      { type: 'system/message', seq: 1, time: 1000, data: { message: { content: text('earlier') } }, surfaceOp: 'append' },
+      { type: 'system/message', seq: 2, time: 2000, data: { message: { content: text('p') } }, surfaceOp: 'append' },
+      { type: 'system/message', seq: 5, time: 5000, data: { message: { content: text('later prompt') } }, surfaceOp: 'append' },
+      { type: 'system/message', seq: 8, time: 8000, data: { message: { content: text('q') } }, surfaceOp: { op: 'replace', startSeq: 2, endSeq: 2 } },
+    ]).state
+    assert.deepEqual(outside.systems?.map(n => n.seq), [1, 5, 8], 'only the claimed node left the list')
+    assert.equal(outside.systemTokens, estimateSystemContent(text('q')), 'the newest nonempty node is effective')
+  })
+
+  test('a system/message expires an armed shadow claim (the shadow-price protocol)', () => {
+    const { state } = driveTimeline([
+      userMessage(1, text('a'), { kind: 'user' }),
+      { type: 'compaction/summary', seq: 2, time: 2000, data: { shadowedSeqs: [1], shadowedTokenCount: 9 } },
+      { type: 'system/message', seq: 3, time: 3000, data: { message: { content: text('p') } }, surfaceOp: 'append' },
+      userMessage(4, text('b'), { kind: 'user' }),
+    ])
+    assert.equal(state.pendingShadowedSeqs, undefined)
+    assert.deepEqual(state.surface.map(n => n.seq), [1, 4], 'the stale claim no longer removes node 1')
+  })
+
+  test('the live node list is bounded (a hostile log cannot grow the state)', () => {
+    const events: TimelineEvent[] = []
+    for (let i = 1; i <= 12; i++) {
+      events.push({ type: 'system/message', seq: i, time: i * 1000, data: { message: { content: text('p' + String(i)) } }, surfaceOp: 'append' })
+    }
+    const { state } = driveTimeline(events)
+    assert.equal(state.systems?.length, 8)
+    assert.deepEqual(state.systems?.map(n => n.seq), [5, 6, 7, 8, 9, 10, 11, 12])
+    assert.equal(state.systemTokens, estimateSystemContent(text('p12')))
+  })
+})
+
+describe('embedded assistant stream — the first-token source', () => {
+  test('a packed text run prices TTFT from its base time plus gaps', () => {
+    const { state } = driveTimeline([
+      stepStart(1, { time: 1000 }),
+      assistantMessage(2, {
+        turn: 1,
+        step: 1,
+        stream: [{ type: 'text-chunks', time0: 1200, index: 0, dt: [30], texts: ['', 'hello'] }],
+        time: 2000,
+      }),
+    ])
+    assert.equal(state.timing?.ttftMs, 230, 'the first NON-EMPTY fragment carries the stamp')
+    assert.equal(state.timing?.genMs, 770)
+  })
+
+  test('a streamless message leaves the call unattributed (the residue bucket)', () => {
+    const { state } = driveTimeline([
+      stepStart(1, { time: 1000 }),
+      assistantMessage(2, { turn: 1, step: 1, time: 2000 }),
+    ])
+    assert.equal(state.timing?.ttftMs, 0)
+    assert.equal(state.timing?.genMs, 0)
+    assert.equal(state.timing?.calls, 1)
+  })
+
+  test('assistant/attempt stamps the open step; the message then reuses it', () => {
+    const { state } = driveTimeline([
+      stepStart(1, { time: 1000 }),
+      assistantAttempt(2, { turn: 1, step: 1, stream: [token(1300)], time: 1500 }),
+      assistantMessage(3, { turn: 1, step: 1, stream: [token(9000)], time: 2000 }),
+      stepEnd(4, { time: 2100 }),
+    ])
+    assert.equal(state.timing?.ttftMs, 300, 'the attempt\'s first token wins over the later message stream')
+    assert.equal(state.timing?.genMs, 700)
+  })
+
+  test('an attempt without a token, without a slot, or over a stamped slot is uninteresting', () => {
+    const def = timelineDef()
+    assertStable(def.init(), assistantAttempt(1, { turn: 1, step: 1, stream: [token(100)] }), def)
+    const armed = def.apply(def.init(), stepStart(1, { time: 1000 }))
+    assertStable(armed, assistantAttempt(2, { turn: 1, step: 1, stream: [{ type: 'chunk', time: 1, chunk: { type: 'finish' } }] }), def)
+    const stamped = def.apply(armed, assistantAttempt(2, { turn: 1, step: 1, stream: [token(1200)] }))
+    assertStable(stamped, assistantAttempt(3, { turn: 1, step: 1, stream: [token(1100)] }), def)
+  })
+})
 })

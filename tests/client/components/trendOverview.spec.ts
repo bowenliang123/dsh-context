@@ -1,12 +1,15 @@
-
-import { act, createElement as h } from 'react'
+import { act, createElement as h, useState } from 'react'
 import assert from 'node:assert/strict'
 import { describe, test } from 'vitest'
-import { aggregateByTurn } from '../../../src/client/components/trendModel'
+import { aggregateByTurn, attachMarkers, jumpTargetOf, turnStepsOf } from '../../../src/client/components/trendModel'
 import { makeTrendOverview, type TrendOverviewProps } from '../../../src/client/components/trendOverview'
-import type { ContextEventRecord, RequestRecord } from '../../../src/shared/types'
-import { click, hover, mount, query, queryAll, unhover } from '../helpers/kit'
-import { kit, req } from './trendChartHarness'
+import { type ContextEventRecord, type RequestRecord } from '../../../src/shared/types'
+import { click, hover, mount, query, queryAll, unhover, flush, until } from '../helpers/kit'
+import { kit, req, TrendChart, bars, propsOf, scrollTo, viewport, type LayoutEl } from './trendChartHarness'
+import { BAR_GAP, BAR_W, initialBarWindow, nextBarWindow, WINDOW_HYSTERESIS_BARS, WINDOW_OVERSCAN_BARS, windowPads, windowRangeFor } from '../../../src/client/components/trendWindow'
+
+describe('trendOverview', () => {
+
 
 const TrendOverview = makeTrendOverview(kit)
 
@@ -589,4 +592,215 @@ describe('TrendOverview keyboard picks', () => {
     await pinned.unmount()
     await m.unmount()
   })
+})
+})
+
+describe('trendChartWindow', () => {
+
+const PITCH = BAR_W + BAR_GAP
+
+describe('trend chart windowing', () => {
+  test('keep small and empty histories whole', () => {
+    assert.deepEqual(windowRangeFor(0, 400, 0), { from: 0, to: 0 })
+    assert.deepEqual(windowRangeFor(3200, 400, 120), { from: 0, to: 119 })
+    assert.deepEqual(nextBarWindow({ from: 0, to: 10 }, { from: 50, to: 60 }, 100), { from: 0, to: 99 })
+    assert.deepEqual(windowPads(0, 119, 120), { left: 0, right: 0 })
+    assert.deepEqual(initialBarWindow(120), { from: 0, to: 119 })
+    assert.equal(initialBarWindow(1_000).to, 999)
+  })
+
+  test('fill an overscanned range around the scroll position, keep a covering window, and refill after leaving it', () => {
+    const n = 1_000
+    const range = windowRangeFor(8000, 400, n)
+    assert.equal(range.from, Math.max(0, Math.floor(8000 / PITCH) - WINDOW_OVERSCAN_BARS))
+    assert.equal(range.to, Math.min(n - 1, Math.ceil(8400 / PITCH) + WINDOW_OVERSCAN_BARS))
+    assert.ok(range.from > 0 && range.to < n - 1)
+    assert.equal(windowRangeFor(0, 400, n).from, 0)
+    assert.equal(windowRangeFor(999_999, 400, n).to, n - 1)
+
+    const prev = { from: 100, to: 300 }
+    assert.equal(nextBarWindow(prev, { from: 120, to: 280 }, 1_000), prev)
+    const moved = nextBarWindow(prev, { from: 400, to: 500 }, 1_000)
+    assert.deepEqual(moved, { from: 400 - WINDOW_HYSTERESIS_BARS, to: 500 + WINDOW_HYSTERESIS_BARS })
+    const clamped = nextBarWindow({ from: 0, to: 100 }, { from: 900, to: 999 }, 1_000)
+    assert.deepEqual(clamped, { from: 900 - WINDOW_HYSTERESIS_BARS, to: 999 })
+
+    for (const [from, to] of [[0, 0], [0, 799], [200, 799], [950, 999], [400, 500]] as const) {
+      const pads = windowPads(from, to, 1_000)
+      const rendered = to - from + 1
+      const items = rendered + (pads.left > 0 ? 1 : 0) + (pads.right > 0 ? 1 : 0)
+      const width = rendered * BAR_W + pads.left + pads.right + Math.max(0, items - 1) * BAR_GAP
+      assert.equal(width, 1_000 * PITCH - BAR_GAP, `padding reproduces the full column width for ${from}..${to}`)
+    }
+  })
+
+  test('DNA highlights are windowed with the same padding', async () => {
+    const list = Array.from({ length: 400 }, (_, i) => req(i + 1))
+    const dna = list.map(() => [{ key: 'sys', cat: 'system' as const, tokens: 10, off: 0, color: '#8b5cf6' }])
+    viewport.clientW = 400
+    const m = await mount(h(TrendChart, propsOf(list, { dna })))
+    const scroller = query<LayoutEl>(m.container, '.lc-chart-scroll')
+    await scrollTo(scroller, 3_200)
+    await until(() => queryAll(m.container, '.lc-bar-pad').length === 2, 'window lands mid-history with both pads')
+    const dnaBar = query(m.container, '.lc-bar-dna')
+    await act(async () => { dnaBar.dispatchEvent(new MouseEvent('mousemove', { bubbles: true, clientY: 10 })) })
+    await flush()
+    const highlight = query(m.container, '.lc-dna-hl')
+    assert.ok(highlight !== null)
+    assert.equal(queryAll(highlight, '.lc-dna-cell').length, queryAll(m.container, '.lc-bar').length + 2)
+    await m.unmount()
+  })
+
+  test('a large history mounts on its newest bars and follows a scroll', async () => {
+    const list = Array.from({ length: 400 }, (_, i) => req(i + 1))
+    viewport.clientW = 400
+    const m = await mount(h(TrendChart, propsOf(list)))
+    try {
+      const scroller = query<LayoutEl>(m.container, '.lc-chart-scroll')
+      const chart = query(m.container, '.lc-chart')
+      assert.equal(chart.getAttribute('data-lc-bars'), '400')
+      const initial = bars(m.container)
+      assert.ok(initial.length < list.length, 'a window, not all 400 bars')
+      assert.ok(initial.length > 50, 'a window wide enough to scroll through')
+      assert.equal(initial[initial.length - 1].getAttribute('data-seq'), String(list[list.length - 1].seq))
+      assert.ok(scroller.__scrollL !== undefined && scroller.__scrollL > 0, 'anchored to the newest bars')
+      assert.ok(query(m.container, '.lc-bar-pad') !== null, 'a pad keeps the full content width')
+
+      await scrollTo(scroller, 0)
+      await until(
+        () => bars(m.container)[0]?.getAttribute('data-seq') === String(list[0].seq),
+        'window follows the scroll to the oldest bars',
+      )
+      assert.equal(bars(m.container)[0].getAttribute('data-seq'), String(list[0].seq))
+      assert.equal(query(m.container, '.lc-turns').children.length, 1)
+    } finally {
+      await m.unmount()
+      viewport.clientW = 400
+    }
+  })
+})
+})
+
+describe('trendChartUnits', () => {
+
+describe('aggregateByTurn', () => {
+  test('same-turn steps collapse into the last record, turnless requests pool under 0, and an empty history aggregates to nothing', () => {
+    const agg = aggregateByTurn([
+      req(1, { turn: 1, step: 0 }),
+      req(2, { turn: 1, step: 1, total: 500 }),
+      req(3, { turn: 2, step: 0 }),
+    ])
+    assert.equal(agg.length, 2)
+    assert.equal(agg[0].seq, 2, 'the turn bar is its LAST step')
+    assert.equal(agg[0].stepCount, 2)
+    assert.equal(agg[0].total, 500)
+    assert.equal(agg[1].stepCount, 1)
+
+    const turnless = aggregateByTurn([req(1, { turn: undefined }), req(2, { turn: undefined })])
+    assert.equal(turnless.length, 1)
+    assert.equal(turnless[0].stepCount, 2)
+    assert.equal(aggregateByTurn([req(1, { turn: undefined }), req(2, { turn: 1 })]).length, 2, 'a turnless run breaks at the first stamped turn')
+    assert.deepEqual(aggregateByTurn([]), [])
+
+    const durationAgg = aggregateByTurn([
+      req(1, { turn: 1, step: 0, activeMs: 1000 }),
+      req(2, { turn: 1, step: 1, activeMs: 2500 }),
+      req(3, { turn: 2, step: 0, activeMs: 800 }),
+    ])
+    assert.equal(durationAgg[0].activeMs, 3500, 'the turn bar carries its steps\' summed active time')
+    assert.equal(durationAgg[1].activeMs, 800, 'a single-step turn keeps its own figure')
+    const partial = aggregateByTurn([req(1, { turn: 1, activeMs: 1000 }), req(2, { turn: 1 })])
+    assert.equal(partial[0].activeMs, 1000)
+    const none = aggregateByTurn([req(1, { turn: 1 }), req(2, { turn: 1 })])
+    assert.ok(!('ms' in none[0]), 'no fabricated zero when no step reported')
+  })
+})
+
+describe('turnStepsOf', () => {
+  test('tallies per-turn step counts over the raw records; turnless pool under 0', () => {
+    const stepsOf = turnStepsOf([
+      req(1, { turn: 1, step: 0 }),
+      req(2, { turn: 1, step: 1 }),
+      req(3, { turn: 2, step: 0 }),
+      req(4, { turn: undefined, step: undefined }),
+    ])
+    assert.equal(stepsOf(1), 2)
+    assert.equal(stepsOf(2), 1)
+    assert.equal(stepsOf(undefined), 1, 'turnless records read the pooled 0 key')
+    assert.equal(stepsOf(9), 1, 'a turn outside the list answers 1 instead of missing')
+    assert.equal(turnStepsOf([])(1), 1)
+  })
+})
+
+describe('jumpTargetOf', () => {
+  test('matches the exact seq; an aged-out seq clamps to the oldest retained request', () => {
+    const reqs = [req(50), req(60), req(70)]
+    assert.equal(jumpTargetOf(reqs, 60)?.seq, 60)
+    assert.equal(jumpTargetOf(reqs, 10)?.seq, 50, 'below the window → the oldest retained bar')
+    assert.equal(jumpTargetOf([], 1), null)
+  })
+})
+
+describe('TrendChart entrance rise', () => {
+  const slot = (el: Element): string => (el as HTMLElement).style.getPropertyValue('--lc-i')
+
+  test('each bar carries its rise stagger slot, capped so a long log settles quickly', async () => {
+    const reqs = Array.from({ length: 25 }, (_, i) => req(i + 1))
+    const m = await mount(h(TrendChart, propsOf(reqs)))
+    const stacks = queryAll(m.container, '.lc-bar-stack')
+    assert.equal(stacks.length, 25)
+    assert.equal(slot(stacks[0]), '0')
+    assert.equal(slot(stacks[1]), '1')
+    assert.equal(slot(stacks[19]), '19')
+    assert.equal(slot(stacks[20]), '20')
+    assert.equal(slot(stacks[24]), '20')
+    await m.unmount()
+
+    const r1 = req(1, { turn: 1, step: 0 })
+    const r2 = req(2, { turn: 1, step: 1, system: 50, user: 60 })
+    const delta = await mount(h(TrendChart, propsOf([r1, r2], { mode: 'delta' })))
+    const ups = queryAll(delta.container, '.lc-bar-up')
+    const downs = queryAll(delta.container, '.lc-bar-down')
+    assert.deepEqual([slot(ups[0]), slot(ups[1]), slot(downs[1])], ['0', '1', '1'], 'delta arms share their bar rise stagger slot')
+    assert.equal(queryAll(downs[0], 'div').length, 0)
+    await delta.unmount()
+  })
+
+  test('switching granularity remounts every bar so the entrance rise replays', async () => {
+    function GranularityHarness(props: { requests: RequestRecord[] }) {
+      const [granularity, setGranularity] = useState<'step' | 'turn'>('turn')
+      const display = granularity === 'turn' ? aggregateByTurn(props.requests) : props.requests
+      return h('div', null,
+        h('button', { onClick: () => { setGranularity('step') } }, 'to-step'),
+        h(TrendChart, { ...propsOf(display), granularity }))
+    }
+    const reqs = [req(1, { turn: 1, step: 0 }), req(2, { turn: 1, step: 1 }), req(3, { turn: 2, step: 0 })]
+    const m = await mount(h(GranularityHarness, { requests: reqs }))
+    assert.deepEqual(bars(m.container).map(b => b.getAttribute('data-seq')), ['2', '3'])
+    const reusedSeq = query(m.container, '.lc-bar[data-seq="2"]')
+    await click(query(m.container, 'button'))
+    assert.deepEqual(bars(m.container).map(b => b.getAttribute('data-seq')), ['1', '2', '3'])
+    assert.notEqual(query(m.container, '.lc-bar[data-seq="2"]'), reusedSeq)
+    await m.unmount()
+  })
+})
+
+describe('attachMarkers', () => {
+  test('each boundary event attaches to the first request logged after it; stray, non-boundary, or repeated events attach nowhere', () => {
+    const reqs = [req(5), req(10)]
+    const ev: ContextEventRecord = { seq: 7, time: 0, kind: 'compaction' }
+    const markers = attachMarkers(reqs, [ev])
+    assert.equal(markers.length, 2)
+    assert.equal(markers[0], undefined)
+    assert.equal(markers[1], ev)
+    assert.equal(Object.keys(attachMarkers(reqs, [{ seq: 99, time: 0, kind: 'prune' }])).length, 0)
+    assert.equal(Object.keys(attachMarkers(reqs, [{ seq: 1, time: 0, kind: 'inject' }])).length, 0)
+    assert.equal(attachMarkers([], [{ seq: 1, time: 0, kind: 'compaction' }]).length, 0)
+    const first: ContextEventRecord = { seq: 1, time: 0, kind: 'compaction' }
+    const second: ContextEventRecord = { seq: 2, time: 0, kind: 'prune' }
+    const repeated = attachMarkers(reqs, [first, second])
+    assert.equal(repeated[0], first)
+    assert.equal(repeated[1], undefined)
+  })
+})
 })

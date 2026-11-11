@@ -2,19 +2,30 @@ import assert from 'node:assert/strict'
 import { describe, test } from 'vitest'
 import { Context } from '@deepseek-ai/cordis'
 import { SessionProjectionRegistry } from '@deepseek-ai/dsh-session-projection'
-import type { SessionEvent } from '@deepseek-ai/dsh-session'
-import { nextSliceSize, watchActivityBackfill } from '../../src/host/backfill'
-import type { FoldPool } from '../../src/host/backfill'
+import { type SessionEvent } from '@deepseek-ai/dsh-session'
+import { nextSliceSize, watchActivityBackfill, type FoldPool, BACKFILL_ROUTE as HOST_BACKFILL_ROUTE } from '../../src/host/backfill'
 import { userMessage } from './helpers/events'
 import { createContextTimelineDefinition } from '../../src/host/timeline'
 import { createContextActivityDefinition } from '../../src/host/activity'
 import { createContextHeadersDefinition } from '../../src/host/headers'
 import { activityOf } from '../../src/host/overviewDecode'
-import type { DurableIdentity, OverviewCache } from '../../src/host/overviewCache'
-import type { HostSession } from '../../src/host/overviewCorpus'
+import { type DurableIdentity, type OverviewCache } from '../../src/host/overviewCache'
+import { type HostSession } from '../../src/host/overviewCorpus'
 import { inProcessPool } from './helpers/foldWorker'
-import { arm, captureLogs, connectionOf, fakeState, trigger, until } from './helpers/backfill'
-import type { RouteBox } from './helpers/backfill'
+import { arm, captureLogs, connectionOf, fakeState, trigger, until, type RouteBox } from './helpers/backfill'
+import { BALANCE_ROUTE as HOST_BALANCE_ROUTE } from '../../src/host/balance'
+import { DETAIL_ROUTE as HOST_DETAIL_ROUTE } from '../../src/host/detail'
+import { ATTACHMENT_ROUTE as HOST_ATTACHMENT_ROUTE } from '../../src/host/attachment'
+import { COMMANDS_ROUTE as HOST_COMMANDS_ROUTE } from '../../src/host/commandPages'
+import { FLEET_ROUTE as HOST_FLEET_ROUTE } from '../../src/host/fleet'
+import { SKILLS_ROUTE as HOST_SKILLS_ROUTE } from '../../src/host/skills'
+import { OVERVIEW_ROUTE as HOST_OVERVIEW_ROUTE } from '../../src/host/overview'
+import { ATTACHMENT_ROUTE, BACKFILL_ROUTE, BALANCE_ROUTE, COMMANDS_ROUTE, DETAIL_ROUTE, FLEET_ROUTE, OVERVIEW_ROUTE, SKILLS_ROUTE } from '../../src/client/apiRoutes'
+import { serviceIdentityOf } from '../../src/host/serviceIdentity'
+import z from '@deepseek-ai/schemastery'
+import { Config, DEFAULT_BOUNDS, resolveBounds, volatileField } from '../../src/host/config'
+
+describe('backfill-sliced', () => {
 
 interface SavedRecord {
   session: HostSession
@@ -514,4 +525,131 @@ describe('the sliced cold fold (issue #145)', () => {
     assert.deepEqual(state.coldReads, ['cold'])
     assert.deepEqual(state.coldSnapshots, ['cold'])
   })
+})
+})
+
+describe('apiRoutes', () => {
+
+describe('apiRoutePairing', () => {
+  test('each client fetch route is its host registration minus the leading slash', () => {
+    for (const [host, client] of [
+      [HOST_DETAIL_ROUTE, DETAIL_ROUTE],
+      [HOST_COMMANDS_ROUTE, COMMANDS_ROUTE],
+      [HOST_BALANCE_ROUTE, BALANCE_ROUTE],
+      [HOST_FLEET_ROUTE, FLEET_ROUTE],
+      [HOST_SKILLS_ROUTE, SKILLS_ROUTE],
+      [HOST_BACKFILL_ROUTE, BACKFILL_ROUTE],
+      [HOST_ATTACHMENT_ROUTE, ATTACHMENT_ROUTE],
+      [HOST_OVERVIEW_ROUTE, OVERVIEW_ROUTE],
+    ]) {
+      assert.equal(client, host.slice(1), `${host} and ${client} lost their pairing`)
+    }
+  })
+})
+})
+
+describe('serviceIdentity', () => {
+
+describe('serviceIdentityOf', () => {
+  test('uses the stable identity of a re-bound service wrapper', () => {
+    assert.equal(serviceIdentityOf({ identity: 'persistence-1', generation: 1 }), 'persistence-1')
+    assert.equal(serviceIdentityOf({ identity: 'persistence-1', generation: 2 }), 'persistence-1')
+  })
+
+  test('falls back to the value itself when no identity is exposed', () => {
+    const service = { id: 'persistence' }
+    assert.equal(serviceIdentityOf(service), service)
+    assert.equal(serviceIdentityOf(undefined), undefined)
+    assert.equal(serviceIdentityOf('persistence'), 'persistence')
+  })
+})
+})
+
+describe('config', () => {
+
+function deref(value: unknown): unknown {
+  return value !== null && typeof value === 'object' && typeof (value as { get?: unknown }).get === 'function'
+    ? (value as { get: () => unknown }).get()
+    : value
+}
+
+describe('Config validator (cordis Standard Schema face)', () => {
+  test('an absent config resolves to defaults; each bounds field overrides independently', () => {
+    const resolved = Config(undefined) as unknown as Record<string, unknown>
+    const resolvedPrefs = Object.fromEntries(
+      Object.entries(resolved).map(([key, value]) => [key, deref(value)]),
+    )
+    assert.deepEqual(resolvedPrefs, {
+      ...DEFAULT_BOUNDS,
+      defaultPlacement: 'all',
+      defaultGranularity: 'step',
+      defaultTrendMode: 'total',
+      defaultDeltaBase: 'step',
+      defaultToolSort: 'count',
+      defaultFileSort: 'lines',
+      insightsEntry: 'show',
+      defaultDurationCurve: 'show',
+      overviewAutoSteps: '100',
+      defaultOverviewRange: '30d',
+      fleetTab: 'show',
+      promptPrefix: '',
+      promptSuffix: '',
+    })
+    assert.deepEqual(resolveBounds(undefined), DEFAULT_BOUNDS)
+    assert.deepEqual(resolveBounds({}), DEFAULT_BOUNDS)
+    assert.equal(resolveBounds({ maxRequestSteps: 7 }).maxRequestSteps, 7)
+    assert.equal(resolveBounds({ maxKeptTurns: 7 }).maxKeptTurns, 7)
+    assert.equal(resolveBounds({ maxEvents: 7 }).maxEvents, 7)
+    assert.equal(resolveBounds({ maxNodes: 7 }).maxNodes, 7)
+    assert.equal(resolveBounds({ maxArchiveNodes: 7 }).maxArchiveNodes, 7)
+    assert.equal(resolveBounds({ maxNodes: 7 }).maxEvents, DEFAULT_BOUNDS.maxEvents)
+  })
+
+  test('rejects bounds below 1, non-integers, and non-numbers', () => {
+    assert.throws(() => Config({ maxRequestSteps: 0 }))
+    assert.throws(() => Config({ maxNodes: -1 }))
+    assert.throws(() => Config({ maxEvents: 1.5 }))
+    assert.throws(() => Config({ maxKeptTurns: '300' } as unknown as Config))
+  })
+
+  test('unknown keys merge through (schemastery objects are not key-strict)', () => {
+    assert.equal(deref(Config({ unknown: 1 } as unknown as Config).maxEvents), DEFAULT_BOUNDS.maxEvents)
+  })
+})
+
+describe('preference fields (the Config-form generation surface)', () => {
+  test('every preference is volatile-marked; the bounds are not', () => {
+    const dict = Config.dict ?? {}
+    for (const pref of ['defaultPlacement', 'defaultGranularity', 'defaultTrendMode', 'defaultDeltaBase', 'defaultToolSort', 'defaultFileSort', 'insightsEntry', 'defaultDurationCurve', 'overviewAutoSteps', 'defaultOverviewRange', 'fleetTab', 'promptPrefix', 'promptSuffix']) {
+      assert.equal((dict[pref] as z['dict'] extends undefined ? never : { meta?: { volatile?: boolean } }).meta?.volatile, true, pref)
+    }
+    for (const bound of ['maxRequestSteps', 'maxKeptTurns', 'maxEvents', 'maxNodes', 'maxArchiveNodes', 'maxFileOps']) {
+      assert.notEqual((dict[bound] as { meta?: { volatile?: boolean } }).meta?.volatile, true, bound)
+    }
+  })
+
+  test('preferences resolve to defaults, stale values degrade, and stored values survive', () => {
+    const resolved = Config({ defaultGranularity: 'bogus', overviewAutoSteps: '50', defaultOverviewRange: 'bogus', promptPrefix: 7, promptSuffix: {} } as unknown as Config)
+    assert.equal(deref(resolved.defaultGranularity), 'step')
+    assert.equal(deref(resolved.overviewAutoSteps), '100')
+    assert.equal(deref(resolved.defaultOverviewRange), '30d')
+    assert.equal(deref(resolved.promptPrefix), '', 'a non-string prompt value degrades to the empty default')
+    assert.equal(deref(resolved.promptSuffix), '')
+    const stored = Config({ defaultPlacement: 'hide', defaultFileSort: 'count', insightsEntry: 'hide', overviewAutoSteps: 'off', defaultOverviewRange: '7d', fleetTab: 'hide', promptPrefix: 'Be terse.', promptSuffix: 'Sign as Atlas.' }) as unknown as Record<string, unknown>
+    assert.deepEqual(
+      ['defaultPlacement', 'defaultFileSort', 'insightsEntry', 'overviewAutoSteps', 'defaultOverviewRange', 'fleetTab', 'promptPrefix', 'promptSuffix'].map(key => deref(stored[key])),
+      ['hide', 'count', 'hide', 'off', '7d', 'hide', 'Be terse.', 'Sign as Atlas.'],
+    )
+  })
+})
+
+describe('volatileField', () => {
+  test('marks the field where schemastery ships the modifier; returns it unchanged on an older schemastery', () => {
+    assert.equal(volatileField(z.union(['a', 'b']).default('a')).meta?.volatile, true)
+    const plain = z.union(['a', 'b']).default('a')
+    const legacy = { meta: plain.meta } as typeof plain
+    assert.equal(volatileField(legacy), legacy)
+    assert.equal(legacy.meta?.volatile, undefined)
+  })
+})
 })

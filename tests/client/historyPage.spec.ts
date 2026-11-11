@@ -1,15 +1,17 @@
-import { act, createElement as h } from 'react'
+import { act, createElement as h, type ReactElement } from 'react'
 import assert from 'node:assert/strict'
-import { describe, test, vi } from 'vitest'
-import {
-  historyFace, makeContentFetcher, makeHeaderFetcher, pageNodesOf,
-  subscribeHistoryFace, watchHistoryFaces, useHistoryFace,
-} from '../../src/client/historyPage'
-import type { ReactElement } from 'react'
-import { sessionAddressOf } from '../../src/client/services'
-import type { SessionAddressLike } from '../../src/client/services'
+import { describe, test, vi, afterEach } from 'vitest'
+import { historyFace, makeContentFetcher, makeHeaderFetcher, pageNodesOf, subscribeHistoryFace, watchHistoryFaces, useHistoryFace } from '../../src/client/historyPage'
+import { sessionAddressOf, type SessionAddressLike } from '../../src/client/services'
 import { asClientCtx, TestClientCtx } from './helpers/harness'
-import { flush, mount } from './helpers/kit'
+import { flush, mount, makeKit } from './helpers/kit'
+import { INSIGHT_PANEL_ID, INSIGHT_PANEL_ORDER, watchInsightPage } from '../../src/client/insightPage'
+import { createContextSettings } from '../../src/client/settings'
+import { resetSessionWarm, scheduleSessionWarm, useSessionDetailWarm } from '../../src/client/prefetch'
+import { detailStoreOf, resetTimelineDetailStores } from '../../src/client/timelineSource'
+import { copySkillPath, readSkillCatalog, setSkillCopier, skillInfoListOf } from '../../src/client/skills'
+
+describe('historyPage', () => {
 
 function row(type: string, seq: number, data: unknown): unknown {
   return { event: { type, seq, time: seq, data } }
@@ -514,4 +516,374 @@ describe('the declared-face store — resolution, revocation, and the mount race
     assert.equal(m.container.textContent, 'no-face')
     await m.unmount()
   })
+})
+})
+
+describe('insightPage', () => {
+
+const NS = 'dsh-context'
+
+function page(_props: { sessionId?: string } & Record<string, unknown>): null {
+  return null
+}
+
+describe('watchInsightPage', () => {
+  test("the default 'show' mounts both registrations under one identity", () => {
+    const ctx = new TestClientCtx()
+    const settings = createContextSettings()
+    const { t } = makeKit()
+    const dispose = watchInsightPage(asClientCtx(ctx), settings, page, t, NS)
+
+    const main = ctx.slots.of('main')
+    assert.equal(main.length, 1, 'the page rides the keyed main seat')
+    assert.equal(main[0].registration.name, 'main')
+    assert.equal(main[0].registration.key, INSIGHT_PANEL_ID)
+    assert.equal(main[0].registration.locale, NS)
+    assert.equal(main[0].component, page, 'the page component registered verbatim')
+
+    const entries = ctx.slots.of('sidebar.panellist')
+    assert.equal(entries.length, 1, 'the entry rides the sidebar panel list')
+    assert.equal(entries[0].registration.name, 'sidebar.panellist')
+    assert.equal(entries[0].registration.id, INSIGHT_PANEL_ID, 'the entry id addresses the main panel')
+    assert.equal(entries[0].registration.order, INSIGHT_PANEL_ORDER)
+    assert.equal(entries[0].registration.locale, NS)
+    assert.equal(entries[0].registration.label?.(), 'Context Insights', 'the label thunk resolves the page title')
+    const iconEl = entries[0].component({ size: 16 }) as ReactElement
+    assert.equal((iconEl.type as { name: string }).name, 'InsightPanelIcon', 'the entry glyph component')
+    const defaults = entries[0].component({}) as ReactElement
+    assert.equal((defaults.type as { name: string }).name, 'InsightPanelIcon', 'the size seat defaults')
+    dispose()
+  })
+
+  test("'hide' unwinds both registrations and 'show' remounts them; a 'hide' start mounts nothing; the disposer unwinds once and is repeat-safe", () => {
+    const ctx = new TestClientCtx()
+    const settings = createContextSettings()
+    const { t } = makeKit()
+    const dispose = watchInsightPage(asClientCtx(ctx), settings, page, t, NS)
+    assert.equal(ctx.slots.of('main').length, 1)
+
+    settings.set('insightsEntry', 'hide')
+    assert.equal(ctx.slots.of('main').length, 0, 'hiding the entry unwinds the page')
+    assert.equal(ctx.slots.of('sidebar.panellist').length, 0, 'hiding unwinds the entry')
+
+    settings.set('insightsEntry', 'show')
+    assert.equal(ctx.slots.of('main').length, 1, 'showing remounts the pair')
+    assert.equal(ctx.slots.of('sidebar.panellist').length, 1)
+
+    settings.set('defaultGranularity', 'turn')
+    assert.equal(ctx.slots.of('main').length, 1)
+    assert.equal(ctx.slots.of('sidebar.panellist').length, 1)
+    dispose()
+
+    const hidden = new TestClientCtx()
+    const hiddenSettings = createContextSettings()
+    hiddenSettings.set('insightsEntry', 'hide')
+    const disposeHidden = watchInsightPage(asClientCtx(hidden), hiddenSettings, page, t, NS)
+    assert.equal(hidden.slots.of('main').length, 0)
+    assert.equal(hidden.slots.of('sidebar.panellist').length, 0)
+    disposeHidden()
+    hiddenSettings.set('insightsEntry', 'show')
+    assert.equal(hidden.slots.of('main').length, 0)
+
+    const live = new TestClientCtx()
+    const liveSettings = createContextSettings()
+    const disposeLive = watchInsightPage(asClientCtx(live), liveSettings, page, t, NS)
+    disposeLive()
+    assert.equal(live.slots.of('main').length, 0, 'the disposer unwinds the live mount')
+    assert.equal(live.slots.of('sidebar.panellist').length, 0)
+    assert.doesNotThrow(disposeLive, 'the disposer is safe to repeat')
+  })
+
+  test('a slots face returning no disposer is tolerated across flips and dispose', () => {
+    const bare = {
+      slots: {
+        inject: (_name: string, cb: () => unknown) => { cb(); return undefined },
+        register: () => undefined,
+      },
+    }
+    const settings = createContextSettings()
+    const { t } = makeKit()
+    const dispose = watchInsightPage(bare as never, settings, page, t, NS)
+    assert.doesNotThrow(() => { settings.set('insightsEntry', 'hide') })
+    assert.doesNotThrow(() => { settings.set('insightsEntry', 'show') })
+    assert.doesNotThrow(dispose)
+  })
+})
+})
+
+describe('prefetch', () => {
+
+function detail(rev: number): unknown {
+  return {
+    rev,
+    requests: [], events: [], nodes: [], droppedNodes: 0, archive: [],
+    head: {
+      ok: true,
+      current: { system: 1, tools: 2, user: 3, inject: 0, skill: 0, assistant: 4, tool: 5, total: 15 },
+      detailRev: rev,
+    },
+  }
+}
+
+function stubDetail(rev = 1): { reads: string[] } {
+  const reads: string[] = []
+  vi.stubGlobal('fetch', async (_url: unknown, init?: { body?: string }) => {
+    const id = JSON.parse(init?.body ?? '{}').sessionId as string
+    reads.push(id)
+    return { ok: true, status: 200, json: async () => ({ ok: true, value: detail(rev) }) }
+  })
+  return { reads }
+}
+
+afterEach(() => {
+  resetSessionWarm()
+  resetTimelineDetailStores()
+  vi.useRealTimers()
+  vi.unstubAllGlobals()
+})
+
+describe('scheduleSessionWarm', () => {
+  test('invalid ids and revisions arm nothing', async () => {
+    vi.useFakeTimers()
+    const { reads } = stubDetail()
+    scheduleSessionWarm('', 1)
+    scheduleSessionWarm(undefined, 1)
+    scheduleSessionWarm('s1', null)
+    scheduleSessionWarm('s1', -1)
+    scheduleSessionWarm('s1', Number.NaN)
+    await vi.advanceTimersByTimeAsync(1000)
+    assert.deepEqual(reads, [])
+  })
+
+  test('a newer revision updates the pending target without moving the deadline; a replay is covered', async () => {
+    vi.useFakeTimers()
+    const { reads } = stubDetail()
+    scheduleSessionWarm('s1', 1)
+    await vi.advanceTimersByTimeAsync(500)
+    scheduleSessionWarm('s1', 2)
+    await vi.advanceTimersByTimeAsync(401)
+    assert.deepEqual(reads, ['s1'], 'the original 900ms deadline fired with the newest revision')
+    scheduleSessionWarm('s1', 1)
+    await vi.advanceTimersByTimeAsync(1000)
+    assert.deepEqual(reads, ['s1'], 'the landed revision covers a replay')
+  })
+
+  test('the fired window warms the newest scheduled revision, not the first', async () => {
+    vi.useFakeTimers()
+    const { reads } = stubDetail(5)
+    detailStoreOf('s1').warm(5)
+    await vi.advanceTimersByTimeAsync(0)
+    assert.deepEqual(reads, ['s1'])
+    scheduleSessionWarm('s1', 1)
+    scheduleSessionWarm('s1', 6)
+    await vi.advanceTimersByTimeAsync(900)
+    assert.deepEqual(reads, ['s1', 's1'], 'the upgraded revision warmed the channel')
+  })
+
+  test('the pending map stays bounded under a burst of sessions', async () => {
+    vi.useFakeTimers()
+    const { reads } = stubDetail()
+    for (let i = 0; i < 33; i++) scheduleSessionWarm('s' + i, 1)
+    await vi.advanceTimersByTimeAsync(900)
+    assert.equal(reads.length, 32, 'the oldest pending warm-up was evicted')
+    assert.equal(reads.includes('s0'), false)
+    assert.equal(reads.includes('s32'), true)
+  })
+})
+
+describe('useSessionDetailWarm', () => {
+  test('the rendered session and its split head arm the warm-up; a head without a revision does not', async () => {
+    vi.useFakeTimers()
+    const { reads } = stubDetail()
+    function Probe(props: { useProjection?: unknown }): null {
+      useSessionDetailWarm('s1', props.useProjection)
+      return null
+    }
+    const m = await mount(h(Probe, { useProjection: () => ({ detailRev: 4 }) }))
+    await act(async () => { await vi.advanceTimersByTimeAsync(900) })
+    assert.deepEqual(reads, ['s1'])
+    await m.update(h(Probe, { useProjection: () => ({}) }))
+    await act(async () => { await vi.advanceTimersByTimeAsync(900) })
+    assert.deepEqual(reads, ['s1'], 'an inline head arms nothing')
+    await m.unmount()
+  })
+})
+
+describe('useSessionDetailWarm — teardown', () => {
+  test('a mount without a projection seat arms nothing', async () => {
+    vi.useFakeTimers()
+    const { reads } = stubDetail()
+    function Probe(): null {
+      useSessionDetailWarm('s1', undefined)
+      return null
+    }
+    const m = await mount(h(Probe))
+    await act(async () => { await vi.advanceTimersByTimeAsync(1000) })
+    assert.deepEqual(reads, [])
+    await m.unmount()
+  })
+
+  test('a missing session id arms nothing and unmounts cleanly', async () => {
+    vi.useFakeTimers()
+    const { reads } = stubDetail()
+    function Probe(): null {
+      useSessionDetailWarm(undefined, () => ({ detailRev: 2 }))
+      return null
+    }
+    const m = await mount(h(Probe))
+    await act(async () => { await vi.advanceTimersByTimeAsync(1000) })
+    assert.deepEqual(reads, [])
+    await m.unmount()
+  })
+
+  test('unmounting before the window cancels the pending warm-up', async () => {
+    vi.useFakeTimers()
+    const { reads } = stubDetail()
+    function Probe(): null {
+      useSessionDetailWarm('s1', () => ({ detailRev: 2 }))
+      return null
+    }
+    const m = await mount(h(Probe))
+    await act(async () => { await vi.advanceTimersByTimeAsync(500) })
+    await m.unmount()
+    await act(async () => { await vi.advanceTimersByTimeAsync(1000) })
+    assert.deepEqual(reads, [])
+  })
+})
+
+describe('scheduleSessionWarm — dedupe and reset', () => {
+  test('a pending session ignores a lower or equal revision, and reset clears an armed timer', async () => {
+    resetSessionWarm()
+    resetTimelineDetailStores()
+    vi.useFakeTimers()
+    const { reads } = stubDetail()
+    scheduleSessionWarm('dedupe', 2)
+    scheduleSessionWarm('dedupe', 1)
+    scheduleSessionWarm('dedupe', 2)
+    await vi.advanceTimersByTimeAsync(901)
+    assert.deepEqual(reads, ['dedupe'])
+    scheduleSessionWarm('dedupe-2', 1)
+    resetSessionWarm()
+    await vi.advanceTimersByTimeAsync(1000)
+    assert.deepEqual(reads, ['dedupe'], 'reset cleared the armed timer')
+  })
+})
+})
+
+describe('skills', () => {
+
+afterEach(() => {
+  setSkillCopier(null)
+  vi.unstubAllGlobals()
+})
+
+describe('skillInfoListOf', () => {
+  test('absent or malformed payloads read null', () => {
+    assert.equal(skillInfoListOf(null), null)
+    assert.equal(skillInfoListOf('x'), null)
+    assert.equal(skillInfoListOf([]), null)
+    assert.equal(skillInfoListOf({}), null)
+    assert.equal(skillInfoListOf({ skills: 'nope' }), null)
+  })
+
+  test('entries failing the name proof drop individually; the proved fields ride alone', () => {
+    assert.deepEqual(skillInfoListOf({
+      skills: [
+        null,
+        'row',
+        [],
+        { description: 'no name' },
+        { name: '' },
+        { name: 42 },
+        { name: 'bare' },
+        { name: 'full', description: 'd', path: '/p/SKILL.md', source: 'bundled' },
+        { name: 'odd', description: 7, path: '', source: '' },
+      ],
+    }), [
+      { name: 'bare', description: '' },
+      { name: 'full', description: 'd', path: '/p/SKILL.md', source: 'bundled' },
+      { name: 'odd', description: '' },
+    ])
+  })
+})
+
+describe('readSkillCatalog', () => {
+  function stubFetch(mode: 'ok' | 'reject' | 'status' | 'badjson', body?: unknown): { urls: string[]; bodies: unknown[] } {
+    const urls: string[] = []
+    const bodies: unknown[] = []
+    vi.stubGlobal('fetch', async (url: string | URL, init?: RequestInit) => {
+      urls.push(String(url))
+      bodies.push(init?.body === undefined ? undefined : JSON.parse(String(init.body)))
+      if (mode === 'reject') throw new Error('down')
+      if (mode === 'status') return { ok: false, json: async () => ({}) } as unknown as Response
+      if (mode === 'badjson') return { ok: true, json: () => Promise.reject(new Error('not json')) } as unknown as Response
+      return { ok: true, json: async () => body } as unknown as Response
+    })
+    return { urls, bodies }
+  }
+
+  test('a served catalog narrows into the name-keyed map; the cwd and session id ride the body', async () => {
+    const { urls, bodies } = stubFetch('ok', {
+      ok: true,
+      value: {
+        skills: [
+          { name: 'tdd', description: 'Test-driven', path: '/p/tdd/SKILL.md', source: 'user-agents' },
+          { name: 'ask-matt', description: 'A router' },
+        ],
+      },
+    })
+    const catalog = await readSkillCatalog('/repo/alpha', 's1')
+    assert.deepEqual(urls, ['api/dsh-context/skills'])
+    assert.deepEqual(bodies, [{ cwd: '/repo/alpha', sessionId: 's1' }])
+    assert.equal(catalog?.size, 2)
+    assert.deepEqual(catalog?.get('tdd'), { name: 'tdd', description: 'Test-driven', path: '/p/tdd/SKILL.md', source: 'user-agents' })
+  })
+
+  test('a context-less open posts an empty body', async () => {
+    const { bodies } = stubFetch('ok', { ok: true, value: { skills: [{ name: 'tdd' }] } })
+    await readSkillCatalog(undefined, undefined)
+    assert.deepEqual(bodies, [{}])
+  })
+
+  test('every failure or empty answer reads null, never a rejection', async () => {
+    stubFetch('reject')
+    assert.equal(await readSkillCatalog(undefined, undefined), null)
+    stubFetch('status')
+    assert.equal(await readSkillCatalog(undefined, undefined), null)
+    stubFetch('badjson')
+    assert.equal(await readSkillCatalog(undefined, undefined), null)
+    stubFetch('ok', {})
+    assert.equal(await readSkillCatalog(undefined, undefined), null, 'no ok flag')
+    stubFetch('ok', { ok: false, value: { skills: [{ name: 'tdd' }] } })
+    assert.equal(await readSkillCatalog(undefined, undefined), null)
+    stubFetch('ok', { ok: true, value: null })
+    assert.equal(await readSkillCatalog(undefined, undefined), null)
+    stubFetch('ok', { ok: true, value: { skills: [] } })
+    assert.equal(await readSkillCatalog(undefined, undefined), null, 'an empty catalog is no enrichment')
+    stubFetch('ok', { ok: true, value: { skills: 'x' } })
+    assert.equal(await readSkillCatalog(undefined, undefined), null)
+  })
+})
+
+describe('copySkillPath', () => {
+  test('the seam’s write resolves true; a throwing write resolves false', async () => {
+    const seen: string[] = []
+    setSkillCopier(async (text) => { seen.push(text) })
+    assert.equal(await copySkillPath('/p/tdd/SKILL.md'), true)
+    assert.deepEqual(seen, ['/p/tdd/SKILL.md'])
+    setSkillCopier(async () => { throw new Error('denied') })
+    assert.equal(await copySkillPath('/p/tdd/SKILL.md'), false)
+  })
+
+  test('the default write rides the platform clipboard; an absent API fails the copy', async () => {
+    const written: string[] = []
+    vi.stubGlobal('navigator', { clipboard: { writeText: async (text: string) => { written.push(text) } } })
+    assert.equal(await copySkillPath('/p/a/SKILL.md'), true)
+    assert.deepEqual(written, ['/p/a/SKILL.md'])
+    vi.stubGlobal('navigator', {})
+    assert.equal(await copySkillPath('/p/a/SKILL.md'), false)
+    vi.stubGlobal('navigator', undefined)
+    assert.equal(await copySkillPath('/p/a/SKILL.md'), false)
+  })
+})
 })

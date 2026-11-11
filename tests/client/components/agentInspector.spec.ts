@@ -1,13 +1,19 @@
 import { createElement as h } from 'react'
 import assert from 'node:assert/strict'
-import { describe, test } from 'vitest'
+import { describe, test, afterEach, vi } from 'vitest'
 import { AgentInspector, type AgentInspectorProps } from '../../../src/client/components/agentInspector'
-import type { AgentNode } from '../../../src/client/agentTree'
-import type { FleetTeam } from '../../../src/client/fleetTeam'
-import type { CommsRow } from '../../../src/client/fleetDetail'
-import type { FleetDetail } from '../../../src/shared/types'
+import { type AgentNode } from '../../../src/client/agentTree'
+import { type FleetTeam } from '../../../src/client/fleetTeam'
+import { type CommsRow } from '../../../src/client/fleetDetail'
+import { type FleetDetail } from '../../../src/shared/types'
 import { DICT_EN } from '../../../src/client/i18n'
-import { click, makeKit, mount, query, queryAll, text } from '../helpers/kit'
+import { click, makeKit, mount, query, queryAll, text, keydown, flush } from '../helpers/kit'
+import { makeUpgradeGate } from '../../../src/client/components/upgradeGate'
+import { disposeRetention } from '../../../src/client/retention'
+import { type makePluginInfo as makePluginInfoFn } from '../../../src/client/components/pluginInfo'
+import { TestClientCtx, asClientCtx } from '../helpers/harness'
+
+describe('agentInspector', () => {
 
 const kit = makeKit()
 
@@ -285,4 +291,179 @@ describe('AgentInspector — comms', () => {
     assert.equal(queryAll(m.container, '.lc-inspector-comm').length, 6)
     await m.unmount()
   })
+})
+})
+
+describe('upgradeGate', () => {
+
+const kit = makeKit()
+const Gate = makeUpgradeGate(kit)
+
+function render(sessionId: string | undefined, extra: { current?: string; minimum?: string } = {}) {
+  return mount(h(Gate, { sessionId, current: extra.current ?? '0.1.1-rc.2', minimum: extra.minimum ?? '0.2.0-rc.2' }))
+}
+
+describe('UpgradeGate', () => {
+  test('renders both versions and the upgrade prompt', async () => {
+    const en = await render('s-en')
+    try {
+      assert.match(text(en.container), /Update DeepSeek Harness/)
+      assert.match(text(en.container), /dsh-context supports DeepSeek Harness v0\.2\.0-rc\.2 or newer\./)
+      assert.match(text(en.container), /v0\.1\.1-rc\.2/)
+      assert.match(text(en.container), /Current/)
+      assert.match(text(en.container), /Minimum required/)
+    } finally {
+      await en.unmount()
+    }
+    const zh = await mount(h(makeUpgradeGate(makeKit('zh')), { sessionId: 's-zh', current: '0.1.1-rc.2', minimum: '0.2.0-rc.2' }))
+    assert.ok(text(zh.container).includes('请更新 DeepSeek Harness 版本'))
+    await zh.unmount()
+  })
+
+  test('OK dismisses and the dismissal survives a remount; ×, a backdrop click, and Escape dismiss; a card click and other keys do not', async () => {
+    const first = await render('s-ok')
+    await click(query(first.container, '.lc-gate-ok'))
+    assert.equal(first.container.querySelector('.lc-modal-backdrop'), null)
+    await first.unmount()
+    const second = await render('s-ok')
+    assert.equal(second.container.querySelector('.lc-modal-backdrop'), null, 'the ledger keeps it closed')
+    await second.unmount()
+
+    const x = await render('s-x')
+    await click(query(x.container, '.lc-modal-close'))
+    assert.equal(x.container.querySelector('.lc-modal-backdrop'), null)
+    await x.unmount()
+
+    const backdrop = await render('s-backdrop')
+    await click(query(backdrop.container, '.lc-gate-card'))
+    assert.ok(backdrop.container.querySelector('.lc-modal-backdrop') !== null, 'card clicks stay inside')
+    await click(query(backdrop.container, '.lc-modal-backdrop'))
+    assert.equal(backdrop.container.querySelector('.lc-modal-backdrop'), null)
+    await backdrop.unmount()
+
+    const esc = await render('s-esc')
+    await keydown('Enter')
+    assert.ok(esc.container.querySelector('.lc-modal-backdrop') !== null)
+    await keydown('Escape')
+    assert.equal(esc.container.querySelector('.lc-modal-backdrop'), null)
+    await keydown('Escape')
+    assert.equal(esc.container.querySelector('.lc-modal-backdrop'), null)
+    await esc.unmount()
+  })
+
+  test('an in-place session switch re-evaluates the ledger', async () => {
+    const m = await render('s-switch-a')
+    await click(query(m.container, '.lc-gate-ok'))
+    assert.equal(m.container.querySelector('.lc-modal-backdrop'), null)
+    await m.update(h(Gate, { sessionId: 's-switch-b', current: '0.1.0', minimum: '0.2.0-rc.2' }))
+    assert.ok(m.container.querySelector('.lc-modal-backdrop') !== null)
+    await m.update(h(Gate, { sessionId: 's-switch-a', current: '0.1.0', minimum: '0.2.0-rc.2' }))
+    assert.equal(m.container.querySelector('.lc-modal-backdrop'), null)
+    await m.unmount()
+  })
+
+  test('a missing sessionId still renders and dismisses', async () => {
+    const m = await render(undefined)
+    assert.ok(m.container.querySelector('.lc-modal-backdrop') !== null)
+    await click(query(m.container, '.lc-gate-ok'))
+    assert.equal(m.container.querySelector('.lc-modal-backdrop'), null)
+    await m.unmount()
+  })
+})
+
+describe('UpgradeGate retention', () => {
+  test('the dismissed ledger is bounded and dispose forgets dismissals', async () => {
+    const gate = makeUpgradeGate(makeKit())
+    for (let i = 0; i < 65; i++) {
+      const m = await mount(h(gate, { sessionId: 'gate-cap-' + i, current: '0.1.0', minimum: '0.2.0-rc.2' }))
+      await click(query(m.container, '.lc-gate-ok'))
+      await m.unmount()
+    }
+    const evicted = await mount(h(gate, { sessionId: 'gate-cap-0', current: '0.1.0', minimum: '0.2.0-rc.2' }))
+    assert.ok(evicted.container.querySelector('.lc-modal-backdrop') !== null, 'the oldest dismissal fell out of the ledger')
+    await evicted.unmount()
+
+    const kept = await mount(h(gate, { sessionId: 'gate-cap-64', current: '0.1.0', minimum: '0.2.0-rc.2' }))
+    assert.equal(kept.container.querySelector('.lc-modal-backdrop'), null, 'the newest dismissal survives')
+    await kept.unmount()
+
+    disposeRetention()
+    const forgotten = await mount(h(gate, { sessionId: 'gate-cap-64', current: '0.1.0', minimum: '0.2.0-rc.2' }))
+    assert.ok(forgotten.container.querySelector('.lc-modal-backdrop') !== null, 'dispose forgets dismissals')
+    await forgotten.unmount()
+  })
+})
+})
+
+describe('pluginInfo', () => {
+
+const kit = makeKit()
+
+function stubVersion(latest: string): ReturnType<typeof vi.fn> {
+  const fetchMock = vi.fn(() => Promise.resolve({
+    ok: true,
+    json: async () => ({ ok: true, value: { ready: true, failed: false, checkedAt: 1, current: '1.0.0', latest } }),
+  }))
+  vi.stubGlobal('fetch', fetchMock)
+  return fetchMock
+}
+
+async function loadPluginInfo(version?: string, ctx = new TestClientCtx()): Promise<ReturnType<typeof makePluginInfoFn>> {
+  vi.resetModules()
+  const globals = globalThis as Record<string, unknown>
+  if (version === undefined) delete globals.__DSH_CTX_VERSION__
+  else globals.__DSH_CTX_VERSION__ = version
+  const { resetVersionSource } = await import('../../../src/client/versionSource')
+  resetVersionSource()
+  const mod = await import('../../../src/client/components/pluginInfo')
+  return mod.makePluginInfo(kit, asClientCtx(ctx))
+}
+
+afterEach(() => {
+  vi.unstubAllGlobals()
+  delete (globalThis as Record<string, unknown>).__DSH_CTX_VERSION__
+})
+
+describe('PluginInfo', () => {
+  test('dev build renders the static rows and never checks the version route', async () => {
+    const fetchMock = stubVersion('9.9.9')
+    const opened: string[] = []
+    const ctx = new TestClientCtx({ services: { pluginNavigation: { openBundle: (name: string) => { opened.push(name) } } } })
+    const PluginInfo = await loadPluginInfo(undefined, ctx)
+    const m = await mount(h(PluginInfo, {}))
+    await flush()
+    assert.equal(fetchMock.mock.calls.length, 0)
+    const rows = queryAll(m.container, '.lc-pi-row')
+    assert.equal(rows.length, 3)
+    assert.deepEqual(rows.map(r => query(r, '.lc-pi-label').textContent), ['Plugin', 'GitHub', 'Plugin Settings'])
+    for (const row of rows) assert.equal(queryAll(row, '.lc-pi-label .lc-pi-labelicon').length, 1)
+    assert.equal(query(rows[0], '.lc-pi-value').textContent, 'dsh-context (v0.0.0-dev)')
+    assert.equal(rows[0].getAttribute('href'), 'https://github.com/bowenliang123/dsh-context')
+    assert.equal(rows[0].getAttribute('target'), '_blank')
+    assert.equal(rows[0].getAttribute('rel'), 'noreferrer')
+    assert.equal(query(rows[1], '.lc-pi-value').textContent, 'bowenliang123/dsh-context')
+    assert.equal(rows[2].getAttribute('href'), null)
+    const hint = query(m.container, '.lc-pi-hint')
+    assert.equal(hint.getAttribute('href'), 'https://github.com/bowenliang123/dsh-context')
+    assert.equal(hint.getAttribute('target'), '_blank')
+    assert.equal(hint.getAttribute('rel'), 'noreferrer')
+    assert.equal(queryAll(m.container, '.lc-pi-update').length, 0)
+    rows[2].click()
+    assert.deepEqual(opened, ['dsh-context'], 'the settings row jumps through the Plugins panel navigator')
+    await m.unmount()
+  })
+
+  test('release build with a newer version appends the update chip', async () => {
+    const fetchMock = stubVersion('1.1.0')
+    const PluginInfo = await loadPluginInfo('1.0.0')
+    const m = await mount(h(PluginInfo, {}))
+    await flush()
+    assert.equal(fetchMock.mock.calls.length, 1)
+    assert.equal(String(fetchMock.mock.calls[0]?.[0]), 'api/dsh-context/version')
+    assert.deepEqual(JSON.parse(String((fetchMock.mock.calls[0]?.[1] as { body: string }).body)), {})
+    assert.ok(text(m.container).includes('dsh-context (v1.0.0)'))
+    assert.equal(query(m.container, '.lc-pi-update').textContent, '↑ v1.1.0')
+    await m.unmount()
+  })
+})
 })

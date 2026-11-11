@@ -1,10 +1,14 @@
+// @vitest-environment node
+
 import assert from 'node:assert/strict'
 import { describe, test } from 'vitest'
-import { absPathOf, activityOf, activityOfOps, displayPathOf, formOf, glyphOf, locateStepOf, previewAddressOf } from '../../src/client/fileActivity'
+import { absPathOf, activityOf, activityOfOps, displayPathOf, formOf, glyphOf, locateStepOf, previewAddressOf, type FileActivity, type FileOp } from '../../src/client/fileActivity'
 import { kindOfCall, kindOfTool, linesOf, pathOfArgs } from '../../src/shared/fileOps'
-import type { FileActivity, FileOp } from '../../src/client/fileActivity'
-import type { ConversationNodeLike } from '../../src/client/services'
-import type { RequestRecord, SurfaceNode } from '../../src/shared/types'
+import { type ConversationNodeLike } from '../../src/client/services'
+import { type RequestRecord, type SurfaceNode } from '../../src/shared/types'
+import { tallyEntriesOf } from '../../src/client/tallySort'
+
+describe('fileActivity', () => {
 
 const T0 = 1700000000000
 
@@ -817,4 +821,20 @@ describe('activityOfOps — the fold-derived op log', () => {
     assert.equal(byPath.get('b.ts')?.ops[0].gone, 50, 'the op\'s own stamp wins')
     assert.equal(byPath.get('c.ts')?.ops[0].gone, 77, 'a nested op reads its parent\'s stamp')
   })
+})
+})
+
+describe('tallySort', () => {
+
+describe('tallyEntriesOf', () => {
+  test('an absent tally is empty', () => {
+    assert.deepEqual(tallyEntriesOf(undefined), [])
+  })
+
+  test('sorts by count then name, covering both name-order arms', () => {
+    assert.deepEqual(tallyEntriesOf({ low: 1, high: 3 }), [['high', 3], ['low', 1]])
+    assert.deepEqual(tallyEntriesOf({ zeta: 1, alpha: 1 }), [['alpha', 1], ['zeta', 1]])
+    assert.deepEqual(tallyEntriesOf({ alpha: 1, zeta: 1 }), [['alpha', 1], ['zeta', 1]])
+  })
+})
 })

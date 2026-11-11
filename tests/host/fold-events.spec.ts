@@ -2,23 +2,13 @@ import assert from 'node:assert/strict'
 import { describe, test } from 'vitest'
 import { Context } from '@deepseek-ai/cordis'
 import SessionStore, { foldSurface } from '@deepseek-ai/dsh-session'
-import type { TimelineEvent } from '../../src/host/fold'
-import {
-  assistantAttempt,
-  assistantMessage,
-  at,
-  compaction,
-  endSeed,
-  foreign,
-  header,
-  planMode,
-  requestContext,
-  toolCall,
-  toolResult,
-  userMessage,
-} from './helpers/events'
+import { type TimelineEvent, buildTimelineDetail, buildTimelineHead, skillNameOf } from '../../src/host/fold'
+import { assistantAttempt, assistantMessage, at, compaction, endSeed, foreign, header, planMode, requestContext, toolCall, toolResult, userMessage, canonicalLog, stepStart } from './helpers/events'
 import { estimateToolsTotal } from '../../src/host/pricing'
-import { assertPlainJson, assertStable, driveTimeline, fullDef, requestsOf, timelineDef } from './helpers/projection'
+import { assertPlainJson, assertStable, driveTimeline, fullDef, requestsOf, timelineDef, assertStatesPlainJson } from './helpers/projection'
+import { resolveBounds } from '../../src/host/config'
+
+describe('fold-events', () => {
 
 const text = (t: string) => [{ type: 'text', text: t }]
 
@@ -643,4 +633,255 @@ describe('surface order parity with the harness fold', () => {
       assert.deepStrictEqual(state.surface.map(node => node.seq), canonical, `surface order drift at prefix ${cut}`)
     }
   })
+})
+})
+
+describe('fold-split', () => {
+
+describe('the detailRev ledger', () => {
+  test('bumps exactly on detail-mutating folds — never on working-slot or envelope folds — and on a real model switch', () => {
+    const { def, state } = driveTimeline(canonicalLog())
+    assert.equal(state.detailRev, 7)
+    const workingSlot: TimelineEvent[] = [
+      requestContext(13, { contextWindow: 256000 }),
+      header(14, { model: 'deepseek-v4-flash', provider: 'deepseek', reason: 'change' }),
+      stepStart(15),
+      toolCall(16, { callId: 'c2', name: 'bash' }),
+    ]
+    let st = state
+    for (const ev of workingSlot) st = def.apply(st, ev)
+    assert.equal(st.detailRev, 7, 'no detail mutation, no bump')
+    assert.notEqual(st, state)
+    const switched = def.apply(state, header(13, { model: 'deepseek-v4-pro', provider: 'deepseek', reason: 'change' }))
+    assert.equal(switched.detailRev, 8, 'the events collection gained a model row')
+  })
+})
+
+describe('buildTimelineHead', () => {
+  test('serves the counters, the headline anchor, and the revision; a fresh state zeroes them', () => {
+    const fresh = buildTimelineHead(timelineDef().init())
+    assert.deepEqual(fresh.counts, { turns: 0, steps: 0, injects: 0, compactions: 0, prunes: 0, skills: 0 })
+    assert.equal(fresh.humanInputs, 0, 'the tally defaults to zero on the wire')
+    assert.equal(fresh.answers, 0, 'the answers tally defaults to zero on the wire too')
+    assert.ok(!('lastUser' in fresh), 'no own key on the wire — no user message yet')
+    assert.equal(fresh.last, undefined, 'no request yet — the anchor stays absent')
+    assert.equal(fresh.detailRev, 0)
+    assert.equal(fresh.current.total, 0)
+    const { state } = driveTimeline(canonicalLog())
+    const head = buildTimelineHead(state)
+    assert.equal(head.ok, true)
+    assert.deepEqual(
+      [head.model, head.provider, head.reasoningEffort, head.contextWindow],
+      ['deepseek-v4-flash', 'deepseek', 'max', 128000],
+    )
+    assert.ok(head.current.total > 0)
+    assert.deepEqual(head.counts, { turns: 1, steps: 2, injects: 0, compactions: 1, prunes: 0, skills: 0 })
+    assert.equal(head.humanInputs, 1)
+    assert.equal(head.answers, 2)
+    assert.equal(head.lastUser, 'hello there')
+    const lastReq = state.requests.at(-1)!
+    assert.deepEqual(head.last, { seq: lastReq.seq, total: lastReq.total, prompt: 20 })
+    assert.equal(head.detailRev, 7)
+    assert.deepEqual(head.requests, [])
+    assert.deepEqual(head.events, [])
+    assert.deepEqual(head.nodes, [])
+    assert.equal(head.droppedNodes, 0)
+    assert.deepEqual(head.archive, [])
+    assertPlainJson(head)
+  })
+
+  test('the counters tally injects/prunes, a turn-less record folds as turn 0, and a usage-less anchor omits prompt', () => {
+    const tallied = driveTimeline([
+      userMessage(1, [{ type: 'text', text: 'ctx' }], { kind: 'plugin', form: 'context', plugin: 'dsh-test' }),
+      compaction(2, 'prune', { shadowedTokenCount: 3 }),
+      assistantMessage(3, {}),
+    ]).state
+    assert.deepEqual(buildTimelineHead(tallied).counts, { turns: 1, steps: 1, injects: 1, compactions: 0, prunes: 1, skills: 0 })
+    const anchorless = driveTimeline([
+      userMessage(1, [{ type: 'text', text: 'hi' }], { kind: 'user' }),
+      assistantMessage(2, { turn: 1, step: 1 }),
+    ])
+    const head = buildTimelineHead(anchorless.state)
+    assert.deepEqual(head.last, { seq: 2, total: anchorless.state.requests[0].total })
+    assert.ok(head.last !== undefined && !('prompt' in head.last), 'no undefined-valued prompt key')
+  })
+
+  test('the skills counter tallies DISTINCT loaded-skill names — the catalog digest never counts', () => {
+    const { state } = driveTimeline([
+      userMessage(1, [{ type: 'text', text: 'run' }], { kind: 'skill-invocation', form: 'skill', name: 'grilling' }),
+      toolCall(2, { callId: 'c1', name: 'skill' }),
+      toolResult(3, { callId: 'c1', content: [{ type: 'text', text: '<skill_content name="grilling">instructions</skill_content>' }] }),
+      userMessage(4, [{ type: 'text', text: 'catalog' }], { kind: 'skill-catalog', form: 'catalog' }),
+      userMessage(5, [{ type: 'text', text: 'again' }], { kind: 'skill-invocation', form: 'skill', name: 'ponytail' }),
+      userMessage(6, [{ type: 'text', text: 'once more' }], { kind: 'skill-invocation', form: 'skill', name: 'grilling' }),
+    ])
+    const head = buildTimelineHead(state)
+    assert.deepEqual(head.counts, { turns: 0, steps: 0, injects: 5, compactions: 0, prunes: 0, skills: 2 })
+    assertPlainJson(head)
+  })
+
+  test('skillNameOf narrows hostile messages to no name (the activity fold’s reuse)', () => {
+    assert.equal(skillNameOf(null), '')
+    assert.equal(skillNameOf('text'), '')
+    assert.equal(skillNameOf(42), '')
+    assert.equal(skillNameOf({}), '')
+    assert.equal(skillNameOf({ content: [{ type: 'text', text: '<skill_content name="tdd">…' }] }), 'tdd')
+  })
+})
+
+describe('buildTimelineDetail', () => {
+  test('serves the revision and head, with collections detached from the fold state', () => {
+    const { state, view } = driveTimeline(canonicalLog())
+    const detail = buildTimelineDetail(state, resolveBounds({}))
+    assert.equal(detail.rev, 7)
+    assert.ok(detail.head !== undefined)
+    assert.deepEqual(detail.head.current, view.current)
+    assertPlainJson(detail)
+    assert.notEqual(detail.requests[0], state.requests[0])
+    assert.notEqual(detail.archive, state.archived)
+  })
+})
+
+describe('the split wire generation (definition slim flag)', () => {
+  test('each generation validates on the one schema, and the inline value is exactly the head plus the detail', () => {
+    const { state } = driveTimeline(canonicalLog())
+    const slim = timelineDef({}, true)
+    const slimView = slim.wire.view(state)
+    assert.equal(slim.wire.viewSchema.safeParse(slimView).success, true, 'the slim head validates')
+    assert.equal(typeof slimView.detailRev, 'number', 'the split marker is present')
+    assert.ok(slimView.counts !== undefined)
+    assert.deepEqual(slimView.nodes, [], 'collections stay off the wire value')
+    const inline = timelineDef({}, false)
+    const inlineView = inline.wire.view(state)
+    assert.equal(inline.wire.viewSchema.safeParse(inlineView).success, true, 'the inline value validates on the same schema')
+    assert.equal(inlineView.detailRev, undefined)
+    assert.ok(inlineView.nodes.length > 0)
+    assert.ok(inlineView.requests.length > 0)
+    const head = buildTimelineHead(state)
+    const detail = buildTimelineDetail(state, resolveBounds({}))
+    assert.deepEqual(inlineView.counts, head.counts, 'the inline value carries the full-session counters')
+    const { last: _last, detailRev: _rev, ...headScalars } = head
+    const { rev: _detailRev, head: _detailHead, ...collections } = detail
+    assert.deepEqual(inlineView, { ...headScalars, ...collections })
+  })
+})
+})
+
+describe('fold-developer', () => {
+
+const changes = [
+  { type: 'tool-addition', toolName: 'read_file' },
+  { type: 'tool-removal', toolName: 'shell' },
+]
+
+function developerMessage(seq: number, options: {
+  content?: unknown
+  source?: unknown
+  surfaceOp?: unknown
+} = {}): TimelineEvent {
+  return {
+    type: 'developer/message', seq, time: at(), surfaceOp: options.surfaceOp ?? 'append',
+    data: {
+      turn: 1, step: 1, headerSeq: 0,
+      message: {
+        role: 'developer',
+        source: options.source ?? { kind: 'tool-registry' },
+        content: options.content ?? changes,
+      },
+    },
+  }
+}
+
+describe('developer/message', () => {
+  test('tool-registry changes enter the surface, request composition and served detail', () => {
+    const result = driveTimeline([
+      userMessage(1, [{ type: 'text', text: 'hello' }]),
+      developerMessage(2),
+      assistantMessage(3, { turn: 1, step: 1 }),
+    ])
+    const node = result.state.surface.find(n => n.seq === 2)
+    assert.ok(node, 'the model-visible registry change must not disappear')
+    assert.equal(node.cat, 'inject')
+    assert.equal(node.tokens, 35)
+    assert.equal(node.name, 'tool-registry')
+    assert.equal(result.state.humanInputs, 1)
+    assert.equal(requestsOf(result.state)[0].inject, 35)
+    assert.equal(result.state.sums.inject, 35)
+    assert.equal(result.view.nodes.some(n => n.seq === 2 && n.tokens === 35), true)
+    assert.equal(result.state.events.find(e => e.seq === 2)?.kind, 'inject')
+    assertStatesPlainJson(result)
+    result.def.stateSchema.parse(result.state)
+    result.def.wire.viewSchema.parse(result.view)
+  })
+
+  test('compaction removes and archives registry nodes with the rest of the claimed surface', () => {
+    const result = driveTimeline([
+      userMessage(1, [{ type: 'text', text: 'hello' }]),
+      developerMessage(2),
+      assistantMessage(3, { turn: 1, step: 1 }),
+      compaction(4, 'summary', { shadowedSeqs: [1, 2, 3], shadowedTokenCount: 55 }),
+      userMessage(5, [{ type: 'text', text: 'summary' }], { kind: 'plugin', form: 'summary' }, {
+        surfaceOp: { op: 'replace', startSeq: 1, endSeq: 3 },
+      }),
+      assistantMessage(6, { turn: 2, step: 1 }),
+    ])
+    assert.equal(result.state.surface.some(n => n.seq === 2), false)
+    const archived = result.state.archived.find(n => n.seq === 2)
+    assert.equal(archived?.tokens, 35)
+    assert.equal(archived?.gone, 5)
+    assert.equal(requestsOf(result.state)[0].inject, 35)
+    assert.equal(requestsOf(result.state)[1].inject, 10)
+    assertStatesPlainJson(result)
+  })
+
+  test('a developer replacement archives the replaced injection and bumps the detail revision', () => {
+    const result = driveTimeline([
+      developerMessage(1),
+      developerMessage(2, {
+        content: [{ type: 'tool-removal', toolName: 'read_file' }],
+        surfaceOp: { op: 'replace', startSeq: 1, endSeq: 1 },
+      }),
+    ])
+    assert.deepEqual(result.state.surface.map(n => n.seq), [2])
+    assert.equal(result.state.archived[0].seq, 1)
+    assert.equal(result.state.archived[0].gone, 2)
+    assert.equal(result.state.sums.inject, result.state.surface[0].tokens)
+    assert.equal(result.state.detailRev, 2)
+    assert.equal(result.state.humanInputs, undefined)
+    assertStatesPlainJson(result)
+  })
+
+  test('empty content keeps its surface position without adding model tokens', () => {
+    const result = driveTimeline([developerMessage(1, { content: [] })])
+    assert.equal(result.state.surface[0].seq, 1)
+    assert.equal(result.state.surface[0].tokens, 0)
+    assert.equal(result.state.sums.inject, 0)
+    assert.equal(result.state.events[0].tokens, 0)
+  })
+
+  test('no developer source, whatever its shape, ever counts as a human input', () => {
+    for (const source of [undefined, null, {}, { kind: 'user' }]) {
+      const event = developerMessage(1)
+      const message = event.data!.message as Record<string, unknown>
+      if (source === undefined) delete message.source
+      else message.source = source
+      const result = driveTimeline([event])
+      assert.equal(result.state.surface[0].cat, 'inject', JSON.stringify(source))
+      assert.equal(result.state.sums.inject, 35)
+      assert.equal(result.state.humanInputs, undefined)
+      assert.equal(result.state.events[0].kind, 'inject')
+      assertStatesPlainJson(result)
+    }
+  })
+
+  test('a malformed nested message leaves the state unchanged', () => {
+    for (const data of [undefined, {}, { message: null }, { message: { content: 'invalid' } }]) {
+      const def = timelineDef()
+      const initial = def.init()
+      const event: TimelineEvent = { type: 'developer/message', seq: 1, time: at(), ...(data === undefined ? {} : { data }) }
+      assert.equal(def.apply(initial, event), initial, JSON.stringify(data))
+      def.stateSchema.parse(initial)
+    }
+  })
+})
 })

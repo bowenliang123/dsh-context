@@ -2,9 +2,19 @@ import assert from 'node:assert/strict'
 import { act, createElement as h, type ReactElement } from 'react'
 import { afterEach, beforeEach, describe, test, vi } from 'vitest'
 import { invalidate } from '../../src/client/invalidation'
-import type { ContextTimelineDetail } from '../../src/shared/types'
+import { type ContextTimelineDetail } from '../../src/shared/types'
 import { DetailStore, detailStoreOf, resetTimelineDetailStores, useTimelineSource } from '../../src/client/timelineSource'
-import { mount, text, until } from './helpers/kit'
+import { mount, text, until, makeKit, query } from './helpers/kit'
+import { revealInScrollParent, revealRowInCard, scrollIntoViewIfPossible, scrollToPos, settleReveal } from '../../src/client/revealScroll'
+import { DICT_EN, DICT_ZH } from '../../src/client/i18n'
+import { makeAgentHeads } from '../../src/client/agentHeads'
+import { makeContextView } from '../../src/client/components/contextView'
+import { createContextSettings } from '../../src/client/settings'
+import { SIDEBAR_CONTEXT_ID, SIDEBAR_CONTEXT_KIND, watchSidebarContextTab } from '../../src/client/sidebar'
+import { type ContextViewProps, type SidebarTabDefinitionLike } from '../../src/client/services'
+import { TestClientCtx, asClientCtx } from './helpers/harness'
+
+describe('timelineRetention', () => {
 
 function detail(rev: number, over: Record<string, unknown> = {}): ContextTimelineDetail {
   return {
@@ -310,4 +320,507 @@ describe('useTimelineSource — retention wiring', () => {
       await m.unmount()
     }
   })
+})
+})
+
+describe('revealScroll', () => {
+
+const top = (t: number): DOMRect => ({ top: t }) as DOMRect
+
+afterEach(() => {
+  vi.unstubAllGlobals()
+})
+
+function queueFrames(): { flush: () => void } {
+  const frames: FrameRequestCallback[] = []
+  vi.stubGlobal('requestAnimationFrame', (callback: FrameRequestCallback) => {
+    frames.push(callback)
+    return frames.length
+  })
+  return {
+    flush: (): void => {
+      while (frames.length > 0) frames.shift()?.(0)
+    },
+  }
+}
+
+function spyScrollTo(el: HTMLElement): ScrollToOptions[] {
+  const calls: ScrollToOptions[] = []
+  Object.defineProperty(el, 'scrollTo', {
+    value: (options?: ScrollToOptions): void => {
+      if (options !== undefined) calls.push(options)
+    },
+  })
+  return calls
+}
+
+function stubReducedMotion(reduced: boolean | 'throw'): void {
+  vi.stubGlobal('matchMedia', (query: string) => {
+    if (query !== '(prefers-reduced-motion: reduce)') throw new Error('unexpected query')
+    if (reduced === 'throw') throw new Error('boom')
+    return { matches: reduced }
+  })
+}
+
+function mounted(oy: 'auto' | 'scroll', scrollerTop: number, anchorTop: number): { scroller: HTMLDivElement; anchor: HTMLDivElement } {
+  const scroller = document.createElement('div')
+  scroller.style.overflowY = oy
+  Object.defineProperty(scroller, 'scrollHeight', { value: 500 })
+  Object.defineProperty(scroller, 'clientHeight', { value: 200 })
+  scroller.getBoundingClientRect = () => top(scrollerTop)
+  const anchor = document.createElement('div')
+  anchor.getBoundingClientRect = () => top(anchorTop)
+  scroller.appendChild(anchor)
+  document.body.appendChild(scroller)
+  return { scroller, anchor }
+}
+
+describe('revealInScrollParent', () => {
+  test("scrolls the nearest 'auto' or 'scroll' ancestor so the anchor tops its scrollport; a grow-with-content box is skipped", () => {
+    const auto = mounted('auto', 100, 450)
+    auto.scroller.scrollTop = 42
+    assert.equal(revealInScrollParent(auto.anchor), true)
+    assert.equal(auto.scroller.scrollTop, 392, 'the rect delta lands the anchor flush: 42 + (450 − 100)')
+    auto.scroller.remove()
+
+    const scroll = mounted('scroll', 0, 200)
+    assert.equal(revealInScrollParent(scroll.anchor), true)
+    assert.equal(scroll.scroller.scrollTop, 200)
+    scroll.scroller.remove()
+
+    const grown = mounted('auto', 0, 300)
+    const inner = document.createElement('div')
+    inner.style.overflowY = 'auto'
+    Object.defineProperty(inner, 'scrollHeight', { value: 300 })
+    Object.defineProperty(inner, 'clientHeight', { value: 300 })
+    inner.appendChild(grown.anchor)
+    grown.scroller.appendChild(inner)
+    assert.equal(revealInScrollParent(grown.anchor), true)
+    assert.equal(grown.scroller.scrollTop, 300, 'the real scroller above takes the delta')
+    grown.scroller.remove()
+  })
+
+  test('with a live scrollTo the delta is applied through it as a smooth scroll, leaving scrollTop untouched', () => {
+    const auto = mounted('auto', 100, 450)
+    auto.scroller.scrollTop = 42
+    const calls = spyScrollTo(auto.scroller)
+    assert.equal(revealInScrollParent(auto.anchor), true)
+    assert.deepEqual(calls, [{ top: 392, left: undefined, behavior: 'smooth' }])
+    assert.equal(auto.scroller.scrollTop, 42)
+    auto.scroller.remove()
+  })
+
+  test('reduced motion downgrades the smooth scroll to an instant one, and a throwing matchMedia keeps it smooth', () => {
+    stubReducedMotion(true)
+    const reduced = mounted('auto', 0, 260)
+    const reducedCalls = spyScrollTo(reduced.scroller)
+    assert.equal(revealInScrollParent(reduced.anchor), true)
+    assert.deepEqual(reducedCalls, [{ top: 260, left: undefined, behavior: 'instant' }])
+    reduced.scroller.remove()
+
+    stubReducedMotion('throw')
+    const noisy = mounted('auto', 0, 260)
+    const noisyCalls = spyScrollTo(noisy.scroller)
+    assert.equal(revealInScrollParent(noisy.anchor), true)
+    assert.deepEqual(noisyCalls, [{ top: 260, left: undefined, behavior: 'smooth' }])
+    noisy.scroller.remove()
+  })
+
+  test('a plain ancestor chain to body, a detached anchor, and a hostile chain all report false without throwing', () => {
+    const plain = document.createElement('div')
+    document.body.appendChild(plain)
+    assert.equal(revealInScrollParent(plain), false)
+    plain.remove()
+    assert.equal(revealInScrollParent(document.createElement('div')), false)
+    const hostile = {
+      get parentElement(): never { throw new Error('boom') },
+    } as unknown as Element
+    assert.equal(revealInScrollParent(hostile), false)
+  })
+})
+
+describe('revealRowInCard', () => {
+  const rect = (t: number, b: number): DOMRect => ({ top: t, bottom: b }) as DOMRect
+
+  function mounted(rowTop: number, rowBottom: number, regionOverflow = true): {
+    page: HTMLDivElement; card: HTMLDivElement; region: HTMLDivElement; row: HTMLDivElement
+  } {
+    const page = document.createElement('div')
+    const card = document.createElement('div')
+    const region = document.createElement('div')
+    const row = document.createElement('div')
+    region.appendChild(row)
+    card.appendChild(region)
+    page.appendChild(card)
+    document.body.appendChild(page)
+    Object.defineProperty(region, 'scrollHeight', { value: regionOverflow ? 600 : 300 })
+    Object.defineProperty(region, 'clientHeight', { value: regionOverflow ? 200 : 300 })
+    region.getBoundingClientRect = () => rect(0, 200)
+    row.getBoundingClientRect = () => rect(rowTop, rowBottom)
+    region.scrollTop = 30
+    page.scrollTop = 55
+    return { page, card, region, row }
+  }
+
+  test('a row above or below the visible slice scrolls the rows region to it; a fully visible row scrolls nothing', () => {
+    const above = mounted(-10, 20)
+    revealRowInCard(above.region.parentElement, above.row)
+    assert.equal(above.region.scrollTop, 20, 'the row reaches the slice top: 30 − (0 − (−10))')
+    assert.equal(above.page.scrollTop, 55, 'nothing above the card moves')
+    const below = mounted(250, 280)
+    revealRowInCard(below.region.parentElement, below.row)
+    assert.equal(below.region.scrollTop, 110, 'the row reaches the slice bottom: 30 + (280 − 200)')
+
+    const visible = mounted(10, 60)
+    revealRowInCard(visible.region.parentElement, visible.row)
+    assert.equal(visible.region.scrollTop, 30)
+    assert.equal(visible.page.scrollTop, 55)
+  })
+
+  test('with a live scrollTo the adjustment rides through it as a smooth scroll', () => {
+    const above = mounted(-10, 20)
+    const calls = spyScrollTo(above.region)
+    revealRowInCard(above.region.parentElement, above.row)
+    assert.deepEqual(calls, [{ top: 20, left: undefined, behavior: 'smooth' }])
+    assert.equal(above.region.scrollTop, 30)
+    assert.equal(above.page.scrollTop, 55)
+  })
+
+  test('a region that does not overflow ends the walk at the card; a null card, null row, or outside row does nothing', () => {
+    const still = mounted(250, 280, false)
+    revealRowInCard(still.card, still.row)
+    assert.equal(still.region.scrollTop, 30)
+    assert.equal(still.card.scrollTop, 0)
+    assert.equal(still.page.scrollTop, 55)
+
+    const { card, row } = mounted(0, 10)
+    const stranger = document.createElement('div')
+    document.body.appendChild(stranger)
+    assert.doesNotThrow(() => {
+      revealRowInCard(null, row)
+      revealRowInCard(card, null)
+      revealRowInCard(card, stranger)
+    })
+    stranger.remove()
+  })
+
+})
+
+function box(): HTMLDivElement {
+  const el = document.createElement('div')
+  Object.defineProperty(el, 'scrollTop', { value: 10, writable: true })
+  Object.defineProperty(el, 'scrollLeft', { value: 20, writable: true })
+  return el
+}
+
+describe('scrollToPos', () => {
+  test('without scrollTo the top and left land as direct assignments, each axis only when present', () => {
+    const both = box()
+    scrollToPos(both, { top: 300, left: 90 })
+    assert.equal(both.scrollTop, 300)
+    assert.equal(both.scrollLeft, 90)
+
+    const topOnly = box()
+    scrollToPos(topOnly, { top: 44 })
+    assert.equal(topOnly.scrollTop, 44)
+    assert.equal(topOnly.scrollLeft, 20)
+
+    const leftOnly = box()
+    scrollToPos(leftOnly, { left: 44 })
+    assert.equal(leftOnly.scrollTop, 10)
+    assert.equal(leftOnly.scrollLeft, 44)
+  })
+
+  test('with a live scrollTo one call carries both axes and the default smooth behavior', () => {
+    const el = box()
+    const calls = spyScrollTo(el)
+    scrollToPos(el, { top: 300, left: 90 })
+    assert.deepEqual(calls, [{ top: 300, left: 90, behavior: 'smooth' }])
+    assert.equal(el.scrollTop, 10)
+    assert.equal(el.scrollLeft, 20)
+  })
+
+  test('an explicit behavior passes through; reduced motion downgrades smooth, and a throwing matchMedia does not', () => {
+    const el = box()
+    const calls = spyScrollTo(el)
+    scrollToPos(el, { top: 1 }, 'instant')
+    assert.deepEqual(calls, [{ top: 1, left: undefined, behavior: 'instant' }])
+
+    stubReducedMotion(true)
+    scrollToPos(el, { top: 2 })
+    assert.deepEqual(calls[1], { top: 2, left: undefined, behavior: 'instant' })
+
+    stubReducedMotion('throw')
+    scrollToPos(el, { top: 3 })
+    assert.deepEqual(calls[2], { top: 3, left: undefined, behavior: 'smooth' })
+  })
+})
+
+describe('scrollIntoViewIfPossible', () => {
+  test('a null element or one without the verb is a no-op; the live verb receives the options', () => {
+    const bare = document.createElement('div')
+    Object.defineProperty(bare, 'scrollIntoView', { value: undefined })
+    assert.doesNotThrow(() => {
+      scrollIntoViewIfPossible(null)
+      scrollIntoViewIfPossible(bare)
+    })
+    const calls: (ScrollIntoViewOptions | undefined)[] = []
+    const el = document.createElement('div')
+    el.scrollIntoView = (options?: boolean | ScrollIntoViewOptions) => { calls.push(options as ScrollIntoViewOptions | undefined) }
+    scrollIntoViewIfPossible(el, { block: 'nearest', behavior: 'smooth' })
+    assert.deepEqual(calls, [{ block: 'nearest', behavior: 'smooth' }])
+  })
+
+  test('reduced motion rewrites a requested smooth scroll into an instant one, keeping the rest of the options', () => {
+    stubReducedMotion(true)
+    const calls: (ScrollIntoViewOptions | undefined)[] = []
+    const el = document.createElement('div')
+    el.scrollIntoView = (options?: boolean | ScrollIntoViewOptions) => { calls.push(options as ScrollIntoViewOptions | undefined) }
+    scrollIntoViewIfPossible(el, { block: 'center', inline: 'center', behavior: 'smooth' })
+    assert.deepEqual(calls, [{ block: 'center', inline: 'center', behavior: 'instant' }])
+  })
+})
+
+describe('settleReveal', () => {
+  test('issues the alignment once, waits out the glide, then re-checks once from the settled position', () => {
+    const { flush } = queueFrames()
+    const el = box()
+    const issues: number[] = []
+    const align = vi.fn((): boolean => {
+      issues.push(el.scrollTop)
+      if (issues.length === 1) {
+        el.scrollTop = 300
+        return true
+      }
+      return false
+    })
+    settleReveal(el, align)
+    flush()
+    assert.equal(align.mock.calls.length, 2, 'one issue and one settled re-check')
+    assert.equal(el.scrollTop, 300)
+  })
+
+  test('an alignment already in place gets one settled re-check and stops without issuing', () => {
+    const { flush } = queueFrames()
+    const el = box()
+    const align = vi.fn((): boolean => false)
+    settleReveal(el, align)
+    flush()
+    assert.equal(align.mock.calls.length, 2)
+    assert.equal(el.scrollTop, 10)
+  })
+
+  test('a stubborn alignment keeps re-issuing only up to the budget', () => {
+    const { flush } = queueFrames()
+    const el = box()
+    const align = vi.fn((): boolean => true)
+    settleReveal(el, align, 5)
+    flush()
+    assert.equal(align.mock.calls.length, 5)
+  })
+
+  test('a newer run on the same element supersedes the older loop', () => {
+    const { flush } = queueFrames()
+    const el = box()
+    const first = vi.fn((): boolean => true)
+    const second = vi.fn((): boolean => false)
+    settleReveal(el, first)
+    settleReveal(el, second)
+    flush()
+    assert.equal(first.mock.calls.length, 1, 'the superseded loop never frames again')
+    assert.equal(second.mock.calls.length, 2)
+  })
+
+  test('user input on the scroller cancels the settle loop', () => {
+    const { flush } = queueFrames()
+    const el = box()
+    const align = vi.fn((): boolean => true)
+    settleReveal(el, align)
+    el.dispatchEvent(new Event('wheel'))
+    flush()
+    assert.equal(align.mock.calls.length, 1)
+  })
+})
+})
+
+describe('sidebar', () => {
+
+const NS = 'dsh-context'
+
+function registry(): { definitions: SidebarTabDefinitionLike[]; disposed: number; register: (d: SidebarTabDefinitionLike) => () => void } {
+  const rec = {
+    definitions: [] as SidebarTabDefinitionLike[],
+    disposed: 0,
+    register: (definition: SidebarTabDefinitionLike): (() => void) => {
+      rec.definitions.push(definition)
+      return () => { rec.disposed += 1 }
+    },
+  }
+  return rec
+}
+
+function wire(ctx: TestClientCtx, view: (props: ContextViewProps) => unknown = props => props): void {
+  const t = ctx.locale.bind(NS)
+  watchSidebarContextTab(asClientCtx(ctx), view, t, NS)
+}
+
+describe('watchSidebarContextTab — the optional registration', () => {
+  test('a harness without the sidebar registry registers nothing until the registry arms (deferred inject)', () => {
+    const ctx = new TestClientCtx()
+    wire(ctx)
+    assert.deepEqual(ctx.slots.of('sidebar.right.pane.tab'), [])
+    const tabs = registry()
+    ctx.setService('sidebarRightTabs', tabs)
+    assert.equal(tabs.definitions.length, 1)
+    assert.equal(ctx.slots.of('sidebar.right.pane.tab').length, 1)
+    ctx.dispose()
+    assert.deepEqual(ctx.slots.of('sidebar.right.pane.tab'), [])
+  })
+
+  test('registers the type, the body and chip-title seats, and the guide fields it supplies; unload unwinds them', async () => {
+    const ctx = new TestClientCtx()
+    const tabs = registry()
+    ctx.setService('sidebarRightTabs', tabs)
+    wire(ctx)
+
+    const def = tabs.definitions[0]
+    assert.equal(def.id, SIDEBAR_CONTEXT_ID)
+    assert.equal(def.kind, SIDEBAR_CONTEXT_KIND, 'the kind is namespaced so a foreign `context` cannot collide')
+    assert.equal(def.title(), 'Context')
+    assert.equal(def.guide?.length, 1)
+    assert.equal(def.guide?.[0].id, SIDEBAR_CONTEXT_ID, 'the guide entry carries the stable entry identity')
+    assert.equal(def.guide?.[0].order, 20, 'after the shipped Files entry (order 10)')
+    assert.equal(def.guide?.[0].title(), 'Context')
+    assert.equal(def.guide?.[0].description?.(), DICT_EN['sidebar.guideDescription'])
+    assert.equal(typeof def.guide?.[0].icon, 'function', 'the guide capsule carries the bundled emblem')
+
+    const body = ctx.slots.of('sidebar.right.pane.tab')
+    assert.equal(body.length, 1)
+    assert.equal(body[0].registration.key, SIDEBAR_CONTEXT_ID, 'the keyed seat dispatches on the type id')
+    assert.equal(body[0].registration.locale, NS, 'the framework synthesizes the t seat for the panel')
+
+    const title = ctx.slots.of('sidebar.right.pane.tab.title')
+    assert.equal(title.length, 1, 'the chip-title seat is registered for the type')
+    assert.equal(title[0].registration.key, SIDEBAR_CONTEXT_ID)
+
+    const m = await mount(h(title[0].component as () => ReactElement))
+    assert.equal(query<SVGSVGElement>(m.container, 'svg').getAttribute('width'), '16')
+    assert.equal(text(m.container), 'Context')
+    await m.unmount()
+
+    ctx.dispose()
+    assert.equal(tabs.disposed, 1, 'the type registration was disposed')
+    assert.deepEqual(ctx.slots.of('sidebar.right.pane.tab'), [], 'the body seat was disposed')
+    assert.deepEqual(ctx.slots.of('sidebar.right.pane.tab.title'), [], 'the chip-title seat was disposed')
+  })
+
+  test('the labels follow the active locale at call time', () => {
+    const ctx = new TestClientCtx({ locale: 'zh' })
+    ctx.locale.register(NS, { zh: DICT_ZH, en: DICT_EN })
+    const tabs = registry()
+    ctx.setService('sidebarRightTabs', tabs)
+    wire(ctx)
+    assert.equal(tabs.definitions[0].title(), '上下文')
+    assert.equal(tabs.definitions[0].guide?.[0].title(), '上下文')
+    assert.equal(tabs.definitions[0].guide?.[0].description?.(), DICT_ZH['sidebar.guideDescription'])
+    ctx.dispose()
+  })
+
+  test('the body renders the injected view with the seat props and the sidebar host marker', () => {
+    const ctx = new TestClientCtx()
+    const seen: ContextViewProps[] = []
+    const view = (props: ContextViewProps): string => {
+      seen.push(props)
+      return 'context-view'
+    }
+    ctx.setService('sidebarRightTabs', registry())
+    wire(ctx, view)
+    const component = ctx.slots.of('sidebar.right.pane.tab')[0].component
+    const props = { sessionId: 's-1', useProjection: () => undefined }
+    assert.equal(component(props), 'context-view')
+    assert.equal(seen.length, 1)
+    assert.notEqual(seen[0], props, 'the marker rides a copy, never the seat object')
+    assert.equal(seen[0].sessionId, 's-1')
+    assert.equal(seen[0].useProjection, props.useProjection, 'the standard kit survives the spread')
+    assert.equal(seen[0].host, 'sidebar', 'the panel host marker')
+    ctx.dispose()
+  })
+
+  test('the real Context view through this seat keeps the Agent Network card inline', async () => {
+    const snapshot = { byId: { 's-1': { displayTitle: 'Main Agent', running: false, blank: false, updatedAt: 1 } } }
+    const ctx = new TestClientCtx({
+      services: {
+        sessions: {
+          list: {
+            getSnapshot: (): unknown => snapshot,
+            subscribe: (): (() => void) => () => {},
+          },
+        },
+      },
+    })
+    ctx.setService('sidebarRightTabs', registry())
+    const view = makeContextView(asClientCtx(ctx), makeKit(), createContextSettings(), makeAgentHeads())
+    wire(ctx, view)
+    const component = ctx.slots.of('sidebar.right.pane.tab')[0].component
+    const m = await mount(component({
+      sessionId: 's-1',
+      useProjection: (key: string) => (key === 'contextTimeline'
+        ? { ok: true, current: { system: 10, tools: 20, user: 30, inject: 0, skill: 0, assistant: 0, tool: 0, total: 60 }, requests: [], events: [], nodes: [], droppedNodes: 0, archive: [] }
+        : undefined),
+    }) as ReactElement)
+    assert.ok(query(m.container, '.lc-agents') !== null, 'the panel keeps the family card')
+    assert.ok(text(m.container).includes(DICT_EN['agents.solo']), 'and renders it with real data')
+    await m.unmount()
+    ctx.dispose()
+  })
+
+  test('a throwing registry is swallowed: the plugin keeps its other seats', () => {
+    const ctx = new TestClientCtx()
+    ctx.setService('sidebarRightTabs', {
+      register: () => { throw new Error('id already registered') },
+    })
+    assert.doesNotThrow(() => { wire(ctx) })
+    assert.deepEqual(ctx.slots.of('sidebar.right.pane.tab'), [], 'no body seat without a type')
+    ctx.dispose()
+  })
+
+  test('a failure mid-registration unwinds the seats that already landed', () => {
+    const ctx = new TestClientCtx()
+    const tabs = registry()
+    ctx.setService('sidebarRightTabs', tabs)
+    let calls = 0
+    ;(ctx as unknown as { slots: unknown }).slots = {
+      inject: (_name: string, callback: () => unknown) => {
+        calls += 1
+        if (calls === 2) throw new Error('title seat unavailable')
+        return callback()
+      },
+      register: () => () => {},
+    }
+    assert.doesNotThrow(() => { wire(ctx) })
+    assert.equal(tabs.disposed, 1, 'the type registration was rolled back')
+    ctx.dispose()
+  })
+
+  test('a shapeless service (no register, a primitive) registers nothing', () => {
+    for (const service of [{}, 'registry', 7, null]) {
+      const ctx = new TestClientCtx()
+      ctx.setService('sidebarRightTabs', service)
+      assert.doesNotThrow(() => { wire(ctx) })
+      assert.deepEqual(ctx.slots.of('sidebar.right.pane.tab'), [])
+      ctx.dispose()
+    }
+  })
+
+  test('a foreign slots face returning no disposer is tolerated on unload', () => {
+    const ctx = new TestClientCtx()
+    ctx.setService('sidebarRightTabs', registry())
+    ;(ctx as unknown as { slots: unknown }).slots = {
+      inject: () => undefined,
+      register: () => () => {},
+    }
+    wire(ctx)
+    assert.doesNotThrow(() => { ctx.dispose() })
+  })
+})
 })

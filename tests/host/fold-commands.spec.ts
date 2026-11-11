@@ -1,11 +1,13 @@
 import assert from 'node:assert/strict'
 import { describe, test } from 'vitest'
-import type { TimelineEvent } from '../../src/host/fold'
-import { buildTimelineDetail } from '../../src/host/fold'
-import { resolveBounds } from '../../src/host/config'
-import type { CommandStateRecord } from '../../src/host/foldState'
-import { codeDispatch, codeDispatchStart, jobRegistered, jobSettled, toolCall, toolResult } from './helpers/events'
+import { type TimelineEvent, buildTimelineDetail, applyTimeline, type TimelineState } from '../../src/host/fold'
+import { resolveBounds, type FoldBounds } from '../../src/host/config'
+import { type CommandStateRecord, createTimelineState, deriveHeadState } from '../../src/host/foldState'
+import { codeDispatch, codeDispatchStart, jobRegistered, jobSettled, toolCall, toolResult, assistantAttempt, assistantMessage, compaction, endSeed, header, planMode, requestContext, stepEnd, stepStart, systemMessage, userMessage } from './helpers/events'
 import { assertStable, driveTimeline, fullDef, timelineDef, assertStatesPlainJson } from './helpers/projection'
+import { buildTimelineHead } from '../../src/host/foldWire'
+
+describe('fold-commands', () => {
 
 function bashCall(seq: number, callId: string, args: Record<string, unknown>, time?: number): TimelineEvent {
   return toolCall(seq, { callId, name: 'bash', arguments: JSON.stringify(args), turn: 1, step: 1, time })
@@ -461,4 +463,468 @@ describe('the command log — retention, stats, and the served payload', () => {
     assert.equal(full.commands?.length, 1)
     assert.equal(inline.wire.viewSchema.safeParse(full).success, true)
   })
+})
+})
+
+describe('fold-head', () => {
+
+const FULL: FoldBounds = resolveBounds({})
+const HEAD: FoldBounds = { ...FULL, headOnly: true }
+
+function text(content: string): ContentBlocks {
+  return [{ type: 'text', text: content }]
+}
+
+type ContentBlocks = { type: 'text'; text: string }[]
+
+function developerMessage(seq: number, source: Record<string, unknown>, content = text('injected context')): TimelineEvent {
+  return {
+    type: 'developer/message',
+    seq,
+    time: Date.now(),
+    data: { message: { role: 'developer', source, content } },
+    surfaceOp: 'append',
+  }
+}
+
+function richLog(): TimelineEvent[] {
+  return [
+    header(1, {
+      tools: [
+        { name: 'bash', description: 'run a command' },
+        { name: 'read_file', description: 'read a file' },
+      ],
+      model: 'deepseek-v4-flash',
+      provider: 'deepseek',
+    }),
+    systemMessage(2),
+    requestContext(3, { contextWindow: 128000 }),
+    stepStart(4, { time: 10_000 }),
+    userMessage(5, [{ type: 'image', content: [{ type: 'text', text: 'px' }] }, ...text('hello there')], { kind: 'user' }),
+    developerMessage(6, { kind: 'plugin', plugin: 'dsh-context', form: 'notice', summary: 'watching' }),
+    assistantMessage(7, { turn: 1, step: 0, usage: { inputTokens: 10, cacheReadTokens: 3, cacheWriteTokens: 4, outputTokens: 5 } }),
+    toolCall(8, { callId: 'c1', name: 'bash', arguments: JSON.stringify({ command: 'ls', description: 'list' }), turn: 1, step: 0 }),
+    jobRegistered(9, { callId: 'c1', startedAt: 11_000 }),
+    toolResult(10, { callId: 'c1', content: text('done'), time: 12_000 }),
+    jobSettled(11, { callId: 'c1', finishedAt: 12_500, status: 'completed', detail: 'exit code: 0' }),
+    toolCall(12, { callId: 'c2', name: 'read_file', arguments: JSON.stringify({ path: 'a.ts' }), turn: 1, step: 0 }),
+    toolResult(13, { callId: 'c2', content: text('file body'), meta: { file: { path: 'a.ts', lineCount: 12 } } }),
+    stepEnd(14, { time: 15_000 }),
+    assistantAttempt(15, { turn: 2, step: 0, stream: [{ type: 'chunk', time: 16_000, chunk: { type: 'text', text: 'x' } }] }),
+    stepStart(16, { time: 15_500 }),
+    assistantMessage(17, {
+      turn: 2,
+      step: 0,
+      content: [{ type: 'text', text: 'hi' }, { type: 'reasoning', text: 'think' }, { type: 'tool-call', name: 'bash', arguments: '{}' }],
+      usage: { inputTokens: 20, outputTokens: 8 },
+      stream: { steps: [{ type: 'chunk', time: 16_000, chunk: { type: 'text', text: 'hi' } }] },
+    }),
+    toolCall(18, { callId: 'rc1', name: 'run_code', arguments: JSON.stringify({ code: 'x', description: 'prog' }), turn: 2, step: 0 }),
+    codeDispatchStart(19, { rootCallId: 'rc1', subCallId: 'rc1:code:0', name: 'bash', arguments: { command: 'one' } }),
+    codeDispatch(20, { rootCallId: 'rc1', subCallId: 'rc1:code:0', name: 'read_file', arguments: { path: 'b.ts' }, content: [text('b body')] }),
+    toolResult(21, { callId: 'rc1', content: text('prog done'), time: 18_000 }),
+    toolCall(22, { callId: 'c3', name: 'ask_user_question', arguments: '{}' }),
+    toolResult(23, { callId: 'c3', content: text('an answer') }),
+    developerMessage(24, { kind: 'skill-invocation', name: 'pdf' }, text('<skill_content name="pdf">steps</skill_content>')),
+    toolCall(25, { callId: 'c4', name: 'read_file', arguments: '{}' }),
+    toolResult(26, { callId: 'c4', content: text('<skill_content name="excel">x</skill_content>') }),
+    toolResult(33, { callId: 'ghost', content: text('<skill_content name="ppt">y</skill_content>') }),
+    userMessage(34, text('replaced'), { kind: 'user' }, { surfaceOp: { op: 'replace', startSeq: 7, endSeq: 8 } }),
+    compaction(27, 'summary', { shadowedTokenCount: 12, shadowedSeqs: [5, 6] }),
+    userMessage(28, text('again'), { kind: 'user' }, { surfaceOp: { op: 'replace', startSeq: 5, endSeq: 6 } }),
+    compaction(29, 'prune', { shadowedTokenCount: 3 }),
+    planMode(30, { active: true }),
+    planMode(31, { active: false }),
+    endSeed(32, { inherited: false }),
+  ]
+}
+
+function fold(events: TimelineEvent[], bounds: FoldBounds): TimelineState[] {
+  const states = [createTimelineState()]
+  for (const ev of events) states.push(applyTimeline(states[states.length - 1], ev, bounds))
+  return states
+}
+
+describe('head-only retention (issue #217)', () => {
+  test('every prefix of a rich log folds to the identical head under both retentions', () => {
+    const events = richLog()
+    const slim = fold(events, HEAD)
+    const full = fold(events, FULL)
+    assert.equal(slim.length, full.length)
+    for (let i = 0; i < slim.length; i++) {
+      const head = buildTimelineHead(slim[i])
+      assert.deepStrictEqual(head, buildTimelineHead(full[i]), `head drift at prefix ${i} (seq ${events[i - 1]?.seq})`)
+    }
+  })
+
+  test('the slim state drops the detail collections and slims the records', () => {
+    const [state] = fold(richLog(), HEAD).slice(-1)
+    assert.equal(state.spans.length, 0)
+    assert.equal(state.fileOps.length, 0)
+    assert.equal(state.archived.length, 0)
+    assert.equal(state.events.length, 0, 'events are refolded on demand, not persisted head-side')
+    assert.ok(state.requests.length <= 2, 'only the last request survives for the head last-value')
+    for (const rec of state.commands) {
+      assert.equal('cmd' in rec, false)
+      assert.equal('description' in rec, false)
+      assert.equal('cwd' in rec, false)
+    }
+    for (const node of state.surface) {
+      assert.equal('text' in node, false)
+      assert.equal('time' in node, false)
+      assert.equal('form' in node, false)
+      assert.equal('skill' in node, false)
+      assert.equal('calls' in node, false)
+    }
+    for (const rec of state.requests) {
+      assert.equal('system' in rec, false)
+      assert.equal('cacheRead' in rec, false)
+    }
+  })
+
+  test('a derived state keeps the optional node and request fields and skips junk commands', () => {
+    const legacy = {
+      surface: [
+        { seq: 1, cat: 'assistant', tokens: 10, reasoning: 4, answerTokens: 5, callTokens: 1, imgs: 2, tool: 'bash' },
+        { seq: 2, cat: 'user', tokens: 3 },
+      ],
+      requests: [
+        { time: 1, seq: 1, total: 10, turn: 1, step: 0, prompt: 8, activeMs: 20 },
+        { time: 2, seq: 2, total: 12 },
+      ],
+      commands: [
+        { seq: 1, time: 1, tool: 'bash', call: 'c1', start: 1, status: 'completed', err: false },
+        null,
+        'junk',
+      ],
+      events: [],
+      sums: { user: 1, inject: 0, skill: 0, assistant: 2, tool: 1 },
+      spans: [{ kind: 'ttft', start: 0, end: 1 }],
+      fileOps: [{ seq: 1, path: 'a', kind: 'read', tool: 'read', err: false, added: 0, removed: 0 }],
+      archived: [{ seq: 9, cat: 'user', tokens: 1, gone: 5 }],
+      pendingCodeCmds: { rc1: [{ seq: 2, time: 2, tool: 'bash', call: 'rc1:code:0', cmd: 'long buffered command', start: 2, status: 'running', err: false }, 'junk'], rc2: 'not-an-array', rc3: ['junk'] },
+    }
+    const derived = deriveHeadState(legacy)
+    assert.ok(derived !== undefined)
+    const pending = derived.pendingCodeCmds?.rc1 ?? []
+    assert.equal(pending.length, 1, 'junk pending entries drop')
+    assert.equal('cmd' in pending[0], false, 'buffered commands slim too')
+    assert.equal(derived.pendingCodeCmds?.rc2, undefined, 'a non-array root drops')
+    assert.equal(derived.pendingCodeCmds?.rc3, undefined, 'a root of only junk drops')
+    const emptyPending = deriveHeadState({ ...legacy, pendingCodeCmds: { only: ['junk'] } })
+    assert.equal(emptyPending?.pendingCodeCmds, undefined, 'all-junk pending maps stay absent')
+    assert.deepEqual(derived.surface[0], { seq: 1, cat: 'assistant', tokens: 10, reasoning: 4, answerTokens: 5, callTokens: 1, imgs: 2, tool: 'bash' })
+    assert.deepEqual(derived.surface[1], { seq: 2, cat: 'user', tokens: 3 })
+    assert.deepEqual(derived.requests[0], { time: 1, seq: 1, total: 10, turn: 1, step: 0, prompt: 8, activeMs: 20 })
+    assert.deepEqual(derived.requests[1], { time: 2, seq: 2, total: 12 })
+    assert.equal(derived.commands.length, 0, 'completed commands stay refold-only head-side')
+    assert.equal(derived.events.length, 0)
+    assert.deepEqual(derived.commandCalls, ['c1', 'rc1:code:0'], 'trimmed command call ids stay for the detail revision parity')
+    assert.equal(derived.spans.length, 0)
+    assert.equal(derived.fileOps.length, 0)
+    assert.equal(derived.archived.length, 0)
+  })
+
+  test('the state schema accepts every slim state of the rich log', () => {
+    const def = timelineDef({})
+    for (const state of fold(richLog(), HEAD)) {
+      const parsed = def.stateSchema.safeParse(structuredClone(state))
+      assert.equal(parsed.success, true, `schema rejects a slim state: ${JSON.stringify(parsed.success ? null : (parsed as { error: { issues: unknown[] } }).error.issues.slice(0, 2))}`)
+    }
+  })
+
+  test('the derived head state keeps the head exact and the persisted shape', () => {
+    const full = fold(richLog(), FULL).at(-1)
+    assert.ok(full !== undefined)
+    const derived = deriveHeadState(structuredClone(full))
+    assert.ok(derived !== undefined)
+    assert.deepStrictEqual(buildTimelineHead(derived), buildTimelineHead(full))
+    assert.equal(derived.spans.length, 0)
+    assert.equal(derived.fileOps.length, 0)
+    assert.equal(derived.archived.length, 0)
+    assert.equal(derived.events.length, 0)
+    assert.ok(derived.commands.every(rec => !('cmd' in rec) && !('description' in rec) && !('cwd' in rec)))
+    assert.ok(derived.surface.every(node => !('text' in node)))
+    const def = timelineDef({})
+    def.stateSchema.parse(structuredClone(derived))
+  })
+
+  test('a derived mid-log state continues folding to the identical head', () => {
+    const events = richLog()
+    for (const cut of [1, 8, 21, events.length]) {
+      const prefix = events.slice(0, cut)
+      const tail = events.slice(cut)
+      const last = fold(prefix, FULL).at(-1)
+      assert.ok(last !== undefined)
+      const derived = deriveHeadState(structuredClone(last))
+      assert.ok(derived !== undefined)
+      let state: TimelineState = derived
+      for (const ev of tail) state = applyTimeline(state, ev, HEAD)
+      const whole = fold(events, FULL).at(-1)
+      assert.ok(whole !== undefined)
+      assert.deepStrictEqual(
+        buildTimelineHead(state),
+        buildTimelineHead(whole),
+        `derive+continue drift at cut ${cut}`,
+      )
+    }
+  })
+
+  test('a derived mid-log state continues folding to the head a slim fold from scratch reaches', () => {
+    const events = richLog()
+    const fromScratch = fold(events, HEAD).at(-1)
+    assert.ok(fromScratch !== undefined)
+    const derived = deriveHeadState(structuredClone(fold(events.slice(0, 12), FULL).at(-1)))
+    assert.ok(derived !== undefined)
+    let state: TimelineState = derived
+    for (const ev of events.slice(12)) state = applyTimeline(state, ev, HEAD)
+    assert.deepStrictEqual(buildTimelineHead(state), buildTimelineHead(fromScratch))
+  })
+
+  test('malformed legacy values refuse the derivation and stay on the refold path', () => {
+    for (const bad of [
+      undefined,
+      null,
+      42,
+      {},
+      { surface: 'nope', requests: [], commands: [], events: [], sums: { user: 0, inject: 0, skill: 0, assistant: 0, tool: 0 } },
+      { surface: [], requests: [], commands: [], events: [], sums: { user: 'x' } },
+      { surface: [null], requests: [], commands: [], events: [], sums: { user: 0, inject: 0, skill: 0, assistant: 0, tool: 0 } },
+      { surface: [{ seq: 'x', cat: 'user', tokens: 1 }], requests: [], commands: [], events: [], sums: { user: 0, inject: 0, skill: 0, assistant: 0, tool: 0 } },
+      { surface: [{ seq: 1, cat: 'weird', tokens: 1 }], requests: [], commands: [], events: [], sums: { user: 0, inject: 0, skill: 0, assistant: 0, tool: 0 } },
+      { surface: [], requests: [{ seq: 'x' }], commands: [], events: [], sums: { user: 0, inject: 0, skill: 0, assistant: 0, tool: 0 } },
+      { surface: [], requests: ['junk'], commands: [], events: [], sums: { user: 0, inject: 0, skill: 0, assistant: 0, tool: 0 } },
+      { surface: [], requests: [], commands: [], events: [], sums: null },
+    ]) {
+      assert.equal(deriveHeadState(bad), undefined, JSON.stringify(bad) ?? String(bad))
+    }
+  })
+
+  test('the head fold keeps the command tallies and surfaces but never parses or retains file-op arguments', () => {
+    const events = [
+      toolCall(1, { callId: 'rc1', name: 'run_code', arguments: JSON.stringify({ code: 'x', description: 'batch' }) }),
+      codeDispatchStart(2, { rootCallId: 'rc1', subCallId: 'rc1:code:0', name: 'bash', arguments: { command: 'git status' } }),
+      codeDispatch(3, { rootCallId: 'rc1', subCallId: 'rc1:code:0', name: 'bash', arguments: { command: 'git status' }, content: [text('ok')] }),
+      toolResult(4, { callId: 'rc1', content: text('done') }),
+      toolCall(5, { callId: 'c1', name: 'read', arguments: JSON.stringify({ file_path: 'b.ts' }) }),
+      toolResult(6, { callId: 'c1', content: text('b body') }),
+      toolCall(7, { callId: 'c2', name: 'read', arguments: JSON.stringify({ file_path: 'c.ts' }) }),
+    ]
+    const [slim] = fold(events, HEAD).slice(-1)
+    assert.equal('pendingCodeOps' in slim, false)
+    assert.equal(slim.fileOps.length, 0)
+    assert.equal(slim.commands.length, 0, 'settled commands are refold-only')
+    assert.equal(slim.commandCalls?.includes('rc1'), true)
+    assert.equal(slim.commandCalls?.includes('rc1:code:0'), true)
+    assert.equal(slim.commandStats?.runs, 2)
+    for (const entry of Object.values(slim.callNames)) assert.equal('argsRaw' in entry, false)
+    const [full] = fold(events, FULL).slice(-1)
+    assert.equal(full.fileOps.length > 0, true)
+    assert.equal(Object.values(full.callNames).some(entry => 'argsRaw' in entry), true)
+  })
+
+  test('a completed command keeps its tally and call id; a late patch moves both detail revisions', () => {
+    const events = [
+      toolCall(1, { callId: 'c1', name: 'bash', arguments: JSON.stringify({ command: 'ls' }) }),
+      toolResult(2, { callId: 'c1', content: text('done') }),
+    ]
+    const [slim] = fold(events, HEAD).slice(-1)
+    const [full] = fold(events, FULL).slice(-1)
+    assert.equal(slim.commands.length, 0)
+    assert.deepEqual(slim.commandCalls, ['c1'])
+    assert.equal(full.commands[0]?.cmd, 'ls')
+    assert.equal(slim.commandStats?.runs, 1)
+    assert.equal(full.commandStats?.runs, 1)
+    const settled = jobSettled(3, { callId: 'c1', finishedAt: 9_000, status: 'killed', detail: 'signal: SIGKILL' })
+    const patchedSlim = applyTimeline(slim, settled, HEAD)
+    const patchedFull = applyTimeline(full, settled, FULL)
+    assert.equal(patchedFull.commands[0]?.status, 'killed')
+    assert.equal(patchedSlim.detailRev, patchedFull.detailRev, 'the detail revision moves together')
+  })
+})
+})
+
+describe('fold-ops', () => {
+
+function readMeta(path: string, offset: number, lines: number): unknown {
+  return { path, offset, lines: Array.from({ length: lines }, (_, i) => ({ number: offset + i })), totalLines: 99 }
+}
+
+describe('the file-op log — call/result pairing', () => {
+  test('a read call+result books the exact window off the result meta', () => {
+    const { state } = driveTimeline([
+      toolCall(1, { callId: 'c1', name: 'read', arguments: JSON.stringify({ file_path: 'src/a.ts', limit: 10 }) }),
+      toolResult(2, { callId: 'c1', content: [{ type: 'text', text: 'ok' }], meta: readMeta('src/a.ts', 5, 3) }),
+    ])
+    assert.deepEqual(state.fileOps, [{
+      seq: 2, time: state.fileOps[0].time, kind: 'read', tool: 'read', err: false,
+      added: 0, removed: 0, path: 'src/a.ts', read: { start: 5, count: 3 },
+    }])
+  })
+
+  test('an edit books the line delta; a grep with the complete matches meta rows per file', () => {
+    const { state } = driveTimeline([
+      toolCall(1, { callId: 'c1', name: 'edit', arguments: JSON.stringify({ file_path: 'a.ts', old_string: 'x\ny', new_string: 'z' }) }),
+      toolResult(2, { callId: 'c1', content: [{ type: 'text', text: 'ok' }] }),
+      toolCall(3, { callId: 'c2', name: 'grep', arguments: JSON.stringify({ pattern: 'TODO' }) }),
+      toolResult(4, {
+        callId: 'c2',
+        content: [{ type: 'text', text: 'ok' }],
+        meta: { shape: 'matches', truncated: false, total: 2, files: [{ path: 'a.ts', matches: [{}, {}] }] },
+      }),
+    ])
+    assert.deepEqual(state.fileOps.map(o => [o.kind, o.path, o.added, o.removed, o.hits ?? 0]), [
+      ['write', 'a.ts', 1, 2, 0],
+      ['search', 'TODO', 0, 0, 0],
+      ['search', 'a.ts', 0, 0, 2],
+    ])
+  })
+
+  test('an unpaired result and a non-file call book nothing', () => {
+    const { state } = driveTimeline([
+      toolResult(1, { callId: 'ghost', content: [{ type: 'text', text: 'ok' }] }),
+      toolCall(2, { callId: 'c1', name: 'bash', arguments: JSON.stringify({ command: 'ls' }) }),
+      toolResult(3, { callId: 'c1', content: [{ type: 'text', text: 'ok' }] }),
+    ])
+    assert.deepEqual(state.fileOps, [])
+  })
+
+  test('a non-file call saves no raw arguments; str_replace_editor keeps and kinds them', () => {
+    const def = fullDef()
+    let state = def.apply(def.init(), toolCall(1, { callId: 'b1', name: 'bash', arguments: JSON.stringify({ command: 'ls' }) }))
+    state = def.apply(state, toolCall(2, {
+      callId: 's1', name: 'str_replace_editor', arguments: JSON.stringify({ command: 'view', path: 'a.ts', view_range: [1, 3] }),
+    }))
+    assert.equal(state.callNames.b1?.name, 'bash')
+    assert.ok(!('argsRaw' in (state.callNames.b1 ?? {})), 'a non-file call saves no raw arguments')
+    assert.equal(state.callNames.s1?.argsRaw, JSON.stringify({ command: 'view', path: 'a.ts', view_range: [1, 3] }))
+    state = def.apply(state, toolResult(3, { callId: 'b1', content: [{ type: 'text', text: 'ok' }] }))
+    state = def.apply(state, toolResult(4, { callId: 's1', content: [{ type: 'text', text: 'ok' }] }))
+    assert.deepEqual(state.fileOps.map(o => [o.kind, o.path, o.tool]), [['read', 'a.ts', 'str_replace_editor']])
+  })
+
+  test('call-argument shapes degrade: no arguments books no op, an object form normalizes', () => {
+    const { state } = driveTimeline([
+      { type: 'tool/call', seq: 1, time: 1, data: { callId: 'c1', name: 'read' } } as unknown as TimelineEvent,
+      toolResult(2, { callId: 'c1', content: [{ type: 'text', text: 'ok' }] }),
+    ])
+    assert.deepEqual(state.fileOps, [], 'no arguments — no target')
+    assert.equal(state.callNames.c1, undefined, 'the pending entry consumed at the result')
+    const objectArgs = driveTimeline([
+      { type: 'tool/call', seq: 1, time: 1, data: { callId: 'c1', name: 'read', arguments: { file_path: 'a.ts' } } } as unknown as TimelineEvent,
+      toolResult(2, { callId: 'c1', content: [{ type: 'text', text: 'ok' }] }),
+    ])
+    assert.deepEqual(objectArgs.state.fileOps.map(o => [o.kind, o.path]), [['read', 'a.ts']])
+  })
+
+  test('the error flag reads the message isError mark', () => {
+    const { state } = driveTimeline([
+      toolCall(1, { callId: 'c1', name: 'read', arguments: JSON.stringify({ file_path: 'a.ts' }) }),
+      toolResult(2, { callId: 'c1', content: [{ type: 'text', text: 'no' }], error: true }),
+      toolCall(3, { callId: 'c2', name: 'read', arguments: JSON.stringify({ file_path: 'b.ts' }) }),
+      {
+        type: 'tool/result', seq: 4, time: 4,
+        data: {
+          error: true,
+          message: { role: 'tool', toolCallId: 'c2', source: { kind: 'tool', callId: 'c2' }, content: [] },
+        },
+      } as unknown as TimelineEvent,
+    ])
+    assert.deepEqual(state.fileOps.map(o => o.err), [true, false])
+  })
+})
+
+describe('the file-op log — Code Mode (PTC) sub-dispatches', () => {
+  test('dispatches buffer under their run_code root and flush at its result with parent + program; an editor dispatch kinds by its command', () => {
+    const drive = driveTimeline([
+      toolCall(1, { callId: 'rc1', name: 'run_code', arguments: JSON.stringify({ description: 'batch the reads' }) }),
+      codeDispatch(2, { rootCallId: 'rc1', name: 'read', arguments: { file_path: 'a.ts' } }),
+      codeDispatch(3, { rootCallId: 'rc1', name: 'write', arguments: { file_path: 'b.ts', content: 'x\ny' } }),
+      codeDispatch(4, { rootCallId: 'rc1', name: 'str_replace_editor', arguments: { command: 'view', path: 'c.ts' } }),
+      toolResult(5, { callId: 'rc1', content: [{ type: 'text', text: 'ok' }] }),
+    ])
+    assert.deepEqual(drive.state.pendingCodeOps, undefined, 'the buffer flushed and emptied')
+    assert.deepEqual(drive.state.fileOps.map(o => [o.kind, o.path, o.parent ?? 0, o.program ?? '', o.added]), [
+      ['read', 'a.ts', 5, 'batch the reads', 0],
+      ['write', 'b.ts', 5, 'batch the reads', 2],
+      ['read', 'c.ts', 5, 'batch the reads', 0],
+    ])
+    assertStatesPlainJson(drive)
+    const interleaved = driveTimeline([
+      toolCall(1, { callId: 'rc1', name: 'run_code', arguments: '{}' }),
+      toolCall(2, { callId: 'rc2', name: 'run_code', arguments: '{}' }),
+      codeDispatch(3, { rootCallId: 'rc1', name: 'read', arguments: { file_path: 'a.ts' } }),
+      codeDispatch(4, { rootCallId: 'rc2', name: 'read', arguments: { file_path: 'b.ts' } }),
+      toolResult(5, { callId: 'rc1', content: [{ type: 'text', text: 'ok' }] }),
+      toolResult(6, { callId: 'rc2', content: [{ type: 'text', text: 'ok' }] }),
+    ]).state
+    assert.deepEqual(interleaved.fileOps.map(o => [o.path, o.parent ?? 0]), [['a.ts', 5], ['b.ts', 6]])
+  })
+
+  test('a non-file dispatch books nothing; a junk dispatch envelope is dropped whole', () => {
+    const { state } = driveTimeline([
+      toolCall(1, { callId: 'rc1', name: 'run_code', arguments: '{}' }),
+      codeDispatch(2, { rootCallId: 'rc1', name: 'bash', arguments: { command: 'ls' } }),
+      { type: 'tool/ptc-dispatch', seq: 3, time: 3, data: null } as unknown as TimelineEvent,
+      codeDispatch(4, { name: 'read' }),
+      toolResult(5, { callId: 'rc1', content: [{ type: 'text', text: 'ok' }] }),
+    ])
+    assert.equal(state.pendingCodeOps, undefined)
+    assert.deepEqual(state.fileOps, [])
+  })
+
+  test('a hostile argument payload (cyclic) yields no ops instead of throwing the fold', () => {
+    const cyclic: Record<string, unknown> = {}
+    cyclic.self = cyclic
+    const { state } = driveTimeline([
+      toolCall(1, { callId: 'rc1', name: 'run_code', arguments: '{}' }),
+      codeDispatch(2, { rootCallId: 'rc1', name: 'read', arguments: cyclic }),
+    ])
+    assert.deepEqual(state.fileOps, [])
+    assert.equal(state.pendingCodeOps, undefined, 'no ops booked — nothing buffered')
+  })
+
+  test('the buffer stays bounded when the run_code never settles', () => {
+    const events: TimelineEvent[] = [toolCall(1, { callId: 'rc1', name: 'run_code', arguments: '{}' })]
+    for (let i = 0; i < 210; i++) {
+      events.push(codeDispatch(10 + i, { rootCallId: 'rc1', name: 'read', arguments: { file_path: `f${i}.ts` } }))
+    }
+    const { state } = driveTimeline(events)
+    const buffered = state.pendingCodeOps?.rc1 ?? []
+    assert.equal(buffered.length, 200, 'the cap holds (the 201st+ batch drops wholesale)')
+  })
+})
+
+describe('the file-op log — retention, schema, and the served payload', () => {
+  test('the log trims to maxFileOps and stamps the coverage floor', () => {
+    const events: TimelineEvent[] = []
+    for (let i = 0; i < 5; i++) {
+      events.push(toolCall(10 + i * 2, { callId: `c${i}`, name: 'read', arguments: JSON.stringify({ file_path: `f${i}.ts` }) }))
+      events.push(toolResult(11 + i * 2, { callId: `c${i}`, content: [{ type: 'text', text: 'ok' }] }))
+    }
+    const { state } = driveTimeline(events, { maxFileOps: 3 })
+    assert.deepEqual(state.fileOps.map(o => o.path), ['f2.ts', 'f3.ts', 'f4.ts'])
+    assert.equal(state.fileOpsFloor, 13, 'the newest dropped op was seq 13')
+  })
+
+  test('the schema accepts an op-bearing state; the detail serves detached copies and the slim head omits the log', () => {
+    const { def, state } = driveTimeline([
+      toolCall(1, { callId: 'c1', name: 'read', arguments: JSON.stringify({ file_path: 'a.ts' }) }),
+      toolResult(2, { callId: 'c1', content: [{ type: 'text', text: 'ok' }], meta: readMeta('a.ts', 1, 2) }),
+    ])
+    def.stateSchema.parse(structuredClone(state))
+    const detail = buildTimelineDetail(state, resolveBounds({}))
+    assert.equal(detail.fileOps?.length, 1)
+    assert.notEqual(detail.fileOps?.[0], state.fileOps[0], 'the served op never aliases the state')
+    const read = detail.fileOps?.[0].read
+    assert.ok(read !== undefined && 'start' in read)
+    assert.equal(read.start, 1)
+    const slim = timelineDef({}, true)
+    const inline = timelineDef({}, false)
+    assert.equal('fileOps' in slim.wire.view(state), false)
+    const full = inline.wire.view(state)
+    assert.equal(full.fileOps?.length, 1)
+    assert.equal(inline.wire.viewSchema.safeParse(full).success, true)
+  })
+})
 })

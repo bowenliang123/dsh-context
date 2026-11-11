@@ -1,10 +1,14 @@
-import { createElement as h, useState } from 'react'
+import { createElement as h, useState, act } from 'react'
 import assert from 'node:assert/strict'
-import { describe, test } from 'vitest'
-import type { CatFocus, ContextBrowserProps } from '../../../src/client/components/browser'
-import type { ContextHeaders } from '../../../src/shared/types'
-import { click, flush, hover, mount, query, queryAll, surfaceNode, text, tipRows, unhover, type Mounted } from '../helpers/kit'
-import { Browser, catRow, filterStat, kit, props, req, tl, typeToolSearch, withEpochContent } from './browserHarness'
+import { describe, test, afterAll, beforeAll, vi } from 'vitest'
+import { type CatFocus, type ContextBrowserProps } from '../../../src/client/components/browser'
+import { type ContextHeaders } from '../../../src/shared/types'
+import { click, flush, hover, mount, query, queryAll, surfaceNode, text, tipRows, unhover, type Mounted, settle, until } from '../helpers/kit'
+import { Browser, catRow, filterStat, kit, props, req, tl, typeToolSearch, withEpochContent, pickStep } from './browserHarness'
+import { restoreLayout, stubClientSizes, stubResizeObserver } from '../helpers/layout'
+import { type ConversationNodeLike } from '../../../src/client/services'
+
+describe('browserDna', () => {
 
 describe('ContextBrowser DNA mode and the open-category bar pin', () => {
   const dnaHeaders: ContextHeaders = {
@@ -406,4 +410,435 @@ describe('ContextBrowser DNA mode and the open-category bar pin', () => {
     await m.unmount()
   })
 })
+})
 
+describe('browserDnaWindow', () => {
+
+const ESTIMATE = 30
+
+class ControlledResizeObserver {
+  static all: ControlledResizeObserver[] = []
+  readonly targets: Element[] = []
+  constructor(readonly callback: ResizeObserverCallback) { ControlledResizeObserver.all.push(this) }
+  static reset(): void { ControlledResizeObserver.all = [] }
+  static rowObserver(): ControlledResizeObserver {
+    const found = ControlledResizeObserver.all.find(entry => entry.targets.some(target => target.classList.contains('lc-br-elem')))
+    if (found === undefined) throw new Error('no row observer')
+    return found
+  }
+  observe(target: Element): void { this.targets.push(target) }
+  unobserve(target: Element): void {
+    const at = this.targets.indexOf(target)
+    if (at >= 0) this.targets.splice(at, 1)
+  }
+  disconnect(): void { this.targets.length = 0 }
+  settle(height: number, target: Element | undefined = this.targets[0]): void {
+    this.callback(
+      [{
+        target,
+        borderBoxSize: [{ blockSize: height, inlineSize: 500 }],
+        contentRect: { height },
+      } as unknown as ResizeObserverEntry],
+      this as unknown as ResizeObserver,
+    )
+  }
+}
+
+beforeAll(() => {
+  stubResizeObserver()
+  stubClientSizes({ 'lc-br-scroll': { width: 500, height: 400 } })
+})
+
+afterAll(() => {
+  vi.unstubAllGlobals()
+  restoreLayout()
+})
+
+const NODES = Array.from({ length: 2_000 }, (_, i) => surfaceNode({
+  seq: i + 1, tokens: 10, time: 1_000 + i, cat: 'tool', tool: 'bash',
+}))
+
+const HEADERS: ContextHeaders = {
+  headers: [{ seq: 0, time: 0, systemTokens: 100, tools: [{ name: 'bash', tokens: 50 }] }],
+}
+
+function data() {
+  return tl({
+    current: { system: 0, tools: 0, user: 0, inject: 0, skill: 0, assistant: 0, tool: 20_000, total: 20_000 },
+    requests: [],
+    nodes: NODES,
+  })
+}
+
+function toolHeaders(count: number): ContextHeaders {
+  return {
+    headers: [{
+      seq: 0,
+      time: 0,
+      systemTokens: 0,
+      tools: Array.from({ length: count }, (_, i) => ({ name: `tool-${String(i).padStart(3, '0')}`, tokens: 10 })),
+    }],
+  }
+}
+
+function dnaRows(m: Awaited<ReturnType<typeof mount>>): HTMLElement[] {
+  return queryAll<HTMLElement>(m.container, '.lc-br-flat > [data-lc-key]')
+}
+
+function focusedKey(): string | null {
+  const active = document.activeElement
+  if (!(active instanceof Element)) return null
+  return active.closest<HTMLElement>('[data-lc-key]')?.dataset.lcKey ?? null
+}
+
+describe('ContextBrowser windowing', () => {
+  test('the DNA feed stays DOM-bounded in wide and closed states and follows the scroll', async () => {
+    const m = await mount(h(Browser, props({ data: data(), headers: HEADERS, dna: true, onDnaChange: () => {} })))
+    try {
+      const rows = queryAll(m.container, '.lc-br-elem')
+      assert.ok(rows.length < 2_000, `windowed rows (${rows.length})`)
+      assert.ok(rows.length > 10, 'a window wide enough to scroll through')
+      assert.ok(dnaRows(m).length < 2_000)
+      const pads = queryAll<HTMLElement>(m.container, '.lc-row-pad')
+      assert.equal(pads.length, 1, 'only the tail spacer is present at the head')
+      assert.ok(Number.parseFloat(pads[0].style.height) > 0)
+      assert.ok(queryAll(m.container, '.lc-stacked-seg').length >= 2_000, 'the composition bar keeps every item')
+      const scroller = query<HTMLElement>(m.container, '.lc-br-scroll')
+      scroller.scrollTop = 6_000
+      await act(async () => { scroller.dispatchEvent(new Event('scroll')) })
+      await until(() => queryAll<HTMLElement>(m.container, '.lc-row-pad').length === 2, 'a top pad appears after scrolling')
+      assert.ok(queryAll(m.container, '.lc-br-elem').length < 2_000, 'scrolled window stays bounded')
+      assert.ok(!dnaRows(m).some(row => row.dataset.lcKey === 'n2000'), 'the newest rows leave the window')
+      await m.unmount()
+    } finally {
+      await m.unmount()
+    }
+  })
+
+  test('the DNA feed keeps windowing on a narrow pane and with rows of mixed measured heights', async () => {
+    stubClientSizes({ 'lc-br-scroll': { width: 300, height: 400 } })
+    vi.stubGlobal('ResizeObserver', ControlledResizeObserver)
+    ControlledResizeObserver.reset()
+    try {
+      const m = await mount(h(Browser, props({ data: data(), headers: HEADERS, dna: true, onDnaChange: () => {} })))
+      const observer = ControlledResizeObserver.rowObserver()
+      for (const target of [...observer.targets]) {
+        const index = dnaRows(m).findIndex(row => row === target)
+        await act(async () => { observer.settle(ESTIMATE + (index % 4 === 0 ? 60 : 0), target) })
+      }
+      assert.ok(queryAll(m.container, '.lc-br-elem').length < 2_000, 'mixed heights stay windowed')
+      assert.ok(queryAll<HTMLElement>(m.container, '.lc-row-pad').length <= 2)
+      const first = query<HTMLElement>(m.container, '.lc-br-elem-row')
+      await act(async () => { first.click() })
+      assert.ok(queryAll(m.container, '.lc-br-content').length === 1, 'the row expands')
+      assert.ok(queryAll(m.container, '.lc-br-elem').length < 2_000, 'an expanded row keeps the window')
+      await m.unmount()
+    } finally {
+      vi.unstubAllGlobals()
+      stubClientSizes({ 'lc-br-scroll': { width: 500, height: 400 } })
+    }
+  })
+
+  test('hovering a composition band scrolls the window to its off-screen row', async () => {
+    const m = await mount(h(Browser, props({ data: data(), headers: null, dna: true, onDnaChange: () => {} })))
+    try {
+      await until(() => queryAll(m.container, '.lc-br-flat > [data-lc-key]').length < 2_000, 'feed windowed')
+      const segs = queryAll<HTMLElement>(m.container, '.lc-br-bar .lc-stacked-seg')
+      assert.ok(segs.length > 0)
+      await act(async () => { segs[0].dispatchEvent(new MouseEvent('mouseover', { bubbles: true })) })
+      await until(() => queryAll(m.container, '[data-lc-key="n1"]').length === 1, 'off-window echoed row mounted')
+      assert.ok(query<HTMLElement>(m.container, '.lc-br-scroll').scrollTop > 0)
+      await m.unmount()
+    } finally {
+      await m.unmount()
+    }
+  })
+
+  test('a non-DNA category list is windowed and its header counts the full model', async () => {
+    const m = await mount(h(Browser, props({ data: data(), headers: HEADERS })))
+    try {
+      const categories = queryAll<HTMLElement>(m.container, '.lc-br-cat-row')
+      assert.equal(categories[6].getAttribute('aria-expanded'), 'false')
+      await act(async () => { categories[6].click() })
+      assert.equal(categories[6].getAttribute('aria-expanded'), 'true')
+      assert.ok((categories[6].getAttribute('aria-controls') ?? '').length > 0)
+      assert.ok(text(m.container).includes(kit.fmt(2_000)), 'the category header keeps the full count')
+      const rows = queryAll(m.container, '.lc-br-elem')
+      assert.ok(rows.length < 2_000, `category rows are windowed (${rows.length})`)
+      assert.ok(rows.length > 8)
+      assert.ok(queryAll<HTMLElement>(m.container, '.lc-row-pad').length >= 1)
+      const firstRow = query<HTMLElement>(m.container, '.lc-br-elem-row')
+      assert.equal(firstRow.getAttribute('aria-expanded'), 'false')
+      await act(async () => { firstRow.click() })
+      assert.equal(query<HTMLElement>(m.container, '.lc-br-elem-row').getAttribute('aria-expanded'), 'true')
+      assert.ok(queryAll(m.container, '.lc-br-elem').length < 2_000, 'opening a row keeps the window')
+      await m.unmount()
+    } finally {
+      await m.unmount()
+    }
+  })
+
+  test('a node focus request reveals its flat row', async () => {
+    const m = await mount(h(Browser, props({ data: data(), headers: null, dna: true, onDnaChange: () => {} })))
+    try {
+      await m.update(h(Browser, props({
+        data: data(),
+        headers: null,
+        dna: true,
+        onDnaChange: () => {},
+        nodeFocus: { step: 'live', key: 'n1', cat: 'tool' },
+        onNodeFocusHandled: () => {},
+      })))
+      await until(() => queryAll(m.container, '[data-lc-key="n1"]').length === 1, 'the focused row mounts')
+      await settle(80)
+      assert.ok(query<HTMLElement>(m.container, '.lc-br-scroll').scrollTop > 0)
+    } finally {
+      await m.unmount()
+    }
+  })
+
+  test('an absent node focus request settles without revealing a row', async () => {
+    const m = await mount(h(Browser, props({ data: data(), headers: null, dna: true, onDnaChange: () => {} })))
+    try {
+      await m.update(h(Browser, props({
+        data: data(),
+        headers: null,
+        dna: true,
+        onDnaChange: () => {},
+        nodeFocus: { step: 'live', key: 'n999999', cat: 'tool' },
+        onNodeFocusHandled: () => {},
+      })))
+      await settle(200)
+      assert.ok(queryAll(m.container, '.lc-br-flat > [data-lc-key]').length < 2_000)
+    } finally {
+      await m.unmount()
+    }
+  })
+
+  test('a long tool list is windowed, measured, and keyboard-reachable from first to last row', async () => {
+    const m = await mount(h(Browser, props({ data: tl({}), headers: toolHeaders(500) })))
+    try {
+      await act(async () => { catRow(m, 'tools').click() })
+      await until(() => queryAll(m.container, '.lc-br-elem-row').length > 8, 'the tool list renders')
+      assert.ok(queryAll(m.container, '.lc-br-elem').length < 500, 'tool rows are windowed')
+      const first = query<HTMLElement>(m.container, '.lc-br-elem-row')
+      first.focus()
+      first.dispatchEvent(new KeyboardEvent('keydown', { key: 'End', bubbles: true, cancelable: true }))
+      await until(() => focusedKey() === 'tool:tool-499', 'End reaches and focuses the last tool')
+      document.activeElement?.dispatchEvent(new KeyboardEvent('keydown', { key: 'Home', bubbles: true, cancelable: true }))
+      await until(() => focusedKey() === 'tool:tool-000', 'Home returns focus to the first tool')
+      assert.ok(queryAll(m.container, '.lc-br-elem').length < 500)
+      await m.unmount()
+    } finally {
+      await m.unmount()
+    }
+  })
+
+  test('DNA rows keep one roving tab stop and End/Home reach the last and first message', async () => {
+    const m = await mount(h(Browser, props({ data: data(), headers: null, dna: true, onDnaChange: () => {} })))
+    try {
+      await until(() => queryAll(m.container, '.lc-br-flat > [data-lc-key]').length < 2_000, 'feed windowed')
+      const stops = queryAll<HTMLElement>(m.container, '.lc-br-elem-row').filter(row => row.tabIndex === 0)
+      assert.equal(stops.length, 1, 'one tab stop for the flat feed')
+      stops[0].focus()
+      stops[0].dispatchEvent(new KeyboardEvent('keydown', { key: 'End', bubbles: true, cancelable: true }))
+      await until(() => focusedKey() === 'n1', 'End reaches and focuses the oldest message')
+      document.activeElement?.dispatchEvent(new KeyboardEvent('keydown', { key: 'Home', bubbles: true, cancelable: true }))
+      await until(() => focusedKey() === 'n2000', 'Home returns focus to the newest message')
+      await m.unmount()
+    } finally {
+      await m.unmount()
+    }
+  })
+})
+})
+
+describe('browserFocus', () => {
+
+describe('ContextBrowser focus bridges', () => {
+  const headers: ContextHeaders = {
+    headers: [{
+      seq: 1, time: 1, systemTokens: 3,
+      tools: [
+        { name: 'beta', tokens: 50 },
+        { name: 'alpha', tokens: 10 },
+      ],
+    }],
+  }
+  const data = tl({
+    current: { system: 10, tools: 60, user: 10, inject: 0, skill: 0, assistant: 0, tool: 0, total: 80 },
+    requests: [req({ seq: 10, turn: 1, step: 0, total: 80 }), req({ seq: 20, turn: 1, step: 1, total: 80 })],
+    nodes: [surfaceNode({ seq: 1, tokens: 5, text: 'focusable' }), surfaceNode({ seq: 11, cat: 'assistant', tokens: 5, text: 'answer' })],
+  })
+  const convNodes: ConversationNodeLike[] = [{ kind: 'user', seq: 1, content: [{ type: 'text', text: 'focusable' }] }]
+
+  test('nodeFocus selects the step, opens the node, reveals it within the card only, and clears', async () => {
+    const scrolls: unknown[] = []
+    const orig = Element.prototype.scrollIntoView
+    Element.prototype.scrollIntoView = function (this: Element, arg?: unknown) { scrolls.push(arg) } as never
+    try {
+      let handled = 0
+      const m = await mount(h(Browser, props({ data, headers, convNodes })))
+      await m.update(h(Browser, props({
+        data, headers, convNodes,
+        nodeFocus: { step: 'live', key: 'n1', cat: 'user' },
+        onNodeFocusHandled: () => { handled += 1 },
+      })))
+      assert.equal(handled, 1)
+      const onRows = queryAll(m.container, '.lc-br-elem-on')
+      assert.equal(onRows.length, 1)
+      assert.ok(text(onRows[0]).includes('focusable'))
+      assert.deepEqual(scrolls, [], 'the open row reveals inside the card — never a scrollIntoView that could drag the page')
+      await m.update(h(Browser, props({
+        data, headers, convNodes,
+        nodeFocus: { step: 20, key: 'n1', cat: 'user' },
+        onNodeFocusHandled: () => { handled += 1 },
+      })))
+      assert.ok(text(query(m.container, '.lc-br-meta')).includes('Turn 1 · Step 1'))
+      assert.equal(handled, 2)
+      await m.update(h(Browser, props({
+        data, headers, convNodes,
+        nodeFocus: { step: 'live', key: 'n999', cat: 'user' },
+      })))
+      assert.equal(queryAll(m.container, '.lc-br-elem-on').length, 0)
+      await m.unmount()
+    } finally {
+      Element.prototype.scrollIntoView = orig
+    }
+  })
+
+  test('pinSeq selects the pinned step and unpinning returns to live (accordion resets)', async () => {
+    const m = await mount(h(Browser, props({ data, headers })))
+    await click(catRow(m, 'user'))
+    assert.equal(queryAll(m.container, '.lc-br-body').length, 1)
+    await m.update(h(Browser, props({ data, headers, pinSeq: 10 })))
+    assert.ok(text(query(m.container, '.lc-br-meta')).includes('Turn 1 · Step 0'))
+    assert.equal(queryAll(m.container, '.lc-br-body').length, 0, 'pinning resets the accordion')
+    assert.equal(query<HTMLSelectElement>(m.container, 'select.lc-br-pick').value, '10')
+    await m.update(h(Browser, props({ data, headers, pinSeq: null })))
+    assert.ok(text(query(m.container, '.lc-br-meta')).includes('Live · Next Request'))
+    await m.unmount()
+  })
+})
+
+describe('ContextBrowser open-category reporting', () => {
+  test('toggling categories and step picks report the open category outward', async () => {
+    const data = tl({
+      requests: [req({ seq: 10, turn: 1, step: 0 }), req({ seq: 20, turn: 2, step: 0 })],
+      nodes: [
+        surfaceNode({ seq: 1, cat: 'user', text: 'hi' }),
+        surfaceNode({ seq: 2, cat: 'user', text: 'again' }),
+        surfaceNode({ seq: 3, cat: 'tool', tokens: 30, tool: 'bash', text: 'out' }),
+      ],
+    })
+    const opens: (string | null)[] = []
+    const onOpenCat = (c: string | null): void => { opens.push(c) }
+    const m = await mount(h(Browser, props({ data, onOpenCat })))
+    assert.deepEqual(opens, [null], 'the mount-time pin pass reports the closed accordion')
+    await click(catRow(m, 'user'))
+    assert.deepEqual(opens, [null, 'user'])
+    await click(catRow(m, 'user'))
+    assert.deepEqual(opens, [null, 'user', null])
+    await click(catRow(m, 'tool'))
+    assert.deepEqual(opens, [null, 'user', null, 'tool'])
+    await pickStep(m, '20')
+    assert.deepEqual(opens, [null, 'user', null, 'tool', null], 'a step pick closes the open category')
+    await m.unmount()
+
+    const data2 = tl({ requests: [req({ seq: 10, turn: 1, step: 0 })], nodes: [surfaceNode({ seq: 1, cat: 'user', text: 'hi' })] })
+    const opens2: (string | null)[] = []
+    const onOpenCat2 = (c: string | null): void => { opens2.push(c) }
+    const m2 = await mount(h(Browser, props({ data: data2, onOpenCat: onOpenCat2 })))
+    await m2.update(h(Browser, props({ data: data2, onOpenCat: onOpenCat2, pinSeq: 10 })))
+    assert.deepEqual(opens2, [null, null], 'pinning resets the accordion')
+    await m2.update(h(Browser, props({
+      data: data2, onOpenCat: onOpenCat2, pinSeq: 10,
+      nodeFocus: { step: 'live', key: 'n1', cat: 'tool' },
+      onNodeFocusHandled: () => {},
+    })))
+    assert.deepEqual(opens2, [null, null, 'tool'], 'the reveal opens the node category')
+    await m2.unmount()
+  })
+
+  test('catFocus opens the named category on the live surface, picking the kind chip', async () => {
+    const data = tl({
+      requests: [req({ seq: 10, turn: 1, step: 0 })],
+      nodes: [
+        surfaceNode({ seq: 1, cat: 'skill', tokens: 5, skill: 'pdf', text: 'instructions' }),
+        surfaceNode({ seq: 2, cat: 'assistant', tokens: 5, text: 'an answer' }),
+        surfaceNode({ seq: 3, cat: 'assistant', tokens: 5, calls: ['bash'] }),
+      ],
+    })
+    const opens: (string | null)[] = []
+    const onOpenCat = (c: string | null): void => { opens.push(c) }
+    let handled = 0
+    const m = await mount(h(Browser, props({ data, onOpenCat })))
+    await m.update(h(Browser, props({
+      data,
+      onOpenCat,
+      catFocus: { cat: 'assistant', kind: 'answer' },
+      onCatFocusHandled: () => { handled += 1 },
+    })))
+    assert.equal(handled, 1)
+    assert.deepEqual(opens, [null, 'assistant'])
+    assert.ok(catRow(m, 'assistant').className.includes('lc-br-cat-open'))
+    const assistantCat = catRow(m, 'assistant').parentElement as HTMLElement
+    const chips = queryAll(assistantCat, '.lc-gran-btn')
+    const answerChip = chips.find(b => text(b).includes('Answer'))
+    assert.ok(answerChip !== undefined && answerChip.className.includes('lc-gran-on'), 'the answer chip is picked')
+    const shownRows = queryAll(assistantCat, '.lc-br-elem')
+    assert.equal(shownRows.length, 1, 'only the textual reply survives the answer filter')
+    assert.ok(text(shownRows[0]).includes('an answer'))
+    await m.update(h(Browser, props({
+      data,
+      onOpenCat,
+      catFocus: { cat: 'skill' },
+      onCatFocusHandled: () => { handled += 1 },
+    })))
+    assert.equal(handled, 2)
+    assert.deepEqual(opens, [null, 'assistant', 'skill'])
+    assert.ok(catRow(m, 'skill').className.includes('lc-br-cat-open'))
+    assert.ok(!catRow(m, 'assistant').className.includes('lc-br-cat-open'), 'the previous category closed')
+    await m.unmount()
+  })
+})
+
+
+
+describe('ContextBrowser step picker bounds', () => {
+  test('a long session caps the option list to the newest steps and follows an older selection', async () => {
+    const requests = Array.from({ length: 600 }, (_, i) => req({ seq: i + 1, turn: i + 1, step: 0 }))
+    const data = tl({ requests, nodes: [surfaceNode({ seq: 1, tokens: 5 })] })
+    const m = await mount(h(Browser, props({ data, headers: null })))
+    try {
+      let options = queryAll(m.container, 'select.lc-br-pick option')
+      assert.equal(options.length, 501, 'live view lists the live option plus the newest 500 steps')
+      await m.update(h(Browser, props({ data, headers: null, pinSeq: 40 })))
+      options = queryAll(m.container, 'select.lc-br-pick option')
+      assert.equal(options.length, 501, 'an old selection re-anchors the option window around it')
+      const select = query<HTMLSelectElement>(m.container, 'select.lc-br-pick')
+      assert.equal(select.value, '40', 'the pinned old step stays selectable in the windowed list')
+      assert.ok(text(select).includes('Turn 260'), 'the window centers on the pinned step')
+      await m.update(h(Browser, props({ data, headers: null, pinSeq: null })))
+      options = queryAll(m.container, 'select.lc-br-pick option')
+      assert.equal(query<HTMLSelectElement>(m.container, 'select.lc-br-pick').value, 'live')
+      assert.ok(options.length <= 501)
+    } finally {
+      await m.unmount()
+    }
+  })
+
+  test('a session at or below the cap lists every step', async () => {
+    const requests = Array.from({ length: 500 }, (_, i) => req({ seq: i + 1, turn: i + 1, step: 0 }))
+    const data = tl({ requests, nodes: [surfaceNode({ seq: 1, tokens: 5 })] })
+    const m = await mount(h(Browser, props({ data, headers: null })))
+    try {
+      const options = queryAll(m.container, 'select.lc-br-pick option')
+      assert.equal(options.length, 501)
+      assert.ok(text(query(m.container, 'select.lc-br-pick')).includes('Turn 1 ·'))
+    } finally {
+      await m.unmount()
+    }
+  })
+})
+})

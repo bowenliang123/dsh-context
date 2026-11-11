@@ -1,12 +1,15 @@
-import { createElement as h } from 'react'
+import { createElement as h, act } from 'react'
 import assert from 'node:assert/strict'
-import { describe, test } from 'vitest'
+import { describe, test, vi } from 'vitest'
 import { makeContextBrowser, stepStampOf } from '../../../src/client/components/browser'
 import { makeStackedBar } from '../../../src/client/components/stackedBar'
-import type { ContextHeaders, RequestRecord } from '../../../src/shared/types'
+import { type ContextHeaders, type RequestRecord, type HeaderEpochContent, type SurfaceNode } from '../../../src/shared/types'
 import { createContextSettings } from '../../../src/client/settings'
 import { click, flush, hover, mount, query, queryAll, surfaceNode, text, unhover, type Mounted } from '../helpers/kit'
-import { Browser, ROW, catRow, elemRows, kit, pickStep, props, req, tl, withEpochContent } from './browserHarness'
+import { Browser, ROW, catRow, elemRows, kit, pickStep, props, req, tl, withEpochContent, silenceFetchWarn } from './browserHarness'
+import { headersOf, type ConversationNodeLike } from '../../../src/client/services'
+
+describe('browserLiveSurface', () => {
 
 async function clickDeltaBase(m: Mounted, label: 'prev step' | 'prev turn'): Promise<void> {
   const btn = queryAll(m.container, '.lc-card-title .lc-gran-btn').find(b => text(b) === label)
@@ -361,4 +364,503 @@ describe('stepStampOf', () => {
     assert.equal(tail(25), null, 'no request follows the item yet')
   })
 })
+})
 
+describe('browserHeaderEpochs', () => {
+
+describe('ContextBrowser header epochs', () => {
+  const HEADERS: ContextHeaders = {
+    headers: [
+      { seq: 15, time: 1500, systemTokens: 8, tools: [{ name: 'old', tokens: 1 }] },
+      { seq: 35, time: 3500, systemTokens: 12, tools: [{ name: 'fresh', tokens: 9 }] },
+    ],
+  }
+  const CONTENTS: Record<number, HeaderEpochContent> = {
+    15: { system: 'SYS A', tools: [{ name: 'old', schema: {} }] },
+    35: { system: 'SYS B\nsecond line', tools: [{ name: 'fresh', description: 'fresh tool', schema: {} }] },
+  }
+  const lazy = withEpochContent(HEADERS, CONTENTS)
+
+  test('system category opens its prompt row directly; rich switch toggles raw/markdown', async () => {
+    const data = tl({ current: { system: 30, tools: 9, user: 0, inject: 0, skill: 0, assistant: 0, tool: 0, total: 39 } })
+    const m = await mount(h(Browser, props({ data, ...lazy })))
+    await click(catRow(m, 'system'))
+    await flush()
+    const body = query(m.container, '.lc-br-body')
+    assert.ok(text(body).includes('SYS B'), 'the newest epoch’s prompt shows on the live surface')
+    assert.ok(text(body).includes('2 lines'), 'line count rides the section head')
+    assert.ok(catRow(m, 'system').className.includes('lc-br-cat-open'))
+    assert.equal(queryAll(m.container, '.lc-br-content').length, 1)
+    assert.ok(queryAll(m.container, '.lc-ts-desc-md').length >= 1, 'markdown view by default')
+    const rawBtn = queryAll(body, '.lc-gran-btn')[0]
+    assert.equal(text(rawBtn), 'Raw')
+    await click(rawBtn)
+    const lines = queryAll(m.container, '.lc-ts-line').map(line => line.textContent)
+    assert.deepEqual(lines, ['SYS B', 'second line'])
+    await click(queryAll(body, '.lc-gran-btn')[1])
+    assert.ok(queryAll(m.container, '.lc-ts-desc-md').length >= 1, 'markdown restored')
+    await click(catRow(m, 'system'))
+    assert.equal(queryAll(m.container, '.lc-br-body').length, 0)
+    assert.ok(!catRow(m, 'system').className.includes('lc-br-cat-open'))
+    await m.unmount()
+  })
+
+  test('an epoch fetches once and the content stays cached across steps, each step reading the epoch in force at its seq', async () => {
+    const data = tl({
+      current: { system: 30, tools: 9, user: 0, inject: 0, skill: 0, assistant: 0, tool: 0, total: 39 },
+      requests: [req({ seq: 20, turn: 1, step: 0 }), req({ seq: 40, turn: 1, step: 1 })],
+    })
+    let calls = 0
+    const counting = { ...lazy, fetchHeader: (seq: number) => { calls += 1; return lazy.fetchHeader(seq) } }
+    const m = await mount(h(Browser, props({ data, ...counting })))
+    await click(catRow(m, 'system'))
+    await flush()
+    assert.ok(text(query(m.container, '.lc-br-body')).includes('SYS B'))
+    assert.equal(calls, 1)
+    await pickStep(m, '20')
+    await click(catRow(m, 'system'))
+    await flush()
+    assert.ok(text(query(m.container, '.lc-br-body')).includes('SYS A'))
+    assert.equal(calls, 2)
+    await pickStep(m, 'live')
+    await click(catRow(m, 'system'))
+    await flush()
+    assert.ok(text(query(m.container, '.lc-br-body')).includes('SYS B'))
+    assert.equal(calls, 2)
+    await m.unmount()
+  })
+
+  test('a failed epoch fetch auto-retries and the retried read renders', async () => {
+    silenceFetchWarn()
+    vi.useFakeTimers()
+    try {
+      const data = tl({ current: { system: 30, tools: 9, user: 0, inject: 0, skill: 0, assistant: 0, tool: 0, total: 39 } })
+      const pendings: Array<{ resolve: (v: HeaderEpochContent | null) => void; reject: (e: unknown) => void }> = []
+      const deferred: () => Promise<HeaderEpochContent | null> = () =>
+        new Promise((resolve, reject) => { pendings.push({ resolve, reject }) })
+      const m = await mount(h(Browser, props({ data, headers: HEADERS, fetchHeader: deferred })))
+      await click(catRow(m, 'system'))
+      await flush()
+      assert.ok(text(query(m.container, '.lc-br-body')).includes('Loading'), 'the fetch is in flight')
+      await act(async () => { pendings[0]!.reject(new Error('down')) })
+      await act(async () => { await vi.advanceTimersByTimeAsync(1_100) })
+      await flush()
+      assert.equal(pendings.length, 2, 'the bounded retry refetches without user action')
+      await act(async () => { pendings[1]!.resolve(CONTENTS[35]!) })
+      await flush()
+      assert.ok(text(query(m.container, '.lc-br-body')).includes('SYS B'), 'the retried read renders')
+      await m.unmount()
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  test('a stale epoch fetch resolves and rejects ignored once another epoch takes over', async () => {
+    silenceFetchWarn()
+    const data = tl({
+      current: { system: 30, tools: 9, user: 0, inject: 0, skill: 0, assistant: 0, tool: 0, total: 39 },
+      requests: [req({ seq: 20, turn: 1, step: 0 }), req({ seq: 40, turn: 1, step: 1 })],
+    })
+    const pendings: Array<{ resolve: (v: HeaderEpochContent | null) => void; reject: (e: unknown) => void }> = []
+    const deferred = (): Promise<HeaderEpochContent | null> =>
+      new Promise((resolve, reject) => { pendings.push({ resolve, reject }) })
+    const m = await mount(h(Browser, props({ data, headers: HEADERS, fetchHeader: deferred })))
+    await click(catRow(m, 'system'))
+    await flush()
+    await pickStep(m, '20')
+    await click(catRow(m, 'system'))
+    await flush()
+    assert.equal(pendings.length, 2)
+    await act(async () => { pendings[0]!.reject(new Error('stale')) })
+    await flush()
+    assert.ok(!text(m.container).includes('Load failed'))
+    assert.ok(text(query(m.container, '.lc-br-body')).includes('Loading'))
+    await act(async () => { pendings[1]!.resolve(CONTENTS[15]!) })
+    await flush()
+    assert.ok(text(query(m.container, '.lc-br-body')).includes('SYS A'))
+    await pickStep(m, 'live')
+    await click(catRow(m, 'system'))
+    await flush()
+    assert.equal(pendings.length, 3)
+    await pickStep(m, '20')
+    await click(catRow(m, 'system'))
+    await flush()
+    assert.equal(pendings.length, 3, 'epoch 15 is cached')
+    assert.ok(text(query(m.container, '.lc-br-body')).includes('SYS A'))
+    await act(async () => { pendings[2]!.resolve(CONTENTS[35]!) })
+    await flush()
+    assert.ok(!text(m.container).includes('SYS B'), 'the stale content is ignored')
+    await m.unmount()
+  })
+
+  test('an epoch missing from the durable log degrades to the not-in-log note', async () => {
+    const data = tl({ current: { system: 30, tools: 9, user: 0, inject: 0, skill: 0, assistant: 0, tool: 0, total: 39 } })
+    const m = await mount(h(Browser, props({
+      data, headers: HEADERS, fetchHeader: () => Promise.resolve(null),
+    })))
+    await click(catRow(m, 'system'))
+    await flush()
+    assert.ok(text(query(m.container, '.lc-br-body')).includes('not in the session log'))
+    await click(catRow(m, 'tools'))
+    await flush()
+    assert.ok(text(queryAll(m.container, '.lc-br-body')[0]).includes('not in the session log'))
+    await m.unmount()
+  })
+
+  test('a host without the history face, or an absent headers projection, degrades to the metadata-only note', async () => {
+    const data = tl({ current: { system: 30, tools: 9, user: 0, inject: 0, skill: 0, assistant: 0, tool: 0, total: 39 } })
+    const m = await mount(h(Browser, props({ data, headers: HEADERS })))
+    await click(catRow(m, 'system'))
+    assert.ok(text(query(m.container, '.lc-br-body')).includes('token estimates only'))
+    await click(catRow(m, 'tools'))
+    assert.equal(elemRows(m).length, 1, 'metadata rows still render')
+    assert.ok(text(query(m.container, '.lc-br-content')).includes('token estimates only'))
+    await m.unmount()
+
+    const absent = await mount(h(Browser, props({ data, headers: null })))
+    await click(catRow(absent, 'system'))
+    assert.ok(text(query(absent.container, '.lc-br-body')).includes('older plugin build'))
+    await click(catRow(absent, 'tools'))
+    assert.ok(text(queryAll(absent.container, '.lc-br-body')[0]).includes('older plugin build'))
+    await absent.unmount()
+  })
+
+  test('an epoch outside retention degrades to the no-epoch note', async () => {
+    const data = tl({
+      current: { system: 30, tools: 9, user: 0, inject: 0, skill: 0, assistant: 0, tool: 0, total: 39 },
+      requests: [req({ seq: 10, turn: 1, step: 0 })],
+    })
+    const m = await mount(h(Browser, props({ data, ...lazy })))
+    await pickStep(m, '10')
+    await click(catRow(m, 'system'))
+    assert.ok(text(query(m.container, '.lc-br-body')).includes('outside retention'))
+    await click(catRow(m, 'tools'))
+    assert.ok(text(queryAll(m.container, '.lc-br-body')[0]).includes('outside retention'))
+    await m.unmount()
+  })
+
+  test('an epoch without a system prompt keeps the system category shut, including a step before the system node', async () => {
+    const headers: ContextHeaders = { headers: [{ seq: 1, time: 1, tools: [{ name: 'x', tokens: 1 }] }] }
+    const data = tl({ current: { system: 0, tools: 1, user: 0, inject: 0, skill: 0, assistant: 0, tool: 0, total: 1 } })
+    const m = await mount(h(Browser, props({ data, ...withEpochContent(headers, { 1: { tools: [] } }) })))
+    assert.ok(text(catRow(m, 'system')).includes('0 Items'))
+    await click(catRow(m, 'system'))
+    assert.equal(queryAll(m.container, '.lc-br-body').length, 0, 'no prompt, no body')
+    await m.unmount()
+
+    const scopedHeaders: ContextHeaders = { headers: [{ seq: 3, time: 300, tools: [] }] }
+    const scoped = tl({
+      current: { system: 30, tools: 0, user: 0, inject: 0, skill: 0, assistant: 0, tool: 0, total: 30 },
+      requests: [req({ seq: 5, turn: 1, step: 0, system: 0, tools: 0, user: 5, total: 5 })],
+      systems: [{ seq: 7, time: 700, tokens: 30 }],
+    })
+    const before = await mount(h(Browser, props({ data: scoped, headers: scopedHeaders })))
+    await pickStep(before, '5')
+    assert.ok(text(catRow(before, 'system')).includes('0 Items'))
+    await click(catRow(before, 'system'))
+    assert.equal(queryAll(before.container, '.lc-br-body').length, 0, 'no prompt yet at this step')
+    await before.unmount()
+  })
+
+  test('a legacy content-bearing epoch (pre-#37 wire) still counts the system prompt', async () => {
+    const legacy = {
+      headers: [{
+        seq: 12,
+        time: 1_000,
+        system: 'You are an AI agent.\n',
+        tools: [{ name: 'bash', tokens: 815, description: 'run', schema: { type: 'object' } }],
+      }],
+    } as unknown as ContextHeaders
+    const data = tl({ current: { system: 9, tools: 815, user: 0, inject: 0, skill: 0, assistant: 0, tool: 0, total: 824 } })
+    const m = await mount(h(Browser, props({ data, headers: headersOf(legacy) })))
+    assert.ok(text(catRow(m, 'system')).includes(kit.t('browser.items', { n: 1 })))
+    await m.unmount()
+  })
+
+  test('a fetched epoch or resolved prompt event without system text explains its absence', async () => {
+    const headers: ContextHeaders = { headers: [{ seq: 3, time: 3, systemTokens: 0, tools: [] }] }
+    const data = tl({ current: { system: 0, tools: 0, user: 0, inject: 0, skill: 0, assistant: 0, tool: 0, total: 0 } })
+    const m = await mount(h(Browser, props({
+      data, headers, fetchHeader: () => Promise.resolve({ tools: [] }),
+    })))
+    await click(catRow(m, 'system'))
+    await flush()
+    assert.ok(text(query(m.container, '.lc-br-body')).includes('carried no system prompt'))
+    await m.unmount()
+
+    const systems = tl({
+      current: { system: 30, tools: 0, user: 0, inject: 0, skill: 0, assistant: 0, tool: 0, total: 30 },
+      systems: [{ seq: 7, time: 700, tokens: 30 }],
+    })
+    const blank = await mount(h(Browser, props({ data: systems, fetchHeader: () => Promise.resolve({ tools: [] }) })))
+    await click(catRow(blank, 'system'))
+    await flush()
+    assert.ok(text(query(blank.container, '.lc-br-body')).includes('carried no system prompt'))
+    await blank.unmount()
+  })
+
+  test('a system prompt rides the timeline systems list, fetched from its own event seq', async () => {
+    const headers: ContextHeaders = { headers: [{ seq: 15, time: 1500, tools: [{ name: 'x', tokens: 1 }] }] }
+    const data = tl({
+      current: { system: 30, tools: 1, user: 0, inject: 0, skill: 0, assistant: 0, tool: 0, total: 31 },
+      systems: [{ seq: 7, time: 700, tokens: 30 }],
+    })
+    const asked: number[] = []
+    const fetchHeader = (seq: number): Promise<HeaderEpochContent> => {
+      asked.push(seq)
+      return Promise.resolve(seq === 7 ? { system: 'THE PROMPT', tools: [] } : { tools: [] })
+    }
+    const m = await mount(h(Browser, props({ data, headers, fetchHeader })))
+    assert.ok(text(catRow(m, 'system')).includes(kit.t('browser.items', { n: 1 })))
+    await click(catRow(m, 'system'))
+    await flush()
+    assert.deepEqual(asked, [7], 'the prompt is fetched from the system node, not the header epoch')
+    assert.ok(text(query(m.container, '.lc-br-body')).includes('THE PROMPT'))
+    await m.unmount()
+  })
+})
+})
+
+describe('browserContentFetch', () => {
+
+describe('ContextBrowser tool results', () => {
+  const cases: { seq: number; tail: string; err: boolean; label: string }[] = [
+    { seq: 80, tail: 'boom\n[exit code: 3]', err: true, label: 'Failed · exit 3' },
+    { seq: 81, tail: '[killed by signal: SIGKILL]', err: true, label: 'Failed' },
+    { seq: 82, tail: '[shell killed by signal: SIGTERM]', err: true, label: 'Failed' },
+    { seq: 83, tail: '[shell exited: code 2]', err: true, label: 'Failed · exit 2' },
+    { seq: 84, tail: '[shell exited: code 0]', err: false, label: 'OK' },
+    { seq: 85, tail: '[shell exited]', err: false, label: 'OK' },
+    { seq: 86, tail: 'oops [exit code: 7]\n[shell killed by signal: SIGTERM]', err: true, label: 'Failed · exit 7' },
+    { seq: 87, tail: '[status: killed]', err: true, label: 'Failed' },
+    { seq: 88, tail: '[status: failed, boom]', err: true, label: 'Failed' },
+    { seq: 89, tail: 'all good', err: false, label: 'OK' },
+    { seq: 90, tail: 'a quoted [exit code: 9] marker mid-text\nmore output', err: false, label: 'OK' },
+  ]
+  const convNodes: ConversationNodeLike[] = cases.map(c => ({
+    kind: 'tool-result', seq: c.seq,
+    call: { name: 'bash', argsRaw: '{"description":"run it"}' },
+    content: [{ type: 'image', attachment: { attachmentId: 'x' + String(c.seq) } }, null, { type: 'text', text: c.tail }],
+  }))
+  convNodes.push(
+    { kind: 'tool-result', seq: 91, call: { name: 'read', argsRaw: '{}' }, content: [{ type: 'text', text: 'denied' }], isError: true },
+    { kind: 'tool-result', seq: 92, call: null, content: [{ type: 'text', text: 'orphan' }] },
+    { kind: 'tool-result', seq: 93, call: { name: 'bash', argsRaw: '' }, content: 'raw-text' as never },
+  )
+  const nodes: SurfaceNode[] = [
+    ...cases.map(c => surfaceNode({ seq: c.seq, cat: 'tool', tokens: 9, tool: 'bash' })),
+    surfaceNode({ seq: 91, cat: 'tool', tokens: 9, tool: 'read' }),
+    surfaceNode({ seq: 92, cat: 'tool', tokens: 9, tool: 'bash' }),
+    surfaceNode({ seq: 93, cat: 'tool', tokens: 9, tool: 'bash' }),
+    surfaceNode({ seq: 94, cat: 'tool', tokens: 9, tool: 'write', err: true }),
+    surfaceNode({ seq: 95, cat: 'tool', tokens: 9, tool: 'bash' }),
+    surfaceNode({ seq: 96, cat: 'tool', tokens: 9 }),
+    surfaceNode({ seq: 97, cat: 'tool', tokens: 9, tool: 'bash' }),
+  ]
+  convNodes.push({ kind: 'tool-result', seq: 97, call: { name: 'bash', argsRaw: '{}' }, content: [{ type: 'text', text: 'skill body' }] })
+
+  const data = tl({
+    current: { system: 0, tools: 0, user: 0, inject: 0, skill: 0, assistant: 0, tool: 162, total: 162 },
+    nodes,
+  })
+
+  test('tail-status matrix drives the error dot; tags and previews render on collapsed rows', async () => {
+    const m = await mount(h(Browser, props({ data, convNodes })))
+    await click(catRow(m, 'tool'))
+    const rows = elemRows(m)
+    assert.equal(rows.length, nodes.length)
+    const dots = queryAll(m.container, '.lc-br-err-dot')
+    assert.equal(dots.length, 9, 'one red dot per failing result')
+    assert.ok(text(rows[0]).includes('bash'))
+    assert.ok(text(rows[1]).includes('?'), 'missing tool name tags as ?')
+    assert.ok(text(rows[1]).includes('Tool Result'), 'no join → placeholder preview')
+    assert.ok(text(rows[2]).includes('Tool Result'))
+    assert.ok(text(rows[3]).includes('write'))
+    const byIdx = Object.fromEntries([97, 96, 95, 94, 93, 92, 91, 90, 89, 88, 87, 86, 85, 84, 83, 82, 81, 80].map((s, i) => [s, i]))
+    for (const c of cases) {
+      const hasDot = rows[byIdx[c.seq]].querySelector('.lc-br-err-dot') !== null
+      assert.equal(hasDot, c.err, `seq ${c.seq}: dot ${c.err ? 'shown' : 'hidden'} for tail ${JSON.stringify(c.tail)}`)
+    }
+    assert.ok(rows[byIdx[91]].querySelector('.lc-br-err-dot') !== null, 'isError stamps the dot')
+    assert.ok(rows[byIdx[94]].querySelector('.lc-br-err-dot') !== null, 'the fold err flag stamps the dot')
+    assert.ok(rows[byIdx[93]].querySelector('.lc-br-err-dot') === null, 'non-array content has no markers')
+    await click(rows[0])
+    const content = query(m.container, '.lc-br-content')
+    assert.ok(text(content).includes('OK'))
+    assert.ok(text(content).includes('skill body'))
+    await m.unmount()
+  })
+
+  test('clean results render the OK state; orphan results render no call card', async () => {
+    const m = await mount(h(Browser, props({ data, convNodes })))
+    await click(catRow(m, 'tool'))
+    const rows = elemRows(m)
+    const byIdx = Object.fromEntries([97, 96, 95, 94, 93, 92, 91, 90, 89, 88, 87, 86, 85, 84, 83, 82, 81, 80].map((s, i) => [s, i]))
+    const expand = async (seq: number) => {
+      await click(rows[byIdx[seq]])
+      return query(m.container, '.lc-br-content')
+    }
+    let content = await expand(89)
+    assert.ok(text(content).includes('OK'))
+    assert.ok(!queryAll(content, '.lc-br-err-dot').length)
+    await click(elemRows(m)[byIdx[89]])
+    content = await expand(80)
+    assert.ok(text(content).includes('Failed · exit 3'))
+    await click(elemRows(m)[byIdx[80]])
+    content = await expand(81)
+    assert.ok(text(content).includes('Failed'))
+    assert.ok(!text(content).includes('exit'))
+    await click(elemRows(m)[byIdx[81]])
+    content = await expand(86)
+    assert.ok(text(content).includes('Failed · exit 7'))
+    await click(elemRows(m)[byIdx[86]])
+    content = await expand(92)
+    assert.ok(!text(content).includes('→'), 'no call card without a call record')
+    assert.ok(text(content).includes('orphan'))
+    await click(elemRows(m)[byIdx[92]])
+    content = await expand(93)
+    assert.ok(text(content).includes('OK'))
+    assert.ok(!text(content).includes('raw-text'))
+    await m.unmount()
+  })
+})
+
+describe('ContextBrowser targeted content fetch', () => {
+  const data = tl({
+    current: { system: 0, tools: 0, user: 10, inject: 0, skill: 0, assistant: 0, tool: 0, total: 10 },
+    nodes: [surfaceNode({ seq: 5, tokens: 5, text: 'pageable' }), surfaceNode({ seq: 6, tokens: 5, text: 'also pageable' })],
+  })
+
+  const openFirstRow = async (m: Mounted) => {
+    await click(catRow(m, 'user'))
+    await click(elemRows(m)[1])
+  }
+
+  test('a missed join fetches the seq once, and the fetched body renders', async () => {
+    let calls = 0
+    let release: (() => void) | null = null
+    const fetchContent = async (seq: number) => {
+      calls += 1
+      return new Promise<void>((resolve) => { release = resolve })
+        .then(() => ({ kind: 'user', seq, content: [{ type: 'text', text: 'FULL BODY' }] }) as ConversationNodeLike)
+    }
+    const m = await mount(h(Browser, props({ data, convNodes: [], fetchContent })))
+    await openFirstRow(m)
+    assert.equal(calls, 1, 'one targeted read')
+    assert.ok(text(query(m.container, '.lc-br-content')).includes('Loading full content from older session history'), 'in-flight note')
+    await act(async () => { release?.() })
+    await flush()
+    assert.ok(text(query(m.container, '.lc-br-content')).includes('FULL BODY'))
+    await click(elemRows(m)[1])
+    await click(elemRows(m)[1])
+    assert.ok(text(query(m.container, '.lc-br-content')).includes('FULL BODY'))
+    assert.equal(calls, 1, 'no second fetch for a merged seq')
+    await m.unmount()
+  })
+
+  test('a page without the seq reports it as absent from the session log', async () => {
+    let calls = 0
+    const fetchContent = async () => {
+      calls += 1
+      return null
+    }
+    const m = await mount(h(Browser, props({ data, convNodes: [], fetchContent })))
+    await openFirstRow(m)
+    await flush()
+    assert.equal(calls, 1)
+    assert.ok(text(query(m.container, '.lc-br-content')).includes('not in the session log anymore'))
+    await m.unmount()
+  })
+
+  test('a failed read arms the retry button; retrying succeeds', async () => {
+    silenceFetchWarn()
+    vi.useFakeTimers()
+    try {
+      let calls = 0
+      let failing = true
+      const fetchContent = async (seq: number) => {
+        calls += 1
+        if (failing) throw new Error('transport down')
+        return { kind: 'user', seq, content: [{ type: 'text', text: 'RETRY BODY' }] } as ConversationNodeLike
+      }
+      const m = await mount(h(Browser, props({ data, convNodes: [], fetchContent })))
+      await openFirstRow(m)
+      await act(async () => { await vi.advanceTimersByTimeAsync(10_000) })
+      const failed = query(m.container, '.lc-br-content')
+      assert.ok(text(failed).includes('Load failed'))
+      assert.equal(calls, 4, 'the bounded auto-retry exhausts before arming the manual retry')
+      failing = false
+      await click(query(failed, '.lc-br-retry'))
+      await act(async () => { await Promise.resolve() })
+      assert.ok(text(query(m.container, '.lc-br-content')).includes('RETRY BODY'))
+      assert.equal(calls, 5)
+      await m.unmount()
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  test('a session scope change refetches instead of reusing another session value', async () => {
+    const fetched: string[] = []
+    let session = 'A'
+    const fetchContent = async (seq: number) => {
+      fetched.push(session + ':' + String(seq))
+      return { kind: 'user', seq, content: [{ type: 'text', text: session + ' BODY' }] } as ConversationNodeLike
+    }
+    const mountWith = (value: string) => props({ data, convNodes: [], fetchContent, session: value })
+    const m = await mount(h(Browser, mountWith('A')))
+    await openFirstRow(m)
+    await flush()
+    assert.ok(text(query(m.container, '.lc-br-content')).includes('A BODY'))
+    session = 'B'
+    await m.update(h(Browser, mountWith('B')))
+    await flush()
+    assert.ok(text(query(m.container, '.lc-br-content')).includes('B BODY'))
+    assert.deepEqual(fetched, ['A:5', 'B:5'])
+    await m.unmount()
+  })
+
+  test('a late fetch for an abandoned row never lands; the next row fetches its own seq', async () => {
+    silenceFetchWarn()
+    const deferreds: { resolve: (node: ConversationNodeLike | null) => void; reject: (reason: Error) => void }[] = []
+    const fetchedFor: number[] = []
+    const fetchContent = (seq: number): Promise<ConversationNodeLike | null> => {
+      fetchedFor.push(seq)
+      if (seq === 5) return new Promise((resolve, reject) => { deferreds.push({ resolve, reject }) })
+      return Promise.resolve({ kind: 'user', seq, content: [{ type: 'text', text: 'BODY ' + String(seq) }] } as ConversationNodeLike)
+    }
+    let snap: { nodes?: readonly ConversationNodeLike[] } = { nodes: [] }
+    const el = () => h(Browser, props({ data, convNodes: snap.nodes, fetchContent }))
+    const m = await mount(el())
+    await openFirstRow(m)
+    assert.equal(deferreds.length, 1)
+    await click(elemRows(m)[0])
+    await flush()
+    assert.ok(text(query(m.container, '.lc-br-content')).includes('BODY 6'))
+    await act(async () => {
+      deferreds[0]?.resolve({ kind: 'user', seq: 5, content: [{ type: 'text', text: 'STALE BODY' }] })
+    })
+    assert.ok(!text(m.container).includes('STALE BODY'), 'stale result ignored')
+    await click(elemRows(m)[1])
+    await click(elemRows(m)[0])
+    await flush()
+    await act(async () => {
+      deferreds[1]?.reject(new Error('gone'))
+    })
+    await flush()
+    assert.ok(text(query(m.container, '.lc-br-content')).includes('BODY 6'), 'stale rejection ignored')
+    await click(elemRows(m)[1])
+    await act(async () => {
+      deferreds[2]?.resolve({ kind: 'user', seq: 5, content: [{ type: 'text', text: 'BODY 5' }] })
+    })
+    await flush()
+    assert.ok(text(query(m.container, '.lc-br-content')).includes('BODY 5'))
+    assert.deepEqual(fetchedFor, [5, 6, 5, 5], 'one call per miss (seq 6 stays cached)')
+    snap = { nodes: [{ kind: 'user', seq: 5, content: [{ type: 'text', text: 'WINDOW BODY' }] }] }
+    await m.update(el())
+    assert.ok(text(query(m.container, '.lc-br-content')).includes('WINDOW BODY'))
+    assert.ok(!text(m.container).includes('BODY 5'), 'the join takes precedence over the fetch cache')
+    await m.unmount()
+  })
+})
+})

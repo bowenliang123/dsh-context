@@ -1,23 +1,19 @@
 import assert from 'node:assert/strict'
-import { act, createElement as h } from 'react'
+import { act, createElement as h, useRef, type ReactElement } from 'react'
 import { describe, test, vi } from 'vitest'
-import {
-  ROW_WINDOW_OVERSCAN,
-  rowWindowFor,
-  type SurfaceWindow,
-  type SurfaceWindowOptions,
-  type WindowAlign,
-} from '../../../src/client/components/useRowWindow'
+import { ROW_WINDOW_OVERSCAN, rowWindowFor, type SurfaceWindow, type SurfaceWindowOptions, type WindowAlign } from '../../../src/client/components/useRowWindow'
 import { mount, query, queryAll, until } from '../helpers/kit'
-import {
-  ControlledResizeObserver,
-  estimateAt,
-  numbers,
-  pinBox,
-  Probe,
-  scrollBy,
-  sizeOf,
-} from './useRowWindowHarness'
+import { ControlledResizeObserver, estimateAt, numbers, pinBox, Probe, scrollBy, sizeOf } from './useRowWindowHarness'
+import { restoreLayout, stubClientSizes, stubListRect } from '../helpers/layout'
+import { useElementSize, useScrollMetrics } from '../../../src/client/components/useElementMetrics'
+import { useLazyMount } from '../../../src/client/components/useLazyMount'
+import { remoteStateOf } from '../../../src/client/components/useRemoteState'
+import { useConversationSurface, type ConversationSurfaceKind } from '../../../src/client/components/useConversationSurface'
+import { assembleCached, cachedByData } from '../../../src/client/components/derivedCache'
+import { type ContextHeaders } from '../../../src/shared/types'
+import { timeline } from './contextViewHarness'
+
+describe('useRowWindow', () => {
 
 describe('rowWindowFor', () => {
   test('covers the viewport with an overscan on both sides', () => {
@@ -432,4 +428,388 @@ describe('useSurfaceWindow — focus and keyboard', () => {
       vi.unstubAllGlobals()
     }
   })
+})
+})
+
+describe('useElementMetrics', () => {
+
+function SizeProbe(props: { mode?: 'client' | 'content'; enabled?: boolean }): ReactElement {
+  const ref = useRef<HTMLDivElement>(null)
+  const size = useElementSize(ref, props.mode ?? 'client', props.enabled ?? true)
+  return h('div', { ref, className: 'size-probe', 'data-w': size.width, 'data-h': size.height })
+}
+
+function ScrollProbe(props: { enabled?: boolean }): ReactElement {
+  const ref = useRef<HTMLDivElement>(null)
+  const metrics = useScrollMetrics(ref, props.enabled ?? true)
+  return h('div', {
+    ref,
+    className: 'scroll-probe',
+    'data-top': metrics.scrollTop,
+    'data-h': metrics.height,
+    'data-measured': String(metrics.measured),
+  })
+}
+
+describe('useElementSize', () => {
+  test('reports the client box, follows props, and resets while disabled', async () => {
+    stubClientSizes({ 'size-probe': { width: 120, height: 40 } })
+    try {
+      const m = await mount(h(SizeProbe, {}))
+      assert.equal(query(m.container, '.size-probe').getAttribute('data-w'), '120')
+      assert.equal(query(m.container, '.size-probe').getAttribute('data-h'), '40')
+      await m.update(h(SizeProbe, { enabled: false }))
+      assert.equal(query(m.container, '.size-probe').getAttribute('data-w'), '0')
+      await m.update(h(SizeProbe, { enabled: true }))
+      assert.equal(query(m.container, '.size-probe').getAttribute('data-w'), '120')
+      await m.unmount()
+    } finally {
+      restoreLayout()
+    }
+  })
+
+  test('measures the content box minus the computed padding', async () => {
+    stubListRect('size-probe', 200, 100)
+    const observers: ResizeObserverCallback[] = []
+    vi.stubGlobal('ResizeObserver', class {
+      constructor(readonly callback: ResizeObserverCallback) { observers.push(callback) }
+      observe = (): void => {}
+      disconnect = (): void => {}
+    })
+    try {
+      const m = await mount(h(SizeProbe, { mode: 'content' }))
+      const el = query<HTMLElement>(m.container, '.size-probe')
+      assert.equal(el.getAttribute('data-w'), '200')
+      el.style.padding = '5px 10px'
+      await act(async () => { observers[0]([], {} as ResizeObserver) })
+      assert.equal(query(m.container, '.size-probe').getAttribute('data-w'), '180')
+      assert.equal(query(m.container, '.size-probe').getAttribute('data-h'), '90')
+      await m.unmount()
+    } finally {
+      vi.unstubAllGlobals()
+      restoreLayout()
+    }
+  })
+})
+
+describe('useScrollMetrics', () => {
+  test('measures the box, follows coalesced scroll frames, and resets while disabled', async () => {
+    stubClientSizes({ 'scroll-probe': { width: 160, height: 200 } })
+    const frames: FrameRequestCallback[] = []
+    vi.stubGlobal('requestAnimationFrame', (callback: FrameRequestCallback) => { frames.push(callback); return frames.length })
+    vi.stubGlobal('cancelAnimationFrame', () => {})
+    try {
+      const m = await mount(h(ScrollProbe, {}))
+      const el = query<HTMLElement>(m.container, '.scroll-probe')
+      assert.equal(el.getAttribute('data-h'), '200')
+      assert.equal(el.getAttribute('data-measured'), 'true')
+      Object.defineProperty(el, 'scrollTop', { configurable: true, value: 75 })
+      await act(async () => { el.dispatchEvent(new Event('scroll')) })
+      await act(async () => { for (const frame of frames.splice(0)) frame(0) })
+      assert.equal(el.getAttribute('data-top'), '75')
+      await m.update(h(ScrollProbe, { enabled: false }))
+      assert.equal(query(m.container, '.scroll-probe').getAttribute('data-top'), '0')
+      await m.unmount()
+    } finally {
+      vi.unstubAllGlobals()
+      restoreLayout()
+    }
+  })
+
+  test('a resize observer callback re-reads the box, and unmount cancels a queued frame', async () => {
+    stubClientSizes({ 'scroll-probe': { width: 160, height: 200 } })
+    const observers: ResizeObserverCallback[] = []
+    const disconnects: number[] = []
+    vi.stubGlobal('ResizeObserver', class {
+      constructor(readonly callback: ResizeObserverCallback) { observers.push(callback) }
+      observe = (): void => {}
+      disconnect = (): void => { disconnects.push(1) }
+    })
+    const frames: FrameRequestCallback[] = []
+    vi.stubGlobal('requestAnimationFrame', (callback: FrameRequestCallback) => {
+      frames.push(callback)
+      return frames.length
+    })
+    const cancels: number[] = []
+    vi.stubGlobal('cancelAnimationFrame', () => { cancels.push(1) })
+    try {
+      const m = await mount(h(ScrollProbe, {}))
+      const el = query<HTMLElement>(m.container, '.scroll-probe')
+      Object.defineProperty(el, 'clientHeight', { configurable: true, value: 300 })
+      await act(async () => { observers[0]([], {} as ResizeObserver) })
+      await act(async () => { for (const frame of frames.splice(0)) frame(0) })
+      assert.equal(el.getAttribute('data-h'), '300')
+      await act(async () => { el.dispatchEvent(new Event('scroll')) })
+      await m.unmount()
+      assert.ok(cancels.length > 0, 'a queued frame is cancelled on unmount')
+      assert.ok(disconnects.length > 0, 'the observer disconnects on unmount')
+    } finally {
+      vi.unstubAllGlobals()
+      restoreLayout()
+    }
+  })
+})
+})
+
+describe('useLazyMount', () => {
+
+function Probe(props: { attachRef?: boolean; wrap?: boolean; force?: boolean }) {
+  const [ref, mounted] = useLazyMount(props.force === true)
+  const body = mounted ? h('span', { 'data-mounted': 'yes' }) : h('span', { 'data-mounted': 'no' })
+  const inner = h('div', { ...(props.attachRef === false ? {} : { ref }), 'data-probe': '' }, body)
+  return props.wrap === true
+    ? h('div', { 'data-conversation-scroll': '' }, inner)
+    : inner
+}
+
+interface ObserverRecord { callback: IntersectionObserverCallback; disconnected: number }
+
+function stubObserver(): { records: ObserverRecord[]; restore: () => void } {
+  const records: ObserverRecord[] = []
+  class FakeObserver {
+    private readonly record: ObserverRecord
+    constructor(callback: IntersectionObserverCallback) {
+      this.record = { callback, disconnected: 0 }
+      records.push(this.record)
+    }
+    observe = (): void => {}
+    disconnect = (): void => { this.record.disconnected++ }
+  }
+  vi.stubGlobal('IntersectionObserver', FakeObserver)
+  return { records, restore: () => { vi.unstubAllGlobals() } }
+}
+
+describe('useLazyMount', () => {
+  test('mounts immediately without an observer or when forced, never observing', async () => {
+    const immediate = await mount(h(Probe, {}))
+    assert.equal(query(immediate.container, '[data-mounted]')?.getAttribute('data-mounted'), 'yes')
+    await immediate.unmount()
+
+    const observer = stubObserver()
+    try {
+      const forced = await mount(h(Probe, { force: true }))
+      assert.equal(query(forced.container, '[data-mounted]')?.getAttribute('data-mounted'), 'yes')
+      await forced.unmount()
+      assert.equal(observer.records.length, 0)
+    } finally {
+      observer.restore()
+      vi.unstubAllGlobals()
+    }
+  })
+
+  test('re-observes a reattached placeholder (a hidden sidebar copy comes back)', async () => {
+    const observer = stubObserver()
+    vi.stubGlobal('requestIdleCallback', undefined)
+    try {
+      const m = await mount(h(Probe, { attachRef: false }))
+      assert.equal(observer.records.length, 0)
+      await m.update(h(Probe, { attachRef: true }))
+      assert.equal(observer.records.length, 1, 'the first attach observes')
+      await m.update(h(Probe, { attachRef: false }))
+      await m.update(h(Probe, { attachRef: true }))
+      assert.equal(observer.records.length, 2, 'a reattach observes again')
+      await m.unmount()
+    } finally {
+      observer.restore()
+      vi.unstubAllGlobals()
+    }
+  })
+
+  test('keeps the skeleton until the block nears the viewport, then mounts in an idle slice', async () => {
+    const observer = stubObserver()
+    const idle: (() => void)[] = []
+    vi.stubGlobal('requestIdleCallback', (callback: () => void) => { idle.push(callback); return 7 })
+    const cancel = vi.fn()
+    vi.stubGlobal('cancelIdleCallback', cancel)
+    try {
+      const m = await mount(h(Probe, {}))
+      assert.equal(query(m.container, '[data-mounted]')?.getAttribute('data-mounted'), 'no')
+      assert.equal(observer.records.length, 1)
+      const entry = { isIntersecting: false } as IntersectionObserverEntry
+      await act(async () => { observer.records[0].callback([entry], {} as IntersectionObserver) })
+      assert.equal(query(m.container, '[data-mounted]')?.getAttribute('data-mounted'), 'no')
+      await act(async () => {
+        observer.records[0].callback([{ isIntersecting: true } as IntersectionObserverEntry], {} as IntersectionObserver)
+      })
+      assert.equal(idle.length, 1)
+      await act(async () => { idle[0]() })
+      assert.equal(query(m.container, '[data-mounted]')?.getAttribute('data-mounted'), 'yes')
+      await act(async () => {
+        observer.records[0].callback([{ isIntersecting: true } as IntersectionObserverEntry], {} as IntersectionObserver)
+      })
+      await m.unmount()
+    } finally {
+      observer.restore()
+      vi.unstubAllGlobals()
+    }
+  })
+
+  test('falls back to a timeout without requestIdleCallback and cancels it on unmount', async () => {
+    const observer = stubObserver()
+    vi.stubGlobal('requestIdleCallback', undefined)
+    try {
+      const m = await mount(h(Probe, {}))
+      await act(async () => {
+        observer.records[0].callback([{ isIntersecting: true } as IntersectionObserverEntry], {} as IntersectionObserver)
+      })
+      await m.unmount()
+      assert.ok(observer.records[0].disconnected > 0)
+    } finally {
+      observer.restore()
+      vi.unstubAllGlobals()
+    }
+  })
+
+  test('resolves a conversation scroll parent as the observer root and tolerates a missing ref', async () => {
+    const observer = stubObserver()
+    try {
+      const m = await mount(h(Probe, { wrap: true }))
+      assert.equal(observer.records.length, 1)
+      await m.unmount()
+      const missing = await mount(h(Probe, { attachRef: false }))
+      assert.equal(query(missing.container, '[data-mounted]')?.getAttribute('data-mounted'), 'no')
+      await missing.unmount()
+    } finally {
+      observer.restore()
+      vi.unstubAllGlobals()
+    }
+  })
+})
+})
+
+describe('useRemoteState', () => {
+
+describe('remoteStateOf', () => {
+  test('content wins, then a loading read, then a retryable failure, and an idle read falls back to empty', () => {
+    const retry = (): void => {}
+    assert.deepEqual(remoteStateOf(2, 'failed', retry), { kind: 'idle' })
+    assert.deepEqual(remoteStateOf(0, 'loading', retry), { kind: 'loading' })
+    assert.deepEqual(remoteStateOf(0, 'failed', retry), { kind: 'failed', retry })
+    assert.deepEqual(remoteStateOf(0, 'failed'), { kind: 'empty' })
+    assert.deepEqual(remoteStateOf(0, 'ready'), { kind: 'empty' })
+    assert.deepEqual(remoteStateOf(0, undefined), { kind: 'empty' })
+  })
+})
+})
+
+describe('useConversationSurface', () => {
+
+const PANE_ATTR = 'data-lc-surface'
+const MODAL_ATTR = 'data-lc-modal'
+
+function Probe(props: { kind?: ConversationSurfaceKind; attach?: boolean }) {
+  const ref = useRef<HTMLDivElement | null>(null)
+  useConversationSurface(ref, props.kind)
+  return h('div', { ...(props.attach === false ? {} : { ref }), 'data-probe': '' })
+}
+
+function Scene(props: { kind?: ConversationSurfaceKind; attach?: boolean; second?: boolean }) {
+  return h('div', { 'data-conversation-scroll': '' },
+    h(Probe, { kind: props.kind, attach: props.attach }),
+    props.second === true ? h(Probe, { kind: props.kind }) : null,
+  )
+}
+
+describe('useConversationSurface', () => {
+  test('marks the closest conversation scroller while mounted and keeps the mark until every surface releases it', async () => {
+    const m = await mount(h(Scene, {}))
+    const host = query(m.container, '[data-conversation-scroll]')
+    assert.equal(host.hasAttribute(PANE_ATTR), true)
+    await m.unmount()
+    assert.equal(host.hasAttribute(PANE_ATTR), false)
+
+    const shared = await mount(h(Scene, { second: true }))
+    const sharedHost = query(shared.container, '[data-conversation-scroll]')
+    assert.equal(sharedHost.hasAttribute(PANE_ATTR), true)
+    await shared.update(h(Scene, {}))
+    assert.equal(sharedHost.hasAttribute(PANE_ATTR), true, 'the remaining surface still owns the pane')
+    await shared.unmount()
+    assert.equal(sharedHost.hasAttribute(PANE_ATTR), false)
+  })
+
+  test('marks the modal separately, moves the mark on a kind change, and keeps the kinds independent', async () => {
+    const m = await mount(h(Scene, { kind: 'modal' }))
+    const host = query(m.container, '[data-conversation-scroll]')
+    assert.equal(host.hasAttribute(MODAL_ATTR), true)
+    assert.equal(host.hasAttribute(PANE_ATTR), false)
+    await m.update(h(Scene, {}))
+    assert.equal(host.hasAttribute(MODAL_ATTR), false, 'the modal released its width-handle mark')
+    assert.equal(host.hasAttribute(PANE_ATTR), true)
+    await m.update(h(Scene, { kind: 'modal' }))
+    assert.equal(host.hasAttribute(PANE_ATTR), false)
+    assert.equal(host.hasAttribute(MODAL_ATTR), true)
+    await m.unmount()
+    assert.equal(host.hasAttribute(MODAL_ATTR), false)
+  })
+
+  test('ignores an unattached ref and a host without the scroller', async () => {
+    const unattached = await mount(h(Scene, { attach: false }))
+    assert.equal(query(unattached.container, '[data-conversation-scroll]').hasAttribute(PANE_ATTR), false)
+    await unattached.unmount()
+
+    const bare = await mount(h(Probe, {}))
+    assert.equal(bare.container.querySelector('[data-conversation-scroll]'), null)
+    await bare.unmount()
+  })
+})
+})
+
+describe('derivedCache', () => {
+
+const headers: ContextHeaders = {
+  headers: [{ seq: 1, time: 1, systemTokens: 0, tools: [] }],
+}
+
+describe('derived cache', () => {
+  test('cachedByData reuses a value per projection and key', () => {
+    const data = timeline()
+    let calls = 0
+    const compute = () => { calls++; return { calls } }
+    const first = cachedByData(data, 'k', compute)
+    const again = cachedByData(data, 'k', compute)
+    assert.equal(first, again)
+    assert.equal(calls, 1)
+    const other = cachedByData(data, 'other', compute)
+    assert.notEqual(first, other)
+    assert.equal(calls, 2)
+    const otherData = timeline()
+    assert.notEqual(cachedByData(otherData, 'k', compute), first)
+    assert.equal(calls, 3)
+  })
+
+  test('assembleCached reuses one assembled view per projection, headers and step', () => {
+    const data = timeline()
+    const live = assembleCached(data, null, null)
+    assert.equal(assembleCached(data, null, null), live)
+    const withHeaders = assembleCached(data, headers, null)
+    assert.notEqual(withHeaders, live)
+    assert.equal(assembleCached(data, headers, null), withHeaders)
+    const otherHeaders: ContextHeaders = { headers: [] }
+    assert.notEqual(assembleCached(data, otherHeaders, null), withHeaders)
+  })
+})
+
+describe('derived cache bounds', () => {
+  test('cachedByData keeps its inner map bounded and touches recency on hits', () => {
+    const data = timeline()
+    let calls = 0
+    const compute = () => { calls++; return calls }
+    const first = cachedByData(data, 'k0', compute)
+    for (let i = 1; i < 16; i++) cachedByData(data, 'k' + i, compute)
+    assert.equal(cachedByData(data, 'k0', compute), first, 'a hit replays and refreshes recency')
+    cachedByData(data, 'k16', compute)
+    assert.equal(cachedByData(data, 'k0', compute), first, 'the touched key survived the trim')
+    assert.notEqual(cachedByData(data, 'k1', compute), 2, 'the untouched oldest key was recomputed')
+  })
+
+  test('assembleCached keeps its per-step map bounded', () => {
+    const data = timeline()
+    const first = assembleCached(data, null, 0)
+    for (let seq = 1; seq < 8; seq++) assembleCached(data, null, seq)
+    assert.equal(assembleCached(data, null, 0), first, 'a hit replays and refreshes recency')
+    assembleCached(data, null, 8)
+    assert.equal(assembleCached(data, null, 0), first, 'the touched step survived the trim')
+    assert.notEqual(assembleCached(data, null, 1), first, 'the untouched oldest step was dropped')
+  })
+})
 })
