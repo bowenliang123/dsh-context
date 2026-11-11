@@ -325,7 +325,8 @@ describe('ContextView — the stats board\'s lower-lane jumps', () => {
       await click(query(m.container, '.lc-core-kv-events'))
       await flush()
       const card = query(m.container, '.lc-events-card')
-      assert.equal(queryAll(card, '.lc-gran-on').length, 5, 'every kind stays picked')
+      assert.equal(queryAll(card, '.lc-gran-on').length, 4, 'every filterable kind stays picked')
+      assert.equal(queryAll(card, '.lc-kinds [data-kind="mode"]').length, 0, 'the plan-mode filter is gone')
       assert.equal(queryAll(card, '.lc-event').length, 3, 'the unfiltered list keeps every row')
       assert.equal(scroller.scrollTop, 600, 'the events card scrolled to the scrollport top')
 

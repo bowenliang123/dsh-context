@@ -61,7 +61,7 @@ import { remoteStateOf } from './useRemoteState'
 
 const viewScroll = new Map<string, number>()
 
-const EVENT_KINDS = ['inject', 'compaction', 'prune', 'model', 'mode'] as const
+const EVENT_KINDS = ['inject', 'compaction', 'prune', 'model'] as const
 const HOVER_DELAY_MS = 140
 const HOVER_LOCK_MS = 320
 const DNA_HOVER_DELAY = 220
