@@ -26,6 +26,10 @@ interface CredentialsHostFace {
   resolve?(ref: string): Promise<{ value?: unknown } | undefined>
 }
 
+interface AccountHostFace {
+  getBalance?(client: { version: string; locale: string; timezoneOffsetSeconds: number }): Promise<unknown>
+}
+
 interface DeepSeekFacts { baseUrl: string; apiKey: string }
 
 interface DeepSeekRow {
@@ -152,6 +156,52 @@ export function balanceOfPayload(value: unknown): PlatformBalance | null {
     : null
 }
 
+function walletAmountsOf(rows: unknown): Map<string, number> | null {
+  const amounts = new Map<string, number>()
+  if (!Array.isArray(rows)) return amounts
+  for (const row of rows) {
+    try {
+      const entry = asRecord(row)
+      if (entry === null) continue
+      const currency = entry.currency
+      const raw = entry.balance
+      const amount = typeof raw === 'string' ? Number(raw) : raw
+      if (typeof currency !== 'string' || currency === ''
+        || typeof amount !== 'number' || !Number.isFinite(amount)) continue
+      if (amount < 0) return null
+      if (!amounts.has(currency)) amounts.set(currency, amount)
+    } catch {
+      continue
+    }
+  }
+  return amounts
+}
+
+export function accountBalanceOf(value: unknown): PlatformBalance | null {
+  const result = asRecord(value)
+  if (result === null || result.status !== 'ready') return null
+  const toppedUp = walletAmountsOf(result.value)
+  const granted = walletAmountsOf(result.bonusWallets)
+  if (toppedUp === null || granted === null) return null
+  const currencies: string[] = []
+  for (const currency of [...toppedUp.keys(), ...granted.keys()]) {
+    if (!currencies.includes(currency)) currencies.push(currency)
+  }
+  const balances = currencies.map((currency) => {
+    const grantedAmount = granted.get(currency) ?? 0
+    const toppedUpAmount = toppedUp.get(currency) ?? 0
+    return {
+      currency,
+      total: grantedAmount + toppedUpAmount,
+      granted: grantedAmount,
+      toppedUp: toppedUpAmount,
+    }
+  })
+  return balances.length > 0
+    ? { isAvailable: balances.some(entry => entry.total > 0), balances }
+    : null
+}
+
 type BalanceFetcher = (url: string, init: RequestInit) => Promise<Response>
 
 const defaultFetcher: BalanceFetcher = (url, init) => fetch(url, init)
@@ -192,13 +242,26 @@ async function readBalance(facts: DeepSeekFacts): Promise<PlatformBalance | null
   }
 }
 
-export function watchBalanceChannel(ctx: Context): void {
+async function readAccountBalance(ctx: Context, version: string): Promise<PlatformBalance | null> {
+  try {
+    const account = ctx.get('deepseekAccount') as AccountHostFace | undefined
+    const getBalance = typeof account?.getBalance === 'function' ? account.getBalance.bind(account) : undefined
+    if (getBalance === undefined) return null
+    return accountBalanceOf(await getBalance({ version, locale: 'en', timezoneOffsetSeconds: 0 }))
+  } catch {
+    return null
+  }
+}
+
+export function watchBalanceChannel(ctx: Context, version = '0.0.0'): void {
   mountPostRoute({
     ctx,
     deps: ['connection'],
     path: BALANCE_ROUTE,
     label: 'dsh-context: balance route',
     handler: () => async (): Promise<Response> => {
+      const account = await readAccountBalance(ctx, version)
+      if (account !== null) return reply({ ok: true, value: account })
       const facts = await resolveFacts(ctx)
       const value = facts !== null ? await readBalance(facts) : null
       return reply({ ok: true, value })
