@@ -15,7 +15,7 @@ import { turnStepsOf } from './trendModel'
 import { useSurfaceWindow } from './useRowWindow'
 import type { SurfaceWindow } from './useRowWindow'
 import { fetchMissNote, useFetchOnMiss } from './fetchOnMiss'
-import { catNodesModelOf, catToolsModelOf, makeNodeRowOf, rowMatches } from './browserRows'
+import { catNodesModelOf, catToolsModelOf, flatNodesModelOf, makeNodeRowOf } from './browserRows'
 import type { NodeRow } from './browserRows'
 import { makeAttachmentSection } from './attachments'
 import { makeRichText } from './richText'
@@ -25,24 +25,15 @@ import { TextSection, schemaTextOf, RowToolbar, ToolSchema } from './browserTool
 import { revealRowInCard } from '../revealScroll'
 import { NodeContent, byCatOf, msgKindsOf } from './browserNodes'
 import type { RowKind } from './browserNodes'
-import { DNA_MIN_BAND, countOf, lastOfTurn, stepStampOf } from './browserHelpers'
+import { DNA_MIN_BAND, STEP_PICK_MAX, baseRequestOf, countOf, findRowByKey, nodeEstimateSize, safeIdPart, stepStampOf } from './browserHelpers'
 import type { CatFocus } from './browserHelpers'
 export type { CatFocus } from './browserHelpers'
 export { stepStampOf } from './browserHelpers'
+import { useLinkedToggle } from './useLinkedToggle'
+import { incrementHas, incrementOf } from './browserIncrement'
+import type { IncrementCat } from './browserIncrement'
 import { MapIcon, makeBrowserTreemap } from './browserTreemap'
 import type { MapBlock } from '../treemap'
-
-function findRowByKey(root: HTMLElement, key: string): HTMLElement | null {
-  for (const row of root.querySelectorAll<HTMLElement>('[data-lc-key]')) {
-    if (row.dataset.lcKey === key) return row
-  }
-  return null
-}
-
-const safeIdPart = (key: string): string => key.replace(/[^a-zA-Z0-9_-]/g, '_')
-
-const STEP_PICK_MAX = 500
-const nodeEstimateSize = (): number => 30
 
 export interface ContextBrowserProps {
   locale?: string
@@ -55,6 +46,8 @@ export interface ContextBrowserProps {
   pinSeq?: number | null
   dna?: boolean
   onDnaChange?: (on: boolean) => void
+  delta?: boolean
+  onDeltaChange?: (on: boolean) => void
   nodeFocus?: { step: number | 'live'; key: string; cat: Category | 'system' | 'tools' } | null
   onNodeFocusHandled?: () => void
   catFocus?: CatFocus | null
@@ -68,7 +61,6 @@ export interface ContextBrowserProps {
   onDetailRetry?: () => void
   session?: string
 }
-
 
 export function makeContextBrowser(
   kit: ViewKit,
@@ -91,21 +83,12 @@ export function makeContextBrowser(
     const [rowQuery, setRowQuery] = useState('')
     const [rowKind, setRowKind] = useState<RowKind | null>(null)
     const [toolSort, setToolSort] = useState<DefaultToolSort>(() => settings.defaultToolSort())
-    const [dnaLocal, setDnaLocal] = useState(false)
-    const dnaLinked = props.dna !== undefined && props.onDnaChange !== undefined
-    const dna = dnaLinked ? props.dna === true : dnaLocal
-    const setDna = (on: boolean): void => {
-      if (dnaLinked) {
-        /* v8 ignore next 1 */
-        props.onDnaChange?.(on)
-      } else {
-        setDnaLocal(on)
-      }
-    }
+    const [dna, setDna] = useLinkedToggle(props.dna, props.onDnaChange)
+    const [delta, setDelta] = useLinkedToggle(props.delta, props.onDeltaChange)
+    const [deltaBase, setDeltaBase] = useState<DefaultDeltaBase>(() => settings.defaultDeltaBase())
     const [dnaKey, setDnaKey] = useState<string | null>(null)
     const [rowDnaKey, setRowDnaKey] = useState<string | null>(null)
     const [mapOn, setMapOn] = useState(false)
-    const [deltaBase, setDeltaBase] = useState<DefaultDeltaBase>(() => settings.defaultDeltaBase())
     const onOpenCat = props.onOpenCat
     const setCat = (c: string | null): void => {
       setOpenCat(c)
@@ -150,6 +133,14 @@ export function makeContextBrowser(
     const nodeFocus = props.nodeFocus
     useEffect(() => {
       if (nodeFocus === null || nodeFocus === undefined) return
+      if (delta) {
+        const step = nodeFocus.step === 'live' ? null : nodeFocus.step
+        const target = step === null ? null : data.requests.find(r => r.seq === step) ?? null
+        const targetSeq = target !== null ? target.seq : null
+        const base = baseRequestOf(data.requests, target, deltaBase)
+        const baseView = base === null ? null : assembleCached(data, headers, base.seq)
+        if (!incrementHas(incrementOf(assembleCached(data, headers, targetSeq), baseView), nodeFocus.key)) setDelta(false)
+      }
       setSel(nodeFocus.step)
       setCat(nodeFocus.cat)
       setOpenElem(nodeFocus.key)
@@ -157,11 +148,12 @@ export function makeContextBrowser(
       setRowKind(null)
       setFocusRowKey(nodeFocus.key)
       if (props.onNodeFocusHandled !== undefined) props.onNodeFocusHandled()
-    }, [nodeFocus, props.onNodeFocusHandled, onOpenCat])
+    }, [nodeFocus, props.onNodeFocusHandled, onOpenCat, delta, data, headers, deltaBase])
     const catFocus = props.catFocus
     useEffect(() => {
       if (catFocus === null || catFocus === undefined) return
       if (dna) setDna(false)
+      if (delta) setDelta(false)
       setSel(catFocus.step ?? 'live')
       setCat(catFocus.cat)
       setOpenElem(null)
@@ -169,7 +161,7 @@ export function makeContextBrowser(
       setRowKind(catFocus.kind ?? null)
       setFocusRowKey(null)
       if (props.onCatFocusHandled !== undefined) props.onCatFocusHandled()
-    }, [catFocus, props.onCatFocusHandled, onOpenCat, dna])
+    }, [catFocus, props.onCatFocusHandled, onOpenCat, dna, delta])
     useEffect(() => {
       if (focusRowKey === null) return undefined
       let frame = 0
@@ -252,13 +244,26 @@ export function makeContextBrowser(
       : null
     const view = useMemo(() => assembleCached(data, headers, seq), [data, headers, seq])
 
+    const lastReq = requests.at(-1) ?? null
+    const refReq = baseRequestOf(requests, req, deltaBase)
+    const zeroBase = refReq === null && lastReq !== null
+    const prevView = useMemo(
+      () => (refReq !== null ? assembleCached(data, headers, refReq.seq) : null),
+      [data, headers, refReq],
+    )
+    const prevByCat = prevView !== null ? byCatOf(prevView) : null
+    const byCat = useMemo(() => byCatOf(view), [view])
+    const inc = useMemo(() => (delta ? incrementOf(view, prevView) : null), [delta, view, prevView])
+    const shownView = inc !== null ? { ...view, system: inc.system, header: inc.header, nodes: inc.nodes } : view
+    const shownByCat = inc !== null ? inc.byCat : byCat
+
     const toolsElemOpen = (): boolean => openElem === 'tools' || (openElem !== null && openElem.startsWith('tool:'))
 
     const fetchHeader = props.fetchHeader
-    const headerSeq = view.header !== null ? view.header.seq : null
-    const systemSeq = view.system !== null ? view.system.seq : null
-    const sysOpen = openCat === 'system' || openElem === 'sys'
-    const toolsOpen = openCat === 'tools' || toolsElemOpen()
+    const headerSeq = shownView.header !== null ? shownView.header.seq : null
+    const systemSeq = shownView.system !== null ? shownView.system.seq : null
+    const sysOpen = shownView.system !== null && (openCat === 'system' || openElem === 'sys')
+    const toolsOpen = shownView.header !== null && (openCat === 'tools' || toolsElemOpen())
     const contentSeq = sysOpen ? systemSeq : toolsOpen ? headerSeq : null
     const epoch = useFetchOnMiss(
       contentSeq,
@@ -272,30 +277,13 @@ export function makeContextBrowser(
     const breakdown = req !== null ? req : data.current
     const parts = partsOf(breakdown)
     const total = breakdown.total
-    const pinKey = openCat !== null && (breakdown[openCat as Category | 'system' | 'tools'] || 0) > 0 ? openCat : null
+    const catTokensOf = (c: IncrementCat): number => inc !== null ? inc.tokens[c] : breakdown[c] || 0
+    const pinKey = openCat !== null && catTokensOf(openCat as IncrementCat) > 0 ? openCat : null
     const pick = (v: string) => {
       setSel(v === 'live' ? 'live' : Number(v))
       setCat(null)
       setOpenElem(null)
     }
-
-    const prevRecordOf = (r: RequestRecord): RequestRecord | null => {
-      const i = requests.findIndex(x => x.seq === r.seq)
-      return i > 0 ? requests[i - 1] : null
-    }
-    const lastReq = requests.length > 0 ? requests[requests.length - 1] : null
-    const turnBaseOf = (r: RequestRecord): RequestRecord | null => lastOfTurn(requests, (r.turn ?? 0) - 1)
-    const refReq = req === null
-      ? deltaBase === 'step' ? lastReq : lastReq === null ? null : turnBaseOf(lastReq)
-      : deltaBase === 'turn' ? turnBaseOf(req) : prevRecordOf(req)
-    const zeroBase = refReq === null && lastReq !== null
-    const prevView = useMemo(
-      () => (refReq !== null ? assembleCached(data, headers, refReq.seq) : null),
-      [data, headers, refReq],
-    )
-    const prevByCat = prevView !== null ? byCatOf(prevView) : null
-
-    const byCat = useMemo(() => byCatOf(view), [view])
 
     const toolHits = new Map<string, number>()
     for (const n of view.nodes) {
@@ -307,23 +295,10 @@ export function makeContextBrowser(
       () => makeNodeRowOf(kit, nodeText, bySeq, openElem),
       [kit, nodeText, bySeq, openElem],
     )
-    interface FlatEntry {
-      r: NodeRow
-      pos: number
-    }
-    const flatModel = useMemo(() => {
-      if (!dna) return { entries: [] as FlatEntry[], tokens: 0 }
-      const q = rowQuery.trim().toLowerCase()
-      const entries: FlatEntry[] = []
-      let tokens = 0
-      for (let i = view.nodes.length - 1; i >= 0; i--) {
-        const r = nodeRowOf(view.nodes[i])
-        if (q !== '' && !rowMatches(r, q)) continue
-        entries.push({ r, pos: i + 1 })
-        tokens += r.n.tokens
-      }
-      return { entries, tokens }
-    }, [dna, nodeRowOf, rowQuery, view])
+    const flatModel = useMemo(
+      () => (dna ? flatNodesModelOf(view.nodes, rowQuery, inc !== null ? inc.seqs : null, nodeRowOf) : { entries: [], tokens: 0 }),
+      [dna, inc, nodeRowOf, rowQuery, view],
+    )
     const flatKeyOf = useCallback((index: number): string => 'n' + String(flatModel.entries[index].r.n.seq), [flatModel])
     const flatScope = useSurfaceWindow(scrollRef, {
       count: flatModel.entries.length,
@@ -354,20 +329,23 @@ export function makeContextBrowser(
     const catModel = useMemo(() => {
       if (openCat === null || openCat === 'system') return null
       if (openCat === 'tools') {
-        const header = view.header
+        const header = shownView.header
         const content = header === null ? undefined : headerContent.get(header.seq)
+        const tokens = inc !== null ? inc.tokens.tools : breakdown.tools
         return {
           kind: 'tools' as const,
-          tools: catToolsModelOf(header?.tools ?? [], content, rowQuery, toolSort, toolHitsOf, breakdown.tools, schemaTextOf),
+          tools: catToolsModelOf(header?.tools ?? [], content, rowQuery, toolSort, toolHitsOf, tokens, schemaTextOf),
         }
       }
       if (dna) return null
       const c = openCat as Category
+      const nodes = shownByCat[c] ?? []
+      const tokens = inc !== null ? inc.tokens[c] : breakdown[c] || 0
       return {
         kind: 'nodes' as const,
-        nodes: catNodesModelOf(byCat[c] ?? [], c, rowQuery, rowKind, nodeRowOf, breakdown[c] || 0),
+        nodes: catNodesModelOf(nodes, c, rowQuery, rowKind, nodeRowOf, tokens),
       }
-    }, [breakdown, byCat, dna, headerContent, nodeRowOf, openCat, rowKind, rowQuery, toolSort, view])
+    }, [breakdown, byCat, dna, headerContent, inc, nodeRowOf, openCat, rowKind, rowQuery, toolSort, view])
     const catKeyOf = useCallback((index: number): string => {
       /* v8 ignore next 1 */
       if (catModel === null) return ''
@@ -396,7 +374,7 @@ export function makeContextBrowser(
       const base = dnaBaseLabel(it, t, catLabel)
       return it.time !== undefined ? base + ' · ' + fmtTime(it.time) : base
     }
-    const dnaItems = dna ? dnaOf(view) : null
+    const dnaItems = dna ? dnaOf(view).filter(it => inc === null || incrementHas(inc, it.key)) : null
     const dnaByKey = new Map(dnaItems?.map(it => [it.key, it] as const) ?? [])
     const dnaParts = dnaItems?.map(it => ({
       key: it.key,
@@ -407,8 +385,8 @@ export function makeContextBrowser(
     })) ?? null
     const liveDnaKey = dnaKey !== null && dnaByKey.has(dnaKey) ? dnaKey : null
     const rowDnaLive = dna && rowDnaKey !== null
-      && (rowDnaKey === 'tools' ? view.header !== null
-        : rowDnaKey === 'system' ? view.system !== null
+      && (rowDnaKey === 'tools' ? shownView.header !== null
+        : rowDnaKey === 'system' ? shownView.system !== null
           : dnaByKey.has(rowDnaKey)) ? rowDnaKey : null
     useLayoutEffect(() => {
       if (liveDnaKey === null) return
@@ -431,27 +409,30 @@ export function makeContextBrowser(
       setOpenElem(key)
     }
 
-    const toolCount = (c: string): number => countOf(view, byCat, c)
+    const toolCount = (c: string): number => inc !== null
+      ? inc.counts[c as IncrementCat]
+      : countOf(view, byCat, c)
+
+    const headerlessOpenable = (c: string): boolean => inc === null && (c === 'system' || c === 'tools') && view.header === null
 
     const singleKeyOf = (c: string): string | null => {
-      if (c === 'system') return view.system !== null ? 'sys' : null
+      if (c === 'system') return shownView.system !== null ? 'sys' : null
       if (c === 'tools') {
-        const tools = view.header?.tools
+        const tools = shownView.header?.tools
         return tools !== undefined && tools.length === 1 ? 'tool:' + tools[0].name : null
       }
       /* v8 ignore next 1 */
-      const nodes = byCat[c as Category] ?? []
+      const nodes = shownByCat[c as Category] ?? []
       return nodes.length === 1 ? 'n' + String(nodes[0].seq) : null
     }
 
     const toggleCat = (c: string) => {
       if (dna) {
-        if (c === 'system' && view.system !== null) { setOpenCat(c); setRowQuery(''); setOpenElem('sys') }
+        if (c === 'system' && shownView.system !== null) { setOpenCat(c); setRowQuery(''); setOpenElem('sys') }
         else if (c === 'tools') { setOpenCat(c); setRowQuery(''); setOpenElem('tools') }
         return
       }
-      const openable = toolCount(c) > 0
-        || ((c === 'system' || c === 'tools') && view.header === null)
+      const openable = toolCount(c) > 0 || headerlessOpenable(c)
       if (!openable) return
       if (openCat === c) {
         setCat(null)
@@ -609,18 +590,19 @@ export function makeContextBrowser(
 
     const catBody = (c: string): ReactNode => {
       if (c === 'system') {
-        const sys = view.system
+        const sys = shownView.system
         if (sys === null) {
           return <div className="lc-br-note">{t(headers === null ? 'browser.noHeader' : 'browser.noEpoch')}</div>
         }
         const content = headerContent.get(sys.seq)
         if (content === undefined) return <div className="lc-br-note">{headerNote}</div>
         if (content.system === undefined) return <div className="lc-br-note">{t('browser.noSystem')}</div>
-        return elemRow('sys', null, systemPreviewOf(sys), breakdown.system, undefined,
+        return elemRow('sys', null, systemPreviewOf(sys), catTokensOf('system'), undefined,
           systemBodyOf(sys), false, null, stampFor(sys.seq))
       }
       if (c === 'tools') {
-        if (view.header === null) return <div className="lc-br-note">{t(headers === null ? 'browser.noHeader' : 'browser.noEpoch')}</div>
+        const header = shownView.header
+        if (header === null) return <div className="lc-br-note">{t(headers === null ? 'browser.noHeader' : 'browser.noEpoch')}</div>
         const labels = {
           desc: t('tool.desc'),
           title: t('tool.params'),
@@ -628,8 +610,8 @@ export function makeContextBrowser(
           show: t('tool.jsonToggle'),
           hide: t('tool.jsonHide'),
         }
-        const content = headerContent.get(view.header.seq)
-        const epochStamp = stampFor(view.header.seq)
+        const content = headerContent.get(header.seq)
+        const epochStamp = stampFor(header.seq)
         const model = catModel !== null && catModel.kind === 'tools' ? catModel.tools : null
         const toolctl = (
           <RowToolbar
@@ -764,7 +746,7 @@ export function makeContextBrowser(
         'tools',
         catChip('tools'),
         t('browser.items', { n: header.tools.length }),
-        breakdown.tools,
+        catTokensOf('tools'),
         undefined,
         catBody('tools'),
         false, null,
@@ -775,23 +757,24 @@ export function makeContextBrowser(
 
     const systemRow = (sys: SystemPromptNode): ReactElement =>
       elemRow('sys', catChip('system'), systemPreviewOf(sys),
-        breakdown.system, undefined, systemBodyOf(sys), false, null, stampFor(sys.seq),
+        catTokensOf('system'), undefined, systemBodyOf(sys), false, null, stampFor(sys.seq),
         { onHover: (over) => { setRowDnaKey(over ? 'system' : null) } })
 
     const flatQ = rowQuery.trim().toLowerCase()
-    const flatSys = view.system
+    const flatHeader = shownView.header
+    const flatSys = shownView.system
     const flatSysText = flatSys !== null ? headerContent.get(flatSys.seq)?.system ?? '' : ''
     const flatTail: ReactElement[] = []
     let flatTailTokens = 0
-    if (dna && view.header !== null && view.header.tools.some(tool =>
+    if (dna && flatHeader !== null && flatHeader.tools.some(tool =>
       tool.name.toLowerCase().includes(flatQ) || (tool.plugin ?? '').toLowerCase().includes(flatQ))) {
-      flatTail.push(toolsGroupRow(view.header))
-      flatTailTokens += breakdown.tools
+      flatTail.push(toolsGroupRow(flatHeader))
+      flatTailTokens += catTokensOf('tools')
     }
     if (dna && flatSys !== null
       && (systemPreviewOf(flatSys).toLowerCase().includes(flatQ) || flatSysText.toLowerCase().includes(flatQ))) {
       flatTail.push(systemRow(flatSys))
-      flatTailTokens += breakdown.system
+      flatTailTokens += catTokensOf('system')
     }
     const flatCount = flatModel.entries.length + flatTail.length
     const flatTokens = flatModel.tokens + flatTailTokens
@@ -805,6 +788,7 @@ export function makeContextBrowser(
         onChange={setRowQuery}
       />
     )
+    const pctBase = inc !== null ? inc.total : total
 
     return (
       <div className="lc-card lc-br" ref={rootRef}>
@@ -821,6 +805,15 @@ export function makeContextBrowser(
                 onClick={() => { setDna(!dna) }}
               >
                 {t('browser.dna')}
+              </button>
+            </span>
+            <span className="lc-gran lc-br-delta-ctl" role="group" title={t('browser.deltaTip')}>
+              <button
+                type="button"
+                className={'lc-gran-btn' + (delta ? ' lc-gran-on' : '')}
+                onClick={() => { setDelta(!delta) }}
+              >
+                {t('gran.delta')}
               </button>
             </span>
             <span className="lc-gran" role="group" title={t('browser.base.tip')}>
@@ -856,17 +849,20 @@ export function makeContextBrowser(
                   ? t('detail.step', { t: req.turn ?? 0, s: req.step ?? 0, n: stepsOf(req.turn) })
                   : t('browser.liveNow')}</b>
                 {req !== null ? <span>{fmtTime(req.time)}</span> : null}
-                <span className="lc-est">{t('detail.estTotal', { n: fmt(total) })}</span>
+                <span className="lc-est">{inc !== null
+                  ? t('browser.addedOfTotal', { a: fmt(inc.total), n: fmt(total) })
+                  : t('detail.estTotal', { n: fmt(total) })}</span>
                 {actual !== null && actual.prompt !== undefined
                   ? <span>{t('detail.actual', { n: fmt(actual.prompt) })}</span>
                   : null}
               </div>
               <StackedBar
-                parts={dnaParts ?? parts}
+                parts={dnaParts ?? (inc !== null ? inc.parts : parts)}
                 height={10}
                 hoverKey={dna ? liveDnaKey ?? rowDnaLive ?? linkKey ?? pinKey : linkKey ?? pinKey}
                 onHoverKey={dna ? setDnaKey : linked ? props.onHoverKey : undefined}
                 tip={dna}
+                shareLabel={inc !== null ? t('browser.ofAdded') : undefined}
                 onPickKey={dna ? pickDna : undefined}
                 minBand={dna ? DNA_MIN_BAND : undefined}
               />
@@ -902,7 +898,9 @@ export function makeContextBrowser(
         {mapOn
           ? (
             <BrowserTreemap
-              view={view}
+              view={shownView}
+              emptyLabel={inc !== null ? t('browser.noAdded') : undefined}
+              shareLabel={inc !== null ? t('browser.ofAdded') : undefined}
               openCat={openCat}
               hoverKey={linkKey}
               onHoverKey={dna ? undefined : linked ? props.onHoverKey : undefined}
@@ -934,20 +932,23 @@ export function makeContextBrowser(
                   ? <div className="lc-row-pad" style={{ height: flatScope.bottomPad }} aria-hidden="true" />
                   : null}
                 {flatTail}
-                {flatCount === 0 ? <div className="lc-br-note">{t('browser.rowNoMatch')}</div> : null}
+                {flatCount === 0
+                  ? <div className="lc-br-note">{inc !== null && flatQ === '' && inc.items === 0 ? t('browser.noAdded') : t('browser.rowNoMatch')}</div>
+                  : null}
               </div>
             )
             : (
               <div className="lc-br-cats">
                 {CATS.map((c) => {
                   const count = toolCount(c.key)
-                  const v = breakdown[c.key] || 0
+                  const fullCount = inc !== null ? countOf(view, byCat, c.key) : count
+                  const v = catTokensOf(c.key)
+                  const fullTokens = inc !== null ? breakdown[c.key] || 0 : v
                   const prevCount = zeroBase ? 0 : prevView !== null && prevByCat !== null ? countOf(prevView, prevByCat, c.key) : null
-                  const countDelta = prevCount !== null ? count - prevCount : null
+                  const countDelta = prevCount !== null ? fullCount - prevCount : null
                   const prevTokens = zeroBase ? 0 : refReq !== null ? (refReq[c.key] || 0) : null
-                  const tokenDelta = prevTokens !== null ? v - prevTokens : null
-                  const openable = count > 0
-                    || ((c.key === 'system' || c.key === 'tools') && view.header === null)
+                  const tokenDelta = prevTokens !== null ? fullTokens - prevTokens : null
+                  const openable = count > 0 || headerlessOpenable(c.key)
                   const open = openCat === c.key && openable
                   return (
                     <div key={c.key} className={'lc-br-cat' + (openable ? '' : ' lc-br-cat-empty')}>
@@ -983,7 +984,7 @@ export function makeContextBrowser(
                           ) : null}
                           <span className="lc-br-tokens">{'≈' + fmt(v)}</span>
                         </span>
-                        <span className="lc-br-pct">{total > 0 ? `${Math.round(v / total * 100)}%` : ''}</span>
+                        <span className="lc-br-pct">{pctBase > 0 ? `${Math.round(v / pctBase * 100)}%` : ''}</span>
                       </button>
                       {open ? <div className="lc-br-body" id={catBodyIdOf(c.key)}>{catBody(c.key)}</div> : null}
                     </div>

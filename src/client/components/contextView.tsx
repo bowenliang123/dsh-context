@@ -826,6 +826,8 @@ export function makeContextView(
         onCatFocusHandled={clearCatFocus}
         dna={dna}
         onDnaChange={setDna}
+        delta={trendMode === 'delta'}
+        onDeltaChange={(on) => { setTrendMode(on ? 'delta' : 'total') }}
         locale={activeLocale}
         session={sessionKey}
       />

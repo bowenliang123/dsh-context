@@ -32,6 +32,7 @@ export interface StackedBarProps {
   onPickKey?: (key: string) => void
   minBand?: number
   tip?: boolean
+  shareLabel?: string
   reserve?: ContextReserve
 }
 
@@ -130,7 +131,7 @@ export function makeStackedBar(kit: ViewKit): (props: StackedBarProps) => ReactE
             const count = p.raw ?? p.value
             tip = {
               head: p.label ?? catLabel(p.key),
-              figure: `≈${fmt(count)} · ${rawTotal > 0 ? Math.round(count / rawTotal * 100) : 0}% ${t('overview.ofUsed')}`,
+              figure: `≈${fmt(count)} · ${rawTotal > 0 ? Math.round(count / rawTotal * 100) : 0}% ${props.shareLabel ?? t('overview.ofUsed')}`,
               leftPct: acc + widths[i] / 2,
             }
             break

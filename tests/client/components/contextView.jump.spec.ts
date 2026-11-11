@@ -661,6 +661,32 @@ describe('ContextView — interactions', () => {
     await m.unmount()
   })
 
+  test('the browser incremental switch and the trend Delta switch move as one', async () => {
+    const m = await mountRich('sv-trend-delta-link')
+    const trendDelta = () => buttonByText(m.container, DICT_EN['gran.delta'])
+    const browserDelta = () => query(m.container, '.lc-br-delta-ctl .lc-gran-btn')
+    assert.ok(!browserDelta().className.includes('lc-gran-on'), 'off at mount')
+    assert.equal(query(m.container, '.lc-br-delta-ctl').getAttribute('title'), DICT_EN['browser.deltaTip'])
+    assert.equal(query(m.container, '.lc-br-dna-ctl').nextElementSibling, query(m.container, '.lc-br-delta-ctl'), 'the switch sits right of DNA mode')
+
+    await click(trendDelta())
+    assert.ok(trendDelta().className.includes('lc-gran-on'))
+    assert.ok(browserDelta().className.includes('lc-gran-on'), 'the browser follows the trend Delta')
+    assert.ok(text(query(m.container, '.lc-br-meta')).includes('Added ≈'))
+
+    await click(browserDelta())
+    assert.ok(!trendDelta().className.includes('lc-gran-on'), 'the trend follows the browser switch')
+    assert.ok(!browserDelta().className.includes('lc-gran-on'))
+
+    await click(browserDelta())
+    assert.ok(browserDelta().className.includes('lc-gran-on'), 'the browser can switch it back on')
+    assert.ok(trendDelta().className.includes('lc-gran-on'), 'the trend follows that direction too')
+    await click(buttonByText(m.container, DICT_EN['gran.total']))
+    assert.ok(!trendDelta().className.includes('lc-gran-on'))
+    assert.ok(!browserDelta().className.includes('lc-gran-on'))
+    await m.unmount()
+  })
+
   test('clicking a DNA band reveals that item in the Context browser', async () => {    const m = await mountRich('sv-dna-reveal')
     await click(buttonByText(m.container, DICT_EN['trend.dna']))
     const dnaDiv = query(m.container, '.lc-bar[data-seq="4"] .lc-bar-dna')

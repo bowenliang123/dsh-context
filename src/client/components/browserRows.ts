@@ -86,6 +86,26 @@ export function rowMatches(r: NodeRow, q: string): boolean {
     || r.reasoning.toLowerCase().includes(q)
 }
 
+export function flatNodesModelOf(
+  nodes: readonly SurfaceNode[],
+  query: string,
+  seqs: ReadonlySet<number> | null,
+  nodeRowOf: (n: SurfaceNode) => NodeRow,
+): { entries: { r: NodeRow; pos: number }[]; tokens: number } {
+  const q = query.trim().toLowerCase()
+  const entries: { r: NodeRow; pos: number }[] = []
+  let tokens = 0
+  for (let i = nodes.length - 1; i >= 0; i--) {
+    const n = nodes[i]
+    if (seqs !== null && !seqs.has(n.seq)) continue
+    const r = nodeRowOf(n)
+    if (q !== '' && !rowMatches(r, q)) continue
+    entries.push({ r, pos: i + 1 })
+    tokens += r.n.tokens
+  }
+  return { entries, tokens }
+}
+
 export interface CatNodesModel {
   c: Category
   rows: NodeRow[]

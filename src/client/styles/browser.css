@@ -1,4 +1,4 @@
-.lc-br-dna-ctl { margin-left: 0; flex: none; }
+.lc-br-dna-ctl, .lc-br-delta-ctl { margin-left: 0; flex: none; }
 .lc-br { display: flex; flex-direction: column; min-height: 0; }
 .lc-br-head { flex: none; }
 .lc-br-scroll { flex: 1 1 auto; min-height: 28px; overflow-y: auto; overscroll-behavior-x: contain; }

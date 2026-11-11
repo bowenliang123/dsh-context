@@ -8,6 +8,8 @@ import { useElementSize } from './useElementMetrics'
 
 export interface BrowserTreemapProps {
   view: Assembled
+  emptyLabel?: string
+  shareLabel?: string
   openCat: string | null
   hoverKey?: string | null
   onHoverKey?: (key: string | null) => void
@@ -132,7 +134,7 @@ export function makeBrowserTreemap(kit: ViewKit): (props: BrowserTreemapProps) =
         for (const b of catHit.c.blocks) items += b.count
         tip = {
           head: catLabel(catHit.c.cat),
-          fig: `≈${fmt(catHit.c.tokens)} · ${pct}% ${t('overview.ofUsed')}`,
+          fig: `≈${fmt(catHit.c.tokens)} · ${pct}% ${props.shareLabel ?? t('overview.ofUsed')}`,
           note: t('browser.items', { n: items }),
           cx: catHit.x + catHit.w / 2,
           top: catHit.y,
@@ -143,7 +145,7 @@ export function makeBrowserTreemap(kit: ViewKit): (props: BrowserTreemapProps) =
         const pct = Math.round(b.tokens / total * 100)
         tip = {
           head: b.count > 1 ? `${b.label} ×${b.count}` : b.label,
-          fig: `≈${fmt(b.tokens)} · ${pct}% ${t('overview.ofUsed')}`,
+          fig: `≈${fmt(b.tokens)} · ${pct}% ${props.shareLabel ?? t('overview.ofUsed')}`,
           cx: blockHit.px + blockHit.sw / 2,
           top: blockHit.py,
           bottom: blockHit.py + blockHit.sh,
@@ -172,7 +174,7 @@ export function makeBrowserTreemap(kit: ViewKit): (props: BrowserTreemapProps) =
     }
 
     if (cats.length === 0) {
-      return <div className="lc-map-empty">{t('browser.mapEmpty')}</div>
+      return <div className="lc-map-empty">{props.emptyLabel ?? t('browser.mapEmpty')}</div>
     }
 
     return (
