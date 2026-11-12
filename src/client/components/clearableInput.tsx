@@ -11,6 +11,7 @@ export interface ClearableInputProps {
   type?: 'search' | 'text'
   onKeyDown?: (ev: KeyboardEvent<HTMLInputElement>) => void
   inputRef?: RefObject<HTMLInputElement>
+  combobox?: { controls: string; active?: string | undefined }
 }
 
 export function isClearableField(target: EventTarget | null): target is HTMLInputElement | HTMLTextAreaElement {
@@ -70,6 +71,11 @@ export function ClearableInput(props: ClearableInputProps): ReactElement {
         placeholder={props.placeholder}
         aria-label={props.label ?? props.placeholder}
         data-lc-clearable=""
+        role={props.combobox === undefined ? undefined : 'combobox'}
+        aria-expanded={props.combobox === undefined ? undefined : true}
+        aria-controls={props.combobox?.controls}
+        aria-activedescendant={props.combobox?.active}
+        aria-autocomplete={props.combobox === undefined ? undefined : 'list'}
         onChange={(ev) => { props.onChange(ev.target.value) }}
         onKeyDown={handleKeyDown}
       />

@@ -4,7 +4,7 @@ import { describe, test, afterAll, beforeAll, vi } from 'vitest'
 import { type CatFocus, type ContextBrowserProps } from '../../../src/client/components/browser'
 import { type ContextHeaders } from '../../../src/shared/types'
 import { click, flush, hover, mount, query, queryAll, surfaceNode, text, tipRows, unhover, type Mounted, settle, until } from '../helpers/kit'
-import { Browser, catRow, filterStat, kit, props, req, tl, typeToolSearch, withEpochContent, pickStep } from './browserHarness'
+import { Browser, catRow, filterStat, kit, props, req, tl, typeToolSearch, withEpochContent, pickStep, pickValue, pickLabels, pickFind } from './browserHarness'
 import { restoreLayout, stubClientSizes, stubResizeObserver } from '../helpers/layout'
 import { type ConversationNodeLike } from '../../../src/client/services'
 
@@ -714,7 +714,7 @@ describe('ContextBrowser focus bridges', () => {
     await m.update(h(Browser, props({ data, headers, pinSeq: 10 })))
     assert.ok(text(query(m.container, '.lc-br-meta')).includes('Turn 1 · Step 0'))
     assert.equal(queryAll(m.container, '.lc-br-body').length, 0, 'pinning resets the accordion')
-    assert.equal(query<HTMLSelectElement>(m.container, 'select.lc-br-pick').value, '10')
+    assert.equal(pickValue(m), '10')
     await m.update(h(Browser, props({ data, headers, pinSeq: null })))
     assert.ok(text(query(m.container, '.lc-br-meta')).includes('Live · Next Request'))
     await m.unmount()
@@ -811,18 +811,20 @@ describe('ContextBrowser step picker bounds', () => {
     const data = tl({ requests, nodes: [surfaceNode({ seq: 1, tokens: 5 })] })
     const m = await mount(h(Browser, props({ data, headers: null })))
     try {
-      let options = queryAll(m.container, 'select.lc-br-pick option')
+      let options = await pickLabels(m)
       assert.equal(options.length, 501, 'live view lists the live option plus the newest 500 steps')
       await m.update(h(Browser, props({ data, headers: null, pinSeq: 40 })))
-      options = queryAll(m.container, 'select.lc-br-pick option')
+      options = await pickLabels(m)
       assert.equal(options.length, 501, 'an old selection re-anchors the option window around it')
-      const select = query<HTMLSelectElement>(m.container, 'select.lc-br-pick')
-      assert.equal(select.value, '40', 'the pinned old step stays selectable in the windowed list')
-      assert.ok(text(select).includes('T260'), 'the window centers on the pinned step')
+      assert.equal(pickValue(m), '40', 'the pinned old step stays selectable in the windowed list')
+      assert.ok(options.some(label => label.includes('T260')), 'the window centers on the pinned step')
       await m.update(h(Browser, props({ data, headers: null, pinSeq: null })))
-      options = queryAll(m.container, 'select.lc-br-pick option')
-      assert.equal(query<HTMLSelectElement>(m.container, 'select.lc-br-pick').value, 'live')
+      options = await pickLabels(m)
+      assert.equal(pickValue(m), 'live')
       assert.ok(options.length <= 501)
+      assert.deepEqual(await pickFind(m, 'T1 · S0'), ['T1 · S0'], 'the filter reaches a step outside the window')
+      assert.deepEqual(await pickFind(m, 'Live'), ['Live'], 'the live row is searchable too')
+      assert.equal((await pickFind(m, 'T')).length, 500, 'the full search still caps its matches')
     } finally {
       await m.unmount()
     }
@@ -833,9 +835,9 @@ describe('ContextBrowser step picker bounds', () => {
     const data = tl({ requests, nodes: [surfaceNode({ seq: 1, tokens: 5 })] })
     const m = await mount(h(Browser, props({ data, headers: null })))
     try {
-      const options = queryAll(m.container, 'select.lc-br-pick option')
+      const options = await pickLabels(m)
       assert.equal(options.length, 501)
-      assert.ok(text(query(m.container, 'select.lc-br-pick')).includes('T1 ·'))
+      assert.ok(options.some(label => label.includes('T1 ·')))
     } finally {
       await m.unmount()
     }

@@ -33,6 +33,7 @@ vi.mock('@deepseek-ai/dsh-client-ui-primitives', async () => {
     IconCheckOutlineRegular: () => React.createElement('span', null),
     IconSettingsOutlineMedium: () => React.createElement('span', null),
     useCodeHighlighter: () => () => undefined,
+    useDismissOnOutsidePointer: () => undefined,
     writeClipboard: async () => true,
   }
 })

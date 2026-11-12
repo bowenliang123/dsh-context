@@ -826,8 +826,8 @@ describe('ErrorBoundary', () => {
 
 describe('escapeClose', () => {
 
-function Overlay(props: { active: boolean; onClose: () => void }): ReactElement {
-  useEscapeClose(props.active, props.onClose)
+function Overlay(props: { active: boolean; onClose: () => void; restore?: boolean }): ReactElement {
+  useEscapeClose(props.active, props.onClose, props.restore)
   return h('div', { className: 'overlay' })
 }
 
@@ -879,6 +879,49 @@ describe('useEscapeClose', () => {
     plainInput.remove()
     markedArea.remove()
     await m.unmount()
+  })
+
+  test('only the topmost open layer consumes Escape', async () => {
+    const closes: string[] = []
+    function Layers(props: { outer: boolean; inner: boolean }): ReactElement {
+      useEscapeClose(props.outer, () => closes.push('outer'))
+      useEscapeClose(props.inner, () => closes.push('inner'))
+      return h('div')
+    }
+    const m = await mount(h(Layers, { outer: true, inner: true }))
+    try {
+      await keydown('Escape')
+      assert.deepEqual(closes, ['inner'])
+      await m.update(h(Layers, { outer: true, inner: false }))
+      await keydown('Escape')
+      assert.deepEqual(closes, ['inner', 'outer'])
+    } finally {
+      await m.unmount()
+    }
+  })
+
+  test('a layer restores the pre-open focus on close unless it opted out', async () => {
+    const trigger = document.createElement('button')
+    document.body.append(trigger)
+    trigger.focus()
+    const closes: string[] = []
+    const m = await mount(h(Overlay, { active: true, onClose: () => closes.push('close') }))
+    try {
+      await keydown('Escape')
+      assert.deepEqual(closes, ['close'])
+      await m.update(h(Overlay, { active: false, onClose: () => closes.push('close') }))
+      assert.equal(document.activeElement, trigger, 'the Escape close restores focus')
+
+      await m.update(h(Overlay, { active: true, onClose: () => closes.push('close'), restore: false }))
+      const other = field('input', false, '')
+      other.focus()
+      await m.update(h(Overlay, { active: false, onClose: () => closes.push('close'), restore: false }))
+      assert.equal(document.activeElement, other, 'an opted-out layer leaves focus alone')
+      other.remove()
+    } finally {
+      await m.unmount()
+      trigger.remove()
+    }
   })
 })
 })

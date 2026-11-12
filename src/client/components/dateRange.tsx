@@ -4,6 +4,7 @@ import { MONTH_KEY_RE, monthGridOf, shiftDayKey, shiftMonthKey } from '../../sha
 import { orderedDayRange, type DayRange } from '../overview'
 import type { ViewKit } from '../viewkit'
 import { useEscapeClose } from './escapeClose'
+import { clampPopoverLeft } from './tip'
 import { IconChevronDown } from '../primitives'
 
 export interface DateRangeProps {
@@ -71,7 +72,7 @@ export function makeDateRange(kit: ViewKit): (props: DateRangeProps) => ReactEle
       const panelEl = panelRef.current
       if (!open || anchorEl === null || panelEl === null) return
       const rect = anchorEl.getBoundingClientRect()
-      const left = Math.max(MARGIN, Math.min(rect.right - panelEl.offsetWidth, window.innerWidth - panelEl.offsetWidth - MARGIN))
+      const left = clampPopoverLeft(rect.right, panelEl.offsetWidth, window.innerWidth, MARGIN)
       const below = rect.bottom + GAP
       const top = below + panelEl.offsetHeight > window.innerHeight - MARGIN
         ? Math.max(MARGIN, rect.top - panelEl.offsetHeight - GAP)

@@ -12,6 +12,10 @@ export function clampTipLeft(anchor: number, tipWidth: number, frameWidth: numbe
   return Math.round(Math.min(Math.max(anchor, half), frameWidth - half) - tipWidth / 2)
 }
 
+export function clampPopoverLeft(anchorRight: number, width: number, frameWidth: number, margin: number): number {
+  return Math.max(margin, Math.min(anchorRight - width, frameWidth - width - margin))
+}
+
 export interface TipAnchor {
   unit: 'px' | 'pct'
   value: number

@@ -9,6 +9,7 @@ import { click, flush, hover, mount, query, queryAll, settle, text, unhover, unt
 import { buttonByText, makeView, projectionsFor, T0, timeline, richTimeline, mountInScroller } from './contextViewHarness'
 import { requestContextFocus, takeContextFocus } from '../../../src/client/viewFocus'
 import { watchHistoryFaces } from '../../../src/client/historyPage'
+import { pickLabels, pickValue } from './browserHarness'
 
 describe('contextView.fileActivity', () => {
 
@@ -96,7 +97,6 @@ describe('ContextView — file activity card', () => {
 
   test('op clicks reveal the result in the browser', async () => {
     const { m, card } = await mountFiles('sv-files-locate')
-    const pick = query<HTMLSelectElement>(m.container, 'select.lc-br-pick')
 
     await click(query(card, '.lc-fa-row'))
     const ops = queryAll(card, '.lc-fa-op')
@@ -104,9 +104,9 @@ describe('ContextView — file activity card', () => {
     assert.ok(text(query(ops[1], '.lc-fa-op-time')).includes('T1 S2'))
     assert.ok(/^\d{2}:\d{2}:\d{2}$/.test(text(query(ops[0], '.lc-fa-op-time'))))
     await click(ops[0])
-    assert.equal(pick.value, 'live')
+    assert.equal(pickValue(m), 'live')
     await click(ops[1])
-    assert.equal(pick.value, '4')
+    assert.equal(pickValue(m), '4')
     assert.ok(text(query(m.container, '.lc-br-elem-on')).includes('/src/a.ts'))
     await m.unmount()
   })
@@ -154,8 +154,7 @@ describe('ContextView — file activity card', () => {
     assert.ok(text(card).includes('edit'))
     assert.ok(text(card).includes('Fix the failing test'))
     await click(query(card, '.lc-fa-op'))
-    const pick = query<HTMLSelectElement>(m.container, 'select.lc-br-pick')
-    assert.equal(pick.value, '4')
+    assert.equal(pickValue(m), '4')
     assert.ok(text(query(m.container, '.lc-br-elem-on')).includes('Fix the failing test'))
     await m.unmount()
   })
@@ -320,14 +319,14 @@ describe('ContextView — the split generation (slim head + detail channel)', ()
     assert.deepEqual(values, ['1', '3', '0', '0'], 'turns/steps/skills/answers from the head counters')
     assert.ok(query(m.container, '.lc-skel-plot') !== null, 'the chart reserves its plot while the detail loads')
     assert.equal(queryAll(m.container, '.lc-bar').length, 0, 'the chart waits for the detail')
-    assert.equal(queryAll(m.container, '.lc-br-pick option').length, 1, 'the picker holds only the live row')
+    assert.equal((await pickLabels(m)).length, 1, 'the picker holds only the live row')
 
     await until(() => typeof release === 'function', 'the detail read never started')
     await act(async () => { release() })
     await until(() => queryAll(m.container, '.lc-bar').length === 3, 'the detail never landed')
     assert.equal(queryAll(m.container, '.lc-skel-plot').length, 0, 'the plot placeholder gives way to the chart')
     assert.ok(text(m.container).includes('heads-up'), 'the events list serves the detail')
-    assert.equal(queryAll(m.container, '.lc-br-pick option').length, 4, 'live + three steps')
+    assert.equal((await pickLabels(m)).length, 4, 'live + three steps')
     assert.ok(text(m.container).includes('reply three'), 'the brief rows serve the detail')
     assert.ok(text(m.container).includes(DICT_EN['files.empty']), 'no file ops in this detail')
     await m.unmount()
@@ -766,11 +765,10 @@ async function mountCommands(sessionId: string, commands: CommandRecord[]) {
 describe('ContextView — command panel', () => {
   test('the panel lists the served commands and reveals the result message in the browser', async () => {
     const { m, card } = await mountCommands('sv-cmds', [cmd(10, { resultSeq: 3 })])
-    const pick = query<HTMLSelectElement>(m.container, 'select.lc-br-pick')
     const row = query(card, '.lc-cmd-row')
     assert.ok(text(row).includes('git status --short'))
     await click(query(row, '.lc-cmd-time'))
-    assert.equal(pick.value, '4', 'the browser lands on the step that first carried the result')
+    assert.equal(pickValue(m), '4', 'the browser lands on the step that first carried the result')
     assert.ok(text(query(m.container, '.lc-br-elem-on')).includes('on branch main'))
     await m.unmount()
   })
@@ -785,9 +783,8 @@ describe('ContextView — command panel', () => {
     const nested = rows.find(r => text(r).includes('git diff'))
     assert.ok(running !== undefined && nested !== undefined)
     assert.equal(queryAll(running, '.lc-cmd-time-link').length, 0)
-    const pick = query<HTMLSelectElement>(m.container, 'select.lc-br-pick')
     await click(query(nested, '.lc-cmd-time'))
-    assert.equal(pick.value, '4', 'the nested run reveals its run_code parent')
+    assert.equal(pickValue(m), '4', 'the nested run reveals its run_code parent')
     await m.unmount()
   })
 
@@ -858,9 +855,8 @@ describe('ContextView — command panel', () => {
     try {
       const card = queryAll(m.container, '.lc-card').find(c => c.className.includes('lc-cmd-card'))
       assert.ok(card !== undefined)
-      const pick = query<HTMLSelectElement>(m.container, 'select.lc-br-pick')
       await click(query(card, '.lc-cmd-time'))
-      assert.equal(pick.value, 'live')
+      assert.equal(pickValue(m), 'live')
     } finally {
       await m.unmount()
     }

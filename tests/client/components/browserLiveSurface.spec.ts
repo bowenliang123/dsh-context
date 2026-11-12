@@ -6,7 +6,7 @@ import { makeStackedBar } from '../../../src/client/components/stackedBar'
 import { type ContextHeaders, type RequestRecord, type HeaderEpochContent, type SurfaceNode } from '../../../src/shared/types'
 import { createContextSettings } from '../../../src/client/settings'
 import { click, flush, hover, mount, query, queryAll, surfaceNode, text, unhover, type Mounted } from '../helpers/kit'
-import { Browser, ROW, catRow, elemRows, kit, pickStep, props, req, tl, withEpochContent, silenceFetchWarn } from './browserHarness'
+import { Browser, ROW, catRow, elemRows, kit, pickStep, pickValue, pickLabels, props, req, tl, withEpochContent, silenceFetchWarn } from './browserHarness'
 import { headersOf, type ConversationNodeLike } from '../../../src/client/services'
 
 describe('browserLiveSurface', () => {
@@ -47,9 +47,8 @@ describe('ContextBrowser live surface', () => {
     const stepBtn = baseBtns.find(b => text(b) === 'prev step')
     assert.ok(stepBtn !== undefined && stepBtn.className.includes('lc-gran-on'), 'step baseline is the default')
     assert.ok(baseBtns.some(b => text(b) === 'prev turn' && !b.className.includes('lc-gran-on')))
-    const sel = query<HTMLSelectElement>(m.container, 'select.lc-br-pick')
-    assert.equal(sel.value, 'live')
-    const options = queryAll(sel, 'option').map(o => text(o))
+    assert.equal(pickValue(m), 'live')
+    const options = await pickLabels(m)
     assert.equal(options.length, 4, 'live + one option per request')
     assert.equal(options[0], 'Live')
     assert.equal(options[3], 'T1 · S0', 'options carry the compact step label without a time suffix')
@@ -255,7 +254,7 @@ describe('ContextBrowser live surface', () => {
     assert.ok(liveMeta.includes('Actual 700'))
     await m.update(h(Browser, props({ data, previewSeq: null, pinSeq: 999 })))
     assert.ok(text(query(m.container, '.lc-br-meta')).includes('Live · Next Request'))
-    assert.equal(query<HTMLSelectElement>(m.container, 'select.lc-br-pick').value, 'live')
+    assert.equal(pickValue(m), 'live')
     await m.unmount()
   })
 

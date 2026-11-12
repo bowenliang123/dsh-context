@@ -10,6 +10,7 @@ import { createContextSettings } from '../../../src/client/settings'
 import { type UseChatLike } from '../../../src/client/services'
 import { makeAgentHeads } from '../../../src/client/agentHeads'
 import { makeContextView, browserCapOf } from '../../../src/client/components/contextView'
+import { pickValue } from './browserHarness'
 
 describe('contextView.overview', () => {
 
@@ -99,7 +100,7 @@ describe('ContextView — overview face', () => {
     assert.equal(polys.length, 1)
     assert.equal(polys[0].getAttribute('data-cat'), 'tools')
     assert.equal(query(m.container, '.lc-fit-pin').style.left, '50%')
-    assert.equal(query<HTMLSelectElement>(m.container, 'select.lc-br-pick').value, '4')
+    assert.equal(pickValue(m), '4')
     await m.unmount()
   })
 

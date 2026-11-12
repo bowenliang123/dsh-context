@@ -23,13 +23,15 @@ import { TextSection, schemaTextOf, RowToolbar, ToolSchema } from './browserTool
 import { revealRowInCard } from '../revealScroll'
 import { NodeContent, byCatOf, msgKindsOf } from './browserNodes'
 import type { RowKind } from './browserNodes'
-import { DNA_MIN_BAND, STEP_PICK_MAX, baseRequestOf, countOf, findRowByKey, nodeEstimateSize, safeIdPart, stepStampOf } from './browserHelpers'
+import { DNA_MIN_BAND, baseRequestOf, countOf, findRowByKey, nodeEstimateSize, safeIdPart, stepPickMatchesOf, stepPickOptionsOf, stepStampOf } from './browserHelpers'
 export type { CatFocus } from './browserHelpers'
 export { stepStampOf } from './browserHelpers'
 import { useLinkedToggle } from './useLinkedToggle'
 import { incrementHas, incrementOf } from '../../shared/increment'
 import type { IncrementCat } from '../../shared/increment'
 import { MapIcon, makeBrowserTreemap } from './browserTreemap'
+import { StepPick } from './browserPick'
+import type { StepPickOption } from './browserHelpers'
 import type { MapBlock } from '../treemap'
 import type { ContextBrowserProps } from './browserProps'
 import { useBrowserDelta } from './useBrowserDelta'
@@ -189,28 +191,22 @@ export function makeContextBrowser(
     const req = hoverReq ?? (sel === 'live' ? null : requests.find(r => r.seq === sel) ?? null)
     const actual = req ?? requests.reduce<RequestRecord | null>((a, r) => (a === null || r.seq > a.seq ? r : a), null)
     const seq = req !== null ? req.seq : null
-    const pickOptions = useMemo(() => {
-      const option = (r: RequestRecord): ReactElement => (
-        <option key={r.seq} value={String(r.seq)}>
-          {t('browser.pickStep', { t: r.turn ?? 0, s: r.step ?? 0 })}
-        </option>
-      )
-      const count = requests.length
-      if (count <= STEP_PICK_MAX) return requests.slice().reverse().map(option)
-      const newest = requests.slice(count - STEP_PICK_MAX)
-      const selSeq = typeof sel === 'number' && (seq === null || seq < newest[0].seq) ? seq : null
-      if (selSeq === null) return newest.slice().reverse().map(option)
-      let low = 0
-      let high = count - 1
-      let idx = count - 1
-      while (low <= high) {
-        const mid = (low + high) >> 1
-        if (requests[mid].seq >= selSeq) { idx = mid; high = mid - 1 } else low = mid + 1
-      }
-      const from = Math.max(0, idx - (STEP_PICK_MAX >> 1))
-      const picked = requests.slice(from, Math.min(count, from + STEP_PICK_MAX))
-      return picked.slice().reverse().map(option)
-    }, [requests, t, props.locale, sel, seq])
+    const pickOption = useMemo(() => {
+      const live: StepPickOption = { value: 'live', label: t('browser.live') }
+      const optionOf = (r: RequestRecord): StepPickOption => ({
+        value: String(r.seq),
+        label: t('browser.pickStep', { t: r.turn ?? 0, s: r.step ?? 0 }),
+      })
+      return { live, optionOf }
+    }, [t, props.locale])
+    const pickOptions = useMemo(
+      () => stepPickOptionsOf(requests, sel, seq, pickOption.live, pickOption.optionOf),
+      [requests, pickOption, sel, seq],
+    )
+    const pickSearch = useMemo(
+      () => (query: string) => stepPickMatchesOf(requests, query, pickOption.live, pickOption.optionOf),
+      [requests, pickOption],
+    )
     const linked = req === null && props.onHoverKey !== undefined
     const linkKey = linked && props.hoverKey !== null && props.hoverKey !== 'free'
       ? props.hoverKey
@@ -792,6 +788,16 @@ export function makeContextBrowser(
               </button>
             </span>
             <span className="lc-br-ctl">
+              <StepPick
+                value={seq === null ? 'live' : String(seq)}
+                options={pickOptions}
+                search={pickSearch}
+                searchPlaceholder={t('browser.pick.search')}
+                emptyLabel={t('browser.pick.empty')}
+                clearLabel={t('field.clear')}
+                ariaLabel={t('browser.pick.aria')}
+                onChange={pick}
+              />
               <span className="lc-gran lc-br-base-ctl" role="group" title={t('browser.base.tip')}>
                 <button
                   type="button"
@@ -808,14 +814,6 @@ export function makeContextBrowser(
                   {t('browser.base.turn')}
                 </button>
               </span>
-              <select
-                className="lc-br-pick"
-                value={seq === null ? 'live' : String(seq)}
-                onChange={(e) => { pick(e.target.value) }}
-              >
-                <option value="live">{t('browser.live')}</option>
-                {pickOptions}
-              </select>
               <span className="lc-gran lc-br-mode-ctl" role="group" title={t('browser.deltaTip')}>
                 <button
                   type="button"

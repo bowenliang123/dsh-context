@@ -390,7 +390,10 @@ describe('ContextModal — the split generation', () => {
     await act(async () => { await new Promise(resolve => setTimeout(resolve, 20)) })
     await act(async () => { release() })
     await until(() => document.body.querySelector('.lc-br-note .lc-skel-note') === null, 'the modal detail never landed')
-    assert.equal(queryAll(document.body, '.lc-br-pick option').length, 2, 'live + the one served step')
+    const picker = query<HTMLButtonElement>(document.body, '.lc-br-pick')
+    await click(picker)
+    assert.equal(queryAll(document.body, '.lc-br-pick-opt').length, 2, 'live + the one served step')
+    await click(picker)
     assert.ok(text(document.body).includes('1 Item'), 'the assistant section counts the served node')
     await m.unmount()
 

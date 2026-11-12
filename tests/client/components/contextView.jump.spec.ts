@@ -9,6 +9,7 @@ import { buttonByText, eventLink, makeView, mountInScroller, mountRich, overflow
 import { type UseChatLike } from '../../../src/client/services'
 import { resetTimelineDetailStores } from '../../../src/client/timelineSource'
 import { type ContextTimeline } from '../../../src/shared/types'
+import { pickValue } from './browserHarness'
 
 describe('contextView.jump', () => {
 
@@ -19,7 +20,7 @@ describe('ContextView — chat→Context jump', () => {
     assert.ok(buttonByText(m.container, DICT_EN['gran.turn']).className.includes('lc-gran-on'), 'granularity flips to turn')
     assert.equal(queryAll(m.container, '.lc-bar').length, 2, 'the chart renders turn aggregates')
     assert.ok(query(m.container, '.lc-bar[data-seq="4"]').className.includes('lc-bar-selected'), 'the reply\'s turn bar is pinned')
-    assert.equal(query<HTMLSelectElement>(m.container, 'select.lc-br-pick').value, '4')
+    assert.equal(pickValue(m), '4')
     assert.equal(takeContextFocus('sv-jump'), null, 'the relay is one-shot')
     await m.unmount()
   })
@@ -57,7 +58,7 @@ describe('ContextView — chat→Context jump', () => {
     assert.ok(!query(m.container, '.lc-bar[data-seq="4"]').className.includes('lc-bar-selected'), 'nothing pinned at mount')
     await act(async () => { requestContextFocus('sv-rejump', 4) })
     assert.ok(query(m.container, '.lc-bar[data-seq="4"]').className.includes('lc-bar-selected'), 'the later record re-pins')
-    assert.equal(query<HTMLSelectElement>(m.container, 'select.lc-br-pick').value, '4')
+    assert.equal(pickValue(m), '4')
     assert.equal(takeContextFocus('sv-rejump'), null, 'the record was consumed')
     await m.unmount()
   })
@@ -368,7 +369,7 @@ describe('ContextView — the events card\'s boundary rows', () => {
       await click(compactionLink(m.container))
       assert.ok(query(m.container, '.lc-bar[data-seq="4"]').className.includes('lc-bar-selected'), 'the landed-on step is pinned')
       assert.equal(query<HTMLElement>(m.container, '.lc-chart-scroll').scrollLeft, 1 * 16 + 7, 'the trend scrolled to the landed bar')
-      assert.equal(query<HTMLSelectElement>(m.container, 'select.lc-br-pick').value, '4', 'the browser aligns to the same step')
+      assert.equal(pickValue(m), '4', 'the browser aligns to the same step')
       assert.equal(scroller.scrollTop, 350, 'the trend card scrolled to the scrollport top')
       await m.unmount()
     } finally {
@@ -382,7 +383,7 @@ describe('ContextView — the events card\'s boundary rows', () => {
     const prune = await mount(h(pruneView, { sessionId: 'sv-prunejump', useProjection: projectionsFor(pruneData) }))
     await click(eventLink(prune.container, DICT_EN['ev.prune']))
     assert.ok(query(prune.container, '.lc-bar[data-seq="4"]').className.includes('lc-bar-selected'), 'the pruned step is pinned')
-    assert.equal(query<HTMLSelectElement>(prune.container, 'select.lc-br-pick').value, '4')
+    assert.equal(pickValue(prune), '4')
     await prune.unmount()
   })
 
@@ -410,7 +411,7 @@ describe('ContextView — the events card\'s boundary rows', () => {
     assert.equal(row.querySelector('.lc-event-jump'), null, 'a jump it cannot make is not offered as a link')
     assert.equal(query(row, '.lc-event-label').tagName, 'SPAN')
     assert.equal(queryAll(m.container, '.lc-bar-selected').length, 0)
-    assert.equal(query<HTMLSelectElement>(m.container, 'select.lc-br-pick').value, 'live')
+    assert.equal(pickValue(m), 'live')
     await m.unmount()
   })
 })
@@ -493,24 +494,22 @@ describe('ContextView — interactions', () => {
 
   test('pinning a bar selects its step in the browser; unpinning returns to live', async () => {
     const m = await mountRich('sv-pin')
-    const pick = query<HTMLSelectElement>(m.container, 'select.lc-br-pick')
-    assert.equal(pick.value, 'live')
+    assert.equal(pickValue(m), 'live')
 
     const bar4 = query(m.container, '.lc-bar[data-seq="4"]')
     await click(bar4)
     assert.ok(bar4.className.includes('lc-bar-selected'))
-    assert.equal(pick.value, '4')
+    assert.equal(pickValue(m), '4')
     assert.ok(query(m.container, '.lc-detail').textContent?.includes('✂') === true)
 
     await click(bar4)
     assert.ok(!bar4.className.includes('lc-bar-selected'))
-    assert.equal(pick.value, 'live')
+    assert.equal(pickValue(m), 'live')
     await m.unmount()
   })
 
   test('brief rows locate their node in the browser (input, mid response, live response)', async () => {
     const m = await mountRich('sv-brief')
-    const pick = query<HTMLSelectElement>(m.container, 'select.lc-br-pick')
 
     await click(query(m.container, '.lc-bar[data-seq="4"]'))
     const briefRows = queryAll(m.container, '.lc-brief-row')
@@ -519,20 +518,20 @@ describe('ContextView — interactions', () => {
     const inRow = briefRows.find(r => text(r).includes(DICT_EN['brief.input']))
     assert.ok(inRow !== undefined)
     await click(inRow)
-    assert.equal(pick.value, '4')
+    assert.equal(pickValue(m), '4')
     assert.ok(text(query(m.container, '.lc-br-elem-on')).includes('file output'))
 
     const replyRow = briefRows.find(r => text(r).includes('reply two'))
     assert.ok(replyRow !== undefined)
     await click(replyRow)
-    assert.equal(pick.value, '6')
+    assert.equal(pickValue(m), '6')
     assert.ok(text(query(m.container, '.lc-br-elem-on')).includes('reply two'))
 
     await click(query(m.container, '.lc-bar[data-seq="6"]'))
     const lastReply = queryAll(m.container, '.lc-brief-row').find(r => text(r).includes('reply three'))
     assert.ok(lastReply !== undefined)
     await click(lastReply)
-    assert.equal(pick.value, 'live')
+    assert.equal(pickValue(m), 'live')
     assert.ok(text(query(m.container, '.lc-br-elem-on')).includes('reply three'))
     await m.unmount()
   })
@@ -672,7 +671,11 @@ describe('ContextView — interactions', () => {
     const overview = () => buttonByText(m.container, DICT_EN['trend.overview'])
     assert.ok(!browserDelta().className.includes('lc-gran-on'), 'off at mount')
     const modeGroup = query(m.container, '.lc-br-mode-ctl')
-    assert.equal(query(m.container, 'select.lc-br-pick').nextElementSibling, modeGroup, 'the switch sits right of the step picker')
+    const baseGroup = query(m.container, '.lc-br-base-ctl')
+    const picker = query(m.container, '.lc-br-pick-wrap')
+    assert.equal(query(m.container, '.lc-br-ctl').firstElementChild, picker, 'the step picker opens the right-hand cluster')
+    assert.equal(picker.nextElementSibling, baseGroup, 'the baseline switch sits right of the step picker')
+    assert.equal(baseGroup.nextElementSibling, modeGroup, 'the mode switch sits right of the baseline switch')
     assert.equal(query(m.container, '.lc-br-ctl').nextElementSibling, null, 'the control cluster closes the title row')
     assert.equal(modeGroup.nextElementSibling, null, 'the switch closes the control cluster')
     assert.equal(modeGroup.getAttribute('title'), DICT_EN['browser.deltaTip'])
@@ -722,7 +725,7 @@ describe('ContextView — interactions', () => {
     dnaDiv.getBoundingClientRect = () => ({ top: 0, left: 0, right: 14, bottom: 112, width: 14, height: 112, x: 0, y: 0, toJSON: () => null }) as DOMRect
     await act(async () => { dnaDiv.dispatchEvent(new MouseEvent('click', { bubbles: true, clientY: 0 })) })
     await flush()
-    assert.equal(query<HTMLSelectElement>(m.container, 'select.lc-br-pick').value, '4')
+    assert.equal(pickValue(m), '4')
     assert.ok(text(query(m.container, '.lc-br-elem-on')).includes('file output'))
     await m.unmount()
   })
@@ -811,7 +814,7 @@ describe('ContextView — injection rows reveal their item', () => {
 
       await click(eventLink(m.container, DICT_EN['form.notice'] + ' · hook'))
 
-      assert.equal(query<HTMLSelectElement>(m.container, 'select.lc-br-pick').value, '4', 'the entry step is selected')
+      assert.equal(pickValue(m), '4', 'the entry step is selected')
       const open = queryAll(m.container, '.lc-br-elem-on')
       assert.equal(open.length, 1)
       assert.ok(text(open[0]).includes('the injected note'), 'the injection\'s own item is open')
@@ -826,7 +829,7 @@ describe('ContextView — injection rows reveal their item', () => {
   test('an injection past the last request reveals on the live surface', async () => {
     const m = await mountInject('sv-injectlive', injectTimeline())
     await click(eventLink(m.container, DICT_EN['form.notice'] + ' · late'))
-    assert.equal(query<HTMLSelectElement>(m.container, 'select.lc-br-pick').value, 'live')
+    assert.equal(pickValue(m), 'live')
     const open = queryAll(m.container, '.lc-br-elem-on')
     assert.equal(open.length, 1)
     assert.ok(text(open[0]).includes('the late note'))
@@ -836,7 +839,7 @@ describe('ContextView — injection rows reveal their item', () => {
   test('an injection whose item is no longer served moves to its step, opening the category only', async () => {
     const m = await mountInject('sv-injectdropped', injectTimeline())
     await click(eventLink(m.container, DICT_EN['form.context'] + ' · dropped'))
-    assert.equal(query<HTMLSelectElement>(m.container, 'select.lc-br-pick').value, '8')
+    assert.equal(pickValue(m), '8')
     assert.equal(queryAll(m.container, '.lc-br-elem-on').length, 0, 'the item is not served, so no row can open')
     assert.ok(queryAll(m.container, '.lc-br-cat-row')[3].className.includes('lc-br-cat-open'))
     await m.unmount()
@@ -850,7 +853,7 @@ describe('ContextView — injection rows reveal their item', () => {
 
     const m = await mountInject('sv-injectshadow', archived(6))
     await click(eventLink(m.container, DICT_EN['form.notice'] + ' · hook'))
-    assert.equal(query<HTMLSelectElement>(m.container, 'select.lc-br-pick').value, '4')
+    assert.equal(pickValue(m), '4')
     const open = queryAll(m.container, '.lc-br-elem-on')
     assert.equal(open.length, 1)
     assert.ok(text(open[0]).includes('the removed note'))
@@ -858,7 +861,7 @@ describe('ContextView — injection rows reveal their item', () => {
 
     const gone = await mountInject('sv-injectgone', archived(4))
     await click(eventLink(gone.container, DICT_EN['form.notice'] + ' · hook'))
-    assert.equal(query<HTMLSelectElement>(gone.container, 'select.lc-br-pick').value, 'live')
+    assert.equal(pickValue(gone), 'live')
     assert.equal(queryAll(gone.container, '.lc-br-elem-on').length, 0)
     assert.ok(!queryAll(gone.container, '.lc-br-cat-row')[3].className.includes('lc-br-cat-open'))
     await gone.unmount()

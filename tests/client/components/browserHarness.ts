@@ -4,7 +4,7 @@ import { makeContextBrowser, type ContextBrowserProps } from '../../../src/clien
 import { makeStackedBar } from '../../../src/client/components/stackedBar'
 import { createContextSettings } from '../../../src/client/settings'
 import type { ContextHeaders, ContextTimeline, HeaderEpochContent, RequestRecord } from '../../../src/shared/types'
-import { makeKit, query, queryAll, text, type Mounted } from '../helpers/kit'
+import { makeKit, click, query, queryAll, text, typeText, type Mounted } from '../helpers/kit'
 
 export const kit = makeKit()
 export const settings = createContextSettings()
@@ -58,12 +58,32 @@ export async function typeToolSearch(m: Mounted, value: string): Promise<void> {
   })
 }
 
-export async function pickStep(m: Mounted, value: string): Promise<void> {
-  const sel = query<HTMLSelectElement>(m.container, 'select.lc-br-pick')
-  await act(async () => {
-    sel.value = value
-    sel.dispatchEvent(new Event('change', { bubbles: true }))
-  })
+export function pickValue(m: Pick<Mounted, 'container'>): string {
+  return query<HTMLElement>(m.container, '.lc-br-pick').dataset.value ?? ''
+}
+
+export async function pickLabels(m: Pick<Mounted, 'container'>): Promise<string[]> {
+  const trigger = query<HTMLButtonElement>(m.container, '.lc-br-pick')
+  const wasOpen = trigger.getAttribute('aria-expanded') === 'true'
+  if (!wasOpen) await click(trigger)
+  const labels = queryAll(m.container, '.lc-br-pick-opt').map(option => text(option))
+  if (!wasOpen) await click(trigger)
+  return labels
+}
+
+export async function pickFind(m: Pick<Mounted, 'container'>, queryText: string): Promise<string[]> {
+  const trigger = query<HTMLButtonElement>(m.container, '.lc-br-pick')
+  if (trigger.getAttribute('aria-expanded') !== 'true') await click(trigger)
+  await typeText(query<HTMLInputElement>(m.container, '.lc-br-pick-search'), queryText)
+  const labels = queryAll(m.container, '.lc-br-pick-opt').map(option => text(option))
+  await click(trigger)
+  return labels
+}
+
+export async function pickStep(m: Pick<Mounted, 'container'>, value: string): Promise<void> {
+  const trigger = query<HTMLButtonElement>(m.container, '.lc-br-pick')
+  if (trigger.getAttribute('aria-expanded') !== 'true') await click(trigger)
+  await click(query(m.container, `.lc-br-pick-opt[data-value="${value}"]`))
 }
 
 export function props(over: Partial<ContextBrowserProps>): ContextBrowserProps {
