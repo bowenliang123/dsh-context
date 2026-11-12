@@ -35,3 +35,7 @@ export async function typeInto(container: ParentNode, selector: string, value: s
 export async function typeSearch(container: ParentNode, value: string): Promise<void> {
   await typeInto(container, 'input.lc-fa-search', value)
 }
+
+export function boxValue(container: ParentNode): string {
+  return query<HTMLInputElement>(container, 'input.lc-fa-search').value
+}

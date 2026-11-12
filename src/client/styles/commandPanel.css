@@ -21,7 +21,10 @@
 .lc-cmd-rail-h { display: flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 600; color: var(--dsw-alias-label-primary); margin-bottom: 8px; padding-bottom: 5px; border-bottom: var(--lc-line-strong, 1px solid var(--dsw-alias-border-l2)); }
 
 .lc-cmd-kpis { display: grid; grid-template-columns: 1fr 1fr; gap: 8px 10px; }
-.lc-cmd-kpi { min-width: 0; padding: 5px 8px; border-radius: 7px; background: var(--lc-control-track); }
+.lc-cmd-kpi { min-width: 0; padding: 5px 8px; border-radius: 7px; background: var(--lc-control-track); appearance: none; border: 0; font: inherit; color: inherit; text-align: left; cursor: pointer; transition: background-color var(--ds-transition-duration, 0.2s) var(--ds-ease-in-out, ease-in-out); }
+.lc-cmd-kpi:hover { background: var(--dsw-alias-interactive-bg-active); }
+.lc-cmd-kpi:hover span { color: var(--dsw-alias-label-primary); }
+.lc-cmd-kpi:focus-visible { outline: 2px solid var(--dsw-alias-brand-primary); outline-offset: 1px; }
 .lc-cmd-kpi b { display: block; font-size: 14px; font-weight: 700; font-variant-numeric: tabular-nums; color: var(--dsw-alias-label-primary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .lc-cmd-kpi span { font-size: 10px; color: var(--dsw-alias-label-secondary); }
 .lc-cmd-kpi-fail b { color: color-mix(in srgb, var(--dsw-alias-state-error-primary) 80%, var(--dsw-alias-label-primary)); }

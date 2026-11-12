@@ -4,7 +4,7 @@ import { afterEach, describe, test, vi } from 'vitest'
 import { type Command } from '../../../src/client/commands'
 import { mount, query, queryAll, text, click, until } from '../helpers/kit'
 import { type ConversationNodeLike } from '../../../src/client/services'
-import { Panel, T0, chipCounts, cmd, rowTexts, typeSearch, typeInto } from './commandPanelHarness'
+import { boxValue, Panel, T0, chipCounts, cmd, rowTexts, typeSearch, typeInto } from './commandPanelHarness'
 
 describe('commandPanel', () => {
 
@@ -122,10 +122,9 @@ describe('CommandPanel — filtering, search, sort', () => {
   test('a focus program seeds the lens once and hands the slot back', async () => {
     const handled: string[] = []
     const m = await mount(h(Panel, { commands: richCommands(), focusProgram: 'pnpm', onFocusProgramHandled: () => { handled.push('pnpm') }, }))
-    const box = () => query<HTMLInputElement>(m.container, 'input.lc-fa-search').value
     assert.equal(rowTexts(m.container).length, 1, 'the seeded lens narrows to the program')
     assert.ok(rowTexts(m.container)[0].includes('vitest'))
-    assert.equal(box(), 'pnpm', 'the box shows the program lens')
+    assert.equal(boxValue(m.container), 'pnpm', 'the box shows the program lens')
     assert.equal(queryAll(m.container, '.lc-cmd-prog-on').length, 1, 'the seeded program is highlighted')
     assert.deepEqual(handled, ['pnpm'], 'the slot is handed back')
     await m.update(h(Panel, {
@@ -135,11 +134,11 @@ describe('CommandPanel — filtering, search, sort', () => {
     }))
     assert.equal(rowTexts(m.container).length, 1)
     assert.ok(rowTexts(m.container)[0].includes('python3'))
-    assert.equal(box(), 'python3')
+    assert.equal(boxValue(m.container), 'python3')
     assert.deepEqual(handled, ['pnpm', 'python3'])
     await m.update(h(Panel, { commands: richCommands() }))
     assert.equal(rowTexts(m.container).length, 1, 'the seeded lens persists')
-    assert.equal(box(), 'python3')
+    assert.equal(boxValue(m.container), 'python3')
     await m.unmount()
   })
 
@@ -202,7 +201,6 @@ describe('CommandPanel — filtering, search, sort', () => {
     const attention = () => queryAll(m.container, '.lc-cmd-attn-row').map(r => text(r))
     const ranking = progs()
     const sessionAttention = attention()
-    const box = () => query<HTMLInputElement>(m.container, 'input.lc-fa-search').value
     assert.equal(ranking.length, 4, 'cat, echo, sleep, ls')
     assert.ok(ranking.some(p => p.startsWith('cat') && p.includes('×3') && p.includes('3 runs')))
     const echoProgram = queryAll(m.container, '.lc-cmd-prog').find(p => text(p).startsWith('echo'))
@@ -232,27 +230,27 @@ describe('CommandPanel — filtering, search, sort', () => {
     assert.ok(progBtn('cat').className.includes('lc-cmd-prog-on'))
     assert.equal(progBtn('cat').getAttribute('aria-pressed'), 'true')
     assert.ok((progBtn('cat').getAttribute('title') ?? '').includes('Clear'))
-    assert.equal(box(), 'cat', 'the pick writes its name into the filter box')
+    assert.equal(boxValue(m.container), 'cat', 'the pick writes its name into the filter box')
     await click(progBtn('echo'))
     assert.equal(rowTexts(m.container).length, 1)
     assert.ok(rowTexts(m.container)[0].includes('echo hi && cat package.json'))
     assert.deepEqual(chipCounts(m.container), ['1', '0', '0', '0'])
-    assert.equal(box(), 'echo', 'the new pick replaces the box text')
+    assert.equal(boxValue(m.container), 'echo', 'the new pick replaces the box text')
     assert.equal(progBtn('cat').getAttribute('aria-pressed'), 'false')
     assert.ok((progBtn('cat').getAttribute('title') ?? '').includes('Filter'))
     await typeSearch(m.container, 'package')
     assert.equal(rowTexts(m.container).length, 1)
-    assert.equal(box(), 'package')
+    assert.equal(boxValue(m.container), 'package')
     assert.equal(progBtn('echo').getAttribute('aria-pressed'), 'false', 'editing the box releases the program pick')
     assert.deepEqual(progs(), ranking)
     await typeSearch(m.container, 'cat')
     assert.equal(rowTexts(m.container).length, 3, 'the text lens stands alone')
     await click(progBtn('echo'))
     assert.equal(rowTexts(m.container).length, 1)
-    assert.equal(box(), 'echo')
+    assert.equal(boxValue(m.container), 'echo')
     await click(progBtn('echo'))
     assert.equal(rowTexts(m.container).length, 5, 'the second click clears the program and the box')
-    assert.equal(box(), '')
+    assert.equal(boxValue(m.container), '')
     assert.equal(queryAll(m.container, '.lc-cmd-prog-on').length, 0)
     assert.deepEqual(chipCounts(m.container), ['5', '1', '1', '1'])
     await click(progBtn('cat'))
@@ -262,7 +260,7 @@ describe('CommandPanel — filtering, search, sort', () => {
     await click(failedChip)
     assert.equal(rowTexts(m.container).length, 1, 'the failed cat run')
     assert.equal(progBtn('cat').getAttribute('aria-pressed'), 'true', 'the chip keeps the pick')
-    assert.equal(box(), 'cat', 'the chip does not disturb the box')
+    assert.equal(boxValue(m.container), 'cat', 'the chip does not disturb the box')
     assert.deepEqual(chipCounts(m.container), ['3', '1', '1', '0'])
     const allChip = queryAll(m.container, '.lc-cmd-chips .lc-gran-btn').find(b => text(b).startsWith('All'))
     assert.ok(allChip !== undefined)
@@ -293,6 +291,55 @@ describe('CommandPanel — filtering, search, sort', () => {
     assert.equal(queryAll(outside.container, '.lc-cmd-attn').length, 1, 'the attention section stays session-wide under the search')
     assert.deepEqual(outsideProgs(), outsideRanking, 'an empty search result keeps the ranking')
     await outside.unmount()
+  })
+
+  test('the summary cells are lens buttons: each applies its filter and clears the box and pick', async () => {
+    const commands: Command[] = [
+      cmd(1, { cmd: 'cat README.md' }),
+      cmd(2, { cmd: 'echo hi && cat package.json' }),
+      cmd(3, { cmd: 'cat missing.txt', status: 'failed', exit: 1, start: T0 + 3000, end: T0 + 15000 }),
+      cmd(4, { cmd: 'sleep 20', status: 'running', background: true, end: undefined }),
+      cmd(5, { cmd: 'ls -la' }),
+    ]
+    const m = await mount(h(Panel, { commands }))
+    const kpi = (label: string) => {
+      const hit = queryAll(m.container, '.lc-cmd-kpi').find(b => text(b).includes(label))
+      if (hit === undefined) throw new Error(`summary cell not found: ${label}`)
+      return hit
+    }
+    const catProgram = queryAll(m.container, '.lc-cmd-prog').find(b => text(b).startsWith('cat'))
+    assert.ok(catProgram !== undefined)
+    await click(catProgram)
+    assert.equal(rowTexts(m.container).length, 3)
+    assert.equal(boxValue(m.container), 'cat')
+    await click(kpi('total time'))
+    assert.equal(rowTexts(m.container).length, 5, 'the time cell resets to the whole log')
+    assert.equal(boxValue(m.container), '', 'the cell clears the filter box')
+    assert.equal(queryAll(m.container, '.lc-cmd-prog-on').length, 0, 'the cell releases the program pick')
+    await typeSearch(m.container, 'cat')
+    assert.equal(rowTexts(m.container).length, 3)
+    await click(kpi('failed'))
+    assert.equal(rowTexts(m.container).length, 1, 'the failure cell filters to the failed run')
+    assert.ok(rowTexts(m.container)[0].includes('cat missing.txt'))
+    assert.equal(boxValue(m.container), '')
+    assert.ok(query(m.container, '.lc-cmd-chip-failed').className.includes('lc-gran-on'), 'the failure chip reflects the applied lens')
+    await click(kpi('background'))
+    assert.equal(rowTexts(m.container).length, 1, 'the background cell filters to the background run')
+    assert.ok(rowTexts(m.container)[0].includes('sleep 20'))
+    assert.equal(boxValue(m.container), '')
+    assert.ok(query(m.container, '.lc-cmd-chip-background').className.includes('lc-gran-on'))
+    await typeSearch(m.container, 'cat')
+    await click(kpi('runs'))
+    assert.equal(rowTexts(m.container).length, 5, 'the runs cell resets to the whole log')
+    assert.equal(boxValue(m.container), '')
+    assert.ok(query(m.container, '.lc-cmd-chip-all').className.includes('lc-gran-on'))
+    const slowest = queryAll(m.container, '.lc-fa-sort .lc-gran-btn').find(b => text(b).startsWith('Slowest'))
+    assert.ok(slowest !== undefined)
+    await click(slowest)
+    assert.ok(rowTexts(m.container)[0].includes('cat missing.txt'), 'the slowest run leads')
+    await click(kpi('total time'))
+    assert.ok(rowTexts(m.container)[0].includes('ls -la'), 'the time cell also resets the sort')
+    await m.unmount()
   })
 
 })
@@ -693,24 +740,23 @@ describe('CommandPanel — the summary rail', () => {
       if (hit === undefined) throw new Error(`attention row not found: ${label}`)
       return hit
     }
-    const box = () => query<HTMLInputElement>(m.container, 'input.lc-fa-search').value
     assert.equal(attentionRows().length, 4, 'all four session facts are listed')
 
     const slowestBtn = attnBtn('Slowest')
     await click(slowestBtn)
     assert.ok(rowTextsNow()[0].includes('vitest'))
-    assert.equal(box(), 'pnpm exec vitest run tests/client/components/commandPanel.spec.ts --reporter=verbose', 'the slowest lens writes the run’s first line')
+    assert.equal(boxValue(m.container), 'pnpm exec vitest run tests/client/components/commandPanel.spec.ts --reporter=verbose', 'the slowest lens writes the run’s first line')
     assert.equal(slowestBtn.getAttribute('aria-pressed'), 'true', 'the active lens is marked')
     assert.equal(attentionRows().length, 4, 'the attention list does not follow the lens')
     await click(slowestBtn)
     assert.equal(rowTextsNow().length, 5, 'a second click clears the lens')
-    assert.equal(box(), '')
+    assert.equal(boxValue(m.container), '')
 
     const failingBtn = attnBtn('Most failures')
     await click(failingBtn)
     assert.equal(rowTextsNow().length, 1)
     assert.ok(rowTextsNow()[0].includes('vitest'))
-    assert.equal(box(), 'pnpm', 'the failing lens writes its program')
+    assert.equal(boxValue(m.container), 'pnpm', 'the failing lens writes its program')
     const latestChip = queryAll(m.container, '.lc-fa-sort .lc-gran-btn').find(b => text(b).startsWith('Latest'))
     assert.ok(latestChip?.className.includes('lc-gran-on'), 'the previous slowest sort is cleared')
     assert.equal(queryAll(m.container, '.lc-cmd-prog').length, 2, 'the ranking stays global')
@@ -719,7 +765,7 @@ describe('CommandPanel — the summary rail', () => {
     assert.equal(attentionRows().length, 4, 'the attention list stays session-wide under its own lens')
     await click(failingBtn)
     assert.equal(rowTextsNow().length, 5, 'a second click on the active failing lens clears it')
-    assert.equal(box(), '')
+    assert.equal(boxValue(m.container), '')
     assert.equal(queryAll(m.container, '.lc-cmd-prog-on').length, 0)
 
     const repeatsBtn = attnBtn('Most repeated')
@@ -729,7 +775,7 @@ describe('CommandPanel — the summary rail', () => {
     assert.ok(withRepeats.every(r => r.includes('git status')))
     const allChip = queryAll(m.container, '.lc-cmd-chips .lc-gran-btn').find(b => text(b).startsWith('All'))
     assert.ok(allChip?.className.includes('lc-gran-on'), 'the All chip is active again')
-    assert.equal(box(), 'cd /repo && git status', 'the repeats lens writes its command')
+    assert.equal(boxValue(m.container), 'cd /repo && git status', 'the repeats lens writes its command')
     assert.equal(queryAll(m.container, '.lc-cmd-prog').length, 2, 'the ranking stays global under the search lens')
     assert.equal(attentionRows().length, 4, 'the attention rows never drop out of the rail')
     assert.ok(attentionRows().some(b => text(b).includes('Background')), 'the background fact stays listed')
@@ -739,7 +785,7 @@ describe('CommandPanel — the summary rail', () => {
     assert.ok(gitBtn !== undefined)
     await click(gitBtn)
     assert.equal(rowTextsNow().length, 3, 'the filtered record count equals the 3 runs label')
-    assert.equal(box(), 'git', 'the program pick writes its name')
+    assert.equal(boxValue(m.container), 'git', 'the program pick writes its name')
     assert.equal(queryAll(m.container, '.lc-cmd-prog').length, 2, 'the ranking stays whole')
     assert.equal(queryAll(m.container, '.lc-cmd-prog-on').length, 1, 'the pick is marked')
     assert.equal(gitBtn.getAttribute('aria-pressed'), 'true')
@@ -747,13 +793,13 @@ describe('CommandPanel — the summary rail', () => {
     assert.ok(picked !== undefined)
     await click(picked)
     assert.equal(rowTextsNow().length, 5)
-    assert.equal(box(), '', 'a second click clears the box too')
+    assert.equal(boxValue(m.container), '', 'a second click clears the box too')
     assert.equal(queryAll(m.container, '.lc-cmd-prog-on').length, 0)
     const bgBtn = attnBtn('Background')
     await click(bgBtn)
     assert.equal(rowTextsNow().length, 1)
     assert.ok(rowTextsNow()[0].includes('pnpm dev'))
-    assert.equal(box(), '', 'the background lens has no text keyword')
+    assert.equal(boxValue(m.container), '', 'the background lens has no text keyword')
     assert.equal(bgBtn.getAttribute('aria-pressed'), 'true')
     await click(bgBtn)
     assert.equal(rowTextsNow().length, 5, 'a second click clears the background lens')
