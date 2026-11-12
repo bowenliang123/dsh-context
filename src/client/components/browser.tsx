@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type ReactElement, type ReactNode } from 'react'
+import { useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type KeyboardEvent as ReactKeyboardEvent, type ReactElement, type ReactNode } from 'react'
 import { assembleCached } from './derivedCache'
 import { UNKNOWN_TOOL_SOURCE, type Category, type HeaderRecord, type HeaderTool, type RequestRecord, type SurfaceNode, type SystemPromptNode } from '../../shared/types'
 import { CATS, CAT_COLOR, partsOf } from '../categories'
@@ -943,7 +943,7 @@ export function makeContextBrowser(
                   const openable = count > 0 || headerlessOpenable(c.key)
                   const open = openCat === c.key && openable
                   return (
-                    <div key={c.key} className={'lc-br-cat' + (openable ? '' : ' lc-br-cat-empty')}>
+                    <div key={c.key} className={'lc-br-cat' + (openable ? '' : ' lc-br-cat-empty')} style={{ '--lc-cat-hue': c.color } as CSSProperties}>
                       <button
                         type="button"
                         className={'lc-br-cat-row hover:bg-(--dsw-alias-interactive-bg-hover)'

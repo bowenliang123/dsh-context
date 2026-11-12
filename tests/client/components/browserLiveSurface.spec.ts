@@ -3,6 +3,7 @@ import assert from 'node:assert/strict'
 import { describe, test, vi } from 'vitest'
 import { makeContextBrowser, stepStampOf } from '../../../src/client/components/browser'
 import { makeStackedBar } from '../../../src/client/components/stackedBar'
+import { CATS } from '../../../src/client/categories'
 import { type ContextHeaders, type RequestRecord, type HeaderEpochContent, type SurfaceNode } from '../../../src/shared/types'
 import { createContextSettings } from '../../../src/client/settings'
 import { click, flush, hover, mount, query, queryAll, surfaceNode, text, unhover, type Mounted } from '../helpers/kit'
@@ -63,6 +64,10 @@ describe('ContextBrowser live surface', () => {
     assert.equal(text(query(liveUserCat, '.lc-br-tdelta')), '+50')
     await clickDeltaBase(m, 'prev step')
     assert.equal(queryAll(m.container, '.lc-br-cat-row').length, 7)
+    const cats = queryAll(m.container, '.lc-br-cat')
+    for (const [index, c] of CATS.entries()) {
+      assert.equal(cats[index].style.getPropertyValue('--lc-cat-hue'), c.color, 'category rows carry their cat color as the tint hue')
+    }
     assert.ok(text(catRow(m, 'user')).includes('1 Items'))
     assert.ok(queryAll(m.container, '.lc-br-cat')[ROW.inject].className.includes('lc-br-cat-empty'), 'empty category is marked')
     await pickStep(m, '7')
