@@ -2,6 +2,7 @@ export const DICT_ZH = {
   'tab.context': '上下文',
   'tab.fleet': '编队',
   'sidebar.guideDescription': '查看上下文的构成、统计、演变。',
+  'recom.sponsor': '推广',
   'field.clear': '清除输入',
   'cat.system': '系统提示词',
   'cat.tools': '工具定义',

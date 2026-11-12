@@ -4,6 +4,7 @@ export const DICT_RU = {
   'tab.context': 'Контекст',
   'tab.fleet': 'Флот',
   'sidebar.guideDescription': 'Просмотр состава, статистики и развития контекста.',
+  'recom.sponsor': 'Спонсор',
   'field.clear': 'Очистить ввод',
   'cat.system': 'Системный промпт',
   'cat.tools': 'Схемы',

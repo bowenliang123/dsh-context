@@ -71,6 +71,7 @@ function initialState(): RecomRead {
 }
 
 export function makeRecomCard(kit: ViewKit, ctx: ClientCtx): () => ReactElement {
+  const { t } = kit
   return function RecomCard(): ReactElement {
     kit.useLocaleTick()
     const localeSvc = ctx.locale as LocaleService | undefined
@@ -103,6 +104,7 @@ export function makeRecomCard(kit: ViewKit, ctx: ClientCtx): () => ReactElement 
         aria-describedby={tooltipId}
       >
         <div className="lc-recom-link">
+          <span className="lc-recom-sponsor">{t('recom.sponsor')}</span>
           <div className="lc-recom-main">
             <div className={'lc-recom-mark' + (iconState === 'loaded' ? ' lc-recom-mark-loaded' : '')}>
               <span className="lc-recom-fallback" aria-hidden="true">{recom.name.charAt(0).toUpperCase()}</span>

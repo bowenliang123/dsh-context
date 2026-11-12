@@ -7,7 +7,7 @@ import { modalStoreOf, setPendingConsume, takePendingConsume } from '../../../sr
 import { watchHistoryFaces } from '../../../src/client/historyPage'
 import { createContextSettings } from '../../../src/client/settings'
 import { type ContextTimeline } from '../../../src/shared/types'
-import { DICT_EN } from '../../../src/client/i18n'
+import { DICT_EN, DICT_ZH } from '../../../src/client/i18n'
 import { TestClientCtx, TestSessions, asClientCtx } from '../helpers/harness'
 import { click, flush, hover, keydown, makeKit, mount, query, queryAll, text, unhover, until } from '../helpers/kit'
 import { makeRecomCard, resetRecomCache } from '../../../src/client/components/recomCard'
@@ -560,6 +560,7 @@ describe('RecomCard', () => {
     const m = await mount(h(RecomCard))
     assert.ok(m.container.querySelector('.lc-card-title') === null)
     assert.ok(m.container.querySelector('.lc-recom-link > .lc-recom-arrow') !== null)
+    assert.equal(query(m.container, '.lc-recom-sponsor').textContent, DICT_EN['recom.sponsor'])
     assert.ok(text(m.container).includes(DEFAULT_RECOM.slogan.en))
     assert.ok(m.container.querySelector('.lc-recom-degraded') === null)
     release(reply({ ok: true, value: [remoteRecom()], degraded: false }))
@@ -595,6 +596,7 @@ describe('RecomCard', () => {
       const m = await mount(h(RecomCard))
       await flush()
       assert.ok(text(m.container).includes(DEFAULT_RECOM.slogan.zh))
+      assert.equal(query(m.container, '.lc-recom-sponsor').textContent, DICT_ZH['recom.sponsor'])
       assert.equal(query(m.container, '[role="tooltip"]').textContent, DEFAULT_RECOM.tooltip.zh)
       assert.ok(m.container.querySelector('.lc-recom-degraded') !== null)
       await m.unmount()

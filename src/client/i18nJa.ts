@@ -4,6 +4,7 @@ export const DICT_JA = {
   'tab.context': 'コンテキスト',
   'tab.fleet': 'フリート',
   'sidebar.guideDescription': 'コンテキストの構成、統計、変遷を確認。',
+  'recom.sponsor': '提供',
   'field.clear': '入力をクリア',
   'cat.system': 'システムプロンプト',
   'cat.tools': 'ツール定義',

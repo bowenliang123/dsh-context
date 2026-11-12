@@ -4,6 +4,7 @@ export const DICT_PT = {
   'tab.context': 'Contexto',
   'tab.fleet': 'Frota',
   'sidebar.guideDescription': 'Inspecione a composição, as estatísticas e a evolução do contexto.',
+  'recom.sponsor': 'Patrocinado',
   'field.clear': 'Limpar entrada',
   'cat.system': 'Prompt do sistema',
   'cat.tools': 'Esquemas de ferramentas',

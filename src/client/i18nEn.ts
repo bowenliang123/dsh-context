@@ -4,6 +4,7 @@ export const DICT_EN = {
   'tab.context': 'Context',
   'tab.fleet': 'Fleet',
   'sidebar.guideDescription': 'Inspect context composition, stats, and evolution.',
+  'recom.sponsor': 'Sponsor',
   'field.clear': 'Clear input',
   'cat.system': 'System Prompt',
   'cat.tools': 'Tool Schemas',
