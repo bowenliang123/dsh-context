@@ -192,7 +192,7 @@ export function makeContextBrowser(
     const pickOptions = useMemo(() => {
       const option = (r: RequestRecord): ReactElement => (
         <option key={r.seq} value={String(r.seq)}>
-          {t('detail.step', { t: r.turn ?? 0, s: r.step ?? 0, n: stepsOf(r.turn) })}
+          {t('browser.pickStep', { t: r.turn ?? 0, s: r.step ?? 0 })}
         </option>
       )
       const count = requests.length
@@ -210,7 +210,7 @@ export function makeContextBrowser(
       const from = Math.max(0, idx - (STEP_PICK_MAX >> 1))
       const picked = requests.slice(from, Math.min(count, from + STEP_PICK_MAX))
       return picked.slice().reverse().map(option)
-    }, [requests, stepsOf, t, props.locale, sel, seq])
+    }, [requests, t, props.locale, sel, seq])
     const linked = req === null && props.onHoverKey !== undefined
     const linkKey = linked && props.hoverKey !== null && props.hoverKey !== 'free'
       ? props.hoverKey
@@ -791,39 +791,48 @@ export function makeContextBrowser(
                 {t('browser.dna')}
               </button>
             </span>
-            <span className="lc-gran lc-br-delta-ctl" role="group" title={t('browser.deltaTip')}>
-              <button
-                type="button"
-                className={'lc-gran-btn' + (delta ? ' lc-gran-on' : '')}
-                onClick={() => { setDelta(!delta) }}
+            <span className="lc-br-ctl">
+              <span className="lc-gran lc-br-base-ctl" role="group" title={t('browser.base.tip')}>
+                <button
+                  type="button"
+                  className={'lc-gran-btn' + (deltaBase === 'step' ? ' lc-gran-on' : '')}
+                  onClick={() => { setDeltaBase('step') }}
+                >
+                  {t('browser.base.step')}
+                </button>
+                <button
+                  type="button"
+                  className={'lc-gran-btn' + (deltaBase === 'turn' ? ' lc-gran-on' : '')}
+                  onClick={() => { setDeltaBase('turn') }}
+                >
+                  {t('browser.base.turn')}
+                </button>
+              </span>
+              <select
+                className="lc-br-pick"
+                value={seq === null ? 'live' : String(seq)}
+                onChange={(e) => { pick(e.target.value) }}
               >
-                {t('gran.delta')}
-              </button>
+                <option value="live">{t('browser.live')}</option>
+                {pickOptions}
+              </select>
+              <span className="lc-gran lc-br-mode-ctl" role="group" title={t('browser.deltaTip')}>
+                <button
+                  type="button"
+                  className={'lc-gran-btn' + (delta ? '' : ' lc-gran-on')}
+                  onClick={() => { if (delta) setDelta(false) }}
+                >
+                  {t('gran.total')}
+                </button>
+                <button
+                  type="button"
+                  className={'lc-gran-btn' + (delta ? ' lc-gran-on' : '')}
+                  onClick={() => { if (!delta) setDelta(true) }}
+                >
+                  {t('gran.delta')}
+                </button>
+              </span>
             </span>
-            <span className="lc-gran" role="group" title={t('browser.base.tip')}>
-              <button
-                type="button"
-                className={'lc-gran-btn' + (deltaBase === 'step' ? ' lc-gran-on' : '')}
-                onClick={() => { setDeltaBase('step') }}
-              >
-                {t('browser.base.step')}
-              </button>
-              <button
-                type="button"
-                className={'lc-gran-btn' + (deltaBase === 'turn' ? ' lc-gran-on' : '')}
-                onClick={() => { setDeltaBase('turn') }}
-              >
-                {t('browser.base.turn')}
-              </button>
-            </span>
-            <select
-              className="lc-br-pick"
-              value={seq === null ? 'live' : String(seq)}
-              onChange={(e) => { pick(e.target.value) }}
-            >
-              <option value="live">{t('browser.live')}</option>
-              {pickOptions}
-            </select>
           </div>
 
           <div className={'lc-br-bar' + (dna ? ' lc-br-bar-dna' : '')}>

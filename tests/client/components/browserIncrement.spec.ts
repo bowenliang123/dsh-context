@@ -191,8 +191,11 @@ const richData = tl({
   systems: [{ seq: 12, time: 2, tokens: 100 }],
 })
 
-function deltaButton(m: Mounted): HTMLElement {
-  return query(m.container, '.lc-br-delta-ctl .lc-gran-btn')
+function modeButton(m: Mounted, key: 'total' | 'delta'): HTMLElement {
+  const label = key === 'total' ? kit.t('gran.total') : kit.t('gran.delta')
+  const hit = queryAll(m.container, '.lc-br-mode-ctl .lc-gran-btn').find(b => text(b) === label)
+  assert.ok(hit !== undefined, `the ${key} mode button exists`)
+  return hit
 }
 
 function cat(m: Mounted, key: keyof typeof ROW): HTMLElement {
@@ -214,15 +217,19 @@ function rowPills(m: Mounted, key: keyof typeof ROW): { countUp: string | null; 
 }
 
 describe('ContextBrowser incremental mode', () => {
-  test('the toggle rides the DNA group on its right, labels the added total, and keeps the diff pills', async () => {
+  test('the mode switch closes the title row, labels the added total, and keeps the diff pills', async () => {
     const m = await mount(h(Browser, props({ data, headers, delta: true, onDeltaChange: () => {} })))
     await pickStep(m, '20')
-    const dnaGroup = query(m.container, '.lc-br-dna-ctl')
-    const deltaGroup = query(m.container, '.lc-br-delta-ctl')
-    assert.equal(dnaGroup.nextElementSibling, deltaGroup, 'the switch sits right of DNA mode')
-    assert.equal(deltaGroup.getAttribute('title'), kit.t('browser.deltaTip'))
-    assert.equal(text(deltaButton(m)), 'Delta')
-    assert.ok(deltaButton(m).className.includes('lc-gran-on'))
+    const modeGroup = query(m.container, '.lc-br-mode-ctl')
+    assert.equal(query(m.container, 'select.lc-br-pick').nextElementSibling, modeGroup, 'the switch sits right of the step picker')
+    assert.equal(query(m.container, '.lc-br-ctl').nextElementSibling, null, 'the control cluster closes the title row')
+    assert.equal(modeGroup.nextElementSibling, null, 'the switch closes the control cluster')
+    assert.equal(modeGroup.getAttribute('title'), kit.t('browser.deltaTip'))
+    const [totalButton] = queryAll(modeGroup, '.lc-gran-btn')
+    assert.equal(text(totalButton), kit.t('gran.total'))
+    assert.ok(!totalButton.className.includes('lc-gran-on'))
+    assert.equal(text(modeButton(m, 'delta')), 'Delta')
+    assert.ok(modeButton(m, 'delta').className.includes('lc-gran-on'))
     assert.ok(text(query(m.container, '.lc-br-meta')).includes('Added ≈ 60 of 275'))
 
     assert.ok(text(cat(m, 'user')).includes('1 Items'))
@@ -264,26 +271,30 @@ describe('ContextBrowser incremental mode', () => {
     const linked = (on: boolean) => h(Browser, props({ data, headers, delta: on, onDeltaChange: (next) => { calls.push(next) } }))
     const m = await mount(linked(true))
     await pickStep(m, '20')
-    assert.ok(deltaButton(m).className.includes('lc-gran-on'))
-    await click(deltaButton(m))
+    assert.ok(modeButton(m, 'delta').className.includes('lc-gran-on'))
+    await click(modeButton(m, 'delta'))
+    assert.deepEqual(calls, [], 're-clicking the active segment keeps the mode')
+    await click(modeButton(m, 'total'))
     assert.deepEqual(calls, [false])
-    assert.ok(deltaButton(m).className.includes('lc-gran-on'), 'still on until the parent re-renders the prop')
+    assert.ok(modeButton(m, 'delta').className.includes('lc-gran-on'), 'still on until the parent re-renders the prop')
     await m.update(linked(false))
-    assert.ok(!deltaButton(m).className.includes('lc-gran-on'))
+    assert.ok(!modeButton(m, 'delta').className.includes('lc-gran-on'))
+    await click(modeButton(m, 'total'))
+    assert.deepEqual(calls, [false], 're-clicking the active Total segment keeps the mode')
     assert.ok(text(cat(m, 'user')).includes('2 Items'), 'the full category is back')
     assert.deepEqual(rowPills(m, 'user'), { countUp: '+1', countDown: null, tokenUp: '+20', tokenDown: null })
     await m.unmount()
 
     const lone = await mount(h(Browser, props({ data, headers, delta: true })))
     await pickStep(lone, '20')
-    assert.ok(!deltaButton(lone).className.includes('lc-gran-on'), 'a lone delta prop is ignored')
+    assert.ok(!modeButton(lone, 'delta').className.includes('lc-gran-on'), 'a lone delta prop is ignored')
     assert.ok(text(cat(lone, 'user')).includes('2 Items'))
     await lone.unmount()
 
     const local = await mount(h(Browser, props({ data, headers })))
     await pickStep(local, '20')
-    await click(deltaButton(local))
-    assert.ok(deltaButton(local).className.includes('lc-gran-on'))
+    await click(modeButton(local, 'delta'))
+    assert.ok(modeButton(local, 'delta').className.includes('lc-gran-on'))
     assert.ok(text(cat(local, 'user')).includes('1 Items'))
     await local.unmount()
   })

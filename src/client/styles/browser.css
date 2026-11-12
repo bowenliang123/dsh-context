@@ -1,4 +1,6 @@
-.lc-br-dna-ctl, .lc-br-delta-ctl { margin-left: 0; flex: none; }
+.lc-br-dna-ctl, .lc-br-base-ctl, .lc-br-mode-ctl { margin-left: 0; flex: none; }
+.lc-br-mode-ctl .lc-gran-btn { transition: none; }
+.lc-br-ctl { margin-left: auto; display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: 8px; }
 .lc-br { display: flex; flex-direction: column; min-height: 0; }
 .lc-br-head { flex: none; }
 .lc-br-scroll { flex: 1 1 auto; min-height: 28px; overflow-y: auto; overscroll-behavior-x: contain; }

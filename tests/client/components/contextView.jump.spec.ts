@@ -666,12 +666,16 @@ describe('ContextView — interactions', () => {
   test('Delta arms Adaptive and links the browser switch; Overview suppresses the link', async () => {
     const m = await mountRich('sv-trend-delta-link')
     const trendDelta = () => buttonByText(m.container, DICT_EN['gran.delta'])
-    const browserDelta = () => query(m.container, '.lc-br-delta-ctl .lc-gran-btn')
+    const browserDelta = () => queryAll(m.container, '.lc-br-mode-ctl .lc-gran-btn').find(b => text(b) === DICT_EN['gran.delta']) as HTMLElement
+    const browserTotal = () => queryAll(m.container, '.lc-br-mode-ctl .lc-gran-btn').find(b => text(b) === DICT_EN['gran.total']) as HTMLElement
     const adaptive = () => buttonByText(m.container, DICT_EN['trend.adaptive'])
     const overview = () => buttonByText(m.container, DICT_EN['trend.overview'])
     assert.ok(!browserDelta().className.includes('lc-gran-on'), 'off at mount')
-    assert.equal(query(m.container, '.lc-br-delta-ctl').getAttribute('title'), DICT_EN['browser.deltaTip'])
-    assert.equal(query(m.container, '.lc-br-dna-ctl').nextElementSibling, query(m.container, '.lc-br-delta-ctl'), 'the switch sits right of DNA mode')
+    const modeGroup = query(m.container, '.lc-br-mode-ctl')
+    assert.equal(query(m.container, 'select.lc-br-pick').nextElementSibling, modeGroup, 'the switch sits right of the step picker')
+    assert.equal(query(m.container, '.lc-br-ctl').nextElementSibling, null, 'the control cluster closes the title row')
+    assert.equal(modeGroup.nextElementSibling, null, 'the switch closes the control cluster')
+    assert.equal(modeGroup.getAttribute('title'), DICT_EN['browser.deltaTip'])
 
     await click(trendDelta())
     assert.ok(trendDelta().className.includes('lc-gran-on'))
@@ -689,7 +693,7 @@ describe('ContextView — interactions', () => {
     await click(trendDelta())
     assert.ok(!adaptive().className.includes('lc-gran-on'), 're-clicking the active Delta chip keeps the opt-out')
 
-    await click(browserDelta())
+    await click(browserTotal())
     assert.ok(!trendDelta().className.includes('lc-gran-on'), 'the trend follows the browser switch')
     assert.ok(!browserDelta().className.includes('lc-gran-on'))
 

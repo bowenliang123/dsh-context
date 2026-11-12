@@ -818,7 +818,7 @@ describe('ContextBrowser step picker bounds', () => {
       assert.equal(options.length, 501, 'an old selection re-anchors the option window around it')
       const select = query<HTMLSelectElement>(m.container, 'select.lc-br-pick')
       assert.equal(select.value, '40', 'the pinned old step stays selectable in the windowed list')
-      assert.ok(text(select).includes('Turn 260'), 'the window centers on the pinned step')
+      assert.ok(text(select).includes('T260'), 'the window centers on the pinned step')
       await m.update(h(Browser, props({ data, headers: null, pinSeq: null })))
       options = queryAll(m.container, 'select.lc-br-pick option')
       assert.equal(query<HTMLSelectElement>(m.container, 'select.lc-br-pick').value, 'live')
@@ -835,7 +835,7 @@ describe('ContextBrowser step picker bounds', () => {
     try {
       const options = queryAll(m.container, 'select.lc-br-pick option')
       assert.equal(options.length, 501)
-      assert.ok(text(query(m.container, 'select.lc-br-pick')).includes('Turn 1 ·'))
+      assert.ok(text(query(m.container, 'select.lc-br-pick')).includes('T1 ·'))
     } finally {
       await m.unmount()
     }
