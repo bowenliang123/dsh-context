@@ -1,6 +1,7 @@
 {
   "meta": {
     "title": "Context (dsh-context)",
-    "description": "Context insights and management, with dashboard, browser, dynamics and commands, for understanding how the context composites, and how it evolves."
+    "description": "Context insights and management, with dashboard, browser, dynamics and commands, for understanding how the context composites, and how it evolves.",
+    "detail": "README_en.md"
   }
 }

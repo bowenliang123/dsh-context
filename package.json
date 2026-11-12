@@ -31,11 +31,11 @@
   "files": [
     "icon.svg",
     "locale/*.json",
+    "README*.md",
     "lib/client.js",
     "lib/index.js",
     "lib/index.d.ts",
     "cordis.patch.yml",
-    "README.md",
     "LICENSE"
   ],
   "scripts": {

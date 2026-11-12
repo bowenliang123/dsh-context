@@ -78,6 +78,7 @@ Last verified: **2026-11-13** (dsh-context `0.84.0`; dsh floors `0.2.0-rc.2`, `0
 7. **Locale switches ride the LocaleFace `subscribe`/`getLocale` pair**, degrading to the boot locale when absent. (dsh: `packages/client/locale/src/client/index.ts`; `src/client/viewkit.ts`)
 
 - **Limitation — language selection:** ja/es/fr/de/ru/pt are selectable only where the harness client registers those packs (the `0.2.2` line from rc.1; the built-in `addLanguage` loop first appears at `0.2.2-alpha.2`). The `0.2.0`/`0.2.1` clients register only the baseline `zh`/`en` (`LOCALE_IDS`), so their selector offers Chinese/English and the six dictionaries resolve as English. (dsh: `packages/client/locale/src/client/index.ts`, `packages/client/locale/src/locale-settings.ts`)
+- **Limitation — plugin detail document:** `meta.detail` is honored only from `dsh-v0.2.2-alpha.2` (`dsh: dsh-v0.2.2-alpha.2:packages/util/plugin-detail/src/document.ts`); the `0.2.0`/`0.2.1` floors ignore the extra locale key and render no detail document, only the localized title and description.
 
 **Boundary**
 

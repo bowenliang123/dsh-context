@@ -1,6 +1,7 @@
 {
   "meta": {
     "title": "上下文 (dsh-context)",
-    "description": "上下文洞察与管理插件：提供跨会话的上下文仪表盘、上下文浏览器、上下文动态、/context 命令，看清上下文的构成与演变。"
+    "description": "上下文洞察与管理插件：提供跨会话的上下文仪表盘、上下文浏览器、上下文动态、/context 命令，看清上下文的构成与演变。",
+    "detail": "README.md"
   }
 }
