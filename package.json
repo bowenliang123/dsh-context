@@ -87,7 +87,7 @@
   ],
   "license": "Apache-2.0",
   "dependencies": {
-    "zod": "4.4.3"
+    "zod": "^4.6.6"
   },
   "peerDependencies": {
     "@deepseek-ai/cordis": "^4.0.4 || >=4.0.6-alpha.2 <5.0.0",
