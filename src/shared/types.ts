@@ -487,6 +487,7 @@ export interface ContextEventRecord {
   count?: number
   sub?: string
   name?: string
+  agent?: string
   detail?: string
   from?: string
   to?: string

@@ -134,6 +134,10 @@ export interface MessageSource {
   summary?: string
   sections?: ({ name?: string } | null)[]
   changes?: ({ path?: string } | null)[]
+  senderSessionId?: string
+  senderId?: string
+  senderName?: string
+  references?: ({ sessionId?: string; label?: string } | null)[]
 }
 
 export function injectionSourceName(source: MessageSource | null | undefined): string {

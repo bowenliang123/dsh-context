@@ -149,6 +149,7 @@ function baseline(id: BaselineId, tag: string, session: string, line: {
       'user/message', 'developer/message', 'tool/call', 'tool/result', 'assistant/message', 'assistant/attempt',
       'tool/ptc-dispatch', 'tool/ptc-dispatch-start',
       'plan/mode', 'compaction/summary', 'compaction/prune', 'system/message',
+      'subagent/catalog', 'team/member',
       'approval/asked', 'approval/decided', 'session/end-seed',
       ...(line.extraFoldEvents ?? []),
     ],

@@ -146,6 +146,12 @@ export interface TimelineEvent {
   surfaceOp?: unknown
 }
 
+export interface AgentAlias {
+  catalogName?: string
+  memberName?: string
+  catalogLabel?: string
+}
+
 export interface TimelineState {
   surface: SurfaceNode[]
   sums: Record<Category, number>
@@ -199,6 +205,7 @@ export interface TimelineState {
   programTally?: Record<string, number>
   commandCalls?: string[]
   commandCallsOverflow?: boolean
+  agents?: Record<string, AgentAlias>
   pendingCodeCmds?: Record<string, CommandStateRecord[]>
   pendingCodeOps?: Record<string, FileOpRecord[]>
   pendingCodeStarts?: Record<string, number>
@@ -361,6 +368,7 @@ export function noteCommandCall(st: TimelineState, callId: string): void {
 export function trimHeadState(st: TimelineState): void {
   if (st.requests.length > 2) st.requests = st.requests.slice(-2)
   if (st.events.length > 0) st.events = []
+  if (st.agents !== undefined) delete st.agents
   if (st.commands.length > 0) st.commands = st.commands.filter(rec => rec.status === 'running').slice(-16)
   if (st.fileOps.length > 0) st.fileOps = []
   if (st.spans.length > 0) st.spans = []

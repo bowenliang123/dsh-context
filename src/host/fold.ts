@@ -13,7 +13,7 @@ import {
   isInjection,
   toolCallNames,
 } from './pricing'
-import type { ContentBlock, MessageSource } from './pricing'
+import type { MessageSource } from './pricing'
 import { deriveEventMessage } from '@deepseek-ai/dsh-session'
 import { firstTokenTimeOfStream, replaceRangeOf, streamTimingOf } from './logShapes'
 import type { DecodeSpan } from './logShapes'
@@ -34,6 +34,7 @@ import {
 import { TALLY_NAME_CHARS_MAX, TALLY_NAMES_MAX, countCompaction, countInject, countStep, countTurnRuns, noteCommandCall, noteSkillName, noteTurn, trimState } from './foldState'
 import { slimSurfaceNode } from './foldState'
 import type { CommandStateRecord, TimelineEvent, TimelineState } from './foldState'
+import { agentOfInjection, applyAgentAliasEvent, messageOf, skillNameOf, type MessageLike } from './foldInjections'
 import { accumulateCost, addDecodeSpan, bumpToolTotals, carveWindows, durOf, ensureTiming, idleGapWindows, mergeWindows, tokenCountOf } from './foldMetering'
 import type { UsageLike } from './foldMetering'
 
@@ -164,34 +165,6 @@ function removeSurfaceSeqs(st: TimelineState, claimed: ReadonlySet<number>, gone
 }
 
 type SurfaceEventLike = Pick<TimelineEvent, 'seq' | 'time' | 'surfaceOp'>
-
-interface MessageLike {
-  content?: ContentBlock[]
-  source?: MessageSource
-  isError?: unknown
-}
-
-function messageOf(data: Record<string, unknown> | undefined): MessageLike | null {
-  const message = data?.message
-  return message !== null && typeof message === 'object' ? message : null
-}
-
-function firstFullText(blocks: unknown): string {
-  if (!Array.isArray(blocks)) return ''
-  for (const item of blocks) {
-    if (item === null || typeof item !== 'object') continue
-    const block = item as ContentBlock
-    if (block.type === 'text' && typeof block.text === 'string' && block.text !== '') return block.text
-  }
-  return ''
-}
-
-export function skillNameOf(msg: unknown): string {
-  const content = msg !== null && typeof msg === 'object' ? (msg as MessageLike).content : undefined
-  const text = firstFullText(content)
-  const match = text.match(/<skill_content\s+name="([^"]+)"/)
-  return match === null ? '' : match[1]
-}
 
 function applySurface(
   st: TimelineState,
@@ -324,7 +297,8 @@ const CLONE_ALL: readonly CloneKey[] = ['surface', 'sums', 'requests', 'events',
 const STEP_BEATS_MAX = 1024
 
 export function applyTimeline(state: TimelineState, event: TimelineEvent, bounds: FoldBounds): TimelineState {
-  if (state.stepStart === undefined || state.stepBeatsFull === true
+  if (event.type === 'subagent/catalog' || event.type === 'team/member'
+    || state.stepStart === undefined || state.stepBeatsFull === true
     || !Number.isFinite(event.time) || event.time < 0) {
     return applyTimelineEvent(state, event, bounds)
   }
@@ -700,6 +674,12 @@ function applyTimelineEvent(state: TimelineState, event: TimelineEvent, bounds: 
         else delete s.stepApprovals
         break
       }
+      case 'subagent/catalog':
+      case 'team/member': {
+        const applied = applyAgentAliasEvent(state, event.type, data)
+        if (applied !== undefined) st = applied
+        break
+      }
       case 'user/message':
       case 'developer/message': {
         const developer = event.type === 'developer/message'
@@ -717,6 +697,8 @@ function applyTimelineEvent(state: TimelineState, event: TimelineEvent, bounds: 
             form: typeof source?.form === 'string' && source.form !== '' ? source.form : 'context',
             tokens: node.tokens,
           }
+          const agent = agentOfInjection(source, msg?.content, state)
+          if (agent !== undefined) rec.agent = agent
           if (source?.kind === 'skill-invocation') {
             rec.sub = 'skill'
             rec.name = typeof source.name === 'string' ? source.name : '?'
@@ -998,6 +980,7 @@ function applyTimelineEvent(state: TimelineState, event: TimelineEvent, bounds: 
   return state
 }
 
+export { skillNameOf }
 export { createTimelineState, trimToLastTurns } from './foldState'
 export type { TimelineEvent, TimelineState } from './foldState'
 export { addBilledUsage, isBeijingPeak, tokenCountOf } from './foldMetering'

@@ -26,6 +26,20 @@ export interface EventLabelParts {
   tail: string
 }
 
+function agentOf(ev: ContextEventRecord): string | undefined {
+  return ev.agent !== undefined && ev.agent !== '' ? ev.agent : undefined
+}
+
+function noticeAgentOf(ev: ContextEventRecord): string | undefined {
+  const agent = agentOf(ev)
+  return ev.form === 'notice' ? agent : undefined
+}
+
+function eventTipOf(ev: ContextEventRecord): string | undefined {
+  if (ev.detail === undefined || ev.detail === '') return undefined
+  return noticeAgentOf(ev) !== undefined ? ev.detail : undefined
+}
+
 export function makeEventText(t: Translate): {
   eventLabel: (ev: ContextEventRecord) => string
   eventLabelParts: (ev: ContextEventRecord) => EventLabelParts
@@ -37,9 +51,12 @@ export function makeEventText(t: Translate): {
     if (ev.kind === 'model') return { lead: '', tail: t('ev.model', { a: ev.from || '?', b: ev.to || '?' }) }
     if (ev.kind === 'mode') return { lead: '', tail: modeLabelOf(t, ev.name) }
     if (ev.sub === 'skill') return { lead: t('ev.skillLead'), tail: ' · ' + (ev.name || '?') }
+    const agent = agentOf(ev)
     return {
       lead: formLabelOf(t, ev.form),
-      tail: (ev.name ? ' · ' + ev.name : '') + (ev.detail ? ' · ' + ev.detail : ''),
+      tail: (ev.name ? ' · ' + ev.name : '')
+        + (ev.detail && noticeAgentOf(ev) === undefined ? ' · ' + ev.detail : '')
+        + (agent !== undefined ? ' · ' + agent : ''),
     }
   }
 
@@ -75,10 +92,12 @@ function syncTitles(root: HTMLElement): void {
     if (el.scrollWidth > el.clientWidth) clipped.push(el)
   }
   for (const el of labels) {
-    el.title = ''
+    el.title = el.getAttribute('data-tip') ?? ''
   }
   for (const el of clipped) {
-    el.title = el.textContent || ''
+    const tip = el.getAttribute('data-tip')
+    const label = el.textContent || ''
+    el.title = tip === null ? label : label + '\n' + tip
   }
 }
 
@@ -127,14 +146,21 @@ export function makeEventList(kit: ViewKit): (props: EventListProps) => ReactEle
             ? props.onEventFocus
             : undefined
           const label = lead === '' ? tail : <><b>{lead}</b>{tail}</>
+          const tip = eventTipOf(ev)
           return (
             <div key={ev.seq} className="lc-event @max-[380px]/lc-card:flex-wrap">
               <span className={'lc-event-icon lc-event-' + ev.kind}>{glyph}</span>
               <span className={'lc-kind lc-kind-' + ev.kind}>{t('kind.' + ev.kind)}</span>
               {reveal !== undefined ? (
-                <button type="button" className={labelClass + ' lc-event-jump'} onClick={() => { reveal(ev) }}>{label}</button>
+                <button
+                  type="button"
+                  className={labelClass + ' lc-event-jump'}
+                  data-tip={tip}
+                  title={tip}
+                  onClick={() => { reveal(ev) }}
+                >{label}</button>
               ) : (
-                <span className={labelClass}>{label}</span>
+                <span className={labelClass} data-tip={tip} title={tip}>{label}</span>
               )}
               {at !== null ? <span className="lc-event-at">{at}</span> : null}
               {ev.tokens ? (

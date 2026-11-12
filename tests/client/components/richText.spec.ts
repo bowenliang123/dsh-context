@@ -475,6 +475,35 @@ describe('makeEventText.eventLabel', () => {
     assert.equal(eventLabel(ev({ kind: 'inject', form: 'notice', name: 'hook' })), 'Notice · hook')
     assert.equal(eventLabel(ev({ kind: 'inject', detail: 'from the producer' })), 'Context Injection · from the producer')
     assert.equal(eventLabel(ev({ kind: 'inject', form: 'notice', name: 'hook', detail: 'd' })), 'Notice · hook · d')
+    assert.equal(
+      eventLabel(ev({ kind: 'inject', form: 'relay', name: 'agent-message', agent: 'reviewer' })),
+      'Agent Relay · agent-message · reviewer',
+    )
+    assert.equal(
+      eventLabel(ev({ kind: 'inject', form: 'context', name: 'team-message', agent: 'worker' })),
+      'Context Injection · team-message · worker',
+    )
+    assert.equal(
+      eventLabel(ev({ kind: 'inject', form: 'recall', name: 'session-reference', agent: 'Alpha +1' })),
+      'Recall · session-reference · Alpha +1',
+    )
+    assert.equal(
+      eventLabel(ev({ kind: 'inject', form: 'notice', name: 'subagent-settled', detail: 'summary', agent: 'explorer' })),
+      'Notice · subagent-settled · explorer',
+    )
+    assert.equal(
+      eventLabel(ev({ kind: 'inject', form: 'notice', name: 'subagent-settled', detail: 'summary' })),
+      'Notice · subagent-settled · summary',
+    )
+    assert.equal(
+      eventLabel(ev({ kind: 'inject', form: 'notice', name: 'hook', detail: 'd', agent: 'explorer' })),
+      'Notice · hook · explorer',
+    )
+    assert.equal(
+      eventLabel(ev({ kind: 'inject', form: 'context', name: 'hook', detail: 'd', agent: 'explorer' })),
+      'Context Injection · hook · d · explorer',
+    )
+    assert.equal(eventLabel(ev({ kind: 'inject', form: 'notice', name: 'hook', agent: '' })), 'Notice · hook')
   })
 })
 
@@ -488,6 +517,14 @@ describe('makeEventText.eventLabelParts', () => {
     assert.deepEqual(
       eventLabelParts(ev({ kind: 'inject', sub: 'skill', name: 'code-review' })),
       { lead: 'Skill Injection', tail: ' · code-review' },
+    )
+    assert.deepEqual(
+      eventLabelParts(ev({ kind: 'inject', form: 'notice', name: 'subagent-settled', detail: 'summary', agent: 'explorer' })),
+      { lead: 'Notice', tail: ' · subagent-settled · explorer' },
+    )
+    assert.deepEqual(
+      eventLabelParts(ev({ kind: 'inject', form: 'relay', name: 'agent-message', agent: 'reviewer' })),
+      { lead: 'Agent Relay', tail: ' · agent-message · reviewer' },
     )
     assert.deepEqual(
       eventLabelParts(ev({ kind: 'compaction', count: 2 })),
@@ -555,6 +592,72 @@ describe('EventList', () => {
   test('equal gross and net tokens omit the tooltip', async () => {
     const m = await mount(h(EventList, { events: [ev({ seq: 1, kind: 'compaction', tokens: 60, grossTokens: 60 })] }))
     assert.equal(query(m.container, '.lc-event-tokens').getAttribute('title'), null)
+    await m.unmount()
+  })
+
+  test('a named settlement keeps its summary out of the row and in the tooltip', async () => {
+    const events = [
+      ev({
+        seq: 1, kind: 'inject', form: 'notice', name: 'subagent-settled',
+        detail: 'Background subagent explorer finished.', agent: 'explorer',
+      }),
+    ]
+    const m = await mount(h(EventList, { events }))
+    const label = query(m.container, '.lc-event-label')
+    assert.equal(label.textContent, 'Notice · subagent-settled · explorer')
+    assert.equal(label.getAttribute('data-tip'), 'Background subagent explorer finished.')
+    assert.equal(label.getAttribute('title'), 'Background subagent explorer finished.')
+    await m.unmount()
+
+    const focused: ContextEventRecord[] = []
+    const linked = await mount(h(EventList, { events, onEventFocus: e => { focused.push(e) } }))
+    const button = query(linked.container, '.lc-event-jump')
+    assert.equal(button.getAttribute('data-tip'), 'Background subagent explorer finished.')
+    await click(button)
+    assert.deepEqual(focused.map(e => e.seq), [1])
+    await linked.unmount()
+  })
+
+  test('an unnamed settlement and a named relay keep their existing row shapes', async () => {
+    const unnamed = await mount(h(EventList, {
+      events: [ev({ seq: 1, kind: 'inject', form: 'notice', name: 'subagent-settled', detail: 'summary' })],
+    }))
+    const unnamedLabel = query(unnamed.container, '.lc-event-label')
+    assert.equal(unnamedLabel.textContent, 'Notice · subagent-settled · summary')
+    assert.equal(unnamedLabel.getAttribute('data-tip'), null)
+    await unnamed.unmount()
+
+    const relay = await mount(h(EventList, {
+      events: [ev({ seq: 1, kind: 'inject', form: 'relay', name: 'agent-message', agent: 'reviewer' })],
+    }))
+    const relayLabel = query(relay.container, '.lc-event-label')
+    assert.equal(relayLabel.textContent, 'Agent Relay · agent-message · reviewer')
+    assert.equal(relayLabel.getAttribute('data-tip'), null)
+    await relay.unmount()
+
+    const context = await mount(h(EventList, {
+      events: [ev({ seq: 1, kind: 'inject', form: 'context', name: 'hook', detail: 'd', agent: 'explorer' })],
+    }))
+    const contextLabel = query(context.container, '.lc-event-label')
+    assert.equal(contextLabel.textContent, 'Context Injection · hook · d · explorer')
+    assert.equal(contextLabel.getAttribute('data-tip'), null)
+    await context.unmount()
+  })
+
+  test('a clipped named settlement keeps the summary tooltip', async () => {
+    const m = await mount(h(EventList, {
+      events: [ev({
+        seq: 1, kind: 'inject', form: 'notice', name: 'subagent-settled',
+        detail: 'summary', agent: 'explorer',
+      })],
+    }))
+    const label = query(m.container, '.lc-event-label')
+    Object.defineProperty(label, 'scrollWidth', { value: 100, configurable: true })
+    await act(async () => {
+      window.dispatchEvent(new Event('resize'))
+    })
+    await settle(20)
+    assert.equal(label.getAttribute('title'), 'Notice · subagent-settled · explorer\nsummary')
     await m.unmount()
   })
 
