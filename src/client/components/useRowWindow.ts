@@ -119,6 +119,7 @@ interface SurfaceWindowSnapshot {
   scrollTop: number
   viewport: number
   leading: number
+  leadingEl: HTMLElement | null
   offsets: Float64Array
   keys: readonly string[]
   range: RowRange
@@ -219,7 +220,7 @@ export function useSurfaceWindow(
     if (!force && previous !== null && Math.abs(scrollTop - previous.scrollTop) < hysteresis && viewport === previous.viewport) {
       return
     }
-    if (previous !== null && previous.keys === keys) {
+    if (previous !== null && previous.keys === keys && previous.leadingEl === leadingEl) {
       const anchorIndex = anchorKey !== null && indexOf.has(anchorKey)
         ? indexOf.get(anchorKey) as number
         : clampIndex(previous.range.from, count)
@@ -263,7 +264,7 @@ export function useSurfaceWindow(
     }
     to = clampIndex(Math.max(from, to), count)
     const next: RowRange = { from, to: Math.max(from, to) }
-    last.current = { scrollTop, viewport, leading, offsets, keys, range: next }
+    last.current = { scrollTop, viewport, leading, leadingEl, offsets, keys, range: next }
     const applied = appliedRange.current
     if (applied !== null && applied.from === next.from && applied.to === next.to) return
     appliedRange.current = next

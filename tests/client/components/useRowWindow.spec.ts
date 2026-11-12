@@ -3,7 +3,7 @@ import { act, createElement as h, useRef, type ReactElement } from 'react'
 import { describe, test, vi } from 'vitest'
 import { ROW_WINDOW_OVERSCAN, rowWindowFor, type SurfaceWindow, type SurfaceWindowOptions, type WindowAlign } from '../../../src/client/components/useRowWindow'
 import { mount, query, queryAll, until } from '../helpers/kit'
-import { ControlledResizeObserver, estimateAt, numbers, pinBox, Probe, scrollBy, sizeOf } from './useRowWindowHarness'
+import { ControlledResizeObserver, estimateAt, numbers, pinBox, pinListAt, Probe, scrollBy, sizeOf } from './useRowWindowHarness'
 import { restoreLayout, stubClientSizes, stubListRect } from '../helpers/layout'
 import { useElementSize, useScrollMetrics } from '../../../src/client/components/useElementMetrics'
 import { useLazyMount } from '../../../src/client/components/useLazyMount'
@@ -175,28 +175,42 @@ describe('useSurfaceWindow — estimated windows', () => {
       assert.equal(numbers(el).from, 17, 'the static leading shifts the window start')
       const list = document.createElement('div')
       list.dataset.row = ''
-      const pinContent = (contentTop: number): void => {
-        Object.defineProperty(list, 'getBoundingClientRect', {
-          configurable: true,
-          value: () => ({
-            top: contentTop - el.scrollTop, left: 0, height: 20, width: 300,
-            bottom: contentTop - el.scrollTop + 20, right: 300, x: 0, y: contentTop - el.scrollTop, toJSON: () => ({}),
-          }) as DOMRect,
-        })
-      }
-      pinContent(550)
+      pinListAt(list, el, 550)
       await m.update(h(Probe, { count: 50, options: { estimateSize: estimateAt(20), overscan: 80, hysteresis: 0, leadingEl: list } }))
       pinBox(el, 0, 100)
       await scrollBy(el, 500)
       assert.equal(numbers(el).from, 0, 'a below-viewport list start yields the head of the list')
       assert.equal(numbers(el).to, 6)
-      pinContent(620)
+      pinListAt(list, el, 620)
       await scrollBy(el, 500)
       assert.equal(numbers(el).from, 0)
       assert.equal(numbers(el).to, 6, 'the window compensates the shifted list so the anchor row stays put')
       pinBox(list, -50, 20)
       await scrollBy(el, 0)
       assert.equal(numbers(el).from, 0, 'a list above the viewport yields the head of the list')
+      await m.unmount()
+    } finally {
+      vi.unstubAllGlobals()
+    }
+  })
+
+  test('enabling a window or measuring its leading element for the first time never scrolls the pane', async () => {
+    const m = await mount(h(Probe, { count: 50, options: { estimateSize: estimateAt(20), overscan: 80, hysteresis: 0, enabled: false } }))
+    const el = query<HTMLElement>(m.container, 'div')
+    try {
+      sizeOf(el, 100)
+      pinBox(el, 0, 100)
+      await scrollBy(el, 40)
+      await m.update(h(Probe, { count: 50, options: { estimateSize: estimateAt(20), overscan: 80, hysteresis: 0 } }))
+      assert.equal(el.scrollTop, 40, 'enabling the window keeps the scroll position')
+      const list = document.createElement('div')
+      list.dataset.row = ''
+      pinListAt(list, el, 128)
+      await m.update(h(Probe, { count: 50, options: { estimateSize: estimateAt(20), overscan: 80, hysteresis: 0, leadingEl: list } }))
+      assert.equal(el.scrollTop, 40, 'the first measured leading is not a list shift')
+      pinListAt(list, el, 198)
+      await scrollBy(el, 40)
+      assert.equal(el.scrollTop, 110, 'a later shift of the same element still compensates the anchor')
       await m.unmount()
     } finally {
       vi.unstubAllGlobals()

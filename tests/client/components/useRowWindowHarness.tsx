@@ -103,6 +103,18 @@ export async function scrollBy(el: HTMLElement, top: number, frames?: FrameReque
   await act(async () => {})
 }
 
+export function pinListAt(list: Element, scroller: HTMLElement, contentTop: number): void {
+  Object.defineProperty(list, 'getBoundingClientRect', {
+    configurable: true,
+    value: () => {
+      const top = contentTop - scroller.scrollTop
+      return {
+        top, y: top, bottom: top + 20, left: 0, x: 0, right: 300, width: 300, height: 20, toJSON: () => ({}),
+      } as DOMRect
+    },
+  })
+}
+
 export function numbers(el: HTMLElement): { from: number; to: number; top: number; bottom: number } {
   return {
     from: Number(el.dataset.from),

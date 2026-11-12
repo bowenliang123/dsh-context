@@ -634,6 +634,35 @@ describe('ContextBrowser windowing', () => {
     }
   })
 
+  test('expanding a windowed category keeps the scroll position on its first leading measurement', async () => {
+    const proto = HTMLElement.prototype
+    const saved = Object.getOwnPropertyDescriptor(proto, 'getBoundingClientRect')!
+    const rect = (top: number, height: number): DOMRect => ({
+      top, y: top, bottom: top + height, left: 0, x: 0, right: 500, width: 500, height, toJSON: () => ({}),
+    } as DOMRect)
+    let m: Mounted | null = null
+    try {
+      m = await mount(h(Browser, props({ data: tl({}), headers: toolHeaders(500) })))
+      const scroller = query<HTMLElement>(m.container, '.lc-br-scroll')
+      Object.defineProperty(proto, 'getBoundingClientRect', {
+        configurable: true,
+        value(this: HTMLElement): DOMRect {
+          if (this.classList.contains('lc-br-scroll')) return rect(0, 400)
+          if (this.classList.contains('lc-br-rows')) return rect(128 - scroller.scrollTop, 20)
+          return saved.value!.call(this)
+        },
+      })
+      scroller.scrollTop = 90
+      await act(async () => { catRow(m!, 'tools').click() })
+      await until(() => queryAll(m!.container, '.lc-br-elem-row').length > 8, 'the tool list renders')
+      assert.equal(scroller.scrollTop, 90, 'the first leading measurement is not a list shift')
+      await m.unmount()
+    } finally {
+      await m?.unmount()
+      Object.defineProperty(proto, 'getBoundingClientRect', saved)
+    }
+  })
+
   test('DNA rows keep one roving tab stop and End/Home reach the last and first message', async () => {
     const m = await mount(h(Browser, props({ data: data(), headers: null, dna: true, onDnaChange: () => {} })))
     try {
