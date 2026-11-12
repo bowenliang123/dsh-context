@@ -39,7 +39,7 @@ export interface OverviewPanelProps {
   useWorkspaces?: unknown
 }
 
-const RANGES: readonly OverviewRange[] = ['today', '7d', '30d', 'all']
+const RANGES: readonly OverviewRange[] = ['today', '7d', '30d']
 const SORTS: readonly OverviewSort[] = ['recent', 'tokens', 'context']
 const COVERAGE: readonly OverviewCoverage[] = ['all', 'active', 'archived']
 const METRICS: readonly HeatMetric[] = ['sessions', 'tokens']
@@ -117,16 +117,14 @@ export function makeOverviewPanel(
     const nowForCards = Date.now()
     const hostRange = useMemo<HostRange>(() => {
       const window = custom === null ? null : dayRangeWindow(custom)
-      if (window !== null && window.start !== null && window.end !== null) return { start: window.start, end: window.end }
-      /* v8 ignore next 1 */
-      return preset
+      return window === null ? preset : { start: window.start, end: window.end }
     }, [custom, preset])
     const scopeWindow = useMemo(
       () => (custom !== null ? dayRangeWindow(custom) : null) ?? rangeWindowOf(preset, nowMinute),
       [custom, preset, nowMinute],
     )
-    const spanFrom = scopeWindow.start === null ? null : dayKeyOf(scopeWindow.start)
-    const spanTo = scopeWindow.start === null ? null : dayKeyOf(scopeWindow.end ?? nowMinute)
+    const spanFrom = dayKeyOf(scopeWindow.start)
+    const spanTo = dayKeyOf(scopeWindow.end ?? nowMinute)
     const span = spanFrom !== null && spanTo !== null ? { from: spanFrom, to: spanTo } : null
     const listScope = useMemo<OverviewScope>(() => ({
       range: hostRange,
@@ -407,7 +405,7 @@ export function makeOverviewPanel(
                             type="button"
                             className={'lc-ov-chip' + (group === null ? ' lc-ov-chip-on' : '')}
                             onClick={() => { setGroup(null) }}
-                          >{t('ov.range.all')}<span className="lc-ov-chip-n">{scopeTotal}</span></button>
+                          >{t('ov.group.all')}<span className="lc-ov-chip-n">{scopeTotal}</span></button>
                           {chips.map(c => (
                             <button
                               key={c.key}

@@ -174,7 +174,7 @@ export type DefaultDurationCurve = 'show' | 'hide'
 
 export type OverviewAutoSteps = 'off' | '100' | '200' | '300'
 
-export type DefaultOverviewRange = 'today' | '7d' | '30d' | 'all'
+export type DefaultOverviewRange = 'today' | '7d' | '30d'
 
 export type FleetTab = 'show' | 'hide'
 
@@ -555,7 +555,7 @@ export type OverviewSort = 'recent' | 'tokens' | 'context'
 
 export type OverviewTallyField = 'skills' | 'tools' | 'cmds'
 
-export type OverviewRange = 'all' | 'today' | '7d' | '30d' | { start: number; end: number }
+export type OverviewRange = 'today' | '7d' | '30d' | { start: number; end: number }
 
 export interface OverviewScope {
   range?: OverviewRange

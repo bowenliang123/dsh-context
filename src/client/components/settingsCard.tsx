@@ -166,7 +166,6 @@ function PreferenceRows(props: { t: Translate; state: SettingsState; set?: Setti
             { id: 'today', label: t('ov.range.today') },
             { id: '7d', label: t('ov.range.7d') },
             { id: '30d', label: t('ov.range.30d') },
-            { id: 'all', label: t('ov.range.all') },
           ]}
           onPick={(id) => { set?.('defaultOverviewRange', id) }}
         />

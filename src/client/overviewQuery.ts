@@ -6,11 +6,9 @@ export type OverviewCoverage = 'all' | 'active' | 'archived'
 export type OverviewRange = DefaultOverviewRange
 
 export interface RangeWindow {
-  start: number | null
+  start: number
   end: number | null
 }
-
-const OPEN_WINDOW: RangeWindow = Object.freeze({ start: null, end: null })
 
 export interface DayRange {
   from: string
@@ -22,12 +20,10 @@ export function orderedDayRange(a: string, b: string): DayRange {
 }
 
 export function rangeWindowOf(range: OverviewRange, now: number): RangeWindow {
-  if (range === 'all') return OPEN_WINDOW
-  const start = rangeStartOf(range, now)
-  return { start, end: null }
+  return { start: rangeStartOf(range, now), end: null }
 }
 
-function rangeStartOf(range: Exclude<OverviewRange, 'all'>, now: number): number {
+function rangeStartOf(range: OverviewRange, now: number): number {
   if (range === 'today') {
     const midnight = new Date(now)
     midnight.setHours(0, 0, 0, 0)
@@ -36,7 +32,7 @@ function rangeStartOf(range: Exclude<OverviewRange, 'all'>, now: number): number
   return now - (range === '7d' ? 7 : 30) * 86_400_000
 }
 
-export function dayRangeWindow(range: DayRange): RangeWindow | null {
+export function dayRangeWindow(range: DayRange): { start: number; end: number } | null {
   const ordered = orderedDayRange(range.from, range.to)
   const start = startOfDayKey(ordered.from)
   const end = endOfDayKey(ordered.to)

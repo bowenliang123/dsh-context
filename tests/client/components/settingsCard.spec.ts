@@ -201,7 +201,6 @@ describe('PluginConfigCard (the Plugins-page seat)', () => {
       DICT_EN['ov.range.today'],
       DICT_EN['ov.range.7d'],
       DICT_EN['ov.range.30d'],
-      DICT_EN['ov.range.all'],
     ])
     await click(rangeItems[1])
     commit('defaultOverviewRange', '7d')

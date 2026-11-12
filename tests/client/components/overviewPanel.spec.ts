@@ -316,6 +316,19 @@ describe('OverviewPanel', () => {
     await late.m.unmount()
   })
 
+  test('a clock outside the day-key range leaves the span unnamed', async () => {
+    vi.useFakeTimers({ toFake: ['Date'] })
+    try {
+      vi.setSystemTime(new Date(1969, 5, 1))
+      stubRoutes()
+      const { m } = await openPanel(makeCtx())
+      assert.deepEqual(queryAll(m.container, '.lc-dp-half').map(el => el.textContent), ['Start date', 'End date'])
+      await m.unmount()
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
   test('picking a range writes it back as the default, so a remount keeps it; a loading or read-only form stays unwritten', async () => {
     stubRoutes()
     const { settings, sets } = writableSettings()
@@ -375,16 +388,10 @@ describe('OverviewPanel', () => {
     const ctx = makeCtx()
     const { m } = await openPanel(ctx)
     const rangeButtons = queryAll<HTMLButtonElement>(m.container, '.lc-ov-range .lc-gran-btn')
-    assert.equal(rangeButtons.length, 4)
+    assert.equal(rangeButtons.length, 3)
     const span = () => queryAll(m.container, '.lc-dp-half').map(el => el.textContent)
     const thirty = new Date(NOW - 30 * 86_400_000)
     assert.deepEqual(span(), [dayKeyOf(thirty.getTime()), TODAY], '30d shows the thirty days it covers')
-    await click(rangeButtons[3])
-    await settle(5)
-    assert.deepEqual(lastBodyOf(calls, 'page').scope, { range: 'all', coverage: 'all' })
-    assert.deepEqual(span(), ['Start date', 'End date'], 'an unbounded scope has no span to print')
-    assert.equal(cardsOf(m.container).length, 3, 'the stale session joins')
-    assert.equal(queryAll(m.container, '.lc-stat-value')[0].textContent, '3', 'the host summary follows the All preset')
     await click(rangeButtons[0])
     await settle(5)
     assert.deepEqual(span(), [TODAY, TODAY], "today's own day on both ends")
@@ -428,9 +435,9 @@ describe('OverviewPanel', () => {
       calendarButtons.every(b => !b.className.includes('lc-gran-on')),
       'a picked range and a preset are never both lit',
     )
-    await click(calendarButtons[3])
+    await click(calendarButtons[2])
     await settle(5)
-    assert.equal(cardsOf(calendar.m.container).length, 3, 'the stale session joins again')
+    assert.equal(cardsOf(calendar.m.container).length, 2, 'the preset leaves the stale session out again')
     assert.ok(!query(calendar.m.container, '.lc-dp-trigger').className.includes('lc-dp-trigger-on'))
     await calendar.m.unmount()
 

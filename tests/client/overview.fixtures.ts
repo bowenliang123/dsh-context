@@ -168,12 +168,12 @@ function dayInWindow(key: string, window: { start?: number | null; end?: number 
 }
 
 function inRangeOf(row: ServerRow, range: OverviewScope['range']): boolean {
-  if (range === undefined || range === 'all') return true
-  const window = typeof range === 'object'
-    ? range
-    : range === 'today'
+  const effective = range ?? '30d'
+  const window = typeof effective === 'object'
+    ? effective
+    : effective === 'today'
       ? { start: MIDNIGHT, end: null }
-      : { start: NOW - (range === '7d' ? 7 : 30) * 86_400_000, end: null }
+      : { start: NOW - (effective === '7d' ? 7 : 30) * 86_400_000, end: null }
   if (row.updatedAt >= (window.start ?? 0) && (window.end === null || row.updatedAt <= window.end)) return true
   return row.activeDays.some(key => dayInWindow(key, window))
 }

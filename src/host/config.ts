@@ -45,7 +45,7 @@ export const Config = z.object({
   insightsEntry: volatileField(z.union(['show', 'hide']).default('show').loose()),
   defaultDurationCurve: volatileField(z.union(['show', 'hide']).default('show').loose()),
   overviewAutoSteps: volatileField(z.union(['100', '200', '300', 'off']).default('100').loose()),
-  defaultOverviewRange: volatileField(z.union(['today', '7d', '30d', 'all']).default('30d').loose()),
+  defaultOverviewRange: volatileField(z.union(['today', '7d', '30d']).default('30d').loose()),
   fleetTab: volatileField(z.union(['show', 'hide']).default('show').loose()),
   promptPrefix: volatileField(z.string().default('').loose()),
   promptSuffix: volatileField(z.string().default('').loose()),

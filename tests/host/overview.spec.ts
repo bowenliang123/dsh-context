@@ -3,7 +3,7 @@ import { Context } from '@deepseek-ai/cordis'
 import { describe, test, vi } from 'vitest'
 import { watchOverviewRoute, OVERVIEW_ROUTE } from '../../src/host/overview'
 import { type ContextTimeline, type SessionCostUsage } from '../../src/shared/types'
-import { boot, call, summaryOf, pageOf, revisionOf, recordOf, unwrap, usageOf, timelineOf, timingOf, dayOf, costOfUsage, fakeCost, fakeBackfill, fakeState, tokenPartsOf, usageTotalsOf, sortedParts, type RouteBox } from './helpers/overview'
+import { boot, call, summaryOf, pageOf, revisionOf, recordOf, unwrap, usageOf, timelineOf, timingOf, dayOf, costOfUsage, fakeCost, fakeBackfill, fakeState, tokenPartsOf, usageTotalsOf, sortedParts, WIDE_RANGE, type RouteBox } from './helpers/overview'
 import { makeScanWindow, type ScanResult } from '../../src/host/overviewScan'
 
 describe('overview', () => {
@@ -145,10 +145,10 @@ describe('dsh-context overview route', () => {
         },
       },
     })
-    const all = summaryOf(await call(harness, { part: 'summary' }))
-    assert.equal(all.tokens, 33, 'the open scope sums every retained day')
-    assert.equal(all.turns, 3)
-    assert.deepEqual(all.windowTiming, { calls: 3, toolCalls: 3, toolsMs: 30, wallMs: 40 })
+    const wide = summaryOf(await call(harness, { part: 'summary' }))
+    assert.equal(wide.tokens, 33, 'the wide scope sums every retained day')
+    assert.equal(wide.turns, 3)
+    assert.deepEqual(wide.windowTiming, { calls: 3, toolCalls: 3, toolsMs: 30, wallMs: 40 })
     const ranged = summaryOf(await call(harness, { part: 'summary', scope: { range: { start: Date.UTC(2026, 9, 20), end: Date.UTC(2026, 10, 5) } } }))
     assert.equal(ranged.tokens, 22, 'a bounded scope bills only its window days')
     assert.equal(ranged.turns, 2)
@@ -156,7 +156,7 @@ describe('dsh-context overview route', () => {
     const day = summaryOf(await call(harness, { part: 'summary', scope: { day: '2026-11-01' } }))
     assert.equal(day.tokens, 22)
     assert.equal(day.turns, 2)
-    assert.ok(all.tokens >= ranged.tokens)
+    assert.ok(wide.tokens >= ranged.tokens)
     assert.ok(ranged.tokens >= day.tokens)
   })
 
@@ -170,11 +170,11 @@ describe('dsh-context overview route', () => {
         },
       },
     })
-    const all = summaryOf(await call(harness, { part: 'summary' }))
-    assert.equal(all.tokens, 22)
-    assert.equal(all.costSessions, 1)
-    assert.equal(all.usageSessions, 1)
-    assert.equal(all.tokenParts, null)
+    const wide = summaryOf(await call(harness, { part: 'summary' }))
+    assert.equal(wide.tokens, 22)
+    assert.equal(wide.costSessions, 1)
+    assert.equal(wide.usageSessions, 1)
+    assert.equal(wide.tokenParts, null)
     const ranged = summaryOf(await call(harness, { part: 'summary', scope: { range: 'today' } }))
     assert.equal(ranged.tokens, 0)
   })
@@ -489,7 +489,7 @@ describe('dsh-context overview route', () => {
     }
   })
 
-  test('a held All-time revision stays unchanged across local midnight', async () => {
+  test('a held absolute-range revision stays unchanged across local midnight', async () => {
     vi.useFakeTimers({ toFake: ['Date'] })
     try {
       vi.setSystemTime(new Date(2026, 10, 8, 23, 59, 50))
@@ -502,11 +502,11 @@ describe('dsh-context overview route', () => {
           },
         },
       })
-      const before = await call(harness, { part: 'summary', scope: { range: 'all' } })
+      const before = await call(harness, { part: 'summary', scope: { range: { start: Date.UTC(2026, 10, 1), end: Date.UTC(2026, 11, 1) } } })
       const revision = revisionOf(before)
       vi.setSystemTime(new Date(2026, 10, 9, 0, 0, 20))
-      const after = await call(harness, { part: 'summary', scope: { range: 'all' }, revision })
-      assert.ok(after.reply.value !== undefined && 'unchanged' in after.reply.value, 'All time is day-independent')
+      const after = await call(harness, { part: 'summary', scope: { range: { start: Date.UTC(2026, 10, 1), end: Date.UTC(2026, 11, 1) } }, revision })
+      assert.ok(after.reply.value !== undefined && 'unchanged' in after.reply.value, 'an absolute window is day-independent')
     } finally {
       vi.useRealTimers()
     }
@@ -519,7 +519,7 @@ describe('dsh-context overview route', () => {
       persistence: { stat: async () => ({ path: '/p/a.jsonl', sizeBytes: 1, mtimeMs: 2 }) },
       coverage: { complete: true, remaining: 0, failed: 0, running: false, total: 1, covered: 1, unsupported: 0 },
     })
-    const first = await call(harness, { part: 'summary', scope: { range: 'all' } })
+    const first = await call(harness, { part: 'summary', scope: { range: WIDE_RANGE } })
     assert.equal(summaryOf(first).sessions, 1)
     assert.equal(harness.state.savedRecords.length, 0, 'a snapshot with only one projection is never cached')
     harness.cacheMode.values.a = {}
@@ -532,7 +532,7 @@ describe('dsh-context overview route', () => {
     harness.state.foldedVersion = 1
     harness.state.foldedIds = ['a']
     harness.state.workerFoldedIds = ['a']
-    const second = await call(harness, { part: 'summary', scope: { range: 'all' } })
+    const second = await call(harness, { part: 'summary', scope: { range: WIDE_RANGE } })
     assert.equal(summaryOf(second).sessions, 1, 'the dirty session reloaded from the plugin cache')
     assert.equal(summaryOf(second).tokens, 44)
   })
@@ -544,12 +544,12 @@ describe('dsh-context overview route', () => {
       persistence: { stat: async () => ({ path: '/p/a.jsonl', sizeBytes: 1, mtimeMs: 2 }) },
       coverage: { complete: true, remaining: 0, failed: 0, running: false, total: 1, covered: 1, unsupported: 0 },
     })
-    const first = await call(harness, { part: 'summary', scope: { range: 'all' } })
+    const first = await call(harness, { part: 'summary', scope: { range: WIDE_RANGE } })
     assert.equal(summaryOf(first).sessions, 1)
     harness.state.foldedVersion = 1
     harness.state.foldedIds = ['a']
     harness.state.workerFoldedIds = null
-    const second = await call(harness, { part: 'summary', scope: { range: 'all' } })
+    const second = await call(harness, { part: 'summary', scope: { range: WIDE_RANGE } })
     assert.equal(summaryOf(second).sessions, 1, 'the session refolds from the served projections instead')
   })
 

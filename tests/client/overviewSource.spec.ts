@@ -205,14 +205,14 @@ describe('useOverviewSummary', () => {
   test('the held revision rides the next fetch; an unchanged reply keeps the painted data', async () => {
     vi.useFakeTimers()
     const mod = await fresh()
-    const probe = await mountSummary(mod, { range: 'all' })
+    const probe = await mountSummary(mod, { range: '30d' })
     const calls = stubRoutes((_call, index) => (index === 0 ? summaryValue() : { revision: 'r1', unchanged: true }))
     await advance(0)
     assert.equal(lastOf(probe.states).data?.summary.sessions, 2)
     mod.invalidation.invalidate('overview')
     await advance(250)
     assert.equal(calls.length, 2)
-    assert.deepEqual(calls[1]?.body, { part: 'summary', scope: { range: 'all' }, revision: 'r1' })
+    assert.deepEqual(calls[1]?.body, { part: 'summary', scope: { range: '30d' }, revision: 'r1' })
     const state = lastOf(probe.states)
     assert.equal(state.data?.summary.sessions, 2, 'the unchanged reply leaves the painted summary in place')
     assert.equal(state.revision, 'r1', 'the held revision survives the unchanged reply')
@@ -224,7 +224,7 @@ describe('useOverviewSummary', () => {
   test('invalidation coalesces into one refresh and only overview-carrying kinds trigger it', async () => {
     vi.useFakeTimers()
     const mod = await fresh()
-    const probe = await mountSummary(mod, { range: 'all' })
+    const probe = await mountSummary(mod, { range: '30d' })
     const calls = stubRoutes(() => summaryValue())
     await advance(0)
     assert.equal(calls.length, 1)
@@ -246,7 +246,7 @@ describe('useOverviewSummary', () => {
   test('polls while the document is visible and stays quiet while hidden', async () => {
     vi.useFakeTimers()
     const mod = await fresh()
-    const probe = await mountSummary(mod, { range: 'all' })
+    const probe = await mountSummary(mod, { range: '30d' })
     const calls = stubRoutes(() => summaryValue())
     await advance(0)
     assert.equal(calls.length, 1)
@@ -268,14 +268,14 @@ describe('useOverviewSummary', () => {
     vi.useFakeTimers()
     const mod = await fresh()
     const calls = stubServed(() => summaryValue())
-    const first = await mountSummary(mod, { range: 'all' })
+    const first = await mountSummary(mod, { range: '30d' })
     await advance(0)
     assert.equal(lastOf(first.states).data?.summary.sessions, 2)
     await first.m.unmount()
-    const second = await mountSummary(mod, { range: 'all' })
+    const second = await mountSummary(mod, { range: '30d' })
     await advance(0)
     assert.equal(calls.length, 2)
-    assert.deepEqual(calls[1]?.body, { part: 'summary', scope: { range: 'all' }, revision: null })
+    assert.deepEqual(calls[1]?.body, { part: 'summary', scope: { range: '30d' }, revision: null })
     assert.equal(lastOf(second.states).data?.summary.sessions, 2, 'the reopened panel paints instead of staying blank')
     await second.m.unmount()
   })
@@ -290,9 +290,9 @@ describe('useOverviewSummary', () => {
     const probe = await mountSummary(mod, { range: 'today' })
     await advance(0)
     assert.equal(lastOf(probe.states).data?.summary.sessions, 1)
-    await probe.update({ range: 'all' })
+    await probe.update({ range: '30d' })
     await advance(0)
-    assert.deepEqual(calls[1]?.body, { part: 'summary', scope: { range: 'all' }, revision: null })
+    assert.deepEqual(calls[1]?.body, { part: 'summary', scope: { range: '30d' }, revision: null })
     assert.equal(lastOf(probe.states).data?.summary.sessions, 3)
     await probe.update({ range: 'today' })
     await advance(0)
@@ -311,7 +311,7 @@ describe('useOverviewSummary', () => {
     await act(async () => { releases[0]?.(summaryValue({ summary: summaryRaw({ sessions: 1 }) })) })
     await flush()
     assert.equal(lastOf(probe.states).data?.summary.sessions, 1)
-    await probe.update({ range: 'all' })
+    await probe.update({ range: '30d' })
     await advance(0)
     assert.equal(lastOf(probe.states).data, null, 'the previous scope data is not painted under the new scope')
     assert.equal(lastOf(probe.states).pending, true)
@@ -327,7 +327,7 @@ describe('useOverviewSummary', () => {
     const { releases } = stubDeferred()
     const probe = await mountSummary(mod, { range: 'today' })
     await advance(0)
-    await probe.update({ range: 'all' })
+    await probe.update({ range: '30d' })
     await advance(0)
     assert.equal(releases.length, 2)
     await act(async () => { releases[0]?.(summaryValue({ summary: summaryRaw({ sessions: 1 }) })) })
@@ -345,7 +345,7 @@ describe('useOverviewSummary', () => {
     vi.useFakeTimers()
     const mod = await fresh()
     const calls = stubRoutes(() => summaryValue())
-    const disabled = await mountSummary(mod, { range: 'all' }, false)
+    const disabled = await mountSummary(mod, { range: '30d' }, false)
     await advance(0)
     assert.equal(lastOf(disabled.states).pending, false)
     assert.equal(lastOf(disabled.states).data, null)
@@ -359,7 +359,7 @@ describe('useOverviewSummary', () => {
   test('an error keeps the painted data and raises the stale flag until the next success', async () => {
     vi.useFakeTimers()
     const mod = await fresh()
-    const probe = await mountSummary(mod, { range: 'all' })
+    const probe = await mountSummary(mod, { range: '30d' })
     stubRoutes(() => summaryValue())
     await advance(0)
     assert.equal(lastOf(probe.states).data?.summary.sessions, 2)
@@ -385,7 +385,7 @@ describe('useOverviewSummary', () => {
     for (const failure of ['http', 'envelope', 'malformed'] as const) {
       vi.useFakeTimers()
       const mod = await fresh()
-      const probe = await mountSummary(mod, { range: 'all' })
+      const probe = await mountSummary(mod, { range: '30d' })
       stubFailing(failure)
       await advance(0)
       const state = lastOf(probe.states)
@@ -397,7 +397,7 @@ describe('useOverviewSummary', () => {
     }
     vi.useFakeTimers()
     const mod = await fresh()
-    const probe = await mountSummary(mod, { range: 'all' })
+    const probe = await mountSummary(mod, { range: '30d' })
     vi.stubGlobal('fetch', async () => ({ ok: true, json: async () => ({ ok: true, value: null }) }))
     await advance(0)
     assert.equal(lastOf(probe.states).error, true, 'a null value reads as a failed read')
@@ -407,7 +407,7 @@ describe('useOverviewSummary', () => {
   test('a reply for another part leaves the summary unpainted', async () => {
     vi.useFakeTimers()
     const mod = await fresh()
-    const probe = await mountSummary(mod, { range: 'all' })
+    const probe = await mountSummary(mod, { range: '30d' })
     stubRoutes(() => daysValue())
     await advance(0)
     const state = lastOf(probe.states)
@@ -420,7 +420,7 @@ describe('useOverviewSummary', () => {
     vi.useFakeTimers()
     const mod = await fresh()
     const { bodies, releases } = stubDeferred()
-    const probe = await mountSummary(mod, { range: 'all' })
+    const probe = await mountSummary(mod, { range: '30d' })
     await advance(0)
     assert.equal(bodies.length, 1)
     mod.invalidation.invalidate('overview')
@@ -430,7 +430,7 @@ describe('useOverviewSummary', () => {
     await act(async () => { releases[0]?.(summaryValue({ revision: 'r1' })) })
     await flush()
     assert.equal(bodies.length, 2, 'the queued read fires right after the first settles')
-    assert.deepEqual(bodies[1], { part: 'summary', scope: { range: 'all' }, revision: 'r1' })
+    assert.deepEqual(bodies[1], { part: 'summary', scope: { range: '30d' }, revision: 'r1' })
     await act(async () => { releases[1]?.(summaryValue({ revision: 'r2' })) })
     await flush()
     assert.equal(lastOf(probe.states).revision, 'r2')
@@ -442,7 +442,7 @@ describe('useOverviewSummary', () => {
     const mod = await fresh()
     let release: ((value: unknown) => void) | null = null
     const calls = stubRoutes(() => new Promise<unknown>((resolve) => { release = resolve }))
-    const probe = await mountSummary(mod, { range: 'all' })
+    const probe = await mountSummary(mod, { range: '30d' })
     await advance(0)
     assert.equal(calls.length, 1)
     mod.invalidation.invalidate('overview')
@@ -459,7 +459,7 @@ describe('useOverviewSummary', () => {
     const mod = await fresh()
     let rejectLate: ((err: Error) => void) | null = null
     vi.stubGlobal('fetch', () => new Promise<never>((_resolve, reject) => { rejectLate = reject }))
-    const probe = await mountSummary(mod, { range: 'all' })
+    const probe = await mountSummary(mod, { range: '30d' })
     await advance(0)
     await probe.m.unmount()
     await act(async () => {
@@ -476,7 +476,7 @@ describe('useOverviewSummary', () => {
     const mod = await fresh()
     const states: ReturnType<typeof mod.source.useOverviewSummary>[] = []
     function Probe(): null {
-      states.push(mod.source.useOverviewSummary({ range: 'all' }, true))
+      states.push(mod.source.useOverviewSummary({ range: '30d' }, true))
       return null
     }
     const container = document.createElement('div')
@@ -608,7 +608,7 @@ describe('summary coverage auto-backfill', () => {
       }
       return summaryValue({ summary: summaryRaw({ coverage: coverageOf({ complete: false, remaining: 2, covered: 1 }) }) })
     })
-    const probe = await mountSummary(mod, { range: 'all' })
+    const probe = await mountSummary(mod, { range: '30d' })
     await advance(0)
     assert.equal(backfills.length, 0, 'the first paint arms no backfill before the read lands')
     await advance(2_000)
@@ -629,7 +629,7 @@ describe('summary coverage auto-backfill', () => {
       }
       return summaryValue({ summary: summaryRaw({ coverage }) })
     })
-    const probe = await mountSummary(mod, { range: 'all' })
+    const probe = await mountSummary(mod, { range: '30d' })
     await advance(0)
     await advance(20_000)
     assert.equal(backfills, 0, 'a running pass is left to finish')
@@ -657,7 +657,7 @@ describe('summary coverage auto-backfill', () => {
       }
       return summaryValue({ summary: summaryRaw({ coverage: coverageOf({ complete: false, remaining: 0, total: 0, covered: 0 }) }) })
     })
-    const probe = await mountSummary(mod, { range: 'all' })
+    const probe = await mountSummary(mod, { range: '30d' })
     await advance(0)
     await advance(2_000)
     assert.equal(backfills, 1, 'an unlisted corpus posts the first pass')
@@ -676,7 +676,7 @@ describe('summary coverage auto-backfill', () => {
       }
       return summaryValue({ summary: summaryRaw({ coverage }) })
     })
-    const probe = await mountSummary(mod, { range: 'all' })
+    const probe = await mountSummary(mod, { range: '30d' })
     await advance(0)
     await advance(2_000)
     assert.equal(backfillAttempts, 1, 'the rejected POST is swallowed')
@@ -705,7 +705,7 @@ describe('summary coverage auto-backfill', () => {
         }),
       })
     })
-    const probe = await mountSummary(mod, { range: 'all' })
+    const probe = await mountSummary(mod, { range: '30d' })
     await advance(0)
     for (let i = 0; i < 9; i++) {
       mod.invalidation.invalidate('overview')
@@ -733,7 +733,7 @@ describe('summary coverage auto-backfill', () => {
       const running = calls % 2 === 0
       return summaryValue({ summary: summaryRaw({ coverage: coverageOf({ complete: false, remaining: 5, covered: 2, running }) }) })
     })
-    const probe = await mountSummary(mod, { range: 'all' })
+    const probe = await mountSummary(mod, { range: '30d' })
     await advance(0)
     for (let i = 0; i < 40; i++) {
       mod.invalidation.invalidate('overview')
@@ -764,7 +764,7 @@ describe('summary coverage auto-backfill', () => {
       calls++
       return summaryValue({ summary: summaryRaw({ coverage: coverageOf({ complete: false, remaining: 30 - calls, covered: calls }) }) })
     })
-    const probe = await mountSummary(mod, { range: 'all' })
+    const probe = await mountSummary(mod, { range: '30d' })
     await advance(0)
     for (let i = 0; i < 15; i++) {
       mod.invalidation.invalidate('overview')
@@ -787,7 +787,7 @@ describe('summary coverage auto-backfill', () => {
       }
       return summaryValue({ summary: summaryRaw({ coverage }) })
     })
-    const probe = await mountSummary(mod, { range: 'all' })
+    const probe = await mountSummary(mod, { range: '30d' })
     await advance(0)
     await advance(2_000)
     assert.equal(backfills, 1)
@@ -872,8 +872,7 @@ describe('overview current-session seat', () => {
 })
 
 describe('overview range windows', () => {
-  test('range windows start at midnight, the period floor or never', () => {
-    assert.deepEqual(rangeWindowOf('all', NOW), { start: null, end: null })
+  test('range windows start at midnight or the period floor', () => {
     assert.deepEqual(rangeWindowOf('today', NOW), { start: new Date(NOW).setHours(0, 0, 0, 0), end: null })
     assert.deepEqual(rangeWindowOf('7d', NOW), { start: NOW - 7 * 86_400_000, end: null })
     assert.deepEqual(rangeWindowOf('30d', NOW), { start: NOW - 30 * 86_400_000, end: null })

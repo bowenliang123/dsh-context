@@ -27,7 +27,7 @@ const PAGE_SIZE = 12
 const UNGROUPED_KEY = '__ungrouped__'
 
 export interface Window {
-  start: number | null
+  start: number
   end: number | null
 }
 
@@ -49,13 +49,12 @@ export interface Filters {
 }
 
 
-export function windowOf(range: OverviewRange | undefined, day: string | null, now: number): Window {
+export function windowOf(range: OverviewRange, day: string | null, now: number): Window {
   if (day !== null) {
     const start = startOfDayKey(day)
     const end = endOfDayKey(day)
     if (start !== null && end !== null) return { start, end }
   }
-  if (range === undefined || range === 'all') return { start: null, end: null }
   if (typeof range === 'object') {
     return range.start > range.end
       ? { start: range.end, end: range.start }
@@ -70,7 +69,7 @@ export function windowOf(range: OverviewRange | undefined, day: string | null, n
 }
 
 function dayInScope(key: string, scope: Window): boolean {
-  const floor = scope.start === null ? null : dayKeyOf(scope.start)
+  const floor = dayKeyOf(scope.start)
   const ceiling = scope.end === null ? null : dayKeyOf(scope.end)
   return (floor === null || key >= floor) && (ceiling === null || key <= ceiling)
 }
@@ -102,22 +101,20 @@ function hasTally(row: HostRow, pick: OverviewPick, admit: (key: string) => bool
 export function matches(row: HostRow, filters: Filters): boolean {
   if (filters.coverage !== 'all' && row.archived !== (filters.coverage === 'archived')) return false
   if (!inGroup(row, filters.group)) return false
-  if (filters.window.start !== null || filters.window.end !== null) {
-    let inScope = (filters.window.start === null || row.session.updatedAt >= filters.window.start)
-      && (filters.window.end === null || row.session.updatedAt <= filters.window.end)
-    if (!inScope) {
-      const days = row.activity?.days
-      if (days !== undefined) {
-        for (const key of Object.keys(days)) {
-          if (dayInScope(key, filters.window) && hasActivity(days[key])) {
-            inScope = true
-            break
-          }
+  let inScope = row.session.updatedAt >= filters.window.start
+    && (filters.window.end === null || row.session.updatedAt <= filters.window.end)
+  if (!inScope) {
+    const days = row.activity?.days
+    if (days !== undefined) {
+      for (const key of Object.keys(days)) {
+        if (dayInScope(key, filters.window) && hasActivity(days[key])) {
+          inScope = true
+          break
         }
       }
     }
-    if (!inScope) return false
   }
+  if (!inScope) return false
   if (filters.day !== null) {
     const entry = row.activity?.days[filters.day]
     if (entry === undefined || (entry.tokens <= 0 && entry.requests <= 0)) return false

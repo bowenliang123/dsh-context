@@ -188,10 +188,13 @@ describe('dsh-context overview route', () => {
         quiet: { contextTimeline: timelineOf({ total: 1, turns: 0 }), sessionListMetadata: { blank: false, lastPromptAt: todayStart - 86_400_000 } },
       },
     })
-    for (const range of ['today', '7d', '30d', 'all', 'bogus']) {
+    for (const range of ['today', '7d', '30d', 'bogus']) {
       const reply = await call(harness, { part: 'summary', scope: { range } })
       assert.equal(reply.reply.ok, true, `range ${range}`)
     }
+    const explicitRange = summaryOf(await call(harness, { part: 'summary', scope: { range: '30d' } }))
+    assert.deepEqual(summaryOf(await call(harness, { part: 'summary', scope: null })), explicitRange, 'a missing range resolves to the default 30d')
+    assert.deepEqual(summaryOf(await call(harness, { part: 'summary', scope: { range: 'bogus' } })), explicitRange, 'an unknown range resolves to the default 30d')
     const todaySummary = summaryOf(await call(harness, { part: 'summary', scope: { range: 'today' } }))
     assert.equal(todaySummary.sessions, 1)
     const reversed = summaryOf(await call(harness, { part: 'summary', scope: { range: { start: now + 1_000, end: now - 1_000 } } }))
@@ -559,6 +562,6 @@ describe('dsh-context overview route', () => {
     const noActivityPick = pageOf(await call(harness, { part: 'page', pick: { field: 'tools', name: 'bash' } }))
     assert.equal(noActivityPick.total, 0, 'a row without activity never matches a tally filter')
     const partial = summaryOf(await call(harness, { part: 'summary', scope: { range: { start: 5 } } }))
-    assert.equal(partial.sessions, 2, 'a partial window falls back to the open window')
+    assert.equal(partial.sessions, 0, 'a partial window falls back to the default range')
   })
 })

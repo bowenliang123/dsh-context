@@ -72,7 +72,7 @@ const SORTS = new Set<OverviewSort>(['recent', 'tokens', 'context'])
 
 const TALLY_FIELDS = new Set<OverviewTallyField>(['skills', 'tools', 'cmds'])
 
-const RANGES = new Set<string>(['all', 'today', '7d', '30d'])
+const RANGES = new Set<string>(['today', '7d', '30d'])
 
 interface FeedState extends RowFeed {
   served: Map<string, string>
@@ -87,12 +87,15 @@ function rangeOf(value: unknown): OverviewRange {
     const end = optionalNumOf(data.end)
     if (start !== undefined && end !== undefined) return { start, end }
   }
-  return 'all'
+  return '30d'
 }
 
-function scopeOf(value: unknown): OverviewScope {
+type ParsedScope = OverviewScope & { range: OverviewRange }
+
+function scopeOf(value: unknown): ParsedScope {
   const data = asRecord(value)
-  if (data === null) return {}
+  const range = rangeOf(data?.range)
+  if (data === null) return { range }
   const coverage = typeof data.coverage === 'string' && COVERAGES.has(data.coverage as OverviewCoverage)
     ? data.coverage as OverviewCoverage
     : undefined
@@ -100,7 +103,7 @@ function scopeOf(value: unknown): OverviewScope {
   const group = typeof data.group === 'string' && data.group !== '' ? data.group : undefined
   const query = typeof data.query === 'string' && data.query !== '' ? data.query.slice(0, MAX_QUERY_CHARS) : undefined
   return {
-    range: rangeOf(data.range),
+    range,
     ...(coverage === undefined ? {} : { coverage }),
     ...(day === undefined ? {} : { day }),
     ...(group === undefined ? {} : { group }),
@@ -119,7 +122,7 @@ function pickOf(value: unknown): OverviewPick | null {
 interface ParsedRequest {
   part: OverviewPart
   revision?: string
-  scope: OverviewScope
+  scope: ParsedScope
   sort: OverviewSort
   page: number
   tally: OverviewTallyField
@@ -442,7 +445,7 @@ export function watchOverviewRoute(
         if (feed.revision !== revision) feed.served.clear()
         const now = Date.now()
         const filters = filtersOf(parsed, now)
-        const timeKey = filters.window.start === null ? '' : dayKeyOf(filters.window.start) ?? ''
+        const timeKey = dayKeyOf(filters.window.start) ?? ''
         const requestKey = requestKeyOf(parsed, timeKey)
         if (dirty.size === 0 && parsed.revision !== undefined
           && parsed.revision === revision && servedOf(feed, requestKey)) {

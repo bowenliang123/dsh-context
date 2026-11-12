@@ -578,7 +578,7 @@ describe('attach', () => {
     const defaults = createContextSettings()
     defaults.attach(new TestSettingsScope({
       status: 'ready',
-      value: { defaultPlacement: 'all', defaultGranularity: 'step', defaultTrendMode: 'total', defaultDeltaBase: 'step', defaultToolSort: 'count', defaultFileSort: 'lines', insightsEntry: 'show', overviewAutoSteps: '200', defaultOverviewRange: 'all' },
+      value: { defaultPlacement: 'all', defaultGranularity: 'step', defaultTrendMode: 'total', defaultDeltaBase: 'step', defaultToolSort: 'count', defaultFileSort: 'lines', insightsEntry: 'show', overviewAutoSteps: '200', defaultOverviewRange: '7d' },
       writable: false,
     }))
     assert.equal(defaults.defaultPlacement(), 'all')
@@ -589,7 +589,7 @@ describe('attach', () => {
     assert.equal(defaults.defaultFileSort(), 'lines')
     assert.equal(defaults.insightsEntry(), 'show')
     assert.equal(defaults.overviewAutoSteps(), '200')
-    assert.equal(defaults.defaultOverviewRange(), 'all')
+    assert.equal(defaults.defaultOverviewRange(), '7d')
   })
 
   test('an unavailable snapshot keeps parsed preferences; any other status reads as loading', () => {
@@ -654,6 +654,7 @@ describe('attach', () => {
       ['defaultDurationCurve', 'hide', 'always', 'show', () => s.defaultDurationCurve()],
       ['overviewAutoSteps', '200', '50', '100', () => s.overviewAutoSteps()],
       ['defaultOverviewRange', '7d', 'quarter', '30d', () => s.defaultOverviewRange()],
+      ['defaultOverviewRange', 'today', 'all', '30d', () => s.defaultOverviewRange()],
     ]
     let s = createContextSettings()
     for (const [field, prior, invalid, expected, read] of cases) {

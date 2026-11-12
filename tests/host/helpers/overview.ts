@@ -453,13 +453,27 @@ export function boot(options: BootOptions = {}): Promise<Harness> {
   })()
 }
 
+export const WIDE_RANGE = { start: 0, end: Date.UTC(2100, 0, 1) }
+
+function withWideRange(body: unknown): unknown {
+  if (body === null || typeof body !== 'object' || Array.isArray(body)) return body
+  const data = body as Record<string, unknown>
+  if (data.part !== 'summary' && data.part !== 'page' && data.part !== 'tally') return body
+  const scope = data.scope
+  if (scope !== undefined && (scope === null || typeof scope !== 'object')) return body
+  const scopeData = scope === undefined || scope === null ? {} : scope as Record<string, unknown>
+  if ('range' in scopeData) return body
+  return { ...data, scope: { ...scopeData, range: WIDE_RANGE } }
+}
+
 export async function call(harness: Harness, body: unknown): Promise<CallResult> {
   const route = harness.routes.get(OVERVIEW_ROUTE)
   assert.ok(route !== undefined && route.fetch !== undefined)
+  const payload = withWideRange(body)
   const response = await route.fetch(new Request(`http://dsh.test${OVERVIEW_ROUTE}`, {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
-    body: typeof body === 'string' ? body : JSON.stringify(body),
+    body: typeof payload === 'string' ? payload : JSON.stringify(payload),
   }))
   const text = await response.text()
   return { reply: JSON.parse(text) as RouteReply, bytes: new TextEncoder().encode(text).length }

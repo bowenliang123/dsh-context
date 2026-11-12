@@ -67,7 +67,7 @@ Click **Context Insights / 上下文洞察** in the sidebar's panel list — the
 
 | Section | The question it answers |
 | --- | --- |
-| **KPI band** | How much am I using — sessions active in the picked range (today / 7d / 30d / all), with billed tokens, estimated cost, cache-hit rate and turns folded by the day each step started; tool runs and active time cover those sessions and their subagents' whole lifetime, matching the timing card. |
+| **KPI band** | How much am I using — sessions active in the picked range (today / 7d / 30d), with billed tokens, estimated cost, cache-hit rate and turns folded by the day each step started; tool runs and active time cover those sessions and their subagents' whole lifetime, matching the timing card. |
 | **7-day usage chart** | When did I spend what — each of the last 7 days' billed tokens and estimated cost as a bar pair, aggregated by each request's start day in its session (not the session's last-active day). |
 | **Activity heatmap** | When do I actually work — the last 8 weeks of daily billed tokens; click a day to filter the sessions and scope the three tally cards to that day. |
 | **Skill loads** | Which skills I loaded, how often, and how recently — the range's loads per skill; click one to filter the sessions that loaded it. |
@@ -220,7 +220,7 @@ A centered dialog opens with the **Current Composition** card and the **Context 
 
 ## ⚙️ Settings
 
-The **Context** preferences card holds this plugin's per-user settings — the **Context panel entry** (the **Context** conversation tab, the right Sidebar panel, both, or Hide for neither — the reply-row jump goes with it), the **Fleet** tab's own Show/Hide switch (the panel entry never gates it), the **Context Insights** default range (Today / Last 7 days / Last 30 days / All, Last 30 days unless changed; picking a preset on the page writes it back), trend granularity (Step/Turn), trend mode (Total/Delta), the trend duration curve (shown by default), the trend auto-overview step threshold, the Context Browser diff baseline, tool and File Activity sort, and the Context Insights Show/Hide switch. It lives on the **Plugins** page: the sidebar **Plugins** entry → the **dsh-context** bundle's page → its **Configuration** section (the card is served by the entry's live Config form).
+The **Context** preferences card holds this plugin's per-user settings — the **Context panel entry** (the **Context** conversation tab, the right Sidebar panel, both, or Hide for neither — the reply-row jump goes with it), the **Fleet** tab's own Show/Hide switch (the panel entry never gates it), the **Context Insights** default range (Today / Last 7 days / Last 30 days, Last 30 days unless changed; picking a preset on the page writes it back), trend granularity (Step/Turn), trend mode (Total/Delta), the trend duration curve (shown by default), the trend auto-overview step threshold, the Context Browser diff baseline, tool and File Activity sort, and the Context Insights Show/Hide switch. It lives on the **Plugins** page: the sidebar **Plugins** entry → the **dsh-context** bundle's page → its **Configuration** section (the card is served by the entry's live Config form).
 
 The **System Prompt · Prefix / Suffix** rows hold free text joined at the very start / end of every session's system prompt, for all agents (subagents included) — a per-deployment persona or behavioral rule that rides the harness's own prompt assembly. Edits apply from the next turn; leave a row empty to disable it.
 
