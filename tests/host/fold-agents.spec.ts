@@ -21,10 +21,12 @@ describe('injection agent labels', () => {
       injected(1, { kind: 'agent-message', form: 'relay', senderSessionId: 'sid-1' }, 'Agent explorer sent a message: hi'),
     ]).state
     assert.equal(state.events[0].agent, 'explorer')
+    assert.equal(state.surface.find(n => n.seq === 1)?.agent, 'explorer')
     const guarded = driveTimeline([
       injected(1, { kind: 'agent-message', form: 'relay', senderSessionId: 'sid-1' }, 'Agent sid-1 sent a message: hi'),
     ]).state
     assert.ok(!('agent' in guarded.events[0]))
+    assert.ok(!('agent' in guarded.surface.find(n => n.seq === 1)!))
     const noSenderId = driveTimeline([
       injected(1, { kind: 'agent-message', form: 'relay' }, 'Agent explorer sent a message: hi'),
     ]).state
@@ -70,6 +72,16 @@ describe('injection agent labels', () => {
       }, 'closing note'),
     ]).state
     assert.ok(!('agent' in unmatched.events[0]))
+  })
+
+  test('node labels outlive the event retention window', () => {
+    const drive = driveTimeline([
+      injected(1, { kind: 'agent-message', form: 'relay', senderSessionId: 'sid-1' }, 'Agent explorer-1 sent a message: hi'),
+      injected(2, { kind: 'subagent-settled', form: 'notice', senderSessionId: 'child-2' }, 'Background subagent explorer-2 finished.'),
+    ], { maxEvents: 1 })
+    assert.equal(drive.state.events.length, 1)
+    assert.equal(drive.state.surface.find(n => n.seq === 1)?.agent, 'explorer-1')
+    assert.equal(drive.state.surface.find(n => n.seq === 2)?.agent, 'explorer-2')
   })
 
   test('catalog name beats team name beats label; repeated facts merge', () => {

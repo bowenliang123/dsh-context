@@ -698,7 +698,10 @@ function applyTimelineEvent(state: TimelineState, event: TimelineEvent, bounds: 
             tokens: node.tokens,
           }
           const agent = agentOfInjection(source, msg?.content, state)
-          if (agent !== undefined) rec.agent = agent
+          if (agent !== undefined) {
+            rec.agent = agent
+            node.agent = agent
+          }
           if (source?.kind === 'skill-invocation') {
             rec.sub = 'skill'
             rec.name = typeof source.name === 'string' ? source.name : '?'

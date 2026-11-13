@@ -408,6 +408,31 @@ describe('ContextBrowser message categories', () => {
     await m.unmount()
   })
 
+  test('inject rows append the subagent name carried by the node', async () => {
+    const data = tl({
+      current: { system: 0, tools: 0, user: 0, inject: 45, skill: 0, assistant: 0, tool: 0, total: 45 },
+      nodes: [
+        surfaceNode({ seq: 50, cat: 'inject', tokens: 9, form: 'notice', name: 'subagent-settled' }),
+        surfaceNode({ seq: 51, cat: 'inject', tokens: 9, form: 'notice', name: 'subagent-settled', text: 'settled body', agent: 'explorer-1' }),
+        surfaceNode({ seq: 52, cat: 'inject', tokens: 9, form: 'notice', text: 'plain notice' }),
+        surfaceNode({ seq: 53, cat: 'inject', tokens: 9, form: 'relay', name: 'agent-message' }),
+        surfaceNode({ seq: 54, cat: 'inject', tokens: 9, form: 'relay', text: 'relay body', agent: 'planner-2' }),
+        surfaceNode({ seq: 55, cat: 'inject', tokens: 9, form: 'notice', agent: 'solo-3' }),
+      ],
+    })
+    const m = await mount(h(Browser, props({ data })))
+    await click(catRow(m, 'inject'))
+    const previews = elemRows(m).map(r => text(query(r, '.lc-br-preview')))
+    assert.ok(previews.includes('subagent-settled · explorer-1'), 'name + agent')
+    assert.ok(previews.includes('relay body · planner-2'), 'text fallback + agent')
+    assert.ok(previews.includes('Notice · solo-3'), 'form-label fallback + agent')
+    assert.ok(previews.includes('subagent-settled'), 'no agent → name stays bare')
+    assert.ok(previews.includes('plain notice'), 'no agent → text stays bare')
+    await typeToolSearch(m, 'explorer-1')
+    assert.deepEqual(elemRows(m).map(r => text(query(r, '.lc-br-preview'))), ['subagent-settled · explorer-1'])
+    await m.unmount()
+  })
+
   test('skill rows: loads/invocations name themselves, the catalog tags its form', async () => {
     const convNodes: ConversationNodeLike[] = [
       { kind: 'tool-result', seq: 72, call: { name: 'skill', argsRaw: '{"description":"grill the plan"}' }, content: [{ type: 'text', text: 'skill body' }] },

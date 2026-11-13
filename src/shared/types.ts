@@ -451,6 +451,7 @@ export interface SurfaceNode {
   err?: boolean
   skill?: string
   calls?: string[]
+  agent?: string
 }
 
 export interface SlimRequestRecord {

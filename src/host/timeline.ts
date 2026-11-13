@@ -27,6 +27,7 @@ const surfaceNodeSchema = z.object({
   err: z.boolean().optional(),
   skill: z.string().optional(),
   calls: z.array(z.string()).optional(),
+  agent: z.string().optional(),
 }).strict()
 
 const systemPromptNodeSchema = z.object({

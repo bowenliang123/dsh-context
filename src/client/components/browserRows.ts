@@ -66,6 +66,7 @@ export function makeNodeRowOf(
       } else if (n.text !== undefined && n.text !== '') {
         preview = n.form === 'snapshot' ? t('node.snapshot') + n.text : n.text
       }
+      if (n.agent !== undefined) preview = preview + ' · ' + n.agent
     }
     return {
       n,
