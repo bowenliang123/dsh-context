@@ -1,0 +1,791 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>dsh-context · SQLite 存储层重设计 — 调研与实施计划</title>
+<style>
+:root{
+  --bg:#f6f7f9; --card:#ffffff; --ink:#1c2330; --muted:#5b6577; --line:#e2e6ec;
+  --accent:#2563eb; --accent-soft:#eaf1fe; --ok:#0f8a4d; --ok-soft:#e6f6ec;
+  --warn:#b45309; --warn-soft:#fdf3e3; --bad:#b42334; --bad-soft:#fdeaea;
+  --code:#0f1720; --code-ink:#dbe6f0; --tag-new:#2563eb; --tag-rep:#7c3aed; --tag-keep:#0f8a4d; --tag-drop:#b42334;
+}
+*{box-sizing:border-box}
+html{scroll-behavior:smooth}
+body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.75 "Segoe UI","PingFang SC","Microsoft YaHei",system-ui,sans-serif}
+a{color:var(--accent);text-decoration:none}
+a:hover{text-decoration:underline}
+h1{font-size:26px;margin:0 0 6px}
+h2{font-size:21px;margin:44px 0 14px;padding-top:10px;border-top:2px solid var(--line)}
+h3{font-size:17px;margin:26px 0 10px}
+h4{font-size:15px;margin:18px 0 8px;color:var(--muted)}
+p{margin:8px 0}
+ul,ol{margin:8px 0;padding-left:22px}
+li{margin:4px 0}
+code,.mono{font-family:Consolas,"Cascadia Code",Menlo,monospace;font-size:.92em;background:#eef1f5;border:1px solid var(--line);border-radius:4px;padding:0 4px}
+pre{background:var(--code);color:var(--code-ink);border-radius:8px;padding:14px 16px;overflow-x:auto;font:12.5px/1.6 Consolas,"Cascadia Code",Menlo,monospace}
+pre code{background:none;border:none;color:inherit;padding:0;font-size:1em}
+table{width:100%;border-collapse:collapse;background:var(--card);border:1px solid var(--line);border-radius:8px;overflow:hidden;font-size:13.5px;margin:12px 0}
+th{background:#f0f3f7;text-align:left;font-weight:600;padding:8px 10px;border-bottom:1px solid var(--line);white-space:nowrap}
+td{padding:7px 10px;border-bottom:1px solid var(--line);vertical-align:top}
+tr:last-child td{border-bottom:none}
+td code{white-space:nowrap}
+.wrap{max-width:1180px;margin:0 auto;padding:28px 26px 80px}
+header.hero{background:linear-gradient(135deg,#12203a,#1f3a68);color:#fff;border-radius:14px;padding:30px 34px;margin-bottom:10px}
+header.hero p{color:#c9d6ee;margin:6px 0 0;max-width:900px}
+header.hero .sub{font-size:13px;color:#8fa7cf;letter-spacing:.4px;text-transform:uppercase}
+nav.toc{position:sticky;top:0;z-index:9;background:rgba(246,247,249,.94);backdrop-filter:blur(6px);border-bottom:1px solid var(--line);padding:8px 0;margin:0 -26px 8px;padding-left:26px}
+nav.toc a{margin-right:14px;font-size:13px;color:var(--muted);white-space:nowrap}
+nav.toc a:hover{color:var(--accent);text-decoration:none}
+.card{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:18px 22px;margin:14px 0}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+.grid3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:14px}
+@media (max-width:860px){.grid2,.grid3{grid-template-columns:1fr}}
+.tag{display:inline-block;font-size:11px;font-weight:700;border-radius:20px;padding:1px 9px;vertical-align:1px;letter-spacing:.3px}
+.tag.new{background:var(--accent-soft);color:var(--tag-new)}
+.tag.rep{background:#f1e9fe;color:var(--tag-rep)}
+.tag.keep{background:var(--ok-soft);color:var(--tag-keep)}
+.tag.drop{background:var(--bad-soft);color:var(--tag-drop)}
+.tag.warn{background:var(--warn-soft);color:var(--warn)}
+.badge-ok{color:var(--ok);font-weight:600}
+.badge-bad{color:var(--bad);font-weight:600}
+.note{border-left:4px solid var(--accent);background:var(--accent-soft);border-radius:0 8px 8px 0;padding:10px 14px;margin:12px 0;font-size:14px}
+.note.warn{border-color:var(--warn);background:var(--warn-soft)}
+.note.ok{border-color:var(--ok);background:var(--ok-soft)}
+.kv{display:grid;grid-template-columns:190px 1fr;gap:4px 14px;font-size:14px}
+.kv dt{color:var(--muted);font-weight:600}
+.kv dd{margin:0}
+.arrow{color:var(--muted)}
+.diagram{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:16px;overflow-x:auto}
+.legend{font-size:12.5px;color:var(--muted);margin-top:8px}
+.small{font-size:12.5px;color:var(--muted)}
+.req-id{display:inline-block;min-width:26px;text-align:center;background:#12203a;color:#fff;border-radius:6px;font-weight:700;font-size:12px;padding:1px 5px;margin-right:6px}
+footer{margin-top:60px;color:var(--muted);font-size:12.5px;border-top:1px solid var(--line);padding-top:14px}
+@media print{nav.toc{display:none}body{background:#fff}}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header class="hero">
+  <div class="sub">dsh-context · design proposal · 2026-11-15</div>
+  <h1>SQLite 存储层重设计 — 调研报告与实施计划</h1>
+  <p>以插件私有的 <code>node:sqlite</code> 数据库作为唯一派生存储：会话级 / 步骤级行式建模，版本不符即全量重建，查询即 SQL，
+  前端只拉取细粒度 API。现有投影注册、JSON 缓存、内存聚合与粗粒度路由全部打破重做；折叠引擎与全部 dsh 原生数据接缝保留。</p>
+  <p class="small" style="color:#8fa7cf">依据：dsh master (0.2.2-rc.3) 与 dsh-context 0.84.1 源码逐行调研；所有论断附文件:行号证据。</p>
+</header>
+
+<nav class="toc">
+  <a href="#s1">① 需求映射</a>
+  <a href="#s2">② 现状盘点</a>
+  <a href="#s3">③ 目标架构</a>
+  <a href="#s4">④ 版本与重建</a>
+  <a href="#s5">⑤ 表设计</a>
+  <a href="#s6">⑥ 索引设计</a>
+  <a href="#s7">⑦ API 设计</a>
+  <a href="#s8">⑧ 回填与刷新</a>
+  <a href="#s9">⑨ 前端改造</a>
+  <a href="#s10">⑩ 兼容与风险</a>
+  <a href="#s11">⑪ 实施路线</a>
+  <a href="#s12">⑫ 附录</a>
+</nav>
+
+<!-- ============ ① ============ -->
+<h2 id="s1">① 需求映射</h2>
+<table>
+<tr><th style="width:60px">需求</th><th style="width:220px">设计落点</th><th>要点</th></tr>
+<tr><td><span class="req-id">1</span>引入 SQLite</td><td>§3 架构 · §4 表设计</td><td>插件私有 <code>node:sqlite DatabaseSync</code> 单文件库（WAL），路径 <code>$DSH_HOME/storages/dsh-context/index.sqlite</code>；与 dsh 自带 <code>session-query-sqlite</code> / <code>storage-sqlite</code> 同一技术栈与惯例。</td></tr>
+<tr><td><span class="req-id">2</span>版本不符即重建</td><td>§4 版本与重建</td><td><code>PRAGMA application_id</code> + <code>PRAGMA user_version</code> 双门禁；任何不符 → 删除全部用户表 → 重建。与 dsh <code>session-query-sqlite</code> 的 <code>resetDerivedSchema</code> 同款策略（dsh: session-query-sqlite/src/schema.ts:64-101）。</td></tr>
+<tr><td><span class="req-id">3</span>前端尽量走后端</td><td>§7 API · §9 前端改造</td><td>聚合 / 过滤 / 排序 / 分页 / 时间旅行(assemble)全部下沉 SQL；删除 detailStores、heads、history、derivedCache 等十余处前端缓存。</td></tr>
+<tr><td><span class="req-id">4</span>会话级/步骤级字段</td><td>§4 表设计</td><td><code>sessions</code> 仅承载排序/热路径键与折叠簿记（评审修订：计数/计时全部派生）；<code>steps</code> / <code>requests</code> 承载步骤级；多行事实全部事件源化，统计用 GROUP BY 现算，废弃预聚合账本（activity days / tallies / 400 天上限 / 64 名上限全部取消）。</td></tr>
+<tr><td><span class="req-id">5</span>大量细粒度 API</td><td>§7 API 设计</td><td>按实体划分 16 个 POST 查询路由（sessions/summary/days/tally/context/timeline/requests/steps/tool-calls/file-ops/events/spans/skill-loads/family/cost/status），统一 scope 过滤与游标分页，前端自由组合；不再按板块划分。</td></tr>
+<tr><td><span class="req-id">6</span>调研前端行为链</td><td>§2.4 · §9</td><td>逐板块盘点（context 视图 /context 弹窗 / overview / fleet / 命令页 / 文件卡 / 余额 / 更新 / recom），映射到新 API；客户端计算清单逐项给出归属。</td></tr>
+<tr><td><span class="req-id">7</span>命名一致清晰</td><td>§5.0 命名约定</td><td>snake_case；<code>seq</code>=事件序号、<code>*_seq</code>=引用、<code>*_tokens</code>、<code>*_ms</code>、<code>*_at</code>=生命周期时间戳、<code>day</code>=本地日键；同义字段跨表同名。</td></tr>
+<tr><td><span class="req-id">8</span>优先直读 dsh 原生数据</td><td>§2.1 · §4 冗余规则</td><td>原始文本（消息正文 / 工具输出 / system prompt 内容 / fleet 消息）一律不入库，仅保留有界 preview；标题、cwd、头元数据等来自 dsh 自身；FTS 全文检索复用 dsh <code>sessionQuery</code>（可选启用），不重复建设。</td></tr>
+<tr><td><span class="req-id">9</span>联合主键</td><td>§4 各表</td><td>子表一律 <code>PRIMARY KEY (session_id, seq)</code> WITHOUT ROWID（按会话聚簇，局部性最优）；<code>header_tools</code> 三列联合主键；<code>fold_state</code>/<code>meta</code> 单键除外。</td></tr>
+<tr><td><span class="req-id">10</span>重建/删除可行性</td><td>§4.3 生命周期</td><td>任何会话行集都可由持久日志确定性重建（折叠是纯函数）；删除走外键 CASCADE；会话消失 / 日志改写 / 版本升级 / 完整性损坏均给出明确触发与动作。</td></tr>
+<tr><td><span class="req-id">11</span>索引设计</td><td>§6 索引设计</td><td>每条索引对应到具体查询模式（日聚合 / 名目 tally / 家族树 / 游标分页 / 存量过滤），不做无主索引。</td></tr>
+</table>
+
+<!-- ============ ② ============ -->
+<h2 id="s2">② 现状盘点（调研结论）</h2>
+
+<h3>2.1 dsh 原生数据源 — 全部可直读，无需复制原文</h3>
+<table>
+<tr><th style="width:230px">数据源</th><th>内容与形态</th><th style="width:300px">证据（dsh master）</th></tr>
+<tr><td>持久日志（JSONL）</td><td>首行 header <code>{type:'session', version, id, createdAt, cwd?, parentSession?, isSeeded, origin?, delegationDepth, agentPreset?}</code>，此后每事件一行 <code>{type, seq, time, data, ignorable?, surfaceOp?}</code>；格式 v4，65 种已知事件类型；事件从 seq 0 连续、永不重写。</td><td>session-persistence-jsonl/src/format.ts:83-96,199-267；core/session/src/types.ts:90；known-event-types.ts:22-86</td></tr>
+<tr><td><code>sessionPersistence.stat(id)</code></td><td><code>{header, revision, sizeBytes?, location?:{kind,path}, eventCount?, formatStatus?}</code>；<code>revision</code> 为变更令牌；<code>eventCount</code> 目前无后端填充。</td><td>session-persistence/src/index.ts:51-68,203；session-persistence-jsonl/src/index.ts:518-549</td></tr>
+<tr><td><code>handle.read(offset, limit)</code></td><td><b>offset 即首事件 seq</b> —— <code>read(lastSeq+1)</code> 即可增量续读日志尾部，是增量回填的官方通道。</td><td>session-persistence/src/handle.ts:76-93（"@param offset - first logical event seq to include"）</td></tr>
+<tr><td><code>sessionQuery.listSessions()</code></td><td><code>{header, live, persisted, formatStatus?}</code> 行列表；header 含全部头元数据。</td><td>session-query/src/types.ts:27-36</td></tr>
+<tr><td><code>sessionQuery.observeSession(id,{projectionMode:'none'})</code></td><td>冷会话整日志读取 / 活会话快照；插件 detail/facts/heads 现已在使用。</td><td>session-query/src/observation.ts:44-49；dsh-context src/host/detailShadow.ts:154</td></tr>
+<tr><td>事件推送</td><td>活会话提交事件经 cordis 总线 <code>ctx.on('session/event', (session, event))</code> 广播；另有 <code>session/created</code> / <code>session/disposed</code> 生命周期事件。</td><td>api/session-controller/src/history/listener.ts、state/listener.ts；dsh-context src/host/detailShadow.ts:81-87 已在消费</td></tr>
+<tr><td>会话列表元数据</td><td>标题来自 <code>title</code> 投影（latest-wins），<code>blank</code>/<code>lastPromptAt</code> 来自 <code>sessionListMetadata</code> 投影；<code>updatedAt = max(createdAt, lastPromptAt)</code>。</td><td>api/session-controller/src/list.ts:47-58,368-382</td></tr>
+<tr><td>工作区 / 运行态</td><td><code>workspaceRegistry</code>（分组标题、archived 会话集合）；<code>agents.get(id).status==='running'</code>；插件现已直读（overviewCorpus.ts:192-232,421-430）。</td><td>同左</td></tr>
+<tr><td>FTS 全文检索（可选）</td><td>dsh 自带 <code>session-query-sqlite</code>（FTS5，默认 <code>':memory:' + openAt:'never'</code> 关闭，部署可开启）——全文搜索需求应由它承担，本插件不重复建设。</td><td>bundle/base/cordis.patch.yml:157-163；bundle/web-app/cordis.patch.yml:24-30</td></tr>
+</table>
+
+<h3>2.2 现有派生管线与缓存（将被打掉的部分）</h3>
+<p>现状是一条「注册投影 → dsh 代持折叠态 → JSON 快照缓存 → 请求期 JS 聚合」的长链，任何一步都持有派生数据的副本：</p>
+<table>
+<tr><th style="width:280px">环节</th><th>形态与问题</th><th style="width:90px">处置</th></tr>
+<tr><td>3 个投影注册 <code>contextTimeline</code>(v42) / <code>contextHeaders</code>(v1) / <code>contextActivity</code>(v7)</td><td>折叠态整体塞进 harness 的 <code>session_projcache</code>（每会话一个 JSON，含瘦身 surface/requests/commands 数组）；head-only 行不能服务 detail（§6.2），冷读只能整体重折叠。</td><td><span class="tag drop">移除注册</span></td></tr>
+<tr><td><code>overview-cache.v1.json</code> 磁盘缓存</td><td><code>$DSH_HOME/storages/dsh-context/</code> 下单文件 JSON，按 <code>path+size+mtime</code> 身份键缓存 HostSession 摘要；2s 防抖、20s 闲释放；首次播种实测峰值 922 MB（compatibility.md §7.3）。</td><td><span class="tag drop">删除文件</span></td></tr>
+<tr><td>请求期内存 feed</td><td><code>sessions</code> Map + <code>rows</code> + 128 键 served 表 + 5s 扫描 TTL + materialize 锁；revision 由 6 个因子拼串（overview.ts:224-445）。</td><td><span class="tag drop">删除</span></td></tr>
+<tr><td>detail/delta/facts 冷缓存</td><td>4/2/4 条修订键折叠态（foldCache.ts）；重复维护 3 份。</td><td><span class="tag drop">删除</span></td></tr>
+<tr><td>DetailShadow 活会话影子折叠</td><td>8 会话 + 512 事件缓冲 + 种子重放（detailShadow.ts）——<b>机制保留、扩展为唯一活折叠器</b>。</td><td><span class="tag rep">改造复用</span></td></tr>
+<tr><td>overview 路由 JS 聚合</td><td><code>summaryOf/daysOf/tallyStatsOf</code> 每次修订变更即全语料遍历（overviewAggregate.ts:243-408）；活动账本限 400 天、tally 每日 64-100 名、技能 500 名、tool timing 16 名淘汰（activity.ts:12-22, foldMetering.ts:81-130）。</td><td><span class="tag rep">SQL 化</span></td></tr>
+<tr><td>backfill 预热</td><td>覆盖统计 + 切片折叠 + worker 折叠 + 投影缓存回写（backfill.ts）；<code>servesRows</code> 探测因 <code>eventCount</code> 无人填充而退化为存在性探测（§6.5）——崩溃后会话可长期供给过期行。</td><td><span class="tag rep">改造复用</span></td></tr>
+<tr><td>12+ 条粗粒度路由</td><td>overview(parts) / snapshot / heads / detail / delta / facts / commands / fleet / skills / attachment / balance / recom / version / backfill。</td><td><span class="tag rep">重组</span></td></tr>
+</table>
+
+<h3>2.3 折叠引擎产出的全部数据形态（新表设计的直接输入）</h3>
+<div class="grid2">
+<div class="card">
+<h4>事件 → 派生事实（每条都应成为一行）</h4>
+<ul>
+<li><b>assistant/message</b> → LLM 调用行：当时上下文构成（system/tools/user/inject/skill/assistant/tool/total）、<code>usage</code> 四桶、turn/step、TTFT 与 gen 时窗。</li>
+<li><b>step/start→step/end</b> → 步骤行：wall/active/wait/idle/tool-busy、首 token 时刻、节拍封顶标记（fold.ts:585-655）。</li>
+<li><b>tool/call→tool/result</b> 及 PTC 对 → 工具调用行：名称、起止、时长、错误、shell 命令文本（≤4096）、退出码、程序名归组（fold.ts:400-575）。</li>
+<li><b>表面节点</b>（user/inject/skill/assistant/tool）→ 表面行：类别、tokens、reasoning/answer/call 拆分、imgs、工具名、预览；compaction/prune/system 替换 → <code>gone_seq</code> 归档标记（fold.ts:169-289）。</li>
+<li><b>compaction/prune/inject/model/mode</b> → 事件行（fold.ts:683-970）。</li>
+<li><b>request/header</b> → 头纪元行 + 逐工具 schema 估值行（headers.ts:65-108）。</li>
+<li><b>system/message</b> → 系统提示行（被替换的旧提示从状态删除，fold.ts:369-385）。</li>
+<li><b>file ops</b>（read/write/search）→ 文件操作行（fold.ts:743-801；shared/fileOps.ts）。</li>
+<li><b>技能装载</b>三条路径（invocation / result / PTC dispatch）→ 技能装载行（activity.ts:199-321）。</li>
+<li><b>计时 span</b>（ttft/reasoning/text/toolarg/tools/other）→ span 行（fold.ts:618-640）。</li>
+</ul>
+</div>
+<div class="card">
+<h4>折叠态维护的标量（终稿口径，评审修订）</h4>
+<ul>
+<li>回写 sessions 的仅两把排序键：billed_tokens / cur_total（flush 时按行集现算回写）+ 最新态 model / provider / reasoningEffort / contextWindow / maxOutputTokens / last_user。</li>
+<li>运行计数（turns/steps/injects/…）与计时总量（wall/ttft/gen/…）折叠器不再驻留 —— 全部由子表派生（§5.2 派生对照）。</li>
+</ul>
+<h4>不入库（服务时计算 / 直读 dsh）</h4>
+<ul>
+<li>成本 = usage 行 × 价目表（host 已持有，1h TTL）；faces/misses 由 DISTINCT(provider,model) 现算。</li>
+<li>running / archived / 分组 = workspaceRegistry / agents 镜像列（带刷新触发）。</li>
+<li>标题 = dsh title 投影；消息正文、工具输出、fleet 消息 = 按需 RPC 读原始日志。</li>
+</ul>
+</div>
+</div>
+
+<h3>2.4 前端行为链盘点（消费侧证据）</h3>
+<table>
+<tr><th style="width:170px">板块</th><th style="width:330px">现走的数据通道</th><th>客户端现存计算 / 缓存（改造对象）</th></tr>
+<tr><td>Context 侧栏 / /context 弹窗</td><td>投影座席(slim head) + facts parts(head/series/nodes/events/files/commands/spans) + delta + commands 分页 + history RPC + attachment</td><td>DetailStore 64 会话/6 MiB 保留缓存；<code>assemble()</code> 逐 seq 时间旅行 + WeakMap 缓存；增量 fold(increment.ts) 前端重算；文件按 path 聚合；程序名解析、过滤、排序、tally 全在前端（commands.ts / fileActivity.ts / trendModel.ts / dna.ts）</td></tr>
+<tr><td>Overview / Insights</td><td>overview 四 parts + revision/unchanged + 30s 可见轮询 + backfill 覆盖轮询</td><td>热力图分位、7 日窗口、donut 组装、share/top-N 截断在前端；scope 过滤/排序/分页已在 host（保持）</td></tr>
+<tr><td>Fleet / MissionPulse</td><td>fleet(summary/batch/legacy) + heads 批量 64 + 会话快照 + agentTeam/subagentCatalog 座席</td><td>heads 缓存 128/1 MiB TTL 60s；landed maps 64/4 MiB ×3；familyOf / subagentCostFoldOf 前端 BFS 求和；comms 归并排序</td></tr>
+<tr><td>命令页 / 面板</td><td>facts(commands part) + commands 分页路由</td><td>known map 上限 4000；程序名/失败/慢查询过滤、tally、attention 全前端；结果文本 LRU 8</td></tr>
+<tr><td>历史内容层</td><td>remote.session.page RPC</td><td>historyContent 128 条 TTL 5min、historyHeader 12 条 TTL 5min</td></tr>
+<tr><td>余额 / 更新 / recom</td><td>balance / version / recom 路由</td><td>balance localStorage 10min TTL；version 1h / recom 30min 模块缓存（与本次数据面无关，保留现状）</td></tr>
+</table>
+<p class="small">客户端缓存完整清单（含 file:line）见附录 C.3；改造取舍见 §9。</p>
+
+<!-- ============ ③ ============ -->
+<h2 id="s3">③ 目标架构</h2>
+
+<h3>3.1 架构图</h3>
+<div class="diagram">
+<pre style="background:none;color:var(--ink);padding:0;font-size:12.5px">
+┌─────────────────────────────── dsh web server 进程（插件宿主）───────────────────────────────┐
+│                                                                                       │
+│  数据源（dsh 原生，全部直读/订阅，不复制原文）                                            │
+│  ├─ sessionPersistence.stat() / open().read(offset)   ← 冷日志（offset=seq，支持增量续读）  │
+│  ├─ sessionQuery.listSessions() / observeSession(projectionMode:'none')                  │
+│  ├─ ctx.on('session/event' | 'session/created' | 'session/disposed')  ← 活会话推送         │
+│  └─ workspaceRegistry · agents · title/sessionListMetadata 投影值                         │
+│        │                                                                                 │
+│        ▼                                                                                 │
+│  ┌───────────────┐   事件流    ┌──────────────────────────────┐   行写入(单事务/会话批次)      │
+│  │ 回填调度器      │──────────▶ │  折叠引擎（纯计算，行发射器）      │──────────────┐            │
+│  │ boot 对账/扫描   │  冷读分片    │  applyTimeline / applyActivity │              ▼            │
+│  │ 身份变更对账     │  worker>30k │  （保留现有 metering/pricing）    │   ┌──────────────────┐  │
+│  └───────────────┘            └──────────────────────────────┘   │ SQLite (WAL)       │  │
+│        ▲                                                         │ storages/dsh-context│  │
+│        │ 身份 stat + 5s TTL 扫描 + 版本门禁                         │ 14 张表 · 版本重建   │  │
+│  ┌─────┴────────┐                                                └─────────┬────────┘  │
+│  │ 活会话写通器    │  200 事件/2s/step-end/turn-end/dispose 刷库（Debounced）  │            │
+│  │ (工作态=全活会 │──────────────────────────────────────────────────────┘             │
+│  │  话, LRU 于 fold_state 之上, 驱逐安全)│                                              │
+│  └──────────────┘                                                                     │
+│        │                                                                              │
+│        ▼  generation + pricing_version 变更协议                                          │
+│  ┌──────────────────────────────────────────────────────────────────────┐              │
+│  │ 查询 API 层（16 条细粒度 POST 路由，全部 = 预编译 SQL）                    │              │
+│  │ sessions/summary/days/tally/context/timeline/requests/steps/           │              │
+│  │ tool-calls/file-ops/events/spans/skill-loads/family/cost/status        │              │
+│  └──────────────────────────────┬───────────────────────────────────────┘              │
+└─────────────────────────────────┼──────────────────────────────────────────────────────┘
+                                  ▼  浏览器：只持视图状态 + generation unchanged 协议
+                        ┌───────────────────────┐
+                        │ dsh-context client    │
+                        │ 无负载缓存 · 按需拉取    │
+                        └───────────────────────┘
+</pre>
+</div>
+
+<h3>3.2 核心决策</h3>
+<table>
+<tr><th style="width:70px">编号</th><th style="width:250px">决策</th><th>理由与代价</th></tr>
+<tr><td><b>D1</b></td><td>SQLite 为<b>唯一</b>派生存储</td><td>同时取代投影注册+session_projcache 行、overview JSON 缓存、请求期内存 feed、detail/delta/facts 冷缓存。消除「同一派生数据存 4 处」的根本冗余；查询/聚合/分页成为索引扫描而非 JS 遍历。<br><b>代价</b>：折叠器必须自行管理活会话折叠与冷回填（两者皆有已验证的实现模式可复用）。</td></tr>
+<tr><td><b>D2</b></td><td>折叠引擎保留为纯计算，改造成「行发射器」</td><td><code>applyTimeline/applyActivity</code> 的计量口径（token 估值、峰谷分桶、idle 刻雕、TTFT 锚点）经过 diff-fold 差分校准，全部保留；改变的是<b>终点</b>——状态不再攒成大对象，而是在终结点(步骤结束/工具结算/请求落定)发射为行。</td></tr>
+<tr><td><b>D3</b></td><td>事件来源与接缝全部沿用现状</td><td><code>session/event</code> 推送、<code>observeSession('none')</code>、<code>stat/open/read(offset)</code>、<code>connection.fetch.register</code>、heap 冷读门、切片/worker 折叠、回填节流——每一项都是当前代码已在三个支持线上运行的接缝，兼容风险最小。</td></tr>
+<tr><td><b>D4</b></td><td>聚合策略两分法</td><td><b>多行事实的横切统计</b>（按日、按名目、按模型、按路径）→ 一律 SQL GROUP BY 现算，废除 activity-days 账本与全部 tally 上限；sessions 仅保留 <code>billed_tokens</code> / <code>cur_total</code> 两把排序与热路径键（flush 时按行集现算回写，幂等），其余计数/计时全部派生（需求 4：能查表就不预聚合）——折叠态随之瘦身：timing/totals/turnRuns/cost 不再驻留折叠器。</td></tr>
+<tr><td><b>D5</b></td><td>原始文本零入库，成本零入库</td><td>消息正文/工具输出/system prompt 内容/fleet 消息不进库（仅 ≤2,000 字符展示预览——渲染必需截断，全文仍走 history RPC，评审修订）；全文检索复用 dsh sessionQuery FTS（可选启用）；成本=usage 行×价目表服务时计算，价目更新无需任何数据迁移。</td></tr>
+</table>
+
+<h3>3.3 保留 / 移除 / 改造总表</h3>
+<table>
+<tr><th style="width:110px">类别</th><th>清单</th></tr>
+<tr><td><span class="tag keep">保留</span></td><td>折叠算法与计量口径（fold.ts/foldMetering/foldCommands/fileOps/pricing/estimate/imageTokens）；冷读堆门 coldReadGate；切片折叠与 foldWorker（>30k 事件）；回填节流（8s 工作预算/2s 暂停）；价目与版本目录服务（catalog.ts）；balance/version/skills/attachment/recom 路由；stepIdentity 会话保护；升级门 fallback。</td></tr>
+<tr><td><span class="tag rep">改造</span></td><td>DetailShadow → 活会话写通器；backfill → SQLite 对账与回填调度器；foldWorker 返回行批次；headsRoute/snapshotRoute/detail/delta/facts/commands/overview → 16 条查询路由；delta 的 assemble → SQL 时间旅行；客户端 timelineSource/overviewSource/agentHeads/fleetModel 换接新 API。</td></tr>
+<tr><td><span class="tag drop">移除</span></td><td>3 个投影注册（sessionProjections.inject 一并移除）；overviewCache.v1.json 及其身份验证/防抖/闲释放；请求期 feed/served/revision 拼串；foldCache 冷缓存 ×3；foldJournal；sweep（投影行迁移）；heads 三级探测；客户端 heads/derivedCache/history 缓存簇。</td></tr>
+</table>
+<div class="note ok"><b>口径收益（相对现状的已知缺陷）：</b>steps 计数与 harness <code>sessionStats</code> 对齐（新 steps 表按 step/end 落行，空步骤不再丢失，§4 limitation "counts" 解除）；400 天账本上限、64/100/500 名 tally 上限、16 名 tool-timing 淘汰全部取消；崩溃后过期行问题由水位线+增量续读根治；首次播种由「整体扫描 922 MB 峰值」变为逐会话流式行写入。</div>
+
+<!-- ============ ④ ============ -->
+<h2 id="s4">④ 版本与重建策略</h2>
+
+<h3>4.1 数据库身份与版本门禁</h3>
+<pre><code>-- 打开序列（与 dsh session-query-sqlite / storage-sqlite 同款惯例）
+PRAGMA application_id  = 0x44534358;   -- 'DSCX'，区别于 dsh 的 'DSHQ'(0x44534851)
+PRAGMA user_version    = 8;            -- DSHCTX_SCHEMA_VERSION（整数，无迁移语义）
+PRAGMA journal_mode    = WAL;
+PRAGMA foreign_keys    = ON;
+PRAGMA busy_timeout    = 5000;
+PRAGMA synchronous     = NORMAL;       -- 派生可重建数据，WAL+NORMAL 足够
+PRAGMA cache_size      = -8000;        -- 8 MB 页缓存上限</code></pre>
+<table>
+<tr><th style="width:240px">打开时检查</th><th>动作</th></tr>
+<tr><td><code>application_id</code> 非 0 且 ≠ 'DSCX'</td><td><b>拒绝打开</b>（他方数据库，永不触碰）——同 dsh session-query-sqlite/schema.ts:58-63。</td></tr>
+<tr><td><code>user_version ≠ SCHEMA_VERSION</code>（含 0 但已有表）</td><td><b>删除全部用户表 → 重置 user_version=0 → 重建 schema → 重播种 meta</b>。数据全部来自可重放的持久日志，重建安全（需求 2 的「任何不同即完全重建」）。同款先例：session-query-sqlite/schema.ts:64-101 <code>resetDerivedSchema</code>。</td></tr>
+<tr><td>空库（application_id=0 且无表）</td><td>建 schema、写 application_id + user_version。</td></tr>
+<tr><td><code>PRAGMA quick_check</code> 失败 / 打开异常</td><td>删文件重建；仍失败 → 尝试 <code>:memory:</code> 降级（全功能、随进程消失）+ warn 日志；两者皆败 → 路由统一 <code>ready:false</code>，前端渲染重试提示，宿主进程不受影响。</td></tr>
+<tr><td>检测到旧 <code>overview-cache.v1.json</code></td><td>首次成功建库后删除（一次性清理，失败静默）。</td></tr>
+</table>
+
+<h3>4.2 SCHEMA_VERSION 的 bump 规则</h3>
+<ul>
+<li>任何<b>表结构 / 字段语义 / 口径</b>变化都必须 bump —— 因为不迁移：旧行口径与新查询混杂即是数据错误（符合编码标准「数据准确性第一」）。</li>
+<li>派生数据完全可重建，bump 的代价仅是首次启动的回填时长（有节流与 worker，不阻塞使用；未回填会话按 §8 的 coverage 显示 «—»）。</li>
+<li>与 <code>fold_state</code> 的状态载荷格式变化共用同一版本号：载荷不兼容时该表整体清空（等价于回退到全量重折叠）。</li>
+</ul>
+
+<h3>4.3 会话行集的生命周期（需求 10：重建与删除的可行性与必要性）</h3>
+<table>
+<tr><th style="width:210px">状态 / 触发</th><th style="width:150px">来源</th><th>动作</th></tr>
+<tr><td><code>pending</code> 新会话进入视野</td><td>listSessions 对账 / 活事件首见</td><td>INSERT sessions 行（头元数据）→ 入回填队列（活跃优先）</td></tr>
+<tr><td><code>ok</code> 折叠完成</td><td>回填 / 活写通</td><td>行集完整；<code>last_seq</code>=水位线；<code>fold_status='ok'</code></td></tr>
+<tr><td>日志增长（非活会话）</td><td>身份对账：stat().revision 或 fs.stat(path) size/mtime 变化</td><td><b>增量续读</b>：<code>read(last_seq+1)</code> + fold_state 续折 → 追加行；fold_state 缺失（LRU 逐出）→ 全量重折叠（事务内 DELETE+INSERT 整会话行集）</td></tr>
+<tr><td>日志重写保持身份</td><td>fs.stat 相同但内容变（理论可能）</td><td>接受窗口：与现状一致（overviewCache 同样按 path+size+mtime 判断）；<code>PRAGMA quick_check</code> 级异常兜底重建</td></tr>
+<tr><td>会话从列表消失</td><td>listSessions 对账差集（listed − db − live）</td><td>DELETE sessions 行 → 外键 CASCADE 清空全部子表行（需求 10：删除可行性）</td></tr>
+<tr><td><code>unsupported</code> 旧格式不可迁移</td><td><code>SessionFormatUnsupportedError</code></td><td>保留 sessions 行（fold_status='unsupported'）+ 无子行；前端显示 «—»；永不重试成功，不阻塞 coverage 之外的任何功能</td></tr>
+<tr><td><code>failed</code> 折叠异常</td><td>读日志 / 折叠 / 写库失败</td><td>fold_status='failed'+fold_error；下轮回填带退避重试；行集若已部分写入则整会话事务回滚（原子性保证）</td></tr>
+<tr><td>版本 bump / 库损坏</td><td>§4.1 门禁</td><td>全库重建：仅保留「会话清单」重播种，其余行集由回填逐会话重建</td></tr>
+</table>
+<div class="note"><b>重建可行性根保证</b>：折叠是「header + 事件序列 → 行集」的确定性纯函数（现状代码已经如此，diff-fold 差分测试即证）；因此任意会话、任意时刻都可删掉行集重折，SQLite 里不存在不可再生的状态。<b>必要性收敛</b>：只有身份变化 / 版本升级 / 损坏三类触发全量重建，日常变更走增量续读，避免现状「身份不符→整体重建」的高频全量开销。</div>
+<!-- ============ ⑤ ============ -->
+<h2 id="s5">⑤ 表设计（14 张表）</h2>
+
+<h3>5.0 命名与冗余约定（先立规矩，再列字段）</h3>
+<div class="grid2">
+<div class="card">
+<h4>命名约定（需求 7）</h4>
+<ul>
+<li><code>snake_case</code>；主键列名全库一致：<code>session_id</code>、<code>seq</code>（源事件序号）。</li>
+<li><code>*_seq</code> = 引用其他事件的序号（result_seq / parent_seq / request_seq / gone_seq / epoch_seq / span_seq）。</li>
+<li><code>*_tokens</code> / <code>*_ms</code> = 计量；<code>*_at</code> = 生命周期时间戳（created_at / updated_at / folded_at）；事件时间统一叫 <code>time</code>（配对事件用 start_time / end_time）。</li>
+<li><code>day</code> = 折叠时用 <code>dayKeyOf()</code> 算好的本地日键（'YYYY-MM-DD'）——日聚合一律走它，SQL 内不做时区运算。</li>
+<li>布尔 <code>INTEGER 0/1</code>；枚举 <code>TEXT</code> + CHECK；金额永不入库。</li>
+<li>避让 SQL 关键字：模型变更用 <code>model_from/model_to</code>（不用 from/to）。</li>
+</ul>
+</div>
+<div class="card">
+<h4>冗余判定五规则（需求 4/8）</h4>
+<ol>
+<li><b>原文不复制</b>：消息正文、工具输出、system prompt 文本、fleet 消息不入库；展示需要处只留 ≤2,000 字符 <code>preview</code>（渲染必需的截断预览，全文按需走 RPC，§5.6）。</li>
+<li><b>折叠态只落排序键</b>：sessions 仅保留 billed_tokens / cur_total 两把排序与热路径键（flush 时按行集现算回写，幂等）；其余计数/计时一律子表 GROUP BY 现算 —— <b>禁止</b>为查询新造预聚合（days/tallies 全废，会话级计数列亦裁剪），并消灭「计数器 = 子表 SUM」的双源不变量。</li>
+<li><b>可由行集 GROUP BY 现算的 → 不设列</b>：当前构成分类拆分（surface_nodes 求和）、成本（usage×价目）、名目统计、文件聚合全部现算；仅保留排序键（billed_tokens、cur_total）与列表显示所需最小列。</li>
+<li><b>dsh 服务在请求时零成本可得的 → 镜像列 + 明确刷新触发</b>：archived/workspace_title/running/title/blank（刷新触发见 §8.5），字段语义以 dsh 为准。</li>
+<li><b>派生但查询高频且纯函数的 → 折叠时算好存列</b>：day、period（峰/谷）、starts_turn、program、plugin 归属——存一次，省去查询端 JS 重算。</li>
+</ol>
+</div>
+</div>
+
+<h3>5.1 <code>meta</code> — 单行运行状态 <span class="tag new">新</span></h3>
+<table>
+<tr><th style="width:190px">字段</th><th style="width:90px">类型</th><th>含义 / 来源</th></tr>
+<tr><td><code>key</code> PK</td><td>TEXT</td><td>'data_generation' | 'pricing_version' | 'seeded_at'（版本本身由 user_version 承载，不重复存）</td></tr>
+<tr><td><code>value</code></td><td>TEXT</td><td>data_generation：任一影响查询结果的写事务 +1（unchanged 协议的根）；pricing_version：价目书版本（价目刷新 → 一并参与 generation）</td></tr>
+</table>
+
+<h3>5.2 <code>sessions</code> — 会话级（1 行/会话）<span class="tag new">新</span></h3>
+<p class="small">PK 即 id（TEXT）。列分四组：头元数据（dsh 直读）、列表镜像（带刷新触发）、排序/热路径键与当前上下文状态（D4 规则 2）、折叠簿记。<b>评审修订</b>：原设计的 ~20 个折叠计数/计时列全部裁剪为子表派生（见派生对照），会话行从 ~45 列降至 ~30 列。</p>
+<table>
+<tr><th style="width:205px">字段</th><th style="width:80px">类型</th><th>含义 / 来源 / 写入时机</th></tr>
+<tr><td colspan="3" style="background:#f6f8fb"><b>头元数据 — 首见写入（listSessions/observe header；dsh: format.ts:83-96）</b></td></tr>
+<tr><td><code>id</code> PK</td><td>TEXT</td><td>header.id</td></tr>
+<tr><td><code>created_at</code></td><td>INTEGER</td><td>header.createdAt（ms）</td></tr>
+<tr><td><code>cwd</code></td><td>TEXT NULL</td><td>header.cwd（冷会话准入要求非空，与现状一致 overviewCorpus.ts:165）</td></tr>
+<tr><td><code>parent_session</code></td><td>TEXT NULL</td><td>header.parentSession（家族树 = parent_session 森林，不可变）</td></tr>
+<tr><td><code>origin</code></td><td>TEXT NULL</td><td>'subagent' | NULL（仅 fork 子会话标 subagent，compat §5.10）</td></tr>
+<tr><td><code>is_seeded</code></td><td>INTEGER</td><td>header.isSeeded</td></tr>
+<tr><td><code>delegation_depth</code></td><td>INTEGER NULL</td><td>header.delegationDepth</td></tr>
+<tr><td><code>agent_preset</code></td><td>TEXT NULL</td><td>header.agentPreset</td></tr>
+<tr><td colspan="3" style="background:#f6f8fb"><b>列表镜像 — 扫描/效果触发时 UPDATE（D4 规则 4）</b></td></tr>
+<tr><td><code>title</code></td><td>TEXT</td><td>dsh title 投影 → workspaceTitleOf(cwd) → id 兜底（titleOf，overviewCorpus.ts:263-270）</td></tr>
+<tr><td><code>blank</code></td><td>INTEGER</td><td>sessionListMetadata.blank（首个 turn/start 前为 1）</td></tr>
+<tr><td><code>last_prompt_at</code></td><td>INTEGER NULL</td><td>sessionListMetadata.lastPromptAt</td></tr>
+<tr><td><code>updated_at</code></td><td>INTEGER</td><td>max(created_at, last_prompt_at)（list.ts:368-370 同式）</td></tr>
+<tr><td><code>archived</code></td><td>INTEGER</td><td>workspaceRegistry.archivedSessionIds</td></tr>
+<tr><td><code>workspace_title</code></td><td>TEXT NULL</td><td>workspaceRegistry 分组标题（NULL=未分组）</td></tr>
+<tr><td><code>running</code></td><td>INTEGER</td><td>agents.get(id).status==='running'（扫描 TTL 内刷新，≤5s 陈旧=现状持平）</td></tr>
+<tr><td colspan="3" style="background:#f6f8fb"><b>当前上下文状态 — 折叠维护（请求头/上下文事件 + 最新请求）</b></td></tr>
+<tr><td><code>model</code> / <code>provider</code> / <code>reasoning_effort</code></td><td>TEXT NULL</td><td>最新 request/header · config（fold.ts:341-367）</td></tr>
+<tr><td><code>context_window</code> / <code>max_output_tokens</code></td><td>INTEGER NULL</td><td>request/context · header config.maxTokens</td></tr>
+<tr><td><code>cur_total</code></td><td>INTEGER</td><td>当前上下文总量（排序 'context' 键 + 占用条）。<b>flush 时按行集现算回写</b>（活表面 SUM + 最新 system_prompts + 最新 header 纪元 tools 和；幂等），分类拆分不存列 → 同口径现算（D4 规则 3）</td></tr>
+<tr><td><code>last_user</code></td><td>TEXT NULL</td><td>最近一条用户输入 ≤200 字预览（overview 搜索过滤用；派生预览，非原文存储）</td></tr>
+<tr><td colspan="3" style="background:#f6f8fb"><b>排序/热路径键（仅保留 SQL 难以廉价重算的两把键；其余统计一律派生 — 见派生对照）</b></td></tr>
+<tr><td><code>billed_tokens</code></td><td>INTEGER</td><td>生命周期计费 tokens = Σ(input+cache_read+cache_write+output) WHERE is_inherited=0。<b>flush 时按 requests 现算回写（幂等）</b>，排序 'tokens' 键 + KPI 热路径；继承种子 cut 后仅统计 cut 之后（口径同 fold.ts:935-943 的账本重置）</td></tr>
+<tr><td colspan="3" style="background:#f6f8fb"><b>折叠簿记</b></td></tr>
+<tr><td><code>fold_status</code></td><td>TEXT CHECK</td><td>'pending'|'ok'|'failed'|'unsupported'</td></tr>
+<tr><td><code>fold_error</code></td><td>TEXT NULL</td><td>失败摘要 ≤200 字</td></tr>
+<tr><td><code>last_seq</code></td><td>INTEGER</td><td>水位线（已折叠到的事件 seq；增量续读与 freshness 的根）</td></tr>
+<tr><td><code>log_path</code> / <code>log_size</code> / <code>log_mtime</code></td><td>TEXT/INTEGER NULL</td><td>身份快照（stat().location.path + fs.stat size/mtime，overviewCache 同款；无 stat 能力时 NULL=纯活会话模式）</td></tr>
+<tr><td><code>detail_rev</code></td><td>INTEGER</td><td>会话内行变更计数（任何子表写 +1；前端按需重拉的令牌，替代现 detailRev）</td></tr>
+<tr><td><code>folded_at</code></td><td>INTEGER</td><td>最近折叠完成时间（回填队列排序 + fold_state LRU 依据）</td></tr>
+</table>
+<p class="small"><b>会话级统计派生对照</b>（评审修订：原 ~20 个计数/计时列全部裁剪，query/summary 与 query/sessions 行内按子表聚合现算；基准语料 1,158 会话 ≈10⁵ 请求行，全库单查 10–30ms）：
+steps=COUNT(steps WHERE end_time NOT NULL，<b>与 harness sessionStats 对齐，修复现状差异</b>) · turns=Σ(requests.starts_turn) · calls=COUNT(requests) · injects/compactions/prunes=COUNT(events BY kind) · tool_calls=COUNT(tool_calls WHERE transport=0 AND result_seq NOT NULL) · human_inputs=COUNT(surface cat='user') + COUNT(name='ask_user_question' 结算行) · answers=COUNT(surface cat='assistant' AND preview 非空) · images=Σ(surface.imgs) · skills_loaded=COUNT(DISTINCT skill_loads.name) · gen_reasoning/answer/call=Σ(requests.reasoning_tokens)+Σ(surface 拆分列) · wall/ttft/idle/tool_busy=Σ(steps 各列) · gen_ms/speed=Σ(requests WHERE gen_ms NOT NULL) · tools_ms=Σ(tool_calls.duration_ms WHERE transport=0) · reasoning/text/toolarg=Σ(timing_spans BY kind) · cache_hit=usage 四桶比 · 成本=usage×价目（query/cost）。</p>
+<p class="small"><b>索引</b>：<code>(updated_at DESC)</code>、<code>(archived, updated_at)</code>、<code>(workspace_title)</code>、<code>(parent_session)</code>（家族 CTE）、<code>(billed_tokens DESC)</code>、<code>(origin)</code>。</p>
+
+<h3>5.3 <code>requests</code> — LLM 调用（步骤级·经济面）<span class="tag new">新</span></h3>
+<p class="small">来源 <code>assistant/message</code>（fold.ts:838-933）。1 事件 1 行；构成列取「本请求发出时刻」的上下文（与现 RequestRecord 同一快照序，响应节点在此之后才入表面）。usage 缺失时计费列为 NULL（成本缺口与现状一致）。</p>
+<table>
+<tr><th style="width:205px">字段</th><th style="width:80px">类型</th><th>含义</th></tr>
+<tr><td><code>session_id</code> + <code>seq</code> PK</td><td>TEXT+INTEGER</td><td>所属会话 / assistant/message 事件 seq</td></tr>
+<tr><td><code>time</code></td><td>INTEGER</td><td>事件时间</td></tr>
+<tr><td><code>day</code></td><td>TEXT</td><td>dayKeyOf(stepStart ?? time)（活动账本「发起日」口径）</td></tr>
+<tr><td><code>turn</code> / <code>step</code></td><td>INTEGER NULL</td><td>事件 data.turn / data.step</td></tr>
+<tr><td><code>starts_turn</code></td><td>INTEGER</td><td>与前一请求 turn 标签不同（=1；「按日 turns」=SUM(starts_turn)）</td></tr>
+<tr><td><code>is_inherited</code></td><td>INTEGER</td><td>位于继承种子 cut 之前（=1；成本/日聚合过滤它，保持「父子不重复计费」口径 fold.ts:935-943）</td></tr>
+<tr><td colspan="3" style="background:#f6f8fb"><b>请求时刻上下文构成</b></td></tr>
+<tr><td><code>system_tokens</code> / <code>tools_tokens</code> / <code>user_tokens</code> / <code>inject_tokens</code> / <code>skill_tokens</code> / <code>assistant_tokens</code> / <code>tool_tokens</code></td><td>INTEGER</td><td>七类当时值（现 RequestRecord 字段一一对应）</td></tr>
+<tr><td><code>total_tokens</code></td><td>INTEGER</td><td>上述之和（趋势图主序列）</td></tr>
+<tr><td colspan="3" style="background:#f6f8fb"><b>计费 usage（provider 权威值；无则 NULL）</b></td></tr>
+<tr><td><code>model</code> / <code>provider</code></td><td>TEXT NULL</td><td>请求时路由（sessions.model 的来源链）</td></tr>
+<tr><td><code>period</code></td><td>TEXT NULL</td><td>'peak'|'off'（折叠时按 isBeijingPeak(start time) 算定；DeepSeek 峰谷价目键）</td></tr>
+<tr><td><code>prompt_tokens</code></td><td>INTEGER NULL</td><td>input+cacheRead+cacheWrite</td></tr>
+<tr><td><code>input_tokens</code> / <code>cache_read_tokens</code> / <code>cache_write_tokens</code> / <code>output_tokens</code></td><td>INTEGER NULL</td><td>usage 四桶（成本/缓存命中/按日 tokens 的唯一来源）</td></tr>
+<tr><td><code>reasoning_tokens</code></td><td>INTEGER NULL</td><td>provider 上报 reasoningTokens（min(output) 截断同 fold）</td></tr>
+<tr><td><code>gen_ms</code></td><td>INTEGER NULL</td><td>首 token→消息时刻（解码时长；首 token 等待归 steps.ttft_ms，两表不重复）</td></tr>
+<tr><td><code>active_ms</code></td><td>INTEGER NULL</td><td>步骤结算时回填（step/end；替代现 RequestRecord.activeMs 的延迟补写）</td></tr>
+</table>
+<p class="small"><b>索引</b>：<code>(day, session_id)</code>（跨会话按日聚合+每会话日序列）、<code>(session_id, turn)</code>、<code>(model)</code>（模型 tally）。PK 覆盖 (session_id, seq) 游标分页。</p>
+
+<h3>5.4 <code>steps</code> — 步骤（步骤级·行为面）<span class="tag new">新</span></h3>
+<p class="small">来源 <code>step/start</code>（INSERT，end NULL=运行中）→ <code>step/end</code>（UPDATE，fold.ts:596-655）。空步骤（无消息）也成行 —— 修复现状「steps 计数与 harness 不一致」。</p>
+<table>
+<tr><th style="width:205px">字段</th><th style="width:80px">类型</th><th>含义</th></tr>
+<tr><td><code>session_id</code> + <code>seq</code> PK</td><td>TEXT+INTEGER</td><td>step/start 事件 seq</td></tr>
+<tr><td><code>turn</code> / <code>step</code></td><td>INTEGER NULL</td><td>事件 data.turn / data.step</td></tr>
+<tr><td><code>start_time</code> / <code>end_time</code></td><td>INTEGER</td><td>起止（end NULL=进行中）</td></tr>
+<tr><td><code>day</code></td><td>TEXT</td><td>dayKeyOf(start_time)（活动账本 wallMs 记账日口径）</td></tr>
+<tr><td><code>request_seq</code></td><td>INTEGER NULL</td><td>本步骤发出的 assistant/message seq（NULL=空步骤；step/start 插入时必为 NULL，assistant/message 落定后 UPDATE 回填，step/end 结算确认）</td></tr>
+<tr><td><code>wall_ms</code> / <code>active_ms</code> / <code>wait_ms</code> / <code>idle_ms</code> / <code>tool_busy_ms</code></td><td>INTEGER</td><td>步末结算五件套（wall/活跃/审批等待/≥2min 残余空闲/工具忙并集）</td></tr>
+<tr><td><code>ttft_ms</code></td><td>INTEGER NULL</td><td>start→首 token（请求级 gen_ms 在 requests 表，不重复）</td></tr>
+<tr><td><code>beats_full</code></td><td>INTEGER</td><td>1024 节拍封顶命中（idle 刻雕被跳过，读数解释用）</td></tr>
+</table>
+<p class="small"><b>索引</b>：<code>(session_id, start_time)</code>、<code>(day)</code>（按日 wall/active 聚合，替代 activity.wallMs 账本）。</p>
+
+<h3>5.5 <code>tool_calls</code> — 工具调用与命令（统一表）<span class="tag new">新</span></h3>
+<p class="small">统一 <code>tool/call→tool/result</code> 与 PTC <code>dispatch-start→dispatch</code> 对，兼容现 CommandRecord 全字段 + toolTally 来源。命令页 = WHERE program/cmd 非空过滤；工具统计 = 全表 GROUP BY。</p>
+<table>
+<tr><th style="width:205px">字段</th><th style="width:80px">类型</th><th>含义</th></tr>
+<tr><td><code>session_id</code> + <code>seq</code> PK</td><td>TEXT+INTEGER</td><td>发起事件 seq</td></tr>
+<tr><td><code>call_id</code></td><td>TEXT</td><td>callId / subCallId（UNIQUE(session_id,call_id) 配对键；'__proto__' 拒收同 fold）</td></tr>
+<tr><td><code>result_seq</code></td><td>INTEGER NULL</td><td>结算事件 seq</td></tr>
+<tr><td><code>name</code> / <code>plugin</code></td><td>TEXT</td><td>工具名 / 静态归因（attribution.ts 首方映射）</td></tr>
+<tr><td><code>transport</code></td><td>INTEGER</td><td>PTC 传输父调用（run_code；计时长但不计费/不计 toolCalls，compat §3.12 口径）</td></tr>
+<tr><td><code>code_mode</code> / <code>parent_seq</code></td><td>INTEGER/INTEGER NULL</td><td>run_code 子派发 / 外层调用 seq</td></tr>
+<tr><td><code>turn</code> / <code>step</code> / <code>day</code></td><td>INTEGER/INTEGER/TEXT</td><td>归属与记账日（dayKeyOf(stepStart ?? start)）</td></tr>
+<tr><td><code>start_time</code> / <code>end_time</code> / <code>duration_ms</code></td><td>INTEGER / INTEGER NULL / INTEGER NULL</td><td>起止与时长（end/duration 运行中为 NULL；job/registered 可回写 start，fold.ts:433-450）</td></tr>
+<tr><td><code>is_error</code> / <code>status</code></td><td>INTEGER/TEXT NULL</td><td>错误 / 'running'|'completed'|'failed'|'killed'|'background'（shell 命令；非命令工具 NULL）</td></tr>
+<tr><td><code>exit_code</code> / <code>exit_inferred</code> / <code>signal</code> / <code>timed_out</code> / <code>stopped</code> / <code>denied</code> / <code>derived</code></td><td>INTEGER/TEXT NULL</td><td>退出细节（0.2.0 线由结果文本标记推导，derived=1 标注）</td></tr>
+<tr><td><code>background</code> / <code>timeout_ms</code> / <code>sandbox</code></td><td>INTEGER/INTEGER/TEXT NULL</td><td>后台 / 超时 / 沙箱</td></tr>
+<tr><td><code>cmd</code> / <code>cmd_truncated</code> / <code>cmd_description</code> / <code>cmd_cwd</code></td><td>TEXT/…</td><td>命令文本（≤maxCommandChars=4096，shell/pwsh/run_code 才有；命令页显示必需，属「命令」而非会话原文）</td></tr>
+<tr><td><code>program</code></td><td>TEXT NULL</td><td>commandProgramsOf() 解析的程序名（命令页归组/tally 查询键；替代前端解析）</td></tr>
+<tr><td><code>out_chars</code> / <code>out_truncated</code> / <code>stderr</code></td><td>INTEGER</td><td>输出规模元数据（<b>输出文本不入库</b>，按需 RPC 取）</td></tr>
+</table>
+<p class="small"><b>索引</b>：UNIQUE<code>(session_id, call_id)</code>；<code>(session_id, start_time)</code>（命令页游标）、<code>(day, session_id)</code>（按日工具聚合）、<code>(session_id, name)</code>、<code>(name)</code>、<code>(program)</code>。</p>
+
+<h3>5.6 <code>surface_nodes</code> — 上下文表面（时间旅行基础）<span class="tag new">新</span></h3>
+<p class="small">1 表面节点 1 行；compaction/prune/system 替换 → 被移除节点 UPDATE <code>gone_seq</code>（真实上下文退出事件，非裁剪），替换节点正常 INSERT。现 foldState 的 surface 数组与 archived 数组由此一张表表达。</p>
+<table>
+<tr><th style="width:205px">字段</th><th style="width:80px">类型</th><th>含义</th></tr>
+<tr><td><code>session_id</code> + <code>seq</code> PK</td><td>TEXT+INTEGER</td><td>节点事件 seq</td></tr>
+<tr><td><code>time</code></td><td>INTEGER NULL</td><td>事件时间</td></tr>
+<tr><td><code>cat</code></td><td>TEXT CHECK</td><td>'user'|'inject'|'skill'|'assistant'|'tool'</td></tr>
+<tr><td><code>tokens</code></td><td>INTEGER</td><td>估值 tokens</td></tr>
+<tr><td><code>reasoning_tokens</code> / <code>answer_tokens</code> / <code>call_tokens</code></td><td>INTEGER NULL</td><td>assistant 拆分（live 子集记账）</td></tr>
+<tr><td><code>imgs</code></td><td>INTEGER NULL</td><td>图片块数</td></tr>
+<tr><td><code>form</code> / <code>name</code> / <code>agent</code></td><td>TEXT NULL</td><td>注入 form / 注入或技能标签 / agent 别名（compat §3.11）</td></tr>
+<tr><td><code>tool</code> / <code>skill</code></td><td>TEXT NULL</td><td>工具名（tool/skill 行）/ 装载的技能名</td></tr>
+<tr><td><code>is_error</code></td><td>INTEGER</td><td>tool/result 错误</td></tr>
+<tr><td><code>calls</code></td><td>TEXT NULL</td><td>assistant 行前 3 个工具调用名 JSON</td></tr>
+<tr><td><code>preview</code></td><td>TEXT NULL</td><td>≤2,000 字符显示预览（首段文本/notice summary/sections 名；派生预览，非原文）。<b>评审修订</b>：取 2,000 而非 200 —— requestDetail/browserRows 直接渲染该文本且今日 wire 不截断（requestDetail.tsx:80-88），200 会造成可见回归；超长正文仍走 history RPC 按需取全文。列入视觉验收项</td></tr>
+<tr><td><code>gone_seq</code></td><td>INTEGER NULL</td><td>移除事件 seq（NULL=仍在上下文；时间旅行与增量 delta 的墓碑键）</td></tr>
+</table>
+<p class="small"><b>索引</b>：PK (session_id, seq)（时间旅行 <code>seq&lt;=X AND (gone_seq IS NULL OR gone_seq&gt;X)</code> 走主键范围扫）；部分索引 <code>(session_id, gone_seq) WHERE gone_seq IS NOT NULL</code>（归档窗口）。</p>
+
+<h3>5.7 <code>system_prompts</code> — 系统提示纪元 <span class="tag new">新</span></h3>
+<table>
+<tr><th style="width:190px">字段</th><th style="width:90px">类型</th><th>含义</th></tr>
+<tr><td><code>session_id</code> + <code>seq</code> PK</td><td>TEXT+INTEGER</td><td>system/message 事件 seq</td></tr>
+<tr><td><code>time</code> / <code>tokens</code></td><td>INTEGER</td><td>时间 / 估值 tokens（estimateSystemContent 同口径）</td></tr>
+</table>
+<p class="small">被替换提示按 fold 语义 DELETE（fold.ts:376-377）；cur_system = 最新行 tokens（写入 sessions.cur_total 参与方，分类构成现算来源之一）。</p>
+
+<h3>5.8 <code>header_epochs</code> + <code>header_tools</code> — 工具清单纪元 <span class="tag new">新</span></h3>
+<table>
+<tr><th style="width:190px">表/字段</th><th style="width:90px">类型</th><th>含义</th></tr>
+<tr><td><code>header_epochs</code>: session_id + seq PK</td><td>TEXT+INTEGER</td><td>request/header 事件 seq；<code>time</code>、<code>reason</code>（initial|resume|change|series）。<b>不设 system_tokens 列（评审修订）</b>：request/header 从不携带 system 文本（dsh EpochHeader.system 为 never），现 headers.ts 的 systemTokens 仅来自 legacy 迁移态回填（headers.ts:103-107），新折叠除迁移外恒缺 —— 系统 tokens 一律由 system_prompts 表承担</td></tr>
+<tr><td><code>header_tools</code>: PK (session_id, epoch_seq, ordinal)</td><td>TEXT+…</td><td>每纪元逐工具：<code>name</code>、<code>tokens</code>（estimateToolSchema 估值）、<code>plugin</code>（静态归因）</td></tr>
+</table>
+<p class="small">tools_tokens 当前值 = 最新纪元 SUM(tokens)（构成现算来源之一）；0.2.0 线 plugin 缺失时由 attribution 现解析补齐。</p>
+
+<h3>5.9 <code>events</code> — 上下文事件时间线 <span class="tag new">新</span></h3>
+<p class="small">对应现 ContextEventRecord（fold 推入 st.events 的行）：inject / compaction / prune / model / mode。</p>
+<table>
+<tr><th style="width:190px">字段</th><th style="width:90px">类型</th><th>含义</th></tr>
+<tr><td><code>session_id</code> + <code>seq</code> PK</td><td>TEXT+INTEGER</td><td>事件 seq</td></tr>
+<tr><td><code>time</code> / <code>kind</code></td><td>INTEGER/TEXT</td><td>时间 / 'inject'|'compaction'|'prune'|'model'|'mode'</td></tr>
+<tr><td><code>sub</code> / <code>form</code> / <code>name</code> / <code>agent</code> / <code>detail</code></td><td>TEXT NULL</td><td>'skill' 标注 / 注入 form / 注入·技能·mode 名 / agent 别名 / notice 摘要 ≤200 字</td></tr>
+<tr><td><code>tokens</code> / <code>gross_tokens</code> / <code>node_count</code></td><td>INTEGER NULL</td><td>注入 tokens / compaction 移除毛额 / shadowed 节点数</td></tr>
+<tr><td><code>model_from</code> / <code>model_to</code></td><td>TEXT NULL</td><td>模型切换（避开 SQL 关键字 from/to）</td></tr>
+</table>
+<p class="small"><b>索引</b>：<code>(session_id, kind)</code>（事件卡类别开关）。turn/step 富化（现 attachTurnSpans 的 from_turn/from_step/turn/step）<b>不设列</b> —— query/events 以 requests JOIN 现算（事件 seq 之前最近的请求行），避免折叠端维护冗余投影。注：技能注入同时出现在 events（时间线显示）与 skill_loads（统计源），两者职责不同、各自完整。</p>
+
+<h3>5.10 <code>file_ops</code> — 文件活动 <span class="tag new">新</span></h3>
+<table>
+<tr><th style="width:190px">字段</th><th style="width:90px">类型</th><th>含义</th></tr>
+<tr><td><code>session_id</code> + <code>seq</code> PK</td><td>TEXT+INTEGER</td><td>结算事件 seq</td></tr>
+<tr><td><code>time</code> / <code>kind</code> / <code>tool</code></td><td>INTEGER/TEXT</td><td>时间 / 'read'|'write'|'search' / 工具名</td></tr>
+<tr><td><code>path</code></td><td>TEXT</td><td>文件路径（元数据，非原文）</td></tr>
+<tr><td><code>is_error</code> / <code>lines_added</code> / <code>lines_removed</code></td><td>INTEGER</td><td>错误 / 增删行数（文件卡聚合键）</td></tr>
+<tr><td><code>detail</code></td><td>TEXT NULL</td><td>≤200 字摘要（如 diff 概述）</td></tr>
+<tr><td><code>hits</code></td><td>INTEGER NULL</td><td>搜索命中数</td></tr>
+<tr><td><code>read_start</code> / <code>read_count</code> / <code>read_est</code></td><td>INTEGER NULL</td><td>读取窗口（est=1 为估算）</td></tr>
+<tr><td><code>parent_seq</code> / <code>program</code></td><td>INTEGER/TEXT NULL</td><td>run_code 外层 / 其 description</td></tr>
+<tr><td><code>is_pattern</code></td><td>INTEGER</td><td>搜索 pattern 操作标记</td></tr>
+</table>
+<p class="small"><b>索引</b>：<code>(session_id, path)</code>（文件卡 GROUP BY path）。现 fileOpsFloor/gone 裁剪列取消 —— 全量行 + SQL 游标替代。</p>
+
+<h3>5.11 <code>skill_loads</code> — 技能装载账本 <span class="tag new">新</span></h3>
+<table>
+<tr><th style="width:190px">字段</th><th style="width:90px">类型</th><th>含义</th></tr>
+<tr><td><code>session_id</code> + <code>seq</code> PK</td><td>TEXT+INTEGER</td><td>来源事件 seq</td></tr>
+<tr><td><code>time</code> / <code>day</code> / <code>name</code> / <code>source</code></td><td>INTEGER/TEXT</td><td>装载时间 / 记账日 / 技能名 / 'invocation'|'result'|'dispatch'（三路径统一，activity.ts:199-321）</td></tr>
+</table>
+<p class="small"><b>索引</b>：<code>(name, day)</code>、<code>(day, session_id)</code>、<code>(session_id, name)</code>。tally/skills 卡 = GROUP BY name：COUNT(*)、COUNT(DISTINCT session_id)、MAX(time) —— 三路径全覆盖且无 500 名上限。</p>
+
+<h3>5.12 <code>timing_spans</code> — 计时 span 行 <span class="tag new">新</span></h3>
+<table>
+<tr><th style="width:190px">字段</th><th style="width:90px">类型</th><th>含义</th></tr>
+<tr><td><code>session_id</code> + <code>span_seq</code> PK</td><td>TEXT+INTEGER</td><td>会话内单调序号（折叠器分配，重建时随行集重置）</td></tr>
+<tr><td><code>start_time</code> / <code>end_time</code> / <code>kind</code></td><td>INTEGER/TEXT</td><td>起止 / 'ttft'|'reasoning'|'text'|'toolarg'|'tools'|'other'</td></tr>
+</table>
+<p class="small"><b>索引</b>：<code>(session_id, start_time)</code>。现 TIMING_SPANS_MAX=2000 截断取消；步与 tool_busy 归 steps/tool_calls 行，span 表专职时间带可视化。</p>
+
+<h3>5.13 <code>fold_state</code> — 折叠工作态缓存（可再生）<span class="tag new">新</span></h3>
+<table>
+<tr><th style="width:190px">字段</th><th style="width:90px">类型</th><th>含义</th></tr>
+<tr><td><code>session_id</code> PK</td><td>TEXT</td><td>与 sessions 行同事务写入</td></tr>
+<tr><td><code>last_seq</code></td><td>INTEGER</td><td>≤ sessions.last_seq：行事务推进权威水位；活路径本表按 turn 边界落后（崩溃后从本水位重放已落库事件，UPSERT 幂等），回填路径随会话收尾一次写入</td></tr>
+<tr><td><code>state_json</code></td><td>TEXT</td><td>head-only TimelineState + ActivityState（现投影缓存已验证的 zod 载荷）+ 行发射游标；用于 <b>read(last_seq+1) 增量续折</b></td></tr>
+<tr><td><code>updated_at</code></td><td>INTEGER</td><td>LRU 依据；总字节超上限（建议 64 MB）时按最旧逐出（纯缓存，逐出仅损失增量性 → 回退全量重折）</td></tr>
+</table>
+<div class="note warn"><b>边界说明</b>：head-only 载荷中的 surface 数组是继续折叠所必需（compaction 替换需在内存表面定位 seq 并回扣 tokens），体积随长会话线性增长，故以 LRU 上限约束，超限会话退回全量重折叠（worker 路径，仅发生在日志增长时）。<b>落库节奏与幂等（评审修订）</b>：fold_state 随 turn/end 与 session/disposed 落库，不随每个步骤重写 100KB+ 的 blob（避免 WAL 放大）；因此崩溃后可能从较早水位重放「行已落库」的事件 —— <b>所有行写入必须是 UPSERT</b>（重放折叠是确定性纯函数，重放结果逐值相同；billed_tokens/cur_total 为 flush 时按行集现算的绝对值，不受重放影响），sessions.last_seq 以行事务为准推进、state 允许暂时落后。</div>
+
+<h3>5.14 关系总览</h3>
+<pre><code>meta(1行)                          sessions(1行/会话, WITHOUT ROWID, TEXT PK)
+                                     │ 1:N，全部子表 FK → sessions(id) ON DELETE CASCADE
+    ┌──────────┬──────────┬─────────┼──────────┬───────────┬──────────┬──────────┐
+ steps      requests   tool_calls  surface_nodes events   file_ops  skill_loads timing_spans
+(步骤·行为) (调用·经济) (工具/命令)  (上下文表面)  (事件线)  (文件活动) (技能账本)   (时间带)
+                                     ├ system_prompts (1:N)
+                                     ├ header_epochs (1:N) ──1:N── header_tools
+                                     └ fold_state (1:1, 可再生缓存)</code></pre>
+<!-- ============ ⑥ ============ -->
+<h2 id="s6">⑥ 索引设计与查询模式对照（需求 11）</h2>
+<p>原则：每条索引必须对应一个真实查询模式；WITHOUT ROWID 联合主键本身就是最主用的聚簇索引（按会话取全部行 = 一次范围扫）。</p>
+<table>
+<tr><th style="width:330px">查询模式（消费板块）</th><th style="width:290px">索引 / 访问路径</th></tr>
+<tr><td>会话卡片页（排序 recent / tokens / context；分页 12）</td><td><code>sessions(updated_at DESC)</code>、<code>sessions(billed_tokens DESC)</code>、<code>sessions.cur_total</code> 排序；页行构成 → 12 个 id IN 走各子表 PK 前缀</td></tr>
+<tr><td>coverage / archived / 分组过滤</td><td><code>sessions(archived, updated_at)</code>、<code>sessions(workspace_title)</code></td></tr>
+<tr><td>跨会话按日聚合（KPI、日热力图、按日 tokens/cost）</td><td><code>requests(day, session_id)</code>、<code>steps(day)</code>、<code>tool_calls(day, session_id)</code>、<code>skill_loads(day, session_id)</code> —— 单索引范围扫，无全表遍历；<b>范围由查询窗口界定</b>（30d 窗口只扫近 30 天的行），轮询成本 ∝ 活跃速率 × 窗口，不随语料总量增长（评审二轮修订）</td></tr>
+<tr><td>窗口内活跃会话集合（summary / page 的 scope 集推导）</td><td>各子表 (day, session_id) 窗口范围扫 + DISTINCT session_id 再 JOIN sessions —— 不做逐会话 EXISTS 探测，仍为窗口界（评审二轮修订）</td></tr>
+<tr><td>名目 tally（skills / tools / programs / models）</td><td><code>skill_loads(name, day)</code>、<code>tool_calls(name)</code>、<code>tool_calls(program)</code>、<code>requests(model)</code>；「sessions 数」= COUNT(DISTINCT session_id)，last = MAX(time)</td></tr>
+<tr><td>单会话趋势序列 / 步骤卡 / 时间带</td><td>各子表 PK (session_id, seq) 范围扫 + LIMIT；<code>steps(session_id, start_time)</code>、<code>timing_spans(session_id, start_time)</code></td></tr>
+<tr><td>命令页（游标翻页 / 失败 / 慢 / 后台过滤）</td><td><code>tool_calls(session_id, start_time)</code> 游标 <code>WHERE seq? &lt; before ORDER BY start_time DESC</code>；status/is_error/program 走同一索引后过滤（命令量级小）</td></tr>
+<tr><td>文件卡聚合（按 path 汇总增删行数）</td><td><code>file_ops(session_id, path)</code> GROUP BY</td></tr>
+<tr><td>时间旅行 assemble(seq) / delta</td><td>surface_nodes PK 范围扫 <code>seq&lt;=X AND (gone_seq IS NULL OR gone_seq&gt;X)</code>；墓碑部分索引 <code>(session_id, gone_seq) WHERE gone_seq IS NOT NULL</code></td></tr>
+<tr><td>家族树 / fleet 汇总（递归 CTE）</td><td><code>sessions(parent_session)</code>；家族 tokens = SUM(billed_tokens) GROUP BY family_root（CTE 求根）</td></tr>
+<tr><td>工具配对（result 回写 call 行）</td><td>UNIQUE <code>tool_calls(session_id, call_id)</code></td></tr>
+<tr><td>unchanged 协议</td><td>meta 单行读（data_generation / pricing_version）+ 命中即 <code>{unchanged:true}</code>，零行序列化</td></tr>
+</table>
+<div class="note"><b>写入成本核算</b>：全库索引 ≈ 24 条，全部为单会话批次事务内的追加型写；实测验收门槛定为「10 万事件会话全量折叠写库 ≤ 3s（worker 路径）」「单步骤活写通 ≤ 5ms」。大回填完成后可选 <code>ANALYZE</code> 优化计划。<b>轮询成本的真正变量（评审二轮修订）</b>：overview 各聚合按 (day, session_id) 索引做<b>窗口界</b>范围扫——成本 ∝ 活跃速率（行/天）× 窗口长度，与语料总量无关；语料总量只影响 boot 回填、身份巡检与存储体积。query/days 是现状唯一无窗口的全库聚合（overview part=days 仅 coverage 过滤，靠 400 天账本兜底），新设计为其加 range（默认热力图 8 周窗）后此例外消除。<b>预案触发条件（可观测）</b>：实测 summary P99 &gt; 50ms（M4 记录基线），或 query/status 报告的「近 30 天请求行数」&gt; 2×10⁵（极端活跃速率，窗口本身变大）——任一命中即落地「按日粒度物化缓存」（带 generation 失效；principles 缓存条款：稳定 key/TTL/上限），不回到无界预聚合。</div>
+
+<!-- ============ ⑦ ============ -->
+<h2 id="s7">⑦ API 设计（需求 3/5/6）</h2>
+
+<h3>7.1 统一协议</h3>
+<pre><code>POST api/dsh-context/&lt;route&gt;          // connection.fetch.register 精确路径注册（现状同款）
+→ { ok: true, value, generation, pricing_version?, unchanged?: true }
+// 客户端请求可携带 { generation?, pricing_version? }：
+//   服务端无状态比对：两值与当前库内值一致 → { ok:true, generation, unchanged:true }（零行序列化）；
+//   "该请求键是否仍持有效载荷"由客户端本地判定（持有 payload 的 generation 与回值比对）
+//   会话级路由另受 sessions.detail_rev 门控（等价现 detailRev 语义）
+错误 → { ok:false, error:{ code, message } }；参数上限：limit≤500、query≤500 字、ids≤256</code></pre>
+
+<h3>7.2 路由总表（16 条查询 + 6 条保留）</h3>
+<table>
+<tr><th style="width:225px">路由 <span class="tag new">新</span></th><th>参数 → 响应要点</th><th style="width:190px">取代 / 消费板块</th></tr>
+<tr><td><code>query/sessions</code></td><td>scope{coverage,group,day,range,query,model?,running?,pick?} + sort(recent|tokens|context) + page/pageSize <b>或 ids[]</b> → 行数组{title,cwd,archived,running,workspace_title,updated_at,created_at,billed_tokens,cur_total,cur_parts[],model,context_window,max_output_tokens,last_user,parent_session,origin,cost_usd?,fold_status} + {total,scope_total,groups[]}。<b>语义（评审修订）</b>：恒排除 blank 会话；行含 fold_status（pending/failed/unsupported → 前端渲染 «—»，绝不显示 0）；tokens/costUsd 为<b>家族合并值</b>（root+subagent 后代，parent_session 递归 CTE，与现 rowsOf 家族聚合同口径），parts/cur_total 为根会话自身值</td><td>overview part=page + snapshot + heads(批量模式) —— Overview 卡片表、fleet 树卡头部、当前会话锚定</td></tr>
+<tr><td><code>query/summary</code></td><td>scope + parts[kpi|tokens|usage|timing|cost] → counts{sessions,archived,billed…}, tokenParts[], cacheHit, costUsd+costSessions, timing{lifetime,window}, coverage。窗口界说明：tokens/turns/windowTiming/cost/cacheHit/tokenParts 仅聚合窗口内天数（子表 day 索引范围扫）；timing.lifetime 为「窗口内活跃会话的终生累计」（与现状同语义），成本 ∝ 活跃会话数 × 各自寿命，与语料总量亚线性相关</td><td>overview part=summary —— 六 KPI 卡、donut、StatsTiming、折叠横幅</td></tr>
+<tr><td><code>query/days</code></td><td>scope{coverage,range} → [{key, tokens, calls, sessions, tool_calls, tools_ms, wall_ms, turns, cost_usd}]。<b>range 语义（评审二轮修订）</b>：默认热力图 8 周窗（56 天）——修掉现状 part=days「无窗口全库聚合」这最后一个例外（现状靠 400 天账本上限兜底）；热力图分位基线随之从「全部历史天」变为「可见窗口」，列入视觉验收项</td><td>overview part=days —— 热力图、7 日用量条（<b>新增</b>每日工具/时长列，热力图下钻无需再请求）</td></tr>
+<tr><td><code>query/tally</code></td><td>scope + field(skills|tools|programs|models|providers) → [{name, n, sessions, last}]</td><td>overview part=tally —— 技能/工具/命令卡（<b>新增</b> models/providers 名目）</td></tr>
+<tr><td><code>query/context</code></td><td>{sessionId, rev?} → 当前构成(cur 系+分类拆分)、counts、last、timing 总量、systems 尾窗、header_epochs+tools 尾窗、costRead、fold_status/unsupported</td><td>detail(head) / snapshot.current / contextHeaders / 升级门 unsupported —— 头部构成卡、系统提示与工具清单卡</td></tr>
+<tr><td><code>query/timeline</code></td><td>{sessionId, rev?, seq?, limit?, archive:{before_gone, limit}} → {nodes[], dropped_total, archive[], surface_floor?, archive_floor? 游标}；seq 给定即返回该时刻视图（SQL 时间旅行）。<b>窗口必须保留现状「溢出 inject/skill 节点钉住 + surfaceFloor/droppedNodes」语义</b>（foldState.ts:242-264；SQL 两段查询：尾窗 PK 倒序 LIMIT + 溢出段 cat IN ('inject','skill')，评审修订）</td><td>facts(nodes) / detail.nodes / delta 的视图基准 —— 上下文浏览器、DNA 带、弹窗</td></tr>
+<tr><td><code>query/requests</code></td><td>{sessionId?, scope?, turn?, day?, model?, cursor/limit} → 请求行数组（构成+usage+gen_ms/active_ms；首 token 等待在 query/steps 的 ttft_ms）</td><td>facts(series/requests) —— 趋势图、RequestDetail、按 turn 聚合（SQL GROUP BY turn）</td></tr>
+<tr><td><code>query/steps</code></td><td>{sessionId, cursor/limit} → 步骤行（wall/active/wait/idle/busy/ttft/request_seq）</td><td>StatsTiming 步骤细节（<b>新能力</b>：空步骤可见、逐步时间可查）</td></tr>
+<tr><td><code>query/tool-calls</code></td><td>{sessionId?, scope?, status?('failed'|'slow'|'background'), program?, query?, sort(latest|slowest), before_seq, limit} → 工具/命令行数组 + total</td><td>facts(commands) / commands 路由 —— 命令页、命令面板（程序名归组、过滤、tally 全部 host 化）</td></tr>
+<tr><td><code>query/file-ops</code></td><td>{sessionId, mode:'list'|'paths', kind?, cursor/limit} → 明细或 {path 汇总: count/added/removed/last/err}</td><td>facts(files) —— 文件卡（GROUP BY host 化，前端 fileActivity.ts 聚合删除）</td></tr>
+<tr><td><code>query/events</code></td><td>{sessionId, kinds?, cursor/limit} → 事件行数组</td><td>facts(events) —— 事件卡、trend 标记</td></tr>
+<tr><td><code>query/spans</code></td><td>{sessionId, before?/limit} → span 行</td><td>facts(spans) —— StatsTiming 时间带</td></tr>
+<tr><td><code>query/skill-loads</code></td><td>{scope?, sessionId?, name?, day?, cursor/limit} → 装载行</td><td>技能卡下钻明细（<b>新</b>）</td></tr>
+<tr><td><code>query/family</code></td><td>{rootId|sessionId} → 递归 CTE 家族：成员[{id,title,origin,running,depth,order,billed_tokens,calls,cost_usd?,messages_total?}] + 汇总；可带 needs_history 标记</td><td>fleet summary 会话面 + subagentCostFoldOf 前端 BFS —— MissionPulse、家族成本</td></tr>
+<tr><td><code>query/cost</code></td><td>scope 或 sessionId → GROUP BY(provider,model,period) usage 行 × 价目解析 → {usd, ready, faces[], misses[]}（价目表永不出库）</td><td>overview cost 卡 / costRead —— 成本卡、家族成本</td></tr>
+<tr><td><code>query/status</code></td><td>{} → {schema_version, generation, pricing_version, ready, db_bytes, coverage{complete,remaining,failed,total,covered,unsupported,running}, counts{sessions,steps,requests,…}, harness_supported}</td><td>backfill 轮询补充 / 升级门 / 诊断</td></tr>
+<tr><td><code>backfill</code> <span class="tag keep">保留</span></td><td>POST {} → 触发对账+回填 pass；coverage 同 query/status（保留以兼容轮询习惯）</td><td>overview 自动续填</td></tr>
+<tr><td><code>delta</code> <span class="tag rep">改造</span></td><td>入参/出参 wire 不变；内部由 surface_nodes 两个边界视图现算（removed = gone_seq ∈ (base, now] 按类聚合）</td><td>上下文浏览器增量</td></tr>
+<tr><td><code>fleet</code> <span class="tag rep">收窄</span></td><td>仅保留消息面（relay/mailbox/settled，原始日志冷折）；成员/家族统计移交 query/family</td><td>任务脉搏消息流</td></tr>
+<tr><td><code>balance / version / skills / attachment / recom</code> <span class="tag keep">保留</span></td><td>不变（非会话数据面）</td><td>—</td></tr>
+<tr><td><code>snapshot / heads / detail / facts / commands / overview</code> <span class="tag drop">删除</span></td><td>职责全部被上表吸收</td><td>—</td></tr>
+</table>
+
+<h3>7.3 组合示例（前端自由拼装，无板块耦合）</h3>
+<div class="grid2">
+<div class="card"><h4>「最近 7 天用了某技能的会话」</h4>
+<pre><code>POST query/tally(field:'skills',
+  scope:{range:'7d'})            // 找名目
+POST query/sessions(
+  scope:{range:'7d',
+         pick:{field:'skills',
+               name:'code-review'}})   // 反查会话
+POST query/days(
+  scope:{...同上})              // 该集合的日分布</code></pre></div>
+<div class="card"><h4>「某会话第 40 步前后的上下文增量」</h4>
+<pre><code>POST query/requests {sessionId,
+  limit:1, offsetFromEnd:40}     // 定位 seq
+POST query/timeline {sessionId,
+  seq: 那一行的 seq}              // 该时刻视图
+POST delta {sessionId,
+  seq: now, baseSeq: 那一行的 seq} // 完整增量</code></pre></div>
+</div>
+<!-- ============ ⑧ ============ -->
+<h2 id="s8">⑧ 回填与及时刷新机制（主动回填 / 写通）</h2>
+
+<h3>8.1 Boot 对账（启动即主动回填，活跃优先）</h3>
+<pre><code>apply()
+ 1. 打开/门禁/重建数据库（§4.1）
+ 2. listSessions() 对账：准入(有 cwd 或 live) → INSERT pending / 标记消失集合(延迟删除)
+ 3. 排序回填队列：updated_at DESC（活跃、最近优先 —— host-client-principles「主动回填活跃会话」）
+ 4. 对每个待处理会话（fold_status='pending'|'failed' 或 身份已变；live 会话由写通独占行集写权、不进冷回填）：
+      coldReads.admit(堆门, FIFO)                      ← 沿用现状（coldRead.ts）
+      ├ 有 fold_state 且 sessions.last_seq 有效 → persistence.open().read(last_seq+1) 增量续折
+      ├ 事件 ≤30k → 切片折叠（150ms 块预算自适应，backfill.ts 现逻辑）
+      └ 事件 >30k → foldWorker 行批次折叠（离线程，不阻塞宿主事件循环）
+      单会话 = 单事务（BEGIN IMMEDIATE…COMMIT）：DELETE 旧行 + INSERT 行集 + UPDATE sessions + UPSERT fold_state
+      节流沿用现状：8s 工作预算 / 2s 暂停 / 25ms 最小间隔（backfill.ts:59-95）
+ 5. coverage 由 SQL 计数（pending/failed/unsupported/total/covered），query/status 暴露</code></pre>
+<div class="note warn"><b>事务预算（评审修订）</b>：「单会话 = 单事务」仅适用于 ≤5 万行的常规行集；更大行集<b>分片提交</b>（每片 ≤2 万行一个事务，水位随片推进，期间 sessions.fold_status='folding'，前端按 «—» 渲染），避免数百 ms 级同步阻塞事件循环。折叠计算仍整会话一次完成，分片只作用于写入；增量续读的追加式写入不受此限（单调追加，随时可见）。</div>
+
+<h3>8.2 活会话写通（及时刷新的根）</h3>
+<table>
+<tr><th style="width:200px">触发</th><th>动作</th></tr>
+<tr><td><code>ctx.on('session/event')</code></td><td><b>工作态必须覆盖全部活会话（评审修订）</b>——行必须随事件推进，任何会话被排除都会滞留旧值：内存工作态是 fold_state 之上的 LRU 缓存，<b>驱逐安全</b>——下次事件到达时从 fold_state 续折（read(last_seq+1)），不整会话重折。逐事件推折叠；<b>行在终结点落库</b>：请求行(assistant/message)、步骤行(start/end)、工具行(call/result)、表面行、事件行即时入「待写批次」</td></tr>
+<tr><td>刷库时机</td><td>200 事件 或 2s 防抖 或 step/end / turn/end / <code>session/disposed</code>（与 harness 投影缓存写屏障同策略：事件数阈值 + 生命周期强制点，dsh: session-projection-cache/src/index.ts:312-363）→ 一个事务：批次行 + sessions（billed_tokens/cur_total 按行集现算回写 + last_seq/detail_rev++）+ fold_state（turn 边界）</td></tr>
+<tr><td>失序 / 缺口</td><td>seq ≤ state_seq 丢弃（现状 DetailShadow 同款守卫）；缺口检测 → observeSession 重种子 + 缓冲重放（现状逻辑照搬）</td></tr>
+<tr><td>session/disposed</td><td>终刷 + stat 身份落列；之后走冷会话对账路径</td></tr>
+</table>
+
+<h3>8.3 增量续折（崩溃/重启后的最终一致性）</h3>
+<p>启动对账发现身份变化（stat revision / fs.stat size+mtime 变）而 fold_state 可用 → <code>read(last_seq+1)</code> 续折续写。<b>根治现状缺陷</b>：ungraceful kill 后投影缓存行可能过期供给（compat §6.5），新设计中水位线 <code>last_seq</code> 是行集与日志一致性的硬约束，永远可以便宜地补齐尾巴。</p>
+
+<h3>8.4 请求期扫描与过期对账</h3>
+<ul>
+<li>query/sessions 等路由附 5s TTL 扫描窗（现状 makeScanWindow 复用）：listSessions 差集 → 新会话 INSERT / 消失会话 DELETE；live 会话 running 刷新；workspace/agents 镜像列刷新。</li>
+<li>冷会话身份对账只做 <code>fs.stat(location.path)</code>（每轮一次、并发 16，现状 overviewCache.refresh 同款）—— <b>查询路径永不触发折叠</b>，脏会话只进回填队列。<b>规模注（评审二轮修订）</b>：stat 巡检是 O(会话数)，语料 ~10⁴ 时每轮 10⁴ 次 stat 偏重——分层巡检：updated_at 新近（近 7 天）会话随扫描窗巡检，更旧会话降频（分钟级一轮）。此为继承自现状架构的既有点，非新设计引入。</li>
+</ul>
+
+<h3>8.5 镜像列与外部量的刷新触发</h3>
+<table>
+<tr><th style="width:220px">数据</th><th style="width:280px">刷新触发</th><th>陈旧上界</th></tr>
+<tr><td>title / blank / last_prompt_at / updated_at</td><td>扫描窗 listSessions 对账</td><td>≤5s（扫描 TTL）</td></tr>
+<tr><td>archived / workspace_title</td><td>workspaceRegistry 读取于扫描窗 + 签名比对变更即全列 UPDATE</td><td>≤5s</td></tr>
+<tr><td>running</td><td>扫描窗读 agents</td><td>≤5s（与现状持平）</td></tr>
+<tr><td>pricing_version / 成本</td><td>价目书 1h TTL；刷新 → generation 重算，客户端 cost ladder 复用</td><td>≤1h（现状持平）</td></tr>
+</table>
+
+<h3>8.6 变更到达前端的通道（保持现状模型，协议更简）</h3>
+<ul>
+<li><b>不变量协议</b>：所有查询路由支持 generation+pricing_version unchanged 快答；会话级另受 detail_rev 门控 —— 客户端 30s 可见轮询 / invalidation 订阅的消费模型原样保留。</li>
+<li><b>失效主题</b>：sessions/overview/fleet/heads/pricing 五主题保留（活写通事务提交后按需触发，服务端产生而非仅客户端自发自消）；'heads' 名随 heads 路由退役可在前端更名 'family'（客户端内部命名，不影响协议）。</li>
+<li>coverage 进行中 → 前端按现状指数退避触发 backfill 路由；完成后 generation 变化自动带出全量数据。</li>
+</ul>
+
+<!-- ============ ⑨ ============ -->
+<h2 id="s9">⑨ 前端改造（需求 3/6）</h2>
+
+<h3>9.1 板块 → API 映射（逐板块重接线）</h3>
+<table>
+<tr><th style="width:160px">板块</th><th>原通道</th><th>新通道（全部一次 SQL 命中）</th></tr>
+<tr><td>Context 构成头</td><td>投影座席 slim head</td><td><code>query/context</code>（detail_rev 门控）</td></tr>
+<tr><td>上下文浏览器 / DNA / 弹窗</td><td>facts(nodes)+delta+assemble(前端)</td><td><code>query/timeline</code>（seq 时间旅行 SQL 化）+ <code>delta</code>（同 wire）——客户端 <code>assembled</code> WeakMap、increment 重算全删</td></tr>
+<tr><td>趋势图 / RequestDetail</td><td>facts(series)+前端按 turn 聚合</td><td><code>query/requests</code>（GROUP BY turn 服务端可选聚合模式）</td></tr>
+<tr><td>StatsTiming</td><td>facts(spans)+timing 总量</td><td><code>query/context</code>(timing) + <code>query/steps</code> + <code>query/spans</code>（逐步 TTFT/TPS 不再受 2000 span 上限）</td></tr>
+<tr><td>文件卡</td><td>facts(files)+前端按 path 聚合</td><td><code>query/file-ops</code>（mode:'paths' 服务端聚合）</td></tr>
+<tr><td>命令页/面板</td><td>facts(commands)+commands 分页+前端解析过滤</td><td><code>query/tool-calls</code>（program/status/query/sort 全服务端）</td></tr>
+<tr><td>事件卡</td><td>facts(events)+前端 kind 开关</td><td><code>query/events</code>（kinds 服务端过滤）</td></tr>
+<tr><td>Overview 六卡/热力图/会话表/tally</td><td>overview 4 parts</td><td><code>query/summary|days|sessions|tally</code>（同参数风格、统一 generation 协议）</td></tr>
+<tr><td>Fleet / MissionPulse</td><td>fleet+heads+前端家族求和</td><td><code>query/family</code>（递归 CTE 家族+成本）+ <code>query/sessions</code>(ids) 树卡 + <code>fleet</code>(仅消息面)</td></tr>
+<tr><td>家族/子代理成本</td><td>subagentCostFoldOf 前端 BFS</td><td><code>query/family</code> / <code>query/cost</code></td></tr>
+<tr><td>折叠横幅 / 升级门</td><td>backfill 覆盖 + snapshot.unsupported</td><td><code>query/status</code>（coverage + harness_supported + fold_status 分布）</td></tr>
+<tr><td>历史内容 / 命令输出 / 附件</td><td>RPC + attachment 路由</td><td>不变（原始文本按需直读 dsh，不落库 —— 需求 8）</td></tr>
+</table>
+
+<h3>9.2 客户端缓存处置清单</h3>
+<table>
+<tr><th style="width:300px">缓存（file:line 见附录 C.3）</th><th style="width:110px">处置</th><th>理由</th></tr>
+<tr><td>timelineSource DetailStore（64 会话 / 6 MiB 保留缓存）</td><td><span class="tag drop">删除</span></td><td>查询即达（rev 门控），无需跨视图载荷缓存</td></tr>
+<tr><td>assembled WeakMap / derivedCache 全家 / trendChart bandStore / rowCache / titleCache</td><td><span class="tag drop">删除</span></td><td>时间旅行与派生已 SQL 化</td></tr>
+<tr><td>agentHeads heads（128/1 MiB TTL 60s）</td><td><span class="tag drop">删除</span></td><td>query/sessions(ids) 单次批量</td></tr>
+<tr><td>historyContent / historyHeader（5min TTL）</td><td><span class="tag drop">删除</span></td><td>header 纪元走 query/context；正文仍 RPC（原始数据，读得快、留原味）</td></tr>
+<tr><td>fleet landed/historyLanded/fullLanded/facts（4 MiB ×3+）</td><td><span class="tag rep">大幅缩身</span></td><td>家族统计走 query/family；仅消息面板保留 landed（原始消息，无法 SQL 化）</td></tr>
+<tr><td>useCommandLog known map（4000 上限）</td><td><span class="tag rep">缩身</span></td><td>游标分页 + 视图窗口化（useRowWindow 保留），known 只留渲染窗口</td></tr>
+<tr><td>balance localStorage / version / recom 模块缓存</td><td><span class="tag keep">保留</span></td><td>非会话数据面，外部 API 限频需要</td></tr>
+<tr><td>modalStore / viewFocus / viewScroll / warm pending 等视图状态</td><td><span class="tag keep">保留</span></td><td>属「视图状态」非数据缓存（principles 允许）</td></tr>
+</table>
+<div class="note ok">改完后客户端常驻 = 视图状态 + 在途请求 + 渲染窗口；所有数据随查询到达、随 generation 失效 —— 满足「减少或避免前端的缓存；后端如果有的，及时拉取就行」。</div>
+
+<!-- ============ ⑩ ============ -->
+<h2 id="s10">⑩ 兼容性、风险与限制</h2>
+
+<h3>10.1 运行时与支持面</h3>
+<table>
+<tr><th style="width:250px">项</th><th>结论 / 证据</th></tr>
+<tr><td><code>node:sqlite</code> 可用性</td><td>22.13.0 起免 flag（ExperimentalWarning），24 起稳定；dsh 0.2.2 线 engines <code>&gt;=24.9.0</code>（npm @deepseek-ai/dsh）→ 稳定可用；0.2.0/0.2.1 线未声明 engines，插件自身 floor ^22.19.0 → 免 flag 可加载（可能有 ExperimentalWarning，不影响功能）。dsh 自身即用 <code>node:sqlite</code>（session-query-sqlite/schema.ts:44、storage-sqlite 全包）——<b>技术栈与宿主一致</b>。</td></tr>
+<tr><td>dsh 三条支持线（0.2.0-rc.2+ / 0.2.1-rc.2+ / 0.2.2-rc.1+）</td><td>新方案用到的接缝（session/event、observeSession('none')、stat/open/read(offset)、listSessions、connection.fetch.register、workspaceRegistry、agents、storageDomain 无关化）全部是当前代码已在用或 harness 三线共有的契约；无新增接缝。</td></tr>
+<tr><td>投影注册移除的连带</td><td>harness 列表行的 <code>contextTimeline/contextActivity/contextHeaders</code> 键消失——0.2.2 线本就 summary:false 不携带（compat §4）；0.2.0/0.2.1 线列表负载反而变小；无 harness 代码读取插件投影单元（grep 证据见 §2.1）。<b>座席机制分界（评审修订）</b>：客户端 useProjection 座席保留用于 harness 自有单元（contextPressure / contextBreakdown / tokenUsage / sessionStats / subagentCatalog / agentTeam —— 均非本插件注册，不受影响）；仅插件自有的 contextTimeline / contextHeaders / contextActivity 三个座席改走 query 路由。</td></tr>
+<tr><td>兼容矩阵测试</td><td>tests/compat 三线启动探针需重写目标（新 status/context 探针替代投影行探针）；fold-switch 事件族覆盖要求不变（折叠器仍在）。</td></tr>
+</table>
+
+<h3>10.2 风险与缓解</h3>
+<table>
+<tr><th style="width:270px">风险</th><th style="width:90px">级别</th><th>缓解</th></tr>
+<tr><td>大语料回填时长（首次/版本升级）</td><td><span class="tag warn">中</span></td><td>活跃优先排序 + 切片/worker + 8s/2s 节流（现状验证过的节奏）；未完成会话 coverage 显示 «—» 不阻塞使用；增量续折让后续启动近零成本</td></tr>
+<tr><td>同步 SQL 阻塞事件循环</td><td><span class="tag warn">中</span></td><td>所有聚合走 (day,session_id)/(name) 索引范围扫且<b>窗口界</b>（成本 ∝ 活跃速率 × 窗口，非语料总量——§6 评审二轮修订）；列表 LIMIT；验收门槛（§6）：P99 路由 ≤50ms；触发条件见 §6（P99 实测 / 近 30 天行数）；必要时把重聚合移入 worker（行批次返回，方案预留）</td></tr>
+<tr><td>多进程同库（CLI + web 同 profile）</td><td><span class="tag warn">低</span></td><td>WAL + busy_timeout；写入以会话为单位原子换行集，会话级 last-writer-wins；文档声明单写者预期</td></tr>
+<tr><td>fold_state 载荷膨胀</td><td><span class="tag warn">低</span></td><td>64 MB LRU 上限 + 逐出退回全量重折（正确性不受影响，仅增量性损失）</td></tr>
+<tr><td>usage 缺失（无计费数据的路由/模型）</td><td><span class="tag warn">低</span></td><td>计费列 NULL → 成本 «—»（现状同口径，provider usage 权威）</td></tr>
+<tr><td>写入失败（磁盘满/只读）</td><td><span class="tag warn">低</span></td><td>:memory: 降级全功能；事务失败整批回滚保持水位一致；路由 ready:false 兜底</td></tr>
+<tr><td>行为回归（口径漂移）</td><td><span class="tag warn">中</span></td><td>折叠算法不动 → diff-fold 差分继续有效；新增「行集 vs 现投影 wire」对拍测试（同一 fixture 双实现逐字段比对）；KPI/days/tally 与现 overviewAggregate 输出对拍</td></tr>
+</table>
+
+<h3>10.3 明确的限制（诚实声明）</h3>
+<ul>
+<li><b>不做全文检索</b>：消息正文检索应由 dsh sessionQuery FTS（部署可选启用）承担；本库仅 title/cwd/last_user/命令文本的 LIKE。</li>
+<li><b>身份窗口</b>：日志被原地重写且保持 path+size+mtime 的情形不可见（与现状 overviewCache 相同的窗口，非新引入）。</li>
+<li><b>镜像列陈旧 ≤5s</b>（title/archived/running）：与现状请求期直读持平；若未来 harness 推送这些变化可进一步收紧。</li>
+<li><b>多进程写者</b>为会话级 last-wins，不提供跨进程合并语义。</li>
+<li><b>路由契约破坏性变更</b>：旧 14 条路由中 6 条删除、8 条改造，客户端同仓同发，属插件内闭环（无第三方消费面）；版本按 breaking 处理（次版本大版本，如 0.85.0 + compatibility.md 全面更新）。</li>
+</ul>
+
+<!-- ============ ⑪ ============ -->
+<h2 id="s11">⑪ 实施路线与验证</h2>
+<table>
+<tr><th style="width:90px">里程碑</th><th>内容</th><th style="width:330px">验收</th></tr>
+<tr><td><b>M1</b> 地基</td><td>DB 打开/门禁/重建（§4.1）；meta/sessions DAO；STRICT schema + 索引 DDL 单元测试</td><td>版本不符重建、他方库拒开、:memory: 降级三路径测试全绿</td></tr>
+<tr><td><b>M2</b> 折叠→行</td><td>行发射器改造（终结点：请求/步骤/工具/表面/事件/span/技能）；活写通器；fold_state 续折；read(last_seq+1) 增量</td><td><b>对拍测试</b>：现 fixtures 全量重折 → 行集 ↔ 现 TimelineState/ActivityState wire 逐字段一致；diff-fold 继续 0 退出</td></tr>
+<tr><td><b>M3</b> 回填调度</td><td>boot 对账 / 队列排序 / 切片+worker 行批次 / 节流 / coverage SQL 化 / 删除对账</td><td>1,158 会话语料（现状基准）播种内存峰值 &lt; 300 MB、时长 ≤ 现状；coverage 数字与 folds 数一致</td></tr>
+<tr><td><b>M4</b> 查询 API</td><td>16 条路由 + 统一 envelope/generation unchanged；SQL 性能验收（§6 门槛）</td><td>旧 overview 四 parts 输出与新 query/* 输出在基准语料上对拍相等；P99 ≤50ms；query/status 记录行数/库大小基线（§6 规模天花板触发条件的观测起点）</td></tr>
+<tr><td><b>M5</b> 前端重接线</td><td>§9 映射逐板块切换；删除缓存簇；unchanged 协议统一</td><td>浏览器实测（390px→桌面、双语、长会话、/context 弹窗）；payload 字节数与请求数对比报告；堆峰值对比</td></tr>
+<tr><td><b>M6</b> 清场</td><td>删投影注册/JSON 缓存/foldCache/sweep/foldJournal/旧路由与旧测试；compat 矩阵重写；compatibility.md 更新（数据面章节整体重写）</td><td><code>pnpm run check</code> 100% 覆盖；三线 compat 全绿；release notes 迁移说明</td></tr>
+</table>
+<p class="small">测试复用：tests/host fixtures 与 fold-* 套件全部保留（折叠器未变）；overview*/snapshot/heads/facts 等路由测试改造为 DAO/SQL 测试；overviewMemory 变更为 M3 验收基准。</p>
+
+<!-- ============ ⑫ ============ -->
+<h2 id="s12">⑫ 附录</h2>
+
+<h3>A. 旧 → 新映射速查</h3>
+<table>
+<tr><th style="width:330px">旧</th><th>新</th></tr>
+<tr><td>sessionProjections 注册 ×3 + session_projcache 行</td><td>折叠器直写 SQLite（sessions/steps/requests/surface_nodes/… 14 表）</td></tr>
+<tr><td>overview-cache.v1.json（身份键 JSON）</td><td>sessions.log_* 身份列 + last_seq 水位线（行级增量）</td></tr>
+<tr><td>overview part=summary / days / page / tally</td><td>query/summary / query/days / query/sessions / query/tally</td></tr>
+<tr><td>snapshot / heads</td><td>query/sessions(ids) + query/context</td></tr>
+<tr><td>detail / facts(parts)</td><td>query/context + query/timeline|requests|steps|tool-calls|file-ops|events|spans</td></tr>
+<tr><td>commands 分页</td><td>query/tool-calls(before_seq 游标)</td></tr>
+<tr><td>fleet summary（会话统计面）</td><td>query/family（递归 CTE）+ query/cost</td></tr>
+<tr><td>前端 assemble()/increment.ts</td><td>query/timeline(seq) + delta（SQL 边界视图）</td></tr>
+<tr><td>前端 tallySort/fileActivity/commands.ts 聚合</td><td>query/tally / query/file-ops(mode:'paths') / query/tool-calls</td></tr>
+<tr><td>detailRev（投影态计数）</td><td>sessions.detail_rev（行写事务计数）</td></tr>
+<tr><td>revisionOf 六因子拼串</td><td>meta.data_generation + pricing_version 两整数</td></tr>
+</table>
+
+<h3>B. 字段量与体积量级估算（1,158 会话语料，与现状基准同源）</h3>
+<ul>
+<li>sessions ≈ 1.2k 行 × ~30 列 ≈ 数 MB（评审修订后）；requests/steps ≈ ΣLLM 调用数（数万级）；surface_nodes ≈ Σ表面事件（数十万级）；tool_calls/file_ops/skill_loads 各数万级。</li>
+<li>DB 总体积量级 ≤ 现 session_projcache + overview-cache + detail 载荷之和（原文不入库是决定性因素）；WAL 正常回收，无 VACUUM 例程。</li>
+<li>常驻内存 = 8 MB 页缓存 + 全部活会话工作态（fold_state 之上的 LRU 缓存，驱逐安全：续折重种子，评审修订）+ 预编译语句 —— 替代现状 feed/rows/served + 播种峰值 922 MB 的工作集。</li>
+</ul>
+
+<h3>C. 关键证据索引</h3>
+<h4>C.1 dsh（master, 0.2.2-rc.3）</h4>
+<ul class="small">
+<li>日志格式/头/事件词表：packages/session/session-persistence-jsonl/src/format.ts:83-96,199-267；packages/core/session/src/known-event-types.ts:22-86</li>
+<li>stat 契约与 read(offset=seq)：packages/session/session-persistence/src/index.ts:51-68,144-175；.../src/handle.ts:76-93</li>
+<li>投影缓存行格式/写屏障：packages/session/session-projection-cache/src/index.ts:106-273,312-363；src/spec.ts:29-107</li>
+<li>SQLite 惯例（版本重建/STRICT/WAL/application_id）：packages/session-query/session-query-sqlite/src/schema.ts:46-139；packages/storage/storage-sqlite/src/schema.ts:60-107</li>
+<li>路由注册与 /api：packages/client/connection/lib/types/rpc.d.ts:119-132；packages/boot/plugin-manager/src/index.ts:398-402</li>
+<li>列表行/标题/updatedAt：packages/api/session-controller/src/list.ts:47-58,368-382</li>
+</ul>
+<h4>C.2 dsh-context（0.84.1）</h4>
+<ul class="small">
+<li>折叠态与投影定义：src/host/foldState.ts:155-212、timeline.ts:296-398、activity.ts、headers.ts</li>
+<li>缓存与聚合：src/host/overviewCache.ts、overview.ts:224-445、overviewAggregate.ts:243-408、overviewCorpus.ts</li>
+<li>回填/切片/worker：src/host/backfill.ts:59-95,193-247,265-589、foldWorker.ts、coldRead.ts</li>
+<li>活折叠先例：src/host/detailShadow.ts（8 会话/512 缓冲/种子重放）</li>
+<li>路由挂载：src/host/postRoute.ts:61-72、connection.ts:22-37</li>
+<li>兼容契约：docs/compatibility.md（§3 折叠、§4 计量、§6 投影缓存、§7 数据面）</li>
+</ul>
+<h4>C.3 客户端缓存清单（处置见 §9.2）</h4>
+<ul class="small">
+<li>boundedCache.ts / retention.ts（策略表）；timelineSource.ts:706-727（DetailStore 64/6 MiB）；agentHeads.ts:71-90（heads 128/1 MiB TTL 60s）；historyPage.ts:212,255（5min TTL ×2）</li>
+<li>components/derivedCache.ts:7,27（WeakMap 派生 + assembled）；trendChart.tsx:206-224；agentTree.ts:81,328；fleetModel.ts:82-96,217-227,534-596；useCommandLog.ts:55-153（known ≤4000）</li>
+<li>balance.ts:57-58,94（localStorage 10min）；versionSource.ts:41（1h）；recomCard.tsx:17-21（30min）</li>
+</ul>
+
+<footer>
+dsh-context SQLite 存储层重设计 · 调研与实施计划 · 2026-11-15 ·
+依据 dsh master(39163dd30f, 0.2.2-rc.3 同步) 与 dsh-context 0.84.1 源码 ·
+所有设计决策可追溯至文中 file:line 证据 · 本文档为设计提案，实现以落地代码与测试为准
+</footer>
+
+</div>
+</body>
+</html>
+
