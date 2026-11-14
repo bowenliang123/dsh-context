@@ -659,7 +659,7 @@ export const DICT_JA = {
   'balance.tip.granted': '付与残高',
   'balance.tip.toppedUp': 'チャージ残高',
   'update.label': '新バージョン',
-  'update.tip': '新バージョン {version} が公開されました。クリックして更新情報を確認',
+  'update.tip': '新バージョン {version} が公開されました。クリックしてプラグインページで更新',
   'ov.heat.title': 'アクティビティ',
   'ov.heat.sub': '日付で絞り込み',
   'ov.heat.empty': 'アクティビティデータはまだありません。セッションでモデルリクエストが発生すると、日別使用量がここに表示されます',

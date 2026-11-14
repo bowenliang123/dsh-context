@@ -657,7 +657,7 @@ export const DICT_ZH = {
   'balance.tip.granted': '赠送余额',
   'balance.tip.toppedUp': '充值余额',
   'update.label': '新版本',
-  'update.tip': '新版本 {version} 已发布，点击查看更新说明',
+  'update.tip': '新版本 {version} 已发布，点击前往插件页更新',
   'ov.heat.title': '活跃度',
   'ov.heat.sub': '按日期筛选',
   'ov.heat.empty': '暂无活跃数据 — 会话产生模型请求后，这里会显示每日用量',

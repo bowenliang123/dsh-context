@@ -659,7 +659,7 @@ export const DICT_PT = {
   'balance.tip.granted': 'Saldo concedido',
   'balance.tip.toppedUp': 'Saldo de recargas',
   'update.label': 'Atualização',
-  'update.tip': 'A atualização {version} está disponível — clique para ver as notas da versão',
+  'update.tip': 'A atualização {version} está disponível — clique para atualizar na página de Plug-ins',
   'ov.heat.title': 'Atividade',
   'ov.heat.sub': 'Filtrar por data',
   'ov.heat.empty': 'Ainda não há atividade — o uso diário aparece quando as sessões fazem requisições ao modelo',

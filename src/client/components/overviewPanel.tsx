@@ -71,7 +71,7 @@ export function makeOverviewPanel(
   const OverviewUsage = makeOverviewUsage(kit)
   const OverviewSkills = makeOverviewSkills(kit)
   const OverviewTally = makeOverviewTally(kit)
-  const UpdatePill = makeUpdatePill(kit)
+  const UpdatePill = makeUpdatePill(kit, ctx)
   const ErrorBoundary = makeErrorBoundary(t)
 
   function activeLocale(): string {

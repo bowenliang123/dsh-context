@@ -659,7 +659,7 @@ export const DICT_FR = {
   'balance.tip.granted': 'Solde offert',
   'balance.tip.toppedUp': 'Solde rechargé',
   'update.label': 'Mise à jour',
-  'update.tip': 'La mise à jour {version} est disponible ; cliquez pour consulter les notes de version',
+  'update.tip': 'La mise à jour {version} est disponible ; cliquez pour mettre à jour depuis la page Plugins',
   'ov.heat.title': 'Activité',
   'ov.heat.sub': 'Filtrer par date',
   'ov.heat.empty': 'Aucune activité pour le moment ; l’utilisation quotidienne apparaîtra lorsque les sessions enverront des requêtes au modèle',

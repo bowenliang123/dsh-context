@@ -659,7 +659,7 @@ export const DICT_DE = {
   'balance.tip.granted': 'Gewährtes Guthaben',
   'balance.tip.toppedUp': 'Aufgeladenes Guthaben',
   'update.label': 'Update',
-  'update.tip': 'Update {version} ist verfügbar — für die Versionshinweise klicken',
+  'update.tip': 'Update {version} ist verfügbar — klicken Sie, um es auf der Plugins-Seite zu aktualisieren',
   'ov.heat.title': 'Aktivität',
   'ov.heat.sub': 'Nach Datum filtern',
   'ov.heat.empty': 'Noch keine Aktivität — tägliche Nutzung erscheint, sobald Sitzungen Modellanfragen stellen',

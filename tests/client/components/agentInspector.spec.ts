@@ -448,6 +448,8 @@ describe('PluginInfo', () => {
     assert.equal(hint.getAttribute('target'), '_blank')
     assert.equal(hint.getAttribute('rel'), 'noreferrer')
     assert.equal(queryAll(m.container, '.lc-pi-update').length, 0)
+    rows[0].click()
+    assert.deepEqual(opened, [], 'the name row stays a GitHub link while the build is current')
     rows[2].click()
     assert.deepEqual(opened, ['dsh-context'], 'the settings row jumps through the Plugins panel navigator')
     await m.unmount()
@@ -463,6 +465,37 @@ describe('PluginInfo', () => {
     assert.deepEqual(JSON.parse(String((fetchMock.mock.calls[0]?.[1] as { body: string }).body)), {})
     assert.ok(text(m.container).includes('dsh-context (v1.0.0)'))
     assert.equal(query(m.container, '.lc-pi-update').textContent, '↑ v1.1.0')
+    await m.unmount()
+  })
+
+  test('release build with a newer version jumps the name row to the Plugins page', async () => {
+    stubVersion('1.1.0')
+    const opened: string[] = []
+    const ctx = new TestClientCtx({ services: { pluginNavigation: { openBundle: (name: string) => { opened.push(name) } } } })
+    const PluginInfo = await loadPluginInfo('1.0.0', ctx)
+    const m = await mount(h(PluginInfo, {}))
+    await flush()
+    const rows = queryAll(m.container, '.lc-pi-row')
+    let prevented: boolean | null = null
+    m.container.addEventListener('click', (event) => { prevented = (event as MouseEvent).defaultPrevented })
+    rows[0].dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }))
+    assert.deepEqual(opened, ['dsh-context'], 'the name row jumps through the Plugins panel navigator')
+    assert.equal(prevented, true, 'the GitHub repo link stays unpainted')
+    assert.equal(rows[0].getAttribute('href'), 'https://github.com/bowenliang123/dsh-context')
+    assert.equal(query(rows[0], '.lc-pi-value').getAttribute('title'), 'Update v1.1.0 is available — click to update on the Plugins page')
+    await m.unmount()
+  })
+
+  test('release build with a newer version keeps the repo link where the navigator is absent', async () => {
+    stubVersion('1.1.0')
+    const PluginInfo = await loadPluginInfo('1.0.0')
+    const m = await mount(h(PluginInfo, {}))
+    await flush()
+    const rows = queryAll(m.container, '.lc-pi-row')
+    let prevented: boolean | null = null
+    m.container.addEventListener('click', (event) => { prevented = (event as MouseEvent).defaultPrevented })
+    rows[0].dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }))
+    assert.equal(prevented, false, 'the GitHub repo link keeps its default action')
     await m.unmount()
   })
 })

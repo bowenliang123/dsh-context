@@ -659,7 +659,7 @@ export const DICT_EN = {
   'balance.tip.granted': 'Granted balance',
   'balance.tip.toppedUp': 'Topped-up balance',
   'update.label': 'Update',
-  'update.tip': 'Update {version} is available — click for the release notes',
+  'update.tip': 'Update {version} is available — click to update on the Plugins page',
   'ov.heat.title': 'Activity',
   'ov.heat.sub': 'Filter by date',
   'ov.heat.empty': 'No activity yet — daily usage appears once sessions make model requests',

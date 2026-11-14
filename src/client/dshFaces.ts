@@ -326,12 +326,16 @@ export function seedConversationViewVia(sessionId: string, view: string): void {
   } catch {}
 }
 
-export function openPluginSettings(ctx: ClientCtx): void {
+export function openPluginSettings(ctx: ClientCtx): boolean {
   try {
     const navigation = asRecord(ctx.get('pluginNavigation'))
     const open = navigation?.openBundle
-    if (typeof open === 'function') open.call(navigation, PLUGIN_NAME)
+    if (typeof open === 'function') {
+      open.call(navigation, PLUGIN_NAME)
+      return true
+    }
   } catch {}
+  return false
 }
 
 export function subagentChatAddressOf(address: { parentSessionId: string; childSessionId: string; mode: string }): string {
