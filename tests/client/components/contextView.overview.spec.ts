@@ -155,6 +155,7 @@ describe('contextView.projectionGuards', () => {
 
 describe('ContextView — projection guards', () => {
   test('loading screen while useProjection is absent, empty, or the session id is missing; a served projection renders without one', async () => {
+    vi.stubGlobal('fetch', () => new Promise(() => {}))
     const View = makeView(new TestClientCtx())
 
     for (const props of [
