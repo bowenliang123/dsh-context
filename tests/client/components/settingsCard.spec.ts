@@ -81,7 +81,7 @@ describe('PluginConfigCard (the Plugins-page seat)', () => {
     await m.unmount()
   })
 
-  test('ready+writable: enabled selects pick through the real portaled Menu', async () => {
+  test('ready+writable: enabled selects pick through the in-place Menu', async () => {
     const calls: [string, string][] = []
     const expected: [string, string][] = []
     const commit = (field: string, value: string): void => {
@@ -99,6 +99,7 @@ describe('PluginConfigCard (the Plugins-page seat)', () => {
     assert.ok(text(selects[0]).includes(DICT_EN['placement.all']))
     await click(selects[0])
     assert.equal(selects[0].getAttribute('aria-expanded'), 'true')
+    assert.ok(m.container.querySelector('.lc-settings-row [role="menu"]') !== null, 'the list stays in the settings row, out of a body-level portal')
     const placementItems = menuItems()
     assert.equal(placementItems.length, 4)
     assert.deepEqual(placementItems.map(i => text(i)), [
@@ -217,6 +218,22 @@ describe('PluginConfigCard (the Plugins-page seat)', () => {
     assert.equal(selects[0].getAttribute('aria-expanded'), 'false')
     assert.equal(document.body.querySelector('[role="menu"]'), null)
     assert.equal(calls.length, picked)
+    await m.unmount()
+  })
+
+  test('a trigger with no room below its scrollport opens the menu above', async () => {
+    const m = await mount(h(PluginConfigCard, { useContextSettings: hookFor(stateOf()) }))
+    const trigger = query<HTMLButtonElement>(m.container, '.lc-settings-select')
+    trigger.getBoundingClientRect = () => ({
+      top: 600, bottom: 700, left: 0, right: 100, width: 100, height: 100, x: 0, y: 600, toJSON: () => ({}),
+    })
+    document.body.style.overflowY = 'auto'
+    try {
+      await click(trigger)
+      assert.match(query(m.container, '[role="menu"]').className, /sideTop/)
+    } finally {
+      document.body.style.overflowY = ''
+    }
     await m.unmount()
   })
 
