@@ -3,8 +3,8 @@ import assert from 'node:assert/strict'
 import { describe, test } from 'vitest'
 import type { ContextDelta } from '../../../src/shared/delta'
 import type { SurfaceNode } from '../../../src/shared/types'
-import { flush, mount, surfaceNode, text } from '../helpers/kit'
-import { Browser, catRow, pickStep, props, req, tl } from './browserHarness'
+import { flush, mount, query, queryAll, surfaceNode, text } from '../helpers/kit'
+import { Browser, catRow, kit, pickStep, props, req, tl } from './browserHarness'
 
 const ZERO = { system: 0, tools: 0, user: 0, inject: 0, skill: 0, assistant: 0, tool: 0 }
 
@@ -77,6 +77,35 @@ describe('ContextBrowser host delta', () => {
     await flush()
     assert.equal(calls, 3, 'a detail revision bump refetches the delta')
     assert.ok(text(catRow(m, 'assistant')).includes('-600'))
+    await m.unmount()
+  })
+
+  test('the delta-pending marker holds a fixed slot instead of shifting the rows', async () => {
+    const data = tl({
+      requests: [req({ seq: 10, turn: 1, step: 0 }), req({ seq: 20, turn: 1, step: 1 })],
+      nodes: [surfaceNode({ seq: 30, tokens: 10, cat: 'assistant', text: 'new' })],
+    })
+    let release: (value: ContextDelta | null) => void = () => {}
+    const m = await mount(h(Browser, props({
+      data,
+      fetchDelta: () => new Promise<ContextDelta | null>((resolve) => { release = resolve }),
+    })))
+    await flush()
+    const slot = query(m.container, '.lc-br-pending')
+    const list = query(m.container, '.lc-br-scroll')
+    assert.equal(text(slot), '…', 'the pending read keeps a visible marker')
+    assert.equal(slot.getAttribute('role'), 'status', 'the marker is a status region')
+    assert.equal(slot.getAttribute('aria-label'), kit.t('browser.deltaPending'), 'the marker carries the complete pending copy for assistive tech')
+    assert.equal(slot.getAttribute('title'), kit.t('browser.deltaPending'), 'the marker carries the complete pending copy on hover')
+    assert.ok(slot.parentElement !== null && slot.parentElement.classList.contains('lc-br-meta'), 'the marker holds a slot in the meta row')
+    assert.equal(list.getAttribute('aria-busy'), 'true', 'the scrolled list reports the pending read to assistive tech')
+    assert.equal(queryAll(m.container, '.lc-br-note').length, 0, 'the pending copy no longer mounts a block that shifts the rows')
+    release(deltaOf())
+    await flush()
+    assert.equal(text(slot), '', 'the marker clears when the read settles')
+    assert.equal(slot.getAttribute('aria-label'), null)
+    assert.equal(slot.getAttribute('title'), null)
+    assert.equal(list.getAttribute('aria-busy'), null)
     await m.unmount()
   })
 

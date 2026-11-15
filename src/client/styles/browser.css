@@ -50,6 +50,7 @@
 .lc-br-meta b { color: var(--dsw-alias-label-primary); }
 .lc-br-meta .lc-est { margin-left: auto; }
 .lc-br-note { margin-top: 8px; color: var(--dsw-alias-label-secondary); font-size: 12px; }
+.lc-br-pending { flex: none; width: 14px; height: 12px; line-height: 12px; text-align: center; color: var(--dsw-alias-label-secondary); font-size: 12px; }
 .lc-br-retry { border: 0; background: transparent; padding: 0; color: var(--dsw-alias-brand-primary); font: inherit; font-size: 12px; cursor: pointer; text-decoration: underline; text-underline-offset: 2px; transition: filter var(--ds-transition-duration, 0.2s) var(--ds-ease-in-out, ease-in-out); }
 .lc-br-cats { margin-top: 10px; display: flex; flex-direction: column; gap: 4px; }
 .lc-br-flat { margin-top: 10px; display: flex; flex-direction: column; }

@@ -846,6 +846,7 @@ export function makeContextBrowser(
                 {actual !== null && actual.prompt !== undefined
                   ? <span>{t('detail.actual', { n: fmt(actual.prompt) })}</span>
                   : null}
+                <span className="lc-br-pending" role="status" aria-label={deltaPending ? t('browser.deltaPending') : undefined} title={deltaPending ? t('browser.deltaPending') : undefined}>{deltaPending ? '…' : ''}</span>
               </div>
               <StackedBar
                 parts={dnaParts ?? (inc !== null ? inc.parts : parts)}
@@ -872,9 +873,6 @@ export function makeContextBrowser(
 
           {view.missingLive > 0
             ? <div className="lc-br-note">{t('browser.missingLive', { n: view.missingLive })}</div>
-            : null}
-          {deltaPending
-            ? <div className="lc-br-note">{t('browser.deltaPending')}</div>
             : null}
           {approximate
             ? <div className="lc-br-note">{t('browser.approx')}</div>
@@ -904,7 +902,7 @@ export function makeContextBrowser(
           )
           : null}
 
-        <div className="lc-br-scroll" ref={scrollRef}>
+        <div className="lc-br-scroll" ref={scrollRef} aria-busy={deltaPending || undefined}>
           {dna
             ? (
               <div className="lc-br-flat" onKeyDown={flatScope.onKeyDown}>
