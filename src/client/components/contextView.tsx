@@ -300,23 +300,25 @@ export function makeContextView(
 
     const leftColRef = useRef<HTMLDivElement | null>(null)
     const [browserCap, setBrowserCap] = useState<number | null>(null)
-    const [capTick, setCapTick] = useState(0)
-    useEffect(() => {
+    const syncBrowserCap = useCallback((): void => {
       const col = leftColRef.current
       /* v8 ignore next 1 */
       if (col === null) return
       const next = browserCapOf([...col.children].map(el => el.getBoundingClientRect()))
       setBrowserCap(prev => (prev === next ? prev : next))
-    }, [capTick, data, sidebarVisible])
+    }, [])
+    useEffect(() => {
+      syncBrowserCap()
+    }, [syncBrowserCap, data, sidebarVisible])
     /* v8 ignore start */
     useEffect(() => {
       const col = leftColRef.current
       if (col === null || typeof ResizeObserver !== 'function') return
-      const observer = new ResizeObserver(() => { setCapTick(tick => tick + 1) })
+      const observer = new ResizeObserver(syncBrowserCap)
       observer.observe(col)
       for (const el of col.querySelectorAll(':scope > .lc-card')) observer.observe(el)
       return () => { observer.disconnect() }
-    }, [sidebarVisible])
+    }, [sidebarVisible, syncBrowserCap])
     /* v8 ignore stop */
     const onJump = useCallback((jump: StatsJump): void => {
       if (jump === 'turns' || jump === 'steps') {

@@ -1,10 +1,10 @@
-import { act, createElement as h } from 'react'
+import { act, createElement as h, Profiler } from 'react'
 import assert from 'node:assert/strict'
 import { describe, test, vi, afterEach } from 'vitest'
 import { requestContextFocus, takeContextFocus } from '../../../src/client/viewFocus'
 import { DICT_EN } from '../../../src/client/i18n'
 import { TestClientCtx } from '../helpers/harness'
-import { click, flush, hover, mount, query, queryAll, text, unhover } from '../helpers/kit'
+import { click, flush, hover, mount, query, queryAll, settle, text, unhover } from '../helpers/kit'
 import { buttonByText, eventLink, makeView, mountInScroller, mountRich, overflowingScroller, projectionsFor, richTimeline, settingsWith, stubRevealRects, T0, timeline } from './contextViewHarness'
 import { type UseChatLike } from '../../../src/client/services'
 import { resetTimelineDetailStores } from '../../../src/client/timelineSource'
@@ -423,14 +423,23 @@ describe('ContextView — interactions', () => {
   test('the browser column caps at the left cards\' full extent, flush with the column, live', async () => {
     const orig = Element.prototype.getBoundingClientRect
     let cardH = 100
+    let offset = 0
     Element.prototype.getBoundingClientRect = function (this: Element) {
       const box = orig.call(this)
       const parent = this.parentElement
       if (!this.classList.contains('lc-card') || parent === null
         || !parent.classList.contains('lc-col') || parent.classList.contains('lc-col-browser')) return box
-      const top = 100 + [...parent.children].indexOf(this) * (cardH + 7)
+      const top = 100 + offset + [...parent.children].indexOf(this) * (cardH + 7)
       return { ...box, top, bottom: top + cardH }
     } as never
+    const observers: { callback: ResizeObserverCallback; targets: Element[] }[] = []
+    vi.stubGlobal('ResizeObserver', class {
+      readonly targets: Element[] = []
+      constructor(readonly callback: ResizeObserverCallback) { observers.push(this) }
+      observe(el: Element): void { this.targets.push(el) }
+      unobserve(): void {}
+      disconnect(): void {}
+    })
     try {
       const View = makeView(new TestClientCtx())
       const el = () => h(View, {
@@ -440,17 +449,35 @@ describe('ContextView — interactions', () => {
         }),
         useChat: (sel => sel({ legacy: { nodes: [] } })) as UseChatLike,
       })
-      const m = await mount(el())
+      let commits = 0
+      const tree = () => h(Profiler, { id: 'cap', onRender: () => { commits++ } }, el())
+      const m = await mount(tree())
       const col = query<HTMLElement>(m.container, '.lc-col-browser')
+      const left = query<HTMLElement>(m.container, '.lc-cols-main > .lc-col:not(.lc-col-browser)')
       assert.equal(col.style.maxHeight, '207px', 'two 100px cards and their 7px gap')
       assert.equal(col.style.overflowY, '')
       assert.ok(query(m.container, '.lc-br-scroll') !== null)
+      const observer = observers.find(o => o.targets.includes(left))
+      assert.ok(observer !== undefined, 'the cap observer watches the left column')
+      await settle(20)
+      const settled = commits
+      offset = 12
+      await act(async () => { observer.callback([], {} as ResizeObserver) })
+      await flush()
+      assert.equal(col.style.maxHeight, '207px', 'a reflow that keeps the span keeps the cap')
+      assert.equal(commits, settled, 'an unchanged cap commits nothing')
       cardH = 150
-      await m.update(el())
-      assert.equal(col.style.maxHeight, '307px', 'the cap follows the grown cards on the next render')
+      await act(async () => { observer.callback([], {} as ResizeObserver) })
+      await flush()
+      assert.equal(col.style.maxHeight, '307px', 'the resize notification syncs the cap')
+      assert.ok(commits > settled, 'a genuine cap change commits')
+      cardH = 200
+      await m.update(tree())
+      assert.equal(col.style.maxHeight, '407px', 'the cap follows the grown cards on a projection update')
       await m.unmount()
     } finally {
       Element.prototype.getBoundingClientRect = orig
+      vi.unstubAllGlobals()
     }
   })
 
