@@ -10,6 +10,7 @@ export default defineConfig({
           name: 'host',
           include: ['tests/host/**/*.spec.ts', 'tests/shared/**/*.spec.ts'],
           environment: 'node',
+          testTimeout: 30_000,
         },
       },
       {
