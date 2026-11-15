@@ -109,8 +109,8 @@ describe.skipIf(reasons.length > 0)('compat matrix — real dsh sources per base
       assert.equal(redact, true, 'the settings service redaction option')
       assert.equal(directory, true, 'the llm provider directory face')
       assert.equal(service, true, 'the deepseekAccount getBalance face')
-      assert.equal(accountProvider, true, 'the account platform getBalance implementation')
-      assert.equal(bundle, true, 'the base bundle mounts the account platform')
+      assert.equal(accountProvider, true, 'the account getBalance implementation')
+      assert.equal(bundle, true, 'the base bundle mounts the account service')
       for (const [index, id] of balance.stockIds.ids.entries()) {
         assert.equal(stockHits[index], true, `the DeepSeek stock entry id: ${id}`)
       }

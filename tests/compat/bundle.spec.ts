@@ -183,7 +183,7 @@ const floorsOf = (range: string): string[] => range.split('||').map(floorOf)
 const satisfies = (version: string, range: string): boolean => semver.satisfies(version, range, { includePrerelease: true })
 
 describe('supported-set lockstep', () => {
-  test('dshReleases, baselines and the CI tag fetches name the same per-line floors', () => {
+  test('dshReleases, baselines and the CI tag fetches name the same staged releases', () => {
     assert.deepEqual(
       manifest.dsh.compatibility.dshReleases,
       Object.fromEntries(versions.map(version => [`${version}+`, 'compatible'])),

@@ -1,4 +1,4 @@
-export type BaselineId = 'v0.2.0-rc.2' | 'v0.2.1-rc.2' | 'v0.2.2-rc.1'
+export type BaselineId = 'v0.2.0-rc.2' | 'v0.2.1-rc.2' | 'v0.2.2-rc.1' | 'v0.2.2-rc.3'
 
 export interface ClientSeam {
   imageFaceMethod: string
@@ -137,6 +137,7 @@ function baseline(id: BaselineId, tag: string, session: string, line: {
   stateOfNeedle?: string
   fallbackStateOfNeedle?: string
   awaitableRegister?: boolean
+  account?: Partial<Omit<Baseline['balance']['account'], 'serviceFile' | 'bundleFile'>>
 } = {}): Baseline {
   return {
     id,
@@ -269,11 +270,11 @@ function baseline(id: BaselineId, tag: string, session: string, line: {
       ],
       account: {
         serviceFile: 'packages/credentials/deepseek-account/src/index.ts',
-        serviceNeedle: 'abstract getBalance(client: AccountClientMetadata)',
-        providerFile: 'packages/credentials/deepseek-account-platform/src/index.ts',
-        providerNeedle: 'getBalance(client: AccountClientMetadata)',
+        serviceNeedle: line.account?.serviceNeedle ?? 'abstract getBalance(client: AccountClientMetadata)',
+        providerFile: line.account?.providerFile ?? 'packages/credentials/deepseek-account-platform/src/index.ts',
+        providerNeedle: line.account?.providerNeedle ?? 'getBalance(client: AccountClientMetadata)',
         bundleFile: 'packages/bundle/base/cordis.patch.yml',
-        bundleNeedle: "'@deepseek-ai/dsh-deepseek-account-platform'",
+        bundleNeedle: line.account?.bundleNeedle ?? "'@deepseek-ai/dsh-deepseek-account-platform'",
       },
     },
     stepGuard: {
@@ -296,6 +297,16 @@ function baseline(id: BaselineId, tag: string, session: string, line: {
   }
 }
 
+const line022Seams = {
+  cordis: '4.1.0',
+  stockIds: ['llm-deepseek', 'web-search-deepseek', 'web-deepseek-api'],
+  platformModules: [...DEFAULT_PLATFORM_MODULES, 'zod', '@tanstack/react-virtual'],
+  extraFoldEvents: ['job/registered', 'job/settled'],
+  stateOfNeedle: 'stateOf(session: Session): S',
+  fallbackStateOfNeedle: 'stateOf(session: Session, key: string): unknown',
+  awaitableRegister: true,
+}
+
 export const BASELINES: readonly Baseline[] = [
   baseline('v0.2.0-rc.2', 'dsh-v0.2.0-rc.2', '0.2.0-rc.2'),
   baseline('v0.2.1-rc.2', 'dsh-v0.2.1-rc.2', '0.2.1-rc.2', {
@@ -304,13 +315,13 @@ export const BASELINES: readonly Baseline[] = [
     platformModules: [...DEFAULT_PLATFORM_MODULES, 'zod', '@tanstack/react-virtual'],
     extraFoldEvents: ['job/registered', 'job/settled'],
   }),
-  baseline('v0.2.2-rc.1', 'dsh-v0.2.2-rc.1', '0.2.2-rc.1', {
-    cordis: '4.1.0',
-    stockIds: ['llm-deepseek', 'web-search-deepseek', 'web-deepseek-api'],
-    platformModules: [...DEFAULT_PLATFORM_MODULES, 'zod', '@tanstack/react-virtual'],
-    extraFoldEvents: ['job/registered', 'job/settled'],
-    stateOfNeedle: 'stateOf(session: Session): S',
-    fallbackStateOfNeedle: 'stateOf(session: Session, key: string): unknown',
-    awaitableRegister: true,
+  baseline('v0.2.2-rc.1', 'dsh-v0.2.2-rc.1', '0.2.2-rc.1', { ...line022Seams }),
+  baseline('v0.2.2-rc.3', 'dsh-v0.2.2-rc.3', '0.2.2-rc.3', {
+    ...line022Seams,
+    account: {
+      serviceNeedle: 'interface Context { deepseekAccount: DeepSeekAccount }',
+      providerFile: 'packages/credentials/deepseek-account/src/index.ts',
+      bundleNeedle: "'@deepseek-ai/dsh-deepseek-account'",
+    },
   }),
 ]
