@@ -283,9 +283,50 @@ function sameWindow(a: FactWindow, b: FactWindow): boolean {
     && a.filesTail === b.filesTail && a.commandsTail === b.commandsTail && a.spansTail === b.spansTail
 }
 
-function detailFromFacts(facts: FactsRead): ContextTimelineDetail {
-  const base = emptyDetail(facts.rev, facts.parts.head, facts.parts.series ?? facts.parts.requests)
+function carriedDetail(prev: ContextTimelineDetail, facts: FactsRead): ContextTimelineDetail {
+  return {
+    ...prev,
+    rev: facts.rev,
+    head: facts.parts.head ?? prev.head,
+    requests: facts.parts.series ?? prev.requests,
+  }
+}
+
+function detailFromFacts(facts: FactsRead, prev: ContextTimelineDetail | null): ContextTimelineDetail {
+  const base = prev === null
+    ? emptyDetail(facts.rev, facts.parts.head, facts.parts.series ?? facts.parts.requests)
+    : carriedDetail(prev, facts)
   return mergeFactsInto(base, facts)
+}
+
+function withoutPart(detail: ContextTimelineDetail, part: FactPart): ContextTimelineDetail {
+  if (part === 'requests') return detail
+  const next: ContextTimelineDetail = { ...detail }
+  switch (part) {
+    case 'events':
+      next.events = []
+      break
+    case 'nodes':
+      next.nodes = []
+      next.droppedNodes = 0
+      next.archive = []
+      delete next.surfaceFloor
+      delete next.archiveFloor
+      break
+    case 'files':
+      delete next.fileOps
+      delete next.fileOpsFloor
+      break
+    case 'commands':
+      delete next.commands
+      delete next.commandsFloor
+      delete next.commandStats
+      break
+    case 'spans':
+      delete next.spans
+      break
+  }
+  return next
 }
 
 function mergeFactsInto(detail: ContextTimelineDetail, facts: FactsRead): ContextTimelineDetail {
@@ -294,19 +335,27 @@ function mergeFactsInto(detail: ContextTimelineDetail, facts: FactsRead): Contex
     ...detail,
     ...(parts.requests === undefined ? {} : { requests: parts.requests }),
     ...(parts.events === undefined ? {} : { events: parts.events }),
-    ...(parts.nodes === undefined ? {} : parts.nodes),
+    ...(parts.nodes === undefined
+      ? {}
+      : {
+        nodes: parts.nodes.nodes,
+        droppedNodes: parts.nodes.droppedNodes,
+        archive: parts.nodes.archive,
+        surfaceFloor: parts.nodes.surfaceFloor,
+        archiveFloor: parts.nodes.archiveFloor,
+      }),
     ...(parts.files === undefined
       ? {}
       : {
         fileOps: parts.files.fileOps,
-        ...(parts.files.fileOpsFloor === undefined ? {} : { fileOpsFloor: parts.files.fileOpsFloor }),
+        fileOpsFloor: parts.files.fileOpsFloor,
       }),
     ...(parts.commands === undefined
       ? {}
       : {
         commands: parts.commands.commands,
-        ...(parts.commands.commandsFloor === undefined ? {} : { commandsFloor: parts.commands.commandsFloor }),
-        ...(parts.commands.commandStats === undefined ? {} : { commandStats: parts.commands.commandStats }),
+        commandsFloor: parts.commands.commandsFloor,
+        commandStats: parts.commands.commandStats,
       }),
     ...(parts.spans === undefined ? {} : { spans: parts.spans }),
   }
@@ -559,7 +608,7 @@ export class DetailStore {
         if ('missing' in read && read.missing?.includes('series') === true) {
           return { detail: await this.legacyRead(), disable: true }
         }
-        return { detail: detailFromFacts(read), disable: false }
+        return { detail: detailFromFacts(read, this.detail), disable: false }
       }
     }
     return { detail: await this.legacyRead(), disable: false }
@@ -579,6 +628,7 @@ export class DetailStore {
       }
       if (!('parts' in read)) {
         this.unavailableParts.add(part)
+        this.dropPart(part)
         return
       }
       if (read.rev !== rev) {
@@ -588,6 +638,12 @@ export class DetailStore {
       }
       if (read.missing?.includes(part) === true) {
         this.unavailableParts.add(part)
+        this.dropPart(part)
+        return
+      }
+      if (read.parts[part] === undefined) {
+        this.unavailableParts.add(part)
+        this.dropPart(part)
         return
       }
       const merged = mergeFactsInto(this.detail as ContextTimelineDetail, read)
@@ -600,15 +656,24 @@ export class DetailStore {
       if (generation === this.generation && this.acceptedRev === rev) this.schedulePartRetry(part)
     } finally {
       this.inflightParts.delete(part)
+      if (generation === this.generation && this.acceptedRev !== rev) this.fetchWantedParts()
       this.emit()
     }
+  }
+
+  private dropPart(part: FactPart): void {
+    this.detail = withoutPart(this.detail as ContextTimelineDetail, part)
+    this.bytes = detailBytesOf(this.detail)
   }
 
   private schedulePartRetry(part: FactPart): void {
     if (!this.active || this.partRetries.has(part)) return
     const failures = (this.partFailures.get(part) ?? 0) + 1
     this.partFailures.set(part, failures)
-    if (failures > PART_RETRY_LIMIT) return
+    if (failures > PART_RETRY_LIMIT) {
+      this.dropPart(part)
+      return
+    }
     const delay = PART_RETRY_MS * 2 ** (failures - 1)
     this.partRetries.set(part, setTimeout(() => {
       this.partRetries.delete(part)
@@ -656,6 +721,7 @@ export class DetailStore {
           this.onResize?.()
           this.unavailableParts.clear()
           this.partRev.clear()
+          this.clearPartRetries()
           if (!seriesHasBreakdown(d.requests)) this.ensurePart('requests')
           this.fetchWantedParts()
         }
