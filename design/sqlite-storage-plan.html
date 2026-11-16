@@ -69,11 +69,10 @@ footer{margin-top:60px;color:var(--muted);font-size:12.5px;border-top:1px solid 
 <div class="wrap">
 
 <header class="hero">
-  <div class="sub">dsh-context · design proposal · 2026-11-16</div>
+  <div class="sub">dsh-context · design proposal · 2026-11-17</div>
   <h1>SQLite 存储层重设计 — 调研报告与实施计划</h1>
-  <p>以插件私有的 <code>node:sqlite</code> 数据库作为唯一派生存储：会话级 / 步骤级行式建模，版本不符即全量重建，查询即 SQL，
-  前端只拉取细粒度 API。现有插件投影注册、JSON 缓存、内存聚合与粗粒度路由全部打破重做；折叠引擎、dsh 自有 title/metadata 投影读取与全部 dsh 原生数据接缝保留。</p>
-  <p class="small" style="color:#8fa7cf">依据：dsh master (39163dd, 0.2.2-rc.3) 与 dsh-context 0.85.1 源码逐行调研；所有论断附文件:行号证据。2026-11-16 修订版。</p>
+  <p>以插件私有的 <code>node:sqlite</code> 数据库作为唯一派生存储：会话级 / 步骤级行式建模，版本不符即全量重建，查询由 <b>Drizzle ORM</b>（schema-as-code + typed SQL）承载。现有插件投影注册、JSON 缓存、内存聚合与粗粒度路由全部打破重做；折叠引擎、dsh 自有 title/metadata 投影读取与全部 dsh 原生数据接缝保留。</p>
+  <p class="small" style="color:#8fa7cf">依据：dsh master (39163dd, 0.2.2-rc.3) 与 dsh-context 0.85.1 源码逐行调研；所有论断附文件:行号证据。2026-11-17 修订版。</p>
 </header>
 
 <nav class="toc">
@@ -91,11 +90,12 @@ footer{margin-top:60px;color:var(--muted);font-size:12.5px;border-top:1px solid 
   <a href="#s12">⑫ 附录</a>
 </nav>
 
-<div class="note ok"><b>2026-11-16 修订摘要（基于对 dsh 0.2.2-rc.3 / dsh-context 0.85.1 的复核）</b>
+<div class="note ok"><b>2026-11-17 修订摘要（基于对 dsh 0.2.2-rc.3 / dsh-context 0.85.1 的复核）</b>
 <ul>
 <li><b>数据正确性</b>：打开门禁改为「先读后写」，拒绝 <code>application_id=0</code> 且有表/未知表的库；<code>file_ops</code> 增加 <code>ordinal</code> 修复多文件搜索主键冲突；<code>last_seq</code> 默认 -1；<code>log_mtime</code> 改 REAL 并增加 <code>log_revision</code>。</li>
 <li><b>口径</b>：新增 §5.15「family × inherited × root」矩阵；<code>seed_cut_seq</code> 统一继承过滤；<code>family_root</code> 统一家族聚合，普通 fork 不并入；<code>turn/steps</code> 明确根自身口径。</li>
 <li><b>时间旅行/API</b>：严格 <code>seq&lt;X</code>；timeline 返回 system/header/live/floors；sessions 返回 turns/steps/created_day 与 self/family 两套值；events 同时富化前驱/后继；tool-calls 改为排序相关 keyset。</li>
+<li><b>数据访问层</b>：新增 §3.4/§5.0.1：<code>drizzle-orm@1.0.0-rc.5</code> + <code>node:sqlite</code> 同步驱动；schema-as-code；DDL 由 schema 生成并后处理 <code>STRICT/WITHOUT ROWID</code>；查询用 typed builders，递归 CTE/window 用插值 table/column 的 <code>sql</code> 模板；不使用 drizzle migration。</li>
 <li><b>启动/首屏</b>：新增 §8.0：apply 只做打开/门禁/DDL/路由注册（p99 ≤10ms），hydration 延迟到首屏后；首屏 serve-first 读 SQLite 不 await 扫描；冷读改「交互 &gt; 列表 &gt; 回填 &gt; 清理」优先级池（2–4 并发）；<b>统一 WorkScheduler + 按资源分执行器</b>，回填/Reaper 只在空闲预算内运行，quick_check 后台 worker。</li>
 <li><b>一致性/恢复</b>：增量续折改从 <code>fold_state.last_seq</code> 起；新增 clean_shutdown 双向尾部校验；folding 状态与分片崩溃清理；<b>Reaper + session_tombstones 清理已消失会话（防复活）</b>；多进程 destructive refold 用 CAS。</li>
 <li><b>性能/内存</b>：两把排序键由折叠器维护绝对值；活会话工作态设内存 LRU 上限；tally 加 limit；索引补齐 family_root/cur_total/model/running/provider/duration。</li>
@@ -106,8 +106,8 @@ footer{margin-top:60px;color:var(--muted);font-size:12.5px;border-top:1px solid 
 <h2 id="s1">① 需求映射</h2>
 <table>
 <tr><th style="width:60px">需求</th><th style="width:220px">设计落点</th><th>要点</th></tr>
-<tr><td><span class="req-id">1</span>引入 SQLite</td><td>§3 架构 · §4 表设计</td><td>插件私有 <code>node:sqlite DatabaseSync</code> 单文件库（WAL），路径 <code>$DSH_HOME/storages/dsh-context/index.sqlite</code>；与 dsh 自带 <code>session-query-sqlite</code> / <code>storage-sqlite</code> 同一技术栈与惯例。</td></tr>
-<tr><td><span class="req-id">2</span>版本不符即重建</td><td>§4 版本与重建</td><td><code>PRAGMA application_id</code> + <code>PRAGMA user_version</code> 双门禁，<b>先读后写</b>：非 <code>DSCX</code> 库、<code>application_id=0</code> 但已有用户表、或存在未知用户表 → 一律拒绝打开且不触碰；仅 <code>DSCX</code> 且版本不符时删除<b>已知</b>表重建。与 dsh <code>session-query-sqlite</code> 的读取/拒绝顺序一致（dsh: session-query-sqlite/src/schema.ts:58-101）。</td></tr>
+<tr><td><span class="req-id">1</span>引入 SQLite</td><td>§3 架构 · §4 表设计</td><td>插件私有 <code>node:sqlite DatabaseSync</code> 单文件库（WAL），路径 <code>$DSH_HOME/storages/dsh-context/index.sqlite</code>；数据访问层用 <code>drizzle-orm@1.0.0-rc.5</code>（schema-as-code + typed queries + 同步 UPSERT/transaction），DDL 由 schema 生成；与 dsh 自带 <code>session-query-sqlite</code> / <code>storage-sqlite</code> 同一 SQLite 技术栈。</td></tr>
+<tr><td><span class="req-id">2</span>版本不符即重建</td><td>§4 版本与重建</td><td><code>PRAGMA application_id</code> + <code>PRAGMA user_version</code> 双门禁，<b>先读后写</b>：非 <code>DSCX</code> 库、<code>application_id=0</code> 但已有用户表、或同版本出现未知用户表 → 一律拒绝打开且不触碰；仅 <code>DSCX</code> 且版本不符时删除<b>本插件库的全部用户表</b>重建（app_id 已证明归属）。与 dsh <code>session-query-sqlite</code> 的读取/拒绝顺序一致（dsh: session-query-sqlite/src/schema.ts:58-101）。</td></tr>
 <tr><td><span class="req-id">3</span>前端尽量走后端</td><td>§7 API · §9 前端改造</td><td>聚合 / 过滤 / 排序 / 分页 / 时间旅行(assemble)全部下沉 SQL；删除 detailStores、heads、history、derivedCache 等十余处前端缓存。</td></tr>
 <tr><td><span class="req-id">4</span>会话级/步骤级字段</td><td>§4 表设计</td><td><code>sessions</code> 仅承载排序/热路径键与折叠簿记（评审修订：计数/计时全部派生）；<code>steps</code> / <code>requests</code> 承载步骤级；多行事实全部事件源化，统计用 GROUP BY 现算，废弃预聚合账本（activity days / tallies / 400 天上限 / 64 名上限全部取消）。</td></tr>
 <tr><td><span class="req-id">5</span>大量细粒度 API</td><td>§7 API 设计</td><td>按实体划分 16 个 POST 查询路由（sessions/summary/days/tally/context/timeline/requests/steps/tool-calls/file-ops/events/spans/skill-loads/family/cost/status），统一 scope 过滤与游标分页，前端自由组合；不再按板块划分。</td></tr>
@@ -224,7 +224,7 @@ footer{margin-top:60px;color:var(--muted);font-size:12.5px;border-top:1px solid 
 │        │                                                                              │
 │        ▼  generation + pricing_version 变更协议                                          │
 │  ┌──────────────────────────────────────────────────────────────────────┐              │
-│  │ 查询 API 层（16 条细粒度 POST 路由，全部 = 预编译 SQL）                    │              │
+│  │ 查询 API 层（16 条细粒度 POST 路由 = Drizzle typed queries + sql 模板）  │              │
 │  │ sessions/summary/days/tally/context/timeline/requests/steps/           │              │
 │  │ tool-calls/file-ops/events/spans/skill-loads/family/cost/status        │              │
 │  └──────────────────────────────┬───────────────────────────────────────┘              │
@@ -245,16 +245,72 @@ footer{margin-top:60px;color:var(--muted);font-size:12.5px;border-top:1px solid 
 <tr><td><b>D3</b></td><td>事件来源与接缝全部沿用现状</td><td><code>session/event</code> 推送、<code>observeSession('none')</code>、<code>stat/open/read(offset)</code>、<code>connection.fetch.register</code>、heap 冷读门、切片/worker 折叠、回填节流——除「冷读 FIFO → 分级优先级池」外均沿用现状接缝；这项改造是本次启动/交互目标的前提。</td></tr>
 <tr><td><b>D4</b></td><td>聚合策略两分法</td><td><b>多行事实的横切统计</b>（按日、按名目、按模型、按路径）→ 一律 SQL GROUP BY 现算，废除 activity-days 账本与全部 tally 上限；sessions 仅保留 <code>billed_tokens</code> / <code>cur_total</code> 两把排序与热路径键（<b>由折叠器维护绝对值并随 flush 写入</b>；全量重折/回填时按行集校验一次，不在每次 flush 做全量 SUM）。其余计数/计时全部派生（需求 4：能查表就不预聚合）——折叠态随之瘦身：timing/totals/turnRuns/activity days 不再驻留折叠器。</td></tr>
 <tr><td><b>D5</b></td><td>原始文本零入库，成本零入库</td><td>消息正文/工具输出/system prompt 内容/fleet 消息不进库（仅 ≤2,000 字符展示预览并标记 <code>preview_truncated</code>——超长正文由客户端按 seq 走 history RPC 取全文，评审修订）；全文检索复用 dsh sessionQuery FTS（可选启用）；成本=usage 行×价目表服务时计算，价目更新无需任何数据迁移。</td></tr>
+<tr><td><b>D6</b></td><td>Drizzle ORM 作为数据访问层</td><td><code>drizzle-orm@1.0.0-rc.5</code> + <code>node:sqlite</code> 同步驱动：schema-as-code、查询/UPSERT/事务类型安全、无 native addon。DDL 由 schema 生成并对 <code>STRICT/WITHOUT ROWID</code> 做确定性后处理；<b>不使用 drizzle migration</b>，版本重建仍走 §4。复杂递归 CTE/window 用 Drizzle <code>sql</code> 模板插值 table/column，禁止裸表名。</td></tr>
 </table>
 
 <h3>3.3 保留 / 移除 / 改造总表</h3>
 <table>
 <tr><th style="width:110px">类别</th><th>清单</th></tr>
 <tr><td><span class="tag keep">保留</span></td><td>折叠算法与计量口径（fold.ts/foldMetering/foldCommands/fileOps/pricing/estimate/imageTokens）；heap 冷读门（升级为优先级池的一部分）；切片折叠与 foldWorker（>30k 事件）；回填节流（8s 工作预算/2s 暂停）；价目与版本目录服务（catalog.ts）；balance/version/skills/attachment/recom 路由；stepIdentity 会话保护；升级门（改为 route 级 <code>ready:false/harness_supported:false</code>）。</td></tr>
-<tr><td><span class="tag rep">改造</span></td><td>DetailShadow → 活会话写通器；coldReads 串行 FIFO → 分级优先级池（共享 WorkScheduler）；backfill → SQLite 对账与回填调度器；foldWorker 返回行批次；headsRoute/snapshotRoute/detail/delta/facts/commands/overview → 16 条查询路由；delta 的 assemble → SQL 时间旅行；客户端 timelineSource/overviewSource/agentHeads/fleetModel 换接新 API。</td></tr>
+<tr><td><span class="tag rep">改造</span></td><td>DetailShadow → 活会话写通器；coldReads 串行 FIFO → 分级优先级池（共享 WorkScheduler）；backfill → SQLite 对账与回填调度器；foldWorker 返回行批次；<b>Drizzle schema + generated DDL + 16 条 typed query 路由</b>；headsRoute/snapshotRoute/detail/delta/facts/commands/overview → query 路由；delta 的 assemble → SQL 时间旅行；客户端 timelineSource/overviewSource/agentHeads/fleetModel 换接新 API。</td></tr>
 <tr><td><span class="tag drop">移除</span></td><td>3 个插件投影注册（<b>保留</b> <code>sessionProjections</code>/<code>sessionProjectionCache</code> 依赖，仅用于读取 dsh 自有的 <code>title</code>/<code>sessionListMetadata</code> 投影；不再注册插件单元）；overviewCache.v1.json 及其身份验证/防抖/闲释放；请求期 feed/served/revision 拼串；foldCache 冷缓存 ×3；foldJournal；投影行 sweep（改为建库后一次性清理旧 <code>session_projcache</code> 插件行）；heads 三级探测；客户端 heads/derivedCache/history 缓存簇。</td></tr>
 </table>
 <div class="note ok"><b>口径收益（相对现状的已知缺陷）：</b>steps 计数与 harness <code>sessionStats</code> 对齐（新 steps 表按 step/end 落行，空步骤不再丢失，§4 limitation "counts" 解除）；400 天账本上限、64/100/500 名 tally 上限、16 名 tool-timing 淘汰全部取消；崩溃后可检测的过期行问题由「fold_state 续折 + 双向尾部校验」覆盖，未 flush 的日志尾部仍受 harness durability 限制（§10.3）；首次播种由「整体扫描 922 MB 峰值」变为逐会话流式行写入。</div>
+
+<h3>3.4 数据访问层：Drizzle ORM（已选定）</h3>
+<p><b>决策</b>：采用 <code>drizzle-orm@1.0.0-rc.5</code> + <code>node:sqlite</code> 同步驱动。Drizzle 负责 schema 类型、查询构建、UPSERT 与事务；DDL 从 schema 生成；<b>运行时不使用 drizzle migration</b>，版本不符仍按 §4 全量重建。</p>
+<table>
+<tr><th style="width:170px">范围</th><th>约定</th></tr>
+<tr><td><b>版本与依赖</b></td><td><code>drizzle-orm@1.0.0-rc.5</code>（exact pin）；<code>drizzle-kit@1.0.0-rc.5</code> 仅 devDependency。stable latest <code>0.45.4</code> 尚无 <code>drizzle-orm/node-sqlite</code>；RC5 已包含该导出。必须是 RC 是本设计的已知风险，三线 compat 必须锁定；不引入 better-sqlite3/libsql/native addon。</td></tr>
+<tr><td><b>Schema</b></td><td><code>src/host/db/schema.ts</code> 用 <code>sqliteTable</code>/<code>primaryKey</code>/<code>index</code>/<code>uniqueIndex</code>/<code>check</code>/<code>foreignKey</code> 定义全部 15 张表；表名、列名、类型、CHECK、FK、索引只在 schema 出现一次。查询用 <code>typeof table.$inferSelect / $inferInsert</code>，不使用裸字符串表/列名。</td></tr>
+<tr><td><b>DDL</b></td><td>Drizzle RC5 的 SQLite schema <b>不能表达</b> <code>STRICT</code> 和 <code>WITHOUT ROWID</code>。因此 DDL 由 <code>drizzle-kit export --sql</code> 直接输出无迁移元数据的建表 SQL，经 <code>scripts/db-schema.mjs</code> 给每个 <code>CREATE TABLE</code> 追加 <code>STRICT, WITHOUT ROWID</code>，生成 <code>schema.generated.ts</code> 的 <code>CREATE_SCHEMA_SQL</code> 字符串；运行时 import 该常量并 <code>db.$client.exec()</code>。<code>application_id/user_version/PRAGMA</code> 由打开序列原样执行。</td></tr>
+<tr><td><b>生成与校验</b></td><td><code>schema.ts → drizzle-kit export --sql（不写 migration/snapshot）→ 追加 STRICT/WITHOUT ROWID → schema.generated.ts</code>。CI 跑 <code>scripts/db-schema.mjs --check</code> 重新生成并 diff；M1 的 parity 测试应用生成 SQL 到内存库，比对 <code>PRAGMA table_list</code>(strict/wr)、<code>table_info</code>、<code>index_list/index_info</code>、<code>foreign_key_list</code>。</td></tr>
+<tr><td><b>查询</b></td><td><code>db = drizzle({ client })</code>；同步 <code>.all()/.get()/.run()</code>。普通 select/insert/update/delete、聚合、排序、分页用 Drizzle builder；动态 scope 用 <code>and/or/eq/inArray/like/sql</code> 组合，禁止字符串拼 SQL。</td></tr>
+<tr><td><b>复杂 SQL</b></td><td>非递归 CTE 用 <code>$with/with</code>；<b>递归 CTE、window、部分 SQLite 语法</b>用 Drizzle <code>sql</code> 模板，表/列必须插值 Drizzle table/column 对象（如 <code>sql`select ... from ${sessions} where ${sessions.familyRoot} = ${id}`</code>），结果用 <code>sql&lt;Row[]&gt;</code>/<code>$type</code> 标注；禁止裸写表名/列名。</td></tr>
+<tr><td><b>写入</b></td><td>行批次用 <code>db.insert(table).values(rows)</code>；幂等 UPSERT 用 <code>onConflictDoUpdate</code>；<code>excluded</code> 列用 <code>sql`excluded.${sql.identifier(column.name)}`</code>（RC5 没有 <code>excluded()</code> helper），避免字符串列名。大行集按 ≤2k 行/事务走 <code>db.transaction({ behavior: 'immediate' })</code>；<b>单条 INSERT 的 <code>values(rows)</code> 必须按 SQLite 变量上限再分块</b>（保守 <code>floor(900 / columnCount)</code>，运行前用 <code>PRAGMA compile_options</code>/常量确认），事务内可多次 insert；同步事务回调内禁止 await。</td></tr>
+<tr><td><b>数值类型</b></td><td>Drizzle SQLite 的 <code>sum()</code> 实际返回字符串（本设计 spike 已复现）；计数/整数聚合显式 <code>cast(... as integer)</code>，金额/比率/浮点用 <code>sql&lt;number&gt;</code>/<code>mapWith(Number)</code>，禁止把金额或比率截断成 integer；全部加数值回归测试。</td></tr>
+<tr><td><b>热路径</b></td><td>Drizzle 先实现活写通与回填批次；若 M3 实测行批次 P95 超过 5ms 预算，允许对「纯行批量写入」使用 <code>db.$client.prepare</code> 的预编译语句作为 measured fallback；schema/查询仍由 Drizzle 定义，不允许散落第二套表名。</td></tr>
+<tr><td><b>生命周期</b></td><td><code>db.$client</code> 就是插件打开的 <code>DatabaseSync</code>；RC5 没有 <code>db.destroy()</code>，数据库生命周期由插件持有：dispose 完成终刷后只调用一次 <code>db.$client.close()</code>。打开门禁/PRAGMA/DDL/quick_check/measured fallback 使用 <code>db.$client</code>；普通查询与 Reaper 删除用 Drizzle。</td></tr>
+<tr><td><b>打包</b></td><td><code>drizzle-orm</code> 放 <code>dependencies</code>（exact，和 zod 一样由 tsdown externalize，不 bundle）；<code>drizzle-kit</code> 只放 <code>devDependencies</code>，运行时永不 import。<code>schema.generated.ts</code> 编译进 <code>lib/index.js</code>，不新增 <code>.sql</code> 发布资产，<code>package.json</code> 的 <code>files</code> 不变。</td></tr>
+</table>
+<div class="grid2">
+<div class="card"><h4>schema.ts（列名/类型/约束的唯一来源）</h4>
+<pre><code>const FOLD_STATUSES = [
+  'pending', 'folding', 'deleting', 'ok', 'failed', 'unsupported',
+] as const
+const FOLD_STATUS_SQL = sql.raw(FOLD_STATUSES.map(v =&gt; `'${v}'`).join(', '))
+
+export const sessions = sqliteTable('sessions', {
+  id: text('id').primaryKey(),
+  familyRoot: text('family_root').notNull(),
+  foldStatus: text('fold_status', { enum: FOLD_STATUSES }).notNull(),
+  billedTokens: integer('billed_tokens').notNull().default(0),
+}, (t) =&gt; [
+  index('idx_sessions_family').on(t.familyRoot),
+  check('ck_sessions_fold_status', sql`${t.foldStatus} in (${FOLD_STATUS_SQL})`),
+])</code></pre></div>
+<div class="card"><h4>query / writer（同步 API）</h4>
+<pre><code>db.select({
+  day: requests.day,
+  tokens: sql&lt;number&gt;`cast(sum(
+    ${requests.inputTokens} + ${requests.outputTokens}
+  ) as integer)`.as('tokens'),
+}).from(requests)
+  .where(and(gte(requests.day, start), lt(requests.day, end)))
+  .groupBy(requests.day)
+  .orderBy(requests.day)
+  .all()
+
+db.insert(requests).values(batch).onConflictDoUpdate({
+  target: [requests.sessionId, requests.seq],
+  set: {
+    outputTokens: sql`excluded.${sql.identifier(
+      requests.outputTokens.name
+    )}`,
+  },
+}).run()</code></pre></div>
+</div>
+<div class="note"><b>Spike 结论（本机 Node 26 + RC5）</b>：<code>drizzle({client: DatabaseSync})</code> 可用；<code>select/insert/onConflictDoUpdate/transaction/$with</code> 均在同步 API 下通过；<code>sum</code> 返回字符串，必须显式转 number。RC5 无运行时依赖；RC 风险通过 exact pin、lockfile、Node 22.19/24.9 compat 测试和 M1 parity gate 控制。<b>DDL 生成已实测</b>：<code>drizzle-kit generate</code> 能产出复合主键、CHECK、FK、普通/部分索引的 SQL；正式实现改用 <code>export --sql</code> 直接取无元数据 DDL，M1 验证导出结果一致；将 <code>CREATE TABLE ... );</code> 追加 <code>STRICT, WITHOUT ROWID</code> 后在 <code>node:sqlite</code> 执行成功，<code>PRAGMA table_list</code> 返回 <code>strict=1, wr=1</code>。</div>
 
 <!-- ============ ④ ============ -->
 <h2 id="s4">④ 版本与重建策略</h2>
@@ -289,6 +345,7 @@ footer{margin-top:60px;color:var(--muted);font-size:12.5px;border-top:1px solid 
 <tr><td>拒绝打开后的服务形态</td><td>路由统一 <code>ready:false</code> / <code>startup_phase=degraded</code>，不写库、不改库、不退 <code>:memory:</code>（避免把「路径上有非本插件库」误当成可用空库）；记录日志与修复提示，dsh 会话列表不受影响。</td></tr>
 <tr><td><code>application_id=DSCX</code>、<code>user_version=8</code> 但表缺失/不完整</td><td>视为半建库：DROP 已知表 → 重建 schema → 重播种 meta；不保留可能不一致的旧行。</td></tr>
 <tr><td><code>quick_check</code> 失败 / 打开异常</td><td><b>P2 后台 worker 每次启动执行</b> <code>PRAGMA quick_check</code>（低优先级；<code>clean_shutdown=0</code> 或打开异常时提高优先级），不在 apply 主线程执行；失败则 close、把文件改名为 <code>index.sqlite.corrupt-&lt;ts&gt;</code>（不直接 rm，避免误删他方文件），再建新库；失败 → <code>:memory:</code> 降级（全功能、随进程消失）+ warn；两者皆败 → 路由统一 <code>ready:false</code>。</td></tr>
+<tr><td>建库/重建 DDL 来源</td><td><code>schema.generated.ts</code> 的 <code>CREATE_SCHEMA_SQL</code>（Drizzle <code>schema.ts</code> 生成后追加 <code>STRICT, WITHOUT ROWID</code>）；不执行 drizzle migration、不建迁移表；<code>application_id/user_version/PRAGMA</code> 由打开序列负责。见 §5.0.1。</td></tr>
 <tr><td>检测到旧 <code>overview-cache.v1.json</code></td><td>首次成功建库后删除（一次性清理，失败静默）。</td></tr>
 </table>
 <div class="note warn"><b>磁盘与多进程</b>：数据库目录沿用 dsh 的 <code>0700</code>、文件 <code>0600</code>（session-query-sqlite/schema.ts:37-41）；WAL 的 <code>-wal</code>/<code>-shm</code> 同目录。重建/改名只在确认文件未被另一进程持有时执行；否则退 <code>:memory:</code> 并告警。</div>
@@ -319,6 +376,7 @@ footer{margin-top:60px;color:var(--muted);font-size:12.5px;border-top:1px solid 
 <div class="note"><b>重建可行性根保证</b>：折叠是「header + 事件序列 → 行集」的确定性纯函数（现状代码已经如此，diff-fold 差分测试即证）；因此任意会话、任意时刻都可删掉行集重折，SQLite 里不存在不可再生的状态。<b>必要性收敛</b>：只有身份被替换 / 版本升级 / 损坏 / 库领先日志，以及 folding/failed 大行集的整会话重折，会触发全量重建；日常增长走增量续读，避免现状「身份不符→整体重建」的高频全量开销。</div>
 <!-- ============ ⑤ ============ -->
 <h2 id="s5">⑤ 表设计（15 张表）</h2>
+<p class="small"><b>实现映射</b>：以下每张表的字段/约束在 <code>src/host/db/schema.ts</code> 有唯一 <code>sqliteTable</code> 定义；本文表格是设计契约，Drizzle schema 是可执行定义，<code>schema.generated.ts</code> 是运行时建库脚本（§5.0.1）。<b>schema.ts ↔ generated SQL ↔ SQLite catalog</b> 由 parity 测试锁定；HTML 设计表由 M1 fixture 逐字段对照（不参与运行时校验）。任何字段/索引/约束改动必须同时更新 schema 并重新生成。</p>
 
 <h3>5.0 命名与冗余约定（先立规矩，再列字段）</h3>
 <div class="grid2">
@@ -345,6 +403,28 @@ footer{margin-top:60px;color:var(--muted);font-size:12.5px;border-top:1px solid 
 </ol>
 </div>
 </div>
+
+<h3>5.0.1 Drizzle schema 与生成 DDL（选定实现）</h3>
+<div class="grid2">
+<div class="card">
+<h4>Schema 是表/列名的唯一来源</h4>
+<ul>
+<li><code>src/host/db/schema.ts</code> 为 15 张表各定义一个 <code>sqliteTable</code>；列用 <code>text/integer/real</code> + <code>notNull/default</code>/<code>$type</code>；复合主键用 <code>primaryKey({columns})</code>，索引用 <code>index/uniqueIndex</code>（部分索引用 <code>.where(sql`...`)</code>），约束用 <code>check</code>/<code>foreignKey</code>。schema 同时导出 <code>TABLES</code>（由 table 对象派生），打开门禁的 allowlist 与重建 DROP 列表从这里取，不维护第二份表名清单。</li>
+<li>查询行类型从 <code>typeof table.$inferSelect</code> 推导，写入类型从 <code>$inferInsert</code> 推导；<b>禁止</b>在 query 模块手写表名/列名字符串。</li>
+<li>枚举列用 <code>text('...', { enum: [...] })</code> 得到 TS 联合，CHECK 由 <code>check()</code> 同步定义；状态常量只在 schema/常量模块出现一次。</li>
+</ul>
+</div>
+<div class="card">
+<h4>DDL 生成与校验</h4>
+<ul>
+<li><code>drizzle-kit export --sql --dialect=sqlite --schema=src/host/db/schema.ts</code>（dev-only）从 schema 直接输出建表/索引 SQL（不写 migration/snapshot）；<code>scripts/db-schema.mjs</code> 为每个 <code>CREATE TABLE</code> 追加 <code>STRICT, WITHOUT ROWID</code>，生成 <code>schema.generated.ts</code>（<code>CREATE_SCHEMA_SQL</code>）。15 张表都有主键，单键表（<code>meta</code>/<code>fold_state</code>/<code>session_tombstones</code>）同样适用；「单键除外」只指主键列数，不是行存例外。</li>
+<li>运行时 import <code>CREATE_SCHEMA_SQL</code> 并 <code>db.$client.exec()</code> + 打开序列 PRAGMA；不调用 <code>migrate()</code>，不创建 <code>__drizzle_migrations</code>。</li>
+<li>CI 跑 <code>scripts/db-schema.mjs --check</code> 重新生成并 diff；M1 parity 测试应用 SQL 到内存库，比对 <code>PRAGMA table_list</code>(strict/wr)、<code>table_info</code>、<code>index_list/index_info</code>、<code>foreign_key_list</code>，任何漂移失败。</li>
+<li>Drizzle RC5 不能表达 <code>STRICT/WITHOUT ROWID</code>，所以后处理脚本是必需的、受测试的构建步骤；若生成器无法稳定输出某个结构，M1 停下来修生成器，不允许手写第二份 DDL。</li>
+</ul>
+</div>
+</div>
+<div class="note"><b>为什么不直接用 drizzle-kit migration</b>：本设计的版本策略是 <code>user_version</code> 不符即全量重建，迁移链没有语义；把 schema 当 DDL 生成源、把生成 SQL 当运行时建库脚本，既保留 schema-as-code 的类型安全，又避免 migration 状态机与重建逻辑双轨。</div>
 
 <h3>5.1 <code>meta</code> — 单行运行状态 <span class="tag new">新</span></h3>
 <table>
@@ -581,7 +661,7 @@ steps=COUNT(steps WHERE end_time NOT NULL，<b>与 harness sessionStats 对齐�
 <tr><td><code>query/requests|tool-calls|skill-loads</code> 的 <code>scope</code> 模式</td><td>根家族集合（同 overview scope）</td><td>否（逐会话行）</td><td>是</td><td>带 <code>scope</code> 是多会话列表/趋势，按根家族集合过滤继承前缀，避免继承重复；带 <code>sessionId</code> 是明细，保留继承行。</td></tr>
 <tr><td><code>query/requests|steps|timeline|events|file-ops|spans|skill-loads|tool-calls</code>（sessionId 模式）</td><td>单个会话</td><td>否</td><td><b>否</b></td><td>明细视图展示完整会话（含继承），与现状 detail 一致；tally 类聚合走 §5.15 前几行。</td></tr>
 </table>
-<div class="note"><b>实现约束</b>：跨会话聚合一律通过 <code>family_root</code> 建根集合（不逐会话 EXISTS），继承过滤一律经 <code>sessions.seed_cut_seq</code>；两条规则集中成 SQL 视图/CTE 片段（如 <code>post_seed</code>），避免 16 条路由各写一份。<b>家族完整性</b>：家族聚合要求所有成员 <code>fold_status='ok'</code>；任一成员 pending/folding/failed → 家族合计标记 <code>family_partial=true</code>，前端显示 «—»/partial，绝不把部分成员之和当完整家族；summary/days/tally 中这类家族不计入合计并计入 coverage。<b>孤儿 subagent</b>（父会话缺失、family_root=self）仍应被 overview 聚合隐藏：聚合在 family_root 之后再 join 根行，要求根 <code>origin != 'subagent' AND blank=0</code>；query/family 按 id 查询时可单独展示它自身。所有会话级路由在 <code>fold_status != 'ok'</code> 时统一返回 null/status（不吐部分行），前端据此渲染 «—»。M2/M4 的对拍测试必须包含 seeded-fork、普通 fork、根+多级 subagent 三种 fixture，并逐指标断言「含/不含继承」与「self/family」。</div>
+<div class="note"><b>实现约束</b>：跨会话聚合一律通过 <code>family_root</code> 建根集合（不逐会话 EXISTS），继承过滤一律经 <code>sessions.seed_cut_seq</code>；两条规则集中成 Drizzle <code>$with/with</code> 片段或插值 table/column 的 <code>sql</code> 模板（如 <code>post_seed</code>），避免 16 条路由各写一份。<b>家族完整性</b>：家族聚合要求所有成员 <code>fold_status='ok'</code>；任一成员 pending/folding/failed → 家族合计标记 <code>family_partial=true</code>，前端显示 «—»/partial，绝不把部分成员之和当完整家族；summary/days/tally 中这类家族不计入合计并计入 coverage。<b>孤儿 subagent</b>（父会话缺失、family_root=self）仍应被 overview 聚合隐藏：聚合在 family_root 之后再 join 根行，要求根 <code>origin != 'subagent' AND blank=0</code>；query/family 按 id 查询时可单独展示它自身。所有会话级路由在 <code>fold_status != 'ok'</code> 时统一返回 null/status（不吐部分行），前端据此渲染 «—»。M2/M4 的对拍测试必须包含 seeded-fork、普通 fork、根+多级 subagent 三种 fixture，并逐指标断言「含/不含继承」与「self/family」。</div>
 
 <h3>5.16 <code>session_tombstones</code> — 已删除会话墓碑 <span class="tag new">新</span></h3>
 <table>
@@ -594,7 +674,7 @@ steps=COUNT(steps WHERE end_time NOT NULL，<b>与 harness sessionStats 对齐�
 
 <!-- ============ ⑥ ============ -->
 <h2 id="s6">⑥ 索引设计与查询模式对照（需求 11）</h2>
-<p>原则：每条索引必须对应一个真实查询模式；WITHOUT ROWID 联合主键本身就是最主用的聚簇索引（按会话取全部行 = 一次范围扫）。</p>
+<p>原则：每条索引必须对应一个真实查询模式；WITHOUT ROWID 联合主键本身就是最主用的聚簇索引（按会话取全部行 = 一次范围扫）。索引在 Drizzle <code>schema.ts</code> 声明（部分索引用 <code>.where()</code>），由生成 DDL 落地；§5.0.1 的 parity 测试保证 schema 索引与运行时 SQLite 索引一致。</p>
 <table>
 <tr><th style="width:330px">查询模式（消费板块）</th><th style="width:290px">索引 / 访问路径</th></tr>
 <tr><td>会话卡片页（排序 recent / tokens / context；分页 12）</td><td><code>sessions(updated_at DESC)</code>（recent）、<code>sessions(cur_total DESC)</code>（context）；tokens 列表排序用 <code>family_root</code> 聚合的 <code>SUM(billed_tokens)</code>（根集合小，聚合后排序）；<code>sessions(billed_tokens DESC)</code> 只用于自身值展示/可选排序，不承担列表 family 排序（ids 模式 sort 不生效）；页行构成 → 12 个 id IN 走各子表 PK 前缀</td></tr>
@@ -629,6 +709,7 @@ steps=COUNT(steps WHERE end_time NOT NULL，<b>与 harness sessionStats 对齐�
 错误 → { ok:false, error:{ code, message } }；参数上限：limit≤500、query≤500 字、ids≤256</code></pre>
 
 <h3>7.2 路由总表（16 条查询 + 6 条保留 + 2 条改造）</h3>
+<p class="small"><b>实现约定（Drizzle）</b>：路由处理器只调用 <code>src/host/db/queries/*</code> 的 typed functions；普通 select/insert/update/delete、过滤、排序、分页用 Drizzle builder + schema 列对象；递归 CTE/window 用 <code>sql</code> 模板插值 Drizzle table/column（不写裸表名）；聚合必须显式 cast 为 number；同步 <code>.all()/.get()/.run()</code>；<code>db.transaction({ behavior: 'immediate' })</code> 回调内禁止 await。查询模块之外不允许裸 SQL 字符串；DDL（<code>schema.generated.ts</code>）、打开序列/维护 PRAGMA 由 <code>db.$client</code> 执行，是明确例外。M4 用 <code>query.toSQL()</code> 或 <code>EXPLAIN QUERY PLAN</code> 断言 SQL 形状与索引。</p>
 <table>
 <tr><th style="width:225px">路由 <span class="tag new">新</span></th><th>参数 → 响应要点</th><th style="width:190px">取代 / 消费板块</th></tr>
 <tr><td><code>query/sessions</code></td><td>scope{coverage,group,day,range,query,model?,running?,pick?} + sort(recent|tokens|context) + page/pageSize <b>或 ids[]</b> → 行数组{title,cwd,archived,running,workspace_title,updated_at,created_at,<b>billed_tokens(self)</b>,<b>family_billed_tokens</b>,<b>family_partial</b>,cur_total,cur_parts[],cost_usd(self),family_cost_usd?,<b>turns</b>,<b>steps</b>,<b>created_day</b>,model,context_window,max_output_tokens,last_user,parent_session,origin,family_root,fold_status} + {total,scope_total,groups[],<b>coverage</b>}。<b>语义（评审修订）</b>：默认列表 = 根会话（恒排除 blank 与 <code>origin='subagent'</code>）；<code>tokens/cost</code> 用 <code>family_*</code>（root+subagent 后代，按 <code>family_root</code> 聚合），<code>turns/steps/cur_total/cur_parts</code> 为根自身（§5.15）；<code>scope.day</code> 沿用现状 <code>matches</code> 的语义：该日 tokens&gt;0 或 requests&gt;0，而不是任意 wall/tool 活动；<code>scope.range</code> 命中 = <code>updated_at</code> 在窗口内 <b>或</b> 窗口内存在 token/request 活动（同 matches），不能只看 updated_at；<code>ids[]</code> 模式返回请求的任意 id（可含 subagent）、按请求顺序、self 值，sort 不生效；列表的 tokens 排序按 family_root 聚合，不依赖 <code>sessions.billed_tokens</code> 单列索引。fold_status ≠ ok 或 family_partial → 前端渲染 «—»/partial，绝不给 0/部分行；coverage 随响应返回。</td><td>overview part=page + snapshot + heads(批量模式) —— Overview 卡片表、fleet 树卡头部、当前会话锚定</td></tr>
@@ -696,7 +777,7 @@ POST delta {sessionId,
 </ul>
 <h4>SQLite 同步 API 的硬约束</h4>
 <ul>
-<li><code>DatabaseSync</code> 的每次 exec/事务都在主线程；回填禁止大事务直接跑：拆为 ≤2k 行/事务，事务间 <code>setTimeout(0)</code> 让路。<b>所有写入（活写通/回填/重建/meta）统一走 SqliteWriter 单写者队列</b>；worker 只做折叠/重聚合并返回行批次，<b>不直接写 DB</b>，避免多写者/跨线程连接问题。</li>
+<li><code>DatabaseSync</code> 的每次 exec/事务都在主线程；Drizzle <code>node-sqlite</code> 是同步 API，<code>db.transaction({ behavior: 'immediate' })</code> 回调禁止 await；回填禁止大事务直接跑：拆为 ≤2k 行/事务，事务间 <code>setTimeout(0)</code> 让路。<b>所有写入（活写通/回填/重建/meta）统一走 SqliteWriter 单写者队列</b>；worker 只做折叠/重聚合并返回行批次，<b>不直接写 DB</b>，避免多写者/跨线程连接问题。</li>
 <li><code>quick_check</code> 不在 apply 执行：P2 每次启动都在后台 worker 执行（低优先级；unclean 或打开异常时提高优先级）；期间插件数据标记 <code>integrity_check=true</code>/ready:false（或只读现有行并显式标注），不阻塞 dsh 会话列表。</li>
 <li>版本不符重建：小库在 P0 做 DROP/建表；大库 close 后改名为 <code>index.sqlite.rebuild-&lt;ts&gt;</code>、立即新建空库（P0 只做 rename+DDL），旧文件后台删除；标记 <code>rebuilding</code>/ready:false，dsh 会话列表不受影响。</li>
 </ul>
@@ -748,6 +829,7 @@ bootScheduler  [P2：首个路由响应后 1.5–2s，或 5s idle 后启动]
 10. P4 Reaper（§8.7）以 30–60s 周期或 backfill pass 结束后运行：候选发现走 IO lane，删除走单写者，
     与回填同池但优先级最低；首屏/交互期间不启动，连续交互最多延后 30s</code></pre>
 <div class="note warn"><b>事务预算（评审修订）</b>：「单会话 = 单事务」仅适用于 ≤5 万行的常规行集；更大行集<b>分片提交</b>（每片 ≤2k 行一个事务，事务间让出事件循环；水位随片推进，期间 sessions.fold_status='folding'，<b>所有查询路由</b>按 «—» 隐藏该会话），避免数百 ms 级同步阻塞事件循环。折叠计算仍整会话一次完成，分片只作用于写入；<b>崩溃/失败时不做跨片回滚</b>——boot 或重试发现 folding/failed 即 DELETE 子行并整会话重折（部分行集永不可见）。增量续读的追加式写入不受此限（单调追加，随时可见）。</div>
+<p class="small"><b>写入实现（Drizzle）</b>：所有行写入走 Drizzle 同步 API（<code>insert().values()</code> / <code>onConflictDoUpdate</code> / <code>update</code> / <code>delete</code>）；<code>db.transaction({ behavior: 'immediate' })</code> 回调必须是同步函数，禁止 await；事务粒度 ≤2k 行或 ≤5ms，<b>事务内每条多行 INSERT 再按 ≤900 个绑定参数分块</b>（避免 SQLITE_MAX_VARIABLE_NUMBER）；事务失败由 Drizzle rollback。热路径若实测超过预算，按 §3.4 使用 <code>db.$client.prepare</code> 的 measured fallback，但表/列仍引用 Drizzle schema 常量。</p>
 
 <h3>8.2 活会话写通（及时刷新的根）</h3>
 <table>
@@ -795,7 +877,7 @@ bootScheduler  [P2：首个路由响应后 1.5–2s，或 5s idle 后启动]
 <tr><td><b>触发</b></td><td>P2 hydration 完成后启动；作为独立的 <b>P4 维护 lane</b>，每 30–60s 运行一次（<b>不</b>跟随 §8.4 的 5s 请求扫描窗）。连续交互时最多延后 30s，之后以 ≤2ms 低频推进候选发现；首屏期间不启动。它不是新线程：<code>listSessions</code>/<code>stat</code>/<code>persistence</code> 是主进程服务，不能搬到通用 worker；删除必须走 <code>SqliteWriter</code> 单写者。候选发现/stat 走 AsyncIoExecutor（stat 用独立 16 上限，不占日志 read 槽）。</td></tr>
 <tr><td><b>候选判定</b></td><td>同时满足：① <code>listSessions()</code> 成功（<b>空列表合法</b>）；② id 在 sessions 表但不在 listed 集合；③ <code>sessions.get(id)</code> 不存在（非 live）；④ <code>fold_status</code> 不是 folding/deleting；⑤ <b>持久化/stat 可用</b>（不可用则 Reaper 禁用，纯 live 模式绝不批量删冷行）；⑥ <code>stat(id)=undefined</code>；⑦ <code>log_path</code> 文件不存在，或 log_path 为 NULL 且连续缺席 ≥24h；⑧ 连续两轮 Reaper 缺席 + ≥60s 宽限；⑨ <code>folded_at</code> 早于 60s。任一不满足都不删；stat 返回 undefined 但文件存在（malformed/空 header）视为损坏，不删。</td></tr>
 <tr><td><b>防复活</b></td><td>删除前先写 <code>session_tombstones(id, deleted_at, reason)</code>（reason 只能是 'missing-from-list'|'log-file-missing'），取消/拒绝该 id 的 queued/in-flight backfill、seed、refold（候选已排除 live，不取消 live 写通）；清掉内存工作态。**写事务查墓碑的范围**：backfill/seed/refold/scan INSERT/UPDATE 查；墓碑写入、删除事务、TTL 清理自身豁免。墓碑保留 7 天（可配），过期前若 sessions 行仍在则续期重试。会话重新出现时由扫描窗先删墓碑、重置 <code>fold_status='pending'</code>、<code>last_seq=-1</code> 再重新准入。</td></tr>
-<tr><td><b>删除事务</b></td><td>先置 <code>fold_status='deleting'</code>（查询隐藏），再按子表/主键 ≤2k 行或 ≤5ms 分片删除，最后删 sessions 行；小行集可单事务。FK CASCADE 仅作为最终兜底，不作为唯一分片机制。失败保留墓碑与 sessions 行，下轮从 deleting 重试；崩溃不会留下「部分子行 + fold_status=ok」。</td></tr>
+<tr><td><b>删除事务</b></td><td>先置 <code>fold_status='deleting'</code>（查询隐藏），再按子表/主键 ≤2k 行或 ≤5ms 分片删除（Drizzle <code>db.delete(table).where(...)</code>），最后删 sessions 行；小行集可单事务。FK CASCADE 仅作为最终兜底，不作为唯一分片机制。失败保留墓碑与 sessions 行，下轮从 deleting 重试；崩溃不会留下「部分子行 + fold_status=ok」。</td></tr>
 <tr><td><b>关联修复</b></td><td>删除父会话后，受影响的<b>整个子树</b>重算 <code>family_root</code> 到最近的存活非 subagent 祖先；若没有存活祖先，则子树中直接子会话各自成为根。保留仍存在的子会话，并 bump 受影响行的 detail_rev/generation，避免 overview 丢失完整范围。</td></tr>
 <tr><td><b>可观测</b></td><td><code>query/status</code> 增加 <code>reaper{running,last_run_at,candidates,deleted_sessions,deleted_child_rows,failed,tombstones}</code>；日志只记录 id 与原因，不打印会话内容。</td></tr>
 </table>
@@ -841,10 +923,11 @@ bootScheduler  [P2：首个路由响应后 1.5–2s，或 5s idle 后启动]
 <h3>10.1 运行时与支持面</h3>
 <table>
 <tr><th style="width:250px">项</th><th>结论 / 证据</th></tr>
-<tr><td><code>node:sqlite</code> 可用性</td><td>22.13.0 / 23.4.0 起免 flag（仍 ExperimentalWarning）；<b>Node 24 仍是 Stability 1.1（Active development），25.7.0 才升为 Release candidate</b>，因此 dsh 0.2.2 线的 <code>&gt;=24.9.0</code> 属于「免 flag 可用但非稳定 API 承诺」；插件自身 floor ^22.19.0 同样可用。dsh 自身即用 <code>node:sqlite</code>（session-query-sqlite/schema.ts:44、storage-sqlite 全包）——技术栈与宿主一致；需在 compat 矩阵中锁住 DatabaseSync 的实际 API 面。</td></tr>
+<tr><td><code>node:sqlite</code> 可用性</td><td>22.13.0 / 23.4.0 起免 flag（仍 ExperimentalWarning）；<b>Node 24.9–24.14 是 Stability 1.1，24.15+ 升为 Stability 1.2（Release candidate），仍非 stable</b>；dsh 0.2.2 线的 <code>&gt;=24.9.0</code> 因此可能落在 1.1 或 1.2，API 面仍需 compat 探针锁定；插件自身 floor ^22.19.0 同样可用。dsh 自身即用 <code>node:sqlite</code>（session-query-sqlite/schema.ts:44、storage-sqlite 全包）——技术栈与宿主一致。</td></tr>
 <tr><td>dsh 三条支持线（0.2.0-rc.2+ / 0.2.1-rc.2+ / 0.2.2-rc.1+）</td><td>新方案用到的接缝（session/event、observeSession('none')、stat/open/read(offset)、listSessions、connection.fetch.register、workspaceRegistry、agents、storageDomain 无关化）全部是当前代码已在用或 harness 三线共有的契约；无新增接缝。</td></tr>
 <tr><td>投影注册移除的连带</td><td>harness 列表行的 <code>contextTimeline/contextActivity/contextHeaders</code> 键消失——0.2.2 线本就 summary:false 不携带（compat §4）；0.2.0/0.2.1 线列表负载反而变小；无 harness 代码读取插件投影单元（grep 证据见 §2.1）。<b>但 title/blank/lastPromptAt 仍来自 dsh 自有投影</b>：必须保留 <code>sessionProjections</code>（live）与 <code>sessionProjectionCache</code>（cold）依赖，只移除插件的三个注册；<code>fallback.ts</code> 的 stub 投影与升级门改写为 route 级 <code>ready:false/harness_supported:false</code>；建库后一次性清理旧 <code>session_projcache</code> 插件行。<b>座席机制分界（评审修订）</b>：客户端 useProjection 座席保留用于 harness 自有单元（contextPressure / contextBreakdown / tokenUsage / sessionStats / subagentCatalog / agentTeam —— 均非本插件注册，不受影响）；仅插件自有的 contextTimeline / contextHeaders / contextActivity 三个座席改走 query 路由。</td></tr>
-<tr><td>兼容矩阵测试</td><td>tests/compat 三线启动探针需重写目标（新 status/context 探针替代投影行探针）；保留 title/sessionListMetadata 读取探针（证明移除插件注册后 dsh 自有投影仍可读）；fold-switch 事件族覆盖要求不变（折叠器仍在）；补 node:sqlite DatabaseSync 的最小 API 面探针（三线 Node 版本）。</td></tr>
+<tr><td>Drizzle 依赖与版本</td><td><code>drizzle-orm@1.0.0-rc.5</code> 放 <code>dependencies</code>（exact，tsdown externalize）；<code>drizzle-kit@1.0.0-rc.5</code> 仅 <code>devDependencies</code>，运行时不 import。npm stable latest <code>0.45.4</code> 没有 <code>drizzle-orm/node-sqlite</code>，RC5 有；这是已接受的风险，必须锁 exact + lockfile + Node 22.19/24.9 兼容测试。Drizzle 无 native addon、无必需运行时依赖（RC5 仅有可选 peer）；<code>db.$client</code> 就是插件持有的 <code>DatabaseSync</code>，RC5 没有 <code>db.destroy()</code>，dispose 后由插件 close 一次。<code>schema.generated.ts</code> 编译进 lib，不新增 <code>.sql</code> 发布资产；<code>drizzle-kit</code> 只在 dev/CI 生成 SQL，运行时不 import。</td></tr>
+<tr><td>兼容矩阵测试</td><td>tests/compat 三线启动探针需重写目标（新 status/context 探针替代投影行探针）；保留 title/sessionListMetadata 读取探针；fold-switch 事件族覆盖不变；补 Drizzle <code>node-sqlite</code> 的 select/insert/upsert/transaction、聚合数值转换、schema parity 与 DDL 生成探针（Node 22.19/24.9）。</td></tr>
 </table>
 
 <h3>10.2 风险与缓解</h3>
@@ -864,11 +947,21 @@ bootScheduler  [P2：首个路由响应后 1.5–2s，或 5s idle 后启动]
 <tr><td>fold_state 载荷膨胀</td><td><span class="tag warn">中</span></td><td>磁盘 64 MB LRU（实测校准）+ 逐出退回全量重折；内存工作态另设 64 MB LRU（§5.13）；surface 是压缩后的当前上下文，不是整段历史。</td></tr>
 <tr><td>usage 缺失（无计费数据的路由/模型）</td><td><span class="tag warn">低</span></td><td>计费列 NULL → 成本 «—»（现状同口径，provider usage 权威）</td></tr>
 <tr><td>写入失败（磁盘满/只读）</td><td><span class="tag warn">低</span></td><td>:memory: 降级全功能；≤5 万行事务失败整批回滚；分片失败标记 folding/failed、对查询隐藏并由 boot 整会话重折；路由 ready:false 兜底。</td></tr>
+<tr><td>Drizzle RC 版本漂移</td><td><span class="tag warn">中</span></td><td><code>1.0.0-rc.5</code> exact pin + lockfile；三线 Node/兼容探针锁住 select/insert/upsert/transaction/CTE；升级只在 stable 1.0 发布并通过 parity 后。RC 不可用则暂停合并，不悄悄换回 raw DAO。</td></tr>
+<tr><td>schema → DDL 后处理漂移</td><td><span class="tag warn">高</span></td><td><code>drizzle-kit export --sql</code> + 追加 <code>STRICT, WITHOUT ROWID</code> 的 <code>scripts/db-schema.mjs</code> 必须有 <code>--check</code>、schema parity（table_list/table_info/index/FK）和 M1 建库测试；生成器不稳定就停 M1，禁止第二份手写 DDL。</td></tr>
+<tr><td>Drizzle 复杂 SQL/类型退化</td><td><span class="tag warn">中</span></td><td>递归 CTE/window/PRAGMA 用 <code>sql</code> 模板插值 table/column，结果显式 <code>sql&lt;Row[]&gt;</code>；禁止裸表名；每个复杂查询有 fixture + <code>EXPLAIN QUERY PLAN</code>；若 builder 类型不可维护，保留 raw <code>sql</code> 但不得回退字符串表名。</td></tr>
+<tr><td>聚合数值类型</td><td><span class="tag warn">中</span></td><td>Drizzle SQLite <code>sum()</code> 返回字符串（spike 已复现）；计数/整数聚合显式 cast integer，金额/比率/浮点用 <code>mapWith(Number)</code>/<code>sql&lt;number&gt;</code>，不能整数截断；加数值回归测试，避免「10」参与字符串拼接或比较。</td></tr>
+<tr><td>Drizzle 写热路径开销</td><td><span class="tag warn">中</span></td><td>Drizzle 每次执行构建/准备 SQL；多行 <code>values()</code> 还受 <code>SQLITE_MAX_VARIABLE_NUMBER</code> 限制，必须按列数分块（保守 ≤900 参数）；活写通与回填批次先按 Drizzle 实现，M3 测每批 ≤5ms；超预算时仅对纯批量行写入用 <code>db.$client.prepare</code> 的 measured fallback，schema/列名仍引用 Drizzle 常量。</td></tr>
 <tr><td>行为回归（口径漂移）</td><td><span class="tag warn">中</span></td><td>折叠口径不变（实现改为发射行）→ diff-fold 差分继续有效；新增「行集 vs 现投影 wire」对拍测试（同一 fixture 双实现逐字段比对）；KPI/days/tally 与现 overviewAggregate 输出对拍，并按 §5.15 矩阵显式覆盖 family/继承/根会话三种差异（seeded fork、普通 fork、多级 subagent）。</td></tr>
 </table>
 
 <h3>10.3 明确的限制（诚实声明）</h3>
 <ul>
+<li><b>Drizzle RC</b>：<code>drizzle-orm/node-sqlite</code> 目前只在 1.0 RC；stable 0.45.4 不可用。exact pin 是兼容性的一部分，不代表 Drizzle 1.0 已稳定。</li>
+<li><b>Drizzle schema 表达不了 STRICT/WITHOUT ROWID</b>：DDL 由 schema 生成后追加表选项；这是受测试的构建步骤，不是手写第二份 DDL。若生成器/后处理失败，M1 必须停下。</li>
+<li><b>复杂 SQL 的边界</b>：递归 CTE、window、PRAGMA 仍用 <code>sql</code> 模板，只有插值的 table/column 有保护；裸 SQL 片段必须限制在 <code>db/queries</code> 并加 EXPLAIN/fixture 测试。</li>
+<li><b>聚合数值</b>：Drizzle SQLite 的 <code>sum()</code> 返回字符串；计数/整数聚合 cast integer，金额/比率/浮点用 <code>mapWith(Number)</code>/<code>sql&lt;number&gt;</code>，不能整数截断。</li>
+<li><b>不使用 drizzle migration</b>：migration API/迁移表被禁用；版本重建仍以 <code>user_version</code> 全量重建为准。</li>
 <li><b>不做全文检索</b>：消息正文检索应由 dsh sessionQuery FTS（部署可选启用）承担；本库仅 title/cwd/last_user 的 <code>search_text</code> LIKE（小写折叠覆盖非 ASCII；last_user 仍只保留 200 字，超出部分的搜索命中是已知边界）。</li>
 <li><b>身份窗口</b>：日志被原地重写且保持 path+size+mtime 的情形不可见（与现状 overviewCache 相同的窗口，非新引入）；<code>stat().revision</code> 可用时优先。</li>
 <li><b>镜像列陈旧 ≤5s</b>（title/blank/running/archived）：与现状请求期直读持平；若未来 harness 推送这些变化可进一步收紧。</li>
@@ -885,14 +978,14 @@ bootScheduler  [P2：首个路由响应后 1.5–2s，或 5s idle 后启动]
 <h2 id="s11">⑪ 实施路线与验证</h2>
 <table>
 <tr><th style="width:90px">里程碑</th><th>内容</th><th style="width:330px">验收</th></tr>
-<tr><td><b>M1</b> 地基</td><td>DB 打开/门禁/重建（§4.1，先读后写）；meta/sessions DAO；STRICT schema + 索引 DDL；权限/clean_shutdown/db_epoch</td><td>版本不符重建、他方库拒开、<b>application_id=0 且有表拒开且文件不变</b>、:memory: 降级、重建后 generation 变化；各门禁/降级路径测试全绿</td></tr>
-<tr><td><b>M2</b> 折叠→行</td><td>行发射器改造（终结点：请求/步骤/工具/表面/事件/span/技能/系统提示/header/file_ops ordinal）；活写通器；FoldWorkState + fold_state 续折；两把键绝对值；read(fold_state.last_seq+1) 增量</td><td><b>对拍测试</b>：现 fixtures 全量重折 → 行集 ↔ 现 TimelineState/ActivityState wire 逐字段一致；diff-fold 0 退出；seeded fork / 普通 fork / 多级 subagent 的 §5.15 矩阵逐项断言；file_ops 多文件搜索不丢行；时间旅行严格 <code>seq&lt;X</code></td></tr>
+<tr><td><b>M1</b> 地基</td><td>DB 打开/门禁/重建（§4.1，先读后写）；Drizzle <code>schema.ts</code>（15 表）+ <code>drizzle-kit export --sql</code> + STRICT/WITHOUT ROWID 后处理 + <code>schema.generated.ts</code>；Drizzle meta/sessions DAO；权限/clean_shutdown/db_epoch</td><td>版本不符重建、他方库拒开、<b>application_id=0 且有表拒开且文件不变</b>、:memory: 降级、重建后 generation 变化；Drizzle select/insert/upsert/transaction smoke；schema parity（table_list strict/wr、table_info、index、FK）全绿；各门禁/降级路径测试全绿</td></tr>
+<tr><td><b>M2</b> 折叠→行</td><td>行发射器改造（终结点：请求/步骤/工具/表面/事件/span/技能/系统提示/header/file_ops ordinal）；活写通器；FoldWorkState + fold_state 续折；两把键绝对值；read(fold_state.last_seq+1) 增量；<b>Drizzle 同步 insert/onConflictDoUpdate/transaction</b></td><td><b>对拍测试</b>：现 fixtures 全量重折 → 行集 ↔ 现 TimelineState/ActivityState wire 逐字段一致；diff-fold 0 退出；seeded fork / 普通 fork / 多级 subagent 的 §5.15 矩阵逐项断言；file_ops 多文件搜索不丢行；时间旅行严格 <code>seq&lt;X</code>；聚合数值转 number 测试；多行 INSERT 参数分块不超过 SQLite 变量上限</td></tr>
 <tr><td><b>M3</b> 回填调度</td><td>boot 对账 / 队列排序 / 切片+worker 行批次 / 节流 / coverage SQL 化（含 folding）/ 删除对账 / Reaper + session_tombstones / clean_shutdown 双向尾部校验 / 分片崩溃清理 / 活会话内存上限 / 启动快路径与优先级池 / 共享 WorkScheduler + 资源执行器</td><td>1,158 会话语料（现状基准）播种内存峰值 &lt; 300 MB、时长 ≤ 现状；coverage 数字与 folds 数一致；SIGKILL/掉电模拟下两方向水位都自愈；50 并发 subagent 常驻/峰值达标；<b>dsh 启动到会话列表可交互不回归（插件 apply 热盘 p99 ≤10ms，冷盘走安全阀）</b>；回填期间事件循环最大延迟 ≤16ms；同 session detail+backfill 并发只折叠一次（去重命中）；<b>已删除会话的全部子行清零、在途 backfill 不能复活、临时 list 失败不误删</b>。</td></tr>
-<tr><td><b>M4</b> 查询 API</td><td>16 条路由 + 统一 envelope/分域 unchanged；SQL 性能验收（§6 门槛）；sessions/timeline/events/tool-calls 契约全部落地；family_root 聚合</td><td>旧 overview 四 parts 输出与新 query/* 输出在基准语料上对拍（按 §5.15 矩阵解释差异）；P95 ≤50ms；status/backfill 永不 unchanged；query/status 记录行数/库大小基线（§6 规模天花板触发条件的观测起点）</td></tr>
+<tr><td><b>M4</b> 查询 API</td><td>16 条路由 + 统一 envelope/分域 unchanged；<b>Drizzle typed queries + sql 模板</b>；SQL 性能验收（§6 门槛）；sessions/timeline/events/tool-calls 契约全部落地；family_root 聚合</td><td>旧 overview 四 parts 输出与新 query/* 输出在基准语料上对拍（按 §5.15 矩阵解释差异）；P95 ≤50ms；status/backfill 永不 unchanged；query/status 记录行数/库大小基线；复杂查询 EXPLAIN 命中预期索引</td></tr>
 <tr><td><b>M5</b> 前端重接线</td><td>§9 映射逐板块切换；删除缓存簇；unchanged 分域协议；preview 截断的自动全文加载；search_text 非 ASCII 搜索；days 的 all 窗口；首屏 serve-first 与启动占位</td><td>浏览器实测（390px→桌面、双语/多语言搜索、长会话、/context 弹窗、超长正文）；<b>首屏不等待 hydration：plugin query p95 ≤50ms，pending «—» 可见且自动补齐</b>；payload 字节数与请求数对比报告；堆峰值对比；unchanged 在 remount/逐出场景不返回空数据</td></tr>
-<tr><td><b>M6</b> 清场</td><td>删三个插件投影注册/JSON 缓存/foldCache/foldJournal/旧路由与旧测试；保留 sessionProjections/sessionProjectionCache 的 title/metadata 读取；fallback 改 route 级；清理旧 projcache 插件行；compat 矩阵重写；compatibility.md 更新（数据面章节整体重写）</td><td><code>pnpm run check</code> 100% 覆盖；三线 compat 全绿；release notes 迁移说明（含 breaking 路由与 0.86.0）</td></tr>
+<tr><td><b>M6</b> 清场</td><td>删三个插件投影注册/JSON 缓存/foldCache/foldJournal/旧路由与旧测试；保留 sessionProjections/sessionProjectionCache 的 title/metadata 读取；fallback 改 route 级；清理旧 projcache 插件行；<b>Drizzle exact pin / 无 drizzle-kit 运行时 / 无 better-sqlite3</b>；compat 矩阵重写；compatibility.md 更新（数据面章节整体重写）</td><td><code>pnpm run check</code> 100% 覆盖；三线 compat 全绿；release notes 迁移说明（含 breaking 路由与 0.86.0）</td></tr>
 </table>
-<p class="small">测试复用：tests/host fixtures 与 fold-* 套件全部保留（折叠器输出不变）；overview*/snapshot/heads/facts 等路由测试改造为 DAO/SQL 测试；overviewMemory 变更为 M3 验收基准。新增：seeded-fork/ordinary-fork/multi-subagent 口径矩阵、file_ops 多文件搜索、timeline 严格边界、events 前后驱、tool-calls keyset、folding 分片崩溃、unclean shutdown 双向对账。</p>
+<p class="small">测试复用：tests/host fixtures 与 fold-* 套件全部保留（折叠器输出不变）；overview*/snapshot/heads/facts 等路由测试改造为 Drizzle schema/query 测试；overviewMemory 变更为 M3 验收基准。新增：Drizzle node-sqlite smoke/事务/聚合数值、schema 生成 parity、seeded-fork/ordinary-fork/multi-subagent 口径矩阵、file_ops 多文件搜索、timeline 严格边界、events 前后驱、tool-calls keyset、folding 分片崩溃、unclean shutdown 双向对账。`docs/compatibility.md` 在 M1 首次落地依赖时即更新 Drizzle exact pin/supported set，M6 再重写数据面章节。</p>
 
 <!-- ============ ⑫ ============ -->
 <h2 id="s12">⑫ 附录</h2>
@@ -900,7 +993,8 @@ bootScheduler  [P2：首个路由响应后 1.5–2s，或 5s idle 后启动]
 <h3>A. 旧 → 新映射速查</h3>
 <table>
 <tr><th style="width:330px">旧</th><th>新</th></tr>
-<tr><td>sessionProjections 注册 ×3 + session_projcache 行</td><td>插件折叠器直写 SQLite（15 表；<code>session_tombstones</code> 由 Reaper 维护）；dsh 自有 title/sessionListMetadata 投影仍经 sessionProjections/sessionProjectionCache 读取；旧插件投影行一次性清理</td></tr>
+<tr><td>旧派生数据通道（投影 / JSON / 内存 feed）</td><td>Drizzle <code>schema.ts</code> + typed query modules + 插值 table/column 的 <code>sql</code> 模板</td></tr>
+<tr><td>sessionProjections 注册 ×3 + session_projcache 行</td><td>插件折叠器经 Drizzle 写 SQLite（15 表；<code>session_tombstones</code> 由 Reaper 维护）；dsh 自有 title/sessionListMetadata 投影仍经 sessionProjections/sessionProjectionCache 读取；旧插件投影行一次性清理</td></tr>
 <tr><td>overview-cache.v1.json（身份键 JSON）</td><td>sessions.log_* 身份列 + last_seq 水位线（行级增量）</td></tr>
 <tr><td>会话从列表消失（<code>stat</code> 也不存在）</td><td>Reaper + <code>session_tombstones</code> → DELETE sessions CASCADE（大行集分片）；墓碑 TTL 清理</td></tr>
 <tr><td>overview part=summary / days / page / tally</td><td>query/summary / query/days / query/sessions / query/tally</td></tr>
@@ -918,7 +1012,7 @@ bootScheduler  [P2：首个路由响应后 1.5–2s，或 5s idle 后启动]
 <ul>
 <li>sessions ≈ 1.2k 行 × ~36 列 ≈ 数 MB（评审修订后）；requests/steps ≈ ΣLLM 调用数（数万级）；surface_nodes ≈ Σ表面事件（数十万级）；tool_calls/file_ops/skill_loads 各数万级。</li>
 <li>DB 体积目标：≤ 现 session_projcache + overview-cache + detail 载荷之和；但 <code>surface_nodes.preview(2000)</code> 与 <code>tool_calls.cmd(4096)</code> 可能成为新大头，M3 必须给出逐表字节基线，不以断言代替测量；WAL 正常回收，无 VACUUM 例程。</li>
-<li>常驻内存 = 8 MB 页缓存 + 活会话工作态（fold_state 之上的 LRU，<b>内存/磁盘各 64 MB 上限</b>，驱逐安全：续折/重种子）+ 待写批次（有界）+ 预编译语句 —— 替代现状 feed/rows/served + 播种峰值 922 MB 的工作集。</li>
+<li>常驻内存 = 8 MB 页缓存 + 活会话工作态（fold_state 之上的 LRU，<b>内存/磁盘各 64 MB 上限</b>，驱逐安全：续折/重种子）+ 待写批次（有界）+ Drizzle query compiler（不缓存 prepared statements；热路径 fallback 才按需 prepare）—— 替代现状 feed/rows/served + 播种峰值 922 MB 的工作集。</li>
 </ul>
 
 <h3>C. 关键证据索引</h3>
@@ -955,9 +1049,18 @@ bootScheduler  [P2：首个路由响应后 1.5–2s，或 5s idle 后启动]
 <li>title 由投影提供，listSessions 不返回：packages/api/session-controller/src/list.ts:125-156,309-330；packages/session-query/session-query/src/types.ts:20-31</li>
 </ul>
 
+<h4>C.5 Drizzle（选型与 spike）</h4>
+<ul class="small">
+<li><code>drizzle-orm@1.0.0-rc.5</code>：npm dist-tag <code>rc</code>；stable latest <code>0.45.4</code> 无 <code>drizzle-orm/node-sqlite</code> 导出；RC5 包内含 <code>node-sqlite/</code>，支持 <code>drizzle({client: DatabaseSync})</code>。</li>
+<li>官方 docs：<code>orm.drizzle.team/docs/sqlite/connect-node-sqlite</code>（要求 @rc）、<code>/docs/sqlite/get-started-sqlite</code>、<code>/docs/get-started/sqlite-new</code>；SQLite indexes/constraints（部分索引 <code>.where</code>、CHECK/FK）；schema 无 <code>STRICT/WITHOUT ROWID</code> 表达。</li>
+<li>RC5 包内证据：<code>node-sqlite/driver.js</code>（<code>DatabaseSync</code>）、<code>node-sqlite/session.js</code>（同步 session/transaction）、<code>sql/functions/aggregate.js</code>（<code>sum()</code> 返回字符串）；<code>drizzle-kit</code> 的 <code>export --sql</code> 输出无 migration 元数据。</li>
+<li>本机 spike（Node 26 + RC5）：select/insert/onConflictDoUpdate/transaction/$with 均通过；<code>sum()</code> 返回字符串，需显式 cast。</li>
+<li>本机 spike 的 DDL 生成：<code>drizzle-kit generate</code> 已产出复合主键/CHECK/FK/索引 SQL；正式实现改用 <code>drizzle-kit export --sql</code> 获取无元数据 DDL，M1 验证；追加 <code>STRICT, WITHOUT ROWID</code> 后在 <code>node:sqlite</code> 建库成功，<code>PRAGMA table_list</code> 显示 strict=1、wr=1。</li>
+</ul>
+
 <footer>
-dsh-context SQLite 存储层重设计 · 调研与实施计划 · 2026-11-16 修订版 ·
-依据 dsh master(39163dd30f, 0.2.2-rc.3 同步) 与 dsh-context 0.85.1 源码 ·
+dsh-context SQLite 存储层重设计 · 调研与实施计划 · 2026-11-17 修订版 ·
+依据 dsh master(39163dd30f, 0.2.2-rc.3 同步) 与 dsh-context 0.85.1 源码；Drizzle 选型基于 <code>drizzle-orm@1.0.0-rc.5</code> 实际包与 node:sqlite spike ·
 所有设计决策可追溯至文中 file:line 证据 · 本文档为设计提案，实现以落地代码与测试为准
 </footer>
 
