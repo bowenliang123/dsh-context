@@ -417,6 +417,96 @@ describe('createToolAttribution', () => {
     assert.equal(attribution.ownerOf('beta'), 'provider-a')
   })
 
+  const trackedApp = () => {
+    const app = new Context()
+    const tools = new TrackedTools(app)
+    return { app, tools, attribution: createToolAttribution(app) }
+  }
+
+  test('a held traced handle keeps the use site that obtained it', async () => {
+    const { app, tools, attribution } = trackedApp()
+    let held!: TrackedTools
+    await app.plugin({
+      name: 'provider-a',
+      inject: ['tools'],
+      apply(sub) {
+        held = (sub as any).tools
+      },
+    })
+    await app.plugin({
+      name: 'provider-b',
+      inject: ['tools'],
+      apply(sub) {
+        void (sub as any).tools
+      },
+    })
+    held.register({ name: 'held_tool' })
+    assert.equal(attribution.ownerOf('held_tool'), 'provider-a', 'a later reader does not take over the held handle')
+    tools.register({ name: 'raw_tool' })
+    assert.equal(attribution.ownerOf('raw_tool'), 'provider-b', 'a raw-instance call keeps the last-reader fallback')
+  })
+
+  test('a root-context traced call does not inherit the last reader', async () => {
+    const { app, attribution } = trackedApp()
+    await app.plugin({
+      name: 'provider-b',
+      inject: ['tools'],
+      apply(sub) {
+        void (sub as any).tools
+      },
+    })
+    ;(app as any).tools.register({ name: 'root_tool' })
+    assert.notEqual(attribution.ownerOf('root_tool'), 'provider-b', 'a root use site skips the stale reader')
+  })
+
+  test('ctx.get registrations take their use site, immediate or held', async () => {
+    const { app, attribution } = trackedApp()
+    await app.plugin({
+      name: 'first-getter',
+      apply(sub) {
+        ;(sub as any).get('tools').register({ name: 'first_tool' })
+      },
+    })
+    assert.equal(attribution.ownerOf('first_tool'), 'first-getter', 'no prior ctx.tools reader is needed')
+    let heldCtx!: Context
+    await app.plugin({
+      name: 'holder',
+      apply(sub) {
+        heldCtx = sub
+      },
+    })
+    await app.plugin({
+      name: 'late-reader',
+      inject: ['tools'],
+      apply(sub) {
+        void (sub as any).tools
+      },
+    })
+    ;(heldCtx as any).get('tools').register({ name: 'held_get_tool' })
+    assert.equal(attribution.ownerOf('held_get_tool'), 'holder', 'a held ctx.get handle keeps its acquiring use site')
+  })
+
+  test('a receiver without a use-site fiber keeps the last-reader fallback', async () => {
+    const { app, tools, attribution } = trackedApp()
+    await app.plugin({
+      name: 'provider-b',
+      inject: ['tools'],
+      apply(sub) {
+        void (sub as any).tools
+      },
+    })
+    const receivers = [
+      {},
+      { ctx: {} },
+      { ctx: { fiber: {} } },
+      { ctx: { fiber: { name: 42 } } },
+    ]
+    for (const [index, receiver] of receivers.entries()) {
+      Reflect.apply(tools.register, { [CORDIS_ORIGINAL]: receiver }, [{ name: `foreign_${index}` }])
+      assert.equal(attribution.ownerOf(`foreign_${index}`), 'provider-b', 'no use-site fiber still falls back to the last reader')
+    }
+  })
+
   test('forwards registration options and keeps the disposer attribution', async () => {
     const app = new Context()
     const seen: unknown[][] = []

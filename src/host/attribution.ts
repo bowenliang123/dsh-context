@@ -48,6 +48,16 @@ function rawInstanceOf(tools: unknown): unknown {
   return raw ?? tools
 }
 
+function isTracedView(receiver: unknown): boolean {
+  return rawInstanceOf(receiver) !== receiver
+}
+
+function receiverFiberNameOf(receiver: unknown): string | undefined {
+  if (!isTracedView(receiver)) return undefined
+  const name = (receiver as { ctx?: { fiber?: { name?: unknown } } }).ctx?.fiber?.name
+  return typeof name === 'string' ? name : undefined
+}
+
 const selfPackage = packageNameFrom(selfUrl)
 
 export function callerPackageFrom(stack: string | undefined): string | undefined {
@@ -109,7 +119,7 @@ export function createToolAttribution(ctx: Context, harnessVersion?: string): To
     const instance = tools as { register: (this: unknown, definition?: { name?: unknown }, ...args: unknown[]) => unknown }
     const wrappedRegister = function (this: unknown, definition?: { name?: unknown }, ...args: unknown[]) {
       const toolName = definition?.name
-      let owner = lastReader
+      let owner = receiverFiberNameOf(this) ?? lastReader
       if (!owner || owner === 'root' || owner === self) {
         owner = callerPackageFrom(new Error().stack)
       }
