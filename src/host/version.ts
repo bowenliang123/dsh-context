@@ -20,6 +20,10 @@ function ownPackageRoot(): string {
 }
 const PLUGIN_ROOT = ownPackageRoot()
 
+export function detectPluginVersion(root: string = PLUGIN_ROOT): string {
+  return versionOfManifest(join(root, 'package.json'), 'dsh-context') ?? '0.0.0'
+}
+
 type Resolve = (specifier: string) => string
 type ResolveUrl = (specifier: string) => string
 

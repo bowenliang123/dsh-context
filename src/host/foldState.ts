@@ -182,6 +182,12 @@ export interface TimelineState {
   archiveFloor?: number
   detailRev?: number
   timing?: TimingTotals
+  isSeeded?: boolean
+  seedCutSeq?: number
+  createdDay?: string
+  billedTokens?: number
+  nextSpanSeq?: number
+  stepSeq?: number
   stepStart?: {
     time: number
     firstToken?: number
@@ -193,7 +199,7 @@ export interface TimelineState {
   stepBeatsFull?: boolean
   spans: TimingSpan[]
   stepSpans?: TimingSpan[]
-  callNames: Record<string, { name: string; start: number; argsRaw?: string; transport?: true }>
+  callNames: Record<string, { name: string; start: number; argsRaw?: string; transport?: true; seq?: number }>
   pendingShadowedSeqs?: number[]
   pendingShadowEventSeq?: number
   fileOps: FileOpRecord[]
@@ -457,5 +463,7 @@ export function createTimelineState(): TimelineState {
     fileOps: [],
     commands: [],
     spans: [],
+    billedTokens: 0,
+    nextSpanSeq: 0,
   }
 }

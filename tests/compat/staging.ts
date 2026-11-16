@@ -179,171 +179,82 @@ function parseDriverOutput<T>(stdout: string, marker: string, what: string): T {
 }
 
 export interface DriverReport {
-  keys: string[]
-  gateOk: boolean
-  coldMatches: boolean
-  developerTokens: number | null
-  developerRequestTokens: number | null
-  developerInjectCount: number | null
-  developerRestoreMatches: boolean
-  hostileSnapshotOk: boolean
-  hostilePrompt: number | null
-  hostileCacheRead: number | null
-  hostileSteps: number | null
-  poisonedEscapedDrive: number
-  poisonedStarves: boolean
-  poisonedSnapshotThrows: boolean
+  queryRoutes: string[]
+  statusOk: boolean
+  schemaVersion: number
+  contextOk: boolean
+  requests: number
+  steps: number
+  surfaces: number
+  foldStatus: Record<string, number>
+  dbEpoch: string
 }
 
 function driverSource(pluginUrl: string): string {
   return `
 import { Context } from '@deepseek-ai/cordis'
-import { SessionProjectionRegistry } from './registry/index.ts'
-import { snapshotJsonValue } from './dsh/index.ts'
+import { mkdtempSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
 const plugin = await import(${JSON.stringify(pluginUrl)})
+const home = mkdtempSync(join(tmpdir(), 'dscx-compat-'))
 const ctx = new Context()
-const registry = new SessionProjectionRegistry(ctx)
-ctx.sessionProjections = registry
+const routes = new Map()
+ctx.provide('sessionProjections', { snapshot: () => ({ values: {} }) })
+ctx.provide('connection', { fetch: { register(route) { routes.set(route.path, route); return () => routes.delete(route.path) } } })
+ctx.provide('dshHomePath', (...segments) => join(home, ...segments))
+ctx.provide('agents', { get: () => undefined })
+ctx.provide('workspaceRegistry', { list: () => [], archivedSessionIds: [] })
+ctx.provide('sessionPersistence', { stat: async () => undefined })
+const session = { id: 'compat-session', header: { id: 'compat-session', cwd: '/tmp', createdAt: 1, isSeeded: false }, events: [] }
+ctx.provide('sessionQuery', {
+  listSessions: async () => [],
+  observeSession: async () => ({ events: session.events.filter(Boolean) }),
+})
 plugin.apply(ctx, {})
-const session = { seq: 0, header: { id: 'compat-session', cwd: '/tmp' }, events: [] }
 ctx.emit('session/created', session)
 const ev = (seq, type, data = {}) => ({ seq, time: 1700000000000 + seq * 1000, type, data })
-const drive = (context, target, events) => {
-  for (const event of events) {
-    target.events[event.seq] = event
-    target.seq = event.seq + 1
-    context.emit('session/event', target, event)
-  }
-}
-const log = [
-  ev(0, 'session/created'),
-  ev(1, 'request/header', { header: { tools: [{ name: 'bash', description: 'run' }], config: { model: 'deepseek-v4-flash', provider: 'deepseek' } }, reason: 'initial' }),
-  ev(2, 'system/message', { turn: 0, step: 0, message: { content: [{ type: 'text', text: 'You are an agent.' }] } }),
-  ev(3, 'request/context', { contextWindow: 128000 }),
-  ev(4, 'step/start'),
-  ev(5, 'user/message', { content: [{ type: 'text', text: 'hello' }] }),
-  ev(6, 'assistant/message', { message: { content: [{ type: 'text', text: 'hi' }] } }),
-  ev(7, 'tool/call', { callId: 'c1', name: 'bash', arguments: '{}' }),
-  ev(8, 'tool/result', { message: { source: { callId: 'c1' }, content: [{ type: 'text', text: 'ok' }] } }),
-  ev(9, 'step/end'),
-  ev(10, 'plan/mode', { active: true }),
-  ev(11, 'compaction/summary', { summary: [{ type: 'text', text: 'so far' }], shadowedSeqs: [5] }),
+const events = [
+  ev(0, 'request/header', { header: { tools: [{ name: 'bash', description: 'run' }], config: { model: 'deepseek-v4-flash', provider: 'deepseek' } }, reason: 'initial' }),
+  ev(1, 'system/message', { message: { content: [{ type: 'text', text: 'You are an agent.' }] } }),
+  ev(2, 'user/message', { content: [{ type: 'text', text: 'hello' }] }),
+  ev(3, 'step/start', { turn: 1, step: 1 }),
+  ev(4, 'assistant/message', { turn: 1, step: 1, message: { content: [{ type: 'text', text: 'hi' }] }, usage: { inputTokens: 10, outputTokens: 5 } }),
+  ev(5, 'tool/call', { turn: 1, step: 1, callId: 'c1', name: 'bash', arguments: JSON.stringify({ command: 'ls' }) }),
+  ev(6, 'tool/result', { message: { source: { callId: 'c1' }, content: [{ type: 'text', text: 'ok' }] } }),
+  ev(7, 'step/end', { turn: 1, step: 1 }),
 ]
-drive(ctx, session, log)
-const snapshot = registry.snapshot(session)
-const gate = snapshotJsonValue(registry.checkpoint(session))
-const cold = registry.restore({}, log, 0, session.header)
-
-let developerTokens = null
-let developerInjectCount = null
-let developerRestoreMatches = false
-const ctxC = new Context()
-const registryC = new SessionProjectionRegistry(ctxC)
-ctxC.sessionProjections = registryC
-plugin.apply(ctxC, {})
-const sessionC = { seq: 0, header: { id: 'registry-change-session', cwd: '/tmp' }, events: [] }
-ctxC.emit('session/created', sessionC)
-const registryLog = [
-  ev(0, 'request/header', { header: { tools: [{ name: 'read_file', description: 'read a file', parameters: { type: 'object' } }] }, reason: 'change' }),
-  ev(1, 'user/message', { content: [{ type: 'text', text: 'hello' }] }),
-  ev(2, 'developer/message', { turn: 1, step: 1, headerSeq: 0, message: { role: 'developer', source: { kind: 'tool-registry' }, content: [{ type: 'tool-addition', toolName: 'read_file' }, { type: 'tool-removal', toolName: 'shell' }] } }),
-  ev(3, 'assistant/message', { turn: 1, step: 1, message: { content: [{ type: 'text', text: 'reply' }] } }),
-]
-drive(ctxC, sessionC, registryLog)
-const values = registryC.snapshot(sessionC).values
-const node = values.contextTimeline.nodes.find(n => n.seq === 2)
-developerTokens = node ? node.tokens : null
-const developerState = registryC.checkpoint(sessionC).contextTimeline.val
-developerInjectCount = typeof developerState.totals?.injects === 'number'
-  ? developerState.totals.injects
-  : Array.isArray(developerState.events) ? developerState.events.filter(e => e.kind === 'inject').length : null
-const rows = snapshotJsonValue(registryC.checkpoint(sessionC))
-const warm = registryC.restore(rows, registryLog, 0, sessionC.header)
-const oldLog = registryLog.map(e => e.type === 'developer/message' ? { ...e, type: 'todo/write' } : e)
-const oldRows = registryC.restore({}, oldLog, 0, sessionC.header).checkpoint
-oldRows.contextTimeline.ver = 24
-const rebuilt = registryC.restore(oldRows, registryLog, 0, sessionC.header)
-const HEAD_VIEW_FIELDS = ['current', 'counts', 'cost', 'last', 'model', 'provider', 'reasoningEffort', 'contextWindow', 'maxOutputTokens', 'images', 'toolCalls', 'toolTally', 'programTally', 'commandStats', 'humanInputs', 'answers', 'lastUser', 'generatedReasoning', 'generatedAnswerTokens', 'generatedCallTokens', 'detailRev', 'timing', 'systems']
-const headViewOf = (view) => JSON.stringify(Object.fromEntries(HEAD_VIEW_FIELDS.filter(field => view?.[field] !== undefined).map(field => [field, view[field]])))
-developerRestoreMatches = headViewOf(warm.snapshot.values.contextTimeline) === headViewOf(values.contextTimeline)
-  && headViewOf(rebuilt.snapshot.values.contextTimeline) === headViewOf(values.contextTimeline)
-
-const hostile = [
-  ev(12, 'step/start'),
-  ev(13, 'assistant/message', { turn: 1, step: 2, message: { content: [{ type: 'text', text: 'h1' }] }, usage: { inputTokens: -80, cacheReadTokens: 150.7, cacheWriteTokens: '10', outputTokens: 22.4 } }),
-  ev(14, 'assistant/message', { turn: 1, step: 3, message: { content: [] }, usage: { inputTokens: NaN, outputTokens: null } },
-)]
-drive(ctx, session, hostile)
-let hostileSnapshotOk = true
-let hostileSteps = null
-try {
-  const hostileSnapshot = registry.snapshot(session).values
-  const hostileView = hostileSnapshot.contextTimeline
-  const hostileState = registry.checkpoint(session).contextTimeline.val
-  hostileSteps = typeof hostileView?.counts?.steps === 'number'
-    ? hostileView.counts.steps
-    : typeof hostileState.totals?.steps === 'number'
-      ? hostileState.totals.steps
-      : Array.isArray(hostileState.requests) ? hostileState.requests.length : null
-} catch {
-  hostileSnapshotOk = false
+for (const event of events) {
+  session.events[event.seq] = event
+  ctx.emit('session/event', session, event)
 }
-
-const ctxB = new Context()
-const registryB = new SessionProjectionRegistry(ctxB)
-ctxB.sessionProjections = registryB
-registryB.register({
-  key: 'gatewayPoison',
-  stateVersion: 1,
-  stateSchema: { parse: (v) => v },
-  init: () => ({ uncached: 0 }),
-  apply: (state, event) => {
-    if (event.type !== 'assistant/message' || !event.data || event.data.usage === undefined) return state
-    return { uncached: event.data.usage.inputTokens }
-  },
-  wire: {
-    viewSchema: { parse: (v) => { if (typeof v.uncached !== 'number' || !Number.isInteger(v.uncached) || v.uncached < 0) throw new Error('nonconforming gateway figure fails the integer/nonnegative gate'); return v } },
-    view: (state) => ({ uncached: state.uncached }),
-  },
-})
-plugin.apply(ctxB, {})
-const sessionB = { seq: 0, header: { id: 'poison-session', cwd: '/tmp' }, events: [] }
-ctxB.emit('session/created', sessionB)
-const notified = []
-registryB.onChanged((s, key) => { if (s === sessionB && key === 'contextTimeline') notified.push(key) })
-const poisonLog = [
-  ev(0, 'request/header', { header: { tools: [], config: { model: 'deepseek-v4-flash', provider: 'p' } }, reason: 'initial' }),
-  ev(1, 'assistant/message', { turn: 1, step: 1, message: { content: [{ type: 'text', text: 'ok' }] }, usage: { inputTokens: 10, cacheReadTokens: 20, outputTokens: 5 } }),
-]
-drive(ctxB, sessionB, poisonLog)
-const beforePoison = notified.length
-let poisonedEscapedDrive = 0
-const gatewayStep = ev(2, 'assistant/message', { turn: 1, step: 2, message: { content: [{ type: 'text', text: 'bad gateway step' }] }, usage: { inputTokens: -80, cacheReadTokens: 150, outputTokens: 22 } })
-sessionB.events[2] = gatewayStep
-sessionB.seq = 3
-try {
-  ctxB.emit('session/event', sessionB, gatewayStep)
-} catch {
-  poisonedEscapedDrive += 1
+await new Promise(resolve => setTimeout(resolve, 300))
+const post = async (path, body) => {
+  const route = routes.get(path)
+  if (route === undefined) return null
+  const response = await route.fetch(new Request('http://compat' + path, {
+    method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body),
+  }))
+  return response.json()
 }
-let poisonedSnapshotThrows = false
-try { registryB.snapshot(sessionB) } catch { poisonedSnapshotThrows = true }
+const status = await post('/api/dsh-context/query/status', {})
+const context = await post('/api/dsh-context/query/context', { sessionId: 'compat-session' })
+const report = {
+  queryRoutes: [...routes.keys()].filter(path => path.includes('/query/')).sort(),
+  statusOk: status?.ok === true,
+  schemaVersion: status?.value?.schema_version ?? -1,
+  contextOk: context?.ok === true && context?.value?.ok === true,
+  requests: status?.value?.counts?.requests ?? -1,
+  steps: status?.value?.counts?.steps ?? -1,
+  surfaces: status?.value?.counts?.surface_nodes ?? -1,
+  foldStatus: status?.value?.fold_status ?? {},
+  dbEpoch: status?.value?.db_epoch ?? '',
+}
+process.stdout.write('DRIVER-JSON ' + JSON.stringify(report) + '\\n')
 
-process.stdout.write('DRIVER-JSON ' + JSON.stringify({
-  keys: Object.keys(snapshot.values).sort(),
-  gateOk: gate !== undefined,
-  coldMatches: JSON.stringify(cold.snapshot.values) === JSON.stringify(snapshot.values),
-  developerTokens,
-  developerInjectCount,
-  developerRestoreMatches,
-  hostileSnapshotOk,
-  hostileSteps,
-  poisonedEscapedDrive,
-  poisonedStarves: beforePoison > 0 && notified.length === beforePoison,
-  poisonedSnapshotThrows,
-}) + '\\n')
 `
 }
+
 
 const driverCache = new Map<string, Promise<DriverReport>>()
 

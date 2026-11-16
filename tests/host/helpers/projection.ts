@@ -7,6 +7,29 @@ import { buildTimelineView } from '../../../src/host/foldWire'
 import type { ContextTimeline } from '../../../src/shared/types'
 import { createTimelineState } from '../../../src/host/foldState'
 import { createContextTimelineDefinition } from '../../../src/host/timeline'
+import type { FoldSink } from '../../../src/host/db/foldSink'
+
+export const noopSink: FoldSink = {
+  header: () => {},
+  system: () => {},
+  systemGone: () => {},
+  surface: () => {},
+  surfaceGone: () => {},
+  request: () => {},
+  requestActive: () => {},
+  stepStart: () => {},
+  stepRequest: () => {},
+  stepEnd: () => {},
+  toolCall: () => {},
+  toolCallUpdate: () => {},
+  command: () => {},
+  commandUpdate: () => {},
+  event: () => {},
+  eventUpdate: () => {},
+  fileOps: () => {},
+  skillLoad: () => {},
+  span: (_seq, _spans, nextSpanSeq) => nextSpanSeq,
+}
 
 interface TimelineDefLike {
   key: string
@@ -29,7 +52,7 @@ export function fullDef(config?: Config, slim = false): TimelineDefLike {
   return {
     ...real,
     init: () => createTimelineState(),
-    apply: (state: TimelineState, event: TimelineEvent) => applyTimeline(state, event, bounds),
+    apply: (state: TimelineState, event: TimelineEvent) => applyTimeline(state, event, bounds, noopSink),
     wire: { ...real.wire, view: (state: TimelineState) => buildTimelineView(state, bounds) },
   }
 }

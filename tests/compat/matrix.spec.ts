@@ -41,22 +41,28 @@ describe.skipIf(reasons.length > 0)('compat matrix — real dsh sources per base
       report = await staging.runDriver(baseline)
     }, 60_000)
 
-    test('host: all three projection values served through the wire', () => {
-      assert.deepEqual(report.keys, ['contextActivity', 'contextHeaders', 'contextTimeline'])
+    test('host: the storage layer mounts its query routes', () => {
+      for (const route of [
+        'query/status', 'query/sessions', 'query/summary', 'query/days', 'query/tally',
+        'query/context', 'query/timeline', 'query/requests', 'query/steps', 'query/tool-calls',
+        'query/file-ops', 'query/events', 'query/spans', 'query/skill-loads', 'query/family', 'query/cost',
+      ]) {
+        assert.ok(report.queryRoutes.some(path => path.endsWith(`/${route}`)), route)
+      }
     })
 
-    test('host: checkpoint rows pass the tag\'s lossless-JSON cache-write gate', () => {
-      assert.equal(report.gateOk, true)
+    test('host: status reports the strict schema and the folded live session', () => {
+      assert.equal(report.statusOk, true)
+      assert.equal(report.schemaVersion, 8)
+      assert.ok(report.dbEpoch !== '')
+      assert.deepEqual(report.foldStatus, { ok: 1 })
+      assert.equal(report.requests, 1)
+      assert.equal(report.steps, 1)
+      assert.equal(report.surfaces, 3)
     })
 
-    test('host: cold restore refolds to the live snapshot', () => {
-      assert.equal(report.coldMatches, true)
-    })
-
-    test('host: developer messages contribute to requests and survive warm restore and v24 cache rebuild', () => {
-      assert.equal(report.developerTokens, 35)
-      assert.equal(report.developerInjectCount, 1)
-      assert.equal(report.developerRestoreMatches, true)
+    test('host: the context route serves the live fold', () => {
+      assert.equal(report.contextOk, true)
     })
 
     test('admission: the tag gate admits this manifest and refuses the dropped 0.1.7 line', async () => {
@@ -64,17 +70,6 @@ describe.skipIf(reasons.length > 0)('compat matrix — real dsh sources per base
       assert.deepEqual(admission.baseline, { admitted: true, requirements: null }, 'a supported release needs no exemption')
       assert.equal(admission.dropped.admitted, false, 'the dropped 0.1.7 line is refused')
       assert.ok(Object.keys(admission.dropped.requirements ?? {}).length > 0, 'the refusal names its unmet requirement')
-    })
-
-    test('host: hostile gateway usage keeps the served view schema-valid (issue #44)', () => {
-      assert.equal(report.hostileSnapshotOk, true)
-      assert.equal(report.hostileSteps, 3, 'both hostile requests re-track in the head counts')
-    })
-
-    test('host: a poisoned upstream unit starves downstream units and throws the whole snapshot (dsh containment gap)', () => {
-      assert.ok(report.poisonedEscapedDrive >= 1)
-      assert.equal(report.poisonedStarves, true)
-      assert.equal(report.poisonedSnapshotThrows, true)
     })
 
     test('settings: the retired register face stays gone (the plugin never calls it)', async () => {

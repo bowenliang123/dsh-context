@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import { describe, test } from 'vitest'
-import { commandArgsOf, commandArgsRecordOf, commandTool, exitOfJobDetail, firstLineOf, headProgramOf, hideableCdPrefix, markersOfText, outcomeOfMarkers, programsOfCommand, shapeOfCmd, signalOfJobDetail } from '../../src/shared/commands'
+import { commandArgsOf, commandArgsRecordOf, commandTool, exitOfJobDetail, firstLineOf, headProgramOf, hideableCdPrefix, markersOfText, outcomeOfMarkers, programOfCommand, programsOfCommand, shapeOfCmd, signalOfJobDetail } from '../../src/shared/commands'
 import { opsOfCall, parseCallArgs } from '../../src/shared/fileOps'
 
 describe('commands', () => {
@@ -632,6 +632,15 @@ describe('parseCallArgs', () => {
     assert.equal(parseCallArgs(undefined), null)
     assert.equal(parseCallArgs(42), null)
     assert.equal(parseCallArgs(null), null)
+  })
+})
+
+describe('programOfCommand', () => {
+  test('run_code is its own program and an empty shell head falls back to the shell name', () => {
+    assert.equal(programOfCommand('run_code', ''), 'run_code')
+    assert.equal(programOfCommand('bash', 'ls -la'), 'ls')
+    assert.equal(programOfCommand('bash', ''), 'shell')
+    assert.equal(programOfCommand('pwsh', ''), 'pwsh')
   })
 })
 })

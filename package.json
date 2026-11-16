@@ -88,6 +88,7 @@
   ],
   "license": "Apache-2.0",
   "dependencies": {
+    "drizzle-orm": "1.0.0-rc.5",
     "zod": "^4.6.6"
   },
   "peerDependencies": {
@@ -131,6 +132,7 @@
     "anser": "^2.3.5",
     "clsx": "^2.1.1",
     "diff": "^9.0.0",
+    "drizzle-kit": "1.0.0-rc.5",
     "eslint-plugin-sonarjs": "^4.2.2",
     "husky": "^9.1.7",
     "immer": "^10.2.0",

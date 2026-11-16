@@ -105,7 +105,7 @@ interface ToolServiceLike {
 export function createToolAttribution(ctx: Context, harnessVersion?: string): ToolAttribution {
   const live = new Map<string, string>()
   const wrapped = new WeakSet()
-  const self = ctx.fiber.name
+  const self = (ctx as { fiber?: { name?: string } }).fiber?.name ?? 'dsh-context'
   let lastReader: string | undefined
   const patched: (() => void)[] = []
 
