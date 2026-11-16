@@ -124,6 +124,47 @@ describe('database open gate', () => {
     rmSync(dir, { recursive: true, force: true })
   })
 
+  test('upgrades a version 8 database without dropping its rows', () => {
+    const dir = tempDir()
+    const path = join(dir, 'index.sqlite')
+    openDatabase(path).client.close()
+    const raw = new DatabaseSync(path)
+    raw.exec(`INSERT INTO sessions (id, title, created_at, updated_at, fold_status, last_seq, detail_rev, family_root)
+      VALUES ('s', 's', 1, 1, 'ok', 0, 1, 's')`)
+    raw.exec(`INSERT INTO tool_calls (session_id, seq, call_id, name, day, start_time, end_time, duration_ms, cmd)
+      VALUES ('s', 1, 'c1', 'bash', 'd', 1, 3, 2, 'ls')`)
+    raw.exec('ALTER TABLE tool_calls DROP COLUMN command_start_time')
+    raw.exec('ALTER TABLE tool_calls DROP COLUMN command_end_time')
+    raw.exec('ALTER TABLE tool_calls DROP COLUMN command_duration_ms')
+    raw.exec('PRAGMA user_version = 8')
+    raw.close()
+    const upgraded = openDatabase(path)
+    assert.equal(upgraded.rebuilt, false)
+    assert.equal(Number(upgraded.client.prepare('PRAGMA user_version').get()!.user_version), SCHEMA_VERSION)
+    assert.deepEqual(
+      { ...upgraded.client.prepare('SELECT command_start_time, command_end_time, command_duration_ms FROM tool_calls').get() },
+      { command_start_time: 1, command_end_time: 3, command_duration_ms: 2 },
+    )
+    upgraded.client.close()
+    rmSync(dir, { recursive: true, force: true })
+  })
+
+  test('a failed version 8 upgrade rolls back and reports the open failure', () => {
+    const dir = tempDir()
+    const path = join(dir, 'index.sqlite')
+    openDatabase(path).client.close()
+    const raw = new DatabaseSync(path)
+    raw.exec('ALTER TABLE tool_calls DROP COLUMN command_start_time')
+    raw.exec('PRAGMA user_version = 8')
+    raw.close()
+    assert.throws(() => openDatabase(path), (error: unknown) => {
+      assert.ok(error instanceof DatabaseOpenError)
+      assert.equal(error.reason, 'open-failed')
+      return true
+    })
+    rmSync(dir, { recursive: true, force: true })
+  })
+
   test('rebuilds a half-created current-version database', () => {
     const dir = tempDir()
     const path = join(dir, 'index.sqlite')

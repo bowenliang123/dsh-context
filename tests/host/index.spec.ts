@@ -44,7 +44,7 @@ describe('index', () => {
     }))
     const body = await response?.json() as { ok: boolean; value: { schema_version: number; startup_phase: string } }
     assert.equal(body.ok, true)
-    assert.equal(body.value.schema_version, 8)
+    assert.equal(body.value.schema_version, 9)
     fake.dispose()
     rmSync(home, { recursive: true, force: true })
   })

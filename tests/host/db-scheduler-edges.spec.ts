@@ -25,6 +25,7 @@ interface EdgeOptions {
   sessionsGet?: (id: string) => unknown
   now?: () => number
   live?: LiveWriter
+  observe?: () => { observeSession?: (id: string, options: unknown) => Promise<unknown> }
 }
 
 function edgeHarness(options: EdgeOptions = {}) {
@@ -44,7 +45,7 @@ function edgeHarness(options: EdgeOptions = {}) {
     workspaceRegistry: { list: () => [], archivedSessionIds: [] },
     agents: { get: () => undefined },
   }, { injectAll: true })
-  const live = options.live ?? new LiveWriter(fake.ctx, db, BOUNDS)
+  const live = options.live ?? new LiveWriter(fake.ctx, db, BOUNDS, options.observe === undefined ? {} : { observe: options.observe })
   const scheduler = new BackfillScheduler(fake.ctx, db, BOUNDS, {
     live,
     ...(options.now === undefined ? {} : { now: options.now }),
@@ -782,5 +783,39 @@ describe('live reseed and tail abort guards', () => {
     release?.({ events: [] })
     await pending
     after.opened.client.close()
+  })
+})
+
+describe('live session warm-up', () => {
+  test('a live session with no rows seeds from its observation before coverage is reported', async () => {
+    const h = edgeHarness({
+      list: () => [
+        { header: { id: 'live', createdAt: 1, cwd: '/w' }, live: true },
+        { header: { id: 'prewarmed', createdAt: 1, cwd: '/w' }, live: true },
+      ],
+      observe: () => ({
+        observeSession: async () => ({ events: [header(0, { model: 'm', provider: 'p' }), userMessage(1, text('hello'))] }),
+      }),
+    })
+    seedSession(h.db, 'prewarmed', { foldStatus: 'ok', lastSeq: 0 })
+    h.db.insert(foldState).values({ sessionId: 'prewarmed', lastSeq: 0, stateJson: stateToJson(createTimelineState()), updatedAt: 1 }).run()
+    await h.scheduler.runOnce()
+    assert.equal(h.db.select().from(sessions).where(eq(sessions.id, 'live')).get()?.foldStatus, 'ok')
+    assert.equal(h.db.select().from(sessions).where(eq(sessions.id, 'prewarmed')).get()?.foldStatus, 'ok')
+    assert.equal(h.scheduler.coverage().complete, true)
+    h.scheduler.dispose()
+    h.opened.client.close()
+  })
+
+  test('warming without an observation or a header leaves the entry unseeded', async () => {
+    const h = edgeHarness()
+    const writer = h.live
+    assert.equal(await writer.warm('none', { id: 'none', createdAt: 1 }), false)
+    writer.dispose()
+    assert.equal(await writer.warm('none', { id: 'none', createdAt: 1 }), false)
+    const second = new LiveWriter(h.fake.ctx, h.db, BOUNDS)
+    assert.equal(await second.warm('bad', null), false)
+    second.dispose()
+    h.opened.client.close()
   })
 })

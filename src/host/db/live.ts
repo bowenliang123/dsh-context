@@ -90,6 +90,17 @@ export class LiveWriter {
     return this.entries.has(id)
   }
 
+  async warm(id: string, rawHeader: unknown): Promise<boolean> {
+    if (this.disposed) return false
+    const entry = this.entryOf(id, rawHeader)
+    if (entry === undefined) return false
+    this.ensureSeed(id, entry)
+    await (entry.seed as Promise<void>)
+    if (entry.state === null) return false
+    this.flushEntry(id, entry)
+    return true
+  }
+
   private admit(id: string, rawHeader: unknown): void {
     if (!this.db.select({ id: sessions.id }).from(sessions).where(eq(sessions.id, id)).get()) {
       const header = asRecord(rawHeader)

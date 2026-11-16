@@ -151,6 +151,7 @@ export class BackfillScheduler {
   }
   private tailChecked = false
   private readonly dirty = new Set<string>()
+  private readonly warmedLive = new Set<string>()
 
   constructor(
     private readonly ctx: Context,
@@ -416,6 +417,13 @@ export class BackfillScheduler {
     clearTombstones(this.db, entries.map(entry => entry.id))
     await this.refreshIdentities(entries)
     await this.verifyTails()
+    for (const entry of entries) {
+      if (!entry.live || this.warmedLive.has(entry.id)) continue
+      if (this.db.select({ sessionId: foldState.sessionId }).from(foldState)
+        .where(eq(foldState.sessionId, entry.id)).get() !== undefined) continue
+      this.warmedLive.add(entry.id)
+      await this.options.live.warm(entry.id, entry.header)
+    }
     const liveIds = new Set(entries.filter(entry => entry.live).map(entry => entry.id))
     const queue = this.db.select({ id: sessions.id, status: sessions.foldStatus, updatedAt: sessions.updatedAt })
       .from(sessions)

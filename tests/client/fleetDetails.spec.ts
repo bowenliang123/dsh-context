@@ -357,12 +357,13 @@ describe('useFleetDetails — progressive family loading', () => {
     const m = await mount(h(Probe))
     act(() => { (box.current as FleetDetailState).requestFamily(familyRequest(familyOf(2))) })
     await until(() => box.current?.family.loaded === 3, 'the family never loaded')
-    const before = batch.mock.calls.length
+    await act(async () => { await new Promise(resolve => setTimeout(resolve, 20)) })
+    batch.mockClear()
     await act(async () => { invalidate('overview') })
     await act(async () => { invalidate('fleet', { sessionId: 'other' }) })
-    assert.equal(batch.mock.calls.length, before, 'an unrelated fleet invalidation is ignored')
+    assert.equal(batch.mock.calls.length, 0, 'an unrelated fleet invalidation is ignored')
     await act(async () => { invalidate('fleet', { sessionId: 'root' }) })
-    await until(() => batch.mock.calls.length > before, 'the fleet invalidation never refreshed the members')
+    await until(() => batch.mock.calls.length > 0, 'the fleet invalidation never refreshed the members')
     await m.unmount()
   })
 

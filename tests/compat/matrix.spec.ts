@@ -53,7 +53,7 @@ describe.skipIf(reasons.length > 0)('compat matrix — real dsh sources per base
 
     test('host: status reports the strict schema and the folded live session', () => {
       assert.equal(report.statusOk, true)
-      assert.equal(report.schemaVersion, 8)
+      assert.equal(report.schemaVersion, 9)
       assert.ok(report.dbEpoch !== '')
       assert.deepEqual(report.foldStatus, { ok: 1 })
       assert.equal(report.requests, 1)

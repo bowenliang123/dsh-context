@@ -930,6 +930,13 @@ function applyTimelineEvent(state: TimelineState, event: TimelineEvent, bounds: 
               }
               setCommand(s, index, next)
               sink?.commandUpdate(next)
+              sink?.toolCallUpdate(srcId, {
+                resultSeq: event.seq,
+                endTime: event.time,
+                durationMs: durOf(pendingEntry.start, event.time),
+                isError: toolMsg?.isError === true,
+                status: next.status,
+              })
             }
           } else {
             const texts = resultTextsOf(toolMsg?.content)

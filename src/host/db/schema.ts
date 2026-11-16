@@ -1,7 +1,7 @@
 import { sql } from 'drizzle-orm'
 import { check, foreignKey, index, integer, primaryKey, real, sqliteTable, text, uniqueIndex } from 'drizzle-orm/sqlite-core'
 
-export const SCHEMA_VERSION = 8
+export const SCHEMA_VERSION = 9
 
 export const APPLICATION_ID = 0x44534358
 
@@ -169,6 +169,9 @@ export const toolCalls = sqliteTable('tool_calls', {
   startTime: integer('start_time').notNull(),
   endTime: integer('end_time'),
   durationMs: integer('duration_ms'),
+  commandStartTime: integer('command_start_time'),
+  commandEndTime: integer('command_end_time'),
+  commandDurationMs: integer('command_duration_ms'),
   isError: integer('is_error').notNull().default(0),
   status: text('status'),
   exitCode: integer('exit_code'),

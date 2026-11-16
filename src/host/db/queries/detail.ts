@@ -166,7 +166,8 @@ function contextTiming(db: Db, id: string): TimingTotals | undefined {
   const row = db.get(sql`
     select
       coalesce((select sum(wall_ms) from ${steps} where session_id = ${id}), 0) as wall,
-      coalesce((select sum(ttft_ms) from ${steps} where session_id = ${id}), 0) as ttft,
+      coalesce(nullif((select sum(end_time - start_time) from ${timingSpans} where session_id = ${id} and kind = 'ttft'), 0),
+        (select sum(ttft_ms) from ${steps} where session_id = ${id}), 0) as ttft,
       coalesce((select sum(gen_ms) from ${requests} where session_id = ${id}), 0) as gen,
       coalesce((select sum(idle_ms) from ${steps} where session_id = ${id}), 0) as idle,
       coalesce((select sum(tool_busy_ms) from ${steps} where session_id = ${id}), 0) as busy,
@@ -571,10 +572,13 @@ function commandOf(
   attribution?: (name: string) => string | undefined,
 ): CommandRecord & Record<string, unknown> {
   const status = row.status ?? (row.resultSeq === null ? 'running' : 'completed')
+  const start = row.commandStartTime ?? row.startTime
+  const end = row.commandEndTime ?? row.endTime
+  const duration = row.commandDurationMs ?? row.durationMs
   return {
     seq: row.seq,
     ...(row.resultSeq === null ? {} : { resultSeq: row.resultSeq }),
-    time: row.startTime,
+    time: start,
     tool: row.name,
     ...(row.cmd === null ? {} : { cmd: row.cmd }),
     ...(row.cmdTruncated === 1 ? { cmdTruncated: true as const } : {}),
@@ -587,8 +591,8 @@ function commandOf(
     ...(row.parentSeq === null ? {} : { parent: row.parentSeq }),
     ...(row.turn === null ? {} : { turn: row.turn }),
     ...(row.step === null ? {} : { step: row.step }),
-    start: row.startTime,
-    ...(row.endTime === null ? {} : { end: row.endTime }),
+    start,
+    ...(end === null ? {} : { end }),
     status: status as CommandRecord['status'],
     ...(row.exitCode === null ? {} : { exit: row.exitCode }),
     ...(row.exitInferred === 1 ? { exitInferred: true as const } : {}),
@@ -608,7 +612,7 @@ function commandOf(
     code_mode: row.codeMode === 1,
     parent_seq: row.parentSeq,
     day: row.day,
-    duration_ms: row.durationMs,
+    duration_ms: duration,
     is_error: row.isError === 1,
     program: row.program,
   }

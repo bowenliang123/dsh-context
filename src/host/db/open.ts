@@ -48,6 +48,7 @@ export interface OpenDatabaseOptions {
 
 interface GateResult {
   rebuild: boolean
+  migrate?: number
   reason?: string
 }
 
@@ -72,12 +73,13 @@ function gate(client: DatabaseSync): GateResult {
     throw new DatabaseOpenError('unowned-database', 'index.sqlite has tables but no dsh-context application id', true)
   }
   if (applicationId === 0) return { rebuild: false }
-  if (version !== SCHEMA_VERSION) return { rebuild: true }
   const unknown = tables.filter(name => !KNOWN_TABLES.has(name))
   if (unknown.length > 0) {
     throw new DatabaseOpenError('unknown-tables', `index.sqlite has unknown tables: ${unknown.join(', ')}`, true)
   }
   const missing = [...KNOWN_TABLES].filter(name => !tables.includes(name))
+  if (version === 8 && missing.length === 0) return { rebuild: false, migrate: 8 }
+  if (version !== SCHEMA_VERSION) return { rebuild: true }
   if (missing.length > 0) return { rebuild: true }
   return { rebuild: false, reason: 'ready' }
 }
@@ -128,6 +130,22 @@ function renameAside(path: string, suffix: string, now: number): string {
   return target
 }
 
+function upgradeFrom8(client: DatabaseSync): void {
+  client.exec('BEGIN IMMEDIATE')
+  try {
+    client.exec('ALTER TABLE tool_calls ADD COLUMN command_start_time INTEGER')
+    client.exec('ALTER TABLE tool_calls ADD COLUMN command_end_time INTEGER')
+    client.exec('ALTER TABLE tool_calls ADD COLUMN command_duration_ms INTEGER')
+    client.exec(`UPDATE tool_calls SET command_start_time = start_time, command_end_time = end_time,
+      command_duration_ms = duration_ms WHERE cmd IS NOT NULL`)
+    client.exec('COMMIT')
+    client.exec(`PRAGMA user_version = ${SCHEMA_VERSION}`)
+  } catch (error) {
+    try { client.exec('ROLLBACK') } catch {}
+    throw new DatabaseOpenError('open-failed', `cannot upgrade index.sqlite: ${String(error)}`, false)
+  }
+}
+
 function openFile(client: DatabaseSync, path: string, epoch: string, now: number, options: OpenDatabaseOptions): OpenedDatabase {
   const result = gate(client)
   if (result.rebuild) {
@@ -152,6 +170,7 @@ function openFile(client: DatabaseSync, path: string, epoch: string, now: number
     }
     dropAll(client)
   }
+  if (result.migrate === 8) upgradeFrom8(client)
   createSchemaIfNeeded(client, epoch, now)
   applyPragmas(client)
   return { client, mode: 'file', rebuilt: result.rebuild, epoch }
