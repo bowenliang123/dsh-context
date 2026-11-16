@@ -96,8 +96,8 @@ footer{margin-top:60px;color:var(--muted);font-size:12.5px;border-top:1px solid 
 <li><b>数据正确性</b>：打开门禁改为「先读后写」，拒绝 <code>application_id=0</code> 且有表/未知表的库；<code>file_ops</code> 增加 <code>ordinal</code> 修复多文件搜索主键冲突；<code>last_seq</code> 默认 -1；<code>log_mtime</code> 改 REAL 并增加 <code>log_revision</code>。</li>
 <li><b>口径</b>：新增 §5.15「family × inherited × root」矩阵；<code>seed_cut_seq</code> 统一继承过滤；<code>family_root</code> 统一家族聚合，普通 fork 不并入；<code>turn/steps</code> 明确根自身口径。</li>
 <li><b>时间旅行/API</b>：严格 <code>seq&lt;X</code>；timeline 返回 system/header/live/floors；sessions 返回 turns/steps/created_day 与 self/family 两套值；events 同时富化前驱/后继；tool-calls 改为排序相关 keyset。</li>
-<li><b>启动/首屏</b>：新增 §8.0：apply 只做打开/门禁/DDL/路由注册（p99 ≤10ms），hydration 延迟到首屏后；首屏 serve-first 读 SQLite 不 await 扫描；冷读改「交互 &gt; 列表 &gt; 回填」优先级池（2–4 并发）；<b>统一 WorkScheduler + 按资源分执行器</b>，回填只在空闲预算内运行，quick_check 后台 worker。</li>
-<li><b>一致性/恢复</b>：增量续折改从 <code>fold_state.last_seq</code> 起；新增 clean_shutdown 双向尾部校验；folding 状态与分片崩溃清理；多进程 destructive refold 用 CAS。</li>
+<li><b>启动/首屏</b>：新增 §8.0：apply 只做打开/门禁/DDL/路由注册（p99 ≤10ms），hydration 延迟到首屏后；首屏 serve-first 读 SQLite 不 await 扫描；冷读改「交互 &gt; 列表 &gt; 回填 &gt; 清理」优先级池（2–4 并发）；<b>统一 WorkScheduler + 按资源分执行器</b>，回填/Reaper 只在空闲预算内运行，quick_check 后台 worker。</li>
+<li><b>一致性/恢复</b>：增量续折改从 <code>fold_state.last_seq</code> 起；新增 clean_shutdown 双向尾部校验；folding 状态与分片崩溃清理；<b>Reaper + session_tombstones 清理已消失会话（防复活）</b>；多进程 destructive refold 用 CAS。</li>
 <li><b>性能/内存</b>：两把排序键由折叠器维护绝对值；活会话工作态设内存 LRU 上限；tally 加 limit；索引补齐 family_root/cur_total/model/running/provider/duration。</li>
 <li><b>兼容/文字</b>：保留 sessionProjections/sessionProjectionCache 读取 dsh 自有 title/metadata；更新 node:sqlite 稳定性表述与 0.85.1 基线；明确 days 的 all 窗口、search_text 非 ASCII 搜索、preview 截断与 unsupported 重试。</li>
 </ul></div>
@@ -114,7 +114,7 @@ footer{margin-top:60px;color:var(--muted);font-size:12.5px;border-top:1px solid 
 <tr><td><span class="req-id">6</span>调研前端行为链</td><td>§2.4 · §9</td><td>逐板块盘点（context 视图 /context 弹窗 / overview / fleet / 命令页 / 文件卡 / 余额 / 更新 / recom），映射到新 API；客户端计算清单逐项给出归属。</td></tr>
 <tr><td><span class="req-id">7</span>命名一致清晰</td><td>§5.0 命名约定</td><td>snake_case；<code>seq</code>=事件序号、<code>*_seq</code>=引用、<code>*_tokens</code>、<code>*_ms</code>、<code>*_at</code>=生命周期时间戳、<code>day</code>=本地日键；同义字段跨表同名。</td></tr>
 <tr><td><span class="req-id">8</span>优先直读 dsh 原生数据</td><td>§2.1 · §4 冗余规则</td><td>原始文本（消息正文 / 工具输出 / system prompt 内容 / fleet 消息）一律不入库，仅保留有界 preview；标题、cwd、头元数据等来自 dsh 自身；FTS 全文检索复用 dsh <code>sessionQuery</code>（可选启用），不重复建设。</td></tr>
-<tr><td><span class="req-id">9</span>联合主键</td><td>§5 各表</td><td>子表默认 <code>PRIMARY KEY (session_id, seq)</code> WITHOUT ROWID（按会话聚簇，局部性最优）；<code>header_tools</code> 三列联合主键；<code>file_ops</code> 因单事件多行使用 <code>(session_id, seq, ordinal)</code>；<code>timing_spans</code> 用 <code>(session_id, span_seq)</code>（折叠器分配的代理序号）；<code>fold_state</code>/<code>meta</code> 单键除外。</td></tr>
+<tr><td><span class="req-id">9</span>联合主键</td><td>§5 各表</td><td>子表默认 <code>PRIMARY KEY (session_id, seq)</code> WITHOUT ROWID（按会话聚簇，局部性最优）；<code>header_tools</code> 三列联合主键；<code>file_ops</code> 因单事件多行使用 <code>(session_id, seq, ordinal)</code>；<code>timing_spans</code> 用 <code>(session_id, span_seq)</code>（折叠器分配的代理序号）；<code>fold_state</code>/<code>meta</code>/<code>session_tombstones</code> 单键除外。</td></tr>
 <tr><td><span class="req-id">10</span>重建/删除可行性</td><td>§4.3 生命周期</td><td>任何会话行集都可由持久日志确定性重建（折叠是纯函数）；删除走外键 CASCADE；会话消失 / 日志改写 / 库领先日志 / 版本升级 / 完整性损坏均给出明确触发与动作。</td></tr>
 <tr><td><span class="req-id">11</span>索引设计</td><td>§6 索引设计</td><td>每条索引对应到具体查询模式（日聚合 / 名目 tally / 家族树 / 游标分页 / 存量过滤），不做无主索引。</td></tr>
 </table>
@@ -215,7 +215,7 @@ footer{margin-top:60px;color:var(--muted);font-size:12.5px;border-top:1px solid 
 │  │ 身份变更对账     │  worker>30k │  （保留现有 metering/pricing）    │   ┌──────────────────┐  │
 │  └───────────────┘            └──────────────────────────────┘   │ SQLite (WAL)       │  │
 │        ▲                                                         │ storages/dsh-context│  │
-│        │ 身份 stat + 5s TTL 扫描 + 版本门禁                         │ 14 张表 · 版本重建   │  │
+│        │ 身份 stat + 5s TTL 扫描 + 版本门禁                         │ 15 张表 · 版本重建   │  │
 │  ┌─────┴────────┐                                                └─────────┬────────┘  │
 │  │ 活会话写通器    │  200 事件/2s/step-end/turn-end/dispose 刷库（Debounced）  │            │
 │  │ (工作态=全活会 │──────────────────────────────────────────────────────┘             │
@@ -306,18 +306,19 @@ footer{margin-top:60px;color:var(--muted);font-size:12.5px;border-top:1px solid 
 <tr><th style="width:210px">状态 / 触发</th><th style="width:150px">来源</th><th>动作</th></tr>
 <tr><td><code>pending</code> 新会话进入视野</td><td>listSessions 对账 / 活事件首见</td><td>INSERT sessions 行（头元数据 + <code>family_root</code>；<code>seed_cut_seq</code>=NULL，待 <code>session/end-seed</code> 到达时回填）→ 入回填队列（活跃优先）</td></tr>
 <tr><td><code>folding</code> 大行集分片写入</td><td>回填 &gt;5 万行</td><td>折叠计算一次完成，写入按 ≤2k 行/事务推进（事务间让路）；期间所有查询把该会话当作不可用（«—»）。崩溃/重启后 boot 对 <code>folding</code> 会话一律 DELETE 子行并整会话重折；<b>不</b>依赖部分行集继续增量。</td></tr>
+<tr><td><code>deleting</code> 分片删除</td><td>Reaper（§8.7）</td><td>墓碑已写入；按子表/主键 ≤2k 行分片删除，最后删 sessions 行。查询隐藏该会话；崩溃/失败保留墓碑并重试；完成前不会出现「部分子行 + ok」。</td></tr>
 <tr><td><code>ok</code> 折叠完成</td><td>回填 / 活写通</td><td>行集完整；<code>last_seq</code>=行集水位；<code>fold_status='ok'</code></td></tr>
 <tr><td>日志增长（非活会话）</td><td>身份对账：stat().revision 或 fs.stat(path) size/mtime 变化</td><td><b>增量续读</b>：从 <code>fold_state.last_seq + 1</code> 开始 <code>read()</code>（<b>不是</b> sessions.last_seq）→ 续折 → UPSERT 追加行；fold_state 缺失（LRU 逐出）→ 全量重折叠（事务内 DELETE+INSERT 整会话行集）。</td></tr>
 <tr><td>库领先持久日志（崩溃/掉电）</td><td>P2 启动对账（<code>clean_shutdown</code> 仅调优先级/并发）</td><td>用 <code>read(sessions.last_seq, 1)</code> 验证水位：返回空或首事件 seq ≠ sessions.last_seq → 该会话行集不可信 → DELETE 子行、<code>last_seq=-1</code>、<code>fold_status='pending'</code>、整会话重折。尾部校验并发受限（4–8；stat 另有独立上限）；<b>干净关机不跳过正确性校验</b>，只降低优先级。</td></tr>
 <tr><td>日志重写保持身份</td><td>fs.stat 相同但内容变（理论可能）</td><td>接受窗口：与现状一致（overviewCache 同样按 path+size+mtime 判断）；<code>quick_check</code> 级异常兜底重建。</td></tr>
-<tr><td>会话从列表消失</td><td>listSessions 对账差集（listed − db − live）</td><td>DELETE sessions 行 → 外键 CASCADE 清空全部子表行（需求 10：删除可行性）；差集持续两轮才删，避免后端瞬时失败误删。</td></tr>
+<tr><td>会话从列表消失</td><td>listSessions 对账差集（<b>db − listed − live</b>），由 Reaper 执行（§8.7）</td><td>候选需同时满足：listSessions 成功（空列表合法）、非 live、非 folding/deleting、<b>持久化可用</b>、<code>stat(id)=undefined</code> 且 <code>log_path</code> 文件不存在（或 log_path NULL 且缺席 ≥24h）+ 连续两轮 Reaper 缺席 + 60s 宽限 → 写墓碑 → 取消/拒绝在途任务 → 分片 DELETE 子表 → 删 sessions 行。墓碑 7 天 TTL，防止 backfill 复活；会话重新出现则删墓碑、重置 pending、重新准入。</td></tr>
 <tr><td><code>unsupported</code> 旧格式不可迁移</td><td><code>SessionFormatUnsupportedError</code></td><td>保留 sessions 行（fold_status='unsupported'）+ 无子行；前端显示 «—»；记录 <code>meta.harness_version/plugin_version</code>，版本变化时把这些行重置为 pending 重试一次。</td></tr>
 <tr><td><code>failed</code> 折叠异常</td><td>读日志 / 折叠 / 写库失败</td><td>fold_status='failed'+fold_error；下轮回填带退避重试。≤5 万行单事务原子回滚；&gt;5 万行走 <code>folding</code> 分片，失败行集对查询不可见，boot/重试时整会话重折。</td></tr>
 <tr><td>版本 bump / 库损坏</td><td>§4.1 门禁</td><td>全库重建：仅保留「会话清单」重播种，其余行集由回填逐会话重建。</td></tr>
 </table>
 <div class="note"><b>重建可行性根保证</b>：折叠是「header + 事件序列 → 行集」的确定性纯函数（现状代码已经如此，diff-fold 差分测试即证）；因此任意会话、任意时刻都可删掉行集重折，SQLite 里不存在不可再生的状态。<b>必要性收敛</b>：只有身份被替换 / 版本升级 / 损坏 / 库领先日志，以及 folding/failed 大行集的整会话重折，会触发全量重建；日常增长走增量续读，避免现状「身份不符→整体重建」的高频全量开销。</div>
 <!-- ============ ⑤ ============ -->
-<h2 id="s5">⑤ 表设计（14 张表）</h2>
+<h2 id="s5">⑤ 表设计（15 张表）</h2>
 
 <h3>5.0 命名与冗余约定（先立规矩，再列字段）</h3>
 <div class="grid2">
@@ -387,7 +388,7 @@ footer{margin-top:60px;color:var(--muted);font-size:12.5px;border-top:1px solid 
 <tr><td colspan="3" style="background:#f6f8fb"><b>排序/热路径键（仅保留 SQL 难以廉价重算的两把键；其余统计一律派生 — 见派生对照）</b></td></tr>
 <tr><td><code>billed_tokens</code></td><td>INTEGER</td><td>生命周期计费 tokens = Σ(input+cache_read+cache_write+output) WHERE is_inherited=0。<b>由折叠器维护绝对值随 flush 写入</b>（不每次全量 SUM），排序 'tokens' 键（<b>自身值</b>，用于 ids/fleet 树卡）+ KPI 热路径；继承种子 cut 后仅统计 cut 之后（口径同 fold.ts:935-943 的账本重置）。家族合并值由 <code>family_root</code> 聚合得出，不存列。</td></tr>
 <tr><td colspan="3" style="background:#f6f8fb"><b>折叠簿记</b></td></tr>
-<tr><td><code>fold_status</code></td><td>TEXT CHECK</td><td>'pending'|'folding'|'ok'|'failed'|'unsupported'</td></tr>
+<tr><td><code>fold_status</code></td><td>TEXT CHECK</td><td>'pending'|'folding'|'deleting'|'ok'|'failed'|'unsupported'</td></tr>
 <tr><td><code>fold_error</code></td><td>TEXT NULL</td><td>失败摘要 ≤200 字</td></tr>
 <tr><td><code>last_seq</code></td><td>INTEGER</td><td>行集水位线（已落库到的事件 seq；<b>默认 -1</b>，因为事件从 seq 0 开始）；增量续折的起点以 <code>fold_state.last_seq</code> 为准，不用本列。</td></tr>
 <tr><td><code>log_path</code> / <code>log_size</code> / <code>log_mtime</code> / <code>log_revision</code></td><td>TEXT/INTEGER/REAL/TEXT NULL</td><td>身份快照：<code>stat().location.path</code> + <code>stat().revision</code>（优先）+ fs.stat 的 size/mtimeMs（REAL，避免整数截断）；无 stat 能力时 NULL=纯活会话模式。</td></tr>
@@ -553,7 +554,7 @@ steps=COUNT(steps WHERE end_time NOT NULL，<b>与 harness sessionStats 对齐�
 <div class="note warn"><b>边界说明</b>：head-only 载荷中的 surface 数组是继续折叠所必需（compaction 替换需在内存表面定位 seq 并回扣 tokens）；它是<b>压缩后的当前上下文</b>，不随整段会话历史线性增长，但长上下文会话仍可达数百 KB～MB 级，因此需要 LRU 上限。<b>落库节奏与幂等（评审修订）</b>：fold_state 随 turn/end 与 session/disposed 落库，不随每个步骤重写 100KB+ 的 blob（避免 WAL 放大）；崩溃后从 <code>fold_state.last_seq + 1</code> 重放「行已落库」的事件 —— <b>所有行写入必须是 UPSERT 或单调 UPDATE</b>（重放折叠是确定性纯函数；<code>billed_tokens</code>/<code>cur_total</code> 是 fold_state 维护的绝对值，不受重放影响），sessions.last_seq 以行事务为准推进、state 允许暂时落后。<b>内存上限</b>：活动会话的内存工作态另设 LRU 字节上限（建议 64 MB，与磁盘上限独立）；被逐出的活会话在下个事件到达时从 fold_state 续折，fold_state 也缺失时整会话重折。</div>
 
 <h3>5.14 关系总览</h3>
-<pre><code>meta(1行)                          sessions(1行/会话, WITHOUT ROWID, TEXT PK)
+<pre><code>meta(1行)   session_tombstones(墓碑, 独立)     sessions(1行/会话, WITHOUT ROWID, TEXT PK)
                                      │ 1:N，全部子表 FK → sessions(id) ON DELETE CASCADE
     ┌──────────┬──────────┬─────────┼──────────┬───────────┬──────────┬──────────┐
  steps      requests   tool_calls  surface_nodes events   file_ops  skill_loads timing_spans
@@ -561,7 +562,7 @@ steps=COUNT(steps WHERE end_time NOT NULL，<b>与 harness sessionStats 对齐�
                                      ├ system_prompts (1:N)
                                      ├ header_epochs (1:N) ──1:N── header_tools
                                      └ fold_state (1:1, 可再生缓存)</code></pre>
-<p class="small"><b>外键补充</b>：<code>header_tools</code> FK <code>(session_id, epoch_seq)</code> → <code>header_epochs</code> ON DELETE CASCADE（否则纪元删除后工具行残留）；其余子表 FK <code>sessions(id)</code> CASCADE；<code>fold_state</code> 1:1 CASCADE。<code>sessions.family_root</code> 是逻辑自引用（不建 FK，避免删除/重排顺序问题），靠索引与扫描窗维护一致性。</p>
+<p class="small"><b>外键补充</b>：<code>header_tools</code> FK <code>(session_id, epoch_seq)</code> → <code>header_epochs</code> ON DELETE CASCADE（否则纪元删除后工具行残留）；其余子表 FK <code>sessions(id)</code> CASCADE；<code>fold_state</code> 1:1 CASCADE。<code>sessions.family_root</code> 是逻辑自引用（不建 FK，避免删除/重排顺序问题），靠索引与扫描窗维护一致性。<code>session_tombstones</code> 是独立表（不参与 CASCADE），由 Reaper 维护 TTL。</p>
 <h3>5.15 统计口径矩阵（family × inherited × root）<span class="tag warn">必读</span></h3>
 <p>现状并非单一公式：<code>rowsOf</code> 产出「根 + 后代 activity 合并」的行（跳过 blank 与 <code>origin='subagent'</code>），但 <code>pageRowOf</code> 的 turns/steps 取根会话自身 timeline；<code>session/end-seed</code> 会重置 ActivityState 的 days，却不重置 TimelineState 的 totals/timing/requests。因此 <code>summary.turns</code>（activity 口径）与 <code>counts.turns</code>（timeline 口径）本来就可能不同。新实现必须逐路由复刻这张矩阵，禁止用一条「turns=Σstarts_turn」同时宣称对齐两者。</p>
 <table>
@@ -582,6 +583,15 @@ steps=COUNT(steps WHERE end_time NOT NULL，<b>与 harness sessionStats 对齐�
 </table>
 <div class="note"><b>实现约束</b>：跨会话聚合一律通过 <code>family_root</code> 建根集合（不逐会话 EXISTS），继承过滤一律经 <code>sessions.seed_cut_seq</code>；两条规则集中成 SQL 视图/CTE 片段（如 <code>post_seed</code>），避免 16 条路由各写一份。<b>家族完整性</b>：家族聚合要求所有成员 <code>fold_status='ok'</code>；任一成员 pending/folding/failed → 家族合计标记 <code>family_partial=true</code>，前端显示 «—»/partial，绝不把部分成员之和当完整家族；summary/days/tally 中这类家族不计入合计并计入 coverage。<b>孤儿 subagent</b>（父会话缺失、family_root=self）仍应被 overview 聚合隐藏：聚合在 family_root 之后再 join 根行，要求根 <code>origin != 'subagent' AND blank=0</code>；query/family 按 id 查询时可单独展示它自身。所有会话级路由在 <code>fold_status != 'ok'</code> 时统一返回 null/status（不吐部分行），前端据此渲染 «—»。M2/M4 的对拍测试必须包含 seeded-fork、普通 fork、根+多级 subagent 三种 fixture，并逐指标断言「含/不含继承」与「self/family」。</div>
 
+<h3>5.16 <code>session_tombstones</code> — 已删除会话墓碑 <span class="tag new">新</span></h3>
+<table>
+<tr><th style="width:190px">字段</th><th style="width:90px">类型</th><th>含义</th></tr>
+<tr><td><code>id</code> PK</td><td>TEXT</td><td>已删除会话 id</td></tr>
+<tr><td><code>deleted_at</code></td><td>INTEGER</td><td>删除时间（ms）；TTL 7 天（可配），过期由 Reaper 清理</td></tr>
+<tr><td><code>reason</code></td><td>TEXT CHECK</td><td>'missing-from-list' | 'log-file-missing'（诊断用；无 restore 流程，不设 speculative reason）</td></tr>
+</table>
+<p class="small"><b>作用</b>：防止已排队的 backfill/seed/refold 或另一进程把刚删除的会话重新写回；backfill/seed/refold/scan INSERT/UPDATE 查墓碑，墓碑写入/删除/TTL 自身豁免。墓碑 <b>不是</b> sessions 的子表（会话行已删），无 FK；索引 <code>(deleted_at)</code>。会话在列表重新出现时先删墓碑、重置 pending/last_seq 再准入。</p>
+
 <!-- ============ ⑥ ============ -->
 <h2 id="s6">⑥ 索引设计与查询模式对照（需求 11）</h2>
 <p>原则：每条索引必须对应一个真实查询模式；WITHOUT ROWID 联合主键本身就是最主用的聚簇索引（按会话取全部行 = 一次范围扫）。</p>
@@ -599,8 +609,9 @@ steps=COUNT(steps WHERE end_time NOT NULL，<b>与 harness sessionStats 对齐�
 <tr><td>家族树 / fleet 汇总（递归 CTE）</td><td><code>sessions(parent_session)</code> 建树（仅 <code>origin='subagent'</code> 边）；<code>sessions(family_root)</code> 做聚合：家族 tokens = SUM(billed_tokens) GROUP BY family_root；普通 fork/孤儿按 §5.2 规则降级为自身根</td></tr>
 <tr><td>工具配对（result 回写 call 行）</td><td>UNIQUE <code>tool_calls(session_id, call_id)</code></td></tr>
 <tr><td>unchanged 协议</td><td>列表/overview：meta 单行读（data_generation / pricing_version）命中即 <code>{unchanged:true}</code>；会话级：db_epoch + sessions.detail_rev + pricing_version；status/backfill 永不走 unchanged</td></tr>
+<tr><td>Reaper 墓碑 TTL</td><td><code>session_tombstones(deleted_at)</code> 范围扫，删除超过 7 天且 sessions 行已不存在的墓碑；索引计入 §6 总数</td></tr>
 </table>
-<div class="note"><b>写入成本核算</b>：全库索引 ≈ 35 条（含本轮新增的 family_root/cur_total/model/running/provider/start+duration keyset/span-seq/file start_time/system 墓碑），全部为单会话批次事务内的追加型写；实测验收门槛定为「10 万事件会话全量折叠写库 ≤ 3s（worker 路径）」「单步骤活写通 ≤ 5ms」。大回填完成后可选 <code>ANALYZE</code> 优化计划。<b>轮询成本的真正变量（评审二轮修订）</b>：overview 各聚合按 (day, session_id) 索引做<b>窗口界</b>范围扫——成本 ∝ 活跃速率（行/天）× 窗口长度，与语料总量无关；语料总量只影响 boot 回填、身份巡检与存储体积。家族聚合按 <code>family_root</code> 索引分组，根集合（~1.2k）远小于事实行数；递归 CTE 只用于树形/顺序，不参与每行聚合。<b>query/days 的窗口</b>：默认热力图 8 周窗，同时提供 <code>range:'all'</code> 显式全历史（无窗口，成本 ∝ 全语料；UI 必须可自动加载/切换，不能悄悄丢失 400 天历史）。<b>预案触发条件（可观测）</b>：实测 summary P95 &gt; 50ms（M4 记录基线），或 query/status 报告的「近 30 天请求行数」&gt; 2×10⁵（极端活跃速率，窗口本身变大）——任一命中即落地「按日粒度物化缓存」（带 generation 失效；principles 缓存条款：稳定 key/TTL/上限），不回到无界预聚合。</div>
+<div class="note"><b>写入成本核算</b>：全库索引 ≈ 36 条（含本轮新增的 family_root/cur_total/model/running/provider/start+duration keyset/span-seq/file start_time/system 墓碑/tombstone TTL），全部为单会话批次事务内的追加型写；实测验收门槛定为「10 万事件会话全量折叠写库 ≤ 3s（worker 路径）」「单步骤活写通 ≤ 5ms」。大回填完成后可选 <code>ANALYZE</code> 优化计划。<b>轮询成本的真正变量（评审二轮修订）</b>：overview 各聚合按 (day, session_id) 索引做<b>窗口界</b>范围扫——成本 ∝ 活跃速率（行/天）× 窗口长度，与语料总量无关；语料总量只影响 boot 回填、身份巡检与存储体积。家族聚合按 <code>family_root</code> 索引分组，根集合（~1.2k）远小于事实行数；递归 CTE 只用于树形/顺序，不参与每行聚合。<b>query/days 的窗口</b>：默认热力图 8 周窗，同时提供 <code>range:'all'</code> 显式全历史（无窗口，成本 ∝ 全语料；UI 必须可自动加载/切换，不能悄悄丢失 400 天历史）。<b>预案触发条件（可观测）</b>：实测 summary P95 &gt; 50ms（M4 记录基线），或 query/status 报告的「近 30 天请求行数」&gt; 2×10⁵（极端活跃速率，窗口本身变大）——任一命中即落地「按日粒度物化缓存」（带 generation 失效；principles 缓存条款：稳定 key/TTL/上限），不回到无界预聚合。</div>
 
 <!-- ============ ⑦ ============ -->
 <h2 id="s7">⑦ API 设计（需求 3/5/6）</h2>
@@ -635,7 +646,7 @@ steps=COUNT(steps WHERE end_time NOT NULL，<b>与 harness sessionStats 对齐�
 <tr><td><code>query/skill-loads</code></td><td>{scope?, sessionId?, name?, day?, cursor/limit} → 装载行。sessionId 明细含继承；scope 多会话过滤 cut；tally 走 query/tally。</td><td>技能卡下钻明细（<b>新</b>）</td></tr>
 <tr><td><code>query/family</code></td><td>{rootId|sessionId} → 家族：成员[{id,title,origin,running,depth,order,<b>billed_tokens(self)</b>,<b>subtree_billed_tokens</b>,<b>calls(self)</b>,<b>subtree_calls</b>,cost_usd(self),subtree_cost_usd?,messages_total?,fold_status}] + 汇总 + <b>family_partial</b>。边只取 <code>origin='subagent' AND parent_session</code>（普通 fork 不并入）；孤儿降级为根，遇到环则告警并以首见为根，深度上限防止失控；billed/calls/cost 过滤继承 cut，结构/标题不过滤；任一成员非 ok → family_partial=true、自合计不显示为完整。成员 <code>subtree_*</code> = 自身 + 后代（root 的即全家）；汇总 = root 的 subtree。</td><td>fleet summary 会话面 + subagentCostFoldOf 前端 BFS —— MissionPulse、家族成本</td></tr>
 <tr><td><code>query/cost</code></td><td>{scope?|sessionId, family?:boolean} → GROUP BY(provider,model,period) usage 行 × 价目解析 → {usd, ready, faces[], misses[]}（价目表永不出库）。<b>口径（§5.15）</b>：只统计非继承 usage；scope 按根家族聚合；sessionId 默认 self，family:true 含后代。</td><td>overview cost 卡 / costRead —— 成本卡、家族成本</td></tr>
-<tr><td><code>query/status</code></td><td>{} → {schema_version, generation, <b>db_epoch</b>, pricing_version, ready, <b>startup_phase(starting|open|hydrating|ready|degraded|rebuilding), hydrating, integrity_check</b>, db_bytes(含 WAL), coverage{complete,remaining,failed,total,covered,unsupported,<b>folding</b>,running}, counts{sessions,steps,requests,…}, <b>fold_status 分布</b>, harness_supported}。<b>永不走 unchanged</b>；counts 允许 5s 级缓存但必须最终一致。</td><td>backfill 轮询补充 / 升级门 / 诊断</td></tr>
+<tr><td><code>query/status</code></td><td>{} → {schema_version, generation, <b>db_epoch</b>, pricing_version, ready, <b>startup_phase(starting|open|hydrating|ready|degraded|rebuilding), hydrating, integrity_check</b>, db_bytes(含 WAL), coverage{complete,remaining,failed,total,covered,unsupported,<b>folding,deleting</b>,running}, counts{sessions,steps,requests,…}, <b>fold_status 分布</b>, <b>reaper{running,last_run_at,candidates,deleted_sessions,deleted_child_rows,failed,tombstones}</b>, harness_supported}。<b>永不走 unchanged</b>；counts 允许 5s 级缓存但必须最终一致。</td><td>backfill 轮询补充 / 升级门 / 诊断</td></tr>
 <tr><td><code>backfill</code> <span class="tag keep">保留</span></td><td>POST {} → 触发对账+回填 pass；coverage 同 query/status（保留以兼容轮询习惯）。<b>永不走 unchanged</b>（队列/coverage 变化不写行）；尾部校验按 §8.3 的 P2 规则执行（clean_shutdown 只调优先级，不跳过正确性）。</td><td>overview 自动续填</td></tr>
 <tr><td><code>delta</code> <span class="tag rep">改造</span></td><td>入参/出参 wire 不变；内部由 surface_nodes 两个边界视图（严格 <code>seq&lt;X</code>）现算：<b>added</b>=now 可见且 base 不可见、<b>removed</b>=base 可见且 now 不可见（gone_seq ∈ (base,now]）、<b>tokenUp/tokenDown</b>=同 seq 节点 tokens 变化、以及 system/header 的变化；removed 按类聚合。仅算 removed 不足以保持 wire。</td><td>上下文浏览器增量</td></tr>
 <tr><td><code>fleet</code> <span class="tag rep">收窄</span></td><td>仅保留消息面（relay/mailbox/settled，原始日志冷折）；成员/家族统计移交 query/family</td><td>任务脉搏消息流</td></tr>
@@ -666,17 +677,18 @@ POST delta {sessionId,
 <h2 id="s8">⑧ 回填与及时刷新机制（主动回填 / 写通）</h2>
 
 <h3>8.0 启动、首屏与交互优先级（评审修订：不阻塞 dsh 启动）</h3>
-<div class="note warn"><b>结论</b>：原稿把 <code>listSessions</code> 对账、尾部校验、stat 巡检与逐会话回填写进 <code>apply()</code> 的 boot 序列；即使内部 <code>await</code>，也会把 dsh 启动与首个会话列表交互拖进插件的数据管线。SQLite 是同步 API，<code>coldReads</code> 现状是串行 FIFO，fold pool 是单 worker/单 pending——都不满足「主动、异步、并发、池化、交互优先」。本节是硬约束，§8.1 的重活只能发生在 P2/P3。</div>
+<div class="note warn"><b>结论</b>：原稿把 <code>listSessions</code> 对账、尾部校验、stat 巡检与逐会话回填写进 <code>apply()</code> 的 boot 序列；即使内部 <code>await</code>，也会把 dsh 启动与首个会话列表交互拖进插件的数据管线。SQLite 是同步 API，<code>coldReads</code> 现状是串行 FIFO，fold pool 是单 worker/单 pending——都不满足「主动、异步、并发、池化、交互优先」。本节是硬约束，§8.1 的重活只能发生在 P2/P4。</div>
 <table>
 <tr><th style="width:150px">阶段</th><th>做什么</th><th>硬预算 / 约束</th></tr>
 <tr><td><b>P0 apply 快路径</b>（同步）</td><td>解析路径；<code>DatabaseSync</code> 打开；读取 <code>application_id/user_version</code>/用户表；门禁；小库 DDL / 大库改名换新库（§4.1）；注册路由；<code>clean_shutdown=0</code>；返回。</td><td>p99 ≤10ms（不含首次冷磁盘 I/O）；<b>禁止</b> listSessions / stat / quick_check / 标题投影读取 / 回填 / 全表 COUNT；不等待任何日志读取或网络。<b>安全阀</b>：若首次 open/DDL 仍超预算，先注册路由、把 open/DDL 放 <code>setImmediate</code>，query 返回 <code>starting</code>，绝不在 apply 里 await。</td></tr>
 <tr><td><b>P1 首屏</b></td><td>query/* 直接读当前 SQLite 行（镜像列/已回填行）；pending/folding/unsupported 返回 «—» 与 coverage；<b>不 await 扫描</b>；后台调度 reconcile。</td><td>首个 query/sessions p95 ≤50ms（含冷页缓存）；首屏不得等待 listSessions/stat/标题刷新；dsh 会话列表完全独立（插件不再注册投影，apply 不阻塞它）。</td></tr>
 <tr><td><b>P2 延迟 hydration</b></td><td>在「首个路由响应后 + 安静窗（建议 1.5–2s）」或「无 UI 时 5s」启动：listSessions 对账、标题/blank 刷新、尾部校验、stat 巡检、回填队列。</td><td>只在交互空闲时占用主线程；有交互请求时暂停/让路；可被 dispose/abort 取消；不在 apply/inject 同步前缀里做。</td></tr>
 <tr><td><b>P3 主动回填</b></td><td>按 updated_at 降序的活跃优先队列；>30k 事件用 worker 行批次；节流 8s 工作/2s 暂停。</td><td>只使用「剩余预算」；主线程 slice ≤8ms、写事务 ≤2k 行或 ≤5ms；事件循环最大阻塞 ≤16ms；交互队列非空时不得启动新 slice。</td></tr>
+<tr><td><b>P4 维护/清理</b></td><td>Reaper（§8.7）：已消失会话候选、墓碑、分片删除、TTL 清理。</td><td>最低 lane；30–60s 周期；连续交互最多延后 30s；删除走 SqliteWriter；不在首屏/apply 中运行。</td></tr>
 </table>
 <h4>优先级与池化</h4>
 <ul>
-<li><b>交互 &gt; 列表 &gt; 回填</b>：<code>coldReads.admit(read, {lane})</code>；交互（detail/context/timeline/tool-calls/file-ops）优先，列表（sessions/summary/days/tally）次之，回填最低。禁止现状的 <code>tail.then</code> 串行 FIFO，也禁止回填占用交互 lane。</li>
+<li><b>交互 &gt; 列表 &gt; 回填 &gt; 清理</b>：<code>coldReads.admit(read, {lane})</code>；交互（detail/context/timeline/tool-calls/file-ops）优先，列表（sessions/summary/days/tally）次之，回填再次，Reaper 清理最低。禁止现状的 <code>tail.then</code> 串行 FIFO，也禁止回填/清理占用交互 lane。</li>
 <li><b>池</b>：冷读/折叠并发 2–4（默认 2，可配）；主线程同时只允许 1 个写事务；worker 池 1–2 个（&gt;30k 会话）；heap gate 仍保留，在入池前检查。</li>
 <li><b>让路</b>：回填在每个 slice/事务边界检查 <code>interactivePending</code>/<code>lastInteractiveAt</code>；有交互在途或最近 500ms 内有交互 → 不启动新 slice；正在执行的 slice 不能抢占，但用 ≤8ms 预算保证尽快结束。</li>
 <li><b>启动静默窗</b>：P2 在首个路由响应后延迟 1.5–2s；无 UI 时 5s；<b>持续交互时最多再等 10s，之后以低优先级、≤8ms slice 缓慢推进</b>，不为等待静默无限延迟 hydration。首屏为空/新库时仍先返回空 + coverage，不等待回填。</li>
@@ -702,7 +714,7 @@ POST delta {sessionId,
 </table>
 <ul>
 <li><b>共享逻辑</b>：一个 <code>WorkScheduler</code> 提供 <code>admit(task, {lane, resource, key, budget, signal})</code>、优先级、in-flight 去重、堆门、取消、超时与指标；消费者只描述任务，不再各自实现 <code>tail.then</code> 或独立 semaphore。</li>
-<li><b>共用资源</b>：<code>AsyncIoExecutor</code>、<code>MainThreadSlicer</code>、<code>WorkerExecutor</code>、<code>SqliteWriter</code> 是共享实例；backfill、detail、overview、stat、title 刷新、live seed/refold 全部提交到同一 scheduler，但按 resource 落到不同执行器。</li>
+<li><b>共用资源</b>：<code>AsyncIoExecutor</code>、<code>MainThreadSlicer</code>、<code>WorkerExecutor</code>、<code>SqliteWriter</code> 是共享实例；backfill、detail、overview、stat、title 刷新、live seed/refold、Reaper 全部提交到同一 scheduler，但按 resource 落到不同执行器。</li>
 <li><b>饥饿与公平</b>：交互 lane 优先；P3 回填在交互静默后恢复，不为 P3 在连续交互中强行插入 slice；P2 的轻量 hydration（listSessions/stat/tail check）在持续交互 10s 后以 ≤2ms 低频推进，不抢占 P3。长时间无交互时按 8s/2s 节奏推进；队列深度/等待时间/服务时间进 <code>query/status</code>，hydration 可延后但不会丢任务。</li>
 <li><b>去重</b>：同一 session 的 cold read/fold 在 detail 与 backfill 同时请求时共享同一 promise；同一 stat path、同一 overview query key 同理，避免重复日志读取和重复折叠。</li>
 <li><b>死锁约束</b>：任何任务不得在持有 worker/写事务时等待主线程 lane；SqliteWriter 不得在事务内等待 AsyncIo。违反时 scheduler 记录错误并放弃该任务，而不是让宿主饿死。</li>
@@ -718,10 +730,10 @@ POST delta {sessionId,
     插件数据先按 ready/partial 状态返回，不阻塞 dsh 会话列表
 
 bootScheduler  [P2：首个路由响应后 1.5–2s，或 5s idle 后启动]
- 5. listSessions() 对账：准入(有 cwd 或 live) → INSERT pending / 标记消失集合(延迟两轮删除)
+ 5. listSessions() 对账：准入(有 cwd 或 live) → INSERT pending / 消失集合交给 Reaper（§8.7），不在本 pass 直接删
  6. 排序回填队列：updated_at DESC（活跃、最近优先）
  7. <b>对所有 last_seq ≥ 0 的会话</b>做低价尾部校验（§8.3）；clean_shutdown=0 提高校验优先级/并发，clean_shutdown=1 降低优先级，但都不跳过正确性
- 8. 对每个待处理会话（fold_status='pending'|'failed'|'folding' 或 身份已变；live 会话由写通独占行集写权、不进冷回填）：
+ 8. 对每个待处理会话（fold_status='pending'|'failed'|'folding' 或 身份已变；deleting 由 P4 Reaper 重试；live 会话由写通独占行集写权、不进冷回填）：
       coldReads.admit(交互/列表/回填 lane, 堆门)        ← 优先级池，不再串行 FIFO
       ├ 身份变化且 fold_state 可用、header id/createdAt 一致、read(fold_state.last_seq, 1) 返回同 seq 事件
       │    → persistence.open().read(fold_state.last_seq + 1) 增量续折
@@ -732,7 +744,9 @@ bootScheduler  [P2：首个路由响应后 1.5–2s，或 5s idle 后启动]
       单会话 ≤5 万行 = 单事务（BEGIN IMMEDIATE…COMMIT）：DELETE 旧行 + INSERT 行集 + UPDATE sessions + UPSERT fold_state
       >5 万行 = fold_status='folding' + 每 ≤2k 行一个事务（所有查询隐藏该会话）；崩溃后整会话重折
       节流沿用现状：8s 工作预算 / 2s 暂停 / 25ms 最小间隔（backfill.ts:59-95），并叠加交互让路
- 9. coverage 由 SQL 计数（pending/folding/failed/unsupported/total/covered），query/status 暴露</code></pre>
+ 9. coverage 由 SQL 计数（pending/folding/deleting/failed/unsupported/total/covered），query/status 暴露
+10. P4 Reaper（§8.7）以 30–60s 周期或 backfill pass 结束后运行：候选发现走 IO lane，删除走单写者，
+    与回填同池但优先级最低；首屏/交互期间不启动，连续交互最多延后 30s</code></pre>
 <div class="note warn"><b>事务预算（评审修订）</b>：「单会话 = 单事务」仅适用于 ≤5 万行的常规行集；更大行集<b>分片提交</b>（每片 ≤2k 行一个事务，事务间让出事件循环；水位随片推进，期间 sessions.fold_status='folding'，<b>所有查询路由</b>按 «—» 隐藏该会话），避免数百 ms 级同步阻塞事件循环。折叠计算仍整会话一次完成，分片只作用于写入；<b>崩溃/失败时不做跨片回滚</b>——boot 或重试发现 folding/failed 即 DELETE 子行并整会话重折（部分行集永不可见）。增量续读的追加式写入不受此限（单调追加，随时可见）。</div>
 
 <h3>8.2 活会话写通（及时刷新的根）</h3>
@@ -751,7 +765,7 @@ bootScheduler  [P2：首个路由响应后 1.5–2s，或 5s idle 后启动]
 
 <h3>8.4 请求期扫描与过期对账</h3>
 <ul>
-<li><b>serve-first, reconcile-later（评审修订）</b>：query/sessions 等路由<b>先返回当前 SQLite 行</b>（含镜像列/已回填行），随后在后台触发 5s TTL 扫描窗（现状 makeScanWindow 复用）：listSessions 差集 → 新会话 INSERT / 消失会话 DELETE；live 会话 running 刷新；workspace/agents 镜像列刷新。<b>首屏不 await listSessions/stat/标题投影</b>；title/blank/lastPromptAt 只对「新见/近期活跃/签名变化」的会话后台重读并重算 <code>search_text</code>，不做逐会话全量投影读。陈旧上界 ≤5s（与现状持平）。</li>
+<li><b>serve-first, reconcile-later（评审修订）</b>：query/sessions 等路由<b>先返回当前 SQLite 行</b>（含镜像列/已回填行），随后在后台触发 5s TTL 扫描窗（现状 makeScanWindow 复用）：listSessions 差集 → 新会话 INSERT / 消失集合交给 Reaper（§8.7，不在扫描窗直接删）；live 会话 running 刷新；workspace/agents 镜像列刷新。<b>首屏不 await listSessions/stat/标题投影</b>；title/blank/lastPromptAt 只对「新见/近期活跃/签名变化」的会话后台重读并重算 <code>search_text</code>，不做逐会话全量投影读。陈旧上界 ≤5s（与现状持平）。</li>
 <li>冷会话身份对账优先用 <code>stat().revision</code>，缺失时 <code>fs.stat(location.path)</code>（size + mtimeMs REAL；每轮一次、<b>stat 独立并发上限 16</b>，不与日志 read 共槽；tail check 仍为 4–8）—— <b>查询路径永不触发折叠</b>，脏会话只进回填队列。<b>规模注（评审二轮修订）</b>：stat 巡检是 O(会话数)，语料 ~10⁴ 时每轮 10⁴ 次 stat 偏重——分层巡检：updated_at 新近（近 7 天）会话随扫描窗巡检，更旧会话降频（分钟级一轮）。此为继承自现状架构的既有点，非新设计引入。</li>
 </ul>
 
@@ -773,6 +787,19 @@ bootScheduler  [P2：首个路由响应后 1.5–2s，或 5s idle 后启动]
 <li><b>失效主题</b>：sessions/overview/fleet/heads/pricing 五主题保留（活写通事务提交后按需触发，服务端产生而非仅客户端自发自消）；'heads' 名随 heads 路由退役可在前端更名 'family'（客户端内部命名，不影响协议）。</li>
 <li>coverage 进行中 → 前端按现状指数退避触发 backfill 路由；进度变化不依赖 unchanged，完成后 generation 变化自动带出全量数据。</li>
 </ul>
+
+<h3>8.7 会话清理（Reaper）：删除已消失会话的全部派生内容</h3>
+<p><b>已考虑删除，但原稿只有「差集两轮删除」，没有独立的清理任务、墓碑和并发池。</b>本修订补一个低优先级 Reaper：它是 P4 维护 lane（P2 hydration 之后），复用 §8.0 的 WorkScheduler，不是 dsh 启动路径的一部分。</p>
+<table>
+<tr><th style="width:190px">项</th><th>规则</th></tr>
+<tr><td><b>触发</b></td><td>P2 hydration 完成后启动；作为独立的 <b>P4 维护 lane</b>，每 30–60s 运行一次（<b>不</b>跟随 §8.4 的 5s 请求扫描窗）。连续交互时最多延后 30s，之后以 ≤2ms 低频推进候选发现；首屏期间不启动。它不是新线程：<code>listSessions</code>/<code>stat</code>/<code>persistence</code> 是主进程服务，不能搬到通用 worker；删除必须走 <code>SqliteWriter</code> 单写者。候选发现/stat 走 AsyncIoExecutor（stat 用独立 16 上限，不占日志 read 槽）。</td></tr>
+<tr><td><b>候选判定</b></td><td>同时满足：① <code>listSessions()</code> 成功（<b>空列表合法</b>）；② id 在 sessions 表但不在 listed 集合；③ <code>sessions.get(id)</code> 不存在（非 live）；④ <code>fold_status</code> 不是 folding/deleting；⑤ <b>持久化/stat 可用</b>（不可用则 Reaper 禁用，纯 live 模式绝不批量删冷行）；⑥ <code>stat(id)=undefined</code>；⑦ <code>log_path</code> 文件不存在，或 log_path 为 NULL 且连续缺席 ≥24h；⑧ 连续两轮 Reaper 缺席 + ≥60s 宽限；⑨ <code>folded_at</code> 早于 60s。任一不满足都不删；stat 返回 undefined 但文件存在（malformed/空 header）视为损坏，不删。</td></tr>
+<tr><td><b>防复活</b></td><td>删除前先写 <code>session_tombstones(id, deleted_at, reason)</code>（reason 只能是 'missing-from-list'|'log-file-missing'），取消/拒绝该 id 的 queued/in-flight backfill、seed、refold（候选已排除 live，不取消 live 写通）；清掉内存工作态。**写事务查墓碑的范围**：backfill/seed/refold/scan INSERT/UPDATE 查；墓碑写入、删除事务、TTL 清理自身豁免。墓碑保留 7 天（可配），过期前若 sessions 行仍在则续期重试。会话重新出现时由扫描窗先删墓碑、重置 <code>fold_status='pending'</code>、<code>last_seq=-1</code> 再重新准入。</td></tr>
+<tr><td><b>删除事务</b></td><td>先置 <code>fold_status='deleting'</code>（查询隐藏），再按子表/主键 ≤2k 行或 ≤5ms 分片删除，最后删 sessions 行；小行集可单事务。FK CASCADE 仅作为最终兜底，不作为唯一分片机制。失败保留墓碑与 sessions 行，下轮从 deleting 重试；崩溃不会留下「部分子行 + fold_status=ok」。</td></tr>
+<tr><td><b>关联修复</b></td><td>删除父会话后，受影响的<b>整个子树</b>重算 <code>family_root</code> 到最近的存活非 subagent 祖先；若没有存活祖先，则子树中直接子会话各自成为根。保留仍存在的子会话，并 bump 受影响行的 detail_rev/generation，避免 overview 丢失完整范围。</td></tr>
+<tr><td><b>可观测</b></td><td><code>query/status</code> 增加 <code>reaper{running,last_run_at,candidates,deleted_sessions,deleted_child_rows,failed,tombstones}</code>；日志只记录 id 与原因，不打印会话内容。</td></tr>
+</table>
+<div class="note"><b>为什么不是「独立线程」</b>：dsh 的 <code>sessionQuery</code>/<code>sessionPersistence</code> 由宿主主进程组合（dsh: packages/session-query/session-query/src/index.ts:186-190、packages/session/session-persistence/src/index.ts:51-68），worker 无法直接调用这些服务；<code>node:sqlite</code> 的 <code>DatabaseSync</code> 也不能跨线程共享。把清理放进独立线程会引入第二个写者、连接归属和跨线程服务代理，反而破坏单写者与 WAL 预算。正确的「异步、并发、池化」是：Reaper 作为后台任务 + 候选发现走 AsyncIo 池 + 删除走单写者队列；CPU 重的清理计算（如大行集分片计划）可交给共享 WorkerExecutor。</div>
 
 <!-- ============ ⑨ ============ -->
 <h2 id="s9">⑨ 前端改造（需求 3/6）</h2>
@@ -825,7 +852,7 @@ bootScheduler  [P2：首个路由响应后 1.5–2s，或 5s idle 后启动]
 <tr><th style="width:270px">风险</th><th style="width:90px">级别</th><th>缓解</th></tr>
 <tr><td>大语料回填时长（首次/版本升级）</td><td><span class="tag warn">中</span></td><td>活跃优先排序 + 切片/worker + 8s/2s 节流（现状验证过的节奏）；未完成会话 coverage 显示 «—» 不阻塞使用；增量续折让后续启动近零成本</td></tr>
 <tr><td><b>启动/首屏卡顿</b></td><td><span class="tag warn">高</span></td><td>§8.0 两阶段：apply 只做 DB 打开/门禁/DDL/路由注册（p99 ≤10ms），不 listSessions/stat/quick_check/回填；首屏 serve-first 读 SQLite，不 await 扫描；hydration 在首个路由响应后 1.5–2s（无 UI 5s）延迟启动；quick_check 后台 worker；dsh 会话列表不依赖插件投影。</td></tr>
-<tr><td><b>回填与交互竞争</b></td><td><span class="tag warn">高</span></td><td>冷读改「交互 &gt; 列表 &gt; 回填」优先级池（2–4 并发，默认 2）；回填仅在交互空闲/最近 500ms 无交互时启动新 slice；主线程 slice ≤8ms、写事务 ≤2k 行/≤5ms；超过 16ms 事件循环阻塞预算的批次降级 worker/推迟；M3/M5 实测。</td></tr>
+<tr><td><b>回填与交互竞争</b></td><td><span class="tag warn">高</span></td><td>冷读改「交互 &gt; 列表 &gt; 回填 &gt; 清理」优先级池（2–4 并发，默认 2）；回填仅在交互空闲/最近 500ms 无交互时启动新 slice；主线程 slice ≤8ms、写事务 ≤2k 行/≤5ms；超过 16ms 事件循环阻塞预算的批次降级 worker/推迟；M3/M5 实测。</td></tr>
 <tr><td>共享池饥饿/死锁</td><td><span class="tag warn">中</span></td><td>交互 lane 优先；交互空闲后立即恢复回填，连续交互时不为回填强行插入 slice（hydration 可延后但不丢任务）；同 key in-flight 去重；禁止持有 worker/写事务时等待主线程 lane；队列深度/等待时间进 query/status；M3 以 10k 会话 + 50 并发 subagent 压测。</td></tr>
 <tr><td>同步 SQL 阻塞事件循环</td><td><span class="tag warn">中</span></td><td>所有聚合走 (day,session_id)/(name)/(family_root) 索引范围扫且<b>窗口界</b>（成本 ∝ 活跃速率 × 窗口，非语料总量——§6 评审二轮修订）；列表 LIMIT；验收门槛（§6）：P95 路由 ≤50ms；触发条件见 §6（P95 实测 / 近 30 天行数）；必要时把重聚合移入 worker（行批次返回，方案预留）</td></tr>
 <tr><td>多进程同库（CLI + web 同 profile）</td><td><span class="tag warn">中</span></td><td>WAL + busy_timeout；写入以会话为单位原子换行集；<b>destructive refold 必须 CAS</b>（<code>WHERE last_seq = :expected AND log_revision IS :expected</code>，NULL-safe）才允许 DELETE/提交，避免旧 backfill 覆盖新 live 行；<code>meta.data_generation</code> 用原子 <code>UPDATE value=value+1</code>；文档声明单写者优先、多写者仅会话级 last-wins。</td></tr>
@@ -833,6 +860,7 @@ bootScheduler  [P2：首个路由响应后 1.5–2s，或 5s idle 后启动]
 <tr><td>活会话工作态内存/CPU</td><td><span class="tag warn">中</span></td><td>全部活会话逐事件折叠是新增基线；工作态与待写批次设字节上限 LRU、seeding 缓冲上限；实测 50 并发 subagent 的常驻/峰值与事件延迟；超限逐出后从 fold_state + 日志尾续折。</td></tr>
 <tr><td>flush 热路径 O(会话规模)</td><td><span class="tag warn">中</span></td><td><code>billed_tokens/cur_total</code> 由 fold_state 维护绝对值，flush 写入，不在每次事务做全量 SUM；全量重折/回填时校验一次。M3 以 10 万请求会话验证 ≤5ms/步。</td></tr>
 <tr><td>分片回填的一致性</td><td><span class="tag warn">中</span></td><td>folding 状态对全部查询隐藏；崩溃/失败不做跨片回滚，boot 删子行整会话重折；coverage 把 folding 计入 remaining；补「分片中途 kill」测试。</td></tr>
+<tr><td>已删除会话被复活/清理卡顿</td><td><span class="tag warn">中</span></td><td>Reaper 先写 <code>session_tombstones</code>、取消/拒绝在途 backfill/seed/refold、写事务前查墓碑；大行集分片删除（≤2k 行/≤5ms），墓碑 7 天 TTL；临时 listSessions 失败不删除；M3 覆盖「删除后并发 backfill 不复活」「10k 会话清理」。</td></tr>
 <tr><td>fold_state 载荷膨胀</td><td><span class="tag warn">中</span></td><td>磁盘 64 MB LRU（实测校准）+ 逐出退回全量重折；内存工作态另设 64 MB LRU（§5.13）；surface 是压缩后的当前上下文，不是整段历史。</td></tr>
 <tr><td>usage 缺失（无计费数据的路由/模型）</td><td><span class="tag warn">低</span></td><td>计费列 NULL → 成本 «—»（现状同口径，provider usage 权威）</td></tr>
 <tr><td>写入失败（磁盘满/只读）</td><td><span class="tag warn">低</span></td><td>:memory: 降级全功能；≤5 万行事务失败整批回滚；分片失败标记 folding/failed、对查询隐藏并由 boot 整会话重折；路由 ready:false 兜底。</td></tr>
@@ -846,6 +874,7 @@ bootScheduler  [P2：首个路由响应后 1.5–2s，或 5s idle 后启动]
 <li><b>镜像列陈旧 ≤5s</b>（title/blank/running/archived）：与现状请求期直读持平；若未来 harness 推送这些变化可进一步收紧。</li>
 <li><b>首屏可能不完整</b>：P1 直接读已回填行；pending/folding/unsupported 显示 «—»，hydration 在首屏后自动补齐。这是「不阻塞 dsh 启动/首个会话列表」的有意取舍，不要求用户额外操作；coverage 可见。</li>
 <li><b>quick_check 延迟</b>：P2 每次启动在后台 worker 执行（unclean/打开异常提高优先级），插件数据在检查完成前按 ready/partial 状态展示；dsh 会话列表不受影响。若检查失败则重建/降级（§4.1）。</li>
+<li><b>Reaper 的保守边界</b>：持久化/stat 不可用时禁用删除（纯 live 模式绝不批量删冷行）；log_path 为 NULL（跨进程未 materialize 的 pending 会话）需连续缺席 ≥24h 才进入候选；stat 返回 undefined 但日志文件存在（malformed/空 header）不删。宁可留下不可达行，也不误删仍存在的会话。</li>
 <li><b>崩溃后的尾部校验</b>：P2 始终校验所有 <code>last_seq≥0</code> 的会话（<code>read(sessions.last_seq,1)</code>）；<code>clean_shutdown</code> 只影响优先级/并发，不跳过正确性。若宿主日志缓冲丢失且文件身份未变，插件无法从身份识别，只能依赖尾部 read 校验；干净关机也接受 WAL/NORMAL 的最后一次提交回滚语义。</li>
 <li><b>多进程写者</b>为会话级 last-wins；destructive refold 用 last_seq/revision CAS 防止旧写覆盖新写，但不提供跨进程合并/事务语义。</li>
 <li><b>preview 截断</b>：surface preview ≤2,000 字符并标注 <code>preview_truncated</code>；上下文浏览器/RequestDetail 在节点展开时自动按 seq 走 history RPC 取全文，不要求额外手动加载；未接入的视图会显示截断文本。</li>
@@ -858,7 +887,7 @@ bootScheduler  [P2：首个路由响应后 1.5–2s，或 5s idle 后启动]
 <tr><th style="width:90px">里程碑</th><th>内容</th><th style="width:330px">验收</th></tr>
 <tr><td><b>M1</b> 地基</td><td>DB 打开/门禁/重建（§4.1，先读后写）；meta/sessions DAO；STRICT schema + 索引 DDL；权限/clean_shutdown/db_epoch</td><td>版本不符重建、他方库拒开、<b>application_id=0 且有表拒开且文件不变</b>、:memory: 降级、重建后 generation 变化；各门禁/降级路径测试全绿</td></tr>
 <tr><td><b>M2</b> 折叠→行</td><td>行发射器改造（终结点：请求/步骤/工具/表面/事件/span/技能/系统提示/header/file_ops ordinal）；活写通器；FoldWorkState + fold_state 续折；两把键绝对值；read(fold_state.last_seq+1) 增量</td><td><b>对拍测试</b>：现 fixtures 全量重折 → 行集 ↔ 现 TimelineState/ActivityState wire 逐字段一致；diff-fold 0 退出；seeded fork / 普通 fork / 多级 subagent 的 §5.15 矩阵逐项断言；file_ops 多文件搜索不丢行；时间旅行严格 <code>seq&lt;X</code></td></tr>
-<tr><td><b>M3</b> 回填调度</td><td>boot 对账 / 队列排序 / 切片+worker 行批次 / 节流 / coverage SQL 化（含 folding）/ 删除对账 / clean_shutdown 双向尾部校验 / 分片崩溃清理 / 活会话内存上限 / 启动快路径与优先级池 / 共享 WorkScheduler + 资源执行器</td><td>1,158 会话语料（现状基准）播种内存峰值 &lt; 300 MB、时长 ≤ 现状；coverage 数字与 folds 数一致；SIGKILL/掉电模拟下两方向水位都自愈；50 并发 subagent 常驻/峰值达标；<b>dsh 启动到会话列表可交互不回归（插件 apply 热盘 p99 ≤10ms，冷盘走安全阀）</b>；回填期间事件循环最大延迟 ≤16ms；同 session detail+backfill 并发只折叠一次（去重命中）。</td></tr>
+<tr><td><b>M3</b> 回填调度</td><td>boot 对账 / 队列排序 / 切片+worker 行批次 / 节流 / coverage SQL 化（含 folding）/ 删除对账 / Reaper + session_tombstones / clean_shutdown 双向尾部校验 / 分片崩溃清理 / 活会话内存上限 / 启动快路径与优先级池 / 共享 WorkScheduler + 资源执行器</td><td>1,158 会话语料（现状基准）播种内存峰值 &lt; 300 MB、时长 ≤ 现状；coverage 数字与 folds 数一致；SIGKILL/掉电模拟下两方向水位都自愈；50 并发 subagent 常驻/峰值达标；<b>dsh 启动到会话列表可交互不回归（插件 apply 热盘 p99 ≤10ms，冷盘走安全阀）</b>；回填期间事件循环最大延迟 ≤16ms；同 session detail+backfill 并发只折叠一次（去重命中）；<b>已删除会话的全部子行清零、在途 backfill 不能复活、临时 list 失败不误删</b>。</td></tr>
 <tr><td><b>M4</b> 查询 API</td><td>16 条路由 + 统一 envelope/分域 unchanged；SQL 性能验收（§6 门槛）；sessions/timeline/events/tool-calls 契约全部落地；family_root 聚合</td><td>旧 overview 四 parts 输出与新 query/* 输出在基准语料上对拍（按 §5.15 矩阵解释差异）；P95 ≤50ms；status/backfill 永不 unchanged；query/status 记录行数/库大小基线（§6 规模天花板触发条件的观测起点）</td></tr>
 <tr><td><b>M5</b> 前端重接线</td><td>§9 映射逐板块切换；删除缓存簇；unchanged 分域协议；preview 截断的自动全文加载；search_text 非 ASCII 搜索；days 的 all 窗口；首屏 serve-first 与启动占位</td><td>浏览器实测（390px→桌面、双语/多语言搜索、长会话、/context 弹窗、超长正文）；<b>首屏不等待 hydration：plugin query p95 ≤50ms，pending «—» 可见且自动补齐</b>；payload 字节数与请求数对比报告；堆峰值对比；unchanged 在 remount/逐出场景不返回空数据</td></tr>
 <tr><td><b>M6</b> 清场</td><td>删三个插件投影注册/JSON 缓存/foldCache/foldJournal/旧路由与旧测试；保留 sessionProjections/sessionProjectionCache 的 title/metadata 读取；fallback 改 route 级；清理旧 projcache 插件行；compat 矩阵重写；compatibility.md 更新（数据面章节整体重写）</td><td><code>pnpm run check</code> 100% 覆盖；三线 compat 全绿；release notes 迁移说明（含 breaking 路由与 0.86.0）</td></tr>
@@ -871,8 +900,9 @@ bootScheduler  [P2：首个路由响应后 1.5–2s，或 5s idle 后启动]
 <h3>A. 旧 → 新映射速查</h3>
 <table>
 <tr><th style="width:330px">旧</th><th>新</th></tr>
-<tr><td>sessionProjections 注册 ×3 + session_projcache 行</td><td>插件折叠器直写 SQLite（14 表）；dsh 自有 title/sessionListMetadata 投影仍经 sessionProjections/sessionProjectionCache 读取；旧插件投影行一次性清理</td></tr>
+<tr><td>sessionProjections 注册 ×3 + session_projcache 行</td><td>插件折叠器直写 SQLite（15 表；<code>session_tombstones</code> 由 Reaper 维护）；dsh 自有 title/sessionListMetadata 投影仍经 sessionProjections/sessionProjectionCache 读取；旧插件投影行一次性清理</td></tr>
 <tr><td>overview-cache.v1.json（身份键 JSON）</td><td>sessions.log_* 身份列 + last_seq 水位线（行级增量）</td></tr>
+<tr><td>会话从列表消失（<code>stat</code> 也不存在）</td><td>Reaper + <code>session_tombstones</code> → DELETE sessions CASCADE（大行集分片）；墓碑 TTL 清理</td></tr>
 <tr><td>overview part=summary / days / page / tally</td><td>query/summary / query/days / query/sessions / query/tally</td></tr>
 <tr><td>snapshot / heads</td><td>query/sessions(ids)（self 值，可含 subagent）+ query/context；家族统计走 query/family</td></tr>
 <tr><td>detail / facts(parts)</td><td>query/context + query/timeline|requests|steps|tool-calls|file-ops|events|spans|skill-loads</td></tr>
