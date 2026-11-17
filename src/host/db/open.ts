@@ -5,7 +5,7 @@ import { dirname, join } from 'node:path'
 import { getTableName } from 'drizzle-orm'
 import type { Context } from '@deepseek-ai/cordis'
 import { CREATE_SCHEMA_SQL } from './schema.generated'
-import { APPLICATION_ID, DROP_ORDER, SCHEMA_VERSION, TABLES } from './schema'
+import { APPLICATION_ID, DROP_ORDER, STORAGE_VERSION, TABLES } from './schema'
 
 const REBUILD_RENAME_BYTES = 8 * 1024 * 1024
 
@@ -48,8 +48,6 @@ export interface OpenDatabaseOptions {
 
 interface GateResult {
   rebuild: boolean
-  migrate?: number
-  reason?: string
 }
 
 function userTables(client: DatabaseSync): string[] {
@@ -73,15 +71,14 @@ function gate(client: DatabaseSync): GateResult {
     throw new DatabaseOpenError('unowned-database', 'index.sqlite has tables but no dsh-context application id', true)
   }
   if (applicationId === 0) return { rebuild: false }
+  if (version !== STORAGE_VERSION) return { rebuild: true }
   const unknown = tables.filter(name => !KNOWN_TABLES.has(name))
   if (unknown.length > 0) {
     throw new DatabaseOpenError('unknown-tables', `index.sqlite has unknown tables: ${unknown.join(', ')}`, true)
   }
   const missing = [...KNOWN_TABLES].filter(name => !tables.includes(name))
-  if (version === 8 && missing.length === 0) return { rebuild: false, migrate: 8 }
-  if (version !== SCHEMA_VERSION) return { rebuild: true }
   if (missing.length > 0) return { rebuild: true }
-  return { rebuild: false, reason: 'ready' }
+  return { rebuild: false }
 }
 
 function applyPragmas(client: DatabaseSync): void {
@@ -97,13 +94,14 @@ function applyPragmas(client: DatabaseSync): void {
 function dropAll(client: DatabaseSync): void {
   client.exec('PRAGMA foreign_keys = OFF')
   for (const name of DROP_ORDER) client.exec(`DROP TABLE IF EXISTS "${name}"`)
+  for (const name of userTables(client)) client.exec(`DROP TABLE IF EXISTS "${name.replaceAll('"', '""')}"`)
   client.exec('PRAGMA user_version = 0')
 }
 
 function createSchema(client: DatabaseSync, epoch: string, now: number): void {
   client.exec(`PRAGMA application_id = ${APPLICATION_ID}`)
   client.exec(CREATE_SCHEMA_SQL)
-  client.exec(`PRAGMA user_version = ${SCHEMA_VERSION}`)
+  client.exec(`PRAGMA user_version = ${STORAGE_VERSION}`)
   const insert = client.prepare('INSERT INTO meta(key, value) VALUES (?, ?)')
   const values: [string, string][] = [
     ['db_epoch', epoch],
@@ -130,22 +128,6 @@ function renameAside(path: string, suffix: string, now: number): string {
   return target
 }
 
-function upgradeFrom8(client: DatabaseSync): void {
-  client.exec('BEGIN IMMEDIATE')
-  try {
-    client.exec('ALTER TABLE tool_calls ADD COLUMN command_start_time INTEGER')
-    client.exec('ALTER TABLE tool_calls ADD COLUMN command_end_time INTEGER')
-    client.exec('ALTER TABLE tool_calls ADD COLUMN command_duration_ms INTEGER')
-    client.exec(`UPDATE tool_calls SET command_start_time = start_time, command_end_time = end_time,
-      command_duration_ms = duration_ms WHERE cmd IS NOT NULL`)
-    client.exec('COMMIT')
-    client.exec(`PRAGMA user_version = ${SCHEMA_VERSION}`)
-  } catch (error) {
-    try { client.exec('ROLLBACK') } catch {}
-    throw new DatabaseOpenError('open-failed', `cannot upgrade index.sqlite: ${String(error)}`, false)
-  }
-}
-
 function openFile(client: DatabaseSync, path: string, epoch: string, now: number, options: OpenDatabaseOptions): OpenedDatabase {
   const result = gate(client)
   if (result.rebuild) {
@@ -170,7 +152,6 @@ function openFile(client: DatabaseSync, path: string, epoch: string, now: number
     }
     dropAll(client)
   }
-  if (result.migrate === 8) upgradeFrom8(client)
   createSchemaIfNeeded(client, epoch, now)
   applyPragmas(client)
   return { client, mode: 'file', rebuilt: result.rebuild, epoch }
@@ -179,7 +160,7 @@ function openFile(client: DatabaseSync, path: string, epoch: string, now: number
 function createSchemaIfNeeded(client: DatabaseSync, epoch: string, now: number): void {
   const applicationId = scalar(client, 'application_id')
   const version = scalar(client, 'user_version')
-  if (applicationId === APPLICATION_ID && version === SCHEMA_VERSION) return
+  if (applicationId === APPLICATION_ID && version === STORAGE_VERSION) return
   dropAll(client)
   createSchema(client, epoch, now)
 }

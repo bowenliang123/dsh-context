@@ -17,7 +17,7 @@ import {
 import type { SnapshotValue, TimelineValue } from './queries/detail'
 import { limitOf, offsetOf, scopeOf } from './queries/common'
 import type { QueryScope } from './queries/common'
-import { SCHEMA_VERSION, sessions } from './schema'
+import { STORAGE_VERSION, sessions } from './schema'
 
 export interface RouteHost {
   ctx: Context
@@ -544,7 +544,7 @@ export function statusOf(host: RouteHost): Record<string, unknown> {
   const coverage = host.scheduler.coverage()
   const pricingVersion = pricingVersionOf(host, meta.pricingVersion)
   return {
-    schema_version: SCHEMA_VERSION,
+    storage_version: STORAGE_VERSION,
     generation: meta.generation,
     db_epoch: meta.epoch,
     pricing_version: pricingVersion,
@@ -562,5 +562,3 @@ export function statusOf(host: RouteHost): Record<string, unknown> {
     harness_supported: host.harnessSupported,
   }
 }
-
-export { SCHEMA_VERSION }

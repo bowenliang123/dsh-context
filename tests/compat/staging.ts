@@ -181,7 +181,7 @@ function parseDriverOutput<T>(stdout: string, marker: string, what: string): T {
 export interface DriverReport {
   queryRoutes: string[]
   statusOk: boolean
-  schemaVersion: number
+  storageVersion: number
   contextOk: boolean
   requests: number
   steps: number
@@ -242,7 +242,7 @@ const context = await post('/api/dsh-context/query/context', { sessionId: 'compa
 const report = {
   queryRoutes: [...routes.keys()].filter(path => path.includes('/query/')).sort(),
   statusOk: status?.ok === true,
-  schemaVersion: status?.value?.schema_version ?? -1,
+  storageVersion: status?.value?.storage_version ?? -1,
   contextOk: context?.ok === true && context?.value?.ok === true,
   requests: status?.value?.counts?.requests ?? -1,
   steps: status?.value?.counts?.steps ?? -1,

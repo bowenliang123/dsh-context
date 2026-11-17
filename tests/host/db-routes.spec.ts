@@ -12,7 +12,7 @@ import type { CostSource } from '../../src/host/cost'
 import { fakeCtx } from './helpers/ctx'
 import { openDatabase } from '../../src/host/db/open'
 import { createDb } from '../../src/host/db/db'
-import { events, SCHEMA_VERSION, sessions, surfaceNodes } from '../../src/host/db/schema'
+import { events, STORAGE_VERSION, sessions, surfaceNodes } from '../../src/host/db/schema'
 import { sql } from 'drizzle-orm'
 
 const COVERAGE: Coverage = {
@@ -87,7 +87,7 @@ describe('query routes', () => {
     const h = routesHarness()
     const status = await h.call('query/status', {})
     assert.equal(status.ok, true)
-    assert.equal((status.value as { schema_version: number }).schema_version, SCHEMA_VERSION)
+    assert.equal((status.value as { storage_version: number }).storage_version, STORAGE_VERSION)
     assert.equal((status.value as { ready: boolean }).ready, true)
     const sessions = await h.call('query/sessions', { scope: { range: 'all' }, pageSize: 2 })
     assert.equal(sessions.ok, true)

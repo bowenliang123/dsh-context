@@ -4,6 +4,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { describe, test } from 'vitest'
 import { apply, inject, name } from '../../src/host/index'
+import { STORAGE_VERSION } from '../../src/host/db/schema'
 import { decodeKindOfBlock, firstTokenTimeOfStream, isTokenChunk, replaceRangeOf, streamTimingOf } from '../../src/host/logShapes'
 import { fakeCtx } from './helpers/ctx'
 
@@ -42,9 +43,9 @@ describe('index', () => {
       headers: { 'content-type': 'application/json' },
       body: '{}',
     }))
-    const body = await response?.json() as { ok: boolean; value: { schema_version: number; startup_phase: string } }
+    const body = await response?.json() as { ok: boolean; value: { storage_version: number; startup_phase: string } }
     assert.equal(body.ok, true)
-    assert.equal(body.value.schema_version, 9)
+    assert.equal(body.value.storage_version, STORAGE_VERSION)
     fake.dispose()
     rmSync(home, { recursive: true, force: true })
   })

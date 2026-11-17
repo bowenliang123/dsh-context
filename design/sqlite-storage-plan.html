@@ -322,8 +322,8 @@ db.insert(requests).values(batch).onConflictDoUpdate({
 3. 门禁（失败即 close + 拒绝打开，绝不写入/删除）：
    - application_id 非 0 且 ≠ 0x44534358('DSCX')  -> 他方数据库，拒绝
    - application_id = 0 且存在用户表               -> 非空且无法证明归属，拒绝
-   - application_id = DSCX 且 user_version ≠ 8     -> 视为本插件旧/新版本：DROP 全部用户表 -> 重建
-   - application_id = DSCX 且 user_version = 8 且有未知表 -> 拒绝（同版本出现未知表，可能是损坏/他方写入）
+   - application_id = DSCX 且 user_version ≠ STORAGE_VERSION -> 视为本插件旧/新版本：DROP 全部用户表 -> 重建
+   - application_id = DSCX 且 user_version = STORAGE_VERSION 且有未知表 -> 拒绝（同版本出现未知表，可能是损坏/他方写入）
    - application_id = 0 且无用户表                  -> 新建
 4. 门禁通过后才应用有副作用的 PRAGMA：
    PRAGMA journal_mode = WAL;
@@ -332,25 +332,25 @@ db.insert(requests).values(batch).onConflictDoUpdate({
    PRAGMA synchronous  = NORMAL;          -- 派生可重建数据，WAL+NORMAL 足够
    PRAGMA cache_size   = -8000;           -- 8 MB 页缓存上限
 5. 门禁通过后先写 PRAGMA application_id = 0x44534358（'DSCX'，区别于 dsh 的 'DSHQ'），
-   再建 schema，最后写 PRAGMA user_version = 8；版本戳只在布局完整后落盘
+   再建 schema，最后写 PRAGMA user_version = STORAGE_VERSION；版本戳只在布局完整后落盘
    -- crash 中途留下 app_id=DSCX + user_version=0/旧值 + 部分已知表 → 下次按版本不符重建，
    -- 不会落入 application_id=0 且有表 → 永久拒绝的死局</code></pre>
 <table>
 <tr><th style="width:240px">场景</th><th>动作</th></tr>
 <tr><td><code>application_id</code> 非 0 且 ≠ 'DSCX'</td><td><b>拒绝打开</b>（他方数据库，永不触碰）——同 dsh session-query-sqlite/schema.ts:58-63。不写 application_id、不改 journal_mode。</td></tr>
 <tr><td><code>application_id=0</code> 但已有用户表</td><td><b>拒绝打开</b>（无法证明是本插件库；可能是被误放到该路径的普通 SQLite 库）——同 dsh session-query-sqlite/schema.ts:64-67 的“非空且非公认派生索引”拒绝。</td></tr>
-<tr><td><code>application_id=DSCX</code> 且有未知用户表</td><td><b>user_version ≠ 8</b>：视为本插件不同版本，DROP 全部用户表重建（满足需求 2，数据可再生）。<b>user_version = 8</b>：同版本出现未知表 → 拒绝（不 DROP 未知表），记录日志供诊断。</td></tr>
-<tr><td><code>user_version ≠ SCHEMA_VERSION</code>（仅限 DSCX 库）</td><td><b>DROP 全部用户表（含未知表）→ 重置 user_version=0 → 重建 schema → 重播种 meta</b>。app_id 已证明是本插件库；不同版本的表结构都是派生数据，重建安全（需求 2）。<b>reset 细节</b>：按子表→父表顺序 DROP，或临时 <code>PRAGMA foreign_keys=OFF</code>（需在事务外），重建后恢复 ON。<b>大库启动约束</b>：旧库行数大时不要在 P0 主线程 DROP 大表——close 后把旧文件改名为 <code>index.sqlite.rebuild-&lt;ts&gt;</code>、立即新建空库，旧文件/旧行后台清理；P0 保持 ≤10ms。先例：session-query-sqlite/schema.ts:68-101 <code>resetDerivedSchema</code>。</td></tr>
+<tr><td><code>application_id=DSCX</code> 且有未知用户表</td><td><b>user_version ≠ STORAGE_VERSION</b>：视为本插件不同版本，DROP 全部用户表重建（满足需求 2，数据可再生）。<b>user_version = STORAGE_VERSION</b>：同版本出现未知表 → 拒绝（不 DROP 未知表），记录日志供诊断。</td></tr>
+<tr><td><code>user_version ≠ STORAGE_VERSION</code>（仅限 DSCX 库）</td><td><b>DROP 全部用户表（含未知表）→ 重置 user_version=0 → 重建 schema → 重播种 meta</b>。app_id 已证明是本插件库；不同版本的表结构都是派生数据，重建安全（需求 2）。<b>reset 细节</b>：按子表→父表顺序 DROP，或临时 <code>PRAGMA foreign_keys=OFF</code>（需在事务外），重建后恢复 ON。<b>大库启动约束</b>：旧库行数大时不要在 P0 主线程 DROP 大表——close 后把旧文件改名为 <code>index.sqlite.rebuild-&lt;ts&gt;</code>、立即新建空库，旧文件/旧行后台清理；P0 保持 ≤10ms。先例：session-query-sqlite/schema.ts:68-101 <code>resetDerivedSchema</code>。</td></tr>
 <tr><td>空库（application_id=0 且无表）</td><td>先写 application_id（DSCX）→ 建 schema → 最后写 user_version；中途 crash 走「DSCX + 版本不符/表缺失」重建路径。</td></tr>
 <tr><td>拒绝打开后的服务形态</td><td>路由统一 <code>ready:false</code> / <code>startup_phase=degraded</code>，不写库、不改库、不退 <code>:memory:</code>（避免把「路径上有非本插件库」误当成可用空库）；记录日志与修复提示，dsh 会话列表不受影响。</td></tr>
-<tr><td><code>application_id=DSCX</code>、<code>user_version=8</code> 但表缺失/不完整</td><td>视为半建库：DROP 已知表 → 重建 schema → 重播种 meta；不保留可能不一致的旧行。</td></tr>
+<tr><td><code>application_id=DSCX</code>、<code>user_version=STORAGE_VERSION</code> 但表缺失/不完整</td><td>视为半建库：DROP 已知表 → 重建 schema → 重播种 meta；不保留可能不一致的旧行。</td></tr>
 <tr><td><code>quick_check</code> 失败 / 打开异常</td><td><b>P2 后台 worker 每次启动执行</b> <code>PRAGMA quick_check</code>（低优先级；<code>clean_shutdown=0</code> 或打开异常时提高优先级），不在 apply 主线程执行；失败则 close、把文件改名为 <code>index.sqlite.corrupt-&lt;ts&gt;</code>（不直接 rm，避免误删他方文件），再建新库；失败 → <code>:memory:</code> 降级（全功能、随进程消失）+ warn；两者皆败 → 路由统一 <code>ready:false</code>。</td></tr>
 <tr><td>建库/重建 DDL 来源</td><td><code>schema.generated.ts</code> 的 <code>CREATE_SCHEMA_SQL</code>（Drizzle <code>schema.ts</code> 生成后追加 <code>STRICT, WITHOUT ROWID</code>）；不执行 drizzle migration、不建迁移表；<code>application_id/user_version/PRAGMA</code> 由打开序列负责。见 §5.0.1。</td></tr>
 <tr><td>检测到旧 <code>overview-cache.v1.json</code></td><td>首次成功建库后删除（一次性清理，失败静默）。</td></tr>
 </table>
 <div class="note warn"><b>磁盘与多进程</b>：数据库目录沿用 dsh 的 <code>0700</code>、文件 <code>0600</code>（session-query-sqlite/schema.ts:37-41）；WAL 的 <code>-wal</code>/<code>-shm</code> 同目录。重建/改名只在确认文件未被另一进程持有时执行；否则退 <code>:memory:</code> 并告警。</div>
 
-<h3>4.2 SCHEMA_VERSION 的 bump 规则</h3>
+<h3>4.2 STORAGE_VERSION 的 bump 规则</h3>
 <ul>
 <li>任何<b>表结构 / 字段语义 / 统计口径</b>变化都必须 bump —— 因为不迁移：旧行口径与新查询混杂即是数据错误（符合编码标准「数据准确性第一」）。包括：<code>seed_cut_seq</code>/<code>family_root</code> 的判定规则、<code>search_text</code> 的折叠方式、<code>day</code>/<code>period</code>/<code>program</code> 的折叠算法、preview 截断规则、家族/继承过滤矩阵的任何变化。</li>
 <li>派生数据完全可重建，bump 的代价仅是首次启动的回填时长（有节流与 worker，不阻塞使用；未回填会话按 §8 的 coverage 显示 «—»）。</li>
@@ -727,7 +727,7 @@ steps=COUNT(steps WHERE end_time NOT NULL，<b>与 harness sessionStats 对齐�
 <tr><td><code>query/skill-loads</code></td><td>{scope?, sessionId?, name?, day?, cursor/limit} → 装载行。sessionId 明细含继承；scope 多会话过滤 cut；tally 走 query/tally。</td><td>技能卡下钻明细（<b>新</b>）</td></tr>
 <tr><td><code>query/family</code></td><td>{rootId|sessionId} → 家族：成员[{id,title,origin,running,depth,order,<b>billed_tokens(self)</b>,<b>subtree_billed_tokens</b>,<b>calls(self)</b>,<b>subtree_calls</b>,cost_usd(self),subtree_cost_usd?,messages_total?,fold_status}] + 汇总 + <b>family_partial</b>。边只取 <code>origin='subagent' AND parent_session</code>（普通 fork 不并入）；孤儿降级为根，遇到环则告警并以首见为根，深度上限防止失控；billed/calls/cost 过滤继承 cut，结构/标题不过滤；任一成员非 ok → family_partial=true、自合计不显示为完整。成员 <code>subtree_*</code> = 自身 + 后代（root 的即全家）；汇总 = root 的 subtree。</td><td>fleet summary 会话面 + subagentCostFoldOf 前端 BFS —— MissionPulse、家族成本</td></tr>
 <tr><td><code>query/cost</code></td><td>{scope?|sessionId, family?:boolean} → GROUP BY(provider,model,period) usage 行 × 价目解析 → {usd, ready, faces[], misses[]}（价目表永不出库）。<b>口径（§5.15）</b>：只统计非继承 usage；scope 按根家族聚合；sessionId 默认 self，family:true 含后代。</td><td>overview cost 卡 / costRead —— 成本卡、家族成本</td></tr>
-<tr><td><code>query/status</code></td><td>{} → {schema_version, generation, <b>db_epoch</b>, pricing_version, ready, <b>startup_phase(starting|open|hydrating|ready|degraded|rebuilding), hydrating, integrity_check</b>, db_bytes(含 WAL), coverage{complete,remaining,failed,total,covered,unsupported,<b>folding,deleting</b>,running}, counts{sessions,steps,requests,…}, <b>fold_status 分布</b>, <b>reaper{running,last_run_at,candidates,deleted_sessions,deleted_child_rows,failed,tombstones}</b>, harness_supported}。<b>永不走 unchanged</b>；counts 允许 5s 级缓存但必须最终一致。</td><td>backfill 轮询补充 / 升级门 / 诊断</td></tr>
+<tr><td><code>query/status</code></td><td>{} → {storage_version, generation, <b>db_epoch</b>, pricing_version, ready, <b>startup_phase(starting|open|hydrating|ready|degraded|rebuilding), hydrating, integrity_check</b>, db_bytes(含 WAL), coverage{complete,remaining,failed,total,covered,unsupported,<b>folding,deleting</b>,running}, counts{sessions,steps,requests,…}, <b>fold_status 分布</b>, <b>reaper{running,last_run_at,candidates,deleted_sessions,deleted_child_rows,failed,tombstones}</b>, harness_supported}。<b>永不走 unchanged</b>；counts 允许 5s 级缓存但必须最终一致。</td><td>backfill 轮询补充 / 升级门 / 诊断</td></tr>
 <tr><td><code>backfill</code> <span class="tag keep">保留</span></td><td>POST {} → 触发对账+回填 pass；coverage 同 query/status（保留以兼容轮询习惯）。<b>永不走 unchanged</b>（队列/coverage 变化不写行）；尾部校验按 §8.3 的 P2 规则执行（clean_shutdown 只调优先级，不跳过正确性）。</td><td>overview 自动续填</td></tr>
 <tr><td><code>delta</code> <span class="tag rep">改造</span></td><td>入参/出参 wire 不变；内部由 surface_nodes 两个边界视图（严格 <code>seq&lt;X</code>）现算：<b>added</b>=now 可见且 base 不可见、<b>removed</b>=base 可见且 now 不可见（gone_seq ∈ (base,now]）、<b>tokenUp/tokenDown</b>=同 seq 节点 tokens 变化、以及 system/header 的变化；removed 按类聚合。仅算 removed 不足以保持 wire。</td><td>上下文浏览器增量</td></tr>
 <tr><td><code>fleet</code> <span class="tag rep">收窄</span></td><td>仅保留消息面（relay/mailbox/settled，原始日志冷折）；成员/家族统计移交 query/family</td><td>任务脉搏消息流</td></tr>

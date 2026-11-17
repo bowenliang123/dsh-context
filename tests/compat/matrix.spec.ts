@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict'
 import { beforeAll, describe, test } from 'vitest'
 import { BASELINES } from '../baselines'
+import { STORAGE_VERSION } from '../../src/host/db/schema'
 import * as staging from './staging'
 
 const reasons = staging.skipReasons()
@@ -51,9 +52,9 @@ describe.skipIf(reasons.length > 0)('compat matrix — real dsh sources per base
       }
     })
 
-    test('host: status reports the strict schema and the folded live session', () => {
+    test('host: status reports the storage version and the folded live session', () => {
       assert.equal(report.statusOk, true)
-      assert.equal(report.schemaVersion, 9)
+      assert.equal(report.storageVersion, STORAGE_VERSION)
       assert.ok(report.dbEpoch !== '')
       assert.deepEqual(report.foldStatus, { ok: 1 })
       assert.equal(report.requests, 1)

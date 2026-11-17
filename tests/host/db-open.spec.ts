@@ -6,7 +6,7 @@ import { DatabaseSync } from 'node:sqlite'
 import { describe, test } from 'vitest'
 import { getTableColumns, getTableName } from 'drizzle-orm'
 import { getTableConfig } from 'drizzle-orm/sqlite-core'
-import { APPLICATION_ID, SCHEMA_VERSION, TABLES } from '../../src/host/db/schema'
+import { APPLICATION_ID, STORAGE_VERSION, TABLES } from '../../src/host/db/schema'
 import { DatabaseOpenError, databasePath, defaultEpoch, openDatabase, quarantine, quickCheck, removeDiscard, resolveDatabasePath, tableNames } from '../../src/host/db/open'
 import { createDb, metaSnapshot, metaValue, setMeta } from '../../src/host/db/db'
 import { fakeCtx } from './helpers/ctx'
@@ -86,7 +86,7 @@ describe('database open gate', () => {
     assert.equal(opened.rebuilt, true)
     assert.equal(opened.mode, 'file')
     const version = opened.client.prepare('PRAGMA user_version').get() as { user_version: number }
-    assert.equal(version.user_version, SCHEMA_VERSION)
+    assert.equal(version.user_version, STORAGE_VERSION)
     assert.equal(tableNames(opened.client).length, 15)
     assert.equal(metaValue(createDb(opened.client), 'db_epoch'), 'fresh')
     opened.client.close()
@@ -110,6 +110,23 @@ describe('database open gate', () => {
     rmSync(dir, { recursive: true, force: true })
   })
 
+  test('rebuilds a version mismatch even when unknown tables are present', () => {
+    const dir = tempDir()
+    const path = join(dir, 'index.sqlite')
+    const raw = new DatabaseSync(path)
+    raw.exec(`PRAGMA application_id = ${APPLICATION_ID}`)
+    raw.exec('PRAGMA user_version = 2')
+    raw.exec('CREATE TABLE mystery(id integer primary key)')
+    raw.exec('CREATE TABLE "odd""name"(id integer primary key)')
+    raw.close()
+    const opened = openDatabase(path, { now: () => 6, epoch: () => 'cleared' })
+    assert.equal(opened.rebuilt, true)
+    assert.equal(tableNames(opened.client).length, 15)
+    assert.equal(Number(opened.client.prepare('PRAGMA user_version').get()!.user_version), STORAGE_VERSION)
+    opened.client.close()
+    rmSync(dir, { recursive: true, force: true })
+  })
+
   test('refuses unknown tables at the current version', () => {
     const dir = tempDir()
     const path = join(dir, 'index.sqlite')
@@ -124,44 +141,21 @@ describe('database open gate', () => {
     rmSync(dir, { recursive: true, force: true })
   })
 
-  test('upgrades a version 8 database without dropping its rows', () => {
+  test('rebuilds a version 8 database instead of migrating its rows', () => {
     const dir = tempDir()
     const path = join(dir, 'index.sqlite')
     openDatabase(path).client.close()
     const raw = new DatabaseSync(path)
     raw.exec(`INSERT INTO sessions (id, title, created_at, updated_at, fold_status, last_seq, detail_rev, family_root)
       VALUES ('s', 's', 1, 1, 'ok', 0, 1, 's')`)
-    raw.exec(`INSERT INTO tool_calls (session_id, seq, call_id, name, day, start_time, end_time, duration_ms, cmd)
-      VALUES ('s', 1, 'c1', 'bash', 'd', 1, 3, 2, 'ls')`)
-    raw.exec('ALTER TABLE tool_calls DROP COLUMN command_start_time')
-    raw.exec('ALTER TABLE tool_calls DROP COLUMN command_end_time')
-    raw.exec('ALTER TABLE tool_calls DROP COLUMN command_duration_ms')
     raw.exec('PRAGMA user_version = 8')
     raw.close()
-    const upgraded = openDatabase(path)
-    assert.equal(upgraded.rebuilt, false)
-    assert.equal(Number(upgraded.client.prepare('PRAGMA user_version').get()!.user_version), SCHEMA_VERSION)
-    assert.deepEqual(
-      { ...upgraded.client.prepare('SELECT command_start_time, command_end_time, command_duration_ms FROM tool_calls').get() },
-      { command_start_time: 1, command_end_time: 3, command_duration_ms: 2 },
-    )
-    upgraded.client.close()
-    rmSync(dir, { recursive: true, force: true })
-  })
-
-  test('a failed version 8 upgrade rolls back and reports the open failure', () => {
-    const dir = tempDir()
-    const path = join(dir, 'index.sqlite')
-    openDatabase(path).client.close()
-    const raw = new DatabaseSync(path)
-    raw.exec('ALTER TABLE tool_calls DROP COLUMN command_start_time')
-    raw.exec('PRAGMA user_version = 8')
-    raw.close()
-    assert.throws(() => openDatabase(path), (error: unknown) => {
-      assert.ok(error instanceof DatabaseOpenError)
-      assert.equal(error.reason, 'open-failed')
-      return true
-    })
+    const opened = openDatabase(path, { now: () => 5, epoch: () => 'rebuilt' })
+    assert.equal(opened.rebuilt, true)
+    assert.equal(Number(opened.client.prepare('PRAGMA user_version').get()!.user_version), STORAGE_VERSION)
+    assert.equal(opened.client.prepare('SELECT count(*) AS n FROM sessions').get()!.n, 0)
+    assert.equal(metaValue(createDb(opened.client), 'db_epoch'), 'rebuilt')
+    opened.client.close()
     rmSync(dir, { recursive: true, force: true })
   })
 
@@ -170,7 +164,7 @@ describe('database open gate', () => {
     const path = join(dir, 'index.sqlite')
     const raw = new DatabaseSync(path)
     raw.exec(`PRAGMA application_id = ${APPLICATION_ID}`)
-    raw.exec(`PRAGMA user_version = ${SCHEMA_VERSION}`)
+    raw.exec(`PRAGMA user_version = ${STORAGE_VERSION}`)
     raw.exec('CREATE TABLE sessions(id text primary key)')
     raw.close()
     const opened = openDatabase(path)
