@@ -28,12 +28,12 @@ describe('OverviewPanel coverage state', () => {
       summary: () => ({ revision: 's0', pricingReady: true, summary: summaryRaw({ coverage: incomplete }) }),
     })
     const { m } = await openPanelFake(makeCtx())
-    assert.equal(calls.filter(c => c.route.endsWith('/overview')).length, 6, 'summary, days, page, and three tallies fetched once')
+    assert.equal(calls.filter(c => c.route.endsWith('/overview')).length, 7, 'summary, days, page, projects, and three tallies fetched once')
     assert.ok(text(m.container).includes(progress(1, 3)), 'the partial projection set is annotated')
     assert.equal(calls.filter(c => c.route.endsWith('/backfill')).length, 0)
     await act(async () => { await vi.advanceTimersByTimeAsync(2_000) })
     assert.equal(calls.filter(c => c.route.endsWith('/backfill')).length, 0, 'the host owns continuation')
-    assert.ok(calls.filter(c => c.route.endsWith('/overview')).length > 6, 'coverage progress schedules fresh overview reads')
+    assert.ok(calls.filter(c => c.route.endsWith('/overview')).length > 7, 'coverage progress schedules fresh overview reads')
     await m.unmount()
   })
 

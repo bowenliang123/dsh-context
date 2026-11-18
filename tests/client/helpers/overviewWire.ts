@@ -85,3 +85,12 @@ export function tallyValue(over: Record<string, unknown> = {}): Record<string, u
     ...over,
   }
 }
+
+export function projectsValue(over: Record<string, unknown> = {}): Record<string, unknown> {
+  return {
+    revision: 'r1',
+    pricingReady: true,
+    projects: [{ key: 'w', tokens: 100, sessions: 2 }],
+    ...over,
+  }
+}

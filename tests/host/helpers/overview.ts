@@ -12,6 +12,7 @@ import type {
   BackfillCoverage,
   ContextTimeline,
   OverviewPage,
+  OverviewProjectStat,
   OverviewSummary,
   OverviewTally,
   OverviewValue,
@@ -480,7 +481,7 @@ export const WIDE_RANGE = { start: 0, end: Date.UTC(2100, 0, 1) }
 function withWideRange(body: unknown): unknown {
   if (body === null || typeof body !== 'object' || Array.isArray(body)) return body
   const data = body as Record<string, unknown>
-  if (data.part !== 'summary' && data.part !== 'page' && data.part !== 'tally') return body
+  if (data.part !== 'summary' && data.part !== 'page' && data.part !== 'tally' && data.part !== 'projects') return body
   const scope = data.scope
   if (scope !== undefined && (scope === null || typeof scope !== 'object')) return body
   const scopeData = scope === undefined || scope === null ? {} : scope as Record<string, unknown>
@@ -524,6 +525,13 @@ export function tallyOf(result: CallOutcome): OverviewTally {
   assert.equal(reply.ok, true)
   assert.ok(reply.value !== undefined && 'tally' in reply.value)
   return reply.value.tally
+}
+
+export function projectsOf(result: CallOutcome): OverviewProjectStat[] {
+  const reply = unwrap(result)
+  assert.equal(reply.ok, true)
+  assert.ok(reply.value !== undefined && 'projects' in reply.value)
+  return reply.value.projects
 }
 
 export function revisionOf(result: CallOutcome): string {

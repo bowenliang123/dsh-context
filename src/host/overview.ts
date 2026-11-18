@@ -34,6 +34,7 @@ import {
   matches,
   pageOf,
   pageRowOf,
+  projectStatsOf,
   sortOf,
   summaryOf,
   tallyStatsOf,
@@ -64,7 +65,7 @@ const CAPTURE_MAX_WAIT_MS = 60_000
 
 const SERVED_KEYS_MAX = 128
 
-const PARTS = new Set<OverviewPart>(['summary', 'days', 'page', 'tally'])
+const PARTS = new Set<OverviewPart>(['summary', 'days', 'page', 'tally', 'projects'])
 
 const COVERAGES = new Set<OverviewCoverage>(['all', 'active', 'archived'])
 
@@ -194,6 +195,9 @@ function valueOf(parsed: ParsedRequest, revision: string, cost: CostSource, data
   }
   if (parsed.part === 'tally') {
     return { revision, pricingReady, tally: { field: parsed.tally, stats: tallyStatsOf(data.rows, data.filters, parsed.tally) } }
+  }
+  if (parsed.part === 'projects') {
+    return { revision, pricingReady, projects: projectStatsOf(data.rows, data.filters) }
   }
   const sorted = sortOf(data.rows, parsed.sort)
   const paged = pageOf(sorted, parsed.page)

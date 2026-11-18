@@ -6,7 +6,6 @@ import type { ViewKit } from '../viewkit'
 import { SkeletonRows } from './skeleton'
 
 const MAX_ROWS = 24
-
 export interface TallyCardProps {
   icon: ReactElement
   title: string
@@ -34,6 +33,7 @@ export function TallyCard(props: TallyCardProps): ReactElement {
 export interface TallyRowProps {
   name: string
   count: string
+  countStyle?: 'multiplier' | 'plain'
   share: number
   color: string
   selected?: boolean
@@ -64,7 +64,7 @@ export function TallyRow(props: TallyRowProps): ReactElement {
     >
       <i className="lc-ov-tally-dot" style={{ background: props.color }} />
       <span className="lc-ov-tally-name">{props.name}</span>
-      <span className="lc-ov-tally-count">×{props.count}</span>
+      <span className="lc-ov-tally-count">{props.countStyle === 'plain' ? '' : '×'}{props.count}</span>
       <i
         className="lc-ov-tally-bar"
         style={{ width: `calc(${props.share}% - ${Math.round(props.share * 12) / 100}px)`, background: props.color }}

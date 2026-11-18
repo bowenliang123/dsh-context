@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import type {
-  BackfillCoverage, BackfillUnreadableSession, OverviewDay, OverviewPage, OverviewPartTotal, OverviewRequest, OverviewScope,
+  BackfillCoverage, BackfillUnreadableSession, OverviewDay, OverviewPage, OverviewPartTotal, OverviewProjectStat,
+  OverviewRequest, OverviewScope,
   OverviewSummary, OverviewTally, OverviewTallyStat, OverviewTimingWindow, OverviewValue, TimingTotals,
   OverviewResolvedWindow,
 } from '../shared/types'
@@ -233,6 +234,20 @@ function tallyOf(value: unknown): OverviewTally | null {
   return { field, stats }
 }
 
+function projectsOf(value: unknown): OverviewProjectStat[] | null {
+  if (!Array.isArray(value)) return null
+  const projects: OverviewProjectStat[] = []
+  for (const entry of value) {
+    const row = asRecord(entry)
+    const key = row === null ? undefined : stringOf(row.key)
+    const tokens = row === null ? null : nonNegativeOf(row.tokens)
+    const sessions = row === null ? null : nonNegativeOf(row.sessions)
+    if (key === undefined || tokens === null || sessions === null) continue
+    projects.push({ key, tokens, sessions })
+  }
+  return projects
+}
+
 export function overviewValueOf(value: unknown): OverviewValue | null {
   const data = asRecord(value)
   if (data === null) return null
@@ -256,6 +271,10 @@ export function overviewValueOf(value: unknown): OverviewValue | null {
   if (data.tally !== undefined) {
     const tally = tallyOf(data.tally)
     return tally === null ? null : { revision, pricingReady, tally }
+  }
+  if (data.projects !== undefined) {
+    const projects = projectsOf(data.projects)
+    return projects === null ? null : { revision, pricingReady, projects }
   }
   return null
 }
@@ -401,6 +420,9 @@ const pickPage = (value: OverviewValue): { page: OverviewPage; pricingReady: boo
 const pickTally = (value: OverviewValue): { tally: OverviewTally; pricingReady: boolean } | null =>
   'tally' in value ? { tally: value.tally, pricingReady: value.pricingReady } : null
 
+const pickProjects = (value: OverviewValue): { projects: OverviewProjectStat[]; pricingReady: boolean } | null =>
+  'projects' in value ? { projects: value.projects, pricingReady: value.pricingReady } : null
+
 export interface OverviewSummaryState extends PartState<{ summary: OverviewSummary; pricingReady: boolean }> {
   coverage: BackfillCoverage | null
 }
@@ -461,4 +483,8 @@ export function useOverviewPage(request: Omit<OverviewRequest, 'revision'> | nul
 
 export function useOverviewTally(request: Omit<OverviewRequest, 'revision'> | null, enabled: boolean): PartState<{ tally: OverviewTally; pricingReady: boolean }> {
   return useOverviewPart({ request: enabled ? request : null, enabled, pick: pickTally })
+}
+
+export function useOverviewProjects(request: Omit<OverviewRequest, 'revision'> | null, enabled: boolean): PartState<{ projects: OverviewProjectStat[]; pricingReady: boolean }> {
+  return useOverviewPart({ request: enabled ? request : null, enabled, pick: pickProjects })
 }

@@ -7,7 +7,7 @@ import {
   type DayRange, type DayTotals, type OverviewCoverage, type OverviewRange, type OverviewSort,
   type TallyField, type TallyStat,
 } from '../overview'
-import { foldStateOf, useOverviewDays, useOverviewPage, useOverviewSummary, useOverviewTally } from '../overviewSource'
+import { foldStateOf, useOverviewDays, useOverviewPage, useOverviewProjects, useOverviewSummary, useOverviewTally } from '../overviewSource'
 import type { PartState } from '../overviewSource'
 import type { OverviewRange as HostRange, OverviewScope, OverviewSummary } from '../../shared/types'
 import { openPluginSettings, openSessionVia, seatKeyOf, type ClientCtx } from '../services'
@@ -27,6 +27,7 @@ import { makeOverviewTokens } from './overviewTokens'
 import { makeOverviewUsage } from './overviewUsage'
 import { makeStatsTiming } from './statsTiming'
 import { makeOverviewCard, type OverviewCardRow } from './overviewCard'
+import { makeOverviewProjects } from './overviewProjects'
 import { makeOverviewSkills } from './overviewSkills'
 import { makeOverviewTally } from './overviewTally'
 import type { TallyCardKind } from './overviewTally'
@@ -69,6 +70,7 @@ export function makeOverviewPanel(
   const OverviewTokens = makeOverviewTokens(kit, Donut)
   const StatsTiming = makeStatsTiming(kit, Donut)
   const OverviewUsage = makeOverviewUsage(kit)
+  const OverviewProjects = makeOverviewProjects(kit)
   const OverviewSkills = makeOverviewSkills(kit)
   const OverviewTally = makeOverviewTally(kit)
   const UpdatePill = makeUpdatePill(kit, ctx)
@@ -147,6 +149,7 @@ export function makeOverviewPanel(
     const skillsState = useOverviewTally({ part: 'tally', scope: tallyScope, tally: 'skills' }, bodyMounted)
     const toolsState = useOverviewTally({ part: 'tally', scope: tallyScope, tally: 'tools' }, bodyMounted)
     const cmdsState = useOverviewTally({ part: 'tally', scope: tallyScope, tally: 'cmds' }, bodyMounted)
+    const projectsState = useOverviewProjects({ part: 'projects', scope: tallyScope }, bodyMounted)
     const summary: OverviewSummary | null = summaryState.data?.summary ?? null
     const fallbackWindow = (custom !== null ? dayRangeWindow(custom) : null) ?? rangeWindowOf(preset, nowMinute)
     const spanFrom = summary?.window?.from ?? dayKeyOf(fallbackWindow.start)
@@ -201,6 +204,7 @@ export function makeOverviewPanel(
     const skillStats = useMemo(() => [...(skillsState.data?.tally.stats ?? [])], [skillsState.data])
     const toolStats = useMemo(() => [...(toolsState.data?.tally.stats ?? [])], [toolsState.data])
     const commandStats = useMemo(() => [...(cmdsState.data?.tally.stats ?? [])], [cmdsState.data])
+    const projectStats = useMemo(() => [...(projectsState.data?.projects ?? [])], [projectsState.data])
     const tallyCards: readonly { kind: TallyCardKind; field: TallyField; stats: TallyStat[] }[] = [
       { kind: 'tool', field: 'tools', stats: toolStats },
       { kind: 'command', field: 'cmds', stats: commandStats },
@@ -312,6 +316,28 @@ export function makeOverviewPanel(
                     </div>
                   </div>
                   <OverviewUsage days={days} currency={currency} today={todayKey()} pending={daysLoading} />
+                  <div className="lc-card lc-ov-heat-card">
+                    <div className="lc-card-title">
+                      <span className="lc-card-title-text">
+                        <IconGauge size={14} />
+                        {t('ov.heat.title')}
+                      </span>
+                      <span className="lc-heat-ctl">
+                        <span className="lc-card-sub">{t('ov.heat.sub')}</span>
+                        <div className="lc-gran" role="group" aria-label={t('ov.heat.metric')}>
+                          {METRICS.map(m => (
+                            <button
+                              key={m}
+                              type="button"
+                              className={'lc-gran-btn' + (metric === m ? ' lc-gran-on' : '')}
+                              onClick={() => { setMetric(m) }}
+                            >{t('ov.heat.metric.' + m)}</button>
+                          ))}
+                        </div>
+                      </span>
+                    </div>
+                    <Heatmap days={days} metric={metric} selected={day} onSelect={setDay} today={todayKey()} pending={daysLoading} />
+                  </div>
                 </div>
                 <div className="lc-ov-stats">
                   <OverviewTokens tokens={tokenParts} pending={summaryLoading} />
@@ -320,28 +346,13 @@ export function makeOverviewPanel(
                 <div className="lc-ov-body" ref={bodyRef}>
                   {bodyMounted ? (<>
                     <div className="lc-ov-tiles">
-                      <div className="lc-card lc-ov-tile lc-ov-heat-card">
-                        <div className="lc-card-title">
-                          <span className="lc-card-title-text">
-                            <IconGauge size={14} />
-                            {t('ov.heat.title')}
-                          </span>
-                          <span className="lc-heat-ctl">
-                            <span className="lc-card-sub">{t('ov.heat.sub')}</span>
-                            <div className="lc-gran" role="group" aria-label={t('ov.heat.metric')}>
-                              {METRICS.map(m => (
-                                <button
-                                  key={m}
-                                  type="button"
-                                  className={'lc-gran-btn' + (metric === m ? ' lc-gran-on' : '')}
-                                  onClick={() => { setMetric(m) }}
-                                >{t('ov.heat.metric.' + m)}</button>
-                              ))}
-                            </div>
-                          </span>
-                        </div>
-                        <Heatmap days={days} metric={metric} selected={day} onSelect={setDay} today={todayKey()} pending={daysLoading} />
-                      </div>
+                      <OverviewProjects
+                        stats={projectStats}
+                        day={day}
+                        selected={group}
+                        onSelect={setGroup}
+                        pending={awaitingValueOf(projectsState)}
+                      />
                       <OverviewSkills
                         stats={skillStats}
                         day={day}

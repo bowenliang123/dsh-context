@@ -4,7 +4,7 @@ import assert from 'node:assert/strict'
 import { afterEach, describe, test, vi } from 'vitest'
 import { type OverviewRequest, type OverviewScope } from '../../src/shared/types'
 import { cleanupMounts, flush, mount, settle, type Mounted } from './helpers/kit'
-import { BASE_COVERAGE, coverageOf, daysValue, pageValue, summaryRaw, summaryValue, tallyValue } from './helpers/overviewWire'
+import { BASE_COVERAGE, coverageOf, daysValue, pageValue, projectsValue, summaryRaw, summaryValue, tallyValue } from './helpers/overviewWire'
 import { currentSessionOf, projectOf, UNGROUPED_KEY } from '../../src/client/overviewModel'
 import { dayRangeWindow, orderedDayRange, rangeWindowOf } from '../../src/client/overviewQuery'
 import { foldStateOf } from '../../src/client/overviewSource'
@@ -158,6 +158,21 @@ async function mountTally(mod: Modules, request: Omit<OverviewRequest, 'revision
   const states: TallyProbe['states'] = []
   function Probe(props: { request: Omit<OverviewRequest, 'revision'> | null; enabled: boolean }): null {
     states.push(mod.source.useOverviewTally(props.request, props.enabled))
+    return null
+  }
+  const m = await mount(h(Probe, { request, enabled }))
+  return { states, m }
+}
+
+interface ProjectsProbe {
+  states: import('../../src/client/overviewSource').PartState<{ projects: import('../../src/shared/types').OverviewProjectStat[]; pricingReady: boolean }>[]
+  m: Mounted
+}
+
+async function mountProjects(mod: Modules, request: Omit<OverviewRequest, 'revision'> | null, enabled = true): Promise<ProjectsProbe> {
+  const states: ProjectsProbe['states'] = []
+  function Probe(props: { request: Omit<OverviewRequest, 'revision'> | null; enabled: boolean }): null {
+    states.push(mod.source.useOverviewProjects(props.request, props.enabled))
     return null
   }
   const m = await mount(h(Probe, { request, enabled }))
@@ -629,6 +644,66 @@ describe('useOverviewTally', () => {
     assert.equal(calls.length, 1, 'a disabled tally hook posts nothing')
     await probe.m.unmount()
     await disabled.m.unmount()
+  })
+})
+
+describe('useOverviewProjects', () => {
+  test('posts the projects request and paints the scoped project totals', async () => {
+    const mod = await fresh()
+    const request: Omit<OverviewRequest, 'revision'> = { part: 'projects', scope: { coverage: 'active', day: '2026-11-01' } }
+    const calls = stubRoutes(() => projectsValue())
+    const probe = await mountProjects(mod, request)
+    await settle(5)
+    assert.deepEqual(calls, [{ route: OVERVIEW_ROUTE, body: { ...request, revision: null }, method: 'POST' }])
+    assert.deepEqual(lastOf(probe.states).data, {
+      projects: [{ key: 'w', tokens: 100, sessions: 2 }],
+      pricingReady: true,
+    })
+    await probe.m.unmount()
+  })
+
+  test('malformed project rows are skipped; a null or disabled request never posts', async () => {
+    const mod = await fresh()
+    const calls = stubRoutes(() => projectsValue({
+      projects: [
+        { key: 'w', tokens: 100, sessions: 2 },
+        null,
+        { key: '', tokens: 1, sessions: 1 },
+        { key: 'x', tokens: -1, sessions: 1 },
+        { key: 'y', tokens: 1 },
+      ],
+    }))
+    const probe = await mountProjects(mod, { part: 'projects' })
+    await settle(5)
+    assert.deepEqual(lastOf(probe.states).data?.projects, [{ key: 'w', tokens: 100, sessions: 2 }])
+    const empty = await mountProjects(mod, null)
+    await settle(5)
+    assert.equal(calls.length, 1, 'a null request posts nothing')
+    const disabled = await mountProjects(mod, { part: 'projects' }, false)
+    await settle(5)
+    assert.equal(calls.length, 1, 'a disabled projects hook posts nothing')
+    await probe.m.unmount()
+    await empty.m.unmount()
+    await disabled.m.unmount()
+  })
+
+  test('a non-array projects payload reads as a malformed part', async () => {
+    const mod = await fresh()
+    stubRoutes(() => projectsValue({ projects: null }))
+    const probe = await mountProjects(mod, { part: 'projects' })
+    await settle(5)
+    assert.equal(lastOf(probe.states).data, null)
+    assert.equal(lastOf(probe.states).error, true)
+    await probe.m.unmount()
+  })
+
+  test('a reply for another part leaves the projects unpainted', async () => {
+    const mod = await fresh()
+    stubRoutes(() => summaryValue())
+    const probe = await mountProjects(mod, { part: 'projects' })
+    await settle(5)
+    assert.equal(lastOf(probe.states).data, null)
+    await probe.m.unmount()
   })
 })
 

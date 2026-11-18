@@ -555,7 +555,7 @@ export interface BackfillCoverage {
   unreadableSessions?: BackfillUnreadableSession[]
 }
 
-export type OverviewPart = 'summary' | 'days' | 'page' | 'tally'
+export type OverviewPart = 'summary' | 'days' | 'page' | 'tally' | 'projects'
 
 export type OverviewCoverage = 'all' | 'active' | 'archived'
 
@@ -680,6 +680,12 @@ export interface OverviewTally {
   stats: OverviewTallyStat[]
 }
 
+export interface OverviewProjectStat {
+  key: string
+  tokens: number
+  sessions: number
+}
+
 export interface OverviewUnchanged {
   revision: string
   unchanged: true
@@ -709,4 +715,11 @@ export interface OverviewTallyValue {
   tally: OverviewTally
 }
 
-export type OverviewValue = OverviewUnchanged | OverviewSummaryValue | OverviewDaysValue | OverviewPageValue | OverviewTallyValue
+export interface OverviewProjectsValue {
+  revision: string
+  pricingReady: boolean
+  projects: OverviewProjectStat[]
+}
+
+export type OverviewValue = OverviewUnchanged | OverviewSummaryValue | OverviewDaysValue | OverviewPageValue
+  | OverviewTallyValue | OverviewProjectsValue

@@ -10,6 +10,7 @@ import type {
   OverviewPageRow,
   OverviewPartTotal,
   OverviewPick,
+  OverviewProjectStat,
   OverviewRange,
   OverviewSort,
   OverviewSummary,
@@ -397,6 +398,29 @@ export function groupCountsOf(rows: readonly HostRow[], workspace: WorkspaceStat
   }
   if (ungrouped > 0) groups.push({ key: UNGROUPED_KEY, count: ungrouped })
   return groups
+}
+
+export function projectStatsOf(rows: readonly HostRow[], filters: Filters): OverviewProjectStat[] {
+  const admit = dayPredicate(filters)
+  const stats = new Map<string, OverviewProjectStat>()
+  for (const row of rows) {
+    const days = row.activity?.days
+    if (days === undefined) continue
+    let tokens = 0
+    for (const key of Object.keys(days)) {
+      if (admit(key)) tokens += days[key].tokens
+    }
+    if (tokens <= 0) continue
+    const key = row.group ?? UNGROUPED_KEY
+    const prev = stats.get(key)
+    if (prev === undefined) stats.set(key, { key, tokens, sessions: 1 })
+    else {
+      prev.tokens += tokens
+      prev.sessions += 1
+    }
+  }
+  return [...stats.values()].sort((left, right) => (right.tokens - left.tokens)
+    || left.key.localeCompare(right.key))
 }
 
 export function tallyStatsOf(rows: readonly HostRow[], filters: Filters, field: OverviewTallyField): OverviewTallyStat[] {

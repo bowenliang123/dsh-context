@@ -35,6 +35,7 @@ export interface ServerRow {
   createdDay?: string
   lastUser?: string
   activeDays: string[]
+  dayTokens?: Record<string, number>
   tallies?: Partial<Record<OverviewTallyField, string[]>>
 }
 
@@ -71,6 +72,7 @@ export function panelRows(): ServerRow[] {
       createdDay: '2026-09-10',
       lastUser: 'fix the flaky spec',
       activeDays: [TODAY, YESTERDAY],
+      dayTokens: { [TODAY]: 1000, [YESTERDAY]: 800 },
       tallies: { skills: ['tdd'], tools: ['read', 'bash'], cmds: ['git'] },
     },
     {
@@ -84,6 +86,7 @@ export function panelRows(): ServerRow[] {
       total: 10,
       costUsd: null,
       activeDays: [YESTERDAY],
+      dayTokens: { [YESTERDAY]: 25 },
       tallies: { tools: ['grep'], cmds: ['node'] },
     },
     {
@@ -95,6 +98,7 @@ export function panelRows(): ServerRow[] {
       parts: [],
       total: 0,
       activeDays: [],
+      dayTokens: {},
     },
   ]
 }
@@ -168,14 +172,18 @@ function dayInWindow(key: string, window: { start?: number | null; end?: number 
 }
 
 function inRangeOf(row: ServerRow, range: OverviewScope['range']): boolean {
+  const window = rangeWindowOfScope(range)
+  if (row.updatedAt >= (window.start ?? 0) && (window.end === null || row.updatedAt <= window.end)) return true
+  return row.activeDays.some(key => dayInWindow(key, window))
+}
+
+function rangeWindowOfScope(range: OverviewScope['range']): { start: number | null; end: number | null } {
   const effective = range ?? '30d'
-  const window = typeof effective === 'object'
+  return typeof effective === 'object'
     ? effective
     : effective === 'today'
       ? { start: MIDNIGHT, end: null }
       : { start: NOW - (effective === '7d' ? 7 : 30) * 86_400_000, end: null }
-  if (row.updatedAt >= (window.start ?? 0) && (window.end === null || row.updatedAt <= window.end)) return true
-  return row.activeDays.some(key => dayInWindow(key, window))
 }
 
 function coveredOf(row: ServerRow, coverage: OverviewCoverage): boolean {
@@ -300,6 +308,38 @@ export function panelTallyValue(body: Record<string, unknown>, tallies: ServerTa
   return { revision: 'rev-tally', pricingReady: true, tally: { field, stats: tallies[field] } }
 }
 
+export function panelProjectsValue(body: Record<string, unknown>, rows: readonly ServerRow[] = panelRows()): Record<string, unknown> {
+  const scope = scopeOf(body)
+  const coverage = scope.coverage ?? 'all'
+  const window = rangeWindowOfScope(scope.range)
+  const stats = new Map<string, { key: string; tokens: number; sessions: number }>()
+  for (const row of rows) {
+    if (!coveredOf(row, coverage) || !inRangeOf(row, scope.range)) continue
+    let tokens = 0
+    for (const [key, value] of Object.entries(row.dayTokens ?? {})) {
+      if (scope.day !== null && scope.day !== undefined) {
+        if (key === scope.day) tokens += value
+      } else if (dayInWindow(key, window)) {
+        tokens += value
+      }
+    }
+    if (tokens <= 0) continue
+    const key = row.group ?? UNGROUPED_KEY
+    const prev = stats.get(key)
+    if (prev === undefined) stats.set(key, { key, tokens, sessions: 1 })
+    else {
+      prev.tokens += tokens
+      prev.sessions += 1
+    }
+  }
+  return {
+    revision: 'rev-projects',
+    pricingReady: true,
+    projects: [...stats.values()].sort((left, right) => (right.tokens - left.tokens)
+      || left.key.localeCompare(right.key)),
+  }
+}
+
 export interface RouteCall {
   route: string
   body: Record<string, unknown>
@@ -314,6 +354,7 @@ export interface PanelRoutes {
   days?: (body: Record<string, unknown>) => unknown
   page?: (body: Record<string, unknown>) => unknown
   tally?: (body: Record<string, unknown>) => unknown
+  projects?: (body: Record<string, unknown>) => unknown
   skills?: (body: Record<string, unknown>) => unknown
 }
 
@@ -332,7 +373,9 @@ export function stubPanelRoutes(routes: PanelRoutes = {}): RouteCall[] {
           ? await (routes.days ?? panelDaysValue)(body)
           : part === 'page'
             ? await (routes.page ?? ((request: Record<string, unknown>) => panelPageValue(request, rows, routes.workspaces ?? ['workspace-one'])))(body)
-            : await (routes.tally ?? ((request: Record<string, unknown>) => panelTallyValue(request, routes.tallies ?? panelTallies())))(body)
+            : part === 'projects'
+              ? await (routes.projects ?? ((request: Record<string, unknown>) => panelProjectsValue(request, rows)))(body)
+              : await (routes.tally ?? ((request: Record<string, unknown>) => panelTallyValue(request, routes.tallies ?? panelTallies())))(body)
       return { ok: true, json: async () => ({ ok: true, value }) }
     }
     if (route.endsWith('/skills')) {
