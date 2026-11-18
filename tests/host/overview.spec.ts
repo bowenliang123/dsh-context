@@ -232,6 +232,26 @@ describe('dsh-context overview route', () => {
     assert.ok(changed.reply.value !== undefined && !('unchanged' in changed.reply.value))
   })
 
+  test('a running backfill moves the revision as its coverage advances', async () => {
+    const harness = await boot({
+      records: [recordOf('a')],
+      values: { a: { contextTimeline: timelineOf(), contextActivity: { days: {} }, title: 'Alpha' } },
+      coverage: { complete: false, remaining: 2, failed: 0, running: true, total: 3, covered: 1, unsupported: 0 },
+    })
+    const first = await call(harness, { part: 'summary' })
+    const revision = revisionOf(first)
+    assert.deepEqual(summaryOf(first).coverage, {
+      complete: false, remaining: 2, failed: 0, running: true, total: 3, covered: 1, unsupported: 0,
+    })
+    harness.state.coverage.covered = 2
+    harness.state.coverage.remaining = 1
+    const advanced = await call(harness, { part: 'summary', revision })
+    assert.notEqual(revisionOf(advanced), revision, 'advancing coverage moves the revision')
+    assert.equal(summaryOf(advanced).coverage.covered, 2, 'the reply carries the advanced counters')
+    const unchanged = await call(harness, { part: 'summary', revision: revisionOf(advanced) })
+    assert.deepEqual(unchanged.reply, { ok: true, value: { revision: revisionOf(advanced), unchanged: true } })
+  })
+
   test('a live session moves the revision with its event seq, and the live snapshot path serves its values', async () => {
     const harness = await boot({
       records: [recordOf('live', { live: true })],

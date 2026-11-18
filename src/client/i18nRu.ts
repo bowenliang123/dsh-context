@@ -646,7 +646,7 @@ export const DICT_RU = {
   'ov.kpi.wallSub': '{n} вызовов модели',
   'ov.timing.lifetime': 'Итого за сеанс',
   'ov.fold.starting': 'Расчёт проекций…',
-  'ov.fold.progress': 'Расчёт проекций {n}/{total}',
+  'ov.fold.progress': 'Расчёт проекций ({n}/{total})…',
   'ov.fold.tip': 'Значения обновятся после завершения расчёта проекций',
   'ov.fold.stalled': 'не удалось спроецировать {n} сеансов',
   'ov.stats.empty': 'В этом диапазоне нет оплаченных токенов',

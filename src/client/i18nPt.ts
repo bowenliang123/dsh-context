@@ -646,7 +646,7 @@ export const DICT_PT = {
   'ov.kpi.wallSub': '{n} chamadas ao modelo',
   'ov.timing.lifetime': 'Acumulado da sessão',
   'ov.fold.starting': 'Calculando projeções…',
-  'ov.fold.progress': 'Calculando projeções {n}/{total}',
+  'ov.fold.progress': 'Calculando projeções ({n}/{total})…',
   'ov.fold.tip': 'Os números são atualizados quando o cálculo das projeções termina',
   'ov.fold.stalled': '{n} sessões não projetadas',
   'ov.stats.empty': 'Nenhum token faturado neste intervalo',

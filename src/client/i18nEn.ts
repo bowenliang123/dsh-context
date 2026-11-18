@@ -646,7 +646,7 @@ export const DICT_EN = {
   'ov.kpi.wallSub': '{n} model calls',
   'ov.timing.lifetime': 'Session lifetime',
   'ov.fold.starting': 'Folding projections…',
-  'ov.fold.progress': 'Folding projections {n}/{total}',
+  'ov.fold.progress': 'Folding projections ({n}/{total})…',
   'ov.fold.tip': 'Figures update automatically as projections finish folding',
   'ov.fold.stalled': '{n} sessions failed to fold',
   'ov.stats.empty': 'No billed tokens in this range',

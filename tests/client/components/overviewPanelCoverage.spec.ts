@@ -18,6 +18,8 @@ afterEach(async () => {
   await new Promise(resolve => setTimeout(resolve, 1))
 })
 
+const progress = (covered: number, total: number): string => `Folding projections (${covered}/${total})…`
+
 describe('OverviewPanel coverage state', () => {
   test('an incomplete coverage shows progress and re-reads overview without posting backfill', async () => {
     vi.useFakeTimers()
@@ -27,7 +29,7 @@ describe('OverviewPanel coverage state', () => {
     })
     const { m } = await openPanelFake(makeCtx())
     assert.equal(calls.filter(c => c.route.endsWith('/overview')).length, 6, 'summary, days, page, and three tallies fetched once')
-    assert.ok(text(m.container).includes('Folding projections 1/3'), 'the partial projection set is annotated')
+    assert.ok(text(m.container).includes(progress(1, 3)), 'the partial projection set is annotated')
     assert.equal(calls.filter(c => c.route.endsWith('/backfill')).length, 0)
     await act(async () => { await vi.advanceTimersByTimeAsync(2_000) })
     assert.equal(calls.filter(c => c.route.endsWith('/backfill')).length, 0, 'the host owns continuation')
@@ -42,7 +44,7 @@ describe('OverviewPanel coverage state', () => {
       summary: () => ({ revision: 's0', pricingReady: true, summary: summaryRaw({ coverage: running }) }),
     })
     const first = await openPanelFake(makeCtx())
-    assert.ok(text(first.m.container).includes('Folding projections 1/3'))
+    assert.ok(text(first.m.container).includes(progress(1, 3)))
     await act(async () => { await vi.advanceTimersByTimeAsync(2_000) })
     assert.equal(runningCalls.filter(c => c.route.endsWith('/backfill')).length, 0, 'a running pass is left alone')
     await first.m.unmount()
@@ -69,5 +71,25 @@ describe('OverviewPanel coverage state', () => {
     await act(async () => { await vi.advanceTimersByTimeAsync(2_000) })
     assert.equal(startingCalls.filter(c => c.route.endsWith('/backfill')).length, 0, 'startup is host-owned even before the first corpus listing')
     await third.m.unmount()
+  })
+
+  test('a progressing coverage repaints the label in place', async () => {
+    vi.useFakeTimers()
+    let covered = 1
+    stubRoutes({
+      summary: () => ({
+        revision: `s${covered}`,
+        pricingReady: true,
+        summary: summaryRaw({
+          coverage: { complete: false, running: true, remaining: 3 - covered, failed: 0, total: 3, covered, unsupported: 0 },
+        }),
+      }),
+    })
+    const { m } = await openPanelFake(makeCtx())
+    assert.ok(text(m.container).includes(progress(1, 3)), 'the first progress tick renders')
+    covered = 2
+    await act(async () => { await vi.advanceTimersByTimeAsync(2_000) })
+    assert.ok(text(m.container).includes(progress(2, 3)), 'the label follows the host coverage')
+    await m.unmount()
   })
 })

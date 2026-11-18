@@ -550,6 +550,46 @@ describe('watchActivityBackfill', () => {
     handle()
   })
 
+  test('a running pass publishes its coverage before it settles', async () => {
+    const ctx = new Context()
+    const state = fakeState([
+      { header: { id: 'a', cwd: '/repo/a' } },
+      { header: { id: 'b', cwd: '/repo/b' } },
+      { header: { id: 'c', cwd: '/repo/c' } },
+    ])
+    let opens = 0
+    let release: (() => void) | null = null
+    const route = arm(ctx, state, {
+      sessionPersistence: {
+        open: async (id: string) => {
+          opens++
+          if (opens === 2) await new Promise<void>(resolve => { release = resolve })
+          return {
+            header: { id, version: 1, createdAt: 1, cwd: '/repo', isSeeded: false },
+            inheritedEventCount: 0,
+            read: async () => ({ events: [] }),
+            close: async () => {},
+          }
+        },
+      },
+    })
+    const handle = watchActivityBackfill(ctx, undefined, FAST_PACING)
+    await trigger(route)
+    await until(
+      () => (handle.coverage().total === 3 && handle.coverage().covered === 1 ? true : undefined),
+      'the pass published the corpus total and the first folded session',
+    )
+    assert.deepEqual(handle.coverage(), {
+      complete: false, remaining: 2, failed: 0, running: true, total: 3, covered: 1, unsupported: 0,
+    })
+    release!()
+    await until(() => (handle.coverage().complete ? true : undefined), 'the pass settled')
+    assert.deepEqual(handle.coverage(), {
+      complete: true, remaining: 0, failed: 0, running: false, total: 3, covered: 3, unsupported: 0,
+    })
+    handle()
+  })
+
   test('a POST during a running pass coalesces into exactly one rerun', async () => {
     const ctx = new Context()
     const state = fakeState([{ header: { id: 'slow', cwd: '/repo/slow' } }])

@@ -241,7 +241,7 @@ export function makeOverviewPanel(
                     ? t('ov.fold.stalled', { n: fmt(backfill.failed) })
                     : backfill.total === 0
                       ? t('ov.fold.starting')
-                      : t('ov.fold.progress', { n: fmt(backfill.covered), total: fmt(backfill.total) })}
+                      : t('ov.fold.progress', { n: backfill.covered, total: backfill.total })}
                 </span>
               )}
               <div className="lc-ov-headctl">

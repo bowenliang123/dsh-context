@@ -441,6 +441,23 @@ export function watchActivityBackfill(
         }
         await sleep(Math.max(pacing.minRestMs, costMs))
       }
+      const remainingOf = (): number => Math.max(0, pass.total - pass.covered - pass.failed - pass.unsupported)
+      const publishCoverage = (complete: boolean): boolean => {
+        const remaining = remainingOf()
+        const changed = complete !== coverage.complete
+          || remaining !== coverage.remaining
+          || pass.failed !== coverage.failed
+          || pass.total !== coverage.total
+          || pass.covered !== coverage.covered
+          || pass.unsupported !== coverage.unsupported
+        coverage.complete = complete
+        coverage.remaining = remaining
+        coverage.failed = pass.failed
+        coverage.total = pass.total
+        coverage.covered = pass.covered
+        coverage.unsupported = pass.unsupported
+        return changed
+      }
       const statCapability: StatCapability = {}
       try {
         const listedRecords = await (query as unknown as SessionQueryLike).listSessions(abort.signal)
@@ -450,6 +467,7 @@ export function watchActivityBackfill(
           const header = headerOf(record)
           if (header !== null && typeof header.cwd === 'string') pass.total++
         }
+        if (!coverage.complete) publishCoverage(false)
         const ownCache = options.ownCache
         const workerConfig = options.config
         const statCapable = typeof (persistence as unknown as PersistenceLike).stat === 'function'
@@ -481,6 +499,7 @@ export function watchActivityBackfill(
         lastSignature = signature
         for (const record of listedRecords) {
           if (abort.signal.aborted) return
+          publishCoverage(false)
           const header = headerOf(record)
           if (header === null || typeof header.cwd !== 'string') continue
           if (isLive(sessions, header.id)) {
@@ -620,20 +639,8 @@ export function watchActivityBackfill(
         }
       } finally {
         if (listed && !disposed) {
-          const remaining = Math.max(0, pass.total - pass.covered - pass.failed - pass.unsupported)
-          const complete = !paused && remaining === 0 && pass.failed === 0
-          const changed = complete !== coverage.complete
-            || remaining !== coverage.remaining
-            || pass.failed !== coverage.failed
-            || pass.total !== coverage.total
-            || pass.covered !== coverage.covered
-            || pass.unsupported !== coverage.unsupported
-          coverage.complete = complete
-          coverage.remaining = remaining
-          coverage.failed = pass.failed
-          coverage.total = pass.total
-          coverage.covered = pass.covered
-          coverage.unsupported = pass.unsupported
+          const complete = !paused && remainingOf() === 0 && pass.failed === 0
+          const changed = publishCoverage(complete)
           if (folded > 0 || changed) version++
           if (complete) {
             retryAttempt = 0

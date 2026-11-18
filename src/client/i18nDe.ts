@@ -646,7 +646,7 @@ export const DICT_DE = {
   'ov.kpi.wallSub': '{n} Modellaufrufe',
   'ov.timing.lifetime': 'Sitzungssumme',
   'ov.fold.starting': 'Projektionen werden berechnet…',
-  'ov.fold.progress': 'Projektionen {n}/{total}',
+  'ov.fold.progress': 'Projektionen ({n}/{total})…',
   'ov.fold.tip': 'Die Zahlen aktualisieren sich, sobald die Projektionen fertig berechnet sind',
   'ov.fold.stalled': '{n} Sitzungen nicht projiziert',
   'ov.stats.empty': 'Keine abgerechneten Tokens in diesem Bereich',

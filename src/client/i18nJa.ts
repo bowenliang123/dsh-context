@@ -646,7 +646,7 @@ export const DICT_JA = {
   'ov.kpi.wallSub': 'モデル呼び出し {n}',
   'ov.timing.lifetime': 'セッション累計',
   'ov.fold.starting': '投影を補算中…',
-  'ov.fold.progress': '投影を補算中 {n}/{total}',
+  'ov.fold.progress': '投影を補算中（{n}/{total}）…',
   'ov.fold.tip': '投影の補算完了後、本ページの数値は自動更新されます',
   'ov.fold.stalled': '{n} セッションの投影に失敗',
   'ov.stats.empty': '集計範囲に課金 Token 使用量はありません',
