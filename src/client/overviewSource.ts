@@ -399,10 +399,12 @@ function useOverviewPart<T>(options: PartOptions<T>): PartState<T> {
   }, [key, enabled])
 
   const heldPart = heldFor(held, key)
+  const active = enabled && request !== null
+  const painted = heldPart ?? (active && !error ? held : null)
   return {
-    data: heldPart === null ? null : heldPart.value,
+    data: painted === null ? null : painted.value,
     pending,
-    stale,
+    stale: stale || (painted !== null && heldPart === null),
     error,
     revision: heldPart === null ? null : heldPart.revision,
   }

@@ -331,7 +331,7 @@ describe('useOverviewSummary', () => {
     await second.m.unmount()
   })
 
-  test('a scope switch posts cold and never keeps another scope\'s numbers', async () => {
+  test('a scope switch posts cold and each scope repaints its own numbers', async () => {
     vi.useFakeTimers()
     const mod = await fresh()
     const calls = stubServed(scope => summaryValue({
@@ -353,7 +353,7 @@ describe('useOverviewSummary', () => {
     await probe.m.unmount()
   })
 
-  test('a scope change drops the previous scope data while the new read is in flight', async () => {
+  test('a scope change keeps the previous scope data painted while the new read is in flight', async () => {
     vi.useFakeTimers()
     const mod = await fresh()
     const { releases } = stubDeferred()
@@ -364,11 +364,13 @@ describe('useOverviewSummary', () => {
     assert.equal(lastOf(probe.states).data?.summary.sessions, 1)
     await probe.update({ range: '30d' })
     await advance(0)
-    assert.equal(lastOf(probe.states).data, null, 'the previous scope data is not painted under the new scope')
+    assert.equal(lastOf(probe.states).data?.summary.sessions, 1, 'the previous scope stays painted under the new scope')
     assert.equal(lastOf(probe.states).pending, true)
+    assert.equal(lastOf(probe.states).stale, true)
     await act(async () => { releases[1]?.(summaryValue({ summary: summaryRaw({ sessions: 3 }) })) })
     await flush()
     assert.equal(lastOf(probe.states).data?.summary.sessions, 3)
+    assert.equal(lastOf(probe.states).stale, false)
     await probe.m.unmount()
   })
 
@@ -405,6 +407,19 @@ describe('useOverviewSummary', () => {
     assert.equal(calls.length, 0, 'neither a disabled hook nor a null scope posts')
     await disabled.m.unmount()
     await scopeless.m.unmount()
+  })
+
+  test('disabling a painted hook drops its payload', async () => {
+    vi.useFakeTimers()
+    const mod = await fresh()
+    stubRoutes(() => summaryValue())
+    const probe = await mountSummary(mod, { range: '30d' })
+    await advance(0)
+    assert.equal(lastOf(probe.states).data?.summary.sessions, 2)
+    await probe.update({ range: '30d' }, false)
+    await advance(0)
+    assert.equal(lastOf(probe.states).data, null)
+    await probe.m.unmount()
   })
 
   test('an error keeps the painted data and raises the stale flag until the next success', async () => {

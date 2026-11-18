@@ -239,6 +239,7 @@ describe('OverviewPanel', () => {
     const { m } = await openPanel(makeCtx())
     const tiles = queryAll(m.container, '.lc-ov-tiles > .lc-card')
     assert.equal(tiles.length, 4)
+    assert.deepEqual(queryAll(m.container, '.lc-ov-chip').map(el => text(el)), ['All0'])
     assert.equal(text(query(tiles[0], '.lc-ov-tally-note')), '0 projects · 0')
     assert.equal(text(query(tiles[1], '.lc-ov-tally-note')), '0 skills · 0 loads')
     assert.equal(text(query(tiles[2], '.lc-ov-tally-note')), '0 tools · 0 calls')
@@ -742,6 +743,35 @@ describe('OverviewPanel', () => {
     await settle(5)
     assert.equal(scopeOf(lastBodyOf(calls, 'page')).group, undefined)
     assert.equal(cardsOf(m.container).length, 2)
+    await m.unmount()
+  })
+
+  test('a pending page keeps the previous grid and group chips painted', async () => {
+    let release: ((value: unknown) => void) | null = null
+    let pendingBody: Record<string, unknown> | null = null
+    let pageCalls = 0
+    const rows = panelRows()
+    stubRoutes({
+      page: (body) => {
+        pageCalls++
+        if (pageCalls === 1) return pageValueFor(body, rows)
+        pendingBody = body
+        return new Promise<unknown>((resolve) => { release = resolve })
+      },
+    })
+    const { m } = await openPanel(makeCtx())
+    assert.equal(cardsOf(m.container).length, 2)
+    const chips = queryAll<HTMLButtonElement>(m.container, '.lc-ov-chip')
+    assert.equal(chips.length, 3)
+    await click(chips[1])
+    await settle(0)
+    assert.equal(cardsOf(m.container).length, 2, 'the previous grid remains while the page read is in flight')
+    assert.equal(queryAll(m.container, '.lc-ov-skel-card').length, 0, 'no skeleton replaces the painted grid')
+    assert.equal(queryAll(m.container, '.lc-ov-chip').length, 3, 'the chips row stays painted')
+    assert.ok(pendingBody !== null)
+    await act(async () => { release?.(pageValueFor(pendingBody!, rows)) })
+    await settle(5)
+    assert.equal(cardsOf(m.container).length, 1)
     await m.unmount()
   })
 

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, useSyncExternalStore, type ReactElement } from 'react'
+import { useEffect, useMemo, useRef, useState, useSyncExternalStore, type ReactElement } from 'react'
 import { formatCost, toCurrency, type CostCurrency } from '../cost'
 import { RING_COLOR } from '../categories'
 import { fmt } from '../format'
@@ -152,9 +152,13 @@ export function makeOverviewPanel(
     const projectsState = useOverviewProjects({ part: 'projects', scope: tallyScope }, bodyMounted)
     const summary: OverviewSummary | null = summaryState.data?.summary ?? null
     const fallbackWindow = (custom !== null ? dayRangeWindow(custom) : null) ?? rangeWindowOf(preset, nowMinute)
-    const spanFrom = summary?.window?.from ?? dayKeyOf(fallbackWindow.start)
-    const spanTo = summary?.window?.to ?? dayKeyOf(fallbackWindow.end ?? nowMinute)
+    const summaryFresh = summary !== null && !summaryState.stale
+    const spanFrom = (summaryFresh ? summary.window?.from : undefined) ?? dayKeyOf(fallbackWindow.start)
+    const spanTo = (summaryFresh ? summary.window?.to : undefined) ?? dayKeyOf(fallbackWindow.end ?? nowMinute)
     const span = spanFrom !== null && spanTo !== null ? { from: spanFrom, to: spanTo } : null
+    const shownCoverageRef = useRef<OverviewCoverage>(coverage)
+    if (!summaryState.stale) shownCoverageRef.current = coverage
+    const shownCoverage = shownCoverageRef.current
     const backfill = summaryState.coverage
     const fold = foldStateOf(backfill)
     const unreadable = backfill?.unreadable ?? 0
@@ -222,10 +226,10 @@ export function makeOverviewPanel(
     const openOne = (id: string): void => {
       openSessionVia(ctx, id)
     }
-    const sessionsLabel = coverage === 'archived' ? t('ov.kpi.archived') : coverage === 'active' ? t('ov.kpi.sessions') : t('ov.kpi.allSessions')
+    const sessionsLabel = shownCoverage === 'archived' ? t('ov.kpi.archived') : shownCoverage === 'active' ? t('ov.kpi.sessions') : t('ov.kpi.allSessions')
     const sessionsSub = summary === null
       ? '—'
-      : coverage === 'all'
+      : shownCoverage === 'all'
         ? t('ov.kpi.inclArchived', { n: summary.archivedScoped })
         : t('ov.kpi.ofTotal', { n: summary.sessionsTotal })
 
@@ -418,7 +422,7 @@ export function makeOverviewPanel(
                         </div>
                       </div>
 
-                      {chips.length > 0 && (
+                      {pageValue !== null && (
                         <div className="lc-ov-groups" role="group" aria-label={t('ov.group.label')}>
                           <button
                             type="button"
