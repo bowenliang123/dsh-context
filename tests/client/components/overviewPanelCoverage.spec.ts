@@ -19,7 +19,7 @@ afterEach(async () => {
 })
 
 describe('OverviewPanel coverage state', () => {
-  test('an incomplete coverage shows the folding progress and posts the warm-up backfill route', async () => {
+  test('an incomplete coverage shows progress and re-reads overview without posting backfill', async () => {
     vi.useFakeTimers()
     const incomplete = { complete: false, running: false, remaining: 2, failed: 0, total: 3, covered: 1, unsupported: 0 }
     const calls = stubRoutes({
@@ -30,11 +30,12 @@ describe('OverviewPanel coverage state', () => {
     assert.ok(text(m.container).includes('Folding projections 1/3'), 'the partial projection set is annotated')
     assert.equal(calls.filter(c => c.route.endsWith('/backfill')).length, 0)
     await act(async () => { await vi.advanceTimersByTimeAsync(2_000) })
-    assert.equal(calls.filter(c => c.route.endsWith('/backfill')).length, 1, 'the incomplete coverage posted the backfill route')
+    assert.equal(calls.filter(c => c.route.endsWith('/backfill')).length, 0, 'the host owns continuation')
+    assert.ok(calls.filter(c => c.route.endsWith('/overview')).length > 6, 'coverage progress schedules fresh overview reads')
     await m.unmount()
   })
 
-  test('a running or failed coverage never posts the warm-up backfill route', async () => {
+  test('running, failed, and starting coverage never post the backfill route', async () => {
     vi.useFakeTimers()
     const running = { complete: false, running: true, remaining: 2, failed: 0, total: 3, covered: 1, unsupported: 0 }
     const runningCalls = stubRoutes({
@@ -66,7 +67,7 @@ describe('OverviewPanel coverage state', () => {
     const third = await openPanelFake(makeCtx())
     assert.ok(text(third.m.container).includes('Folding projections…'), 'an unlisted pass reads as starting')
     await act(async () => { await vi.advanceTimersByTimeAsync(2_000) })
-    assert.equal(startingCalls.filter(c => c.route.endsWith('/backfill')).length, 1, 'the unlisted pass requests its first pass')
+    assert.equal(startingCalls.filter(c => c.route.endsWith('/backfill')).length, 0, 'startup is host-owned even before the first corpus listing')
     await third.m.unmount()
   })
 })

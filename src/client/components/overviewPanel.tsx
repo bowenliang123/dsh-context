@@ -119,26 +119,21 @@ export function makeOverviewPanel(
       const window = custom === null ? null : dayRangeWindow(custom)
       return window === null ? preset : { start: window.start, end: window.end }
     }, [custom, preset])
-    const scopeWindow = useMemo(
-      () => (custom !== null ? dayRangeWindow(custom) : null) ?? rangeWindowOf(preset, nowMinute),
-      [custom, preset, nowMinute],
-    )
-    const spanFrom = dayKeyOf(scopeWindow.start)
-    const spanTo = dayKeyOf(scopeWindow.end ?? nowMinute)
-    const span = spanFrom !== null && spanTo !== null ? { from: spanFrom, to: spanTo } : null
     const listScope = useMemo<OverviewScope>(() => ({
       range: hostRange,
+      ...(custom === null ? {} : { calendar: custom }),
       coverage,
       ...(day === null ? {} : { day }),
       ...(group === null ? {} : { group: group === UNGROUPED_KEY ? '__ungrouped__' : group }),
       ...(query.trim() === '' ? {} : { query: query.trim() }),
-    }), [hostRange, coverage, day, group, query])
+    }), [hostRange, custom, coverage, day, group, query])
     const tallyScope = useMemo<OverviewScope>(() => ({
       range: hostRange,
+      ...(custom === null ? {} : { calendar: custom }),
       coverage,
       ...(day === null ? {} : { day }),
-    }), [hostRange, coverage, day])
-    const summaryScope = useMemo<OverviewScope>(() => ({ range: hostRange, coverage }), [hostRange, coverage])
+    }), [hostRange, custom, coverage, day])
+    const summaryScope = listScope
     const daysScope = useMemo<OverviewScope>(() => ({ coverage }), [coverage])
     const summaryState = useOverviewSummary(summaryScope, true)
     const daysState = useOverviewDays(daysScope, true)
@@ -153,6 +148,10 @@ export function makeOverviewPanel(
     const toolsState = useOverviewTally({ part: 'tally', scope: tallyScope, tally: 'tools' }, bodyMounted)
     const cmdsState = useOverviewTally({ part: 'tally', scope: tallyScope, tally: 'cmds' }, bodyMounted)
     const summary: OverviewSummary | null = summaryState.data?.summary ?? null
+    const fallbackWindow = (custom !== null ? dayRangeWindow(custom) : null) ?? rangeWindowOf(preset, nowMinute)
+    const spanFrom = summary?.window?.from ?? dayKeyOf(fallbackWindow.start)
+    const spanTo = summary?.window?.to ?? dayKeyOf(fallbackWindow.end ?? nowMinute)
+    const span = spanFrom !== null && spanTo !== null ? { from: spanFrom, to: spanTo } : null
     const backfill = summaryState.coverage
     const fold = foldStateOf(backfill)
     const pageValue = pageState.data?.page ?? null

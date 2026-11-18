@@ -2,22 +2,23 @@ import { useEffect, useRef, useState } from 'react'
 import type {
   BackfillCoverage, OverviewDay, OverviewPage, OverviewPartTotal, OverviewRequest, OverviewScope,
   OverviewSummary, OverviewTally, OverviewTallyStat, OverviewTimingWindow, OverviewValue, TimingTotals,
+  OverviewResolvedWindow,
 } from '../shared/types'
-import { BACKFILL_ROUTE, OVERVIEW_ROUTE } from './apiRoutes'
+import { OVERVIEW_ROUTE } from './apiRoutes'
 import { postRoute } from './route'
 import { asRecord } from './services'
-import { subscribeInvalidations } from './invalidation'
+import { invalidate, subscribeInvalidations } from './invalidation'
 import { notePricingPending } from './costRefresh'
 
 const POLL_MS = 30_000
 
 const REFRESH_COALESCE_MS = 250
 
-const BACKFILL_RETRY_MS = 2_000
+const COVERAGE_REFRESH_MS = 1_000
 
-const BACKFILL_RETRY_MAX_MS = 15_000
+const COVERAGE_REFRESH_MAX_MS = 15_000
 
-const BACKFILL_MAX_ATTEMPTS = 10
+const COVERAGE_REFRESH_ATTEMPTS = 10
 
 function numOf(value: unknown): number | null {
   return typeof value === 'number' && Number.isFinite(value) ? value : null
@@ -60,6 +61,17 @@ function windowTimingOf(value: unknown): OverviewTimingWindow | null {
   return { calls, toolCalls, toolsMs, wallMs }
 }
 
+function resolvedWindowOf(value: unknown): OverviewResolvedWindow | undefined {
+  const data = asRecord(value)
+  if (data === null) return undefined
+  const start = numOf(data.start)
+  const end = data.end === null ? null : numOf(data.end)
+  const from = data.from === null ? null : stringOf(data.from)
+  const to = data.to === null ? null : stringOf(data.to)
+  if (start === null || (end === null && data.end !== null) || from === undefined || to === undefined) return undefined
+  return { start, end, from, to }
+}
+
 function coverageOf(value: unknown): BackfillCoverage | null {
   const data = asRecord(value)
   if (data === null) return null
@@ -94,6 +106,7 @@ function summaryOf(value: unknown): OverviewSummary | null {
   const usageSessions = nonNegativeOf(data.usageSessions)
   const coverage = coverageOf(data.coverage)
   const windowTiming = windowTimingOf(data.windowTiming)
+  const window = resolvedWindowOf(data.window)
   if (sessions === null || sessionsTotal === null || tokens === null || turns === null
     || costSessions === null || usageSessions === null || coverage === null || windowTiming === null) return null
   if (costUsd === null && data.costUsd !== null) return null
@@ -112,6 +125,7 @@ function summaryOf(value: unknown): OverviewSummary | null {
     tokenParts: data.tokenParts === null ? null : partsOf(data.tokenParts),
     timing: timingOf(data.timing),
     windowTiming,
+    ...(window === undefined ? {} : { window }),
     coverage,
   }
 }
@@ -390,23 +404,28 @@ export function useOverviewSummary(scope: OverviewScope | null, enabled: boolean
     pick: pickSummary,
   })
   const coverage = state.data?.summary.coverage ?? null
-  const fold = foldStateOf(coverage)
-  const attempts = useRef(0)
-  const coverageKey = coverage === null ? '' : [coverage.complete, coverage.running, coverage.remaining, coverage.covered, coverage.total].join(',')
-  const progressKey = coverage === null ? '' : [coverage.complete, coverage.remaining, coverage.covered, coverage.total].join(',')
+  const following = coverage !== null && !coverage.complete
+  const progressKey = coverage === null ? '' : [coverage.remaining, coverage.covered, coverage.total].join(',')
   useEffect(() => {
-    attempts.current = 0
-  }, [progressKey])
-  useEffect(() => {
-    if (!enabled || (fold !== 'starting' && fold !== 'folding')) return
-    if (attempts.current >= BACKFILL_MAX_ATTEMPTS) return
-    const delay = Math.min(BACKFILL_RETRY_MS * 2 ** attempts.current, BACKFILL_RETRY_MAX_MS)
-    attempts.current += 1
-    const timer = setTimeout(() => {
-      void fetch(BACKFILL_ROUTE, { method: 'POST' }).catch(() => {})
-    }, delay)
-    return () => { clearTimeout(timer) }
-  }, [enabled, coverageKey, fold])
+    if (!enabled || !following) return
+    let cancelled = false
+    let attempts = 0
+    let timer: ReturnType<typeof setTimeout> | undefined
+    const schedule = (): void => {
+      if (cancelled || attempts >= COVERAGE_REFRESH_ATTEMPTS) return
+      const delay = Math.min(COVERAGE_REFRESH_MAX_MS, COVERAGE_REFRESH_MS * 2 ** attempts)
+      attempts++
+      timer = setTimeout(() => {
+        if (document.visibilityState === 'visible') invalidate('overview')
+        schedule()
+      }, delay)
+    }
+    schedule()
+    return () => {
+      cancelled = true
+      clearTimeout(timer)
+    }
+  }, [enabled, following, progressKey])
   return { ...state, coverage }
 }
 

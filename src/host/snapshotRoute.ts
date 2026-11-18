@@ -1,7 +1,9 @@
 import type { Context } from '@deepseek-ai/cordis'
 import type { BackfillHandle } from './backfill'
 import type { CachedSnapshotFace, ListRecordLike, SessionQueryFace, SnapshotProjectionsFace } from './faces'
-import { corpusRevisionOf } from './overviewCorpus'
+import { corpusRevisionOf, revisionOf, type HostSession } from './overviewCorpus'
+import { identityKey, type OverviewCache } from './overviewCache'
+import { withCost, type CostSource } from './cost'
 import { asRecord } from './record'
 import { failure, mountPostRoute, readBody, reply } from './postRoute'
 
@@ -79,8 +81,13 @@ function wantedIdsOf(body: Record<string, unknown>): Set<string> | null | undefi
   return wanted.size > 0 ? wanted : undefined
 }
 
-export function watchSnapshotRoute(ctx: Context, backfill?: BackfillHandle): void {
-  let served: { revision: string; keys: Set<string> } | null = null
+export function watchSnapshotRoute(
+  ctx: Context,
+  backfill?: BackfillHandle,
+  ownCache?: OverviewCache,
+  cost?: CostSource,
+): void {
+  let servedRequests: { revision: string; keys: Set<string> } | null = null
   mountPostRoute({
     ctx,
     deps: ['connection', 'sessionQuery', 'sessions', 'sessionProjectionCache', 'sessionProjections'],
@@ -111,9 +118,29 @@ export function watchSnapshotRoute(ctx: Context, backfill?: BackfillHandle): voi
         try {
           const records = await listSessions()
           if (!Array.isArray(records)) return reply({ ok: true, value: {} })
-          const revision = corpusRevisionOf(records, getSession, backfill?.version() ?? 0)
+          const candidates = new Set<string>()
+          for (const record of records as (ListRecordLike | null)[]) {
+            const id = asRecord(record?.header)?.id
+            if (typeof id === 'string' && id !== '' && (wanted === undefined || wanted.has(id))) candidates.add(id)
+          }
+          let materialized = new Map<string, HostSession>()
+          let stale = new Set<string>()
+          let sourceKey = ''
+          if (ownCache !== undefined && candidates.size > 0) {
+            try {
+              const loaded = await ownCache.load(candidates)
+              materialized = loaded.sessions
+              stale = loaded.rebuild
+              const sources = [...loaded.identities].map(([id, identity]) => `${id}\u0000${identityKey(identity)}`)
+              sources.sort()
+              sourceKey = revisionOf([...sources, ...[...stale].sort().map(id => `R${id}`)])
+            } catch {}
+          }
+          const baseRevision = corpusRevisionOf(records, getSession, backfill?.version() ?? 0)
+          const pricingKey = cost === undefined ? '' : cost.ready() ? `ready${cost.version?.() ?? 0}` : 'cold'
+          const revision = revisionOf([baseRevision, sourceKey, pricingKey])
           if (requestedRevision !== undefined && requestedRevision === revision
-            && served !== null && served.revision === revision && served.keys.has(servedKey)) {
+            && servedRequests !== null && servedRequests.revision === revision && servedRequests.keys.has(servedKey)) {
             return reply({ ok: true, value: {}, revision, unchanged: true })
           }
           const values: Record<string, Record<string, unknown>> = {}
@@ -121,16 +148,26 @@ export function watchSnapshotRoute(ctx: Context, backfill?: BackfillHandle): voi
             const header = asRecord(record?.header)
             const id = typeof header?.id === 'string' ? header.id : undefined
             if (id === undefined || (wanted !== undefined && !wanted.has(id))) continue
-            let block: ReturnType<CachedSnapshotFace['cachedSnapshot']>
+            let served: Record<string, unknown> | null = null
             try {
               const session = getSession(id)
-              block = session !== undefined
-                ? snapshotOf(session, SNAPSHOT_KEYS)
-                : cachedOf(header, SNAPSHOT_KEYS)
+              if (session !== undefined) {
+                served = asRecord(snapshotOf(session, SNAPSHOT_KEYS)?.values)
+              } else {
+                const materialization = materialized.get(id)?.materialization
+                if (materialization !== undefined) {
+                  const timeline = asRecord(materialization.values.contextTimeline)
+                  served = {
+                    ...materialization.values,
+                    ...(timeline === null ? {} : { contextTimeline: withCost(cost, timeline) }),
+                  }
+                } else if (!stale.has(id)) {
+                  served = asRecord(cachedOf(header, SNAPSHOT_KEYS)?.values)
+                }
+              }
             } catch {
               continue
             }
-            const served = asRecord(block?.values)
             if (served === null) continue
             const picked: Record<string, unknown> = {}
             const compact = compactTimelineOf(served.contextTimeline)
@@ -138,7 +175,7 @@ export function watchSnapshotRoute(ctx: Context, backfill?: BackfillHandle): voi
             if (served.contextActivity !== undefined) picked.contextActivity = served.contextActivity
             if (Object.keys(picked).length > 0) values[id] = picked
           }
-          served = { revision, keys: new Set([servedKey]) }
+          servedRequests = { revision, keys: new Set([servedKey]) }
           return reply({ ok: true, value: values, revision })
         } catch (err) {
           return failure('gateway/internal', err instanceof Error ? err.message : String(err))

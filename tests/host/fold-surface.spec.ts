@@ -808,8 +808,11 @@ describe('foldWorker', () => {
 const META = { id: 'w1', version: 4, createdAt: 1, cwd: '/repo/w1', isSeeded: false } as unknown as SessionHeader
 
 function messageEvents(): SessionEvent[] {
-  const events: SessionEvent[] = [header(0, { model: 'deepseek-v4-flash', provider: 'deepseek' }) as unknown as SessionEvent]
-  let seq = 1
+  const events: SessionEvent[] = [
+    header(0, { model: 'deepseek-v4-flash', provider: 'deepseek' }) as unknown as SessionEvent,
+    { type: 'turn/start', seq: 1, time: 1, data: {} } as unknown as SessionEvent,
+  ]
+  let seq = 2
   for (const [text, tokens] of [['first', 10] as const, ['second', 30] as const]) {
     events.push(userMessage(seq++, [{ type: 'text', text }], { kind: 'user' }) as unknown as SessionEvent)
     events.push(assistantMessage(seq++, { turn: seq, usage: { inputTokens: tokens, outputTokens: 5 } }) as unknown as SessionEvent)
@@ -820,7 +823,7 @@ function messageEvents(): SessionEvent[] {
 function referenceValues(config: Record<string, unknown>, events: readonly SessionEvent[]): Record<string, unknown> {
   const ctx = new Context()
   const registry = new SessionProjectionRegistry(ctx as never)
-  registry.register(createContextTimelineDefinition(config as never, () => false) as never)
+  registry.register(createContextTimelineDefinition(config as never, () => true) as never)
   registry.register(createContextActivityDefinition() as never)
   return registry.restore({}, events, 0 as never, META, 0 as never).snapshot.values as Record<string, unknown>
 }
@@ -856,22 +859,25 @@ describe('dsh-context fold worker', () => {
     }
   })
 
-  test('a second concurrent fold is rejected as busy', async () => {
+  test('a second concurrent fold queues and runs after the active fold', async () => {
     const pool = inProcessPool()
     try {
       const first = pool.fold({}, messageEvents())
-      await assert.rejects(pool.fold({}, messageEvents()), /busy/)
-      await first
+      const second = pool.fold({}, messageEvents())
+      const folded = await Promise.all([first, second])
+      assert.ok(folded.every(value => 'timeline' in value))
     } finally {
       pool.dispose()
     }
   })
 
-  test('dispose rejects the pending fold; a later dispose is a no-op', async () => {
+  test('dispose rejects the active and queued folds; a later dispose is a no-op', async () => {
     const pool = inProcessPool()
     const pending = pool.fold({}, messageEvents())
+    const queued = pool.fold({}, messageEvents())
     pool.dispose()
     await assert.rejects(pending, /disposed/)
+    await assert.rejects(queued, /disposed/)
     pool.dispose()
   })
 

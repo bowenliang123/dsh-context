@@ -10,6 +10,7 @@ import { createContextActivityDefinition } from '../../src/host/activity'
 import { createContextHeadersDefinition } from '../../src/host/headers'
 import { arm, captureLogs, coldFaces, connectionOf, fakeState, trigger, unsupportedFormatError, until } from './helpers/backfill'
 import type { RouteBox } from './helpers/backfill'
+import type { ColdReadGate } from '../../src/host/coldRead'
 
 const settle = (ms = 30): Promise<void> => new Promise(resolve => setTimeout(resolve, ms))
 
@@ -159,6 +160,127 @@ describe('watchActivityBackfill', () => {
       dispose()
       assert.deepEqual(state.coldReads, [], 'a route half that never registers leaves the pass unarmed')
     }
+  })
+
+  test('app readiness starts backfill without a connection or browser route', async () => {
+    const ctx = new Context()
+    const state = fakeState([{ header: { id: 'a', cwd: '/repo/a' } }])
+    coldFaces(ctx, state)
+    let ready: (() => void) | null = null
+    let cancelled = false
+    ctx.provide('appReady', {
+      onReady: (listener: () => void) => {
+        ready = listener
+        return () => { cancelled = true }
+      },
+    })
+    let started = 0
+    const handle = watchActivityBackfill(ctx, undefined, undefined, { autoStart: true, onStart: () => { started++ } })
+    await settle()
+    assert.equal(started, 0, 'catalog warm-up waits for readiness too')
+    assert.deepEqual(state.coldReads, [], 'startup work waits for the readiness commit')
+    assert.equal(typeof ready, 'function')
+    ;(ready as unknown as () => void)()
+    await until(() => (state.coldSnapshots.length === 1 ? true : undefined), 'readiness started the cold fold')
+    assert.equal(started, 1)
+    handle()
+    assert.equal(cancelled, true, 'the readiness listener is disposed with backfill')
+    assert.equal(typeof handle.request, 'function')
+  })
+
+  test('a throwing readiness face falls back to an immediate startup request', async () => {
+    const ctx = new Context()
+    const state = fakeState([{ header: { id: 'a', cwd: '/repo/a' } }])
+    coldFaces(ctx, state)
+    ctx.provide('appReady', { onReady: () => { throw new Error('not ready') } })
+    const handle = watchActivityBackfill(ctx, undefined, FAST_PACING, { autoStart: true })
+    await until(() => (state.coldSnapshots.length === 1 ? true : undefined), 'the readiness failure did not block startup')
+    handle()
+  })
+
+  test('a manual request clears a pending default retry and runs immediately', async () => {
+    const ctx = new Context()
+    const state = fakeState([{ header: { id: 'a', cwd: '/repo/a' } }])
+    coldFaces(ctx, state)
+    let admissions = 0
+    const gate: ColdReadGate = {
+      admit: async <T,>(read: () => Promise<T>): Promise<T | undefined> => {
+        admissions++
+        return admissions === 1 ? undefined : await read()
+      },
+    }
+    const handle = watchActivityBackfill(ctx, gate, FAST_PACING, { autoStart: true })
+    await until(() => (admissions === 1 && !handle.coverage().running ? true : undefined), 'the default retry was scheduled')
+    handle.request()
+    await until(() => (state.coldSnapshots.length === 1 ? true : undefined), 'the manual nudge completed without waiting for the timer')
+    handle()
+  })
+
+  test('a fully warm startup still publishes materialization readiness', async () => {
+    const ctx = new Context()
+    const state = fakeState([{ header: { id: 'a', cwd: '/repo/a' } }])
+    state.served.add('a')
+    coldFaces(ctx, state)
+    let changes = 0
+    const handle = watchActivityBackfill(ctx, undefined, FAST_PACING, { autoStart: true, onChange: () => { changes++ } })
+    await until(() => (changes > 0 ? true : undefined), 'the warm pass published its completion')
+    handle()
+    assert.deepEqual(state.coldReads, [])
+  })
+
+  test('a disposed live session schedules its cold materialization', async () => {
+    const ctx = new Context()
+    const listed = [{ header: { id: 'a', cwd: '/repo/a' } }]
+    const state = fakeState(listed)
+    coldFaces(ctx, state)
+    const handle = watchActivityBackfill(ctx, undefined, FAST_PACING, { autoStart: true })
+    await until(() => (state.coldSnapshots.length === 1 ? true : undefined), 'startup folded the first session')
+    state.served.add('a')
+    listed.push({ header: { id: 'b', cwd: '/repo/b' } })
+    let observed = 0
+    ctx.on('session/disposed', () => { observed++ })
+    ctx.emit('session/disposed', { id: 'b' } as never)
+    assert.equal(observed, 1, 'the test context emits the lifecycle event')
+    await until(() => (state.coldSnapshots.length === 2 ? true : undefined), 'disposal scheduled the new cold session')
+    handle()
+    assert.deepEqual(state.coldSnapshots, ['a', 'b'])
+  })
+
+  test('startup fallback resumes after heap admission without a browser retry', async () => {
+    const ctx = new Context()
+    const state = fakeState([{ header: { id: 'a', cwd: '/repo/a' } }])
+    coldFaces(ctx, state)
+    let admissions = 0
+    const gate: ColdReadGate = {
+      admit: async <T,>(read: () => Promise<T>): Promise<T | undefined> => {
+        admissions++
+        return admissions === 1 ? undefined : await read()
+      },
+    }
+    const handle = watchActivityBackfill(ctx, gate, FAST_PACING, { autoStart: true, retryBaseMs: 2 })
+    await until(() => (state.coldSnapshots.length === 1 ? true : undefined), 'the host resumed the paused startup pass')
+    handle()
+    assert.ok(admissions >= 2)
+    assert.equal(handle.coverage().complete, true)
+  })
+
+  test('a permanent admission failure exhausts the host retry budget', async () => {
+    const ctx = new Context()
+    const state = fakeState([{ header: { id: 'a', cwd: '/repo/a' } }])
+    coldFaces(ctx, state)
+    let admissions = 0
+    const gate: ColdReadGate = {
+      admit: async <T,>(): Promise<T | undefined> => {
+        admissions++
+        return undefined
+      },
+    }
+    const handle = watchActivityBackfill(ctx, gate, FAST_PACING, { autoStart: true, retryBaseMs: 0 })
+    await until(() => (admissions >= 11 ? true : undefined), 'the bounded retries ran')
+    await settle()
+    assert.equal(admissions, 11)
+    assert.equal(handle.coverage().complete, false)
+    handle()
   })
 
   test('incomplete faces are re-proved away — an armed request waits, then never launches', async () => {

@@ -202,6 +202,42 @@ describe('useOverviewSummary', () => {
     await probe.m.unmount()
   })
 
+  test('the host-resolved window is decoded as an additive summary field', async () => {
+    vi.useFakeTimers()
+    const mod = await fresh()
+    const window = { start: 10, end: 20, from: '2026-11-01', to: '2026-11-02' }
+    stubRoutes(() => summaryValue({ summary: { ...summaryRaw(), window } }))
+    const probe = await mountSummary(mod, { range: '30d' })
+    await advance(0)
+    assert.deepEqual(lastOf(probe.states).data?.summary.window, window)
+    await probe.m.unmount()
+  })
+
+  test('resolved-window nulls and hostile fields degrade without dropping the summary', async () => {
+    vi.useFakeTimers()
+    const mod = await fresh()
+    const cases = [
+      { start: 1, end: null, from: null, to: null },
+      { start: 'bad', end: 2, from: 'a', to: 'b' },
+      { start: 1, end: 'bad', from: 'a', to: 'b' },
+      { start: 1, end: 2, from: 7, to: 'b' },
+      { start: 1, end: 2, from: 'a', to: 7 },
+      'bad',
+    ]
+    for (const window of cases) {
+      stubRoutes(() => summaryValue({ summary: { ...summaryRaw(), window } }))
+      const probe = await mountSummary(mod, { range: '30d' })
+      await advance(0)
+      const resolved = lastOf(probe.states).data?.summary.window
+      if (typeof window === 'object' && window.start === 1 && window.end === null) {
+        assert.deepEqual(resolved, window)
+      } else {
+        assert.equal(resolved, undefined)
+      }
+      await probe.m.unmount()
+    }
+  })
+
   test('the held revision rides the next fetch; an unchanged reply keeps the painted data', async () => {
     vi.useFakeTimers()
     const mod = await fresh()
@@ -596,212 +632,70 @@ describe('useOverviewTally', () => {
   })
 })
 
-describe('summary coverage auto-backfill', () => {
-  test('an incomplete coverage posts the backfill route after the bounded retry delay', async () => {
+describe('summary coverage host continuation', () => {
+  test('incomplete coverage re-reads overview without posting backfill', async () => {
     vi.useFakeTimers()
     const mod = await fresh()
-    const backfills: Call[] = []
-    const calls = stubRoutes((call) => {
-      if (call.route === BACKFILL_ROUTE) {
-        backfills.push(call)
-        return undefined
-      }
-      return summaryValue({ summary: summaryRaw({ coverage: coverageOf({ complete: false, remaining: 2, covered: 1 }) }) })
-    })
+    const calls = stubRoutes(() => summaryValue({
+      summary: summaryRaw({ coverage: coverageOf({ complete: false, remaining: 2, covered: 1 }) }),
+    }))
     const probe = await mountSummary(mod, { range: '30d' })
     await advance(0)
-    assert.equal(backfills.length, 0, 'the first paint arms no backfill before the read lands')
-    await advance(2_000)
-    assert.deepEqual(backfills.map(c => [c.route, c.method]), [[BACKFILL_ROUTE, 'POST']])
-    assert.equal(calls.filter(c => c.route === OVERVIEW_ROUTE).length, 1)
-    await probe.m.unmount()
-  })
-
-  test('a running pass waits for the poll, and an exhausted or failed corpus stops the loader', async () => {
-    vi.useFakeTimers()
-    const mod = await fresh()
-    let coverage = coverageOf({ complete: false, running: true, remaining: 2, covered: 1 })
-    let backfills = 0
-    stubRoutes((call) => {
-      if (call.route === BACKFILL_ROUTE) {
-        backfills++
-        return undefined
-      }
-      return summaryValue({ summary: summaryRaw({ coverage }) })
-    })
-    const probe = await mountSummary(mod, { range: '30d' })
-    await advance(0)
-    await advance(20_000)
-    assert.equal(backfills, 0, 'a running pass is left to finish')
-    coverage = coverageOf({ complete: false, remaining: 0, failed: 1, total: 3, covered: 2 })
-    mod.invalidation.invalidate('overview')
+    assert.equal(calls.filter(call => call.route === OVERVIEW_ROUTE).length, 1)
+    await advance(1_000)
     await advance(250)
-    await advance(20_000)
-    assert.equal(backfills, 0, 'an exhausted pass with failures does not loop')
-    coverage = coverageOf({ complete: false, remaining: 1, covered: 1 })
-    mod.invalidation.invalidate('overview')
-    await advance(250)
-    await advance(2_000)
-    assert.equal(backfills, 1, 'a later foldable pass requests a fresh run')
+    assert.equal(calls.filter(call => call.route === OVERVIEW_ROUTE).length, 2)
+    assert.equal(calls.filter(call => call.route === BACKFILL_ROUTE).length, 0)
     await probe.m.unmount()
   })
 
-  test('an unlisted corpus requests its first pass', async () => {
+  test('hidden documents do not issue coverage follow-up reads', async () => {
     vi.useFakeTimers()
+    vi.spyOn(document, 'visibilityState', 'get').mockReturnValue('hidden')
     const mod = await fresh()
-    let backfills = 0
-    stubRoutes((call) => {
-      if (call.route === BACKFILL_ROUTE) {
-        backfills++
-        return undefined
-      }
-      return summaryValue({ summary: summaryRaw({ coverage: coverageOf({ complete: false, remaining: 0, total: 0, covered: 0 }) }) })
-    })
+    const calls = stubRoutes(() => summaryValue({
+      summary: summaryRaw({ coverage: coverageOf({ complete: false, remaining: 2, covered: 1 }) }),
+    }))
     const probe = await mountSummary(mod, { range: '30d' })
     await advance(0)
     await advance(2_000)
-    assert.equal(backfills, 1, 'an unlisted corpus posts the first pass')
+    assert.equal(calls.filter(call => call.route === OVERVIEW_ROUTE).length, 1)
     await probe.m.unmount()
   })
 
-  test('a failing backfill POST is swallowed and a complete coverage stops the loop', async () => {
+  test('complete coverage stops the follow-up loop and leaves the normal poll', async () => {
     vi.useFakeTimers()
     const mod = await fresh()
     let coverage = coverageOf({ complete: false, remaining: 1, covered: 1 })
-    let backfillAttempts = 0
-    stubRoutes((call) => {
-      if (call.route === BACKFILL_ROUTE) {
-        backfillAttempts++
-        throw new Error('route absent')
-      }
-      return summaryValue({ summary: summaryRaw({ coverage }) })
-    })
+    const calls = stubRoutes(() => summaryValue({ summary: summaryRaw({ coverage }) }))
     const probe = await mountSummary(mod, { range: '30d' })
     await advance(0)
-    await advance(2_000)
-    assert.equal(backfillAttempts, 1, 'the rejected POST is swallowed')
-    await flush()
     coverage = coverageOf()
     mod.invalidation.invalidate('overview')
     await advance(250)
-    await advance(60_000)
-    assert.equal(backfillAttempts, 1, 'a complete coverage never posts the backfill route again')
-    assert.equal(vi.getTimerCount(), 1, 'only the poll interval stays armed')
-    await probe.m.unmount()
-    assert.equal(vi.getTimerCount(), 0)
-  })
-
-  test('each coverage change arms the next backfill attempt, capped after ten', async () => {
-    vi.useFakeTimers()
-    const mod = await fresh()
-    const overviewCalls: Call[] = []
-    stubRoutes((call) => {
-      if (call.route === BACKFILL_ROUTE) return undefined
-      const callIndex = overviewCalls.length
-      overviewCalls.push(call)
-      return summaryValue({
-        summary: summaryRaw({
-          coverage: coverageOf({ complete: false, remaining: 20 - callIndex, covered: callIndex }),
-        }),
-      })
-    })
-    const probe = await mountSummary(mod, { range: '30d' })
-    await advance(0)
-    for (let i = 0; i < 9; i++) {
-      mod.invalidation.invalidate('overview')
-      await advance(250)
-    }
-    assert.equal(overviewCalls.length, 10, 'ten summary reads armed ten attempts')
-    mod.invalidation.invalidate('overview')
-    await advance(250)
-    assert.equal(overviewCalls.length, 11)
-    await advance(60_000)
+    const reads = calls.filter(call => call.route === OVERVIEW_ROUTE).length
+    await advance(1_250)
+    assert.equal(calls.filter(call => call.route === OVERVIEW_ROUTE).length, reads)
+    assert.equal(calls.filter(call => call.route === BACKFILL_ROUTE).length, 0)
     await probe.m.unmount()
   })
 
-  test('non-progress coverage churn still caps the backfill budget', async () => {
+  test('non-progress coverage follow-ups are bounded and back off', async () => {
     vi.useFakeTimers()
     const mod = await fresh()
-    let calls = 0
-    let backfills = 0
-    stubRoutes((call) => {
-      if (call.route === BACKFILL_ROUTE) {
-        backfills++
-        return undefined
-      }
-      calls++
-      const running = calls % 2 === 0
-      return summaryValue({ summary: summaryRaw({ coverage: coverageOf({ complete: false, remaining: 5, covered: 2, running }) }) })
-    })
+    const calls = stubRoutes(() => summaryValue({
+      summary: summaryRaw({ coverage: coverageOf({ complete: false, remaining: 2, covered: 1 }) }),
+    }))
     const probe = await mountSummary(mod, { range: '30d' })
     await advance(0)
-    for (let i = 0; i < 40; i++) {
-      mod.invalidation.invalidate('overview')
-      await advance(250)
-      await advance(20_000)
-    }
-    assert.ok(backfills > 0 && backfills <= 10, 'the attempt budget bounds the loader')
-    const settled = backfills
-    for (let i = 0; i < 10; i++) {
-      mod.invalidation.invalidate('overview')
-      await advance(250)
-      await advance(20_000)
-    }
-    assert.equal(backfills, settled, 'a stagnant corpus stops at the attempt budget')
-    await probe.m.unmount()
-  })
-
-  test('coverage progress refills the attempt budget so a slow corpus can finish', async () => {
-    vi.useFakeTimers()
-    const mod = await fresh()
-    let calls = 0
-    let backfills = 0
-    stubRoutes((call) => {
-      if (call.route === BACKFILL_ROUTE) {
-        backfills++
-        return undefined
-      }
-      calls++
-      return summaryValue({ summary: summaryRaw({ coverage: coverageOf({ complete: false, remaining: 30 - calls, covered: calls }) }) })
-    })
-    const probe = await mountSummary(mod, { range: '30d' })
-    await advance(0)
-    for (let i = 0; i < 15; i++) {
-      mod.invalidation.invalidate('overview')
-      await advance(250)
-      await advance(20_000)
-    }
-    assert.ok(backfills >= 14, `progress keeps the loader going (${backfills} backfills)`)
-    await probe.m.unmount()
-  })
-
-  test('a complete coverage resets the attempt counter so a later incomplete run starts over', async () => {
-    vi.useFakeTimers()
-    const mod = await fresh()
-    let coverage = coverageOf({ complete: false, remaining: 1, covered: 1 })
-    let backfills = 0
-    stubRoutes((call) => {
-      if (call.route === BACKFILL_ROUTE) {
-        backfills++
-        return undefined
-      }
-      return summaryValue({ summary: summaryRaw({ coverage }) })
-    })
-    const probe = await mountSummary(mod, { range: '30d' })
-    await advance(0)
-    await advance(2_000)
-    assert.equal(backfills, 1)
-    coverage = coverageOf()
-    mod.invalidation.invalidate('overview')
-    await advance(250)
-    coverage = coverageOf({ complete: false, remaining: 3, covered: 0 })
-    mod.invalidation.invalidate('overview')
-    await advance(250)
-    await advance(2_000)
-    assert.equal(backfills, 2, 'the reopened coverage posts again with a fresh attempt counter')
+    await advance(200_000)
+    const reads = calls.filter(call => call.route === OVERVIEW_ROUTE).length
+    assert.ok(reads > 1 && reads <= 18, `bounded retries plus normal polls (${reads})`)
+    assert.equal(calls.filter(call => call.route === BACKFILL_ROUTE).length, 0)
     await probe.m.unmount()
   })
 })
+
 })
 
 describe('overviewSupport', () => {

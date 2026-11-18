@@ -8,7 +8,7 @@ import { type ColdReadGate, makeColdReadGate } from './coldRead'
 import { makeFoldJournal } from './foldJournal'
 import { createFoldPool, type FoldPool } from './foldWorker'
 import { identityKey, type OverviewCache } from './overviewCache'
-import { headerFactsOf, hostSessionOf, revisionOf } from './overviewCorpus'
+import { headerFactsOf, materializedSessionOf, revisionOf } from './overviewCorpus'
 import { mountPostRoute, reply } from './postRoute'
 
 export const BACKFILL_ROUTE = '/api/dsh-context/backfill'
@@ -21,6 +21,7 @@ export interface FoldedSessions {
 
 export interface BackfillHandle {
   (): void
+  request(): void
   coverage(): BackfillCoverage
   version(): number
   foldedSince(marker: number): FoldedSessions
@@ -69,6 +70,12 @@ const WORKER_FOLD_MIN_EVENTS = 30_000
 const ROUND_WORK_BUDGET_MS = 8_000
 const ROUND_PAUSE_MS = 2_000
 
+const RETRY_BASE_MS = 1_000
+
+const RETRY_MAX_MS = 15_000
+
+const RETRY_ATTEMPTS_MAX = 10
+
 export interface BackfillPacing {
   now: () => number
   sleep: (ms: number) => Promise<void>
@@ -82,6 +89,10 @@ export interface BackfillOptions {
   ownCache?: OverviewCache
   config?: Config
   pool?: FoldPool
+  autoStart?: boolean
+  retryBaseMs?: number
+  onStart?: () => void
+  onChange?: () => void
 }
 
 export type { FoldPool }
@@ -135,6 +146,7 @@ async function servesRows(
   cache: ProjectionCacheLike,
   header: SessionHeader,
   capability: StatCapability,
+  presenceIsFresh: boolean,
 ): Promise<boolean> {
   let block: Record<string, unknown> | null
   try {
@@ -147,7 +159,7 @@ async function servesRows(
   const asOfSeq = block?.asOfSeq
   if (typeof asOfSeq !== 'number' || !Number.isSafeInteger(asOfSeq)) return false
   const eventCount = await durableEventCount(persistence, header.id, capability)
-  if (eventCount === undefined) return true
+  if (eventCount === undefined) return presenceIsFresh
   return asOfSeq + 1 === eventCount || asOfSeq === eventCount
 }
 
@@ -188,6 +200,8 @@ function isLive(sessions: Record<string, unknown> | null, id: string): boolean {
 interface SliceOutcome {
   outcome: 'done' | 'live' | 'aborted'
   workMs: number
+  snapshot?: unknown
+  write?: () => Promise<unknown>
 }
 
 export function nextSliceSize(size: number, costMs: number, budgetMs: number): number {
@@ -198,7 +212,6 @@ export function nextSliceSize(size: number, costMs: number, budgetMs: number): n
 }
 
 async function coldSnapshotSliced(
-  ctx: Context,
   faces: SlicedFoldFaces,
   sessions: Record<string, unknown> | null,
   log: { header: SessionHeader; inheritedEventCount: unknown; events: readonly SessionEvent[] },
@@ -237,13 +250,8 @@ async function coldSnapshotSliced(
     if (isLive(sessions, header.id)) return { outcome: 'live', workMs }
     throw error
   }
-  faces.hydrate(prepared, rows, events, 0)
-  try {
-    await faces.write(prepared)
-  } catch (error: unknown) {
-    ctx.logger.warn(`dsh-context: projection backfill write-back for "${header.id}" failed (cache stays stale): ${messageOf(error)}`)
-  }
-  return { outcome: 'done', workMs }
+  const snapshot = faces.hydrate(prepared, rows, events, 0)
+  return { outcome: 'done', workMs, snapshot, write: () => faces.write(prepared) }
 }
 
 function isUnsupportedFormat(error: unknown): boolean {
@@ -277,6 +285,10 @@ export function watchActivityBackfill(
   const journal = makeFoldJournal()
   let lastSignature: string | null = null
   let pool: FoldPool | null = null
+  let cancelStartup: (() => void) | null = null
+  let cancelDisposed: (() => void) | null = null
+  let retryTimer: ReturnType<typeof setTimeout> | null = null
+  let retryAttempt = 0
   const workerFor = (): FoldPool => {
     pool ??= options.pool ?? createFoldPool()
     return pool
@@ -301,13 +313,36 @@ export function watchActivityBackfill(
     coverage.running = true
     launch()
   }
+  const clearRetry = (): void => {
+    if (retryTimer !== null) clearTimeout(retryTimer)
+    retryTimer = null
+  }
   const requestPass = (): void => {
+    clearRetry()
+    try { options.onStart?.() } catch {}
     requested = true
     startIfIdle()
   }
+  const requestFreshPass = (): void => {
+    retryAttempt = 0
+    requestPass()
+  }
+  const queueRetry = (): void => {
+    if (options.autoStart !== true || disposed || retryTimer !== null || retryAttempt >= RETRY_ATTEMPTS_MAX) return
+    const base = options.retryBaseMs ?? RETRY_BASE_MS
+    const delay = Math.min(RETRY_MAX_MS, base * 2 ** Math.min(retryAttempt, 10))
+    retryAttempt++
+    retryTimer = setTimeout(() => {
+      retryTimer = null
+      requestPass()
+    }, delay)
+    ;(retryTimer as { unref?: () => void }).unref?.()
+  }
   const noteFolded = (id: string, viaWorker = false): void => {
+    retryAttempt = 0
     foldedVersion++
     journal.note(id, viaWorker)
+    try { options.onChange?.() } catch {}
   }
   const routeFiber = mountPostRoute({
     ctx,
@@ -315,7 +350,7 @@ export function watchActivityBackfill(
     path: BACKFILL_ROUTE,
     label: 'dsh-context: backfill route',
     handler: () => () => {
-      requestPass()
+      requestFreshPass()
       return reply({ ok: true, coverage: { ...coverage } })
     },
   })
@@ -364,6 +399,7 @@ export function watchActivityBackfill(
       : null
 
     const abort = new AbortController()
+    const cancelled = (): boolean => abort.signal.aborted
     const run = async (): Promise<void> => {
       const pass: BackfillCoverage = {
         complete: false,
@@ -377,6 +413,8 @@ export function watchActivityBackfill(
       let listed = false
       let folded = 0
       let paused = false
+      let sourceChanged = false
+      let cacheLimited = false
       let roundWork = 0
       const sleep = async (ms: number): Promise<void> => {
         if (abort.signal.aborted) return
@@ -412,30 +450,35 @@ export function watchActivityBackfill(
           const header = headerOf(record)
           if (header !== null && typeof header.cwd === 'string') pass.total++
         }
-        const signature = signatureOf(listedRecords)
-        if (coverage.complete && signature === lastSignature) {
+        const ownCache = options.ownCache
+        const workerConfig = options.config
+        const statCapable = typeof (persistence as unknown as PersistenceLike).stat === 'function'
+        const foldResources = (): { pool: FoldPool; cache: OverviewCache; config: Config } | null =>
+          ownCache !== undefined && workerConfig !== undefined && statCapable
+            ? { pool: workerFor(), cache: ownCache, config: workerConfig }
+            : null
+        const warmIds = new Set<string>()
+        const rebuildIds = new Set<string>()
+        let signature = signatureOf(listedRecords)
+        if (ownCache !== undefined && pass.total > 0) {
+          const candidates = new Set<string>()
+          for (const record of listedRecords) {
+            const header = headerOf(record)
+            if (header !== null && typeof header.cwd === 'string' && !isLive(sessions, header.id)) candidates.add(header.id)
+          }
+          const ownWarm = await ownCache.probe(candidates)
+          for (const id of ownWarm.warm) warmIds.add(id)
+          for (const id of ownWarm.rebuild) rebuildIds.add(id)
+          const sources = [...candidates].map(id => `${id}\u0000${identityKey(ownWarm.identities.get(id))}`)
+          sources.sort()
+          signature = revisionOf([signature, ...sources])
+        }
+        if (coverage.complete && rebuildIds.size === 0 && signature === lastSignature) {
           pass.covered = pass.total
           lastSignature = signature
           return
         }
         lastSignature = signature
-        const ownCache = options.ownCache
-        const workerConfig = options.config
-        const statCapable = typeof (persistence as unknown as PersistenceLike).stat === 'function'
-        const workerGate = (): { pool: FoldPool; cache: OverviewCache; config: Config } | null =>
-          ownCache !== undefined && workerConfig !== undefined && statCapable
-            ? { pool: workerFor(), cache: ownCache, config: workerConfig }
-            : null
-        const warmIds = new Set<string>()
-        if (ownCache !== undefined && pass.total > 0) {
-          const candidates = new Set<string>()
-          for (const record of listedRecords) {
-            const header = headerOf(record)
-            if (header !== null && typeof header.cwd === 'string') candidates.add(header.id)
-          }
-          const ownWarm = await ownCache.load(candidates)
-          for (const id of ownWarm.sessions.keys()) warmIds.add(id)
-        }
         for (const record of listedRecords) {
           if (abort.signal.aborted) return
           const header = headerOf(record)
@@ -448,11 +491,12 @@ export function watchActivityBackfill(
             pass.covered++
             continue
           }
-          const warm = await servesRows(
+          const warm = rebuildIds.has(header.id) ? false : await servesRows(
             persistence as unknown as PersistenceLike,
             cache as unknown as ProjectionCacheLike,
             header,
             statCapability,
+            ownCache === undefined,
           )
           if (warm) {
             pass.covered++
@@ -464,52 +508,99 @@ export function watchActivityBackfill(
           let viaWorker = false
           try {
             const admitted = await coldReads.admit(async () => {
+              const resources = foldResources()
+              const host = { stat: (persistence as unknown as PersistenceLike).stat?.bind(persistence) }
+              const captured = resources === null ? null : await resources.cache.capture([header.id], host)
+              const identity = captured?.get(header.id) ?? null
               const log = await readColdLog(persistence as unknown as PersistenceLike, header.id, abort.signal)
-              const worker = log.events.length > WORKER_FOLD_MIN_EVENTS && !abort.signal.aborted ? workerGate() : null
-              if (worker !== null) {
+              const writeBack = async (write?: () => Promise<unknown>): Promise<void> => {
+                if (write === undefined) return
+                try {
+                  await write()
+                } catch (error: unknown) {
+                  ctx.logger.warn(`dsh-context: projection backfill write-back for "${header.id}" failed (cache stays stale): ${messageOf(error)}`)
+                }
+              }
+              const sourceIsCurrent = async (): Promise<boolean> => {
+                if (resources === null) return true
+                const validated = await resources.cache.capture([header.id], host)
+                return identityKey(identity) === identityKey(validated.get(header.id) ?? null)
+                  && !isLive(sessions, header.id)
+              }
+              const persist = async (
+                snapshot: unknown,
+                write?: () => Promise<unknown>,
+              ): Promise<'done' | 'stale' | 'unaccepted'> => {
+                if (resources === null) {
+                  await writeBack(write)
+                  return 'done'
+                }
+                if (!await sourceIsCurrent()) return 'stale'
+                await writeBack(write)
+                const facts = headerFactsOf(log.header as unknown as Record<string, unknown>)
+                if (facts !== null) {
+                  const session = materializedSessionOf(facts.id, facts, `C${identityKey(identity)}`, snapshot as { values?: unknown; asOfSeq?: unknown })
+                  if (session.materialization !== undefined
+                    && !await resources.cache.save([{ session, identity }])) return 'unaccepted'
+                }
+                return 'done'
+              }
+              if (log.events.length > WORKER_FOLD_MIN_EVENTS && !cancelled() && resources !== null) {
                 const facts = headerFactsOf(header as unknown as Record<string, unknown>)
                 /* v8 ignore next 1 */
                 if (facts !== null) {
                   try {
-                    const host = { stat: (persistence as unknown as PersistenceLike).stat?.bind(persistence) }
-                    const captured = await worker.cache.capture([header.id], host)
-                    const identity = captured.get(header.id) ?? null
-                    const folded1 = await worker.pool.fold(worker.config, log.events)
-                    if (abort.signal.aborted) return 'aborted' as const
-                    worker.cache.save([{
-                      session: hostSessionOf(facts.id, facts, `C${identityKey(identity)}`, {
+                    const folded1 = await resources.pool.fold(resources.config, log.events)
+                    if (cancelled()) return 'aborted' as const
+                    const persisted = await persist({
+                      asOfSeq: log.events.at(-1)?.seq ?? -1,
+                      values: {
                         contextTimeline: folded1.timeline,
                         contextActivity: folded1.activity,
+                        ...(folded1.title === undefined ? {} : { title: folded1.title }),
                         sessionListMetadata: {
                           blank: folded1.blank,
                           ...(folded1.lastPromptAt > 0 ? { lastPromptAt: folded1.lastPromptAt } : {}),
                         },
-                      }),
-                      identity,
-                    }])
-                    workerWallMs = pacing.now() - started
-                    viaWorker = true
-                    return 'done' as const
+                      },
+                    })
+                    if (persisted === 'done') {
+                      workerWallMs = pacing.now() - started
+                      viaWorker = true
+                      return persisted
+                    }
+                    if (persisted === 'stale') return persisted
                   } catch (error) {
-                    if (abort.signal.aborted) return 'aborted' as const
+                    if (cancelled()) return 'aborted' as const
                     ctx.logger.warn(`dsh-context: worker fold for "${header.id}" failed; folding on the host thread instead (${messageOf(error)})`)
                   }
                 }
               }
               if (sliceFaces !== null && log.events.length > SLICE_EVENTS) {
                 const budgetMs = pacing.sliceBudgetMs ?? BLOCK_BUDGET_MS
-                const sliced = await coldSnapshotSliced(ctx, sliceFaces, sessions, log, abort.signal, rest, pacing.now, budgetMs)
+                const sliced = await coldSnapshotSliced(sliceFaces, sessions, log, abort.signal, rest, pacing.now, budgetMs)
                 slicedWorkMs = sliced.workMs
-                return sliced.outcome
+                return sliced.outcome === 'done' ? await persist(sliced.snapshot, sliced.write) : sliced.outcome
               }
-              ;(cache as unknown as ProjectionCacheLike).coldSnapshot(log.header, log.inheritedEventCount, log.events)
-              return 'done' as const
-            })
+              if (!await sourceIsCurrent()) return 'stale' as const
+              const snapshot = (cache as unknown as ProjectionCacheLike).coldSnapshot(log.header, log.inheritedEventCount, log.events)
+              return await persist(snapshot)
+            }, { priority: 'background' })
             if (admitted === undefined) {
               paused = true
               break
             }
             if (admitted === 'aborted') return
+            if (admitted === 'stale') {
+              paused = true
+              sourceChanged = true
+              break
+            }
+            if (admitted === 'unaccepted') {
+              paused = true
+              cacheLimited = true
+              break
+            }
             if (admitted === 'done') {
               folded++
               noteFolded(header.id, viaWorker)
@@ -544,11 +635,25 @@ export function watchActivityBackfill(
           coverage.covered = pass.covered
           coverage.unsupported = pass.unsupported
           if (folded > 0 || changed) version++
+          if (complete) {
+            retryAttempt = 0
+            clearRetry()
+          } else {
+            queueRetry()
+          }
+          if (changed) {
+            try { options.onChange?.() } catch {}
+          }
         }
       }
       if (folded > 0) ctx.logger.info(`dsh-context: projection rows backfilled for ${folded} session(s)`)
-      if (paused) {
-        ctx.logger.info('dsh-context: projection backfill stopped early under heap pressure (remaining sessions refold on their next live activity)')
+      if (cacheLimited) {
+        ctx.logger.info('dsh-context: projection backfill paused because the overview cache could not accept a record; another pass is required')
+      } else if (paused && !sourceChanged) {
+        ctx.logger.info(`dsh-context: projection backfill stopped early under heap pressure (${options.autoStart === true ? 'remaining sessions retry in the background' : 'remaining sessions refold on their next live activity'})`)
+      }
+      if (sourceChanged) {
+        ctx.logger.info('dsh-context: projection backfill stopped after a durable source changed during a fold')
       }
       if (pass.unsupported > 0) {
         ctx.logger.info(`dsh-context: projection backfill skipped ${pass.unsupported} session(s) (legacy log format is not migratable; sources left unchanged)`)
@@ -557,6 +662,7 @@ export function watchActivityBackfill(
     launch = () => {
       void run().catch((error: unknown) => {
         if (!abort.signal.aborted) ctx.logger.warn(`dsh-context: projection backfill stopped early (${messageOf(error)})`)
+        queueRetry()
       }).finally(() => {
         running = false
         coverage.running = false
@@ -570,14 +676,41 @@ export function watchActivityBackfill(
     }
   })
 
+  if (options.autoStart === true) ctx.effect(() => {
+    cancelDisposed = ctx.on('session/disposed', requestFreshPass)
+    const ready = asRecord(ctx.get('appReady'))
+    if (ready !== null && typeof ready.onReady === 'function') {
+      try {
+        const disposer = (ready.onReady as (listener: () => void) => unknown)(requestFreshPass)
+        if (typeof disposer === 'function') cancelStartup = disposer as () => void
+      } catch {
+        requestFreshPass()
+      }
+    } else {
+      requestFreshPass()
+    }
+    return () => {
+      cancelDisposed?.()
+      cancelDisposed = null
+      cancelStartup?.()
+      cancelStartup = null
+    }
+  }, 'dsh-context: startup backfill')
+
   function disposeAll(): void {
     disposed = true
+    clearRetry()
+    cancelDisposed?.()
+    cancelDisposed = null
+    cancelStartup?.()
+    cancelStartup = null
     for (const fiber of [routeFiber, runnerFiber]) {
       const target = fiber as { dispose?: () => unknown } | undefined
       void target?.dispose?.()
     }
   }
   return Object.assign(disposeAll, {
+    request: requestFreshPass,
     coverage: (): BackfillCoverage => ({ ...coverage }),
     version: (): number => version,
     foldedSince: (marker: number): FoldedSessions => {

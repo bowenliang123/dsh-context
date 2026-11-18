@@ -2,7 +2,7 @@ import assert from 'node:assert/strict'
 import { describe, test } from 'vitest'
 import { boot, call, summaryOf, pageOf, tallyOf, revisionOf, recordOf, timelineOf, usageOf, dayOf, currentOf, type BootOptions } from './helpers/overview'
 import type { DurableIdentity, OverviewCache } from '../../src/host/overviewCache'
-import type { HostSession } from '../../src/host/overviewCorpus'
+import { stableHashOf, type HostSession } from '../../src/host/overviewCorpus'
 import type { ActivityDay } from '../../src/shared/types'
 
 const PERSISTENCE = {
@@ -88,6 +88,60 @@ describe('overview memory: disk cache, idle release, incremental updates', () =>
     harness.dispose()
   })
 
+  test('warm materializes the full rows without an HTTP request and the first paint reuses them', async () => {
+    const harness = await identityBoot()
+    seedIdentities(harness)
+    await harness.warm()
+    assert.deepEqual(harness.calls.cached.sort(), ['a', 'b'])
+    assert.equal(harness.calls.list, 1)
+    assert.equal(harness.state.savedRecords.length, 2)
+    const first = await call(harness, { part: 'summary' })
+    assert.equal(summaryOf(first).sessions, 2)
+    assert.deepEqual(harness.calls.cached, ['a', 'b'], 'the HTTP paint performs no second projection build')
+    harness.dispose()
+  })
+
+  test('concurrent warm calls coalesce one follow-up and disposal stops a pending scan', async () => {
+    const records = [recordOf('a'), recordOf('b')]
+    const values = { a: valuesOf(10), b: valuesOf(20) }
+    let lists = 0
+    let releaseFirst!: () => void
+    let releaseThird!: () => void
+    const firstGate = new Promise<void>(resolve => { releaseFirst = () => resolve() })
+    const thirdGate = new Promise<void>(resolve => { releaseThird = () => resolve() })
+    const harness = await boot({
+      persistence: PERSISTENCE,
+      records,
+      values,
+      listSessions: async () => {
+        lists++
+        if (lists === 1) await firstGate
+        if (lists === 3) await thirdGate
+        return records
+      },
+    })
+    seedIdentities(harness)
+    const first = harness.warm()
+    const second = harness.warm()
+    assert.equal(first, second)
+    releaseFirst()
+    await Promise.all([first, second])
+    assert.equal(lists, 2, 'a concurrent request coalesces into one follow-up build')
+    const third = harness.warm()
+    await sleep(5)
+    assert.equal(lists, 3)
+    harness.dispose()
+    releaseThird()
+    await third
+    await harness.warm()
+  })
+
+  test('warm contains a corpus read failure without an unhandled rejection', async () => {
+    const harness = await boot({ listSessions: () => Promise.reject(new Error('listing failed')) })
+    await harness.warm()
+    harness.dispose()
+  })
+
   test('a large cold corpus captures durable identities in the background so the first paint is not blocked', async () => {
     const ids = Array.from({ length: 130 }, (_, index) => `s${index}`)
     const records = ids.map(id => recordOf(id))
@@ -105,6 +159,49 @@ describe('overview memory: disk cache, idle release, incremental updates', () =>
     assert.equal(harness.state.savedRecords.length, 130)
     assert.ok(harness.state.savedRecords.every(record => record.identity !== null))
     harness.dispose()
+  })
+
+  test('a rejected background-capture save requests a rebuild without changing the painted corpus', async () => {
+    const ids = Array.from({ length: 130 }, (_, index) => `r${index}`)
+    const harness = await boot({
+      persistence: PERSISTENCE,
+      records: ids.map(id => recordOf(id)),
+      values: Object.fromEntries(ids.map(id => [id, valuesOf(10)])),
+      captureDelayMs: 50,
+      capturePollMs: 5,
+    })
+    for (const id of ids) harness.state.captureIdentities.set(id, identityOf(id))
+    const originalSave = harness.cache.save.bind(harness.cache)
+    let reject = false
+    harness.cache.save = async (records, retain) => reject ? false : originalSave(records, retain)
+    const first = await call(harness, { part: 'summary' })
+    assert.equal(summaryOf(first).sessions, 130)
+    reject = true
+    for (let index = 0; index < 300 && harness.state.requests === 0; index++) await sleep(1)
+    assert.equal(harness.state.requests, 1)
+    assert.equal(summaryOf(await call(harness, { part: 'summary' })).sessions, 130)
+    await harness.dispose()
+  })
+
+  test('an empty background-capture record set stays inert', async () => {
+    const ids = Array.from({ length: 130 }, (_, index) => `e${index}`)
+    const harness = await boot({
+      persistence: PERSISTENCE,
+      records: ids.map(id => recordOf(id)),
+      values: Object.fromEntries(ids.map(id => [id, valuesOf(10)])),
+      captureDelayMs: 20,
+      capturePollMs: 1,
+    })
+    for (const id of ids) harness.state.captureIdentities.set(id, identityOf(id))
+    harness.cacheMode.throwCached = true
+    const first = await call(harness, { part: 'summary' })
+    assert.equal(summaryOf(first).sessions, 130)
+    const saves = harness.cache.saveCalls
+    for (let index = 0; index < 300 && harness.cache.captureCalls.length === 0; index++) await sleep(1)
+    assert.equal(harness.cache.captureCalls.length, 1)
+    assert.equal(harness.cache.saveCalls, saves)
+    assert.equal(harness.state.requests, 0)
+    await harness.dispose()
   })
 
   test('a background capture waits for a running backfill pass before the durable stat sweep', async () => {
@@ -229,8 +326,42 @@ describe('overview memory: disk cache, idle release, incremental updates', () =>
     const first = await call(harness, { part: 'summary' })
     assert.equal(summaryOf(first).sessions, 2)
     assert.deepEqual(harness.calls.cached, [], 'validated persisted rows skip the projection cache')
-    assert.equal(harness.cache.saveCalls, 0, 'nothing changed, so nothing is rewritten')
+    assert.equal(harness.cache.saveCalls, 1, 'the initial retain save prunes any offline-deleted ids')
     harness.dispose()
+  })
+
+  test('an offline deletion is pruned on the initial warm-cache load', async () => {
+    const harness = await identityBoot({ records: [recordOf('a')] })
+    harness.state.cachedSessions.set('a', hostSessionOf('a', { tokens: 10 }))
+    harness.state.cachedSessions.set('b', hostSessionOf('b', { tokens: 20 }))
+    harness.state.cachedIdentities.set('a', identityOf('a'))
+    harness.state.cachedIdentities.set('b', identityOf('b'))
+    const first = await call(harness, { part: 'summary' })
+    assert.equal(summaryOf(first).sessions, 1)
+    assert.deepEqual(harness.calls.cached, [])
+    assert.equal(harness.cache.saveCalls, 1)
+    assert.deepEqual(harness.state.savedRecords.map(record => record.session.id), ['a'])
+    harness.dispose()
+  })
+
+  test('an equal-size corpus replacement prunes the removed id', async () => {
+    const harness = await identityBoot({ values: { a: valuesOf(10), b: valuesOf(20), c: valuesOf(30) } })
+    seedIdentities(harness)
+    harness.state.captureIdentities.set('c', identityOf('c'))
+    let retain: ReadonlySet<string> | undefined
+    const save = harness.cache.save.bind(harness.cache)
+    harness.cache.save = async (records, ids) => {
+      retain = ids
+      return await save(records, ids)
+    }
+    await call(harness, { part: 'summary' })
+    harness.state.records = [recordOf('b'), recordOf('c')]
+    const replaced = await call(harness, { part: 'summary' })
+    assert.equal(summaryOf(replaced).sessions, 2)
+    assert.equal(harness.cache.saveCalls, 2)
+    assert.deepEqual(harness.state.savedRecords.map(record => record.session.id).sort(), ['b', 'c'])
+    assert.deepEqual([...retain ?? []].sort(), ['b', 'c'])
+    await harness.dispose()
   })
 
   test('load rebuild ids force a projection read only for those sessions', async () => {
@@ -261,6 +392,7 @@ describe('overview memory: disk cache, idle release, incremental updates', () =>
     const foldedRevision = revisionOf(folded)
     assert.notEqual(foldedRevision, firstRevision, 'a fold moves the revision so clients converge')
     assert.equal(harness.cache.saveCalls, 2)
+    assert.deepEqual(harness.state.savedRecords.map(record => record.session.id), ['a'], 'an incremental fold saves only the changed session')
     const afterFold = await call(harness, { part: 'summary', revision: foldedRevision })
     assert.deepEqual(afterFold.reply.value, { revision: foldedRevision, unchanged: true })
     harness.state.foldedVersion = 2
@@ -270,6 +402,25 @@ describe('overview memory: disk cache, idle release, incremental updates', () =>
     const overflowRevision = revisionOf(overflow)
     assert.notEqual(overflowRevision, foldedRevision)
     harness.dispose()
+  })
+
+  test('a fold-journal overflow reloads every worker-only cached session before rebuilding', async () => {
+    const harness = await identityBoot()
+    seedIdentities(harness)
+    const first = await call(harness, { part: 'summary' })
+    const reads = harness.calls.cached.length
+    for (const [id, tokens] of [['a', 10], ['b', 20]] as const) {
+      harness.state.cachedSessions.set(id, hostSessionOf(id, { tokens }))
+      harness.state.cachedIdentities.set(id, identityOf(id))
+    }
+    harness.state.foldedVersion = 1
+    harness.state.foldedIds = null
+    harness.state.workerFoldedIds = null
+    const overflow = await call(harness, { part: 'summary', revision: revisionOf(first) })
+    assert.equal(summaryOf(overflow).sessions, 2)
+    assert.equal(summaryOf(overflow).tokens, 30)
+    assert.equal(harness.calls.cached.length, reads, 'worker-only rows are reloaded instead of rebuilt from missing projections')
+    await harness.dispose()
   })
 
   test('a host without foldedSince never drains fold markers', async () => {
@@ -338,7 +489,7 @@ describe('overview memory: disk cache, idle release, incremental updates', () =>
     harness.state.captureMissing = ['a', 'b']
     const first = await call(harness, { part: 'summary' })
     assert.equal(summaryOf(first).sessions, 2)
-    assert.equal(summaryOf(first).tokens, 32)
+    assert.equal(summaryOf(first).tokens, 30)
     harness.dispose()
   })
 
@@ -420,11 +571,12 @@ describe('overview memory: disk cache, idle release, incremental updates', () =>
   test('cache failures, disposes, disabled idle timers, and post-dispose requests stay contained', async () => {
     const failing: OverviewCache = {
       load: async () => { throw new Error('cache broken') },
+      probe: async () => { throw new Error('cache broken') },
       refresh: async () => ({ identities: new Map(), changed: new Set() }),
       capture: async () => new Map(),
-      save: () => {},
+      save: async () => true,
       flush: async () => {},
-      dispose: () => {},
+      dispose: async () => {},
     }
     const failed = await boot({ persistence: PERSISTENCE, cache: failing, records: [recordOf('a')], values: { a: valuesOf(10) } })
     const reply = await call(failed, { part: 'summary' })
@@ -447,10 +599,9 @@ describe('overview memory: disk cache, idle release, incremental updates', () =>
   })
 
   test('the default disk cache path honors DSH_HOME and warms the next route instance', async () => {
-    const { mkdtemp, mkdir, rm, stat, writeFile } = await import('node:fs/promises')
-    const { tmpdir } = await import('node:os')
+    const { mkdtemp, mkdir, readdir, rm, stat, writeFile } = await import('node:fs/promises')
     const { join } = await import('node:path')
-    const root = await mkdtemp(join(tmpdir(), 'dsh-overview-memory-'))
+    const root = await mkdtemp(join('.tmp', 'dsh-overview-memory-'))
     const previous = process.env.DSH_HOME
     process.env.DSH_HOME = root
     try {
@@ -475,23 +626,31 @@ describe('overview memory: disk cache, idle release, incremental updates', () =>
       first.state.captureIdentities.set('a', identities.get('a') ?? null)
       first.state.captureIdentities.set('b', identities.get('b') ?? null)
       await call(first, { part: 'summary' })
-      first.dispose()
-      await sleep(20)
-      const cachePath = join(root, 'storages', 'dsh-context', 'overview-cache.v1.json')
-      const info = await stat(cachePath)
-      assert.ok(info.size > 0, 'the default cache path received the flushed records')
+      await first.dispose()
+      const cachePath = join(root, 'storages', 'dsh-context', 'overview-cache.v3')
+      const expectedShards = new Set(['a', 'b'].map(id => stableHashOf([id]) & 63)).size
+      let size = 0
+      for (let index = 0; index < 300 && size === 0; index++) {
+        try {
+          const shards = (await readdir(cachePath)).filter(name => name.endsWith('.json'))
+          size = shards.length < expectedShards ? 0 : (await Promise.all(shards.map(async shard => (await stat(join(cachePath, shard))).size)))
+            .reduce((total, bytes) => total + bytes, 0)
+        } catch {}
+        if (size === 0) await sleep(2)
+      }
+      assert.ok(size > 0, 'the default cache path received the flushed records')
       const second = await boot({ persistence: realPersistence, records, values, noCache: true })
       second.state.captureIdentities.set('a', identities.get('a') ?? null)
       second.state.captureIdentities.set('b', identities.get('b') ?? null)
       const warm = await call(second, { part: 'summary' })
       assert.equal(summaryOf(warm).sessions, 2)
       assert.deepEqual(second.calls.cached, [], 'the restarted route reuses the persisted cold rows')
-      second.dispose()
+      await second.dispose()
       const third = await boot({ persistence: PERSISTENCE, records, values, cachePath, noCache: true })
       third.state.captureIdentities.set('a', identityOf('a'))
       const explicit = await call(third, { part: 'summary' })
       assert.equal(summaryOf(explicit).sessions, 2)
-      third.dispose()
+      await third.dispose()
     } finally {
       if (previous === undefined) delete process.env.DSH_HOME
       else process.env.DSH_HOME = previous
@@ -508,6 +667,20 @@ describe('overview memory: disk cache, idle release, incremental updates', () =>
     harness.dispose()
   })
 
+  test('a rejected cache save preserves the complete response and requests another backfill', async () => {
+    const harness = await identityBoot()
+    seedIdentities(harness)
+    harness.cache.save = async (records) => {
+      harness.cache.saveCalls++
+      harness.state.savedRecords = [...records]
+      return false
+    }
+    const result = await call(harness, { part: 'summary' })
+    assert.equal(summaryOf(result).sessions, 2)
+    assert.equal(harness.state.requests, 1)
+    await harness.dispose()
+  })
+
   test('a dirty session whose projection read fails stays out of the saved cache', async () => {
     const harness = await identityBoot()
     seedIdentities(harness)
@@ -515,8 +688,9 @@ describe('overview memory: disk cache, idle release, incremental updates', () =>
     const first = await call(harness, { part: 'summary' })
     assert.equal(summaryOf(first).sessions, 2)
     assert.equal(harness.state.savedRecords.length, 0, 'nothing cacheable was built')
+    const revision = revisionOf(first)
     harness.cacheMode.throwCached = false
-    const recovered = await call(harness, { part: 'summary' })
+    const recovered = await call(harness, { part: 'summary', revision })
     assert.equal(summaryOf(recovered).sessions, 2)
     assert.equal(harness.state.savedRecords.length, 2)
     harness.dispose()

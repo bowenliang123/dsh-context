@@ -8,6 +8,8 @@ import { buildTimelineHead } from './foldWire'
 import { withCost, type CostSource } from './cost'
 import { failure, leaseOf, mountPostRoute, observeOf, readBody, reply } from './postRoute'
 import { asRecord } from './record'
+import type { OverviewCache } from './overviewCache'
+import type { HostSession } from './overviewCorpus'
 
 export const HEADS_ROUTE = '/api/dsh-context/heads'
 
@@ -56,6 +58,17 @@ export interface HeadsRouteOptions {
   bounds?: FoldBounds
   coldReads?: ColdReadGate
   cost?: CostSource
+  cache?: OverviewCache
+}
+
+function materializedHeadOf(
+  session: HostSession | undefined,
+  cost: CostSource | undefined,
+): { head: unknown; asOfSeq?: number } | null {
+  const materialization = session?.materialization
+  const head = asRecord(materialization?.values.contextTimeline)
+  if (materialization === undefined || head === null) return null
+  return { head: withCost(cost, head), asOfSeq: materialization.asOfSeq }
 }
 
 async function coldHeadOf(
@@ -126,6 +139,15 @@ export function watchHeadsChannel(ctx: Context, options: HeadsRouteOptions = {})
             return headers.get(id)
           }
           const values: Record<string, { head: unknown; asOfSeq?: number }> = {}
+          let materialized = new Map<string, HostSession>()
+          let materializedStale = new Set<string>()
+          if (options.cache !== undefined) {
+            try {
+              const loaded = await options.cache.load(new Set(ids))
+              materialized = loaded.sessions
+              materializedStale = loaded.rebuild
+            } catch {}
+          }
           for (const id of ids) {
             let picked: { head: unknown; asOfSeq?: number } | null = null
             let session: unknown
@@ -141,7 +163,8 @@ export function watchHeadsChannel(ctx: Context, options: HeadsRouteOptions = {})
                 picked = null
               }
             }
-            if (picked === null) {
+            if (picked === null) picked = materializedHeadOf(materialized.get(id), cost)
+            if (picked === null && !materializedStale.has(id)) {
               const header = await headerOf(id)
               if (header !== undefined) {
                 try {

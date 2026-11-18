@@ -561,6 +561,7 @@ export type OverviewRange = 'today' | '7d' | '30d' | { start: number; end: numbe
 export interface OverviewScope {
   range?: OverviewRange
   day?: string | null
+  calendar?: { from: string; to: string }
   coverage?: OverviewCoverage
   group?: string | null
   query?: string
@@ -593,6 +594,13 @@ export interface OverviewTimingWindow {
   wallMs: number
 }
 
+export interface OverviewResolvedWindow {
+  start: number
+  end: number | null
+  from: string | null
+  to: string | null
+}
+
 export interface OverviewSummary {
   sessions: number
   sessionsTotal: number
@@ -607,6 +615,7 @@ export interface OverviewSummary {
   tokenParts: OverviewPartTotal[] | null
   timing: TimingTotals | null
   windowTiming: OverviewTimingWindow
+  window?: OverviewResolvedWindow
   coverage: BackfillCoverage
 }
 

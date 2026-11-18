@@ -8,6 +8,9 @@ import { apply, inject, name } from '../../src/host/index'
 import { watchSnapshotRoute, SNAPSHOT_IDS_MAX, SNAPSHOT_ROUTE } from '../../src/host/snapshotRoute'
 import { type CatalogEntry, type CatalogService } from '../../src/host/catalog'
 import { VERSION_ROUTE, watchVersionChannel } from '../../src/host/versionRoute'
+import type { OverviewCache } from '../../src/host/overviewCache'
+import type { HostSession } from '../../src/host/overviewCorpus'
+import { materializedCache } from './helpers/materialized'
 
 describe('headsRoute', () => {
 
@@ -226,6 +229,7 @@ interface DirectOptions {
   observeSession?: (id: string, options: unknown) => Promise<unknown>
   coldReads?: { admit<T>(read: () => Promise<T>): Promise<T | undefined> }
   cost?: unknown
+  ownCache?: OverviewCache
 }
 
 async function bootDirect(options: DirectOptions = {}): Promise<{
@@ -270,6 +274,7 @@ async function bootDirect(options: DirectOptions = {}): Promise<{
   watchHeadsChannel(ctx, {
     ...(options.coldReads === undefined ? {} : { coldReads: options.coldReads }),
     ...(options.cost === undefined ? {} : { cost: options.cost as never }),
+    ...(options.ownCache === undefined ? {} : { cache: options.ownCache }),
   })
   for (let index = 0; index < 300 && !routes.has(HEADS_ROUTE); index++) await new Promise(resolve => setTimeout(resolve, 1))
   return { routes, calls }
@@ -290,6 +295,29 @@ function statOf(calls: { stat: string[] }, headers: Record<string, unknown>, ove
 const STAT_HEADER = { version: 4, createdAt: 1, cwd: '/tmp', isSeeded: false }
 
 describe('dsh-context heads route per-id resolution', () => {
+  test('a materialized head is served without another projection or cold-log read', async () => {
+    const session: HostSession = {
+      id: 'cold-a', title: 'Cached', updatedAt: 1, blank: false, signature: '',
+      timeline: null, activity: { days: {} },
+      materialization: {
+        asOfSeq: 9,
+        facts: { id: 'cold-a', createdAt: 1 },
+        signature: '',
+        values: {
+          contextTimeline: { ok: true, model: 'materialized' },
+          contextActivity: { days: {} },
+        },
+      },
+    }
+    const harness = await bootDirect({
+      ownCache: materializedCache(session),
+      cached: () => { throw new Error('projection cache should not be read') },
+    })
+    const read = await callRoute(harness.routes, { ids: ['cold-a'] })
+    assert.equal(read.value?.['cold-a']?.head.model, 'materialized')
+    assert.equal(read.value?.['cold-a']?.asOfSeq, 9)
+    assert.equal(harness.calls.cachedHeaders.length, 0)
+  })
   test('explicit ids resolve through sessionPersistence.stat without listing the corpus', async () => {
     const harness = await bootDirect({
       persistence: statOf({ stat: [] }, {
@@ -745,6 +773,7 @@ test('without the connection face the route never registers, and the watcher dis
     })
     let version = 0
     const backfill = Object.assign(() => {}, {
+      request: () => {},
       coverage: () => ({ complete: true, remaining: 0, failed: 0, running: false, total: 0, covered: 0, unsupported: 0 }),
       version: () => version,
       foldedSince: (marker: number) => ({ version: marker, ids: [], workerIds: [] }),

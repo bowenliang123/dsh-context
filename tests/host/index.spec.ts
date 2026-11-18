@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { describe, test } from 'vitest'
+import { afterEach, describe, test, vi } from 'vitest'
 import { Context } from '@deepseek-ai/cordis'
 import SessionStore, { type Session } from '@deepseek-ai/dsh-session'
 import SessionProjectionRegistry from '@deepseek-ai/dsh-session-projection'
@@ -70,6 +70,8 @@ async function boot() {
   return { ctx, fiber }
 }
 
+afterEach(() => { vi.unstubAllGlobals() })
+
 describe('dsh-context host plugin', () => {
   test('mounts the facts route with the shared detail shadow', async () => {
     const ctx = new Context()
@@ -113,7 +115,21 @@ describe('dsh-context host plugin', () => {
     ctx.provide('sessionQuery', {
       listSessions: async () => [...ctx.sessions.list()].map(session => ({ header: session.header, live: true, persisted: true })),
     })
-    ctx.provide('sessionProjectionCache', { cachedSnapshot: () => undefined })
+    ctx.provide('sessionProjectionCache', {
+      cachedSnapshot: () => undefined,
+      coldSnapshot: () => ({ asOfSeq: -1, values: {} }),
+      write: async () => {},
+    })
+    ctx.provide('sessionPersistence', {
+      stat: async () => undefined,
+      open: async (id: string) => ({
+        header: { id, version: 4, createdAt: 1, cwd: '/tmp', isSeeded: false },
+        inheritedEventCount: 0,
+        read: async () => ({ events: [] }),
+        close: async () => {},
+      }),
+    })
+    vi.stubGlobal('fetch', async () => { throw new Error('offline') })
     await ctx.plugin(SessionStore)
     await ctx.plugin(SessionProjectionRegistry)
     await ctx.plugin(plugin, noConfig)
@@ -138,6 +154,66 @@ describe('dsh-context host plugin', () => {
     const unchangedBody = await unchanged.json() as { ok: boolean; value: { unchanged?: boolean; summary?: unknown } }
     assert.equal(unchangedBody.ok, true)
     assert.equal(unchangedBody.value.unchanged, true, 'a repeated summary at the same revision skips the rows')
+    ctx.emit('session/disposed', session)
+  })
+
+  test('coalesced overview warm notifications fire and are cancelled on disposal', async () => {
+    const ctx = new Context()
+    const routes = new Map<string, { fetch: (request: Request) => Promise<Response> }>()
+    ctx.provide('connection', {
+      fetch: {
+        register(route: { path: string; fetch: (request: Request) => Promise<Response> }) {
+          routes.set(route.path, route)
+          return () => { routes.delete(route.path) }
+        },
+      },
+    })
+    ctx.provide('sessionQuery', {
+      listSessions: async () => [{ header: { id: 'cold', version: 4, createdAt: 1, cwd: '/tmp', isSeeded: false } }],
+    })
+    ctx.provide('sessionProjectionCache', {
+      cachedSnapshot: () => undefined,
+      coldSnapshot: () => ({ asOfSeq: -1, values: {} }),
+      write: async () => {},
+    })
+    ctx.provide('sessionPersistence', {
+      stat: async () => undefined,
+      open: async (id: string) => ({
+        header: { id, version: 4, createdAt: 1, cwd: '/tmp', isSeeded: false },
+        inheritedEventCount: 0,
+        read: async () => ({ events: [] }),
+        close: async () => {},
+      }),
+    })
+    await ctx.plugin(SessionStore)
+    await ctx.plugin(SessionProjectionRegistry)
+    await ctx.plugin(plugin, noConfig)
+    const backfill = await until(() => routes.get('/api/dsh-context/backfill'), 'backfill route mounted')
+    await backfill.fetch!(new Request('http://dsh.test/api/dsh-context/backfill', { method: 'POST', body: '{}' }))
+    await backfill.fetch!(new Request('http://dsh.test/api/dsh-context/backfill', { method: 'POST', body: '{}' }))
+    await new Promise(resolve => setTimeout(resolve, 150))
+    await ctx.fiber.dispose()
+    const pending = new Context()
+    pending.provide('connection', { fetch: { register: () => () => {} } })
+    pending.provide('sessionQuery', { listSessions: async () => [] })
+    pending.provide('sessionProjectionCache', {
+      cachedSnapshot: () => undefined,
+      coldSnapshot: () => ({ asOfSeq: -1, values: {} }),
+      write: async () => {},
+    })
+    pending.provide('sessionPersistence', {
+      stat: async () => undefined,
+      open: async (id: string) => ({
+        header: { id, version: 4, createdAt: 1, cwd: '/tmp', isSeeded: false },
+        inheritedEventCount: 0,
+        read: async () => ({ events: [] }),
+        close: async () => {},
+      }),
+    })
+    await pending.plugin(SessionStore)
+    await pending.plugin(SessionProjectionRegistry)
+    await pending.plugin(plugin, noConfig)
+    await pending.fiber.dispose()
   })
 
   test('module shape is the sessionProjections inject gate, and all three units serve folded views over real appends', async () => {

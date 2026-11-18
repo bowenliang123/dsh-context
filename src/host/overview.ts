@@ -1,5 +1,5 @@
 import type { Context } from '@deepseek-ai/cordis'
-import { dayKeyOf } from '../shared/days'
+import { DAY_KEY_RE, dayKeyOf } from '../shared/days'
 import type {
   BackfillCoverage,
   OverviewCoverage,
@@ -102,8 +102,14 @@ function scopeOf(value: unknown): ParsedScope {
   const day = typeof data.day === 'string' && data.day !== '' ? data.day : undefined
   const group = typeof data.group === 'string' && data.group !== '' ? data.group : undefined
   const query = typeof data.query === 'string' && data.query !== '' ? data.query.slice(0, MAX_QUERY_CHARS) : undefined
+  const rawCalendar = asRecord(data.calendar)
+  const calendar = rawCalendar !== null && typeof rawCalendar.from === 'string' && DAY_KEY_RE.test(rawCalendar.from)
+    && typeof rawCalendar.to === 'string' && DAY_KEY_RE.test(rawCalendar.to)
+    ? { from: rawCalendar.from, to: rawCalendar.to }
+    : undefined
   return {
     range,
+    ...(calendar === undefined ? {} : { calendar }),
     ...(coverage === undefined ? {} : { coverage }),
     ...(day === undefined ? {} : { day }),
     ...(group === undefined ? {} : { group }),
@@ -156,7 +162,7 @@ function filtersOf(parsed: ParsedRequest, now: number): Filters {
   const scope = parsed.scope
   const day = scope.day ?? null
   return {
-    window: windowOf(scope.range, day, now),
+    window: windowOf(scope.range, day, now, scope.calendar),
     day,
     coverage: scope.coverage ?? 'all',
     group: scope.group ?? null,
@@ -214,12 +220,17 @@ export interface OverviewRouteOptions {
   cachePath?: string
 }
 
+export interface OverviewHandle {
+  (): Promise<void>
+  warm(): Promise<void>
+}
+
 export function watchOverviewRoute(
   ctx: Context,
   cost: CostSource,
   backfill: BackfillHandle,
   options: OverviewRouteOptions = {},
-): () => void {
+): OverviewHandle {
   const scanTtlMs = options.scanTtlMs ?? SCAN_TTL_MS
   const servedKeysMax = options.servedKeysMax ?? SERVED_KEYS_MAX
   const idleMs = options.idleMs ?? IDLE_MS
@@ -227,6 +238,8 @@ export function watchOverviewRoute(
   const capturePollMs = options.capturePollMs ?? CAPTURE_BACKFILL_POLL_MS
   const feed: FeedState = { revision: '', sessions: new Map(), rows: null, served: new Map(), rowsRevision: '' }
   const scanWindow = makeScanWindow(scanTtlMs)
+  ctx.on('session/created', () => { scanWindow.reset() })
+  ctx.on('session/disposed', () => { scanWindow.reset() })
   let materializeTail: Promise<void> = Promise.resolve()
   let identities = new Map<string, DurableIdentity | null>()
   let identitiesReady = false
@@ -236,7 +249,9 @@ export function watchOverviewRoute(
   let foldMarker = 0
   let idleTimer: ReturnType<typeof setTimeout> | null = null
   let disposed = false
+  let disposePromise: Promise<void> | null = null
   let cache: OverviewCache | null = options.cache ?? null
+  let warmHandler: (() => Promise<void>) | null = null
   const cacheOf = (): OverviewCache => {
     cache ??= createOverviewCache(options.cachePath === undefined ? {} : { path: options.cachePath })
     return cache
@@ -245,7 +260,6 @@ export function watchOverviewRoute(
     if (cache !== null) void cache.flush()
     feed.sessions = new Map()
     feed.rows = null
-    feed.rowsRevision = ''
     warm = null
     sessionsReady = false
     scanWindow.reset()
@@ -260,17 +274,18 @@ export function watchOverviewRoute(
     }, idleMs)
     ;(idleTimer as { unref?: () => void }).unref?.()
   }
-  const dispose = (): void => {
-    if (disposed) return
+  const dispose = (): Promise<void> => {
+    if (disposePromise !== null) return disposePromise
     disposed = true
+    warmHandler = null
     if (idleTimer !== null) {
       clearTimeout(idleTimer)
       idleTimer = null
     }
-    if (cache !== null) {
-      void cache.flush()
-      cache.dispose()
-    }
+    disposePromise = (async () => {
+      if (cache !== null) await cache.dispose()
+    })()
+    return disposePromise
   }
   const withMaterializeLock = <T>(task: () => Promise<T>): Promise<T> => {
     const run = materializeTail.then(task, task)
@@ -361,15 +376,19 @@ export function watchOverviewRoute(
         return loaded.sessions
       }
 
-      const saveCache = (coldIds: ReadonlySet<string>): void => {
+      const saveCache = async (
+        coldIds: ReadonlySet<string>,
+        prune = true,
+        changedIds: ReadonlySet<string> = coldIds,
+      ): Promise<boolean> => {
         const records: CachedSession[] = []
-        for (const id of coldIds) {
+        for (const id of changedIds) {
           const session = feed.sessions.get(id)
           if (session === undefined) continue
           records.push({ session, identity: identities.get(id) ?? null })
         }
-        if (records.length === 0) return
-        cacheOf().save(records)
+        if (records.length === 0 && !prune) return true
+        return await cacheOf().save(records, prune ? coldIds : undefined)
       }
 
       let captureInflight = false
@@ -386,7 +405,7 @@ export function watchOverviewRoute(
             try {
               const captured = await cacheOf().capture(ids, { stat: persistentStat })
               for (const id of ids) identities.set(id, captured.get(id) ?? null)
-              saveCache(coldIds)
+              if (!await saveCache(coldIds, false)) backfill.request()
             } catch {
             } finally {
               captureInflight = false
@@ -426,6 +445,7 @@ export function watchOverviewRoute(
           foldMarker = folded.version
           if (folded.ids === null) {
             for (const id of coldIds) dirty.add(id)
+            workerFolded.push(...coldIds)
           } else {
             for (const id of folded.ids) {
               if (coldIds.has(id)) dirty.add(id)
@@ -443,11 +463,11 @@ export function watchOverviewRoute(
         const pricingKey = cost.ready() ? `ready${cost.version?.() ?? 0}` : 'cold'
         const revision = revisionOf([corpusRevision, workspace.signature, coverageKey, pricingKey, `f${foldEpoch}`])
         if (feed.revision !== revision) feed.served.clear()
-        const now = Date.now()
+        const now = Math.floor(Date.now() / 60_000) * 60_000
         const filters = filtersOf(parsed, now)
         const timeKey = dayKeyOf(filters.window.start) ?? ''
         const requestKey = requestKeyOf(parsed, timeKey)
-        if (dirty.size === 0 && parsed.revision !== undefined
+        if (dirty.size === 0 && feed.rowsRevision === revision && parsed.revision !== undefined
           && parsed.revision === revision && servedOf(feed, requestKey)) {
           return { revision, unchanged: true }
         }
@@ -455,6 +475,7 @@ export function watchOverviewRoute(
         if (feed.rows !== null && feed.rowsRevision === revision && sessionsReady && dirty.size === 0) {
           rows = feed.rows
         } else {
+          const coldFeedLoad = !sessionsReady
           if (!sessionsReady) {
             const cachedSessions = await loadColdSessions(coldIds)
             for (const [id, session] of cachedSessions) feed.sessions.set(id, session)
@@ -467,6 +488,7 @@ export function watchOverviewRoute(
             for (const [id, session] of reloaded) feed.sessions.set(id, session)
           }
           for (const entry of entries) {
+            if (entry.live) continue
             const session = feed.sessions.get(entry.id)
             if (session !== undefined) session.signature = entry.signature
           }
@@ -476,13 +498,20 @@ export function watchOverviewRoute(
               ...(options.yieldEvery === undefined ? {} : { yieldEvery: options.yieldEvery }),
               ...(options.yieldTo === undefined ? {} : { yieldTo: options.yieldTo }),
             }
+          const previousSessions = feed.sessions
           const built = await buildRows(feed.sessions, { entries }, workspace, cacheFace, projections, c, buildOptions)
           feed.sessions = built.reusableSessions
           rows = built.rows
           feed.rows = rows
           feed.revision = revision
           feed.rowsRevision = built.incomplete > 0 ? '' : revision
-          if (identityMode && (dirty.size > 0 || built.rebuilt > 0)) saveCache(coldIds)
+          if (identityMode) {
+            const fullSave = coldFeedLoad || [...previousSessions.keys()].some(id => !built.reusableSessions.has(id))
+            if ((fullSave || dirty.size > 0 || built.rebuilt > 0)
+              && !await saveCache(coldIds, fullSave, fullSave ? coldIds : new Set([...dirty, ...built.rebuiltIds]))) {
+              backfill.request()
+            }
+          }
         }
         const value = valueOf(parsed, revision, cost, {
           allRows: rows,
@@ -494,6 +523,29 @@ export function watchOverviewRoute(
         })
         rememberServed(feed, requestKey, servedKeysMax)
         return value
+      }
+
+      const warmingRequest: ParsedRequest = {
+        part: 'summary', scope: { range: '30d' }, sort: 'recent', page: 0, tally: 'skills', pick: null,
+      }
+      let warmTail: Promise<void> | null = null
+      let warmAgain = false
+      const warmingAgain = (): boolean => warmAgain && !disposed
+      warmHandler = () => {
+        if (warmTail !== null) {
+          warmAgain = true
+          return warmTail
+        }
+        warmTail = (async () => {
+          do {
+            warmAgain = false
+            resetIdle()
+            const scanned = await awaitScan()
+            if (disposed) return
+            await withMaterializeLock(() => materialize(warmingRequest, scanned))
+          } while (warmingAgain())
+        })().catch(() => {}).finally(() => { warmTail = null })
+        return warmTail
       }
 
       return async (request: Request): Promise<Response> => {
@@ -512,7 +564,9 @@ export function watchOverviewRoute(
       }
     },
   })
-  return dispose
+  return Object.assign(dispose, {
+    warm: (): Promise<void> => warmHandler?.() ?? Promise.resolve(),
+  })
 }
 
 function requestKeyOf(parsed: ParsedRequest, timeKey: string): string {

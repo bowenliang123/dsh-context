@@ -34,6 +34,8 @@ import { startFoldWorkerChannel } from './foldWorker'
 
 export const name = 'dsh-context'
 
+const OVERVIEW_WARM_DELAY_MS = 100
+
 export const inject = ['sessionProjections']
 
 export { Config } from './config'
@@ -65,15 +67,34 @@ export function apply(ctx: Context, config: Config): void {
   watchDeltaChannel(ctx, bounds, coldReads, deltaGate, shadow, attribution.ownerOf.bind(attribution))
   watchFactsChannel(ctx, bounds, { gates: gate, coldReads, detailState: id => shadow.stateOf(id), cost: pricing })
   watchCommandPageChannel(ctx, resolveBounds(config), coldReads)
-  watchHeadsChannel(ctx, { bounds, coldReads, cost: pricing })
+  const cache = createOverviewCache({ config })
+  watchHeadsChannel(ctx, { bounds, coldReads, cost: pricing, cache })
   gate.retain('contextTimeline', ctx.sessionProjections.register(createContextTimelineDefinition(config, () => gate.live, pricing)))
   ctx.sessionProjections.register(createContextHeadersDefinition(name => attribution.ownerOf(name)))
   ctx.sessionProjections.register(createContextActivityDefinition())
   watchTimelineRowSweep(ctx)
-  const cache = createOverviewCache()
-  const backfill = watchActivityBackfill(ctx, coldReads, undefined, { ownCache: cache, config })
-  watchSnapshotRoute(ctx, backfill)
-  watchOverviewRoute(ctx, pricing, backfill, { cache })
+  let overview: ReturnType<typeof watchOverviewRoute> | null = null
+  let warmTimer: ReturnType<typeof setTimeout> | null = null
+  ctx.effect(() => () => {
+    if (warmTimer !== null) clearTimeout(warmTimer)
+    warmTimer = null
+  }, 'dsh-context: overview warm schedule')
+  const backfill = watchActivityBackfill(ctx, coldReads, undefined, {
+    ownCache: cache,
+    config,
+    autoStart: true,
+    onStart: () => { catalog.ensure() },
+    onChange: () => {
+      if (warmTimer !== null) return
+      warmTimer = setTimeout(() => {
+        warmTimer = null
+        void overview?.warm()
+      }, OVERVIEW_WARM_DELAY_MS)
+      ;(warmTimer as { unref?: () => void }).unref?.()
+    },
+  })
+  watchSnapshotRoute(ctx, backfill, cache, pricing)
+  overview = watchOverviewRoute(ctx, pricing, backfill, { cache })
   watchPromptInjection(ctx, config)
 }
 

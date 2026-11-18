@@ -32,19 +32,32 @@ interface SavedRecord {
   identity: DurableIdentity | null
 }
 
-function ownCacheStub(sessions: Map<string, HostSession> = new Map(), captureMissing: string[] = []): OverviewCache & { saved: SavedRecord[] } {
+function ownCacheStub(
+  sessions: Map<string, HostSession> = new Map(),
+  captureMissing: string[] = [],
+  rebuild: Set<string> = new Set(),
+  saveResults: boolean[] = [],
+): OverviewCache & { saved: SavedRecord[]; saveAttempts: () => number } {
   const saved: SavedRecord[] = []
+  let saveAttempts = 0
   return {
-    load: async () => ({ sessions, identities: new Map(), rebuild: new Set() }),
+    load: async () => ({ sessions, identities: new Map(), rebuild }),
+    probe: async () => ({ warm: new Set(sessions.keys()), identities: new Map(), rebuild }),
     refresh: async () => ({ identities: new Map(), changed: new Set() }),
     capture: async (ids: readonly string[]) => new Map(ids
       .filter(id => !captureMissing.includes(id))
       .map(id => [id, { path: `/repo/${id}.jsonl`, sizeBytes: 10, mtimeMs: 3 }])),
-    save: (records: readonly SavedRecord[]) => { saved.push(...records) },
+    save: async (records: readonly SavedRecord[]) => {
+      saveAttempts++
+      const accepted = saveResults.shift() ?? true
+      if (accepted) saved.push(...records)
+      return accepted
+    },
     flush: async () => {},
     dispose: () => {},
     saved,
-  } as unknown as OverviewCache & { saved: SavedRecord[] }
+    saveAttempts: () => saveAttempts,
+  } as unknown as OverviewCache & { saved: SavedRecord[]; saveAttempts: () => number }
 }
 
 function activityReference(events: readonly SessionEvent[]): unknown {
@@ -85,6 +98,8 @@ function armSliced(ctx: Context, eventsById: Map<string, SessionEvent[]>, opts: 
   noPrepare?: boolean
   hostileRestoreAt?: number
   stat?: boolean
+  coldValues?: Record<string, unknown>
+  readHeader?: unknown
 } = {}): SliceRig {
   const route: RouteBox = {}
   const state = fakeState([...eventsById.keys()].map(id => ({ header: { id, cwd: `/repo/${id}` } })))
@@ -111,7 +126,7 @@ function armSliced(ctx: Context, eventsById: Map<string, SessionEvent[]>, opts: 
     cachedSnapshot: () => undefined,
     coldSnapshot: (header: { id: string }) => {
       state.coldSnapshots.push(header.id)
-      return { asOfSeq: 0, values: {} }
+      return { asOfSeq: 0, values: opts.coldValues ?? {} }
     },
     write: async (session: { id: string }) => {
       if (opts.failWrite === true) throw new Error('disk full')
@@ -123,7 +138,7 @@ function armSliced(ctx: Context, eventsById: Map<string, SessionEvent[]>, opts: 
     open: async (id: string) => {
       state.coldReads.push(id)
       return {
-        header: { id, version: 1, createdAt: 1, cwd: `/repo/${id}`, isSeeded: false },
+        header: opts.readHeader ?? { id, version: 1, createdAt: 1, cwd: `/repo/${id}`, isSeeded: false },
         inheritedEventCount: 0,
         read: async () => ({ events: eventsById.get(id) ?? [] }),
         close: async () => {},
@@ -412,9 +427,107 @@ describe('the sliced cold fold (issue #145)', () => {
     assert.equal(nextSliceSize(4_000, 10, 150), 2_000)
   })
 
+  test('worker metadata mirrors dsh turn, source, ordering, and logged-title semantics', async () => {
+    const pool = inProcessPool()
+    const nonUser = {
+      type: 'user/message', seq: 0, time: 100,
+      data: { content: [], source: { kind: 'skill-invocation' } },
+    } as unknown as SessionEvent
+    const blank = await pool.fold({}, [nonUser])
+    assert.equal(blank.blank, true)
+    assert.equal(blank.lastPromptAt, 0)
+    const events = [
+      { type: 'session/title', seq: 0, time: 100, data: { title: '' } },
+      { type: 'turn/start', seq: 1, time: 110, data: {} },
+      userMessage(2, [{ type: 'text', text: 'newer' }], { kind: 'user' }, { time: 200 }),
+      { type: 'session/title', seq: 3, time: 210, data: { title: 'First' } },
+      userMessage(4, [{ type: 'text', text: 'older' }], { kind: 'user' }, { time: 150 }),
+      { type: 'session/title', seq: 5, time: 220, data: { title: 'Latest' } },
+    ] as unknown as SessionEvent[]
+    const folded = await pool.fold({}, events)
+    assert.equal(folded.blank, false)
+    assert.equal(folded.lastPromptAt, 150)
+    assert.equal((folded as typeof folded & { title?: string }).title, 'Latest')
+    pool.dispose()
+  })
+
+  test('a sliced cold fold also lands its materialized snapshot in the plugin cache', async () => {
+    const ctx = new Context()
+    const events = fakeEvents(2_001)
+    const rig = armSliced(ctx, new Map([['sliced', events]]), { stat: true })
+    const ownCache = ownCacheStub()
+    const handle = watchActivityBackfill(ctx, undefined, undefined, { ownCache, config: {} })
+    await trigger(rig.route)
+    await until(() => (rig.writes.has('sliced') ? true : undefined), 'the sliced projection write completed')
+    await new Promise(resolve => setTimeout(resolve, 20))
+    handle()
+    assert.equal(ownCache.saved.length, 1)
+    const session = ownCache.saved[0].session
+    assert.equal(session.id, 'sliced')
+    assert.deepStrictEqual(session.activity, activityOf(activityReference(events)))
+    const materialization = (session as unknown as {
+      materialization?: { asOfSeq: number; values: Record<string, unknown> }
+    }).materialization
+    assert.ok(materialization !== undefined)
+    assert.ok(Number.isSafeInteger(materialization.asOfSeq))
+    assert.ok(materialization.values.contextTimeline !== undefined)
+  })
+
+  test('invalid read headers and empty snapshots complete without a materialized cache write', async () => {
+    for (const options of [{ readHeader: { id: '' } }, {}]) {
+      const ctx = new Context()
+      const rig = armSliced(ctx, new Map([['small', []]]), { stat: true, ...options })
+      const ownCache = ownCacheStub()
+      const handle = watchActivityBackfill(ctx, undefined, undefined, { ownCache, config: {} })
+      await trigger(rig.route)
+      await until(() => (rig.coldSnapshots.length === 1 ? true : undefined), 'the cold read completed')
+      await new Promise(resolve => setTimeout(resolve, 10))
+      handle()
+      assert.deepEqual(ownCache.saved, [])
+    }
+  })
+
+  test('a single-shot cold fold lands the same materialized session in the plugin cache', async () => {
+    const ctx = new Context()
+    const rig = armSliced(ctx, new Map([['small', []]]), {
+      stat: true,
+      coldValues: {
+        contextTimeline: {
+          ok: true,
+          current: { system: 1, tools: 0, user: 0, inject: 0, skill: 0, assistant: 0, tool: 0, total: 1 },
+          counts: { turns: 1, steps: 1, injects: 0, compactions: 0, prunes: 0 },
+        },
+        contextActivity: { days: {} },
+        title: 'Named session',
+        sessionListMetadata: { blank: false, lastPromptAt: 50 },
+      },
+    })
+    const ownCache = ownCacheStub()
+    const handle = watchActivityBackfill(ctx, undefined, undefined, { ownCache, config: {} })
+    await trigger(rig.route)
+    await until(() => (rig.coldSnapshots.length === 1 ? true : undefined), 'the single-shot fold completed')
+    await new Promise(resolve => setTimeout(resolve, 20))
+    handle()
+    assert.equal(ownCache.saved.length, 1)
+    const record = ownCache.saved[0]
+    assert.equal(record.session.title, 'Named session')
+    assert.equal(record.session.updatedAt, 50)
+    const materialization = (record.session as unknown as {
+      materialization?: { asOfSeq: number; values: Record<string, unknown> }
+    }).materialization
+    assert.equal(materialization?.asOfSeq, 0)
+    assert.equal(materialization?.values.title, 'Named session')
+    assert.deepEqual([...rig.writes.keys()], [])
+  })
+
   test('a session over the worker threshold folds off-thread and lands only in the plugin cache', async () => {
     const ctx = new Context()
-    const events = [...fakeEvents(30_001), userMessage(30_001, [{ type: 'text', text: 'prompt' }], { kind: 'user' }, { time: 500 }) as unknown as SessionEvent]
+    const events = [
+      ...fakeEvents(30_001),
+      { type: 'turn/start', seq: 30_001, time: 499, data: {} } as unknown as SessionEvent,
+      userMessage(30_002, [{ type: 'text', text: 'prompt' }], { kind: 'user' }, { time: 500 }) as unknown as SessionEvent,
+      { type: 'session/title', seq: 30_003, time: 501, data: { title: 'Worker title' } } as unknown as SessionEvent,
+    ]
     const rig = armSliced(ctx, new Map([['monster', events]]), { stat: true })
     const ownCache = ownCacheStub()
     const pool = inProcessPool()
@@ -426,11 +539,17 @@ describe('the sliced cold fold (issue #145)', () => {
     assert.deepEqual(rig.restoreCalls, [], 'the host thread never folds')
     const record = ownCache.saved[0]
     assert.equal(record.session.id, 'monster')
-    assert.equal(record.session.blank, false, 'the prompt marks the session non-blank')
+    assert.equal(record.session.title, 'Worker title')
+    assert.equal(record.session.blank, false, 'the turn start marks the session non-blank')
     assert.equal(record.session.updatedAt, 500)
     assert.equal(record.identity?.path, '/repo/monster.jsonl')
     assert.deepStrictEqual(record.session.activity, activityOf(activityReference(events)))
     assert.ok(record.session.timeline !== null)
+    const timeline = record.session.materialization?.values.contextTimeline as Record<string, unknown>
+    assert.equal(typeof timeline.detailRev, 'number')
+    assert.deepEqual(timeline.nodes, [], 'the worker persists only empty slim-head collections')
+    assert.deepEqual(timeline.requests, [])
+    assert.equal(timeline.fileOps, undefined)
     pool.dispose()
   })
 
@@ -448,6 +567,67 @@ describe('the sliced cold fold (issue #145)', () => {
     assert.ok(ownCache.saved[0].session.signature.startsWith('C'))
     assert.equal(ownCache.saved[0].session.blank, true, 'a promptless session lands blank')
     pool.dispose()
+  })
+
+  test('a worker result is discarded when the durable identity changes across its read and fold', async () => {
+    const ctx = new Context()
+    const events = fakeEvents(30_001)
+    const rig = armSliced(ctx, new Map([['monster', events]]), { stat: true })
+    const ownCache = ownCacheStub()
+    const pool = inProcessPool()
+    let captures = 0
+    ownCache.capture = async (ids: readonly string[]) => {
+      captures++
+      const mtimeMs = captures === 1 ? 1 : 2
+      return new Map(ids.map(id => [id, { path: `/repo/${id}.jsonl`, sizeBytes: 10, mtimeMs }]))
+    }
+    const handle = watchActivityBackfill(ctx, undefined, undefined, { ownCache, config: {}, pool })
+    await trigger(rig.route)
+    await until(() => (captures >= 2 || ownCache.saved.length > 0 ? true : undefined), 'the worker reached its commit check')
+    await new Promise(resolve => setTimeout(resolve, 20))
+    handle()
+    assert.equal(captures, 2, 'identity is captured before the read and again before the commit')
+    assert.deepEqual(ownCache.saved, [], 'the older event cut never lands under a newer identity')
+    pool.dispose()
+  })
+
+  test('a small result never reaches coldSnapshot when the source moves after the read', async () => {
+    const ctx = new Context()
+    const rig = armSliced(ctx, new Map([['small', []]]), { stat: true })
+    const ownCache = ownCacheStub()
+    let captures = 0
+    ownCache.capture = async (ids: readonly string[]) => {
+      captures++
+      const mtimeMs = captures === 1 ? 1 : 2
+      return new Map(ids.map(id => [id, { path: `/repo/${id}.jsonl`, sizeBytes: 10, mtimeMs }]))
+    }
+    const handle = watchActivityBackfill(ctx, undefined, undefined, { ownCache, config: {} })
+    await trigger(rig.route)
+    await until(() => (captures >= 2 ? true : undefined), 'the small fold reached its preflight check')
+    await new Promise(resolve => setTimeout(resolve, 20))
+    handle()
+    assert.deepEqual(rig.coldSnapshots, [])
+    assert.deepEqual(ownCache.saved, [])
+  })
+
+  test('a sliced result changes neither cache when the source moves before commit', async () => {
+    const ctx = new Context()
+    const events = fakeEvents(2_001)
+    const rig = armSliced(ctx, new Map([['sliced', events]]), { stat: true })
+    const ownCache = ownCacheStub()
+    let captures = 0
+    ownCache.capture = async (ids: readonly string[]) => {
+      captures++
+      const mtimeMs = captures === 1 ? 1 : 2
+      return new Map(ids.map(id => [id, { path: `/repo/${id}.jsonl`, sizeBytes: 10, mtimeMs }]))
+    }
+    const handle = watchActivityBackfill(ctx, undefined, undefined, { ownCache, config: {} })
+    await trigger(rig.route)
+    await until(() => (captures >= 2 ? true : undefined), 'the sliced fold reached its commit check')
+    await new Promise(resolve => setTimeout(resolve, 20))
+    handle()
+    assert.equal(rig.writes.has('sliced'), false, 'the stale dsh checkpoint was not written')
+    assert.deepEqual(ownCache.saved, [])
   })
 
   test('oversize sessions without the worker seam fold on the host thread', async () => {
@@ -503,9 +683,52 @@ describe('the sliced cold fold (issue #145)', () => {
     await trigger(rig.route)
     await until(() => (rig.writes.has('monster') ? true : undefined), 'the sliced fallback landed')
     dispose()
-    assert.deepEqual(ownCache.saved, [], 'the failed worker left no plugin-cache row')
+    assert.equal(ownCache.saved.length, 1, 'the host fallback lands the same canonical cache record')
+    assert.deepStrictEqual(ownCache.saved[0].session.activity, activityOf(activityReference(events)))
     const warns = lines.filter(l => l.level === 'warn' && l.text.includes('worker fold for "monster" failed'))
     assert.equal(warns.length, 1)
+  })
+
+  test('a persistently rejected cache record pauses coverage without reporting completion', async () => {
+    const ctx = new Context()
+    const rig = armSliced(ctx, new Map([['small', []]]), {
+      stat: true,
+      coldValues: {
+        contextTimeline: {
+          ok: true,
+          current: { system: 1, tools: 0, user: 0, inject: 0, skill: 0, assistant: 0, tool: 0, total: 1 },
+          counts: { turns: 1, steps: 1, injects: 0, compactions: 0, prunes: 0 },
+        },
+        contextActivity: { days: {} },
+      },
+    })
+    const lines = captureLogs(ctx)
+    const ownCache = ownCacheStub(new Map(), [], new Set(), [false])
+    const handle = watchActivityBackfill(ctx, undefined, undefined, { ownCache, config: {} })
+    await trigger(rig.route)
+    await until(() => (!handle.coverage().running && handle.coverage().total === 1 ? true : undefined), 'the rejected pass settled')
+    handle()
+    assert.equal(handle.coverage().complete, false)
+    assert.equal(handle.coverage().remaining, 1)
+    assert.equal(ownCache.saveAttempts(), 1)
+    assert.equal(ownCache.saved.length, 0)
+    assert.ok(lines.some(line => line.level === 'info' && line.text.includes('overview cache could not accept a record')))
+  })
+
+  test('a rejected worker cache write falls back without reporting the worker result as accepted', async () => {
+    const ctx = new Context()
+    const events = fakeEvents(30_001)
+    const rig = armSliced(ctx, new Map([['monster', events]]), { stat: true })
+    const ownCache = ownCacheStub(new Map(), [], new Set(), [false, true])
+    const pool = inProcessPool()
+    const dispose = watchActivityBackfill(ctx, undefined, undefined, { ownCache, config: {}, pool })
+    await trigger(rig.route)
+    await until(() => (ownCache.saved.length === 1 ? true : undefined), 'the host fallback row landed')
+    dispose()
+    assert.equal(ownCache.saveAttempts(), 2)
+    assert.ok(rig.restoreCalls.length > 1, 'the rejected worker result fell back to the sliced host fold')
+    assert.equal(rig.writes.has('monster'), true)
+    pool.dispose()
   })
 
   test('a session already warm in the plugin cache skips the read entirely', async () => {
@@ -524,6 +747,64 @@ describe('the sliced cold fold (issue #145)', () => {
     dispose()
     assert.deepEqual(state.coldReads, ['cold'])
     assert.deepEqual(state.coldSnapshots, ['cold'])
+  })
+
+  test('a verified pass does not hide a cold identity change behind the same list headers', async () => {
+    const ctx = new Context()
+    const state = fakeState([{ header: { id: 'a', cwd: '/repo/a' } }])
+    const route = arm(ctx, state)
+    let loads = 0
+    const ownCache = ownCacheStub()
+    ownCache.probe = async () => {
+      loads++
+      return loads === 1
+        ? {
+          warm: new Set(['a']),
+          identities: new Map([['a', { path: '/repo/a.jsonl', sizeBytes: 10, mtimeMs: 1 }]]),
+          rebuild: new Set(),
+        }
+        : {
+          warm: new Set(),
+          identities: new Map([['a', { path: '/repo/a.jsonl', sizeBytes: 10, mtimeMs: 3 }]]),
+          rebuild: new Set(['a']),
+        }
+    }
+    const handle = watchActivityBackfill(ctx, undefined, undefined, { ownCache, config: {} })
+    await trigger(route)
+    await until(() => (handle.coverage().complete ? true : undefined), 'the warm pass finished')
+    await trigger(route)
+    await until(() => (state.coldReads.length === 1 ? true : undefined), 'the changed cold source was read')
+    handle()
+    assert.equal(loads, 2, 'a verified pass still validates durable identities')
+    assert.deepEqual(state.coldSnapshots, ['a'])
+  })
+
+  test('a presence-only projection hit does not certify freshness when the own cache is enabled', async () => {
+    const ctx = new Context()
+    const state = fakeState([{ header: { id: 'cold', cwd: '/repo/cold' } }])
+    state.served.add('cold')
+    const route = arm(ctx, state)
+    const ownCache = ownCacheStub()
+    const handle = watchActivityBackfill(ctx, undefined, undefined, { ownCache })
+    await trigger(route)
+    await until(() => (handle.coverage().complete ? true : undefined), 'the verification pass finished')
+    handle()
+    assert.deepEqual(state.coldReads, ['cold'])
+    assert.deepEqual(state.coldSnapshots, ['cold'])
+  })
+
+  test('an own-cache rebuild marker wins over a presence-only projection hit', async () => {
+    const ctx = new Context()
+    const state = fakeState([{ header: { id: 'stale', cwd: '/repo/stale' } }])
+    state.served.add('stale')
+    const route = arm(ctx, state)
+    const ownCache = ownCacheStub(new Map(), [], new Set(['stale']))
+    const handle = watchActivityBackfill(ctx, undefined, undefined, { ownCache })
+    await trigger(route)
+    await until(() => (handle.coverage().complete ? true : undefined), 'the rebuild pass finished')
+    handle()
+    assert.deepEqual(state.coldReads, ['stale'])
+    assert.deepEqual(state.coldSnapshots, ['stale'])
   })
 })
 })

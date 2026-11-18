@@ -51,6 +51,7 @@ export interface Harness {
   ctx: Context
   routes: Map<string, RouteBox>
   dispose: () => void
+  warm: () => Promise<void>
   cache: FakeOverviewCache
   calls: { list: number; snapshot: string[]; cached: string[] }
   cacheMode: {
@@ -66,6 +67,7 @@ export interface Harness {
     agents: unknown
     coverage: BackfillCoverage
     backfillVersion: number
+    requests: number
     costReady: boolean
     foldedAvailable: boolean
     foldedVersion: number
@@ -161,6 +163,7 @@ export function fakeCost(ready: boolean): CostSource {
 export function fakeBackfill(state: Harness['state']): BackfillHandle {
   const handle = (() => {}) as BackfillHandle
   const base = {
+    request: () => { state.requests++ },
     coverage: (): BackfillCoverage => ({ ...state.coverage }),
     version: (): number => state.backfillVersion,
   }
@@ -186,6 +189,7 @@ export function fakeState(overrides: Partial<Harness['state']> = {}): Harness['s
     agents: undefined,
     coverage: { ...OPEN_COVERAGE },
     backfillVersion: 0,
+    requests: 0,
     costReady: true,
     foldedAvailable: true,
     foldedVersion: 0,
@@ -227,6 +231,13 @@ export function fakeOverviewCache(state: Harness['state']): FakeOverviewCache {
       }
       return { sessions, identities, rebuild }
     },
+    probe: async (ids) => {
+      const warm = new Set<string>()
+      for (const id of ids) {
+        if (state.cachedSessions.has(id)) warm.add(id)
+      }
+      return { warm, identities: new Map(state.cachedIdentities), rebuild: new Set(state.diskRebuild) }
+    },
     refresh: async (ids, known) => {
       cache.refreshCalls++
       const identities = new Map<string, DurableIdentity | null>()
@@ -246,14 +257,15 @@ export function fakeOverviewCache(state: Harness['state']): FakeOverviewCache {
       }
       return out
     },
-    save: (records) => {
+    save: async (records) => {
       cache.saveCalls++
       state.savedRecords = [...records]
+      return true
     },
     flush: async () => {
       cache.flushCalls++
     },
-    dispose: () => {
+    dispose: async () => {
       cache.disposeCalls++
     },
   }
@@ -310,7 +322,7 @@ export function timelineOf(options: {
     contextWindow: options.contextWindow ?? 128_000,
     ...(options.maxOutputTokens === undefined ? {} : { maxOutputTokens: options.maxOutputTokens }),
     ...(options.model === undefined ? {} : { model: options.model }),
-    counts: { turns: options.turns ?? 2, steps: options.steps ?? 3 },
+    counts: { turns: options.turns ?? 2, steps: options.steps ?? 3, injects: 0, compactions: 0, prunes: 0 },
     ...(options.cost === undefined ? {} : { cost: options.cost }),
     ...(options.timing === undefined ? {} : { timing: options.timing }),
     ...(options.lastUser === undefined ? {} : { lastUser: options.lastUser }),
@@ -367,6 +379,7 @@ export function boot(options: BootOptions = {}): Promise<Harness> {
     agents: options.agents,
     coverage: options.coverage ?? { ...OPEN_COVERAGE },
     backfillVersion: options.backfillVersion ?? 0,
+    requests: 0,
     costReady: options.costReady ?? true,
     foldedAvailable: options.foldedAvailable ?? true,
     foldedVersion: 0,
@@ -449,7 +462,16 @@ export function boot(options: BootOptions = {}): Promise<Harness> {
       await new Promise(resolve => setTimeout(resolve, 1))
     }
     assert.ok(routes.has(OVERVIEW_ROUTE), 'the overview route registered')
-    return { ctx, routes, dispose, cache: cache as FakeOverviewCache, calls, cacheMode, state }
+    return {
+      ctx,
+      routes,
+      dispose,
+      warm: (dispose as unknown as { warm: () => Promise<void> }).warm,
+      cache: cache as FakeOverviewCache,
+      calls,
+      cacheMode,
+      state,
+    }
   })()
 }
 

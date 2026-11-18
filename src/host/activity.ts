@@ -352,6 +352,8 @@ export function applyActivity(state: ActivityState, event: SessionEvent): Activi
   return newTurn ? { ...next, lastTurn: turn } : next
 }
 
+export const ACTIVITY_STATE_VERSION = 7
+
 export function createContextActivityDefinition(): WiredProjection<'contextActivity', ActivityState> {
   return {
     key: 'contextActivity',
@@ -371,7 +373,7 @@ export function createContextActivityDefinition(): WiredProjection<'contextActiv
         }])),
       }),
     },
-    stateVersion: 7,
+    stateVersion: ACTIVITY_STATE_VERSION,
   }
 }
 

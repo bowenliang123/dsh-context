@@ -46,6 +46,47 @@ describe('makeColdReadGate', () => {
     assert.equal(maxActive, 1, 'never two reads in flight')
   })
 
+  test('foreground reads overtake queued background work without overtaking the active read', async () => {
+    const gate = makeColdReadGate(() => LOW)
+    const order: string[] = []
+    const blocker = deferred<string>()
+    const task = (name: string, wait?: Promise<string>) => async () => {
+      order.push(`${name}:start`)
+      const value = await (wait ?? Promise.resolve(name))
+      order.push(`${name}:end`)
+      return value
+    }
+    const active = gate.admit(task('background-a', blocker.promise), { priority: 'background' })
+    const queued = gate.admit(task('background-b'), { priority: 'background' })
+    const foreground = gate.admit(task('foreground'))
+    await new Promise(resolve => setTimeout(resolve, 10))
+    assert.deepEqual(order, ['background-a:start'])
+    blocker.resolve('a')
+    assert.deepEqual(await Promise.all([active, queued, foreground]), ['a', 'background-b', 'foreground'])
+    assert.deepEqual(order, [
+      'background-a:start', 'background-a:end',
+      'foreground:start', 'foreground:end',
+      'background-b:start', 'background-b:end',
+    ])
+  })
+
+  test('the waiting queue rejects overflow without running the read', async () => {
+    const gate = makeColdReadGate(() => LOW)
+    const blocker = deferred<string>()
+    const active = gate.admit(() => blocker.promise)
+    const waiting = Array.from({ length: 64 }, () => gate.admit(async () => 'ok'))
+    let overflowRan = false
+    const overflow = gate.admit(async () => {
+      overflowRan = true
+      return 'overflow'
+    })
+    blocker.resolve('done')
+    assert.equal(await active, 'done')
+    assert.deepEqual(await Promise.all(waiting), Array.from({ length: 64 }, () => 'ok'))
+    assert.equal(await overflow, undefined)
+    assert.equal(overflowRan, false)
+  })
+
   test('the headroom check runs at the front of the queue, and its two-thirds boundary is strict', async () => {
     let reading = LOW
     const gate = makeColdReadGate(() => reading)

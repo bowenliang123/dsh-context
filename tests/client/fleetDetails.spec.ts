@@ -357,6 +357,7 @@ describe('useFleetDetails — progressive family loading', () => {
     const m = await mount(h(Probe))
     act(() => { (box.current as FleetDetailState).requestFamily(familyRequest(familyOf(2))) })
     await until(() => box.current?.family.loaded === 3, 'the family never loaded')
+    await flush()
     const before = batch.mock.calls.length
     await act(async () => { invalidate('overview') })
     await act(async () => { invalidate('fleet', { sessionId: 'other' }) })

@@ -1,6 +1,5 @@
 import assert from 'node:assert/strict'
 import { mkdtemp, mkdir, rm } from 'node:fs/promises'
-import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { describe, test } from 'vitest'
 import {
@@ -9,11 +8,12 @@ import {
   createOverviewCache,
   identityKey,
   overviewCachePath,
+  overviewFoldVersions,
   type CacheFs,
   type CachedSession,
   type DurableIdentity,
 } from '../../src/host/overviewCache'
-import type { HostSession } from '../../src/host/overviewCorpus'
+import { stableHashOf, type HostSession } from '../../src/host/overviewCorpus'
 
 interface WriteCounts {
   writes: number
@@ -21,7 +21,7 @@ interface WriteCounts {
 }
 
 function sessionOf(id: string, options: { signature?: string; activity?: HostSession['activity']; timeline?: HostSession['timeline'] } = {}): HostSession {
-  return {
+  const session: HostSession = {
     id,
     title: `Session ${id}`,
     cwd: `/repo/${id}`,
@@ -85,6 +85,52 @@ function sessionOf(id: string, options: { signature?: string; activity?: HostSes
       }
       : options.activity,
   }
+  return withMaterialization(session)
+}
+
+function withMaterialization(session: HostSession): HostSession {
+  const timeline = session.timeline
+  const current = timeline?.current ?? {
+    system: 0, tools: 0, user: 0, inject: 0, skill: 0, assistant: 0, tool: 0, total: 0,
+  }
+  return {
+    ...session,
+    materialization: {
+      asOfSeq: 1,
+      facts: {
+        id: session.id,
+        createdAt: session.updatedAt,
+        ...(session.cwd === undefined ? {} : { cwd: session.cwd }),
+        ...(session.parentSession === undefined ? {} : { parentSession: session.parentSession }),
+        ...(session.origin === undefined ? {} : { origin: session.origin }),
+      },
+      signature: session.signature,
+      values: {
+        contextTimeline: {
+          ok: true,
+          current,
+          counts: {
+            turns: timeline?.turns ?? 0,
+            steps: timeline?.steps ?? 0,
+            injects: 0,
+            compactions: 0,
+            prunes: 0,
+          },
+          ...(timeline?.contextWindow === undefined ? {} : { contextWindow: timeline.contextWindow }),
+          ...(timeline?.maxOutputTokens === undefined ? {} : { maxOutputTokens: timeline.maxOutputTokens }),
+          ...(timeline?.model === undefined ? {} : { model: timeline.model }),
+          ...(timeline?.lastUser === undefined ? {} : { lastUser: timeline.lastUser }),
+          ...(timeline?.timing === undefined ? {} : { timing: timeline.timing }),
+          ...(timeline?.generatedReasoning === undefined ? {} : { generatedReasoning: timeline.generatedReasoning }),
+          ...(timeline?.generatedAnswerTokens === undefined ? {} : { generatedAnswerTokens: timeline.generatedAnswerTokens }),
+          ...(timeline?.generatedCallTokens === undefined ? {} : { generatedCallTokens: timeline.generatedCallTokens }),
+        },
+        contextActivity: session.activity ?? { days: {} },
+        title: session.title,
+        sessionListMetadata: { blank: session.blank, lastPromptAt: session.updatedAt },
+      },
+    },
+  }
 }
 
 function identityOf(path: string, sizeBytes = 100, mtimeMs = 1_000): DurableIdentity {
@@ -96,6 +142,7 @@ interface FakeFs extends CacheFs {
   stats: Map<string, { size: number; mtimeMs: number }>
   mkdirs: string[]
   renames: [string, string][]
+  reads: string[]
   counts: WriteCounts
   failWrite: boolean
   failMkdir: boolean
@@ -110,6 +157,7 @@ function fakeFs(): FakeFs {
     stats,
     mkdirs: [],
     renames: [],
+    reads: [],
     counts: { writes: 0, deletes: 0 },
     failWrite: false,
     failMkdir: false,
@@ -120,6 +168,7 @@ function fakeFs(): FakeFs {
       return info
     },
     async readFile(path) {
+      fs.reads.push(path)
       const data = files.get(path)
       if (data === undefined) throw new Error(`ENOENT: ${path}`)
       return data
@@ -154,109 +203,115 @@ function fakeFs(): FakeFs {
   return fs
 }
 
-function storeFile(fs: FakeFs, path: string, sessions: unknown, format: unknown = OVERVIEW_CACHE_FORMAT, savedAt = 1): void {
-  fs.files.set(path, JSON.stringify({ format, savedAt, sessions }))
+function shardOf(id: string): number {
+  return stableHashOf([id]) & 63
 }
 
-const PATH = '/home/.dsh/storages/dsh-context/overview-cache.v1.json'
+function shardPath(root: string, id: string): string {
+  return join(root, `shard-${String(shardOf(id)).padStart(2, '0')}.json`)
+}
+
+function canonicalOf(session: HostSession, identity: DurableIdentity | null, versions: unknown = overviewFoldVersions()): unknown {
+  return { materialization: session.materialization, identity, versions }
+}
+
+function storeRaw(fs: FakeFs, path: string, sessions: unknown, format: unknown = OVERVIEW_CACHE_FORMAT): void {
+  fs.files.set(path, JSON.stringify({ format, savedAt: 1, sessions }))
+}
+
+function storeSessions(fs: FakeFs, root: string, records: { session: HostSession; identity: DurableIdentity | null; versions?: unknown }[]): void {
+  const shards = new Map<number, unknown[]>()
+  for (const record of records) {
+    const shard = shardOf(record.session.id)
+    const rows = shards.get(shard) ?? []
+    rows.push(canonicalOf(record.session, record.identity, record.versions))
+    shards.set(shard, rows)
+  }
+  for (const [shard, sessions] of shards) {
+    storeRaw(fs, join(root, `shard-${String(shard).padStart(2, '0')}.json`), sessions)
+  }
+}
+
+function savedRecord(id: string, identity: DurableIdentity | null = identityOf(`/logs/${id}`, 1, 1)): CachedSession {
+  return { session: sessionOf(id), identity }
+}
+
+const PATH = '/home/.dsh/storages/dsh-context/overview-cache.v3'
 
 describe('overviewCache', () => {
-  test('resolves the cache path from DSH_HOME or the user home and hashes identities', () => {
+  test('resolves the cache path and identity keys', () => {
     assert.equal(overviewCachePath({ DSH_HOME: '/data/dsh' }, '/home/user'), join('/data/dsh', 'storages', 'dsh-context', OVERVIEW_CACHE_FILE))
     assert.equal(overviewCachePath({ DSH_HOME: '   ' }, '/home/user'), join('/home/user', '.dsh', 'storages', 'dsh-context', OVERVIEW_CACHE_FILE))
-    assert.equal(overviewCachePath({}, '/home/user'), join('/home/user', '.dsh', 'storages', 'dsh-context', OVERVIEW_CACHE_FILE))
     assert.equal(identityKey(null), '?')
     assert.equal(identityKey(undefined), '?')
     assert.equal(identityKey(identityOf('/a', 2, 3)), '/a\u00002\u00003')
   })
 
-  test('a missing or malformed cache file reads as no records', async () => {
+  test('missing and malformed target shards read as empty', async () => {
     const fs = fakeFs()
     const cache = createOverviewCache({ path: PATH, fs })
+    const target = shardPath(PATH, 'a')
     for (const content of [
       'not json',
-      JSON.stringify({ format: 2, savedAt: 0, sessions: [] }),
-      JSON.stringify({ format: OVERVIEW_CACHE_FORMAT, savedAt: 0, sessions: 'nope' }),
+      JSON.stringify({ format: OVERVIEW_CACHE_FORMAT + 1, sessions: [] }),
+      JSON.stringify({ format: OVERVIEW_CACHE_FORMAT, sessions: 'nope' }),
       JSON.stringify([]),
       JSON.stringify(null),
     ]) {
-      fs.files.set(PATH, content)
+      fs.files.set(target, content)
       const loaded = await cache.load(new Set(['a']))
-      assert.deepEqual([...loaded.sessions.keys()], [])
-      assert.deepEqual([...loaded.identities.keys()], [])
-      assert.deepEqual([...loaded.rebuild], [])
+      assert.equal(loaded.sessions.size, 0)
+      assert.equal(loaded.identities.size, 0)
+      assert.equal(loaded.rebuild.size, 0)
     }
   })
 
-  test('load rebuilds changed, missing, and unvalidatable records and reuses the unchanged ones', async () => {
+  test('load validates identities and reuses only unchanged canonical records', async () => {
     const fs = fakeFs()
     const cache = createOverviewCache({ path: PATH, fs, statConcurrency: 2 })
-    storeFile(fs, PATH, [
-      { session: 'junk' },
-      { session: sessionOf('dropped-id'), identity: identityOf('/logs/dropped', 1, 1) },
-      { session: sessionOf('bad-identity'), identity: 'nope' },
+    storeSessions(fs, PATH, [
+      savedRecord('bad-identity'),
       { session: sessionOf('no-identity'), identity: null },
-      { session: sessionOf('same'), identity: identityOf('/logs/same', 10, 100) },
-      { session: sessionOf('changed'), identity: identityOf('/logs/changed', 10, 100) },
-      { session: sessionOf('gone'), identity: identityOf('/logs/gone', 10, 100) },
+      savedRecord('same', identityOf('/logs/same', 10, 100)),
+      savedRecord('changed', identityOf('/logs/changed', 10, 100)),
+      savedRecord('gone', identityOf('/logs/gone', 10, 100)),
     ])
+    fs.files.set(shardPath(PATH, 'bad-identity'), JSON.stringify({ format: 3, sessions: [{ materialization: sessionOf('bad-identity').materialization, identity: 'bad' }] }))
     fs.stats.set('/logs/same', { size: 10, mtimeMs: 100 })
     fs.stats.set('/logs/changed', { size: 11, mtimeMs: 101 })
     const loaded = await cache.load(new Set(['bad-identity', 'no-identity', 'same', 'changed', 'gone']))
     assert.deepEqual([...loaded.sessions.keys()], ['same'])
-    assert.equal(loaded.sessions.get('same')?.id, 'same')
     assert.deepEqual([...loaded.identities.keys()].sort(), ['changed', 'gone', 'no-identity', 'same'])
-    assert.equal(loaded.identities.has('bad-identity'), false, 'a record with an invalid identity is dropped whole')
+    assert.equal(loaded.identities.has('bad-identity'), false)
     assert.deepEqual(loaded.identities.get('changed'), { path: '/logs/changed', sizeBytes: 11, mtimeMs: 101 })
     assert.equal(loaded.identities.get('gone'), null)
-    assert.equal(loaded.identities.get('no-identity'), null)
     assert.deepEqual([...loaded.rebuild].sort(), ['changed', 'gone', 'no-identity'])
   })
 
-  test('load with known identities compares identity strings without touching the file system', async () => {
+  test('known identities avoid source stats and a fold mismatch rebuilds', async () => {
     const fs = fakeFs()
     const cache = createOverviewCache({ path: PATH, fs })
-    storeFile(fs, PATH, [
-      { session: sessionOf('same'), identity: identityOf('/logs/same', 10, 100) },
-      { session: sessionOf('missing-in-known'), identity: identityOf('/logs/miss', 10, 100) },
-      { session: sessionOf('known-null'), identity: identityOf('/logs/nulls', 10, 100) },
-      { session: sessionOf('known-other'), identity: identityOf('/logs/other', 10, 100) },
+    storeSessions(fs, PATH, [
+      savedRecord('same', identityOf('/logs/same', 10, 100)),
+      savedRecord('known-null', identityOf('/logs/null', 10, 100)),
+      savedRecord('known-other', identityOf('/logs/other', 10, 100)),
+      { ...savedRecord('old-version'), versions: { timeline: -1, activity: -1, config: 'old' } },
     ])
     const known = new Map<string, DurableIdentity | null>([
       ['same', identityOf('/logs/same', 10, 100)],
       ['known-null', null],
       ['known-other', identityOf('/logs/other', 12, 120)],
     ])
-    const loaded = await cache.load(new Set(['same', 'missing-in-known', 'known-null', 'known-other']), known)
+    const loaded = await cache.load(new Set(['same', 'known-null', 'known-other']), known)
     assert.deepEqual([...loaded.sessions.keys()], ['same'])
-    assert.deepEqual([...loaded.rebuild].sort(), ['known-null', 'known-other', 'missing-in-known'])
-    assert.deepEqual(loaded.identities.get('known-other'), identityOf('/logs/other', 12, 120))
-    assert.equal(loaded.identities.get('missing-in-known'), null)
+    assert.deepEqual([...loaded.rebuild].sort(), ['known-null', 'known-other'])
+    fs.stats.set('/logs/old-version', { size: 1, mtimeMs: 1 })
+    const old = await cache.load(new Set(['old-version']))
+    assert.deepEqual([...old.rebuild], ['old-version'])
+    assert.equal(fs.stats.has('/logs/same'), false)
   })
 
-  test('load drops sessions whose stored shape is not a valid host session', async () => {
-    const fs = fakeFs()
-    const cache = createOverviewCache({ path: PATH, fs })
-    const timeline = sessionOf('full')
-    storeFile(fs, PATH, [
-      { session: { ...timeline, id: '' }, identity: identityOf('/logs/empty-id', 1, 1) },
-      { session: { ...timeline, title: 7 }, identity: identityOf('/logs/bad-title', 1, 1) },
-      { session: { ...timeline, updatedAt: 'soon' }, identity: identityOf('/logs/bad-time', 1, 1) },
-      { session: { ...timeline, blank: 'no' }, identity: identityOf('/logs/bad-blank', 1, 1) },
-      { session: { ...timeline, signature: 7 }, identity: identityOf('/logs/bad-sig', 1, 1) },
-      { session: { ...timeline, timeline: 'junk', activity: 7 }, identity: identityOf('/logs/full', 1, 1) },
-      { session: { ...timeline, cwd: 7, parentSession: 7, origin: 'fork' } },
-      { session: 'junk', identity: identityOf('/logs/junk', 1, 1) },
-      { session: { id: 'abs' }, identity: identityOf('/logs/abs', 1, 1) },
-    ])
-    fs.stats.set('/logs/full', { size: 1, mtimeMs: 1 })
-    const loaded = await cache.load(new Set(['full', 'abs']))
-    assert.deepEqual([...loaded.sessions.keys()], [], 'a hostile or incomplete record is never served')
-    assert.deepEqual([...loaded.rebuild], ['full'])
-    assert.deepEqual(loaded.identities.get('full'), identityOf('/logs/full', 1, 1))
-  })
-
-  test('refresh keeps equal identities, records changed ones, and treats stat failures as unvalidatable', async () => {
+  test('refresh validates every known source identity', async () => {
     const fs = fakeFs()
     const cache = createOverviewCache({ path: PATH, fs, statConcurrency: 2 })
     fs.stats.set('/logs/same', { size: 10, mtimeMs: 100 })
@@ -276,11 +331,12 @@ describe('overviewCache', () => {
     assert.equal(refreshed.identities.has('unvalidatable'), false)
     assert.equal(refreshed.identities.has('missing'), false)
     assert.deepEqual([...refreshed.changed].sort(), ['changed', 'gone', 'other'])
+    assert.equal((await cache.refresh(new Set(['a']), new Map())).changed.size, 0)
   })
 
-  test('capture derives identities from the persistence snapshot plus a file stat', async () => {
+  test('capture derives identities from persistence snapshots and stats', async () => {
     const fs = fakeFs()
-    const cache = createOverviewCache({ path: PATH, fs, statConcurrency: 1 })
+    const cache = createOverviewCache({ path: PATH, fs, captureConcurrency: 1 })
     fs.stats.set('/logs/ok', { size: 5, mtimeMs: 42 })
     const host = {
       stat: async (id: string): Promise<unknown> => {
@@ -296,46 +352,127 @@ describe('overviewCache', () => {
     }
     const captured = await cache.capture(['ok', 'throws', 'junk', 'nopath', 'nosize', 'badsize', 'empty-path', 'nofile'], host)
     assert.deepEqual(captured.get('ok'), { path: '/logs/ok', sizeBytes: 5, mtimeMs: 42 })
-    for (const id of ['throws', 'junk', 'nopath', 'nosize', 'badsize', 'empty-path', 'nofile']) {
-      assert.equal(captured.get(id), null, id)
-    }
-    const withoutStat = await cache.capture(['ok'], {})
-    assert.deepEqual([...withoutStat.keys()], ['ok'])
-    assert.equal(withoutStat.get('ok'), null)
-    const empty = await cache.capture([], host)
-    assert.equal(empty.size, 0)
+    for (const id of ['throws', 'junk', 'nopath', 'nosize', 'badsize', 'empty-path', 'nofile']) assert.equal(captured.get(id), null, id)
+    assert.equal((await cache.capture(['ok'], {})).get('ok'), null)
+    assert.equal((await cache.capture([], host)).size, 0)
   })
 
-  test('save debounces one atomic write, flush forces it, and dispose writes the pending records', async () => {
+  test('save writes only canonical records and loading shares validated object graphs', async () => {
     const fs = fakeFs()
-    let clock = 0
-    const cache = createOverviewCache({ path: PATH, fs, now: () => (clock += 1), debounceMs: 5 })
-    cache.save([{ session: sessionOf('a'), identity: identityOf('/logs/a', 1, 1) }])
-    cache.save([{ session: sessionOf('b'), identity: null }])
-    assert.equal(fs.counts.writes, 0, 'the debounce has not fired yet')
+    fs.stats.set('/logs/a', { size: 1, mtimeMs: 1 })
+    const cache = createOverviewCache({ path: PATH, fs, debounceMs: 60000 })
+    assert.equal(await cache.save([savedRecord('a')]), true)
+    assert.equal(fs.counts.writes, 0)
     await cache.flush()
-    assert.equal(fs.counts.writes, 1)
-    assert.deepEqual(fs.renames.at(-1), [`${PATH}.tmp`, PATH])
-    const body = JSON.parse(fs.files.get(PATH) ?? '{}') as { format: number; savedAt: number; sessions: CachedSession[] }
-    assert.equal(body.format, OVERVIEW_CACHE_FORMAT)
-    assert.equal(body.savedAt, 1)
-    assert.deepEqual(body.sessions.map(record => record.session.id).sort(), ['a', 'b'], 'staged saves merge by session id')
+    const target = shardPath(PATH, 'a')
+    const body = JSON.parse(fs.files.get(target) ?? '{}') as { format: number; sessions: Record<string, unknown>[] }
+    assert.equal(body.format, 3)
+    assert.deepEqual(Object.keys(body.sessions[0]).sort(), ['identity', 'materialization', 'versions'])
+    assert.equal('session' in body.sessions[0], false)
+    assert.equal('costRead' in (body.sessions[0].materialization as Record<string, unknown>), false)
+    const loaded = await cache.load(new Set(['a']))
+    const session = loaded.sessions.get('a')
+    assert.ok(session?.materialization !== undefined)
+    assert.strictEqual(session.activity, session.materialization.values.contextActivity)
+    assert.strictEqual(session.timeline?.current, (session.materialization.values.contextTimeline as HostSession['timeline'] & object).current)
+    const timeline = session.materialization.values.contextTimeline as { timing?: unknown }
+    assert.strictEqual(session.timeline?.timing, timeline.timing)
+    assert.equal(session.timeline?.contextWindow, 128000)
+    assert.equal(session.timeline?.generatedCallTokens, 3)
+    assert.equal(await cache.save([savedRecord('a')]), true)
     await cache.flush()
-    assert.equal(fs.counts.writes, 1, 'flushing nothing writes nothing')
-    cache.save([{ session: sessionOf('c'), identity: null }])
-    await new Promise(resolve => setTimeout(resolve, 15))
-    assert.equal(fs.counts.writes, 2, 'the debounce writes once for the latest records')
-    cache.save([{ session: sessionOf('d'), identity: null }])
-    cache.dispose()
-    await new Promise(resolve => setTimeout(resolve, 5))
-    assert.deepEqual(JSON.parse(fs.files.get(PATH) ?? '{}').sessions.map((record: CachedSession) => record.session.id), ['d'])
-    cache.dispose()
-    cache.save([{ session: sessionOf('e'), identity: null }])
-    await new Promise(resolve => setTimeout(resolve, 15))
-    assert.deepEqual(JSON.parse(fs.files.get(PATH) ?? '{}').sessions.map((record: CachedSession) => record.session.id), ['d'], 'a disposed cache writes nothing else')
+    const probed = await cache.probe(new Set(['a']))
+    assert.deepEqual([...probed.warm], ['a'])
+    assert.equal('sessions' in probed, false)
   })
 
-  test('write failures stay best-effort and clean the temporary file', async () => {
+  test('hostile materialization, facts, identities, and versions never become warm', async () => {
+    const fs = fakeFs()
+    const ids = ['bad-watermark', 'bad-facts', 'bad-activity', 'bad-versions', 'bad-version-null',
+      'bad-version-string', 'bad-version-activity', 'bad-version-config', 'bad-path', 'no-size', 'no-mtime', 'valid']
+    for (const id of ids) fs.stats.set(`/logs/${id}`, { size: 1, mtimeMs: 1 })
+    const valid = sessionOf('valid')
+    const records = ids.map(id => {
+      const session = sessionOf(id)
+      const materialization = structuredClone(session.materialization) as NonNullable<HostSession['materialization']>
+      if (id === 'bad-watermark') materialization.asOfSeq = 'bad' as never
+      if (id === 'bad-facts') materialization.facts.createdAt = 'bad' as never
+      if (id === 'bad-activity') materialization.values.contextActivity = { days: { bad: { tokens: 'bad' } } }
+      const versions = id === 'bad-versions' ? { timeline: 1.5, activity: 1, config: 'bad' }
+        : id === 'bad-version-null' ? null
+          : id === 'bad-version-string' ? { timeline: '1', activity: 1, config: 'bad' }
+            : id === 'bad-version-activity' ? { timeline: 1, activity: 1.5, config: 'bad' }
+              : id === 'bad-version-config' ? { timeline: 1, activity: 1, config: 7 }
+                : overviewFoldVersions()
+      const identity = id === 'bad-path' ? { path: '', sizeBytes: 1, mtimeMs: 1 }
+        : id === 'no-size' ? { path: `/logs/${id}`, mtimeMs: 1 }
+          : id === 'no-mtime' ? { path: `/logs/${id}`, sizeBytes: 1 }
+            : identityOf(`/logs/${id}`, 1, 1)
+      return { materialization, identity, versions }
+    })
+    const byShard = new Map<number, unknown[]>()
+    for (const [index, record] of records.entries()) {
+      const id = ids[index]
+      const shard = shardOf(id)
+      byShard.set(shard, [...byShard.get(shard) ?? [], record])
+    }
+    for (const [shard, sessions] of byShard) storeRaw(fs, join(PATH, `shard-${String(shard).padStart(2, '0')}.json`), sessions)
+    const cache = createOverviewCache({ path: PATH, fs })
+    const loaded = await cache.load(new Set(ids))
+    assert.deepEqual([...loaded.sessions.keys()], ['valid'])
+    assert.equal(loaded.sessions.get('valid')?.materialization?.facts.id, valid.id)
+    assert.deepEqual([...loaded.rebuild].sort(), ['bad-version-activity', 'bad-version-config', 'bad-version-null',
+      'bad-version-string', 'bad-versions'].sort())
+  })
+
+  test('flush serializes active and pending batches and dispose drains accepted records', async () => {
+    const fs = fakeFs()
+    const writeFile = fs.writeFile
+    let release!: () => void
+    let entered!: () => void
+    const waiting = new Promise<void>((resolve) => { entered = resolve })
+    const gate = new Promise<void>((resolve) => { release = resolve })
+    let first = true
+    fs.writeFile = async (path, data) => {
+      if (first) {
+        first = false
+        entered()
+        await gate
+      }
+      await writeFile(path, data)
+    }
+    const cache = createOverviewCache({ path: PATH, fs })
+    assert.equal(await cache.save([savedRecord('a')]), true)
+    const active = cache.flush()
+    await waiting
+    const stagedSave = cache.save([savedRecord('b')])
+    const staged = cache.flush()
+    release()
+    await Promise.all([active, stagedSave, staged])
+    assert.deepEqual([...(await cache.load(new Set(['a', 'b']), new Map())).rebuild].sort(), ['a', 'b'])
+    assert.equal(await cache.save([savedRecord('c')]), true)
+    await cache.dispose()
+    assert.equal(await cache.save([savedRecord('d')]), false)
+    await cache.dispose()
+    const files = [...fs.files.values()].flatMap(value => (JSON.parse(value) as { sessions: { materialization: { facts: { id: string } } }[] }).sessions)
+    assert.deepEqual(files.map(record => record.materialization.facts.id).sort(), ['a', 'b', 'c'])
+  })
+
+  test('serialization failures reject a save and later records recover', async () => {
+    const fs = fakeFs()
+    const cache = createOverviewCache({ path: PATH, fs, debounceMs: 1 })
+    const cyclic = sessionOf('cyclic')
+    ;(cyclic.materialization as NonNullable<HostSession['materialization']> & { cycle?: unknown }).cycle = cyclic
+    assert.equal(await cache.save([{ session: cyclic, identity: null }]), false)
+    assert.equal(await cache.save([savedRecord('valid')]), true)
+    await cache.flush()
+    const loaded = await cache.load(new Set(['valid'], ), new Map([['valid', null]]))
+    assert.deepEqual([...loaded.rebuild], ['valid'])
+    assert.equal(await cache.save([{ session: cyclic, identity: null }]), false)
+    cache.dispose()
+  })
+
+  test('write failures stay best-effort and clean temporary files', async () => {
     for (const [label, configure] of [
       ['mkdir', (fs: FakeFs) => { fs.failMkdir = true }],
       ['write', (fs: FakeFs) => { fs.failWrite = true }],
@@ -344,29 +481,48 @@ describe('overviewCache', () => {
       const fs = fakeFs()
       configure(fs)
       const cache = createOverviewCache({ path: PATH, fs })
-      cache.save([{ session: sessionOf('a'), identity: null }])
+      assert.equal(await cache.save([savedRecord('a')]), true)
       await cache.flush()
-      assert.equal(fs.files.has(PATH), false, label)
-      if (label !== 'mkdir') assert.equal(fs.counts.deletes, fs.failWrite || fs.failRename ? 1 : 0)
+      assert.equal(fs.files.has(shardPath(PATH, 'a')), false, label)
+      if (label !== 'mkdir') assert.equal(fs.counts.deletes, 1)
       cache.dispose()
     }
-    const fs = fakeFs()
-    fs.stats.set('/logs/a', { size: 1, mtimeMs: 1 })
-    storeFile(fs, PATH, [{ session: sessionOf('a'), identity: identityOf('/logs/a', 1, 1) }])
-    const cache = createOverviewCache({ path: PATH, fs })
-    const loaded = await cache.load(new Set(['a']))
-    assert.deepEqual([...loaded.sessions.keys()], ['a'], 'a failed write never breaks a later load')
+    const withoutRm = fakeFs()
+    delete withoutRm.rm
+    const cache = createOverviewCache({ path: PATH, fs: withoutRm })
+    await cache.save([savedRecord('a')])
+    await cache.flush()
+    cache.dispose()
   })
 
-  test('a real cache roundtrip persists and validates through the default node file system', async () => {
-    const root = await mkdtemp(join(tmpdir(), 'dsh-context-overview-cache-'))
-    const path = join(root, 'nested', 'overview-cache.v1.json')
+  test('failed shard writes retain accepted overlays and recover on a later flush', async () => {
+    const fs = fakeFs()
+    for (const id of ['a', 'b']) fs.stats.set(`/logs/${id}`, { size: 1, mtimeMs: 1 })
+    const cache = createOverviewCache({ path: PATH, fs })
+    await cache.save([savedRecord('a')])
+    fs.failWrite = true
+    await cache.flush()
+    await cache.save([savedRecord('b')])
+    const accepted = await cache.load(new Set(['a', 'b']))
+    assert.deepEqual([...accepted.sessions.keys()].sort(), ['a', 'b'])
+    assert.equal(fs.files.has(shardPath(PATH, 'a')), false)
+    fs.failWrite = false
+    await cache.flush()
+    assert.equal(fs.files.has(shardPath(PATH, 'a')), true)
+    assert.equal(fs.files.has(shardPath(PATH, 'b')), true)
+    const persisted = await cache.load(new Set(['a', 'b']))
+    assert.deepEqual([...persisted.sessions.keys()].sort(), ['a', 'b'])
+    await cache.dispose()
+  })
+
+  test('a real file-system roundtrip validates sources and contains occupied paths', async () => {
+    const root = await mkdtemp(join('.tmp', 'dsh-context-overview-cache-'))
+    const path = join(root, 'nested', 'overview-cache.v3')
     try {
       const cache = createOverviewCache({ path })
-      cache.save([{ session: sessionOf('a'), identity: null }])
+      await cache.save([{ session: sessionOf('a'), identity: null }])
       await cache.flush()
-      const loaded = await cache.load(new Set(['a']))
-      assert.deepEqual([...loaded.sessions.keys()], [], 'a null identity record is never reusable')
+      assert.equal((await cache.load(new Set(['a']))).sessions.size, 0)
       cache.dispose()
       const { stat, writeFile } = await import('node:fs/promises')
       const logPath = join(root, 'log.jsonl')
@@ -374,22 +530,18 @@ describe('overviewCache', () => {
       const logInfo = await stat(logPath)
       const identity = { path: logPath, sizeBytes: logInfo.size, mtimeMs: logInfo.mtimeMs }
       const warm = createOverviewCache({ path })
-      warm.save([{ session: sessionOf('b'), identity }])
+      await warm.save([{ session: sessionOf('b'), identity }])
       await warm.flush()
-      const warmLoaded = await warm.load(new Set(['b']))
-      assert.deepEqual([...warmLoaded.sessions.keys()], ['b'], 'a real unchanged log validates through node fs.stat')
-      warm.save([{ session: sessionOf('b'), identity }])
-      await warm.flush()
+      assert.deepEqual([...(await warm.load(new Set(['b']))).sessions.keys()], ['b'])
       await writeFile(logPath, 'a longer second line')
       const changed = await warm.load(new Set(['b']))
-      assert.deepEqual([...changed.sessions.keys()], [])
       assert.deepEqual([...changed.rebuild], ['b'])
       assert.ok((changed.identities.get('b')?.sizeBytes ?? 0) > identity.sizeBytes)
       warm.dispose()
       const target = join(root, 'occupied')
       await mkdir(target, { recursive: true })
       const failing = createOverviewCache({ path: target })
-      failing.save([{ session: sessionOf('b'), identity: null }])
+      await failing.save([{ session: sessionOf('b'), identity: null }])
       await failing.flush()
       failing.dispose()
     } finally {
@@ -397,167 +549,71 @@ describe('overviewCache', () => {
     }
   })
 
-  test('parses the full host-session shape and degrades hostile members to null', async () => {
+  test('full-corpus prune and isolated upserts preserve pending order', async () => {
     const fs = fakeFs()
+    for (const id of ['a', 'b', 'c']) fs.stats.set(`/logs/${id}`, { size: 1, mtimeMs: 1 })
     const cache = createOverviewCache({ path: PATH, fs })
-    const base = sessionOf('base')
-    storeFile(fs, PATH, [
-      { session: base, identity: identityOf('/logs/base', 1, 1) },
-      { session: { ...base, id: 'minimal', timeline: { total: 1, turns: 0, current: null }, activity: { days: {} }, cwd: '', parentSession: '', origin: 'fork' }, identity: identityOf('/logs/minimal', 1, 1) },
-      { session: { ...base, id: 'hostile-current', timeline: { current: 'junk', total: 'x', turns: 'y', steps: 'z' }, activity: { days: {} } }, identity: identityOf('/logs/hostile-current', 1, 1) },
-      {
-        session: {
-          ...base,
-          id: 'hostile-activity',
-          timeline: { current: null, total: 0, turns: 0 },
-          activity: {
-            days: {
-              '2026-11-01': { tokens: 'x', requests: 1, cost: 'junk', turns: 'no', toolCalls: 2, toolsMs: null, skills: 'junk' },
-              junk: 'nope',
-              '2026-11-02': { tokens: 1, requests: 1, cost: { p: { m: { off: { uncached: 1, cacheRead: 0, cacheWrite: 0, output: 0 } } } } },
-            },
-          },
-        },
-        identity: identityOf('/logs/hostile-activity', 1, 1),
-      },
-      {
-        session: {
-          ...base,
-          id: 'junk-tallies',
-          timeline: { current: { system: 1 }, total: 1, turns: 1, steps: 0, contextWindow: 'x', maxOutputTokens: null, model: '', lastUser: '', cost: 'junk', timing: { wallMs: 1 }, generatedReasoning: 'x' },
-          activity: { days: { '2026-11-01': { tokens: 1, requests: 1, skills: { good: { n: 1, last: 2 }, bad: { n: 'x', last: 1 }, empty: {} }, tools: {}, cmds: 'junk' } } },
-        },
-        identity: identityOf('/logs/junk-tallies', 1, 1),
-      },
-      {
-        session: {
-          ...base,
-          id: 'full-timing',
-          timeline: { ...base.timeline, current: { system: 1, total: 2 }, timing: { ...base.timeline?.timing, reasoningMs: 'x', tools: { bash: { calls: 1, ms: 2 }, junk: {} } }, cost: { p: { m: { off: { uncached: 1, cacheRead: 0, cacheWrite: 0, output: 1 } } } } },
-        },
-        identity: identityOf('/logs/full-timing', 1, 1),
-      },
-      { session: { ...base, id: 'child', parentSession: 'parent', origin: 'subagent' }, identity: identityOf('/logs/child', 1, 1) },
-      { session: base, identity: { path: '/logs/no-size' } },
-      { session: base, identity: { path: '', sizeBytes: 1, mtimeMs: 1 } },
-      { session: base, identity: { path: 7, sizeBytes: 1, mtimeMs: 1 } },
-      { session: base, identity: { path: '/logs/no-mtime', sizeBytes: 1 } },
-      null,
-    ])
-    for (const id of ['base', 'minimal', 'hostile-current', 'hostile-activity', 'junk-tallies', 'full-timing', 'child']) {
-      fs.stats.set(`/logs/${id}`, { size: 1, mtimeMs: 1 })
-    }
-    const loaded = await cache.load(new Set(['base', 'minimal', 'hostile-current', 'hostile-activity', 'junk-tallies', 'full-timing', 'child']))
-    const full = loaded.sessions.get('base')
-    assert.ok(full !== undefined)
-    assert.equal(full.timeline?.current?.assistantReasoning, 1)
-    assert.equal(full.timeline?.timing?.reasoningMs, 5)
-    assert.deepEqual(full.activity?.days['2026-11-01'].skills, { skill: { n: 1, last: 10 } })
-    const minimal = loaded.sessions.get('minimal')
-    assert.ok(minimal !== undefined)
-    assert.equal(minimal.cwd, undefined)
-    assert.equal(minimal.parentSession, undefined)
-    assert.equal(minimal.origin, undefined)
-    assert.equal(minimal.timeline?.current, null)
-    assert.deepEqual(minimal.activity, { days: {} })
-    const hostileCurrent = loaded.sessions.get('hostile-current')
-    assert.ok(hostileCurrent !== undefined)
-    assert.equal(hostileCurrent.timeline?.total, 0)
-    assert.equal(hostileCurrent.timeline?.turns, 0)
-    assert.deepEqual(hostileCurrent.activity, { days: {} })
-    const hostileActivity = loaded.sessions.get('hostile-activity')
-    assert.ok(hostileActivity !== undefined)
-    assert.equal(hostileActivity.activity?.days['2026-11-01'].tokens, 0)
-    assert.equal(hostileActivity.activity?.days['2026-11-01'].toolCalls, 2)
-    assert.equal(hostileActivity.activity?.days['2026-11-01'].skills, undefined)
-    assert.ok(hostileActivity.activity?.days['2026-11-02'].cost !== undefined)
-    assert.equal(hostileActivity.timeline?.current, null)
-    const junkTallies = loaded.sessions.get('junk-tallies')
-    assert.ok(junkTallies !== undefined)
-    assert.ok(junkTallies.timeline !== null)
-    assert.equal(junkTallies.timeline?.current?.system, 1)
-    assert.equal(junkTallies.timeline?.steps, 0)
-    assert.equal(junkTallies.timeline?.timing, undefined)
-    assert.deepEqual(junkTallies.activity?.days['2026-11-01'].skills, { good: { n: 1, last: 2 } })
-    assert.equal(junkTallies.activity?.days['2026-11-01'].tools, undefined)
-    const fullTiming = loaded.sessions.get('full-timing')
-    assert.ok(fullTiming !== undefined)
-    assert.deepEqual(fullTiming.timeline?.timing?.tools.bash, { calls: 1, ms: 2 })
-    assert.equal(fullTiming.timeline?.timing?.reasoningMs, undefined)
-    const child = loaded.sessions.get('child')
-    assert.ok(child !== undefined)
-    assert.equal(child.parentSession, 'parent')
-    assert.equal(child.origin, 'subagent')
+    await cache.save(['a', 'b'].map(id => savedRecord(id)))
+    await cache.flush()
+    const prune = cache.save([savedRecord('a')], new Set(['a']))
+    const isolated = cache.save([savedRecord('c')])
+    assert.equal(await prune, true)
+    assert.equal(await isolated, true)
+    assert.deepEqual([...(await cache.load(new Set(['a', 'b', 'c']))).sessions.keys()].sort(), ['a', 'c'])
+    await cache.flush()
+    assert.deepEqual([...(await cache.load(new Set(['a', 'b', 'c']))).sessions.keys()].sort(), ['a', 'c'])
+    const isolatedAgain = cache.save([savedRecord('a')])
+    const isolatedBeforePrune = cache.save([savedRecord('c')])
+    const pruned = cache.save([savedRecord('a')], new Set(['a']))
+    assert.equal(await isolatedAgain, true)
+    assert.equal(await isolatedBeforePrune, true)
+    assert.equal(await pruned, true)
+    await cache.flush()
+    assert.deepEqual([...(await cache.load(new Set(['a', 'b', 'c']))).sessions.keys()], ['a'])
+    const earlier = cache.save([savedRecord('c'), savedRecord('b')])
+    const finalPrune = cache.save([savedRecord('a')], new Set(['a']))
+    assert.equal(await earlier, true)
+    assert.equal(await finalPrune, true)
+    await cache.flush()
+    assert.deepEqual([...(await cache.load(new Set(['a', 'b', 'c']))).sessions.keys()], ['a'])
   })
 
-  test('load with known identities compares the stored null identity against the known one', async () => {
+  test('an older multi-record save cannot overwrite a newer value for the same id', async () => {
     const fs = fakeFs()
-    const cache = createOverviewCache({ path: PATH, fs, statConcurrency: 1 })
-    storeFile(fs, PATH, [
-      { session: sessionOf('stored-null'), identity: null },
-      { session: sessionOf('vanished'), identity: identityOf('/logs/vanished', 1, 1) },
-    ])
-    const known = new Map<string, DurableIdentity | null>([
-      ['stored-null', identityOf('/logs/stored-null', 1, 1)],
-      ['vanished', identityOf('/logs/vanished', 1, 1)],
-    ])
-    const loaded = await cache.load(new Set(['stored-null', 'vanished']), known)
-    assert.deepEqual([...loaded.sessions.keys()], ['vanished'], 'only the record whose identity matches the known one is reusable')
-    assert.deepEqual([...loaded.rebuild], ['stored-null'])
-    assert.deepEqual(loaded.identities.get('stored-null'), identityOf('/logs/stored-null', 1, 1))
-    assert.deepEqual(loaded.identities.get('vanished'), identityOf('/logs/vanished', 1, 1))
+    fs.stats.set('/logs/a', { size: 1, mtimeMs: 1 })
+    fs.stats.set('/logs/b', { size: 1, mtimeMs: 1 })
+    const cache = createOverviewCache({ path: PATH, fs, debounceMs: 60000 })
+    const oldB = savedRecord('b')
+    oldB.session.title = 'old'
+    assert.ok(oldB.session.materialization !== undefined)
+    oldB.session.materialization.values.title = 'old'
+    const older = cache.save([savedRecord('a'), oldB])
+    const newer = cache.save([savedRecord('b')])
+    assert.equal(await older, true)
+    assert.equal(await newer, true)
+    await cache.flush()
+    const loaded = await cache.load(new Set(['a', 'b']))
+    assert.equal(loaded.sessions.get('b')?.title, 'Session b')
+    cache.dispose()
   })
 
-  test('an empty cache constructor and an empty refresh stay inert', async () => {
+  test('pending records are readable before debounce and stay scoped to requested ids', async () => {
+    const fs = fakeFs()
+    for (const id of ['a', 'b', 'c']) fs.stats.set(`/logs/${id}`, { size: 1, mtimeMs: 1 })
+    const cache = createOverviewCache({ path: PATH, fs, debounceMs: 60000 })
+    storeSessions(fs, PATH, [savedRecord('a')])
+    await cache.save([savedRecord('b')])
+    assert.deepEqual([...(await cache.load(new Set(['a', 'b']))).sessions.keys()].sort(), ['a', 'b'])
+    await cache.save([savedRecord('c')])
+    assert.deepEqual([...(await cache.load(new Set(['a', 'b', 'c']))).sessions.keys()].sort(), ['a', 'b', 'c'])
+    assert.deepEqual([...(await cache.load(new Set(['a']))).sessions.keys()], ['a'])
+    await cache.flush()
+    assert.deepEqual([...(await cache.load(new Set(['a', 'b', 'c']))).sessions.keys()].sort(), ['a', 'b', 'c'])
+    const withoutMaterialization = sessionOf('incomplete')
+    delete withoutMaterialization.materialization
+    assert.equal(await cache.save([{ session: withoutMaterialization, identity: null }]), true)
     const defaults = createOverviewCache()
     defaults.dispose()
-    const fs = fakeFs()
-    const cache = createOverviewCache({ path: PATH, fs })
-    const refreshed = await cache.refresh(new Set(['a']), new Map())
-    assert.equal(refreshed.identities.size, 0)
-    assert.equal(refreshed.changed.size, 0)
-  })
-
-  test('a record missing either projection is never reused and is rebuilt', async () => {
-    const fs = fakeFs()
-    const cache = createOverviewCache({ path: PATH, fs, statConcurrency: 1 })
-    storeFile(fs, PATH, [
-      { session: sessionOf('complete'), identity: identityOf('/logs/complete', 1, 1) },
-      { session: sessionOf('no-timeline', { timeline: null }), identity: identityOf('/logs/no-timeline', 1, 1) },
-      { session: sessionOf('no-activity', { activity: null }), identity: identityOf('/logs/no-activity', 1, 1) },
-    ])
-    for (const id of ['complete', 'no-timeline', 'no-activity']) fs.stats.set(`/logs/${id}`, { size: 1, mtimeMs: 1 })
-    const loaded = await cache.load(new Set(['complete', 'no-timeline', 'no-activity']))
-    assert.deepEqual([...loaded.sessions.keys()], ['complete'])
-    assert.deepEqual([...loaded.rebuild].sort(), ['no-activity', 'no-timeline'])
-    assert.deepEqual(loaded.identities.get('no-timeline'), identityOf('/logs/no-timeline', 1, 1))
-    const known = new Map<string, DurableIdentity | null>([
-      ['complete', identityOf('/logs/complete', 1, 1)],
-      ['no-timeline', identityOf('/logs/no-timeline', 1, 1)],
-      ['no-activity', identityOf('/logs/no-activity', 1, 1)],
-    ])
-    const matched = await cache.load(new Set(['complete', 'no-timeline', 'no-activity']), known)
-    assert.deepEqual([...matched.sessions.keys()], ['complete'])
-    assert.deepEqual([...matched.rebuild].sort(), ['no-activity', 'no-timeline'])
-  })
-
-  test('a staged save is readable before the write debounce lands, and later saves merge by id', async () => {
-    const fs = fakeFs()
-    fs.stats.set('/logs/a', { size: 10, mtimeMs: 100 })
-    fs.stats.set('/logs/b', { size: 20, mtimeMs: 200 })
-    fs.stats.set('/logs/c', { size: 30, mtimeMs: 300 })
-    const cache = createOverviewCache({ path: PATH, fs })
-    storeFile(fs, PATH, [{ session: sessionOf('a'), identity: identityOf('/logs/a', 10, 100) }])
-    cache.save([{ session: sessionOf('b'), identity: identityOf('/logs/b', 20, 200) }])
-    const staged = await cache.load(new Set(['a', 'b']))
-    assert.deepEqual([...staged.sessions.keys()].sort(), ['a', 'b'], 'the file row and the pending row both serve')
-    cache.save([{ session: sessionOf('c'), identity: identityOf('/logs/c', 30, 300) }])
-    const merged = await cache.load(new Set(['a', 'b', 'c']))
-    assert.deepEqual([...merged.sessions.keys()].sort(), ['a', 'b', 'c'], 'a later save keeps the previously staged record')
-    const narrowed = await cache.load(new Set(['a']))
-    assert.deepEqual([...narrowed.sessions.keys()], ['a'], 'a staged record outside the requested ids stays staged')
-    await cache.flush()
-    const persisted = await cache.load(new Set(['b', 'c']))
-    assert.deepEqual([...persisted.sessions.keys()].sort(), ['b', 'c'], 'the flush writes exactly the merged pending records')
+    cache.dispose()
   })
 })

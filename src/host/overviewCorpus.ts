@@ -1,6 +1,6 @@
 import type { Context } from '@deepseek-ai/cordis'
 import { workspaceTitleOf } from '@deepseek-ai/dsh-util-workspace-path'
-import { billedTokensOf, mergeCostUsage } from '../shared/pricing'
+import { mergeCostUsage } from '../shared/pricing'
 import type {
   ActivityDay,
   ActivityTally,
@@ -12,6 +12,8 @@ import type {
 import type { CachedSnapshotFace, SnapshotProjectionsFace } from './faces'
 import { asRecord } from './record'
 import { activityOf, currentOf, numOf, optionalNumOf, timingOf } from './overviewDecode'
+import { contextActivitySchema } from './activity'
+import { contextTimelineSchema } from './timeline'
 
 const OVERVIEW_KEYS = new Set<string>(['contextTimeline', 'contextActivity', 'title', 'sessionListMetadata'])
 
@@ -38,6 +40,13 @@ export interface HostTimeline {
   generatedCallTokens?: number
 }
 
+export interface SessionMaterialization {
+  asOfSeq: number
+  facts: HeaderFacts
+  signature: string
+  values: Record<string, unknown>
+}
+
 export interface HostSession {
   id: string
   title: string
@@ -49,6 +58,7 @@ export interface HostSession {
   timeline: HostTimeline | null
   activity: ContextActivity | null
   signature: string
+  materialization?: SessionMaterialization
 }
 
 export interface HostTotals {
@@ -120,7 +130,7 @@ export function headerFactsOf(header: Record<string, unknown>): HeaderFacts | nu
   }
 }
 
-export function revisionOf(parts: readonly string[]): string {
+export function stableHashOf(parts: readonly string[]): number {
   let hash = 0x811c9dc5
   for (const part of parts) {
     for (let index = 0; index < part.length; index++) {
@@ -130,7 +140,11 @@ export function revisionOf(parts: readonly string[]): string {
     hash ^= 0x1d
     hash = Math.imul(hash, 0x01000193) >>> 0
   }
-  return `r1-${hash.toString(36)}`
+  return hash
+}
+
+export function revisionOf(parts: readonly string[]): string {
+  return `r1-${stableHashOf(parts).toString(36)}`
 }
 
 function sessionSeqOf(session: unknown): number {
@@ -275,9 +289,10 @@ function sessionOf(
   projections: SnapshotProjectionsFace,
 ): { session: HostSession; cacheable: boolean } {
   let values: Record<string, unknown> | null = null
+  let block: { values?: unknown; asOfSeq?: unknown } | undefined
   let cacheable = true
   try {
-    const block = entry.live
+    block = entry.live
       ? projections.snapshot(entry.session, OVERVIEW_KEYS)
       : cache.cachedSnapshot(entry.header, OVERVIEW_KEYS)
     const served = asRecord(block?.values)
@@ -289,7 +304,10 @@ function sessionOf(
     values = null
     cacheable = false
   }
-  return { session: hostSessionOf(entry.id, entry.facts, entry.signature, values), cacheable }
+  const session = values === null
+    ? hostSessionOf(entry.id, entry.facts, entry.signature, null)
+    : materializedSessionOf(entry.id, entry.facts, entry.signature, block)
+  return { session, cacheable: cacheable && session.materialization !== undefined }
 }
 
 export function hostSessionOf(
@@ -313,6 +331,104 @@ export function hostSessionOf(
     ...(facts.parentSession === undefined ? {} : { parentSession: facts.parentSession }),
     ...(facts.origin === undefined ? {} : { origin: facts.origin }),
   }
+}
+
+function materializationOf(
+  values: Record<string, unknown> | null,
+  asOfSeq: unknown,
+  facts: HeaderFacts,
+  signature: string,
+): SessionMaterialization | undefined {
+  if (values === null) return undefined
+  const timeline = asRecord(values.contextTimeline)
+  const activity = values.contextActivity
+  if (timeline === null) return undefined
+  const { costRead: _costRead, ...withoutCostRead } = timeline
+  const parsedTimeline = contextTimelineSchema.safeParse(withoutCostRead)
+  const parsedActivity = contextActivitySchema.safeParse(activity)
+  if (!parsedTimeline.success || !parsedActivity.success) return undefined
+  const clean: Record<string, unknown> = {
+    contextTimeline: parsedTimeline.data,
+    contextActivity: parsedActivity.data,
+  }
+  if (typeof values.title === 'string' && values.title !== '') clean.title = values.title
+  const metadata = asRecord(values.sessionListMetadata)
+  if (metadata !== null) {
+    const lastPromptAt = optionalNumOf(metadata.lastPromptAt)
+    clean.sessionListMetadata = {
+      blank: metadata.blank === true,
+      ...(lastPromptAt === undefined ? {} : { lastPromptAt }),
+    }
+  }
+  if (typeof asOfSeq !== 'number' || !Number.isSafeInteger(asOfSeq)) return undefined
+  return { asOfSeq, facts, signature, values: clean }
+}
+
+function persistedFactsOf(value: unknown): HeaderFacts | undefined {
+  const data = asRecord(value)
+  if (data === null || typeof data.id !== 'string' || data.id === ''
+    || typeof data.createdAt !== 'number' || !Number.isFinite(data.createdAt)
+    || (data.cwd !== undefined && (typeof data.cwd !== 'string' || data.cwd === ''))
+    || (data.parentSession !== undefined && (typeof data.parentSession !== 'string' || data.parentSession === ''))
+    || (data.origin !== undefined && data.origin !== 'subagent')) return undefined
+  return headerFactsOf(data) as HeaderFacts
+}
+
+export function parseSessionMaterialization(value: unknown): SessionMaterialization | undefined {
+  const data = asRecord(value)
+  const facts = persistedFactsOf(data?.facts)
+  if (facts === undefined || typeof data?.signature !== 'string') return undefined
+  return materializationOf(asRecord(data.values), data.asOfSeq, facts, data.signature)
+}
+
+export function hostSessionFromMaterialization(materialization: SessionMaterialization): HostSession {
+  const { facts, signature, values } = materialization
+  const metadata = asRecord(values.sessionListMetadata)
+  const lastPromptAt = optionalNumOf(metadata?.lastPromptAt)
+  const value = asRecord(values.contextTimeline) as Record<string, unknown>
+  const current = asRecord(value.current) as Snapshot['current']
+  const counts = asRecord(value.counts)
+  const timing = asRecord(value.timing) as TimingTotals | null
+  const timeline: HostTimeline = {
+    current,
+    total: current.total,
+    turns: numOf(counts?.turns),
+    ...(counts?.steps === undefined ? {} : { steps: numOf(counts.steps) }),
+    ...(value.contextWindow === undefined ? {} : { contextWindow: numOf(value.contextWindow) }),
+    ...(value.maxOutputTokens === undefined ? {} : { maxOutputTokens: numOf(value.maxOutputTokens) }),
+    ...(typeof value.model === 'string' && value.model !== '' ? { model: value.model } : {}),
+    ...(typeof value.lastUser === 'string' && value.lastUser !== '' ? { lastUser: value.lastUser } : {}),
+    ...(timing === null ? {} : { timing }),
+    ...(value.generatedReasoning === undefined ? {} : { generatedReasoning: numOf(value.generatedReasoning) }),
+    ...(value.generatedAnswerTokens === undefined ? {} : { generatedAnswerTokens: numOf(value.generatedAnswerTokens) }),
+    ...(value.generatedCallTokens === undefined ? {} : { generatedCallTokens: numOf(value.generatedCallTokens) }),
+  }
+  return {
+    id: facts.id,
+    title: titleOf(values.title, facts.cwd, facts.id),
+    updatedAt: Math.max(facts.createdAt, lastPromptAt ?? 0),
+    blank: metadata?.blank === true,
+    timeline,
+    activity: asRecord(values.contextActivity) as ContextActivity | null,
+    signature,
+    materialization,
+    ...(facts.cwd === undefined ? {} : { cwd: facts.cwd }),
+    ...(facts.parentSession === undefined ? {} : { parentSession: facts.parentSession }),
+    ...(facts.origin === undefined ? {} : { origin: facts.origin }),
+  }
+}
+
+export function materializedSessionOf(
+  id: string,
+  facts: HeaderFacts,
+  signature: string,
+  block: { values?: unknown; asOfSeq?: unknown } | null | undefined,
+): HostSession {
+  const values = asRecord(block?.values)
+  const materialization = materializationOf(values, block?.asOfSeq, facts, signature)
+  return materialization === undefined
+    ? hostSessionOf(id, facts, signature, values)
+    : hostSessionFromMaterialization(materialization)
 }
 
 function mergeActivity(members: readonly (ContextActivity | null)[]): ContextActivity | null {
@@ -378,6 +494,7 @@ export function activityTotalsOf(
   admit?: (key: string) => boolean,
 ): HostTotals {
   let usage: SessionCostUsage | null = null
+  let tokens = 0
   let turns = 0
   let calls = 0
   let toolCalls = 0
@@ -387,6 +504,7 @@ export function activityTotalsOf(
     for (const [key, day] of Object.entries(activity.days)) {
       if (admit !== undefined && !admit(key)) continue
       usage = mergeCostUsage(usage, day.cost)
+      tokens += day.tokens
       turns += day.turns ?? 0
       calls += day.requests
       toolCalls += day.toolCalls ?? 0
@@ -394,7 +512,7 @@ export function activityTotalsOf(
       wallMs += day.wallMs ?? 0
     }
   }
-  return { usage, tokens: billedTokensOf(usage), turns, calls, toolCalls, toolsMs, wallMs }
+  return { usage, tokens, turns, calls, toolCalls, toolsMs, wallMs }
 }
 
 function childrenOf(sessions: readonly HostSession[]): Map<string, HostSession[]> {
@@ -481,6 +599,7 @@ export interface BuildRowsResult {
   rows: HostRow[]
   reusableSessions: Map<string, HostSession>
   rebuilt: number
+  rebuiltIds: string[]
   incomplete: number
 }
 
@@ -498,6 +617,7 @@ export async function buildRows(
   const current = new Map<string, HostSession>()
   const reusable = new Map<string, HostSession>()
   let rebuilt = 0
+  const rebuiltIds: string[] = []
   let incomplete = 0
   for (const entry of scan.entries) {
     const cached = sessions.get(entry.id)
@@ -511,9 +631,10 @@ export async function buildRows(
     if (built.cacheable) reusable.set(entry.id, built.session)
     else incomplete++
     rebuilt++
+    rebuiltIds.push(entry.id)
     if (yieldEvery > 0 && rebuilt % yieldEvery === 0) await yieldTo()
   }
   const rows = rowsOf([...current.values()], workspace, ctx)
-  return { rows, reusableSessions: reusable, rebuilt, incomplete }
+  return { rows, reusableSessions: reusable, rebuilt, rebuiltIds, incomplete }
 }
 

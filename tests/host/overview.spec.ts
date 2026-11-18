@@ -3,7 +3,7 @@ import { Context } from '@deepseek-ai/cordis'
 import { describe, test, vi } from 'vitest'
 import { watchOverviewRoute, OVERVIEW_ROUTE } from '../../src/host/overview'
 import { type ContextTimeline, type SessionCostUsage } from '../../src/shared/types'
-import { boot, call, summaryOf, pageOf, revisionOf, recordOf, unwrap, usageOf, timelineOf, timingOf, dayOf, costOfUsage, fakeCost, fakeBackfill, fakeState, tokenPartsOf, usageTotalsOf, sortedParts, WIDE_RANGE, type RouteBox } from './helpers/overview'
+import { boot, call, summaryOf, pageOf, revisionOf, recordOf, unwrap, usageOf, timelineOf, timingOf, dayOf, costOfUsage, fakeCost, fakeBackfill, fakeState, tokenPartsOf, sortedParts, WIDE_RANGE, type RouteBox } from './helpers/overview'
 import { makeScanWindow, type ScanResult } from '../../src/host/overviewScan'
 
 describe('overview', () => {
@@ -61,14 +61,11 @@ describe('dsh-context overview route', () => {
         else prev.value += part.value
       }
     }
-    const expectedTokens = usageTotalsOf(merged).uncachedInputTokens + usageTotalsOf(merged).cacheReadTokens
-      + usageTotalsOf(merged).cacheWriteTokens + usageTotalsOf(merged).outputTokens
     assert.equal(summary.sessions, 2)
     assert.equal(summary.sessionsTotal, 2)
     assert.equal(summary.sessionsArchived, 0)
     assert.equal(summary.archivedScoped, 0)
-    assert.equal(summary.tokens, summary.tokenParts?.reduce((sum, part) => sum + part.value, 0), 'tokens equal the pure billed split total')
-    assert.ok(Math.abs(summary.tokens - expectedTokens) <= 2, 'the split stays within rounding of the billed total')
+    assert.equal(summary.tokens, 200, 'the KPI uses the canonical activity-day token total')
     assert.equal(summary.turns, 5)
     assert.equal(summary.costUsd, costOfUsage(merged))
     assert.equal(summary.costSessions, 2)
@@ -146,15 +143,15 @@ describe('dsh-context overview route', () => {
       },
     })
     const wide = summaryOf(await call(harness, { part: 'summary' }))
-    assert.equal(wide.tokens, 33, 'the wide scope sums every retained day')
+    assert.equal(wide.tokens, 30, 'the wide scope sums every retained day')
     assert.equal(wide.turns, 3)
     assert.deepEqual(wide.windowTiming, { calls: 3, toolCalls: 3, toolsMs: 30, wallMs: 40 })
     const ranged = summaryOf(await call(harness, { part: 'summary', scope: { range: { start: Date.UTC(2026, 9, 20), end: Date.UTC(2026, 10, 5) } } }))
-    assert.equal(ranged.tokens, 22, 'a bounded scope bills only its window days')
+    assert.equal(ranged.tokens, 20, 'a bounded scope bills only its window days')
     assert.equal(ranged.turns, 2)
     assert.equal(ranged.windowTiming.toolCalls, 2)
     const day = summaryOf(await call(harness, { part: 'summary', scope: { day: '2026-11-01' } }))
-    assert.equal(day.tokens, 22)
+    assert.equal(day.tokens, 20)
     assert.equal(day.turns, 2)
     assert.ok(wide.tokens >= ranged.tokens)
     assert.ok(ranged.tokens >= day.tokens)
@@ -171,7 +168,7 @@ describe('dsh-context overview route', () => {
       },
     })
     const wide = summaryOf(await call(harness, { part: 'summary' }))
-    assert.equal(wide.tokens, 22)
+    assert.equal(wide.tokens, 20)
     assert.equal(wide.costSessions, 1)
     assert.equal(wide.usageSessions, 1)
     assert.equal(wide.tokenParts, null)
@@ -213,7 +210,7 @@ describe('dsh-context overview route', () => {
   test('revision is stable for the same corpus and unchanged polls reply tiny; a data change makes a new revision', async () => {
     const harness = await boot({
       records: [recordOf('a')],
-      values: { a: { contextTimeline: timelineOf(), title: 'Alpha' } },
+      values: { a: { contextTimeline: timelineOf(), contextActivity: { days: {} }, title: 'Alpha' } },
     })
     const first = await call(harness, { part: 'summary' })
     const revision = revisionOf(first)
@@ -255,9 +252,17 @@ describe('dsh-context overview route', () => {
     assert.deepEqual(harness.calls.cached, [], 'a live session never reads the cold cache')
     const revision = revisionOf(first)
     harness.state.liveSeq.live = 2
+    harness.cacheMode.liveValues.live = {
+      contextTimeline: timelineOf({ total: 84, turns: 4, cost: usageOf(20, 0, 0, 2) }),
+      contextActivity: { days: { '2026-11-01': dayOf(30, 2, { turns: 4, cost: usageOf(20, 0, 0, 2) }) } },
+      title: 'Live updated',
+      sessionListMetadata: { blank: false, lastPromptAt: 6_000 },
+    }
     const next = await call(harness, { part: 'summary', revision })
     assert.notEqual(revisionOf(next), revision, 'a live event seq change moves the revision')
     assert.equal(summaryOf(next).sessions, 1)
+    assert.equal(summaryOf(next).tokens, 30, 'the new live seq cannot reuse the old materialized values')
+    assert.deepEqual(harness.calls.snapshot, ['live', 'live'])
   })
 
   test('a fresh route instance still replies fully when a known revision arrives before any rows were built', async () => {
@@ -282,8 +287,8 @@ describe('dsh-context overview route', () => {
     const harness = await boot({
       records: [recordOf('a'), recordOf('b'), recordOf('c')],
       values: {
-        a: { contextTimeline: timelineOf({ turns: 1 }), title: 'A' },
-        b: { contextTimeline: timelineOf({ turns: 1 }), title: 'B' },
+        a: { contextTimeline: timelineOf({ turns: 1 }), contextActivity: { days: {} }, title: 'A' },
+        b: { contextTimeline: timelineOf({ turns: 1 }), contextActivity: { days: {} }, title: 'B' },
         c: { contextTimeline: timelineOf({ turns: 1 }), title: 'C' },
       },
       workspace,
@@ -298,6 +303,62 @@ describe('dsh-context overview route', () => {
     const page = pageOf(await call(harness, { part: 'page', scope: { group: 'Alpha' } }))
     assert.deepEqual(page.items.map(row => row.id), ['a'])
     assert.deepEqual(page.groups, [{ key: 'Alpha', count: 1 }, { key: 'Beta', count: 2 }])
+  })
+
+  test('model-less activity keeps the same token total in summary, cards, and days', async () => {
+    const harness = await boot({
+      records: [recordOf('plain')],
+      values: {
+        plain: {
+          contextTimeline: timelineOf({ total: 5, turns: 1 }),
+          contextActivity: { days: { '2026-11-01': { tokens: 17, requests: 2, turns: 1 } } },
+          sessionListMetadata: { blank: false, lastPromptAt: 10 },
+        },
+      },
+    })
+    const summary = summaryOf(await call(harness, { part: 'summary' }))
+    assert.equal(summary.tokens, 17)
+    assert.equal(pageOf(await call(harness, { part: 'page' })).items[0].tokens, 17)
+    const days = await call(harness, { part: 'days' })
+    const value = days.reply.value
+    assert.ok(value !== undefined && 'days' in value)
+    assert.equal(value.days[0].tokens, 17)
+    harness.dispose()
+  })
+
+  test('calendar day keys override the legacy absolute range and resolve on the host', async () => {
+    const harness = await boot({
+      records: [recordOf('a')],
+      values: {
+        a: {
+          contextTimeline: timelineOf(),
+          contextActivity: { days: { '2026-11-01': dayOf(11, 1) } },
+          sessionListMetadata: { blank: false, lastPromptAt: 10 },
+        },
+      },
+    })
+    const summary = summaryOf(await call(harness, {
+      part: 'summary',
+      scope: {
+        range: { start: 1, end: 2 },
+        calendar: { from: '2026-11-01', to: '2026-11-02' },
+      },
+    }))
+    assert.equal(summary.tokens, 11)
+    assert.equal(summary.window?.from, '2026-11-01')
+    assert.equal(summary.window?.to, '2026-11-02')
+    assert.equal(summary.window?.start, new Date(2026, 10, 1).getTime())
+    assert.equal(summary.window?.end, new Date(2026, 10, 2, 23, 59, 59, 999).getTime())
+    const reversed = summaryOf(await call(harness, {
+      part: 'summary', scope: { range: '30d', calendar: { from: '2026-11-02', to: '2026-11-01' } },
+    }))
+    assert.deepEqual(reversed.window, summary.window)
+    const invalid = summaryOf(await call(harness, {
+      part: 'summary',
+      scope: { range: { start: 1, end: 2 }, calendar: { from: '2026-02-30', to: '2026-02-30' } },
+    }))
+    assert.equal(invalid.window?.start, 1)
+    harness.dispose()
   })
 
   test('pricing not ready keeps money null and marks the reply', async () => {
@@ -446,8 +507,8 @@ describe('dsh-context overview route', () => {
       servedKeysMax: 2,
       records: [recordOf('a'), recordOf('b')],
       values: {
-        a: { contextTimeline: timelineOf({ turns: 1 }), title: 'A' },
-        b: { contextTimeline: timelineOf({ turns: 1 }), title: 'B' },
+        a: { contextTimeline: timelineOf({ turns: 1 }), contextActivity: { days: {} }, title: 'A' },
+        b: { contextTimeline: timelineOf({ turns: 1 }), contextActivity: { days: {} }, title: 'B' },
       },
     })
     const summary = await call(harness, { part: 'summary' })

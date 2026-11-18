@@ -421,8 +421,9 @@ describe('OverviewPanel', () => {
     assert.ok(pickedWindow !== null)
     assert.deepEqual(lastBodyOf(calls, 'page').scope, {
       range: { start: pickedWindow.start, end: pickedWindow.end },
+      calendar: { from: YESTERDAY, to: TODAY },
       coverage: 'all',
-    }, 'the page request carries the picked window bounds')
+    }, 'the page request carries both the legacy bounds and host calendar keys')
     assert.ok(query(calendar.m.container, '.lc-dp-trigger').className.includes('lc-dp-trigger-on'), 'the chip carries the picked range')
     assert.deepEqual(
       queryAll(calendar.m.container, '.lc-dp-trigger .lc-dp-half').map(el => el.textContent),
@@ -466,6 +467,7 @@ describe('OverviewPanel', () => {
     await click(todayCell)
     await settle(5)
     assert.equal(scopeOf(lastBodyOf(calls, 'page')).day, TODAY)
+    assert.equal(scopeOf(lastBodyOf(calls, 'summary')).day, TODAY, 'the KPI band follows the pinned day')
     assert.equal(scopeOf(lastBodyOf(calls, 'tally')).day, TODAY, 'the tallies follow the pinned day too')
     assert.ok(query(m.container, '.lc-ov-day-chip'), 'the day chip appears')
     const cards = cardsOf(m.container)
@@ -593,6 +595,7 @@ describe('OverviewPanel', () => {
     await actType(input, 'beta')
     await settle(5)
     assert.equal(scopeOf(lastBodyOf(calls, 'page')).query, 'beta')
+    assert.equal(scopeOf(lastBodyOf(calls, 'summary')).query, 'beta', 'the KPI band follows the search')
     assert.equal(cardsOf(m.container).length, 1)
     assert.ok(text(m.container).includes('beta session'))
     await actType(input, '/repo/a')
@@ -668,6 +671,7 @@ describe('OverviewPanel', () => {
     await click(chips[1])
     await settle(5)
     assert.equal(scopeOf(lastBodyOf(calls, 'page')).group, 'workspace-one')
+    assert.equal(scopeOf(lastBodyOf(calls, 'summary')).group, 'workspace-one', 'the KPI band follows the workspace group')
     let cards = cardsOf(m.container)
     assert.equal(cards.length, 1)
     assert.ok(text(cards[0]).includes('alpha session'))
