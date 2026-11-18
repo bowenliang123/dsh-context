@@ -649,6 +649,8 @@ export const DICT_JA = {
   'ov.fold.progress': '投影を補算中（{n}/{total}）…',
   'ov.fold.tip': '投影の補算完了後、本ページの数値は自動更新されます',
   'ov.fold.stalled': '{n} セッションの投影に失敗',
+  'ov.fold.unreadable': '読み取れないセッション {n} 件',
+  'ov.fold.unreadableTip': 'DeepSeek Harness がこれらのセッションログの読み取りを拒否したため、補算は一旦スキップされます。Harness の更新後に自動で再試行されます',
   'ov.stats.empty': '集計範囲に課金 Token 使用量はありません',
   'ov.usage.title': '過去 7 日の使用量',
   'ov.usage.tokens': 'Token',

@@ -154,6 +154,13 @@ export function makeOverviewPanel(
     const span = spanFrom !== null && spanTo !== null ? { from: spanFrom, to: spanTo } : null
     const backfill = summaryState.coverage
     const fold = foldStateOf(backfill)
+    const unreadable = backfill?.unreadable ?? 0
+    const foldTip = backfill !== null && unreadable > 0
+      ? [
+        fold === 'idle' ? t('ov.fold.unreadableTip') : t('ov.fold.tip'),
+        ...(backfill.unreadableSessions ?? []).map(entry => `${entry.id} — ${entry.reason}`),
+      ].join('\n')
+      : t('ov.fold.tip')
     const pageValue = pageState.data?.page ?? null
     const pageIndex = pageValue?.index ?? 0
     const pageCount = pageValue?.count ?? 1
@@ -235,13 +242,15 @@ export function makeOverviewPanel(
               </button>
               <BalanceCapsule />
               <UpdatePill />
-              {backfill !== null && fold !== 'idle' && (
-                <span className="lc-ov-folding" title={t('ov.fold.tip')}>
+              {backfill !== null && (fold !== 'idle' || unreadable > 0) && (
+                <span className="lc-ov-folding" title={foldTip}>
                   {fold === 'stalled'
                     ? t('ov.fold.stalled', { n: fmt(backfill.failed) })
-                    : backfill.total === 0
-                      ? t('ov.fold.starting')
-                      : t('ov.fold.progress', { n: backfill.covered, total: backfill.total })}
+                    : fold === 'idle'
+                      ? t('ov.fold.unreadable', { n: backfill.unreadable })
+                      : backfill.total === 0
+                        ? t('ov.fold.starting')
+                        : t('ov.fold.progress', { n: backfill.covered, total: backfill.total })}
                 </span>
               )}
               <div className="lc-ov-headctl">

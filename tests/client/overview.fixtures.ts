@@ -15,7 +15,7 @@ export const TODAY = dayKeyOf(NOW) ?? ''
 export const YESTERDAY = dayKeyOf(NOW - 86_400_000) ?? ''
 export const MIDNIGHT = new Date(new Date(NOW).setHours(0, 0, 0, 0)).getTime()
 
-export const COMPLETE_COVERAGE = { complete: true, running: false, remaining: 0, failed: 0, total: 3, covered: 3, unsupported: 0 }
+export const COMPLETE_COVERAGE = { complete: true, running: false, remaining: 0, failed: 0, total: 3, covered: 3, unsupported: 0, unreadable: 0 }
 
 export interface ServerRow {
   id: string

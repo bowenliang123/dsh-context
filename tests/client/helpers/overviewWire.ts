@@ -7,7 +7,7 @@ export const BASE_COVERAGE: BackfillCoverage = {
   failed: 0,
   total: 2,
   covered: 2,
-  unsupported: 0,
+  unsupported: 0, unreadable: 0,
 }
 
 export function coverageOf(over: Partial<BackfillCoverage> = {}): BackfillCoverage {

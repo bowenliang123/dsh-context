@@ -774,7 +774,7 @@ test('without the connection face the route never registers, and the watcher dis
     let version = 0
     const backfill = Object.assign(() => {}, {
       request: () => {},
-      coverage: () => ({ complete: true, remaining: 0, failed: 0, running: false, total: 0, covered: 0, unsupported: 0 }),
+      coverage: () => ({ complete: true, remaining: 0, failed: 0, running: false, total: 0, covered: 0, unsupported: 0, unreadable: 0 }),
       version: () => version,
       foldedSince: (marker: number) => ({ version: marker, ids: [], workerIds: [] }),
     })

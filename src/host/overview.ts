@@ -459,7 +459,7 @@ export function watchOverviewRoute(
           ? `C${identityKey(identities.get(entry.id))}`
           : `C${backfillVersion}`))
         const coverage = backfill.coverage()
-        const coverageKey = `${coverage.complete ? 'c' : 'i'}:${coverage.remaining}:${coverage.failed}:${coverage.unsupported}:${coverage.total}:${coverage.covered}`
+        const coverageKey = `${coverage.complete ? 'c' : 'i'}:${coverage.remaining}:${coverage.failed}:${coverage.unsupported}:${coverage.unreadable}:${coverage.total}:${coverage.covered}`
         const pricingKey = cost.ready() ? `ready${cost.version?.() ?? 0}` : 'cold'
         const revision = revisionOf([corpusRevision, workspace.signature, coverageKey, pricingKey, `f${foldEpoch}`])
         if (feed.revision !== revision) feed.served.clear()

@@ -649,6 +649,8 @@ export const DICT_PT = {
   'ov.fold.progress': 'Calculando projeções ({n}/{total})…',
   'ov.fold.tip': 'Os números são atualizados quando o cálculo das projeções termina',
   'ov.fold.stalled': '{n} sessões não projetadas',
+  'ov.fold.unreadable': 'Sessões ilegíveis: {n}',
+  'ov.fold.unreadableTip': 'O DeepSeek Harness recusa ler estes registros de sessão, então o cálculo as ignora por enquanto; uma atualização do Harness as tenta novamente automaticamente',
   'ov.stats.empty': 'Nenhum token faturado neste intervalo',
   'ov.usage.title': 'Últimos 7 dias',
   'ov.usage.tokens': 'Tokens',

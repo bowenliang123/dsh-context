@@ -23,7 +23,7 @@ const progress = (covered: number, total: number): string => `Folding projection
 describe('OverviewPanel coverage state', () => {
   test('an incomplete coverage shows progress and re-reads overview without posting backfill', async () => {
     vi.useFakeTimers()
-    const incomplete = { complete: false, running: false, remaining: 2, failed: 0, total: 3, covered: 1, unsupported: 0 }
+    const incomplete = { complete: false, running: false, remaining: 2, failed: 0, total: 3, covered: 1, unsupported: 0, unreadable: 0 }
     const calls = stubRoutes({
       summary: () => ({ revision: 's0', pricingReady: true, summary: summaryRaw({ coverage: incomplete }) }),
     })
@@ -39,7 +39,7 @@ describe('OverviewPanel coverage state', () => {
 
   test('running, failed, and starting coverage never post the backfill route', async () => {
     vi.useFakeTimers()
-    const running = { complete: false, running: true, remaining: 2, failed: 0, total: 3, covered: 1, unsupported: 0 }
+    const running = { complete: false, running: true, remaining: 2, failed: 0, total: 3, covered: 1, unsupported: 0, unreadable: 0 }
     const runningCalls = stubRoutes({
       summary: () => ({ revision: 's0', pricingReady: true, summary: summaryRaw({ coverage: running }) }),
     })
@@ -49,7 +49,7 @@ describe('OverviewPanel coverage state', () => {
     assert.equal(runningCalls.filter(c => c.route.endsWith('/backfill')).length, 0, 'a running pass is left alone')
     await first.m.unmount()
 
-    const failed = { complete: false, running: false, remaining: 0, failed: 1, total: 3, covered: 2, unsupported: 0 }
+    const failed = { complete: false, running: false, remaining: 0, failed: 1, total: 3, covered: 2, unsupported: 0, unreadable: 0 }
     const failedCalls = stubRoutes({
       summary: () => ({ revision: 's1', pricingReady: true, summary: summaryRaw({ coverage: failed }) }),
     })
@@ -63,7 +63,7 @@ describe('OverviewPanel coverage state', () => {
       summary: () => ({
         revision: 's2',
         pricingReady: true,
-        summary: summaryRaw({ coverage: { complete: false, running: false, remaining: 0, failed: 0, total: 0, covered: 0, unsupported: 0 } }),
+        summary: summaryRaw({ coverage: { complete: false, running: false, remaining: 0, failed: 0, total: 0, covered: 0, unsupported: 0, unreadable: 0 } }),
       }),
     })
     const third = await openPanelFake(makeCtx())
@@ -71,6 +71,82 @@ describe('OverviewPanel coverage state', () => {
     await act(async () => { await vi.advanceTimersByTimeAsync(2_000) })
     assert.equal(startingCalls.filter(c => c.route.endsWith('/backfill')).length, 0, 'startup is host-owned even before the first corpus listing')
     await third.m.unmount()
+  })
+
+  test('a settled pass with unreadable sessions keeps their ids and reasons in the pill tooltip', async () => {
+    vi.useFakeTimers()
+    stubRoutes({
+      summary: () => ({
+        revision: 's0',
+        pricingReady: true,
+        summary: summaryRaw({
+          coverage: {
+            complete: true,
+            remaining: 0,
+            failed: 0,
+            running: false,
+            total: 3,
+            covered: 2,
+            unsupported: 0,
+            unreadable: 1,
+            unreadableSessions: [{ id: '31a305b6-session', reason: 'SessionPersistenceCorruptionError: stored log is corrupt' }],
+          },
+        }),
+      }),
+    })
+    const { m } = await openPanelFake(makeCtx())
+    assert.ok(text(m.container).includes('Unreadable sessions: 1'))
+    const pill = m.container.querySelector('.lc-ov-folding')
+    assert.ok(pill !== null, 'the unreadable pill is mounted')
+    const title = pill.getAttribute('title') ?? ''
+    assert.ok(title.includes('DeepSeek Harness refuses to read these session logs'))
+    assert.ok(title.includes('31a305b6-session'))
+    assert.ok(title.includes('stored log is corrupt'))
+    await m.unmount()
+
+    stubRoutes({
+      summary: () => ({
+        revision: 's1',
+        pricingReady: true,
+        summary: summaryRaw({
+          coverage: {
+            complete: false,
+            remaining: 2,
+            failed: 0,
+            running: true,
+            total: 3,
+            covered: 1,
+            unsupported: 0,
+            unreadable: 1,
+            unreadableSessions: [{ id: 'refused', reason: 'host refused the log' }],
+          },
+        }),
+      }),
+    })
+    const running = await openPanelFake(makeCtx())
+    assert.ok(text(running.m.container).includes(progress(1, 3)), 'a running pass still shows progress')
+    const runningTitle = running.m.container.querySelector('.lc-ov-folding')?.getAttribute('title') ?? ''
+    assert.ok(runningTitle.includes('refused'), 'the running tooltip carries the unreadable detail')
+    await running.m.unmount()
+
+    stubRoutes({
+      summary: () => ({
+        revision: 's2',
+        pricingReady: true,
+        summary: summaryRaw({
+          coverage: {
+            complete: true, remaining: 0, failed: 0, running: false, total: 3, covered: 2, unsupported: 0, unreadable: 1,
+          },
+        }),
+      }),
+    })
+    const bare = await openPanelFake(makeCtx())
+    assert.ok(text(bare.m.container).includes('Unreadable sessions: 1'))
+    assert.equal(
+      bare.m.container.querySelector('.lc-ov-folding')?.getAttribute('title'),
+      'DeepSeek Harness refuses to read these session logs, so folding skips them for now; a Harness update retries them automatically',
+    )
+    await bare.m.unmount()
   })
 
   test('a progressing coverage repaints the label in place', async () => {
@@ -81,7 +157,7 @@ describe('OverviewPanel coverage state', () => {
         revision: `s${covered}`,
         pricingReady: true,
         summary: summaryRaw({
-          coverage: { complete: false, running: true, remaining: 3 - covered, failed: 0, total: 3, covered, unsupported: 0 },
+          coverage: { complete: false, running: true, remaining: 3 - covered, failed: 0, total: 3, covered, unsupported: 0, unreadable: 0 },
         }),
       }),
     })

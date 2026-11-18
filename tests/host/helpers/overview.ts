@@ -122,7 +122,7 @@ export const OPEN_COVERAGE: BackfillCoverage = {
   running: false,
   total: 0,
   covered: 0,
-  unsupported: 0,
+  unsupported: 0, unreadable: 0,
 }
 
 export function costOfUsage(usage: SessionCostUsage | null | undefined): number | null {

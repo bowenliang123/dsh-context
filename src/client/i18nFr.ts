@@ -649,6 +649,8 @@ export const DICT_FR = {
   'ov.fold.progress': 'Calcul des projections ({n}/{total})…',
   'ov.fold.tip': 'Les chiffres se mettent à jour à la fin du calcul des projections',
   'ov.fold.stalled': '{n} sessions non projetées',
+  'ov.fold.unreadable': 'Sessions illisibles : {n}',
+  'ov.fold.unreadableTip': "DeepSeek Harness refuse de lire ces journaux de session ; le calcul les ignore pour l'instant et les réessaiera après une mise à jour de Harness",
   'ov.stats.empty': 'Aucun token facturé dans cette plage',
   'ov.usage.title': '7 derniers jours',
   'ov.usage.tokens': 'Tokens',

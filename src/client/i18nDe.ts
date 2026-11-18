@@ -649,6 +649,8 @@ export const DICT_DE = {
   'ov.fold.progress': 'Projektionen ({n}/{total})…',
   'ov.fold.tip': 'Die Zahlen aktualisieren sich, sobald die Projektionen fertig berechnet sind',
   'ov.fold.stalled': '{n} Sitzungen nicht projiziert',
+  'ov.fold.unreadable': 'Nicht lesbare Sitzungen: {n}',
+  'ov.fold.unreadableTip': 'DeepSeek Harness verweigert das Lesen dieser Sitzungsprotokolle; das Projizieren überspringt sie vorerst und versucht es nach einem Harness-Update automatisch erneut',
   'ov.stats.empty': 'Keine abgerechneten Tokens in diesem Bereich',
   'ov.usage.title': 'Letzte 7 Tage',
   'ov.usage.tokens': 'Tokens',

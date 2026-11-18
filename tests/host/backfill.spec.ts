@@ -8,19 +8,11 @@ import { BACKFILL_ROUTE, watchActivityBackfill } from '../../src/host/backfill'
 import { createContextTimelineDefinition } from '../../src/host/timeline'
 import { createContextActivityDefinition } from '../../src/host/activity'
 import { createContextHeadersDefinition } from '../../src/host/headers'
-import { arm, captureLogs, coldFaces, connectionOf, fakeState, trigger, unsupportedFormatError, until } from './helpers/backfill'
+import { arm, captureLogs, coldFaces, connectionOf, FAST_PACING, fakeState, trigger, unsupportedFormatError, until } from './helpers/backfill'
 import type { RouteBox } from './helpers/backfill'
 import type { ColdReadGate } from '../../src/host/coldRead'
 
 const settle = (ms = 30): Promise<void> => new Promise(resolve => setTimeout(resolve, ms))
-
-const FAST_PACING = {
-  now: () => performance.now(),
-  sleep: () => Promise.resolve(),
-  minRestMs: 1,
-  workBudgetMs: 1_000_000,
-  roundPauseMs: 1,
-}
 
 function crashTailEvents(filler: number): SessionEvent[] {
   const events: SessionEvent[] = Array.from({ length: filler }, (_, seq) => ({
@@ -522,7 +514,7 @@ describe('watchActivityBackfill', () => {
       },
     })
     const handle = watchActivityBackfill(ctx, undefined, FAST_PACING)
-    assert.deepEqual(handle.coverage(), { complete: false, remaining: 0, failed: 0, running: false, total: 0, covered: 0, unsupported: 0 })
+    assert.deepEqual(handle.coverage(), { complete: false, remaining: 0, failed: 0, running: false, total: 0, covered: 0, unsupported: 0, unreadable: 0 })
     assert.equal(handle.version(), 0)
     const first = await trigger(route)
     assert.equal(route.path, BACKFILL_ROUTE)
@@ -530,7 +522,7 @@ describe('watchActivityBackfill', () => {
     assert.equal(firstBody.ok, true)
     assert.equal(firstBody.coverage.running, true, 'the reply carries the running coverage')
     await until(() => (handle.coverage().complete ? true : undefined), 'the first pass finished')
-    assert.deepEqual(handle.coverage(), { complete: true, remaining: 0, failed: 0, running: false, total: 1, covered: 1, unsupported: 0 })
+    assert.deepEqual(handle.coverage(), { complete: true, remaining: 0, failed: 0, running: false, total: 1, covered: 1, unsupported: 0, unreadable: 0 })
     assert.equal(handle.version(), 1)
     state.served.add('a')
     const second = await trigger(route)
@@ -538,7 +530,7 @@ describe('watchActivityBackfill', () => {
     assert.equal(secondBody.ok, true)
     await until(() => (listed >= 2 ? true : undefined), 'the verified rerun listed the corpus')
     await until(() => (!handle.coverage().running ? true : undefined), 'the verified-warm rerun ends without probing')
-    assert.deepEqual(handle.coverage(), { complete: true, remaining: 0, failed: 0, running: false, total: 1, covered: 1, unsupported: 0 })
+    assert.deepEqual(handle.coverage(), { complete: true, remaining: 0, failed: 0, running: false, total: 1, covered: 1, unsupported: 0, unreadable: 0 })
     assert.deepEqual(state.coldReads, ['a'], 'the warm session is not read again')
     assert.equal(handle.version(), 1, 'a skipped pass keeps the revision')
     ;(state.listed as { header: Record<string, unknown> }[]).push({ header: { id: 'new', cwd: '/repo/new' } })
@@ -580,12 +572,12 @@ describe('watchActivityBackfill', () => {
       'the pass published the corpus total and the first folded session',
     )
     assert.deepEqual(handle.coverage(), {
-      complete: false, remaining: 2, failed: 0, running: true, total: 3, covered: 1, unsupported: 0,
+      complete: false, remaining: 2, failed: 0, running: true, total: 3, covered: 1, unsupported: 0, unreadable: 0,
     })
     release!()
     await until(() => (handle.coverage().complete ? true : undefined), 'the pass settled')
     assert.deepEqual(handle.coverage(), {
-      complete: true, remaining: 0, failed: 0, running: false, total: 3, covered: 3, unsupported: 0,
+      complete: true, remaining: 0, failed: 0, running: false, total: 3, covered: 3, unsupported: 0, unreadable: 0,
     })
     handle()
   })

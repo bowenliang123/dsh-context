@@ -649,6 +649,8 @@ export const DICT_EN = {
   'ov.fold.progress': 'Folding projections ({n}/{total})…',
   'ov.fold.tip': 'Figures update automatically as projections finish folding',
   'ov.fold.stalled': '{n} sessions failed to fold',
+  'ov.fold.unreadable': 'Unreadable sessions: {n}',
+  'ov.fold.unreadableTip': 'DeepSeek Harness refuses to read these session logs, so folding skips them for now; a Harness update retries them automatically',
   'ov.stats.empty': 'No billed tokens in this range',
   'ov.usage.title': 'Last 7 Days',
   'ov.usage.tokens': 'Tokens',

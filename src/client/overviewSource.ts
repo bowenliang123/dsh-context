@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import type {
-  BackfillCoverage, OverviewDay, OverviewPage, OverviewPartTotal, OverviewRequest, OverviewScope,
+  BackfillCoverage, BackfillUnreadableSession, OverviewDay, OverviewPage, OverviewPartTotal, OverviewRequest, OverviewScope,
   OverviewSummary, OverviewTally, OverviewTallyStat, OverviewTimingWindow, OverviewValue, TimingTotals,
   OverviewResolvedWindow,
 } from '../shared/types'
@@ -19,6 +19,8 @@ const COVERAGE_REFRESH_MS = 1_000
 const COVERAGE_REFRESH_MAX_MS = 15_000
 
 const COVERAGE_REFRESH_ATTEMPTS = 10
+
+const UNREADABLE_SESSIONS_MAX = 64
 
 function numOf(value: unknown): number | null {
   return typeof value === 'number' && Number.isFinite(value) ? value : null
@@ -72,10 +74,23 @@ function resolvedWindowOf(value: unknown): OverviewResolvedWindow | undefined {
   return { start, end, from, to }
 }
 
+function unreadableSessionsOf(value: unknown): BackfillUnreadableSession[] | undefined {
+  if (!Array.isArray(value)) return undefined
+  const sessions: BackfillUnreadableSession[] = []
+  for (const entry of value.slice(0, UNREADABLE_SESSIONS_MAX) as unknown[]) {
+    const data = asRecord(entry)
+    const id = data === null ? undefined : stringOf(data.id)
+    const reason = data === null ? undefined : stringOf(data.reason)
+    if (id === undefined || reason === undefined) continue
+    sessions.push({ id, reason })
+  }
+  return sessions.length > 0 ? sessions : undefined
+}
+
 function coverageOf(value: unknown): BackfillCoverage | null {
   const data = asRecord(value)
   if (data === null) return null
-  const fields = ['complete', 'remaining', 'failed', 'running', 'total', 'covered', 'unsupported'] as const
+  const fields = ['complete', 'remaining', 'failed', 'running', 'total', 'covered', 'unsupported', 'unreadable'] as const
   for (const field of fields) {
     if (field === 'complete' || field === 'running') {
       if (typeof data[field] !== 'boolean') return null
@@ -83,6 +98,7 @@ function coverageOf(value: unknown): BackfillCoverage | null {
       return null
     }
   }
+  const unreadableSessions = unreadableSessionsOf(data.unreadableSessions)
   return {
     complete: data.complete as boolean,
     running: data.running as boolean,
@@ -91,6 +107,8 @@ function coverageOf(value: unknown): BackfillCoverage | null {
     total: data.total as number,
     covered: data.covered as number,
     unsupported: data.unsupported as number,
+    unreadable: data.unreadable as number,
+    ...(unreadableSessions === undefined ? {} : { unreadableSessions }),
   }
 }
 

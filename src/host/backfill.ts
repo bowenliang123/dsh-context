@@ -2,7 +2,7 @@ import { asRecord } from './record'
 import { performance } from 'node:perf_hooks'
 import type { Context } from '@deepseek-ai/cordis'
 import type { SessionEvent, SessionHeader } from '@deepseek-ai/dsh-session'
-import type { BackfillCoverage } from '../shared/types'
+import type { BackfillCoverage, BackfillUnreadableSession } from '../shared/types'
 import type { Config } from './config'
 import { type ColdReadGate, makeColdReadGate } from './coldRead'
 import { makeFoldJournal } from './foldJournal'
@@ -106,6 +106,12 @@ const DEFAULT_PACING: BackfillPacing = {
 }
 
 const UNSUPPORTED_FORMAT = 'SessionFormatUnsupported'
+
+const UNREADABLE_HOST_LOG = 'SessionPersistenceCorruption'
+
+const UNREADABLE_REASON_MAX = 180
+
+const UNREADABLE_DETAIL_MAX = 16
 
 function headerOf(record: unknown): SessionHeader | null {
   const header = asRecord(asRecord(record)?.header)
@@ -262,6 +268,19 @@ function isUnsupportedFormat(error: unknown): boolean {
   }
 }
 
+function isUnreadableHostLog(error: unknown): boolean {
+  try {
+    return String(asRecord(error)?.name).startsWith(UNREADABLE_HOST_LOG)
+  } catch {
+    return false
+  }
+}
+
+function unreadableReasonOf(error: unknown): string {
+  const reason = messageOf(error)
+  return reason.length > UNREADABLE_REASON_MAX ? `${reason.slice(0, UNREADABLE_REASON_MAX)}…` : reason
+}
+
 function messageOf(error: unknown): string {
   try {
     return String(error)
@@ -305,6 +324,7 @@ export function watchActivityBackfill(
     total: 0,
     covered: 0,
     unsupported: 0,
+    unreadable: 0,
   }
   const startIfIdle = (): void => {
     if (disposed || running || !requested || launch === null) return
@@ -409,7 +429,9 @@ export function watchActivityBackfill(
         total: 0,
         covered: 0,
         unsupported: 0,
+        unreadable: 0,
       }
+      const unreadableSessions: BackfillUnreadableSession[] = []
       let listed = false
       let folded = 0
       let paused = false
@@ -441,7 +463,7 @@ export function watchActivityBackfill(
         }
         await sleep(Math.max(pacing.minRestMs, costMs))
       }
-      const remainingOf = (): number => Math.max(0, pass.total - pass.covered - pass.failed - pass.unsupported)
+      const remainingOf = (): number => Math.max(0, pass.total - pass.covered - pass.failed - pass.unsupported - pass.unreadable)
       const publishCoverage = (complete: boolean): boolean => {
         const remaining = remainingOf()
         const changed = complete !== coverage.complete
@@ -450,12 +472,16 @@ export function watchActivityBackfill(
           || pass.total !== coverage.total
           || pass.covered !== coverage.covered
           || pass.unsupported !== coverage.unsupported
+          || pass.unreadable !== coverage.unreadable
         coverage.complete = complete
         coverage.remaining = remaining
         coverage.failed = pass.failed
         coverage.total = pass.total
         coverage.covered = pass.covered
         coverage.unsupported = pass.unsupported
+        coverage.unreadable = pass.unreadable
+        if (unreadableSessions.length > 0) coverage.unreadableSessions = [...unreadableSessions]
+        else delete coverage.unreadableSessions
         return changed
       }
       const statCapability: StatCapability = {}
@@ -491,7 +517,7 @@ export function watchActivityBackfill(
           sources.sort()
           signature = revisionOf([signature, ...sources])
         }
-        if (coverage.complete && rebuildIds.size === 0 && signature === lastSignature) {
+        if (coverage.complete && coverage.unreadable === 0 && rebuildIds.size === 0 && signature === lastSignature) {
           pass.covered = pass.total
           lastSignature = signature
           return
@@ -630,6 +656,11 @@ export function watchActivityBackfill(
             if (isUnsupportedFormat(error)) {
               pass.unsupported++
               ctx.logger.debug(`dsh-context: projection backfill skipped "${header.id}" (${messageOf(error)})`)
+            } else if (isUnreadableHostLog(error)) {
+              pass.unreadable++
+              const reason = unreadableReasonOf(error)
+              if (unreadableSessions.length < UNREADABLE_DETAIL_MAX) unreadableSessions.push({ id: header.id, reason })
+              ctx.logger.warn(`dsh-context: projection backfill cannot read "${header.id}" (host refused the log: ${reason})`)
             } else {
               pass.failed++
               ctx.logger.warn(`dsh-context: projection backfill skipped "${header.id}" (${messageOf(error)})`)
@@ -664,6 +695,9 @@ export function watchActivityBackfill(
       }
       if (pass.unsupported > 0) {
         ctx.logger.info(`dsh-context: projection backfill skipped ${pass.unsupported} session(s) (legacy log format is not migratable; sources left unchanged)`)
+      }
+      if (pass.unreadable > 0) {
+        ctx.logger.info(`dsh-context: projection backfill left ${pass.unreadable} session(s) unreadable by the host; the next pass retries them`)
       }
     }
     launch = () => {

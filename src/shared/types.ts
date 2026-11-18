@@ -538,6 +538,11 @@ export interface PlatformBalance {
   balances: PlatformBalanceEntry[]
 }
 
+export interface BackfillUnreadableSession {
+  id: string
+  reason: string
+}
+
 export interface BackfillCoverage {
   complete: boolean
   remaining: number
@@ -546,6 +551,8 @@ export interface BackfillCoverage {
   total: number
   covered: number
   unsupported: number
+  unreadable: number
+  unreadableSessions?: BackfillUnreadableSession[]
 }
 
 export type OverviewPart = 'summary' | 'days' | 'page' | 'tally'

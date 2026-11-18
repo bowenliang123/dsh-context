@@ -415,11 +415,42 @@ describe('overviewValueOf', () => {
       ['coverage total', { coverage: { ...BASE_COVERAGE, total: null } }],
       ['coverage covered', { coverage: { ...BASE_COVERAGE, covered: -1 } }],
       ['coverage unsupported', { coverage: { ...BASE_COVERAGE, unsupported: 'x' } }],
+      ['coverage unreadable', { coverage: { ...BASE_COVERAGE, unreadable: 'x' } }],
       ['coverage garbage', { coverage: 7 }],
     ]
     for (const [label, over] of cases) {
       assert.equal(overviewValueOf(summaryValue({ summary: summaryRaw(over) })), null, `${label} rejects`)
     }
+  })
+
+  test('summary coverage keeps the unreadable sessions it can decode', () => {
+    const decoded = overviewValueOf(summaryValue({
+      summary: summaryRaw({
+        coverage: {
+          ...BASE_COVERAGE,
+          complete: false,
+          unreadable: 2,
+          unreadableSessions: [
+            { id: 'a', reason: 'stored log is corrupt' },
+            { id: '', reason: 'missing id' },
+            { id: 'c' },
+            null,
+            { id: 'd', reason: 'host refused' },
+          ],
+        },
+      }),
+    }))
+    assert.ok(decoded !== null && 'summary' in decoded)
+    assert.deepEqual(decoded.summary.coverage.unreadableSessions, [
+      { id: 'a', reason: 'stored log is corrupt' },
+      { id: 'd', reason: 'host refused' },
+    ])
+    assert.equal(decoded.summary.coverage.unreadable, 2)
+    const blank = overviewValueOf(summaryValue({
+      summary: summaryRaw({ coverage: { ...BASE_COVERAGE, unreadableSessions: [] } }),
+    }))
+    assert.ok(blank !== null && 'summary' in blank)
+    assert.equal(blank.summary.coverage.unreadableSessions, undefined)
   })
 
   test('a summary tokenParts list drops malformed entries and keeps usable keys', () => {

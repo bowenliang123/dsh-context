@@ -647,6 +647,8 @@ export const DICT_ZH = {
   'ov.fold.progress': '投影补算中（{n}/{total}）…',
   'ov.fold.tip': '投影补算完成后，本页数字会自动更新',
   'ov.fold.stalled': '{n} 个会话投影失败',
+  'ov.fold.unreadable': '无法读取 {n} 个会话',
+  'ov.fold.unreadableTip': 'DeepSeek Harness 拒绝了这些会话日志的读取，补算暂时跳过它们；升级 Harness 后会自动重试',
   'ov.stats.empty': '统计范围内暂无计费 Token 用量',
   'ov.usage.title': '近 7 天用量',
   'ov.usage.tokens': 'Token',

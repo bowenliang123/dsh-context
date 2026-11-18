@@ -45,7 +45,7 @@ describe('dsh-context overview route', () => {
     const harness = await boot({
       records: [recordOf('a'), recordOf('b')],
       values,
-      coverage: { complete: true, remaining: 0, failed: 0, running: false, total: 2, covered: 2, unsupported: 0 },
+      coverage: { complete: true, remaining: 0, failed: 0, running: false, total: 2, covered: 2, unsupported: 0, unreadable: 0 },
     })
     const reply = await call(harness, { part: 'summary' })
     const summary = summaryOf(reply)
@@ -236,12 +236,12 @@ describe('dsh-context overview route', () => {
     const harness = await boot({
       records: [recordOf('a')],
       values: { a: { contextTimeline: timelineOf(), contextActivity: { days: {} }, title: 'Alpha' } },
-      coverage: { complete: false, remaining: 2, failed: 0, running: true, total: 3, covered: 1, unsupported: 0 },
+      coverage: { complete: false, remaining: 2, failed: 0, running: true, total: 3, covered: 1, unsupported: 0, unreadable: 0 },
     })
     const first = await call(harness, { part: 'summary' })
     const revision = revisionOf(first)
     assert.deepEqual(summaryOf(first).coverage, {
-      complete: false, remaining: 2, failed: 0, running: true, total: 3, covered: 1, unsupported: 0,
+      complete: false, remaining: 2, failed: 0, running: true, total: 3, covered: 1, unsupported: 0, unreadable: 0,
     })
     harness.state.coverage.covered = 2
     harness.state.coverage.remaining = 1
@@ -598,7 +598,7 @@ describe('dsh-context overview route', () => {
       records: [recordOf('a')],
       values: { a: { contextActivity: { days: { '2026-11-01': dayOf(11, 1) } } } },
       persistence: { stat: async () => ({ path: '/p/a.jsonl', sizeBytes: 1, mtimeMs: 2 }) },
-      coverage: { complete: true, remaining: 0, failed: 0, running: false, total: 1, covered: 1, unsupported: 0 },
+      coverage: { complete: true, remaining: 0, failed: 0, running: false, total: 1, covered: 1, unsupported: 0, unreadable: 0 },
     })
     const first = await call(harness, { part: 'summary', scope: { range: WIDE_RANGE } })
     assert.equal(summaryOf(first).sessions, 1)
@@ -623,7 +623,7 @@ describe('dsh-context overview route', () => {
       records: [recordOf('a')],
       values: { a: { contextActivity: { days: { '2026-11-01': dayOf(11, 1) } } } },
       persistence: { stat: async () => ({ path: '/p/a.jsonl', sizeBytes: 1, mtimeMs: 2 }) },
-      coverage: { complete: true, remaining: 0, failed: 0, running: false, total: 1, covered: 1, unsupported: 0 },
+      coverage: { complete: true, remaining: 0, failed: 0, running: false, total: 1, covered: 1, unsupported: 0, unreadable: 0 },
     })
     const first = await call(harness, { part: 'summary', scope: { range: WIDE_RANGE } })
     assert.equal(summaryOf(first).sessions, 1)
