@@ -323,7 +323,6 @@ export function panelProjectsValue(body: Record<string, unknown>, rows: readonly
         tokens += value
       }
     }
-    if (tokens <= 0) continue
     const key = row.group ?? UNGROUPED_KEY
     const prev = stats.get(key)
     if (prev === undefined) stats.set(key, { key, tokens, sessions: 1 })
@@ -335,7 +334,7 @@ export function panelProjectsValue(body: Record<string, unknown>, rows: readonly
   return {
     revision: 'rev-projects',
     pricingReady: true,
-    projects: [...stats.values()].sort((left, right) => (right.tokens - left.tokens)
+    projects: [...stats.values()].filter(stat => stat.tokens > 0).sort((left, right) => (right.tokens - left.tokens)
       || left.key.localeCompare(right.key)),
   }
 }

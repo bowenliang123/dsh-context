@@ -39,10 +39,11 @@ describe('dsh-context overview projects', () => {
     assert.deepEqual(projectsOf(await call(harness, { part: 'projects', scope: { day: '2026-10-01' } })), [])
   })
 
-  test('projects fold subagent tokens into the parent workspace and omit zero-token rows', async () => {
+  test('projects fold subagent tokens into the parent workspace and count every scoped session', async () => {
     const harness = await boot({
       records: [
         recordOf('p'),
+        recordOf('q'),
         recordOf('c', { origin: 'subagent', parentSession: 'p' }),
         recordOf('z'),
         recordOf('u'),
@@ -52,6 +53,10 @@ describe('dsh-context overview projects', () => {
         p: {
           contextTimeline: timelineOf(),
           contextActivity: { days: { '2026-11-01': dayOf(10, 1) } },
+        },
+        q: {
+          contextTimeline: timelineOf(),
+          contextActivity: { days: { '2026-11-01': dayOf(0, 1) } },
         },
         c: {
           contextTimeline: timelineOf(),
@@ -71,7 +76,7 @@ describe('dsh-context overview projects', () => {
       },
       workspace: {
         list: () => [
-          { id: 'w1', title: 'Team', sessionIds: ['p'] },
+          { id: 'w1', title: 'Team', sessionIds: ['p', 'q'] },
           { id: 'w2', title: 'Empty', sessionIds: ['z'] },
           { id: 'w3', title: 'NoActivity', sessionIds: ['n'] },
         ],
@@ -79,7 +84,7 @@ describe('dsh-context overview projects', () => {
       },
     })
     assert.deepEqual(projectsOf(await call(harness, { part: 'projects' })), [
-      { key: 'Team', tokens: 30, sessions: 1 },
+      { key: 'Team', tokens: 30, sessions: 2 },
       { key: '__ungrouped__', tokens: 5, sessions: 1 },
     ])
   })

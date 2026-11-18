@@ -404,14 +404,14 @@ export function projectStatsOf(rows: readonly HostRow[], filters: Filters): Over
   const admit = dayPredicate(filters)
   const stats = new Map<string, OverviewProjectStat>()
   for (const row of rows) {
-    const days = row.activity?.days
-    if (days === undefined) continue
-    let tokens = 0
-    for (const key of Object.keys(days)) {
-      if (admit(key)) tokens += days[key].tokens
-    }
-    if (tokens <= 0) continue
     const key = row.group ?? UNGROUPED_KEY
+    const days = row.activity?.days
+    let tokens = 0
+    if (days !== undefined) {
+      for (const day of Object.keys(days)) {
+        if (admit(day)) tokens += days[day].tokens
+      }
+    }
     const prev = stats.get(key)
     if (prev === undefined) stats.set(key, { key, tokens, sessions: 1 })
     else {
@@ -419,7 +419,7 @@ export function projectStatsOf(rows: readonly HostRow[], filters: Filters): Over
       prev.sessions += 1
     }
   }
-  return [...stats.values()].sort((left, right) => (right.tokens - left.tokens)
+  return [...stats.values()].filter(stat => stat.tokens > 0).sort((left, right) => (right.tokens - left.tokens)
     || left.key.localeCompare(right.key))
 }
 

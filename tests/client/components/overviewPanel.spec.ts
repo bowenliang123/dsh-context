@@ -137,7 +137,7 @@ describe('OverviewPanel', () => {
     assert.equal(tiles.length, 4, 'the project, skills, tools, and commands cards share one row')
     assert.equal(text(query(tiles[0], '.lc-ov-tally-note')), '2 projects · 1.8k')
     assert.deepEqual(queryAll(tiles[0], '.lc-ov-tally-name').map(el => text(el)), ['workspace-one', 'Ungrouped'])
-    assert.deepEqual(queryAll(tiles[0], '.lc-ov-tally-count').map(el => text(el)), ['1.8k', '25'])
+    assert.deepEqual(queryAll(tiles[0], '.lc-ov-tally-count').map(el => text(el)), ['×1 · 1.8k', '×1 · 25'])
     assert.equal(queryAll(tiles[1], 'button.lc-ov-tally').length, 0, 'no skill loads in this fixture')
     assert.equal(text(query(tiles[2], '.lc-ov-tally-note')), '3 tools · 10 calls')
     assert.deepEqual(queryAll(tiles[2], '.lc-ov-tally-name').map(el => text(el)), ['read', 'grep', 'bash'])

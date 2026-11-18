@@ -42,12 +42,11 @@ export function makeOverviewProjects(kit: ViewKit): (props: OverviewProjectsProp
                 <TallyRow
                   key={stat.key}
                   name={label}
-                  count={fmt(stat.tokens)}
-                  countStyle="plain"
+                  count={`${fmt(stat.sessions)} · ${fmt(stat.tokens)}`}
                   share={shareOf(stat.tokens, max)}
                   color={stat.key === UNGROUPED_KEY ? 'var(--color-gray-400)' : nameColorOf(stat.key)}
                   selected={pinned}
-                  title={`${t('ov.projects.tokens', { n: fmt(stat.tokens) })} · ${t('ov.projects.sessions', { n: fmt(stat.sessions) })}`}
+                  title={`${t('ov.projects.sessions', { n: fmt(stat.sessions) })} · ${t('ov.projects.tokens', { n: fmt(stat.tokens) })}`}
                   onSelect={() => { props.onSelect?.(pinned ? null : stat.key) }}
                 />
               )
