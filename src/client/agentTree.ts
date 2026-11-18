@@ -594,6 +594,23 @@ export function neighborhoodOf(forest: AgentForest, id: string | null): Set<stri
   return found ? related : null
 }
 
+export function runningOnlyForestOf(forest: AgentForest): AgentForest {
+  const parentOf = new Map(forest.nodes.map(node => [node.id, node.parentId]))
+  const keep = new Set<string>()
+  const keepChainOf = (id: string | undefined): void => {
+    for (let cur = id; cur !== undefined && !keep.has(cur); cur = parentOf.get(cur)) keep.add(cur)
+  }
+  for (const node of forest.nodes) {
+    if (node.running) keepChainOf(node.id)
+  }
+  keepChainOf(forest.nodes.find(node => node.isCurrent)?.id)
+  return {
+    nodes: forest.nodes.filter(node => keep.has(node.id)),
+    edges: forest.edges.filter(edge => keep.has(edge.from) && keep.has(edge.to)),
+    solo: forest.solo,
+  }
+}
+
 interface BarSeg {
   key: string
   color: string

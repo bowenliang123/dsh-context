@@ -23,6 +23,7 @@ import {
   layoutForest,
   neighborhoodOf,
   pressureColorOf,
+  runningOnlyForestOf,
 } from '../agentTree'
 import { AgentInspector } from './agentInspector'
 import { AgentAvatar } from './commsAgent'
@@ -84,7 +85,12 @@ export function makeAgentGraph(
 
     const [internalHover, setInternalHover] = useState<string | null>(null)
     const [showAll, setShowAll] = useState(false)
-    useEffect(() => { setShowAll(false) }, [sessionId])
+    const [runningOnly, setRunningOnly] = useState(false)
+    useEffect(() => { setShowAll(false); setRunningOnly(false) }, [sessionId])
+    const viewForest = useMemo(
+      () => (forest !== null && runningOnly ? runningOnlyForestOf(forest) : forest),
+      [forest, runningOnly],
+    )
     const hoverId = props.hoverId !== undefined ? props.hoverId : internalHover
     const focusId = hoverId ?? (props.focusId ?? null)
     const pinnedId = props.pinnedId ?? null
@@ -94,8 +100,8 @@ export function makeAgentGraph(
 
     const stageRef = useRef<HTMLDivElement | null>(null)
     const heardFocus = props.focusId ?? null
-    const stageSize = useElementSize(stageRef, 'content', forest !== null)
-    const stageScroll = useScrollMetrics(stageRef, forest !== null)
+    const stageSize = useElementSize(stageRef, 'content', viewForest !== null)
+    const stageScroll = useScrollMetrics(stageRef, viewForest !== null)
     useEffect(() => {
       const el = stageRef.current
       /* v8 ignore next 1 */
@@ -104,26 +110,26 @@ export function makeAgentGraph(
     }, [])
 
     const layout = useMemo(
-      () => (forest !== null ? layoutForest(forest, stageSize.width, props.compact === true) : null),
-      [forest, props.compact, stageSize.width],
+      () => (viewForest !== null ? layoutForest(viewForest, stageSize.width, props.compact === true) : null),
+      [viewForest, props.compact, stageSize.width],
     )
     const avatarLabels = useMemo(
-      () => forest === null
+      () => viewForest === null
         ? null
-        : avatarLabelsOf(forest.nodes.map(node => ({ id: node.id, name: avatarIdentityOf(team, node, t).name }))),
-      [forest, team, t],
+        : avatarLabelsOf(viewForest.nodes.map(node => ({ id: node.id, name: avatarIdentityOf(team, node, t).name }))),
+      [viewForest, team, t],
     )
     const cardHeight = props.compact === true ? AGENT_CARD_COMPACT_H : AGENT_CARD_H
-    const seededHeight = !stageScroll.measured && forest !== null && forest.nodes.length > GRAPH_WINDOW_SEED ? STAGE_H : 0
+    const seededHeight = !stageScroll.measured && viewForest !== null && viewForest.nodes.length > GRAPH_WINDOW_SEED ? STAGE_H : 0
     const viewportHeight = stageScroll.height > 0 ? stageScroll.height : seededHeight
     const band = viewportHeight > 0
       ? { from: stageScroll.scrollTop - GRAPH_OVERSCAN, to: stageScroll.scrollTop + viewportHeight + GRAPH_OVERSCAN }
       : null
     const graph = useMemo(() => {
-      if (forest === null || layout === null) return null
+      if (viewForest === null || layout === null) return null
       const points = new Map(layout.points.map(point => [point.id, point]))
-      const nodes = new Map(forest.nodes.map(node => [node.id, node]))
-      const entries = forest.nodes.map(node => ({ node, hue: hueOf(node, team, members) }))
+      const nodes = new Map(viewForest.nodes.map(node => [node.id, node]))
+      const entries = viewForest.nodes.map(node => ({ node, hue: hueOf(node, team, members) }))
       const hues = new Map(entries.map(entry => [entry.node.id, entry.hue]))
       const visible = band === null ? entries : entries.filter(({ node }) => {
         const point = points.get(node.id)
@@ -134,12 +140,12 @@ export function makeAgentGraph(
         nodes,
         hues,
         visible,
-        lit: neighborhoodOf(forest, litId),
+        lit: neighborhoodOf(viewForest, litId),
         links: band === null
           ? layout.links
           : layout.links.filter(link => Math.min(link.y1, link.y2) - cardHeight <= band.to && Math.max(link.y1, link.y2) >= band.from),
       }
-    }, [band?.from, band?.to, cardHeight, forest, layout, litId, members, team])
+    }, [band?.from, band?.to, cardHeight, viewForest, layout, litId, members, team])
     useEffect(() => {
       if (heardFocus === null || graph === null) return
       const point = graph.points.get(heardFocus)
@@ -153,12 +159,12 @@ export function makeAgentGraph(
       scrollIntoViewIfPossible(card, { block: 'center', behavior: 'smooth' })
     }, [cardHeight, graph, heardFocus])
 
-    if (forest === null || layout === null || graph === null) return null
+    if (forest === null || viewForest === null || layout === null || graph === null) return null
     const tallFamily = layout.height > STAGE_H
     const overflowsStage = showAll || (tallFamily && layout.height > stageSize.height)
     const byId = graph.nodes
     /* v8 ignore next 1 */
-    const current = forest.nodes.find(n => n.isCurrent) ?? forest.nodes[0]
+    const current = viewForest.nodes.find(n => n.isCurrent) ?? viewForest.nodes[0]
     const pinnedNode = pinnedId !== null ? byId.get(pinnedId) : undefined
     const hoverNode = focusId !== null ? byId.get(focusId) : undefined
     const inspected = pinnedNode ?? hoverNode ?? current
@@ -205,7 +211,27 @@ export function makeAgentGraph(
             <IconWorkspaceTreeOutlineRegular size={14} />
             {t('agents.title')}
           </span>
-          <span className="lc-card-sub">{t(select !== undefined ? 'agents.subSelect' : 'agents.sub')}</span>
+          <span className="lc-agents-tools">
+            <span className="lc-card-sub">{t(select !== undefined ? 'agents.subSelect' : 'agents.sub')}</span>
+            <span className="lc-gran" role="group" aria-label={t('agents.filterLabel')}>
+              <button
+                type="button"
+                className={'lc-gran-btn' + (!runningOnly ? ' lc-gran-on' : '')}
+                aria-pressed={!runningOnly}
+                onClick={() => { setRunningOnly(false) }}
+              >
+                {t('agents.filterAll')}<span className="lc-kind-n">{forest.nodes.length}</span>
+              </button>
+              <button
+                type="button"
+                className={'lc-gran-btn' + (runningOnly ? ' lc-gran-on' : '')}
+                aria-pressed={runningOnly}
+                onClick={() => { setRunningOnly(true) }}
+              >
+                {t('agents.filterRunning')}<span className="lc-kind-n">{runningCount}</span>
+              </button>
+            </span>
+          </span>
         </div>
 
         <div className="lc-agents-chips">
@@ -304,6 +330,7 @@ export function makeAgentGraph(
                       index={index}
                       hovered={focusId === node.id}
                       on={lit !== null && lit.has(node.id)}
+                      dimmed={runningOnly && !node.running && !node.isCurrent}
                       pinned={pinnedId === node.id}
                       onHover={onHover}
                       onOpen={open}
@@ -326,7 +353,8 @@ export function makeAgentGraph(
               </div>
             </div>
 
-            {forest.solo ? <div className="lc-empty lc-agents-solo">{t('agents.solo')}</div> : null}
+            {forest.solo ? <div className="lc-empty lc-agents-solo">{t('agents.solo')}</div>
+              : runningOnly && runningCount === 0 ? <div className="lc-empty lc-agents-solo">{t('agents.filterEmpty')}</div> : null}
           </div>
 
           {props.inspector === false ? null : inspector}
@@ -356,6 +384,7 @@ interface CardProps {
   index: number
   hovered: boolean
   on: boolean
+  dimmed: boolean
   pinned: boolean
   onHover: (id: string | null) => void
   onOpen: (id: string) => void
@@ -388,6 +417,7 @@ function AgentCard(props: CardProps): ReactElement {
     + (node.isCurrent ? ' lc-agent-self' : '')
     + (props.hovered ? ' lc-agent-hover' : '')
     + (props.on ? ' lc-agent-on' : '')
+    + (props.dimmed ? ' lc-agent-dimmed' : '')
     + (props.pinned ? ' lc-agent-pinned' : '')
     + (selectable || !node.isCurrent ? ' lc-agent-clickable' : '')
   return (

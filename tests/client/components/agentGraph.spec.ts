@@ -3,99 +3,16 @@ import assert from 'node:assert/strict'
 import { afterEach, describe, expect, test, vi } from 'vitest'
 import { makeAgentGraph } from '../../../src/client/components/agentGraph'
 import { DICT_EN } from '../../../src/client/i18n'
-import { LEAD_HUE, agentForestOf, familyHue, type AgentNode, type AgentSelfStats } from '../../../src/client/agentTree'
+import { LEAD_HUE, agentForestOf, familyHue, type AgentNode } from '../../../src/client/agentTree'
 import { TestClientCtx, asClientCtx } from '../helpers/harness'
 import { blur, click, flush, focus, hover, makeKit, mount, query, queryAll, text, unhover, until, wheel, silenceWindowErrors, keydown, press } from '../helpers/kit'
+import { FakeSessions, family, filterFamily, makeView, selfStats, timeline } from '../helpers/agentGraphFixtures'
 import { makeErrorBoundary } from '../../../src/client/components/errorBoundary'
 import { useEscapeClose } from '../../../src/client/components/escapeClose'
 
 describe('agentGraph', () => {
 
 const kit = makeKit()
-
-function timeline(total: number, requests = 0): unknown {
-  return {
-    ok: true,
-    contextWindow: 1000,
-    current: { system: 10, tools: 20, user: total, inject: 0, assistant: 0, tool: 0, total: total + 30 },
-    requests: Array.from({ length: requests }, (_, i) => ({
-      seq: i + 1, time: 0, system: 0, tools: 0, user: 0, inject: 0, assistant: 0, tool: 0, total: 1,
-    })),
-    events: [],
-    nodes: [],
-    droppedNodes: 0,
-    archive: [],
-  }
-}
-
-class FakeSessions {
-  opened: string[] = []
-  private listeners = new Set<() => void>()
-  state: unknown
-
-  constructor(byId: Record<string, unknown>) {
-    this.state = { byId }
-  }
-
-  readonly list = {
-    getSnapshot: (): unknown => this.state,
-    subscribe: (fn: () => void): () => void => {
-      this.listeners.add(fn)
-      return () => this.listeners.delete(fn)
-    },
-  }
-
-  openSession(id: string): void {
-    this.opened.push(id)
-  }
-
-  setState(byId: Record<string, unknown>): void {
-    this.state = { byId }
-    for (const fn of this.listeners) fn()
-  }
-}
-
-function makeView(sessions: unknown, options: { locale?: 'en' | 'zh' } = {}) {
-  const nav = { openSession: (id: string) => (sessions as { openSession?: (id: string) => void }).openSession?.(id) }
-  const ctx = new TestClientCtx({ locale: options.locale, services: { sessions, uiWorkspace: nav } })
-  return makeAgentGraph(asClientCtx(ctx), options.locale === 'zh' ? makeKit('zh') : kit)
-}
-
-function selfStats(over: Partial<AgentSelfStats> = {}): AgentSelfStats {
-  return {
-    head: { tokens: 500, window: 1000, pct: 50, parts: [{ key: 'user', color: '#22c55e', value: 500 }] },
-    billed: 1200,
-    requests: 3,
-    durationMs: 387_000,
-    ...over,
-  }
-}
-
-function family(): Record<string, unknown> {
-  return {
-    root: {
-      displayTitle: 'Main Agent', running: true, updatedAt: 10,
-      projectionValues: { contextTimeline: timeline(200, 2) },
-    },
-    worker: {
-      parentId: 'root', origin: 'subagent', running: true, updatedAt: 8,
-      projectionValues: {
-        contextTimeline: timeline(800, 5),
-        subagent: { mode: 'continuable', label: 'worker-bee' },
-        subagentTiming: { settledMs: 42000 },
-        tokenUsage: { uncachedInputTokens: 100, outputTokens: 40, cacheReadTokens: 10, cacheWriteTokens: 0 },
-      },
-    },
-    done: {
-      parentId: 'root', origin: 'subagent', running: false, updatedAt: 6,
-      projectionValues: {
-        contextPressure: { projectedTokens: 950, contextWindow: 1000 },
-        subagent: { mode: 'one-shot' },
-        subagentTiming: { settledMs: 9000, lastTurnCompleted: true },
-      },
-    },
-  }
-}
 
 describe('AgentGraph — degrade arms', () => {
   test('renders nothing without a sessions face or a session id', async () => {
@@ -433,6 +350,85 @@ describe('AgentGraph — the family tree', () => {
     assert.ok(!text(query(mp.container, '[data-agent="worker"]')).includes('$'), 'a non-ready read hides the money figure')
     assert.ok(text(query(mp.container, '[data-agent="cold"]')).includes('1.5M'))
     await mp.unmount()
+  })
+})
+
+describe('AgentGraph — running-only filter', () => {
+  test('the top-right selector shows full counts for both a family and a solo agent', async () => {
+    const face = new FakeSessions(family())
+    const View = makeView(face)
+    const m = await mount(h(View, { sessionId: 'root', self: selfStats() }))
+    const gran = queryAll(m.container, '.lc-agents-tools .lc-gran-btn')
+    assert.equal(gran.length, 2)
+    assert.equal(gran[0].textContent, 'All3')
+    assert.equal(gran[1].textContent, 'Running2')
+    assert.ok(text(m.container).includes('3 agents'))
+    assert.ok(text(m.container).includes('2 running'))
+    await m.unmount()
+
+    const solo = await mount(h(
+      makeView(new FakeSessions({ root: { displayTitle: 'Main Agent', running: true, updatedAt: 10 } })),
+      { sessionId: 'root', self: selfStats() },
+    ))
+    const soloGran = queryAll(solo.container, '.lc-agents-tools .lc-gran-btn')
+    assert.equal(soloGran.length, 2)
+    assert.equal(soloGran[0].textContent, 'All1')
+    assert.equal(soloGran[1].textContent, 'Running1')
+    await solo.unmount()
+  })
+
+  test('running-only keeps live nodes with their idle ancestors, dims the ancestors, and All restores every card', async () => {
+    const face = new FakeSessions(filterFamily())
+    const View = makeView(face)
+    const m = await mount(h(View, { sessionId: 'root', self: selfStats() }))
+    assert.equal(queryAll(m.container, '.lc-agent-card').length, 4)
+
+    const gran = () => queryAll(m.container, '.lc-agents-tools .lc-gran-btn')
+    await click(gran()[1])
+    assert.equal(gran()[0].getAttribute('aria-pressed'), 'false')
+    assert.equal(gran()[1].getAttribute('aria-pressed'), 'true')
+    const cards = queryAll(m.container, '.lc-agent-card')
+    assert.deepEqual(cards.map(card => card.getAttribute('data-agent')), ['root', 'mate', 'mateSub'])
+    assert.ok(query(m.container, '[data-agent="mate"]').classList.contains('lc-agent-dimmed'))
+    assert.ok(!query(m.container, '[data-agent="root"]').classList.contains('lc-agent-dimmed'))
+    assert.ok(!query(m.container, '[data-agent="mateSub"]').classList.contains('lc-agent-dimmed'))
+    assert.equal(queryAll(m.container, 'path.lc-agents-link').length, 2)
+    assert.ok(text(m.container).includes('4 agents'), 'the chips keep the full family count')
+
+    await click(gran()[0])
+    assert.equal(gran()[0].getAttribute('aria-pressed'), 'true')
+    assert.equal(queryAll(m.container, '.lc-agent-card').length, 4)
+    assert.equal(queryAll(m.container, '.lc-agent-dimmed').length, 0)
+    await m.unmount()
+  })
+
+  test('running-only with nothing running keeps the current chain and adds the empty hint', async () => {
+    const still = family() as { root: { running: boolean }, worker: { running: boolean }, done: { running: boolean } }
+    still.root.running = false
+    still.worker.running = false
+    still.done.running = false
+    const face = new FakeSessions(still)
+    const View = makeView(face)
+    const m = await mount(h(View, { sessionId: 'root', self: selfStats() }))
+
+    await click(queryAll(m.container, '.lc-agents-tools .lc-gran-btn')[1])
+    assert.deepEqual(queryAll(m.container, '.lc-agent-card').map(card => card.getAttribute('data-agent')), ['root'])
+    assert.equal(query(m.container, '.lc-empty.lc-agents-solo').textContent, 'No agents running')
+    assert.ok(text(m.container).includes('3 agents'))
+    await m.unmount()
+  })
+
+  test('switching sessions resets the filter to All', async () => {
+    const face = new FakeSessions(family())
+    const View = makeView(face)
+    const m = await mount(h(View, { sessionId: 'root', self: selfStats() }))
+    await click(queryAll(m.container, '.lc-agents-tools .lc-gran-btn')[1])
+    assert.equal(queryAll(m.container, '.lc-agent-card').length, 2)
+
+    await m.update(h(View, { sessionId: 'worker', self: selfStats() }))
+    assert.equal(queryAll(m.container, '.lc-agent-card').length, 3)
+    assert.equal(query(m.container, '.lc-agents-tools .lc-gran-btn').getAttribute('aria-pressed'), 'true')
+    await m.unmount()
   })
 })
 
