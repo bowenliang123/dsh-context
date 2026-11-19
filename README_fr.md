@@ -161,7 +161,7 @@ Choisissez **En direct** ou toute étape conservée, puis parcourez les élémen
 
 ![Événements de contexte avec une compaction](https://raw.githubusercontent.com/bowenliang123/dsh-context/main/docs/context-events.png)
 
-Chaque injection, compaction, élagage, changement de modèle et activation ou désactivation du mode Plan est étiqueté avec son producteur, fichier d’instructions, identifiant de plugin ou nom de compétence, son delta net de tokens, les compactions indiquant ce qu’elles ont récupéré, son tour ou son étape et son heure. Les puces **Injection / Compaction / Élagage / Changement / Mode** filtrent le journal par type et indiquent chacune le nombre total d’événements de la session.
+Chaque injection, compaction, élagage, changement de modèle et activation ou désactivation du mode Plan est étiqueté avec son producteur, fichier d’instructions, identifiant de plugin ou nom de compétence, son delta net de tokens, les compactions indiquant ce qu’elles ont récupéré, son tour ou son étape et son heure. Les puces **Tous / Injection / Compaction / Élagage / Changement** filtrent le journal sur un seul type à la fois ; celles de Tous, Injection, Compaction et Élagage indiquent le total des événements de la session.
 
 ### 📁 Activité des fichiers — ce que l’agent a fait à vos fichiers
 

@@ -34,7 +34,7 @@ function countsOf(requests: readonly RequestRecord[], events: readonly ContextEv
     else if (event.kind === 'prune') prunes++
     if (event.sub === 'skill' && typeof event.name === 'string' && event.name !== '') skills.add(event.name)
   }
-  return { turns: turns.size, steps: requests.length, injects, compactions, prunes, skills: skills.size }
+  return { turns: turns.size, steps: requests.length, events: events.length, injects, compactions, prunes, skills: skills.size }
 }
 
 function tallyOf(nodes: readonly SurfaceNode[]): Record<string, number> {

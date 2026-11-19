@@ -361,7 +361,7 @@ describe('dsh-context host plugin', () => {
     const timeline = ctx.sessionProjections.snapshot(session).values.contextTimeline
     assert.ok(timeline !== undefined)
     assert.equal(typeof timeline.detailRev, 'number', 'the split marker rides the slim head')
-    assert.deepEqual(timeline.counts, { turns: 1, steps: 1, injects: 0, compactions: 0, prunes: 0, skills: 0 })
+    assert.deepEqual(timeline.counts, { turns: 1, steps: 1, events: 0, injects: 0, compactions: 0, prunes: 0, skills: 0 })
     assert.equal(timeline.nodes.length, 0, 'the collections stay off the wire value')
     assert.equal(timeline.requests.length, 0)
 

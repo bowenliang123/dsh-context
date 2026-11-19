@@ -31,7 +31,7 @@ import {
   setCommand,
   tallyRun,
 } from './foldCommands'
-import { TALLY_NAME_CHARS_MAX, TALLY_NAMES_MAX, countCompaction, countInject, countStep, countTurnRuns, noteCommandCall, noteSkillName, noteTurn, trimState } from './foldState'
+import { TALLY_NAME_CHARS_MAX, TALLY_NAMES_MAX, countCompaction, countInject, countStep, countTurnRuns, noteCommandCall, noteSkillName, noteTurn, pushEvent, trimState } from './foldState'
 import { slimSurfaceNode } from './foldState'
 import type { CommandStateRecord, TimelineEvent, TimelineState } from './foldState'
 import { agentOfInjection, applyAgentAliasEvent, messageOf, skillNameOf, type MessageLike } from './foldInjections'
@@ -360,7 +360,7 @@ function applyTimelineEvent(state: TimelineState, event: TimelineEvent, bounds: 
           delete s.maxOutputTokens
         }
         if ((data?.reason === 'change' || data?.reason === 'resume') && s.model && s.lastModel && s.model !== s.lastModel) {
-          s.events.push({ seq: event.seq, time: event.time, kind: 'model', from: s.lastModel, to: s.model })
+          pushEvent(s, { seq: event.seq, time: event.time, kind: 'model', from: s.lastModel, to: s.model })
           bumpDetailRev(s)
         }
         if (s.model) s.lastModel = s.model
@@ -715,7 +715,7 @@ function applyTimelineEvent(state: TimelineState, event: TimelineEvent, bounds: 
               rec.detail = source.summary
             }
           }
-          s.events.push(rec)
+          pushEvent(s, rec)
           countInject(s)
           if (rec.sub === 'skill' && typeof rec.name === 'string') noteSkillName(s, rec.name)
         } else {
@@ -820,7 +820,7 @@ function applyTimelineEvent(state: TimelineState, event: TimelineEvent, bounds: 
             s.sums.tool -= node.tokens
             node.cat = 'skill'
             s.sums.skill += node.tokens
-            s.events.push({ seq: event.seq, time: event.time, kind: 'inject', form: 'instructions', sub: 'skill', name, tokens: node.tokens })
+            pushEvent(s, { seq: event.seq, time: event.time, kind: 'inject', form: 'instructions', sub: 'skill', name, tokens: node.tokens })
             countInject(s)
             noteSkillName(s, name)
             if (bounds.headOnly === true) {
@@ -944,7 +944,7 @@ function applyTimelineEvent(state: TimelineState, event: TimelineEvent, bounds: 
       case 'plan/mode': {
         if (data && typeof data.active === 'boolean') {
           const s = ensure(['events'])
-          s.events.push({ seq: event.seq, time: event.time, kind: 'mode', name: data.active ? 'plan.on' : 'plan.off' })
+          pushEvent(s, { seq: event.seq, time: event.time, kind: 'mode', name: data.active ? 'plan.on' : 'plan.off' })
           bumpDetailRev(s)
         }
         break
@@ -958,7 +958,7 @@ function applyTimelineEvent(state: TimelineState, event: TimelineEvent, bounds: 
           s.pendingShadowEventSeq = event.seq
         }
         countCompaction(s, event.type === 'compaction/summary' ? 'compaction' : 'prune')
-        s.events.push({
+        pushEvent(s, {
           seq: event.seq,
           time: event.time,
           kind: event.type === 'compaction/summary' ? 'compaction' : 'prune',

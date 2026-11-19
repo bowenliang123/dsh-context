@@ -386,6 +386,7 @@ export const TALLY_NAME_CHARS_MAX = 120
 export interface CumulativeTotals {
   turns: number
   steps: number
+  events: number
   injects: number
   compactions: number
   prunes: number
@@ -394,7 +395,7 @@ export interface CumulativeTotals {
 }
 
 function emptyTotals(): CumulativeTotals {
-  return { turns: 0, steps: 0, injects: 0, compactions: 0, prunes: 0, skills: {} }
+  return { turns: 0, steps: 0, events: 0, injects: 0, compactions: 0, prunes: 0, skills: {} }
 }
 
 function ownedTotals(st: TimelineState): CumulativeTotals {
@@ -418,6 +419,13 @@ export function countCompaction(st: TimelineState, kind: 'compaction' | 'prune')
   if (kind === 'compaction') totals.compactions += 1
   else totals.prunes += 1
   st.totals = totals
+}
+
+export function pushEvent(st: TimelineState, record: ContextEventRecord): void {
+  const totals = ownedTotals(st)
+  totals.events += 1
+  st.totals = totals
+  st.events.push(record)
 }
 
 export function noteTurn(st: TimelineState, turn: number | undefined): void {

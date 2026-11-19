@@ -6,11 +6,16 @@
 .lc-event-icon.lc-event-model { color: var(--dsw-alias-brand-primary); }
 .lc-event-icon.lc-event-mode { color: var(--dsw-alias-label-secondary); }
 .lc-kind { flex: none; font-size: 10px; font-weight: 600; padding: 1px 6px; border-radius: 4px; white-space: nowrap; }
-.lc-kind-inject { background: color-mix(in srgb, var(--dsw-alias-state-success-primary) 15%, transparent); color: var(--dsw-alias-state-success-primary); }
-.lc-kind-compaction { background: color-mix(in srgb, var(--dsw-alias-state-error-primary) 15%, transparent); color: var(--dsw-alias-state-error-primary); }
-.lc-kind-prune { background: color-mix(in srgb, var(--color-violet-500) 15%, transparent); color: var(--color-violet-500); }
-.lc-kind-model { background: color-mix(in srgb, var(--dsw-alias-brand-primary) 15%, transparent); color: var(--dsw-alias-brand-primary); }
-.lc-kind-mode { background: color-mix(in srgb, var(--dsw-alias-label-secondary) 15%, transparent); color: var(--dsw-alias-label-secondary); }
+.lc-kind-inject { --lc-kind-fg: var(--dsw-alias-state-success-primary); }
+.lc-kind-compaction { --lc-kind-fg: var(--dsw-alias-state-error-primary); }
+.lc-kind-prune { --lc-kind-fg: var(--color-violet-500); }
+.lc-kind-model { --lc-kind-fg: var(--dsw-alias-brand-primary); }
+.lc-kind-mode { --lc-kind-fg: var(--dsw-alias-label-secondary); }
+.lc-kind-all { --lc-kind-fg: var(--dsw-alias-state-business-primary); }
+.lc-kind { background: color-mix(in srgb, var(--lc-kind-fg) 15%, transparent); color: var(--lc-kind-fg); }
+.lc-kinds .lc-gran-btn, .lc-kinds .lc-gran-btn:hover { color: var(--lc-kind-fg); }
+.lc-kinds .lc-gran-on, .lc-kinds .lc-gran-on:hover { background: color-mix(in srgb, var(--lc-kind-fg) 15%, transparent); color: var(--lc-kind-fg); }
+.lc-kinds .lc-kind-all.lc-gran-on, .lc-kinds .lc-kind-all.lc-gran-on:hover { background: var(--dsw-alias-button-info-fill); color: var(--dsw-alias-label-primary-foreground); }
 .lc-event-label { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .lc-event-jump { border: 0; background: transparent; color: inherit; font: inherit; text-align: left; padding: 0; cursor: pointer; }
 .lc-event-jump:hover { text-decoration: underline; }

@@ -327,7 +327,11 @@ describe('ContextView — the stats board\'s lower-lane jumps', () => {
       await click(query(m.container, '.lc-core-kv-events'))
       await flush()
       const card = query(m.container, '.lc-events-card')
-      assert.equal(queryAll(card, '.lc-gran-on').length, 4, 'every filterable kind stays picked')
+      assert.deepEqual(
+        queryAll(card, '.lc-kinds .lc-gran-on').map(el => el.getAttribute('data-kind')),
+        ['all'],
+        'the whole log is the default lens',
+      )
       assert.equal(queryAll(card, '.lc-kinds [data-kind="mode"]').length, 0, 'the plan-mode filter is gone')
       assert.equal(queryAll(card, '.lc-event').length, 3, 'the unfiltered list keeps every row')
       assert.equal(scroller.scrollTop, 600, 'the events card scrolled to the scrollport top')
@@ -771,24 +775,30 @@ describe('ContextView — interactions', () => {
     await m.unmount()
   })
 
-  test('event-kind filter narrows, unions, drops, and resets', async () => {
+  test('the event-kind filter is a single choice with an all reset', async () => {
     const m = await mountRich('sv-kinds')
     const countEvents = () => queryAll(m.container, '.lc-event').length
     const kindBtn = (k: string) => query(m.container, `.lc-kinds [data-kind="${k}"]`) as HTMLElement
+    const activeKinds = () => queryAll(m.container, '.lc-kinds .lc-gran-on').map(el => el.getAttribute('data-kind'))
     assert.equal(countEvents(), 2)
+    assert.deepEqual(activeKinds(), ['all'])
     assert.deepEqual(
       queryAll(m.container, '.lc-kinds .lc-kind-n').map(el => text(el)),
-      ['1', '1', '0'],
+      ['2', '1', '1', '0'],
     )
+    assert.ok(kindBtn('inject').className.includes('lc-kind-inject'), 'an idle kind keeps its hue')
 
     await click(kindBtn('inject'))
     assert.equal(countEvents(), 1)
+    assert.deepEqual(activeKinds(), ['inject'])
     await click(kindBtn('compaction'))
-    assert.equal(countEvents(), 2)
+    assert.equal(countEvents(), 1, 'a second kind replaces the first instead of unioning')
+    assert.deepEqual(activeKinds(), ['compaction'])
     await click(kindBtn('compaction'))
-    assert.equal(countEvents(), 1)
-    await click(kindBtn('inject'))
+    assert.equal(countEvents(), 1, 'the picked kind stays picked')
+    await click(kindBtn('all'))
     assert.equal(countEvents(), 2)
+    assert.deepEqual(activeKinds(), ['all'])
     await m.unmount()
   })
 })

@@ -159,7 +159,7 @@ dsh plugin --profile web update dsh-context@latest
 
 ![Context Events with a compaction](https://raw.githubusercontent.com/bowenliang123/dsh-context/main/docs/context-events.png)
 
-每次注入、压缩、清理、模型切换和计划模式切换都会记录，并标注其来源（指令文件、插件 ID、技能名称）、Token 净变化量（压缩事件会显示回收量）、轮次 / 步骤和时间。**Inject / Compact / Prune / Switch / Mode** 标签可按类型筛选日志，每个标签都显示整个会话的对应事件总数。
+每次注入、压缩、清理、模型切换和计划模式切换都会记录，并标注其来源（指令文件、插件 ID、技能名称）、Token 净变化量（压缩事件会显示回收量）、轮次 / 步骤和时间。**全部 / 注入 / 压缩 / 剪枝 / 切换** 标签可单选按类型筛选日志；全部、注入、压缩、剪枝标签显示整个会话的对应事件总数。
 
 ### 📁 文件活动 — Agent 对文件做了什么
 

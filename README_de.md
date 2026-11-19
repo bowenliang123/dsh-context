@@ -160,7 +160,7 @@ Wähle **Live** oder einen beliebigen aufbewahrten Schritt und durchstöbere, wo
 
 ![Kontextereignisse mit einer Komprimierung](https://raw.githubusercontent.com/bowenliang123/dsh-context/main/docs/context-events.png)
 
-Jede Injektion, Komprimierung, Bereinigung, jeder Modellwechsel und jede Planmodus-Umschaltung — beschriftet mit ihrem Erzeuger (Anweisungsdatei, Plugin-ID, Skill-Name), ihrem Netto-Token-Delta (Komprimierungen zeigen, was sie zurückgewonnen haben), Runde/Schritt und Zeit. Die Chips **Injektion / Komprimieren / Bereinigen / Wechsel / Modus** filtern das Protokoll nach Art, jeder mit der Ereigniszahl der ganzen Sitzung.
+Jede Injektion, Komprimierung, Bereinigung, jeder Modellwechsel und jede Planmodus-Umschaltung — beschriftet mit ihrem Erzeuger (Anweisungsdatei, Plugin-ID, Skill-Name), ihrem Netto-Token-Delta (Komprimierungen zeigen, was sie zurückgewonnen haben), Runde/Schritt und Zeit. Die Chips **Alle / Injektion / Komprimieren / Bereinigen / Wechsel** filtern das Protokoll jeweils auf eine Art; Alle, Injektion, Komprimieren und Bereinigen tragen die Ereigniszahl der ganzen Sitzung.
 
 ### 📁 Dateiaktivität — was der Agent mit deinen Dateien gemacht hat
 

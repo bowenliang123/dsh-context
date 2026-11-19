@@ -168,6 +168,7 @@ export const DICT_ZH = {
   'events.at': 'T{t} S{s}',
   'events.range': 'T{t} S{a}→{b}',
   'events.rangeTo': 'T{a} S{as} → T{b} S{bs}',
+  'kind.all': '全部',
   'kind.inject': '注入',
   'kind.compaction': '压缩',
   'kind.prune': '剪枝',

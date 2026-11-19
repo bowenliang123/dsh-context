@@ -170,6 +170,7 @@ export const DICT_RU = {
   'events.at': 'Х{t} Ш{s}',
   'events.range': 'Х{t} Ш{a}→{b}',
   'events.rangeTo': 'Х{a} Ш{as} → Х{b} Ш{bs}',
+  'kind.all': 'Все',
   'kind.inject': 'Внедрение',
   'kind.compaction': 'Сжатие',
   'kind.prune': 'Очистка',

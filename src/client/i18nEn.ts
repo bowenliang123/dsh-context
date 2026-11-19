@@ -170,6 +170,7 @@ export const DICT_EN = {
   'events.at': 'T{t} S{s}',
   'events.range': 'T{t} S{a}→{b}',
   'events.rangeTo': 'T{a} S{as} → T{b} S{bs}',
+  'kind.all': 'All',
   'kind.inject': 'Inject',
   'kind.compaction': 'Compact',
   'kind.prune': 'Prune',

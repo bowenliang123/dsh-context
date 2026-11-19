@@ -295,9 +295,9 @@ describe('timelineOf', () => {
     const noStats = timelineOf({ current, commandStats: 'junk' })
     assert.ok(noStats !== null && !('commandStats' in noStats))
 
-    const partial = timelineOf({ current, counts: { turns: 2, steps: 'many' }, last: { seq: 'x' }, detailRev: 'r', answers: 'many' })
+    const partial = timelineOf({ current, counts: { turns: 2, steps: 'many', events: 3 }, last: { seq: 'x' }, detailRev: 'r', answers: 'many' })
     assert.ok(partial !== null)
-    assert.deepEqual(partial.counts, { turns: 2, steps: 0, injects: 0, compactions: 0, prunes: 0, skills: 0 })
+    assert.deepEqual(partial.counts, { turns: 2, steps: 0, events: 3, injects: 0, compactions: 0, prunes: 0, skills: 0 })
     assert.ok(!('answers' in partial), 'a wrong-typed answers tally drops like any other scalar')
     assert.ok(!('last' in partial), 'a wrong-typed seq drops the anchor whole')
     assert.ok(!('detailRev' in partial), 'a wrong-typed revision drops the marker (reads as the inline generation)')

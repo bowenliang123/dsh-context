@@ -125,6 +125,7 @@ function retainedCountsOf(state: TimelineState): NonNullable<Snapshot['counts']>
   return {
     turns: turns.size,
     steps: state.requests.length,
+    events: state.events.length,
     injects,
     compactions,
     prunes,
@@ -138,6 +139,7 @@ function countsOf(state: TimelineState): NonNullable<Snapshot['counts']> {
     ? {
       turns: totals.turns,
       steps: totals.steps,
+      events: totals.events,
       injects: totals.injects,
       compactions: totals.compactions,
       prunes: totals.prunes,

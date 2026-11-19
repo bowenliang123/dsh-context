@@ -170,6 +170,7 @@ export const DICT_DE = {
   'events.at': 'R{t} S{s}',
   'events.range': 'R{t} S{a}→{b}',
   'events.rangeTo': 'R{a} S{as} → R{b} S{bs}',
+  'kind.all': 'Alle',
   'kind.inject': 'Injektion',
   'kind.compaction': 'Komprimieren',
   'kind.prune': 'Bereinigen',

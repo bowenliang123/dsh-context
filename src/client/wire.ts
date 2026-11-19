@@ -296,6 +296,7 @@ function systemsFastOk(value: unknown): boolean {
 function countsOf(value: unknown): ContextTimeline['counts'] {
   const data = asRecord(value)
   if (data === null) return undefined
+  const events = optNumOf(data.events)
   return {
     turns: numOf(data.turns),
     steps: numOf(data.steps),
@@ -303,6 +304,7 @@ function countsOf(value: unknown): ContextTimeline['counts'] {
     compactions: numOf(data.compactions),
     prunes: numOf(data.prunes),
     skills: numOf(data.skills),
+    ...(events !== undefined ? { events } : {}),
   }
 }
 

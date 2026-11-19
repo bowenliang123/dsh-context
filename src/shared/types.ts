@@ -32,6 +32,7 @@ export interface TimelineCounts {
   compactions: number
   prunes: number
   skills?: number
+  events?: number
 }
 
 export interface TimelineLast {

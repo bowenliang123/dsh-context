@@ -170,6 +170,7 @@ export const DICT_JA = {
   'events.at': 'T{t} S{s}',
   'events.range': 'T{t} S{a}→{b}',
   'events.rangeTo': 'T{a} S{as} → T{b} S{bs}',
+  'kind.all': 'すべて',
   'kind.inject': '注入',
   'kind.compaction': '圧縮',
   'kind.prune': '剪定',

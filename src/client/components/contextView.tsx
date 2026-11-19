@@ -29,7 +29,8 @@ import type { CatFocus } from './browser'
 import { makeAgentGraph } from './agentGraph'
 import { Donut } from './donut'
 import { makeCurrentComposition } from './currentComposition'
-import { EVENT_KINDS, makeEventList } from './events'
+import { EVENT_FILTERS, makeEventList } from './events'
+import type { EventKindFilter } from './events'
 import { makeFileCard } from './fileCard'
 import type { FileFilter } from './fileCard'
 import { makeCardSkeletons } from './cardSkeletons'
@@ -68,7 +69,7 @@ const HOVER_DELAY_MS = 140
 const HOVER_LOCK_MS = 320
 const DNA_HOVER_DELAY = 220
 const DNA_LAZY_MIN = 512
-const NO_COUNTS: TimelineCounts = { turns: 0, steps: 0, injects: 0, compactions: 0, prunes: 0, skills: 0 }
+const NO_COUNTS: TimelineCounts = { turns: 0, steps: 0, injects: 0, compactions: 0, prunes: 0, skills: 0, events: 0 }
 function revealCard(root: HTMLElement | null, selector: string): void {
   /* v8 ignore start */
   const card = root?.querySelector(selector) ?? null
@@ -219,14 +220,7 @@ export function makeContextView(
       return () => { observer.disconnect() }
     }, [inSidebar, data])
     /* v8 ignore stop */
-    const [pickedKinds, setPickedKinds] = useState<string[]>([...EVENT_KINDS])
-    const toggleKind = (k: string) => {
-      setPickedKinds((p) => {
-        if (p.length === EVENT_KINDS.length) return [k]
-        if (!p.includes(k)) return [...p, k]
-        return p.length === 1 ? [...EVENT_KINDS] : p.filter(x => x !== k)
-      })
-    }
+    const [kindFilter, setKindFilter] = useState<EventKindFilter>('all')
     const [nodeFocus, setNodeFocus] = useState<{ step: number | 'live'; key: string; cat: Category | 'system' | 'tools' } | null>(null)
     const clearNodeFocus = useCallback(() => { setNodeFocus(null) }, [])
 
@@ -268,7 +262,7 @@ export function makeContextView(
     const clearFilterFocus = useCallback(() => { setFilterFocus(null) }, [])
     const [eventsFocus, setEventsFocus] = useState(0)
     const onEventsClick = useCallback((kind: StatsEventKind | null): void => {
-      if (kind !== null) setPickedKinds([kind])
+      if (kind !== null) setKindFilter(kind)
       setEventsFocus(n => n + 1)
     }, [])
     const [commandFocus, setCommandFocus] = useState<string | null>(null)
@@ -385,8 +379,14 @@ export function makeContextView(
     const requests = data.requests
     const events = data.events
     const counts = data.counts ?? NO_COUNTS
-    const kindCounts: Record<string, number | undefined> = { inject: counts.injects, compaction: counts.compactions, prune: counts.prunes }
-    const shownEvents = pickedKinds.length === EVENT_KINDS.length ? events : events.filter(e => pickedKinds.includes(e.kind))
+    const kindCounts: Record<EventKindFilter, number | undefined> = {
+      all: counts.events,
+      inject: counts.injects,
+      compaction: counts.compactions,
+      prune: counts.prunes,
+      model: undefined,
+    }
+    const shownEvents = kindFilter === 'all' ? events : events.filter(e => e.kind === kindFilter)
     const displayRequests = useMemo(
       () => (granularity === 'turn' ? aggregateByTurn(requests) : requests),
       [requests, granularity],
@@ -861,14 +861,15 @@ export function makeContextView(
                   {t('events.title')}
                 </span>
                 <div className="lc-kinds @max-[380px]/lc-card:flex-wrap">
-                  {EVENT_KINDS.map((k) => {
+                  {EVENT_FILTERS.map((k) => {
                     const n = kindCounts[k]
+                    const active = kindFilter === k
                     return (
                       <button
                         key={k}
                         data-kind={k}
-                        className={'lc-gran-btn' + (pickedKinds.includes(k) ? ' lc-gran-on lc-kind-' + k : '')}
-                        onClick={() => { toggleKind(k) }}
+                        className={'lc-gran-btn lc-kind-' + k + (active ? ' lc-gran-on' : '')}
+                        onClick={() => { setKindFilter(k) }}
                       >
                         {t('kind.' + k)}
                         {n !== undefined ? <span className="lc-kind-n">{kit.fmt(n)}</span> : null}
