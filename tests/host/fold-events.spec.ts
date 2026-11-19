@@ -661,7 +661,7 @@ describe('the detailRev ledger', () => {
 describe('buildTimelineHead', () => {
   test('serves the counters, the headline anchor, and the revision; a fresh state zeroes them', () => {
     const fresh = buildTimelineHead(timelineDef().init())
-    assert.deepEqual(fresh.counts, { turns: 0, steps: 0, events: 0, injects: 0, compactions: 0, prunes: 0, skills: 0 })
+    assert.deepEqual(fresh.counts, { turns: 0, steps: 0, events: 0, injects: 0, compactions: 0, prunes: 0, modelSwitches: 0, skills: 0 })
     assert.equal(fresh.humanInputs, 0, 'the tally defaults to zero on the wire')
     assert.equal(fresh.answers, 0, 'the answers tally defaults to zero on the wire too')
     assert.ok(!('lastUser' in fresh), 'no own key on the wire — no user message yet')
@@ -676,7 +676,7 @@ describe('buildTimelineHead', () => {
       ['deepseek-v4-flash', 'deepseek', 'max', 128000],
     )
     assert.ok(head.current.total > 0)
-    assert.deepEqual(head.counts, { turns: 1, steps: 2, events: 2, injects: 0, compactions: 1, prunes: 0, skills: 0 })
+    assert.deepEqual(head.counts, { turns: 1, steps: 2, events: 2, injects: 0, compactions: 1, prunes: 0, modelSwitches: 0, skills: 0 })
     assert.equal(head.humanInputs, 1)
     assert.equal(head.answers, 2)
     assert.equal(head.lastUser, 'hello there')
@@ -697,7 +697,7 @@ describe('buildTimelineHead', () => {
       compaction(2, 'prune', { shadowedTokenCount: 3 }),
       assistantMessage(3, {}),
     ]).state
-    assert.deepEqual(buildTimelineHead(tallied).counts, { turns: 1, steps: 1, events: 2, injects: 1, compactions: 0, prunes: 1, skills: 0 })
+    assert.deepEqual(buildTimelineHead(tallied).counts, { turns: 1, steps: 1, events: 2, injects: 1, compactions: 0, prunes: 1, modelSwitches: 0, skills: 0 })
     const anchorless = driveTimeline([
       userMessage(1, [{ type: 'text', text: 'hi' }], { kind: 'user' }),
       assistantMessage(2, { turn: 1, step: 1 }),
@@ -717,7 +717,7 @@ describe('buildTimelineHead', () => {
       userMessage(6, [{ type: 'text', text: 'once more' }], { kind: 'skill-invocation', form: 'skill', name: 'grilling' }),
     ])
     const head = buildTimelineHead(state)
-    assert.deepEqual(head.counts, { turns: 0, steps: 0, events: 5, injects: 5, compactions: 0, prunes: 0, skills: 2 })
+    assert.deepEqual(head.counts, { turns: 0, steps: 0, events: 5, injects: 5, compactions: 0, prunes: 0, modelSwitches: 0, skills: 2 })
     assertPlainJson(head)
   })
 

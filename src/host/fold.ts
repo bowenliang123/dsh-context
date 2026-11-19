@@ -31,7 +31,7 @@ import {
   setCommand,
   tallyRun,
 } from './foldCommands'
-import { TALLY_NAME_CHARS_MAX, TALLY_NAMES_MAX, countCompaction, countInject, countStep, countTurnRuns, noteCommandCall, noteSkillName, noteTurn, pushEvent, trimState } from './foldState'
+import { TALLY_NAME_CHARS_MAX, TALLY_NAMES_MAX, countCompaction, countInject, countModelSwitch, countStep, countTurnRuns, noteCommandCall, noteSkillName, noteTurn, pushEvent, trimState } from './foldState'
 import { slimSurfaceNode } from './foldState'
 import type { CommandStateRecord, TimelineEvent, TimelineState } from './foldState'
 import { agentOfInjection, applyAgentAliasEvent, messageOf, skillNameOf, type MessageLike } from './foldInjections'
@@ -361,6 +361,7 @@ function applyTimelineEvent(state: TimelineState, event: TimelineEvent, bounds: 
         }
         if ((data?.reason === 'change' || data?.reason === 'resume') && s.model && s.lastModel && s.model !== s.lastModel) {
           pushEvent(s, { seq: event.seq, time: event.time, kind: 'model', from: s.lastModel, to: s.model })
+          countModelSwitch(s)
           bumpDetailRev(s)
         }
         if (s.model) s.lastModel = s.model

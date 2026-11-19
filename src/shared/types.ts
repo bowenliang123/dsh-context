@@ -33,6 +33,7 @@ export interface TimelineCounts {
   prunes: number
   skills?: number
   events?: number
+  modelSwitches?: number
 }
 
 export interface TimelineLast {

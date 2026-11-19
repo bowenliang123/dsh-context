@@ -161,7 +161,7 @@ Pick **Live** or any retained step, and browse what that request was assembled f
 
 ![Context Events with a compaction](https://raw.githubusercontent.com/bowenliang123/dsh-context/main/docs/context-events.png)
 
-Every injection, compaction, prune, model switch, and plan-mode toggle — labeled with its producer (instruction file, plugin id, skill name), its net token delta (compactions show what they reclaimed), turn/step, and time. The **All / Inject / Compact / Prune / Switch** chips narrow the log to one kind at a time; the All, Inject, Compact, and Prune chips carry their whole-session event tallies.
+Every injection, compaction, prune, model switch, and plan-mode toggle — labeled with its producer (instruction file, plugin id, skill name), its net token delta (compactions show what they reclaimed), turn/step, and time. The **All / Inject / Compact / Prune / Model Switching** chips narrow the log to one kind at a time, each carrying its whole-session event tally.
 
 ### 📁 File Activity — what the agent did to your files
 

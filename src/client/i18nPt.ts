@@ -175,6 +175,7 @@ export const DICT_PT = {
   'kind.compaction': 'Compactar',
   'kind.prune': 'Podar',
   'kind.model': 'Trocar',
+  'kind.modelSwitch': 'Troca de modelo',
   'kind.mode': 'Modo',
   'files.title': 'Atividade de arquivos',
   'files.kind.all': 'Todos',

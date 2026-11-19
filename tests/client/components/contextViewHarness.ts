@@ -27,14 +27,16 @@ function countsOf(requests: readonly RequestRecord[], events: readonly ContextEv
   let injects = 0
   let compactions = 0
   let prunes = 0
+  let modelSwitches = 0
   const skills = new Set<string>()
   for (const event of events) {
     if (event.kind === 'inject') injects++
     else if (event.kind === 'compaction') compactions++
     else if (event.kind === 'prune') prunes++
+    else if (event.kind === 'model') modelSwitches++
     if (event.sub === 'skill' && typeof event.name === 'string' && event.name !== '') skills.add(event.name)
   }
-  return { turns: turns.size, steps: requests.length, events: events.length, injects, compactions, prunes, skills: skills.size }
+  return { turns: turns.size, steps: requests.length, events: events.length, injects, compactions, prunes, modelSwitches, skills: skills.size }
 }
 
 function tallyOf(nodes: readonly SurfaceNode[]): Record<string, number> {

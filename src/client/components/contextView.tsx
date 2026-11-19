@@ -29,7 +29,7 @@ import type { CatFocus } from './browser'
 import { makeAgentGraph } from './agentGraph'
 import { Donut } from './donut'
 import { makeCurrentComposition } from './currentComposition'
-import { EVENT_FILTERS, makeEventList } from './events'
+import { EVENT_FILTERS, eventFilterLabelOf, makeEventList } from './events'
 import type { EventKindFilter } from './events'
 import { makeFileCard } from './fileCard'
 import type { FileFilter } from './fileCard'
@@ -69,7 +69,7 @@ const HOVER_DELAY_MS = 140
 const HOVER_LOCK_MS = 320
 const DNA_HOVER_DELAY = 220
 const DNA_LAZY_MIN = 512
-const NO_COUNTS: TimelineCounts = { turns: 0, steps: 0, injects: 0, compactions: 0, prunes: 0, skills: 0, events: 0 }
+const NO_COUNTS: TimelineCounts = { turns: 0, steps: 0, injects: 0, compactions: 0, prunes: 0, skills: 0, events: 0, modelSwitches: 0 }
 function revealCard(root: HTMLElement | null, selector: string): void {
   /* v8 ignore start */
   const card = root?.querySelector(selector) ?? null
@@ -384,7 +384,7 @@ export function makeContextView(
       inject: counts.injects,
       compaction: counts.compactions,
       prune: counts.prunes,
-      model: undefined,
+      model: counts.modelSwitches,
     }
     const shownEvents = kindFilter === 'all' ? events : events.filter(e => e.kind === kindFilter)
     const displayRequests = useMemo(
@@ -871,7 +871,7 @@ export function makeContextView(
                         className={'lc-gran-btn lc-kind-' + k + (active ? ' lc-gran-on' : '')}
                         onClick={() => { setKindFilter(k) }}
                       >
-                        {t('kind.' + k)}
+                        {eventFilterLabelOf(t, k)}
                         {n !== undefined ? <span className="lc-kind-n">{kit.fmt(n)}</span> : null}
                       </button>
                     )

@@ -161,7 +161,7 @@ Escolha **Ao vivo** ou qualquer etapa retida e explore com o que essa requisiç�
 
 ![Eventos de contexto com uma compactação](https://raw.githubusercontent.com/bowenliang123/dsh-context/main/docs/context-events.png)
 
-Cada injeção, compactação, poda, troca de modelo e alternância do modo de plano — identificada com seu produtor (arquivo de instruções, id do plugin, nome da skill), seu delta líquido de tokens (compactações mostram o que recuperaram), turno/etapa e horário. Os chips **Todos / Injetar / Compactar / Podar / Trocar** filtram o log para um único tipo por vez; os de Todos, Injetar, Compactar e Podar mostram sua contagem de eventos de toda a sessão.
+Cada injeção, compactação, poda, troca de modelo e alternância do modo de plano — identificada com seu produtor (arquivo de instruções, id do plugin, nome da skill), seu delta líquido de tokens (compactações mostram o que recuperaram), turno/etapa e horário. Os chips **Todos / Injetar / Compactar / Podar / Troca de modelo** filtram o log para um único tipo por vez e cada um mostra sua contagem de eventos de toda a sessão.
 
 ### 📁 Atividade de arquivos — o que o agente fez com seus arquivos
 

@@ -784,9 +784,10 @@ describe('ContextView — interactions', () => {
     assert.deepEqual(activeKinds(), ['all'])
     assert.deepEqual(
       queryAll(m.container, '.lc-kinds .lc-kind-n').map(el => text(el)),
-      ['2', '1', '1', '0'],
+      ['2', '1', '1', '0', '0'],
     )
     assert.ok(kindBtn('inject').className.includes('lc-kind-inject'), 'an idle kind keeps its hue')
+    assert.ok(text(kindBtn('model')).startsWith(DICT_EN['kind.modelSwitch']), 'the switch filter names the model')
 
     await click(kindBtn('inject'))
     assert.equal(countEvents(), 1)

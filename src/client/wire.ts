@@ -297,6 +297,7 @@ function countsOf(value: unknown): ContextTimeline['counts'] {
   const data = asRecord(value)
   if (data === null) return undefined
   const events = optNumOf(data.events)
+  const modelSwitches = optNumOf(data.modelSwitches)
   return {
     turns: numOf(data.turns),
     steps: numOf(data.steps),
@@ -305,6 +306,7 @@ function countsOf(value: unknown): ContextTimeline['counts'] {
     prunes: numOf(data.prunes),
     skills: numOf(data.skills),
     ...(events !== undefined ? { events } : {}),
+    ...(modelSwitches !== undefined ? { modelSwitches } : {}),
   }
 }
 

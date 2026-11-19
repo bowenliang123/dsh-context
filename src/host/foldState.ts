@@ -390,12 +390,13 @@ export interface CumulativeTotals {
   injects: number
   compactions: number
   prunes: number
+  modelSwitches: number
   skills: Record<string, true>
   lastTurn?: number
 }
 
 function emptyTotals(): CumulativeTotals {
-  return { turns: 0, steps: 0, events: 0, injects: 0, compactions: 0, prunes: 0, skills: {} }
+  return { turns: 0, steps: 0, events: 0, injects: 0, compactions: 0, prunes: 0, modelSwitches: 0, skills: {} }
 }
 
 function ownedTotals(st: TimelineState): CumulativeTotals {
@@ -418,6 +419,12 @@ export function countCompaction(st: TimelineState, kind: 'compaction' | 'prune')
   const totals = ownedTotals(st)
   if (kind === 'compaction') totals.compactions += 1
   else totals.prunes += 1
+  st.totals = totals
+}
+
+export function countModelSwitch(st: TimelineState): void {
+  const totals = ownedTotals(st)
+  totals.modelSwitches += 1
   st.totals = totals
 }
 

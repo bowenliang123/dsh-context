@@ -175,6 +175,7 @@ export const DICT_RU = {
   'kind.compaction': 'Сжатие',
   'kind.prune': 'Очистка',
   'kind.model': 'Смена',
+  'kind.modelSwitch': 'Смена модели',
   'kind.mode': 'Режим',
   'files.title': 'Активность файлов',
   'files.kind.all': 'Все',

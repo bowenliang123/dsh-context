@@ -175,6 +175,7 @@ export const DICT_JA = {
   'kind.compaction': '圧縮',
   'kind.prune': '剪定',
   'kind.model': '切り替え',
+  'kind.modelSwitch': 'モデル切替',
   'kind.mode': 'モード',
   'files.title': 'ファイルアクティビティ',
   'files.kind.all': 'すべて',

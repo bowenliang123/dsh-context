@@ -117,10 +117,12 @@ function retainedCountsOf(state: TimelineState): NonNullable<Snapshot['counts']>
   let injects = 0
   let compactions = 0
   let prunes = 0
+  let modelSwitches = 0
   for (const e of state.events) {
     if (e.kind === 'inject') injects++
     else if (e.kind === 'compaction') compactions++
     else if (e.kind === 'prune') prunes++
+    else if (e.kind === 'model') modelSwitches++
   }
   return {
     turns: turns.size,
@@ -129,6 +131,7 @@ function retainedCountsOf(state: TimelineState): NonNullable<Snapshot['counts']>
     injects,
     compactions,
     prunes,
+    modelSwitches,
     skills: skillNamesCountOf(state),
   }
 }
@@ -143,6 +146,7 @@ function countsOf(state: TimelineState): NonNullable<Snapshot['counts']> {
       injects: totals.injects,
       compactions: totals.compactions,
       prunes: totals.prunes,
+      modelSwitches: totals.modelSwitches,
       skills: skillNamesCountOf(state),
     }
     : retainedCountsOf(state)

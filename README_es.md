@@ -161,7 +161,7 @@ Elige **En vivo** o cualquier paso conservado, y explora con qué se ensambló e
 
 ![Eventos de contexto con una compactación](https://raw.githubusercontent.com/bowenliang123/dsh-context/main/docs/context-events.png)
 
-Cada inyección, compactación, poda, cambio de modelo y activación o desactivación del modo de planificación, etiquetada con su productor (archivo de instrucciones, id de plugin, nombre de habilidad), su delta neto de tokens (las compactaciones muestran lo que recuperaron), turno/paso y hora. Los chips **Todos / Inyectar / Compactar / Podar / Cambiar** filtran el registro a un solo tipo a la vez; los de Todos, Inyectar, Compactar y Podar muestran su total de eventos de toda la sesión.
+Cada inyección, compactación, poda, cambio de modelo y activación o desactivación del modo de planificación, etiquetada con su productor (archivo de instrucciones, id de plugin, nombre de habilidad), su delta neto de tokens (las compactaciones muestran lo que recuperaron), turno/paso y hora. Los chips **Todos / Inyectar / Compactar / Podar / Cambio de modelo** filtran el registro a un solo tipo a la vez y cada uno muestra su total de eventos de toda la sesión.
 
 ### 📁 Actividad de archivos: qué hizo el agente con tus archivos
 

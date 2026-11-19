@@ -187,6 +187,20 @@ describe('the full-session head counters', () => {
     assert.equal(counts?.events, 6, 'the event total spans the whole session, not the retained tail')
   })
 
+  test('model-switch counters stay full-session past the event cap', () => {
+    const drive = driveTimeline([
+      header(1, { model: 'deepseek-v4-flash', provider: 'deepseek' }),
+      header(2, { model: 'deepseek-v4-pro', provider: 'deepseek', reason: 'change' }),
+      compaction(3, 'summary', { shadowedTokenCount: 1 }),
+      compaction(4, 'prune', { shadowedTokenCount: 1 }),
+      planMode(5, { active: true }),
+    ], { maxEvents: 2 })
+    assert.equal(drive.state.events.length, 2)
+    const counts = buildTimelineHead(drive.state).counts
+    assert.equal(counts?.modelSwitches, 1)
+    assert.equal(counts?.events, 4)
+  })
+
   test('distinct skill names stay full-session and the name ledger is bounded', () => {
     const drive = driveTimeline([
       userMessage(1, [{ type: 'text', text: 'run' }], { kind: 'skill-invocation', name: 'alpha' }),
@@ -271,9 +285,10 @@ describe('the full-session head counters', () => {
       { seq: 5, time: 5, kind: 'prune' },
       { seq: 6, time: 6, kind: 'inject', form: 'context' },
       { seq: 7, time: 7, kind: 'mode' },
+      { seq: 8, time: 8, kind: 'model', from: 'a', to: 'b' },
     ] as TimelineState['events']
     delete state.totals
-    assert.deepEqual(buildTimelineHead(state).counts, { turns: 2, steps: 3, events: 5, injects: 2, compactions: 1, prunes: 1, skills: 1 })
+    assert.deepEqual(buildTimelineHead(state).counts, { turns: 2, steps: 3, events: 6, injects: 2, compactions: 1, prunes: 1, modelSwitches: 1, skills: 1 })
   })
 
   test('a counter-less state continuing forward restarts its counters at its own cut', () => {
@@ -286,12 +301,12 @@ describe('the full-session head counters', () => {
     state = def.apply(state, toolResult(4, { callId: 'c1', content: [{ type: 'text', text: '<skill_content name="pdf">x</skill_content>' }] }))
     state = def.apply(state, compaction(5, 'summary', { shadowedTokenCount: 1 }))
     state = def.apply(state, compaction(6, 'prune', { shadowedTokenCount: 1 }))
-    assert.deepEqual(buildTimelineHead(state).counts, { turns: 1, steps: 1, events: 4, injects: 2, compactions: 1, prunes: 1, skills: 2 })
+    assert.deepEqual(buildTimelineHead(state).counts, { turns: 1, steps: 1, events: 4, injects: 2, compactions: 1, prunes: 1, modelSwitches: 0, skills: 2 })
     const skillResult = def.apply(
       def.apply(legacy, toolCall(1, { callId: 'c9', name: 'skill' })),
       toolResult(2, { callId: 'c9', content: [{ type: 'text', text: '<skill_content name="pdf">x</skill_content>' }] }),
     )
-    assert.deepEqual(buildTimelineHead(skillResult).counts, { turns: 0, steps: 0, events: 1, injects: 1, compactions: 0, prunes: 0, skills: 1 })
+    assert.deepEqual(buildTimelineHead(skillResult).counts, { turns: 0, steps: 0, events: 1, injects: 1, compactions: 0, prunes: 0, modelSwitches: 0, skills: 1 })
   })
 
   test('the state schema round-trips every field including the counters', () => {

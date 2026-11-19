@@ -173,6 +173,7 @@ export const DICT_ZH = {
   'kind.compaction': '压缩',
   'kind.prune': '剪枝',
   'kind.model': '切换',
+  'kind.modelSwitch': '切换模型',
   'kind.mode': '模式',
   'files.title': '文件活动',
   'files.kind.all': '全部',

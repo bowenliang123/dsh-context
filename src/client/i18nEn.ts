@@ -175,6 +175,7 @@ export const DICT_EN = {
   'kind.compaction': 'Compact',
   'kind.prune': 'Prune',
   'kind.model': 'Switch',
+  'kind.modelSwitch': 'Model Switching',
   'kind.mode': 'Mode',
   'files.title': 'File Activity',
   'files.kind.all': 'All',

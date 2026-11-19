@@ -175,6 +175,7 @@ export const DICT_DE = {
   'kind.compaction': 'Komprimieren',
   'kind.prune': 'Bereinigen',
   'kind.model': 'Wechsel',
+  'kind.modelSwitch': 'Modellwechsel',
   'kind.mode': 'Modus',
   'files.title': 'Dateiaktivität',
   'files.kind.all': 'Alle',

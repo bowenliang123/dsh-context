@@ -215,6 +215,7 @@ const countsSchema = z.object({
   prunes: z.number().int().nonnegative(),
   skills: z.number().int().nonnegative().optional(),
   events: z.number().int().nonnegative().optional(),
+  modelSwitches: z.number().int().nonnegative().optional(),
 }).strict()
 
 const lastSchema = z.object({
@@ -324,6 +325,7 @@ const timelineStateSchema = z.object({
     injects: z.number().int().nonnegative(),
     compactions: z.number().int().nonnegative(),
     prunes: z.number().int().nonnegative(),
+    modelSwitches: z.number().int().nonnegative(),
     skills: z.record(z.string(), z.literal(true)),
     lastTurn: z.number().optional(),
   }).strict().optional(),
@@ -377,7 +379,7 @@ const timelineStateSchema = z.object({
   commandCallsOverflow: z.boolean().optional(),
 }) as unknown as z.ZodType<TimelineState>
 
-export const TIMELINE_STATE_VERSION = 43
+export const TIMELINE_STATE_VERSION = 44
 
 export function createContextTimelineDefinition(
   config: Config,
