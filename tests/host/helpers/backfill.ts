@@ -133,3 +133,11 @@ export function fakeState(listed: unknown): FakeState {
     failReads: new Map(),
   }
 }
+
+export function assertIssueDetail(issues: { id: string; reason: string }[] | undefined, firstId: string): void {
+  assert.equal(issues?.length, 16, 'the detail stays bounded')
+  assert.equal(issues?.[0].id, firstId)
+  const reason = issues?.[0].reason ?? ''
+  assert.ok(reason.endsWith('…'))
+  assert.equal(reason.length, 181)
+}

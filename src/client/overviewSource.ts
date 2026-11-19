@@ -1,12 +1,12 @@
 import { useEffect, useRef, useState } from 'react'
 import type {
-  BackfillCoverage, BackfillUnreadableSession, OverviewDay, OverviewPage, OverviewPartTotal, OverviewProjectStat,
+  BackfillCoverage, BackfillSessionIssue, OverviewDay, OverviewPage, OverviewPartTotal, OverviewProjectStat,
   OverviewRequest, OverviewScope,
   OverviewSummary, OverviewTally, OverviewTallyStat, OverviewTimingWindow, OverviewValue, TimingTotals,
   OverviewResolvedWindow,
 } from '../shared/types'
-import { OVERVIEW_ROUTE } from './apiRoutes'
-import { postRoute } from './route'
+import { BACKFILL_ROUTE, OVERVIEW_ROUTE } from './apiRoutes'
+import { postRoute, postRouteAction } from './route'
 import { asRecord } from './services'
 import { invalidate, subscribeInvalidations } from './invalidation'
 import { notePricingPending } from './costRefresh'
@@ -21,7 +21,7 @@ const COVERAGE_REFRESH_MAX_MS = 15_000
 
 const COVERAGE_REFRESH_ATTEMPTS = 10
 
-const UNREADABLE_SESSIONS_MAX = 64
+const ISSUES_MAX = 64
 
 function numOf(value: unknown): number | null {
   return typeof value === 'number' && Number.isFinite(value) ? value : null
@@ -75,10 +75,10 @@ function resolvedWindowOf(value: unknown): OverviewResolvedWindow | undefined {
   return { start, end, from, to }
 }
 
-function unreadableSessionsOf(value: unknown): BackfillUnreadableSession[] | undefined {
+function issuesOf(value: unknown): BackfillSessionIssue[] | undefined {
   if (!Array.isArray(value)) return undefined
-  const sessions: BackfillUnreadableSession[] = []
-  for (const entry of value.slice(0, UNREADABLE_SESSIONS_MAX) as unknown[]) {
+  const sessions: BackfillSessionIssue[] = []
+  for (const entry of value.slice(0, ISSUES_MAX) as unknown[]) {
     const data = asRecord(entry)
     const id = data === null ? undefined : stringOf(data.id)
     const reason = data === null ? undefined : stringOf(data.reason)
@@ -99,7 +99,8 @@ function coverageOf(value: unknown): BackfillCoverage | null {
       return null
     }
   }
-  const unreadableSessions = unreadableSessionsOf(data.unreadableSessions)
+  const unreadableSessions = issuesOf(data.unreadableSessions)
+  const failedSessions = issuesOf(data.failedSessions)
   return {
     complete: data.complete as boolean,
     running: data.running as boolean,
@@ -110,6 +111,7 @@ function coverageOf(value: unknown): BackfillCoverage | null {
     unsupported: data.unsupported as number,
     unreadable: data.unreadable as number,
     ...(unreadableSessions === undefined ? {} : { unreadableSessions }),
+    ...(failedSessions === undefined ? {} : { failedSessions }),
   }
 }
 
@@ -437,6 +439,11 @@ export function foldStateOf(coverage: BackfillCoverage | null): FoldState {
   if (coverage.complete) return 'idle'
   if (coverage.total === 0) return 'starting'
   return coverage.remaining > 0 ? 'folding' : 'stalled'
+}
+
+export async function retryBackfill(): Promise<void> {
+  await postRouteAction(BACKFILL_ROUTE, {})
+  invalidate('overview')
 }
 
 export function useOverviewSummary(scope: OverviewScope | null, enabled: boolean): OverviewSummaryState {

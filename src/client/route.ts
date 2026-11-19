@@ -21,14 +21,18 @@ export interface RouteEnvelope<T> {
   unchanged: boolean
 }
 
-async function readEnvelope(route: string, body: unknown, options: RouteOptions): Promise<Record<string, unknown>> {
-  const label = options.label ?? route
-  const response = await fetch(route, {
+function postJson(route: string, body: unknown, options: RouteOptions = {}): Promise<Response> {
+  return fetch(route, {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify(body),
     ...(options.signal === undefined ? {} : { signal: options.signal }),
   })
+}
+
+async function readEnvelope(route: string, body: unknown, options: RouteOptions): Promise<Record<string, unknown>> {
+  const label = options.label ?? route
+  const response = await postJson(route, body, options)
   if (!response.ok) throw new RouteError(`${PLUGIN_NAME}: ${label} route HTTP ${response.status}`, response.status)
   let parsed: unknown
   try {
@@ -84,4 +88,10 @@ export async function postRouteQuietly<T>(
   } catch {
     return null
   }
+}
+
+export async function postRouteAction(route: string, body: unknown): Promise<void> {
+  try {
+    await postJson(route, body)
+  } catch {}
 }

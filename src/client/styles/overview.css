@@ -10,6 +10,9 @@
 .lc-ov-settings:hover { border-color: var(--dsw-alias-label-secondary); background: var(--dsw-alias-interactive-bg-hover); color: var(--dsw-alias-label-primary); }
 .lc-ov-balance, .lc-ov-update, .lc-ov-folding { flex: none; display: inline-flex; align-items: center; gap: 6px; max-width: 100%; padding: 2px 10px; border-radius: 999px; background: var(--dsw-alias-bg-layer-2); border: var(--lc-line-strong, 1px solid var(--dsw-alias-border-l2)); font-size: 12px; line-height: 18px; text-decoration: none; color: inherit; white-space: nowrap; }
 .lc-ov-folding { color: var(--dsw-alias-label-secondary); font-variant-numeric: tabular-nums; overflow: hidden; text-overflow: ellipsis; }
+.lc-ov-folding-action { font-family: inherit; text-align: center; cursor: pointer; transition: border-color var(--ds-transition-duration, 0.2s) var(--ds-ease-in-out, ease-in-out), background-color var(--ds-transition-duration, 0.2s) var(--ds-ease-in-out, ease-in-out); }
+.lc-ov-folding-action:hover:not(:disabled) { border-color: var(--dsw-alias-state-warn-primary); color: var(--dsw-alias-label-primary); }
+.lc-ov-folding-action:disabled { cursor: progress; }
 .lc-ov-balance:hover .lc-ov-balance-value { text-decoration: underline; }
 .lc-ov-balance-label, .lc-ov-update-label { color: var(--dsw-alias-label-secondary); }
 .lc-ov-balance-value, .lc-ov-update-version { font-variant-numeric: tabular-nums; font-weight: 600; }

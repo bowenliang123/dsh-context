@@ -7,9 +7,9 @@ import {
   type DayRange, type DayTotals, type OverviewCoverage, type OverviewRange, type OverviewSort,
   type TallyField, type TallyStat,
 } from '../overview'
-import { foldStateOf, useOverviewDays, useOverviewPage, useOverviewProjects, useOverviewSummary, useOverviewTally } from '../overviewSource'
+import { foldStateOf, retryBackfill, useOverviewDays, useOverviewPage, useOverviewProjects, useOverviewSummary, useOverviewTally } from '../overviewSource'
 import type { PartState } from '../overviewSource'
-import type { OverviewRange as HostRange, OverviewScope, OverviewSummary } from '../../shared/types'
+import type { OverviewRange as HostRange, OverviewScope, OverviewSummary, BackfillSessionIssue } from '../../shared/types'
 import { openPluginSettings, openSessionVia, seatKeyOf, type ClientCtx } from '../services'
 import { readSkillCatalog } from '../skills'
 import type { ContextSettings } from '../settings'
@@ -98,6 +98,7 @@ export function makeOverviewPanel(
     const [sort, setSort] = useState<OverviewSort>('recent')
     const [metric, setMetric] = useState<HeatMetric>('tokens')
     const [page, setPage] = useState(0)
+    const [retrying, setRetrying] = useState(false)
     const { zoneProps, bubble } = useHoverTip()
     const [bodyRef, bodyMounted] = useLazyMount()
 
@@ -162,12 +163,29 @@ export function makeOverviewPanel(
     const backfill = summaryState.coverage
     const fold = foldStateOf(backfill)
     const unreadable = backfill?.unreadable ?? 0
-    const foldTip = backfill !== null && unreadable > 0
-      ? [
-        fold === 'idle' ? t('ov.fold.unreadableTip') : t('ov.fold.tip'),
-        ...(backfill.unreadableSessions ?? []).map(entry => `${entry.id} — ${entry.reason}`),
-      ].join('\n')
-      : t('ov.fold.tip')
+    const failedCount = backfill?.failed ?? 0
+    const coveredCount = backfill?.covered ?? 0
+    const totalSessions = backfill?.total ?? 0
+    const retryable = fold === 'stalled' || (fold === 'idle' && unreadable > 0)
+    const issues: BackfillSessionIssue[] = [...(backfill?.failedSessions ?? []), ...(backfill?.unreadableSessions ?? [])]
+    const issueTotal = failedCount + unreadable
+    const foldTip = [
+      fold === 'idle' ? t('ov.fold.unreadableTip') : fold === 'stalled' ? t('ov.fold.stalledTip') : t('ov.fold.tip'),
+      ...(retryable ? [t('ov.fold.retry')] : []),
+      ...issues.map(entry => `${entry.id} — ${entry.reason}`),
+      ...(issues.length > 0 && issues.length < issueTotal ? [t('ov.fold.more', { n: issues.length, total: issueTotal })] : []),
+    ].join('\n')
+    const foldLabel = fold === 'stalled'
+      ? t('ov.fold.stalled', { n: fmt(failedCount) })
+      : fold === 'idle'
+        ? t('ov.fold.unreadable', { n: unreadable })
+        : totalSessions === 0
+          ? t('ov.fold.starting')
+          : t('ov.fold.progress', { n: coveredCount, total: totalSessions })
+    const retryFold = (): void => {
+      setRetrying(true)
+      void retryBackfill().finally(() => { setRetrying(false) })
+    }
     const pageValue = pageState.data?.page ?? null
     const pageIndex = pageValue?.index ?? 0
     const pageCount = pageValue?.count ?? 1
@@ -251,15 +269,19 @@ export function makeOverviewPanel(
               <BalanceCapsule />
               <UpdatePill />
               {backfill !== null && (fold !== 'idle' || unreadable > 0) && (
-                <span className="lc-ov-folding" title={foldTip}>
-                  {fold === 'stalled'
-                    ? t('ov.fold.stalled', { n: fmt(backfill.failed) })
-                    : fold === 'idle'
-                      ? t('ov.fold.unreadable', { n: backfill.unreadable })
-                      : backfill.total === 0
-                        ? t('ov.fold.starting')
-                        : t('ov.fold.progress', { n: backfill.covered, total: backfill.total })}
-                </span>
+                retryable ? (
+                  <button
+                    type="button"
+                    className="lc-ov-folding lc-ov-folding-action"
+                    title={foldTip}
+                    aria-label={`${foldLabel}, ${t('ov.fold.retry')}`}
+                    aria-busy={retrying || undefined}
+                    disabled={retrying}
+                    onClick={retryFold}
+                  >{foldLabel}</button>
+                ) : (
+                  <span className="lc-ov-folding" title={foldTip}>{foldLabel}</span>
+                )
               )}
               <div className="lc-ov-headctl">
                 <DateRange

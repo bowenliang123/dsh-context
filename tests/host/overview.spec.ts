@@ -248,8 +248,22 @@ describe('dsh-context overview route', () => {
     const advanced = await call(harness, { part: 'summary', revision })
     assert.notEqual(revisionOf(advanced), revision, 'advancing coverage moves the revision')
     assert.equal(summaryOf(advanced).coverage.covered, 2, 'the reply carries the advanced counters')
-    const unchanged = await call(harness, { part: 'summary', revision: revisionOf(advanced) })
-    assert.deepEqual(unchanged.reply, { ok: true, value: { revision: revisionOf(advanced), unchanged: true } })
+    const running = revisionOf(advanced)
+    harness.state.coverage.running = false
+    const settled = await call(harness, { part: 'summary', revision: running })
+    assert.notEqual(revisionOf(settled), running, 'the pass ending moves the revision even with unchanged counters')
+    const stalled = revisionOf(settled)
+    harness.state.coverage.complete = false
+    harness.state.coverage.failed = 1
+    harness.state.coverage.failedSessions = [{ id: 'b', reason: 'schema rejected the cached row' }]
+    const detailed = await call(harness, { part: 'summary', revision: stalled })
+    assert.notEqual(revisionOf(detailed), stalled, 'a new failure detail moves the revision')
+    assert.deepEqual(summaryOf(detailed).coverage.failedSessions, [{ id: 'b', reason: 'schema rejected the cached row' }])
+    harness.state.coverage.failedSessions = [{ id: 'b', reason: 'a second attempt failed differently' }]
+    const reworded = await call(harness, { part: 'summary', revision: revisionOf(detailed) })
+    assert.notEqual(revisionOf(reworded), revisionOf(detailed), 'a changed reason moves the revision')
+    const unchanged = await call(harness, { part: 'summary', revision: revisionOf(reworded) })
+    assert.deepEqual(unchanged.reply, { ok: true, value: { revision: revisionOf(reworded), unchanged: true } })
   })
 
   test('a live session moves the revision with its event seq, and the live snapshot path serves its values', async () => {

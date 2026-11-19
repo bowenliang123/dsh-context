@@ -2,7 +2,7 @@ import { asRecord } from './record'
 import { performance } from 'node:perf_hooks'
 import type { Context } from '@deepseek-ai/cordis'
 import type { SessionEvent, SessionHeader } from '@deepseek-ai/dsh-session'
-import type { BackfillCoverage, BackfillUnreadableSession } from '../shared/types'
+import type { BackfillCoverage, BackfillSessionIssue } from '../shared/types'
 import type { Config } from './config'
 import { type ColdReadGate, makeColdReadGate } from './coldRead'
 import { makeFoldJournal } from './foldJournal'
@@ -109,9 +109,9 @@ const UNSUPPORTED_FORMAT = 'SessionFormatUnsupported'
 
 const UNREADABLE_HOST_LOG = 'SessionPersistenceCorruption'
 
-const UNREADABLE_REASON_MAX = 180
+const ISSUE_REASON_MAX = 180
 
-const UNREADABLE_DETAIL_MAX = 16
+const ISSUE_DETAIL_MAX = 16
 
 function headerOf(record: unknown): SessionHeader | null {
   const header = asRecord(asRecord(record)?.header)
@@ -276,9 +276,9 @@ function isUnreadableHostLog(error: unknown): boolean {
   }
 }
 
-function unreadableReasonOf(error: unknown): string {
+function reasonOf(error: unknown): string {
   const reason = messageOf(error)
-  return reason.length > UNREADABLE_REASON_MAX ? `${reason.slice(0, UNREADABLE_REASON_MAX)}…` : reason
+  return reason.length > ISSUE_REASON_MAX ? `${reason.slice(0, ISSUE_REASON_MAX)}…` : reason
 }
 
 function messageOf(error: unknown): string {
@@ -431,7 +431,11 @@ export function watchActivityBackfill(
         unsupported: 0,
         unreadable: 0,
       }
-      const unreadableSessions: BackfillUnreadableSession[] = []
+      const unreadableSessions: BackfillSessionIssue[] = []
+      const failedSessions: BackfillSessionIssue[] = []
+      const noteIssue = (list: BackfillSessionIssue[], id: string, error: unknown): void => {
+        if (list.length < ISSUE_DETAIL_MAX) list.push({ id, reason: reasonOf(error) })
+      }
       let listed = false
       let folded = 0
       let paused = false
@@ -482,6 +486,8 @@ export function watchActivityBackfill(
         coverage.unreadable = pass.unreadable
         if (unreadableSessions.length > 0) coverage.unreadableSessions = [...unreadableSessions]
         else delete coverage.unreadableSessions
+        if (failedSessions.length > 0) coverage.failedSessions = [...failedSessions]
+        else delete coverage.failedSessions
         return changed
       }
       const statCapability: StatCapability = {}
@@ -658,11 +664,12 @@ export function watchActivityBackfill(
               ctx.logger.debug(`dsh-context: projection backfill skipped "${header.id}" (${messageOf(error)})`)
             } else if (isUnreadableHostLog(error)) {
               pass.unreadable++
-              const reason = unreadableReasonOf(error)
-              if (unreadableSessions.length < UNREADABLE_DETAIL_MAX) unreadableSessions.push({ id: header.id, reason })
+              const reason = reasonOf(error)
+              noteIssue(unreadableSessions, header.id, error)
               ctx.logger.warn(`dsh-context: projection backfill cannot read "${header.id}" (host refused the log: ${reason})`)
             } else {
               pass.failed++
+              noteIssue(failedSessions, header.id, error)
               ctx.logger.warn(`dsh-context: projection backfill skipped "${header.id}" (${messageOf(error)})`)
             }
           }

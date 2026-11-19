@@ -2,8 +2,8 @@ import assert from 'node:assert/strict'
 import { act } from 'react'
 import { afterEach, beforeEach, describe, test, vi } from 'vitest'
 import { resetInvalidations } from '../../../src/client/invalidation'
-import { text } from '../helpers/kit'
-import { panelSummaryRaw as summaryRaw, pinCurrentSession, stubPanelRoutes as stubRoutes } from '../overview.fixtures'
+import { click, flush, text } from '../helpers/kit'
+import { COMPLETE_COVERAGE, panelSummaryRaw as summaryRaw, pinCurrentSession, stubPanelRoutes as stubRoutes } from '../overview.fixtures'
 import { makeCtx, openPanelFake } from './overviewPanelHarness'
 
 beforeEach(() => {
@@ -19,6 +19,11 @@ afterEach(async () => {
 })
 
 const progress = (covered: number, total: number): string => `Folding projections (${covered}/${total})…`
+
+const STALLED = {
+  complete: false, running: false, remaining: 0, failed: 2, total: 3, covered: 1, unsupported: 0, unreadable: 0,
+  failedSessions: [{ id: 's1', reason: 'Invalid input: expected number' }],
+}
 
 describe('OverviewPanel coverage state', () => {
   test('an incomplete coverage shows progress and re-reads overview without posting backfill', async () => {
@@ -144,9 +149,57 @@ describe('OverviewPanel coverage state', () => {
     assert.ok(text(bare.m.container).includes('Unreadable sessions: 1'))
     assert.equal(
       bare.m.container.querySelector('.lc-ov-folding')?.getAttribute('title'),
-      'DeepSeek Harness refuses to read these session logs, so folding skips them for now; a Harness update retries them automatically',
+      'DeepSeek Harness refuses to read these session logs, so folding skips them for now; a Harness update retries them automatically\nRetry folding',
     )
     await bare.m.unmount()
+  })
+
+  test('a stalled pill retries the pass on click and clears once coverage heals', async () => {
+    vi.useFakeTimers()
+    let stalled = true
+    const calls = stubRoutes({
+      summary: () => ({
+        revision: stalled ? 's0' : 's1',
+        pricingReady: true,
+        summary: summaryRaw({ coverage: stalled ? STALLED : COMPLETE_COVERAGE }),
+      }),
+    })
+    const { m } = await openPanelFake(makeCtx())
+    const pill = m.container.querySelector('.lc-ov-folding')
+    assert.ok(pill instanceof HTMLButtonElement, 'the stalled pill is a button')
+    assert.ok(text(m.container).includes('2 sessions failed to fold'))
+    assert.equal(pill.getAttribute('aria-label'), '2 sessions failed to fold, Retry folding')
+    const title = pill.getAttribute('title') ?? ''
+    assert.ok(title.includes('Retry folding'), 'the tooltip names the action')
+    assert.ok(title.includes('s1 — Invalid input: expected number'), 'the tooltip carries the failing session and its reason')
+    assert.ok(title.includes('Showing 1 of 2 reasons'), 'a capped detail list says how much it hides')
+    stalled = false
+    await click(pill)
+    await act(async () => { await vi.advanceTimersByTimeAsync(300) })
+    assert.equal(calls.filter(c => c.route.endsWith('/backfill')).length, 1, 'the click starts one fresh pass')
+    assert.equal(m.container.querySelector('.lc-ov-folding'), null, 'the healed coverage drops the pill')
+    await m.unmount()
+  })
+
+  test('a posting retry disables its pill until the acknowledgement lands', async () => {
+    vi.useFakeTimers()
+    stubRoutes({
+      summary: () => ({ revision: 's0', pricingReady: true, summary: summaryRaw({ coverage: STALLED }) }),
+    })
+    const { m } = await openPanelFake(makeCtx())
+    const pill = m.container.querySelector('.lc-ov-folding')
+    assert.ok(pill instanceof HTMLButtonElement)
+    let release: (() => void) | null = null
+    vi.stubGlobal('fetch', () => new Promise((resolve) => {
+      release = () => resolve({ ok: true, json: async () => ({ ok: true, coverage: STALLED }) })
+    }))
+    await click(pill)
+    assert.equal(pill.disabled, true, 'the pill parks while the pass starts')
+    assert.equal(pill.getAttribute('aria-busy'), 'true')
+    await act(async () => { release?.() })
+    await flush()
+    assert.equal(pill.disabled, false, 'the acknowledgement re-enables it')
+    await m.unmount()
   })
 
   test('a progressing coverage repaints the label in place', async () => {

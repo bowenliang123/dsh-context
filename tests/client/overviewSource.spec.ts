@@ -7,7 +7,7 @@ import { cleanupMounts, flush, mount, settle, type Mounted } from './helpers/kit
 import { BASE_COVERAGE, coverageOf, daysValue, pageValue, projectsValue, summaryRaw, summaryValue, tallyValue } from './helpers/overviewWire'
 import { currentSessionOf, projectOf, UNGROUPED_KEY } from '../../src/client/overviewModel'
 import { dayRangeWindow, orderedDayRange, rangeWindowOf } from '../../src/client/overviewQuery'
-import { foldStateOf } from '../../src/client/overviewSource'
+import { foldStateOf, overviewValueOf } from '../../src/client/overviewSource'
 
 describe('overviewSource', () => {
 
@@ -723,6 +723,45 @@ describe('useOverviewProjects', () => {
 })
 
 describe('summary coverage host continuation', () => {
+  test('retrying posts one backfill pass and refreshes the overview', async () => {
+    const mod = await fresh()
+    const calls = stubRoutes(() => summaryValue())
+    const kinds: string[] = []
+    mod.invalidation.subscribeInvalidations((event) => { kinds.push(event.kind) })
+    await mod.source.retryBackfill()
+    assert.deepEqual(calls, [{ route: BACKFILL_ROUTE, body: {}, method: 'POST' }])
+    assert.deepEqual(kinds, ['overview'], 'the retried pass repaints the panel')
+  })
+
+  test('a retry refreshes the overview even when the route fails', async () => {
+    const mod = await fresh()
+    vi.stubGlobal('fetch', async () => { throw new Error('offline') })
+    const kinds: string[] = []
+    mod.invalidation.subscribeInvalidations((event) => { kinds.push(event.kind) })
+    await mod.source.retryBackfill()
+    assert.deepEqual(kinds, ['overview'])
+  })
+
+  test('coverage decodes bounded failure detail and drops unusable entries', () => {
+    const many = Array.from({ length: 70 }, (_, index) => ({ id: `s${index}`, reason: 'boom' }))
+    const decoded = overviewValueOf(summaryValue({
+      summary: summaryRaw({ coverage: coverageOf({ complete: false, failed: 70, failedSessions: many }) }),
+    }))
+    assert.ok(decoded !== null && 'summary' in decoded)
+    assert.equal(decoded.summary.coverage.failedSessions?.length, 64, 'the client cap bounds the list')
+    const hostile = overviewValueOf(summaryValue({
+      summary: summaryRaw({
+        coverage: {
+          ...BASE_COVERAGE,
+          failed: 1,
+          failedSessions: [{ id: 'a', reason: 'boom' }, null, { id: 7, reason: 'x' }, { id: 'b' }, { id: 'c', reason: '' }],
+        },
+      }),
+    }))
+    assert.ok(hostile !== null && 'summary' in hostile)
+    assert.deepEqual(hostile.summary.coverage.failedSessions, [{ id: 'a', reason: 'boom' }])
+  })
+
   test('incomplete coverage re-reads overview without posting backfill', async () => {
     vi.useFakeTimers()
     const mod = await fresh()

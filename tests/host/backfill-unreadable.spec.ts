@@ -2,7 +2,7 @@ import assert from 'node:assert/strict'
 import { describe, test } from 'vitest'
 import { Context } from '@deepseek-ai/cordis'
 import { watchActivityBackfill } from '../../src/host/backfill'
-import { arm, captureLogs, FAST_PACING, fakeState, trigger, until } from './helpers/backfill'
+import { arm, assertIssueDetail, captureLogs, FAST_PACING, fakeState, trigger, until } from './helpers/backfill'
 
 describe('watchActivityBackfill host-refused logs', () => {
   test('a host-refused log reports unreadable instead of a fold failure and is retried on the next pass', async () => {
@@ -82,11 +82,7 @@ describe('watchActivityBackfill host-refused logs', () => {
     await until(() => (handle.coverage().complete ? true : undefined), 'the unreadable pass settled')
     const coverage = handle.coverage()
     assert.equal(coverage.unreadable, 17)
-    assert.equal(coverage.unreadableSessions?.length, 16, 'the detail stays bounded')
-    assert.equal(coverage.unreadableSessions?.[0].id, 'bad0')
-    const reason = coverage.unreadableSessions?.[0].reason ?? ''
-    assert.ok(reason.endsWith('…'))
-    assert.equal(reason.length, 181)
+    assertIssueDetail(coverage.unreadableSessions, 'bad0')
     assert.equal(coverage.failed, 0)
     assert.equal(coverage.remaining, 0)
     handle()
