@@ -1,10 +1,9 @@
 import { readFileSync } from 'node:fs'
-import { readFile } from 'node:fs/promises'
 import { homedir } from 'node:os'
 import { fileURLToPath } from 'node:url'
 import { priceSourceOf, pricesBookOf, type ModelBook } from '../shared/pricing'
 import { asRecord } from './record'
-import { NODE_ATOMIC_FS, storagePathOf, writeFileAtomic } from './storage'
+import { NODE_FILE_IO, storagePathOf, type FileIo } from './storage'
 
 export const CATALOG_TTL_MS = 60 * 60 * 1000
 
@@ -25,15 +24,7 @@ export const PRICE_BOOK_FORMAT = 1
 
 export const PRICE_BOOK_FILE = `price-book.v${PRICE_BOOK_FORMAT}.json`
 
-export interface PriceCacheIo {
-  read(path: string): Promise<string>
-  write(path: string, data: string): Promise<void>
-}
-
-const NODE_PRICE_CACHE_IO: PriceCacheIo = {
-  read: path => readFile(path, 'utf8'),
-  write: (path, data) => writeFileAtomic(NODE_ATOMIC_FS, path, data),
-}
+export type PriceCacheIo = FileIo
 
 export function priceBookPath(
   env: Record<string, string | undefined> = process.env,
@@ -92,7 +83,7 @@ export function createCatalogService(options: CatalogOptions = {}): CatalogServi
   const ttlMs = options.ttlMs ?? CATALOG_TTL_MS
   const current = options.currentVersion ?? currentVersionOf()
   const cachePath = options.cachePath === undefined ? priceBookPath() : options.cachePath
-  const cacheIo = options.cacheIo ?? NODE_PRICE_CACHE_IO
+  const cacheIo = options.cacheIo ?? NODE_FILE_IO
   const version = slotOf<string>()
   const prices = slotOf<void>()
   const books = { book: null as ModelBook | null, failed: false, version: 0 }

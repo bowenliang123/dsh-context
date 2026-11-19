@@ -14,6 +14,7 @@ import {
 } from '../../src/host/catalog'
 import { priceOf, priceSourceOf, pricesBookOf } from '../../src/shared/pricing'
 import { until } from './helpers/backfill'
+import { cacheIoOf } from './helpers/cacheIo'
 
 describe('catalog', () => {
 
@@ -66,37 +67,6 @@ function catalogOf(routes: readonly { match: (url: string) => boolean; body?: un
       ...extra.cacheIo === undefined ? {} : { cacheIo: extra.cacheIo },
     }),
   }
-}
-
-interface CacheIo extends PriceCacheIo {
-  files: Map<string, string>
-  reads: number
-  writes: number
-  failRead: boolean
-  failWrite: boolean
-}
-
-function cacheIoOf(): CacheIo {
-  const state: CacheIo = {
-    files: new Map<string, string>(),
-    reads: 0,
-    writes: 0,
-    failRead: false,
-    failWrite: false,
-    async read(path: string): Promise<string> {
-      state.reads++
-      if (state.failRead) throw new Error('read failed')
-      const body = state.files.get(path)
-      if (body === undefined) throw new Error(`missing ${path}`)
-      return body
-    },
-    async write(path: string, data: string): Promise<void> {
-      state.writes++
-      if (state.failWrite) throw new Error('write failed')
-      state.files.set(path, data)
-    },
-  }
-  return state
 }
 
 const CACHE_PATH = join(tmpdir(), 'dsh-context-test-price-book.v1.json')

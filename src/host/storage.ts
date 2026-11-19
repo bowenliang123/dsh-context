@@ -1,4 +1,4 @@
-import { mkdir, rename, writeFile } from 'node:fs/promises'
+import { mkdir, readFile, rename, writeFile } from 'node:fs/promises'
 import { homedir } from 'node:os'
 import { dirname, join } from 'node:path'
 
@@ -31,3 +31,14 @@ export async function writeFileAtomic(fs: AtomicFs, path: string, data: string):
   await fs.writeFile(temporary, data)
   await fs.rename(temporary, path)
 }
+
+export interface FileIo {
+  read(path: string): Promise<string>
+  write(path: string, data: string): Promise<void>
+}
+
+export const NODE_FILE_IO: FileIo = {
+  read: path => readFile(path, 'utf8'),
+  write: (path, data) => writeFileAtomic(NODE_ATOMIC_FS, path, data),
+}
+

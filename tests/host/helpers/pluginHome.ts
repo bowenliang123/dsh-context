@@ -6,13 +6,17 @@ import { PRICE_BOOK_FILE, PRICE_BOOK_FORMAT } from '../../../src/host/catalog'
 
 const SOURCE = { 'test-catalog': { models: { 'test-model': { cost: { input: 1, output: 2 } } } } }
 
-export function isolatePriceBookHome(): void {
+export function isolatePluginHome(): string {
   const home = mkdtempSync(join(tmpdir(), 'dsh-context-boot-home-'))
   process.env.DSH_HOME = home
-  const dir = join(home, 'storages', 'dsh-context')
-  mkdirSync(dir, { recursive: true })
-  writeFileSync(join(dir, PRICE_BOOK_FILE), JSON.stringify({ format: PRICE_BOOK_FORMAT, fetchedAt: Date.now(), source: SOURCE }))
   afterAll(() => {
     rmSync(home, { recursive: true, force: true })
   })
+  return home
+}
+
+export function seedPriceBook(home: string): void {
+  const dir = join(home, 'storages', 'dsh-context')
+  mkdirSync(dir, { recursive: true })
+  writeFileSync(join(dir, PRICE_BOOK_FILE), JSON.stringify({ format: PRICE_BOOK_FORMAT, fetchedAt: Date.now(), source: SOURCE }))
 }

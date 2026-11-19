@@ -11,9 +11,9 @@ import { VERSION_ROUTE, watchVersionChannel } from '../../src/host/versionRoute'
 import type { OverviewCache } from '../../src/host/overviewCache'
 import type { HostSession } from '../../src/host/overviewCorpus'
 import { materializedCache } from './helpers/materialized'
-import { isolatePriceBookHome } from './helpers/priceHome'
+import { isolatePluginHome, seedPriceBook } from './helpers/pluginHome'
 
-isolatePriceBookHome()
+seedPriceBook(isolatePluginHome())
 
 describe('headsRoute', () => {
 
