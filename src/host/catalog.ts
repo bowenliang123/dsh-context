@@ -1,11 +1,16 @@
 import { readFileSync } from 'node:fs'
+import { readFile } from 'node:fs/promises'
+import { homedir } from 'node:os'
 import { fileURLToPath } from 'node:url'
-import { pricesBookOf, type ModelBook } from '../shared/pricing'
+import { priceSourceOf, pricesBookOf, type ModelBook } from '../shared/pricing'
 import { asRecord } from './record'
+import { NODE_ATOMIC_FS, storagePathOf, writeFileAtomic } from './storage'
 
 export const CATALOG_TTL_MS = 60 * 60 * 1000
 
 const PRICES_FAILURE_BACKOFF_MS = 30_000
+
+const CACHE_READ_ATTEMPTS = 2
 
 const VERSION_URLS = [
   'https://registry.npmjs.org/dsh-context/latest',
@@ -16,6 +21,27 @@ const PRICES_URL = 'https://models.dev/api.json'
 
 const FETCH_TIMEOUT_MS = 8_000
 
+export const PRICE_BOOK_FORMAT = 1
+
+export const PRICE_BOOK_FILE = `price-book.v${PRICE_BOOK_FORMAT}.json`
+
+export interface PriceCacheIo {
+  read(path: string): Promise<string>
+  write(path: string, data: string): Promise<void>
+}
+
+const NODE_PRICE_CACHE_IO: PriceCacheIo = {
+  read: path => readFile(path, 'utf8'),
+  write: (path, data) => writeFileAtomic(NODE_ATOMIC_FS, path, data),
+}
+
+export function priceBookPath(
+  env: Record<string, string | undefined> = process.env,
+  home: string = homedir(),
+): string {
+  return storagePathOf(PRICE_BOOK_FILE, env, home)
+}
+
 export type CatalogFetcher = (url: string, init: RequestInit) => Promise<Response>
 
 export interface CatalogOptions {
@@ -23,6 +49,8 @@ export interface CatalogOptions {
   now?: () => number
   currentVersion?: string
   ttlMs?: number
+  cachePath?: string | null
+  cacheIo?: PriceCacheIo
 }
 
 export interface CatalogEntry<T> {
@@ -63,10 +91,14 @@ export function createCatalogService(options: CatalogOptions = {}): CatalogServi
   const now = options.now ?? (() => Date.now())
   const ttlMs = options.ttlMs ?? CATALOG_TTL_MS
   const current = options.currentVersion ?? currentVersionOf()
+  const cachePath = options.cachePath === undefined ? priceBookPath() : options.cachePath
+  const cacheIo = options.cacheIo ?? NODE_PRICE_CACHE_IO
   const version = slotOf<string>()
   const prices = slotOf<void>()
   const books = { book: null as ModelBook | null, failed: false, version: 0 }
   let disposed = false
+  let cacheSettled = false
+  let cacheReads = 0
 
   const fresh = (at: number): boolean => at !== 0 && now() - at < ttlMs
 
@@ -102,13 +134,54 @@ export function createCatalogService(options: CatalogOptions = {}): CatalogServi
     })()
   }
 
+  const loadCachedBook = async (): Promise<void> => {
+    if (cacheSettled) return
+    if (cachePath === null) {
+      cacheSettled = true
+      return
+    }
+    let text: string
+    try {
+      cacheReads++
+      text = await cacheIo.read(cachePath)
+    } catch {
+      if (cacheReads >= CACHE_READ_ATTEMPTS) cacheSettled = true
+      return
+    }
+    cacheSettled = true
+    try {
+      const data = asRecord(JSON.parse(text))
+      if (data === null || data.format !== PRICE_BOOK_FORMAT) return
+      const fetchedAt = data.fetchedAt
+      if (typeof fetchedAt !== 'number' || !Number.isFinite(fetchedAt) || fetchedAt < 0 || fetchedAt > now() + ttlMs) return
+      const book = pricesBookOf(data.source)
+      if (book === null || Object.keys(book.prices).length === 0) return
+      books.book = book
+      books.failed = false
+      prices.at = fetchedAt
+      books.version++
+    } catch {
+    }
+  }
+
+  const saveBook = async (source: Record<string, unknown>, fetchedAt: number): Promise<void> => {
+    if (cachePath === null || Object.keys(source).length === 0) return
+    try {
+      await cacheIo.write(cachePath, JSON.stringify({ format: PRICE_BOOK_FORMAT, fetchedAt, source }))
+    } catch {
+    }
+  }
+
   const ensurePrices = (): void => {
     if (disposed || prices.inflight !== null || books.book !== null && fresh(prices.at)) return
     if (books.book === null && books.failed && prices.at !== 0 && now() - prices.at < PRICES_FAILURE_BACKOFF_MS) return
     prices.inflight = (async () => {
       try {
-        const book = pricesBookOf(await readJson(PRICES_URL))
-        if (book === null) {
+        await loadCachedBook()
+        if (books.book !== null && fresh(prices.at)) return
+        const source = priceSourceOf(await readJson(PRICES_URL))
+        const book = source === null ? null : pricesBookOf(source)
+        if (source === null || book === null) {
           books.failed = true
           prices.at = now()
           return
@@ -117,6 +190,7 @@ export function createCatalogService(options: CatalogOptions = {}): CatalogServi
         books.failed = false
         prices.at = now()
         books.version++
+        void saveBook(source, prices.at)
       } catch {
         books.failed = true
         prices.at = now()

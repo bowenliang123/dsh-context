@@ -65,23 +65,16 @@ type PriceResolution =
   | { kind: 'priced'; face: PriceFace }
   | { kind: 'unpriced'; miss: PriceMiss }
 
-interface PriceBranch {
+interface Branch {
   pid: string
-  byExact: Map<string, PriceCandidate[]>
-  bySuffix: Map<string, PriceCandidate[]>
-  byNormalized: Map<string, PriceCandidate[]>
-  byNormalizedSuffix: Map<string, PriceCandidate[]>
-  labs: Set<string>
-  multiVendor: boolean
+  rates: Record<string, PriceTriple>
+  canonical: Record<string, string> | undefined
 }
 
-interface PriceIndex {
-  byModel: Map<string, PriceCandidate[]>
-  byNormalized: Map<string, PriceCandidate[]>
-  branches: Map<string, PriceBranch>
+export interface ModelBook {
+  prices: ModelPrices
+  canonicalIds: Record<string, Record<string, string>>
 }
-
-export interface ModelBook { prices: ModelPrices; index: PriceIndex }
 
 type PriceLookup =
   | { provider: string; model: string; face: PriceFace; miss?: undefined }
@@ -106,67 +99,72 @@ function rateOfEntry(value: unknown): PriceTriple | null {
     : null
 }
 
-function pushCandidate(map: Map<string, PriceCandidate[]>, key: string, candidate: PriceCandidate): void {
-  const list = map.get(key)
-  if (list === undefined) map.set(key, [candidate])
-  else if (!list.some(existing => existing.pid === candidate.pid && sameRate(existing.rate, candidate.rate))) list.push(candidate)
+function unsafeKey(id: string): boolean {
+  return id === '__proto__' || id === 'constructor' || id === 'prototype'
 }
 
-function pushForms(map: Map<string, PriceCandidate[]>, forms: readonly string[], candidate: PriceCandidate): void {
-  for (const key of forms) pushCandidate(map, key, candidate)
+function pushUnique(list: PriceCandidate[], candidate: PriceCandidate): void {
+  if (!list.some(existing => existing.pid === candidate.pid && sameRate(existing.rate, candidate.rate))) list.push(candidate)
 }
 
-export function priceIndexOf(
-  prices: ModelPrices,
-  canonicalOf: Record<string, Record<string, string> | undefined> = {},
-): PriceIndex {
-  const byModel = new Map<string, PriceCandidate[]>()
-  const byNormalized = new Map<string, PriceCandidate[]>()
-  const branches = new Map<string, PriceBranch>()
-  for (const pid of Object.keys(prices)) {
-    if (isSubscriptionPlanProvider(pid)) continue
-    const branchPrices = branchOf(prices, pid)
-    if (branchPrices === null) continue
-    const exact = new Map<string, PriceCandidate[]>()
-    const suffix = new Map<string, PriceCandidate[]>()
-    const normalized = new Map<string, PriceCandidate[]>()
-    const normalizedSuffix = new Map<string, PriceCandidate[]>()
-    const labs = new Set<string>()
-    for (const mid of Object.keys(branchPrices)) {
-      const rate = branchPrices[mid]
-      if (rateOfEntry(rate) === null) continue
-      const canonical = canonicalOf[pid]?.[mid]
-      const lab = canonical === undefined || canonical.length === 0 ? undefined : labOf(canonical)
-      const candidate: PriceCandidate = {
-        pid,
-        mid,
-        rate,
-        ...canonical === undefined || canonical.length === 0 ? {} : { canonical },
-        ...lab === undefined ? {} : { lab },
-      }
-      const lower = lowerModelId(mid)
-      const normalizedKey = normalizeModelId(mid)
-      const lowerSuffixes = suffixKeys(lower)
-      const normalizedSuffixes = suffixKeys(normalizedKey)
-      pushCandidate(exact, lower, candidate)
-      pushForms(suffix, lowerSuffixes, candidate)
-      pushCandidate(normalized, normalizedKey, candidate)
-      pushForms(normalizedSuffix, normalizedSuffixes, candidate)
-      pushCandidate(byModel, lower, candidate)
-      pushCandidate(byNormalized, normalizedKey, candidate)
-      if (lab !== undefined) labs.add(lab)
-    }
-    branches.set(pid, {
-      pid,
-      byExact: exact,
-      bySuffix: suffix,
-      byNormalized: normalized,
-      byNormalizedSuffix: normalizedSuffix,
-      labs,
-      multiVendor: labs.size > 1,
-    })
+function branchOf(book: ModelBook, pid: string): Branch | null {
+  if (isSubscriptionPlanProvider(pid) || !Object.hasOwn(book.prices, pid)) return null
+  const rates: unknown = book.prices[pid]
+  if (rates === null || typeof rates !== 'object' || Array.isArray(rates)) return null
+  const canonical: unknown = Object.hasOwn(book.canonicalIds, pid) ? book.canonicalIds[pid] : undefined
+  return {
+    pid,
+    rates: rates as Record<string, PriceTriple>,
+    canonical: canonical !== null && typeof canonical === 'object' && !Array.isArray(canonical)
+      ? canonical as Record<string, string>
+      : undefined,
   }
-  return { byModel, byNormalized, branches }
+}
+
+function canonicalOf(branch: Branch, mid: string): string | undefined {
+  if (branch.canonical === undefined || !Object.hasOwn(branch.canonical, mid)) return undefined
+  const value = branch.canonical[mid]
+  return typeof value === 'string' && value.length > 0 ? value : undefined
+}
+
+function candidateOf(branch: Branch, mid: string): PriceCandidate | null {
+  const rate = branch.rates[mid]
+  if (rateOfEntry(rate) === null) return null
+  const canonical = canonicalOf(branch, mid)
+  const lab = canonical === undefined ? undefined : labOf(canonical)
+  return {
+    pid: branch.pid,
+    mid,
+    rate,
+    ...canonical === undefined ? {} : { canonical },
+    ...lab === undefined ? {} : { lab },
+  }
+}
+
+function memoOf<K, V>(store: WeakMap<ModelBook, Map<K, V>>, book: ModelBook): Map<K, V> {
+  let memo = store.get(book)
+  if (memo === undefined) {
+    memo = new Map()
+    store.set(book, memo)
+  }
+  return memo
+}
+
+const multiVendorMemo = new WeakMap<ModelBook, Map<string, boolean>>()
+
+function multiVendorOf(book: ModelBook, branch: Branch): boolean {
+  const memo = memoOf(multiVendorMemo, book)
+  const known = memo.get(branch.pid)
+  if (known !== undefined) return known
+  const labs = new Set<string>()
+  for (const mid of Object.keys(branch.rates)) {
+    const canonical = canonicalOf(branch, mid)
+    const lab = canonical === undefined ? undefined : labOf(canonical)
+    if (lab !== undefined) labs.add(lab)
+  }
+  const multiVendor = labs.size > 1
+  memo.set(branch.pid, multiVendor)
+  return multiVendor
 }
 
 type CandidatePick =
@@ -180,12 +178,6 @@ function pickCandidates(candidates: readonly PriceCandidate[]): CandidatePick {
   return candidates.every(candidate => sameRate(candidate.rate, first.rate))
     ? { kind: 'hit', candidate: first }
     : { kind: 'ambiguous', count: candidates.length }
-}
-
-function collect(map: Map<string, PriceCandidate[]>, keys: readonly string[]): PriceCandidate[] {
-  const out: PriceCandidate[] = []
-  for (const key of keys) out.push(...map.get(key) ?? [])
-  return out
 }
 
 type BranchLookup =
@@ -204,22 +196,35 @@ function faceOf(candidate: PriceCandidate, via: PriceVia, confidence: PriceConfi
   }
 }
 
-function lookupBranch(branch: PriceBranch, model: string): BranchLookup {
-  const exact = lowerModelId(model)
+function collectBranch(branch: Branch, match: (mid: string) => boolean): PriceCandidate[] {
+  const out: PriceCandidate[] = []
+  for (const mid of Object.keys(branch.rates)) {
+    if (!match(mid)) continue
+    const candidate = candidateOf(branch, mid)
+    if (candidate !== null) pushUnique(out, candidate)
+  }
+  return out
+}
+
+function hasSuffixKey(mid: string, key: string): boolean {
+  return suffixKeys(mid).includes(key)
+}
+
+function lookupBranch(branch: Branch, model: string): BranchLookup {
+  const lower = lowerModelId(model)
   const normalized = normalizeModelId(model)
   const stages: ReadonlyArray<{
-    map: Map<string, PriceCandidate[]>
-    keys: readonly string[]
+    match: (mid: string) => boolean
     via: PriceVia
     confidence: PriceConfidence
   }> = [
-    { map: branch.byExact, keys: [exact], via: 'direct', confidence: 'high' },
-    { map: branch.bySuffix, keys: [exact], via: 'branch-suffix', confidence: 'high' },
-    { map: branch.byNormalized, keys: [normalized], via: 'branch-normalized', confidence: 'medium' },
-    { map: branch.byNormalizedSuffix, keys: [normalized], via: 'branch-normalized', confidence: 'medium' },
+    { match: mid => lowerModelId(mid) === lower, via: 'direct', confidence: 'high' },
+    { match: mid => hasSuffixKey(lowerModelId(mid), lower), via: 'branch-suffix', confidence: 'high' },
+    { match: mid => normalizeModelId(mid) === normalized, via: 'branch-normalized', confidence: 'medium' },
+    { match: mid => hasSuffixKey(normalizeModelId(mid), normalized), via: 'branch-normalized', confidence: 'medium' },
   ]
   for (const stage of stages) {
-    const picked = pickCandidates(collect(stage.map, stage.keys))
+    const picked = pickCandidates(collectBranch(branch, stage.match))
     if (picked.kind === 'miss') continue
     if (picked.kind === 'ambiguous') return picked
     return { kind: 'hit', face: faceOf(picked.candidate, stage.via, stage.confidence) }
@@ -227,25 +232,36 @@ function lookupBranch(branch: PriceBranch, model: string): BranchLookup {
   return { kind: 'miss' }
 }
 
-function lookupModel(branch: PriceBranch, model: string): BranchLookup {
+function lookupModel(branch: Branch, model: string): BranchLookup {
   const direct = lookupBranch(branch, model)
   if (direct.kind !== 'miss') return direct
   const bare = bareModelOf(model)
   return bare === model ? direct : lookupBranch(branch, bare)
 }
 
-function indexCandidates(index: PriceIndex, model: string): PriceCandidate[] {
+function collectCatalog(book: ModelBook, match: (mid: string) => boolean): PriceCandidate[] {
+  const out: PriceCandidate[] = []
+  for (const pid of Object.keys(book.prices)) {
+    const branch = branchOf(book, pid)
+    if (branch === null) continue
+    for (const candidate of collectBranch(branch, match)) pushUnique(out, candidate)
+  }
+  return out
+}
+
+function catalogCandidates(book: ModelBook, model: string): PriceCandidate[] {
   const lower = lowerModelId(model)
-  const exact = collect(index.byModel, [lower])
+  const exact = collectCatalog(book, mid => lowerModelId(mid) === lower)
   if (exact.length > 0) return exact
   const bare = bareModelOf(lower)
   if (bare !== lower) {
-    const bareExact = collect(index.byModel, [bare])
+    const bareExact = collectCatalog(book, mid => lowerModelId(mid) === bare)
     if (bareExact.length > 0) return bareExact
   }
-  const normalized = collect(index.byNormalized, [normalizeModelId(model)])
-  if (normalized.length > 0) return normalized
-  return bare === lower ? [] : collect(index.byNormalized, [normalizeModelId(bare)])
+  const normalized = normalizeModelId(model)
+  const normalizedExact = collectCatalog(book, mid => normalizeModelId(mid) === normalized)
+  if (normalizedExact.length > 0) return normalizedExact
+  return bare === lower ? [] : collectCatalog(book, mid => normalizeModelId(mid) === normalizeModelId(bare))
 }
 
 function labsOf(candidates: readonly PriceCandidate[]): Set<string> {
@@ -263,18 +279,18 @@ function labHint(model: string, labs: ReadonlySet<string>): string | undefined {
   return vendor !== undefined && labs.has(vendor) ? vendor : undefined
 }
 
-function routedBranch(book: ModelBook, provider: string): { branch: PriceBranch; aliased: boolean } | null {
-  const exact = book.index.branches.get(provider)
-  if (exact !== undefined) return { branch: exact, aliased: false }
+function routedBranch(book: ModelBook, provider: string): { branch: Branch; aliased: boolean } | null {
+  const exact = branchOf(book, provider)
+  if (exact !== null) return { branch: exact, aliased: false }
   const alias = modelsDevProviderOf(provider)
   if (alias === provider) return null
-  const target = book.index.branches.get(alias)
-  return target === undefined ? null : { branch: target, aliased: true }
+  const target = branchOf(book, alias)
+  return target === null ? null : { branch: target, aliased: true }
 }
 
 function makerLookup(book: ModelBook, lab: string, model: string): BranchLookup {
-  const branch = book.index.branches.get(lab)
-  return branch === undefined ? { kind: 'miss' } : lookupModel(branch, model)
+  const branch = branchOf(book, lab)
+  return branch === null ? { kind: 'miss' } : lookupModel(branch, model)
 }
 
 function priced(face: PriceFace): PriceResolution {
@@ -294,11 +310,7 @@ const resolutionMemo = new WeakMap<ModelBook, Map<string, PriceResolution>>()
 export function priceResolutionOf(book: ModelBook | null | undefined, provider: string, model: string): PriceResolution {
   if (book === null || book === undefined) return unpriced('book-unavailable')
   const key = `${provider}\u0000${model}`
-  let memo = resolutionMemo.get(book)
-  if (memo === undefined) {
-    memo = new Map()
-    resolutionMemo.set(book, memo)
-  }
+  const memo = memoOf(resolutionMemo, book)
   const hit = memo.get(key)
   if (hit !== undefined) return hit
   const resolution = resolvePriceOf(book, provider, model)
@@ -312,18 +324,18 @@ function resolvePriceOf(book: ModelBook, provider: string, model: string): Price
     const match = lookupModel(routed.branch, model)
     if (match.kind === 'hit') return priced(routed.aliased ? { ...match.face, via: 'provider-alias' } : match.face)
     if (match.kind === 'ambiguous') return ambiguous(match.count)
-    if (!routed.branch.multiVendor) return unpriced('model-unknown')
+    if (!multiVendorOf(book, routed.branch)) return unpriced('model-unknown')
   }
   const org = orgOf(model)
   if (org !== undefined) {
-    const branch = book.index.branches.get(org)
-    if (branch !== undefined) {
+    const branch = branchOf(book, org)
+    if (branch !== null) {
       const match = lookupBranch(branch, bareModelOf(model))
       if (match.kind === 'hit') return priced({ ...match.face, via: 'org-branch', confidence: 'high' })
       if (match.kind === 'ambiguous') return ambiguous(match.count)
     }
   }
-  const candidates = indexCandidates(book.index, model)
+  const candidates = catalogCandidates(book, model)
   const labs = labsOf(candidates)
   if (labs.size === 1) {
     const lab = [...labs][0]
@@ -339,8 +351,8 @@ function resolvePriceOf(book: ModelBook, provider: string, model: string): Price
   } else {
     const vendor = familyVendorOf(model)
     if (vendor !== undefined) {
-      const branch = book.index.branches.get(vendor)
-      if (branch !== undefined) {
+      const branch = branchOf(book, vendor)
+      if (branch !== null) {
         const match = lookupModel(branch, model)
         if (match.kind === 'hit') return priced({ ...match.face, via: 'family', confidence: 'medium' })
         if (match.kind === 'ambiguous') return ambiguous(match.count)
@@ -443,46 +455,74 @@ export function mergeCostUsage(...usages: (SessionCostUsage | null | undefined)[
   return any ? out : null
 }
 
-function branchOf(book: ModelPrices, id: string): Record<string, PriceTriple> | null {
-  const value: unknown = book[id]
-  return value !== null && typeof value === 'object' ? value as Record<string, PriceTriple> : null
+interface PricedEntry {
+  provider: string
+  model: string
+  cost: Record<string, unknown>
+  canonical: string | undefined
+}
+
+function eachPricedEntry(value: unknown, visit: (entry: PricedEntry) => void): boolean {
+  const data = asRecord(value)
+  if (data === null || Array.isArray(data)) return false
+  for (const provider of Object.keys(data)) {
+    if (unsafeKey(provider)) continue
+    const providerRecord = asRecord(data[provider])
+    const models = providerRecord !== null ? asRecord(providerRecord.models) : null
+    if (models === null) continue
+    for (const model of Object.keys(models)) {
+      if (unsafeKey(model)) continue
+      const modelRecord = asRecord(models[model])
+      const cost = modelRecord !== null ? asRecord(modelRecord.cost) : null
+      if (cost === null) continue
+      const canonical = modelRecord?.['canonical_model_id']
+      visit({
+        provider,
+        model,
+        cost,
+        canonical: typeof canonical === 'string' && canonical.length > 0 ? canonical : undefined,
+      })
+    }
+  }
+  return true
+}
+
+export function priceSourceOf(value: unknown): Record<string, unknown> | null {
+  const providers = new Map<string, Record<string, unknown>>()
+  const walked = eachPricedEntry(value, ({ provider, model, cost, canonical }) => {
+    let models = providers.get(provider)
+    if (models === undefined) {
+      models = {}
+      providers.set(provider, models)
+    }
+    models[model] = {
+      cost: { ...cost },
+      ...canonical === undefined ? {} : { canonical_model_id: canonical },
+    }
+  })
+  if (!walked) return null
+  const out: Record<string, unknown> = {}
+  for (const [provider, models] of providers) out[provider] = { models }
+  return out
 }
 
 export function pricesBookOf(value: unknown): ModelBook | null {
-  const data = asRecord(value)
-  if (data === null || Array.isArray(data)) return null
-  const book: ModelPrices = {}
-  const canonicalOf: Record<string, Record<string, string>> = {}
-  for (const providerId of Object.keys(data)) {
-    if (providerId === '__proto__' || providerId === 'constructor' || providerId === 'prototype') continue
-    const provider = asRecord(data[providerId])
-    if (provider === null) continue
-    const modelList = asRecord(provider.models)
-    if (modelList === null) continue
-    const models: Record<string, PriceTriple> = {}
-    for (const id of Object.keys(modelList)) {
-      if (id === '__proto__' || id === 'constructor' || id === 'prototype') continue
-      const model = asRecord(modelList[id])
-      const cost = model !== null ? asRecord(model.cost) : null
-      if (cost === null) continue
-      const miss = rateNum(cost.input)
-      const out = rateNum(cost.output)
-      if (miss === null || out === null) continue
-      models[id] = {
-        hit: rateNum(cost.cache_read) ?? miss,
-        miss,
-        write: rateNum(cost.cache_write) ?? miss,
-        out,
-      }
-      const canonical = model?.['canonical_model_id']
-      if (typeof canonical === 'string' && canonical.length > 0) {
-        const branch = canonicalOf[providerId] ?? (canonicalOf[providerId] = {})
-        branch[id] = canonical
-      }
+  const prices: ModelPrices = {}
+  const canonicalIds: Record<string, Record<string, string>> = {}
+  const walked = eachPricedEntry(value, ({ provider, model, cost, canonical: canonicalId }) => {
+    const miss = rateNum(cost.input)
+    const out = rateNum(cost.output)
+    if (miss === null || out === null) return
+    const branch = prices[provider] ?? (prices[provider] = {})
+    branch[model] = {
+      hit: rateNum(cost.cache_read) ?? miss,
+      miss,
+      write: rateNum(cost.cache_write) ?? miss,
+      out,
     }
-    if (Object.keys(models).length > 0) book[providerId] = models
-  }
-  return { prices: book, index: priceIndexOf(book, canonicalOf) }
+    if (canonicalId !== undefined) (canonicalIds[provider] ??= {})[model] = canonicalId
+  })
+  return walked ? { prices, canonicalIds } : null
 }
 
 function rateNum(value: unknown): number | null {

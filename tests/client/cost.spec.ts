@@ -2,7 +2,7 @@
 
 import assert from 'node:assert/strict'
 import { describe, test, afterEach, beforeEach, vi } from 'vitest'
-import { estimateSessionCost, billedTokensOf, mergeCostUsage, priceFaceOf, priceIndexOf, priceLookupsOf, priceOf, priceResolutionOf, pricesBookOf, toCurrency, type ModelBook, type ModelPrices } from '../../src/shared/pricing'
+import { estimateSessionCost, billedTokensOf, mergeCostUsage, priceFaceOf, priceLookupsOf, priceOf, priceResolutionOf, pricesBookOf, toCurrency, type ModelBook, type ModelPrices } from '../../src/shared/pricing'
 import { formatCost, formatPriceRate } from '../../src/client/cost'
 import { type CostBucketTotals, type SessionCostUsage } from '../../src/shared/types'
 import { noteCostPending, notePricingPending, registerCostRefresh, resetCostRefresh } from '../../src/client/costRefresh'
@@ -24,8 +24,8 @@ const BOOK: ModelPrices = {
   'opencode-go': { 'deepseek-v4-flash': FLASH },
 }
 
-function bookOf(prices: ModelPrices, canonicalOf: Record<string, Record<string, string>> = {}): ModelBook {
-  return { prices, index: priceIndexOf(prices, canonicalOf) }
+function bookOf(prices: ModelPrices, canonicalIds: Record<string, Record<string, string>> = {}): ModelBook {
+  return { prices, canonicalIds }
 }
 
 const BOOK_B: ModelBook = bookOf(BOOK)
@@ -69,7 +69,7 @@ describe('priceOf', () => {
   })
 })
 
-describe('priceIndexOf / the model-side resolution tiers', () => {
+describe('the model-side resolution tiers', () => {
   const ANTHROPIC_RATE = { hit: 0.2, miss: 2, write: 2.5, out: 10 }
   const MIRROR_RATE = { hit: 0.2, miss: 2, write: 2.5, out: 10 }
   const VENDOR_BOOK: ModelPrices = {
@@ -80,12 +80,10 @@ describe('priceIndexOf / the model-side resolution tiers', () => {
   }
   const VENDOR_B = bookOf(VENDOR_BOOK)
 
-  test('the branch index keeps suffix tails; the global index keeps exact keys', () => {
-    const branch = VENDOR_B.index.branches.get('anthropic')
-    assert.ok(branch?.bySuffix.get('sonnet-5')?.some(c => c.pid === 'anthropic'), 'short spellings resolve inside a known branch')
-    assert.equal(VENDOR_B.index.byModel.get('sonnet-5'), undefined, 'the global index never guesses by suffix')
-    const exact = [...VENDOR_B.index.byModel.get('claude-sonnet-5') ?? []]
-    assert.equal(exact.filter(c => c.pid === 'anthropic').length, 1)
+  test('suffix tails stay branch-local; the catalogue resolves exact ids only', () => {
+    assert.deepEqual(priceOf(VENDOR_B, 'anthropic', 'sonnet-5'), ANTHROPIC_RATE, 'short spellings resolve inside a known branch')
+    assert.equal(priceOf(VENDOR_B, 'unknown', 'sonnet-5'), null, 'the catalogue never guesses by suffix')
+    assert.deepEqual(priceOf(VENDOR_B, 'unknown', 'gpt-oss-120b'), KIMI, 'an exact catalogue id prices without a carrier branch')
   })
 
   test('tier: vendor, org, family, and carrier signals resolve; an unmatchable org and model price nothing', () => {
@@ -160,7 +158,7 @@ describe('priceIndexOf / the model-side resolution tiers', () => {
     assert.deepEqual(priceOf(agree, '', 'x-y-z'), R1, 'a unanimous suffix tier carries the rate')
   })
 
-  test('hostile branches and partial rate entries are skipped at index build', () => {
+  test('hostile branches and partial rate entries are skipped at lookup', () => {
     const hostile = bookOf({
       junk: ['nope'],
       broken: { 'x': 'nope' },
@@ -168,12 +166,13 @@ describe('priceIndexOf / the model-side resolution tiers', () => {
     } as unknown as ModelPrices)
     assert.deepEqual(priceOf(hostile, '', 'x'), KIMI)
     assert.equal(priceOf(hostile, '', 'y'), null)
+    assert.equal(priceOf(hostile, 'broken', 'x'), null, 'a broken rate inside the routed branch is skipped')
     const R1 = { hit: 1, miss: 1, write: 1, out: 1 }
-    const index = priceIndexOf({ junk: 5, a: { 'x-y': R1, 'z-y': R1 }, b: { 'x': { hit: 1 } } } as unknown as ModelPrices, {})
-    assert.equal([...index.byModel.get('x-y') ?? []].length, 1)
-    assert.equal(index.byModel.get('y'), undefined, 'suffix tails are branch-local')
-    assert.equal(index.byModel.get('junk'), undefined)
-    assert.equal(index.byModel.get('x'), undefined, 'the partial rate entry dropped')
+    const partial = bookOf({ junk: 5, a: { 'x-y': R1, 'z-y': R1 }, b: { 'x': { hit: 1 } } } as unknown as ModelPrices)
+    assert.deepEqual(priceOf(partial, '', 'x-y'), R1)
+    assert.equal(priceOf(partial, '', 'y'), null, 'suffix tails are branch-local')
+    assert.equal(priceOf(partial, '', 'junk'), null)
+    assert.equal(priceOf(partial, '', 'x'), null, 'the partial rate entry drops out')
   })
 })
 
@@ -514,9 +513,10 @@ describe('subscription plan branches', () => {
   const PLAN_BOOK = bookOf(PRICES, CANON)
 
   test('plan branches never enter the per-token book, and their routes fall back to the maker reference', () => {
-    assert.equal(PLAN_BOOK.index.branches.has('kimi-code-plan-global'), false)
-    assert.equal(PLAN_BOOK.index.branches.has('alibaba-token-plan'), false)
-    assert.equal(PLAN_BOOK.index.branches.has('xiaomi-token-plan-cn'), false)
+    assert.equal(priceFaceOf(PLAN_BOOK, 'kimi-code-plan-global', 'k3')?.pid, 'moonshotai', 'the plan branch never prices a per-token model')
+    assert.equal(priceFaceOf(PLAN_BOOK, 'kimi-code-plan-global', 'k3')?.via, 'provider-alias')
+    assert.equal(priceFaceOf(PLAN_BOOK, 'alibaba-token-plan', 'qwen3.8-max')?.pid, 'alibaba')
+    assert.equal(priceFaceOf(PLAN_BOOK, 'xiaomi-token-plan-cn', 'mimo-v2.5')?.pid, 'xiaomi')
     assert.deepEqual(priceOf(PLAN_BOOK, 'kimi-code-plan-global', 'k3'), K3)
     assert.deepEqual(priceOf(PLAN_BOOK, 'qwen-token-plan', 'qwen3.8-max'), QWEN)
     assert.deepEqual(priceOf(PLAN_BOOK, 'qwen-token-plan', 'deepseek-v4-pro'), PRO)
@@ -580,7 +580,7 @@ describe('pricesBookOf', () => {
     assert.equal(pricesBookOf(null), null)
     assert.equal(pricesBookOf('x'), null)
     assert.equal(pricesBookOf([FIXTURE]), null)
-    assert.deepEqual(pricesBookOf({}), { prices: {}, index: { byModel: new Map(), byNormalized: new Map(), branches: new Map() } }, 'an empty payload prices an empty book')
+    assert.deepEqual(pricesBookOf({}), { prices: {}, canonicalIds: {} }, 'an empty payload prices an empty book')
   })
 
   test('own __proto__ provider and model ids never become price entries', () => {
@@ -592,7 +592,15 @@ describe('pricesBookOf', () => {
     assert.equal(Object.getPrototypeOf(book.prices.deepseek), Object.prototype)
   })
 
-  test('canonical ids join the branch index and mark its labs', () => {
+  test('duplicate spellings collapse to one candidate and a bad canonical id is ignored', () => {
+    const R1 = { hit: 1, miss: 1, write: 1, out: 1 }
+    const duplicate = bookOf({ p: { 'Claude-X': R1, 'claude-x': R1 } })
+    assert.deepEqual(priceOf(duplicate, 'p', 'claude-x'), R1)
+    const badCanonical = bookOf({ p: { a: R1 } }, { p: { a: '' } })
+    assert.equal(priceOf(badCanonical, 'p', 'a')?.hit, 1)
+  })
+
+  test('canonical ids drive the maker tier and the branch dialect', () => {
     const book = pricesBookOf({
       p: {
         models: {
@@ -601,11 +609,25 @@ describe('pricesBookOf', () => {
           c: { cost: { input: 5, output: 6 } },
         },
       },
+      lab: { models: { a: { cost: { input: 9, output: 9 } } } },
     })
-    const branch = book?.index.branches.get('p')
-    assert.equal(branch?.labs.size, 1)
-    assert.deepEqual(branch?.byExact.get('a')?.[0], { pid: 'p', mid: 'a', rate: { hit: 1, miss: 1, write: 1, out: 2 }, canonical: 'lab/a', lab: 'lab' })
-    assert.equal(branch?.byExact.get('c')?.[0]?.canonical, undefined)
+    assert.ok(book !== null)
+    assert.deepEqual(book.canonicalIds, { p: { a: 'lab/a', b: 'lab/b' } })
+    assert.deepEqual(priceFaceOf(book, 'unknown', 'a'), {
+      pid: 'lab', mid: 'a', rate: { hit: 9, miss: 9, write: 9, out: 9 }, via: 'canonical-maker', confidence: 'high',
+    })
+    assert.deepEqual(priceResolutionOf(book, 'p', 'nope'), { kind: 'unpriced', miss: { reason: 'model-unknown' } })
+    const split = pricesBookOf({
+      p: {
+        models: {
+          a: { cost: { input: 1, output: 1 }, canonical_model_id: 'lab/a' },
+          b: { cost: { input: 2, output: 2 }, canonical_model_id: 'other/b' },
+        },
+      },
+    })
+    assert.ok(split !== null)
+    assert.deepEqual(priceResolutionOf(split, 'p', 'nope'), { kind: 'unpriced', miss: { reason: 'no-entry' } }, 'a multi-vendor branch falls through to the model tiers')
+    assert.deepEqual(priceResolutionOf(split, 'p', 'other-nope'), { kind: 'unpriced', miss: { reason: 'no-entry' } }, 'the branch dialect is memoized per book')
   })
 })
 
@@ -954,3 +976,4 @@ describe('timelineOf — host cost reads', () => {
   })
 })
 })
+

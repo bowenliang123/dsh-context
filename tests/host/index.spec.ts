@@ -17,6 +17,9 @@ import { type TimelineState } from '../../src/host/foldState'
 import { fakeCtx, type FakeCtx } from './helpers/ctx'
 import { assistantMessage, header, toolCall, toolResult, userMessage } from './helpers/events'
 import { createFallbackActivityDefinition, createFallbackHeadersDefinition, createFallbackTimelineDefinition } from '../../src/host/fallback'
+import { isolatePriceBookHome } from './helpers/priceHome'
+
+isolatePriceBookHome()
 
 describe('index', () => {
 

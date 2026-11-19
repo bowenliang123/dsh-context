@@ -1,6 +1,7 @@
-import { mkdir, readFile, rename, rm, stat, writeFile } from 'node:fs/promises'
+import { readFile, rm, stat } from 'node:fs/promises'
 import { homedir } from 'node:os'
 import { dirname, join } from 'node:path'
+import { NODE_ATOMIC_FS, storagePathOf, writeFileAtomic } from './storage'
 import type { HostSession, SessionMaterialization } from './overviewCorpus'
 import { hostSessionFromMaterialization, parseSessionMaterialization, stableHashOf } from './overviewCorpus'
 import { asRecord } from './record'
@@ -68,9 +69,9 @@ const NODE_FS: CacheFs = {
     return { size: info.size, mtimeMs: info.mtimeMs }
   },
   readFile: path => readFile(path, 'utf8'),
-  writeFile: (path, data) => writeFile(path, data, 'utf8'),
-  rename: (from, to) => rename(from, to),
-  mkdir: async (path) => { await mkdir(path, { recursive: true }) },
+  writeFile: (path, data) => NODE_ATOMIC_FS.writeFile(path, data),
+  rename: (from, to) => NODE_ATOMIC_FS.rename(from, to),
+  mkdir: path => NODE_ATOMIC_FS.mkdir(path),
   rm: async (path) => { await rm(path, { force: true }) },
 }
 
@@ -159,10 +160,7 @@ export function overviewCachePath(
   env: Record<string, string | undefined> = process.env,
   home: string = homedir(),
 ): string {
-  const root = typeof env.DSH_HOME === 'string' && env.DSH_HOME.trim() !== ''
-    ? env.DSH_HOME
-    : join(home, '.dsh')
-  return join(root, 'storages', 'dsh-context', OVERVIEW_CACHE_FILE)
+  return storagePathOf(OVERVIEW_CACHE_FILE, env, home)
 }
 
 export function identityKey(identity: DurableIdentity | null | undefined): string {
@@ -291,9 +289,7 @@ export function createOverviewCache(options: OverviewCacheOptions = {}): Overvie
       }
       if (!changed) return true
       const body = JSON.stringify({ format: OVERVIEW_CACHE_FORMAT, savedAt: now(), sessions: [...merged.values()] })
-      await fs.mkdir(path)
-      await fs.writeFile(temp, body)
-      await fs.rename(temp, target)
+      await writeFileAtomic(fs, target, body)
       return true
     } catch {
       try {
