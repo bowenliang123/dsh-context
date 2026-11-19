@@ -379,7 +379,7 @@ const timelineStateSchema = z.object({
   commandCallsOverflow: z.boolean().optional(),
 }) as unknown as z.ZodType<TimelineState>
 
-export const TIMELINE_STATE_VERSION = 44
+export const TIMELINE_STATE_VERSION = 45
 
 export function createContextTimelineDefinition(
   config: Config,

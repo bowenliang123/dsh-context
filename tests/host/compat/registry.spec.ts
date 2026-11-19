@@ -100,7 +100,7 @@ describe('registry contract — the semantics every supported line shares', () =
     assert.ok(rows !== undefined, 'checkpoint rows are losslessly JSON-serializable')
     for (const key of ['contextTimeline', 'contextHeaders']) {
       const row = rows[key] as { ver: number; seq: number }
-      assert.equal(row.ver, key === 'contextTimeline' ? 44 : 1)
+      assert.equal(row.ver, key === 'contextTimeline' ? 45 : 1, 'the row carries the current state version')
       assert.equal(row.seq, 12)
     }
   })

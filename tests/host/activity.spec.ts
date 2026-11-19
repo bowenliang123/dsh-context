@@ -802,7 +802,7 @@ describe('createContextTimelineDefinition', () => {
   test('carries the pinned projection contract; the wire and state schemas accept a real fold', () => {
     const def = createContextTimelineDefinition({}, () => false)
     assert.equal(def.key, 'contextTimeline')
-    assert.equal(def.stateVersion, 44, 'pinned: the cumulative event and model-switch totals cannot be backfilled from the retained window')
+    assert.equal(def.stateVersion, 45, 'pinned: the cumulative event and model-switch totals cannot be backfilled from the retained window, and 45 discards the interim model-tally rows')
     const drive = driveTimeline(realLog(), {}, true)
     assert.equal(def.wire.viewSchema.safeParse(drive.view).success, true, 'a real folded view validates')
     const view = drive.view
