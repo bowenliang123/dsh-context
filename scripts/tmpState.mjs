@@ -35,3 +35,9 @@ export const removeState = name => {
 export const removeOwnState = (name, pid) => {
   if (pid !== undefined && statePid(name) === pid) removeState(name)
 }
+
+export const cleanStateOnSignal = (name, pid) => {
+  const cleanup = () => removeOwnState(name, pid)
+  for (const signal of ['SIGINT', 'SIGTERM']) process.on(signal, cleanup)
+  return cleanup
+}

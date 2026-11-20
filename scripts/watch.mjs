@@ -3,7 +3,7 @@ import { existsSync } from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { ancestorPids, findPids, supervise, terminatePids } from './proc.mjs'
-import { removeOwnState, removeState, writeState } from './tmpState.mjs'
+import { cleanStateOnSignal, removeState, writeState } from './tmpState.mjs'
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
 const tsdownEntry = path.join(root, 'node_modules', 'tsdown', 'dist', 'run.mjs')
@@ -43,5 +43,6 @@ const child = spawn(process.execPath, [tsdownEntry, '--watch'], {
 })
 const watcherPid = child.pid
 if (watcherPid !== undefined) writeState(stateName, `${watcherPid}\n`)
-child.on('exit', () => removeOwnState(stateName, watcherPid))
+const cleanup = cleanStateOnSignal(stateName, watcherPid)
+child.on('exit', cleanup)
 supervise(child)

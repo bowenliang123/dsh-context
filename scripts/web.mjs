@@ -1,6 +1,6 @@
 import { spawn } from 'node:child_process'
 import { ancestorPids, findPids, supervise, terminatePids } from './proc.mjs'
-import { removeOwnState, removeState, writeState } from './tmpState.mjs'
+import { cleanStateOnSignal, removeState, writeState } from './tmpState.mjs'
 
 const stateName = 'dsh-web-url.txt'
 const urlPattern = /^dsh web: (https?:\/\/\S+)/u
@@ -50,9 +50,10 @@ serverPid = child.pid ?? 0
 child.stdout.setEncoding('utf8')
 child.stdout.pipe(process.stdout, { end: false })
 child.stdout.on('data', capture)
+const cleanup = cleanStateOnSignal(stateName, serverPid)
 child.on('exit', () => {
   child.stdout.destroy()
-  removeOwnState(stateName, serverPid)
+  cleanup()
   if (!announced) console.warn('warning: dsh web printed no URL; .tmp/dsh-web-url.txt was not written')
 })
 supervise(child)
