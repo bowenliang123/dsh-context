@@ -1,19 +1,10 @@
 import { spawn } from 'node:child_process'
-import { mkdirSync, rmSync, writeFileSync } from 'node:fs'
 import { ancestorPids, findPids, supervise, terminatePids } from './proc.mjs'
+import { removeOwnState, removeState, writeState } from './tmpState.mjs'
 
-const tmpDir = new URL('../.tmp/', import.meta.url)
-const urlFile = new URL('dsh-web-url.txt', tmpDir)
+const stateName = 'dsh-web-url.txt'
 const urlPattern = /^dsh web: (https?:\/\/\S+)/u
 const maxPendingLength = 65_536
-
-const removeUrl = () => {
-  try {
-    rmSync(urlFile, { force: true })
-  } catch (error) {
-    console.warn(`warning: could not remove the dsh web URL: ${error.message}`)
-  }
-}
 
 const pattern = process.platform === 'win32' ? 'dsh web|@deepseek-ai[\\\\/]dsh[\\\\/].* web' : 'dsh web'
 
@@ -35,8 +26,9 @@ if (stale.length > 0) {
   await terminatePids(stale)
 }
 
-removeUrl()
+removeState(stateName)
 
+let serverPid = 0
 let pending = ''
 let announced = false
 const capture = chunk => {
@@ -46,13 +38,7 @@ const capture = chunk => {
   for (const line of lines) {
     const match = line.trim().match(urlPattern)
     if (!match) continue
-    try {
-      mkdirSync(tmpDir, { recursive: true })
-      writeFileSync(urlFile, `${match[1]}\n`)
-      announced = true
-    } catch (error) {
-      console.warn(`warning: could not save the dsh web URL: ${error.message}`)
-    }
+    if (serverPid > 0 && writeState(stateName, `${serverPid}\n${match[1]}\n`)) announced = true
   }
 }
 
@@ -60,12 +46,13 @@ const [command, args] = process.platform === 'win32'
   ? [process.env.ComSpec ?? 'cmd.exe', ['/d', '/s', '/c', 'dsh web --no-open']]
   : ['dsh', ['web', '--no-open']]
 const child = spawn(command, args, { stdio: ['inherit', 'pipe', 'inherit'] })
+serverPid = child.pid ?? 0
 child.stdout.setEncoding('utf8')
 child.stdout.pipe(process.stdout, { end: false })
 child.stdout.on('data', capture)
 child.on('exit', () => {
   child.stdout.destroy()
-  removeUrl()
+  removeOwnState(stateName, serverPid)
   if (!announced) console.warn('warning: dsh web printed no URL; .tmp/dsh-web-url.txt was not written')
 })
 supervise(child)

@@ -3,6 +3,7 @@ import { existsSync } from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { ancestorPids, findPids, supervise, terminatePids } from './proc.mjs'
+import { removeOwnState, removeState, writeState } from './tmpState.mjs'
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
 const tsdownEntry = path.join(root, 'node_modules', 'tsdown', 'dist', 'run.mjs')
@@ -12,6 +13,7 @@ if (!existsSync(tsdownEntry)) {
   process.exit(1)
 }
 
+const stateName = 'dsh-context-watch.txt'
 const separator = '[\\\\/]'
 const trimmedRoot = root.replace(/[\\/]+$/, '')
 const rootParts = trimmedRoot
@@ -30,6 +32,7 @@ try {
 }
 for (const pid of stale) console.log(`killing stale watch (pid ${pid})`)
 await terminatePids(stale)
+removeState(stateName)
 
 const WATCH_HEAP_MB = 192
 const nodeOptions = `--expose-gc --max-old-space-size=${WATCH_HEAP_MB}${process.env.NODE_OPTIONS ? ` ${process.env.NODE_OPTIONS}` : ''}`
@@ -38,4 +41,7 @@ const child = spawn(process.execPath, [tsdownEntry, '--watch'], {
   stdio: 'inherit',
   env: { ...process.env, DSH_CTX_WATCH: '1', NODE_OPTIONS: nodeOptions },
 })
+const watcherPid = child.pid
+if (watcherPid !== undefined) writeState(stateName, `${watcherPid}\n`)
+child.on('exit', () => removeOwnState(stateName, watcherPid))
 supervise(child)
