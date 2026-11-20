@@ -152,6 +152,10 @@ export interface AgentAlias {
   catalogLabel?: string
 }
 
+export type WorkflowTodoStatus = 'pending' | 'in_progress' | 'completed'
+
+export type WorkflowTeamTaskStatus = WorkflowTodoStatus | 'deleted'
+
 export interface TimelineState {
   surface: SurfaceNode[]
   sums: Record<Category, number>
@@ -206,6 +210,8 @@ export interface TimelineState {
   commandCalls?: string[]
   commandCallsOverflow?: boolean
   agents?: Record<string, AgentAlias>
+  todoItems?: Record<string, WorkflowTodoStatus>
+  teamTasks?: Record<string, WorkflowTeamTaskStatus>
   pendingCodeCmds?: Record<string, CommandStateRecord[]>
   pendingCodeOps?: Record<string, FileOpRecord[]>
   pendingCodeStarts?: Record<string, number>
@@ -382,6 +388,10 @@ export const SKILL_NAMES_MAX = 500
 export const TALLY_NAMES_MAX = 128
 
 export const TALLY_NAME_CHARS_MAX = 120
+
+export const TODO_ITEMS_MAX = 128
+
+export const TEAM_TASKS_MAX = 256
 
 export interface CumulativeTotals {
   turns: number

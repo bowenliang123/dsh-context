@@ -124,7 +124,7 @@ Uma barra empilhada de seis cores comparada à janela completa do modelo (as dua
 Uma barra empilhada por requisição ao modelo — mais detalhada que por mensagem — para acompanhar o crescimento da janela turno a turno:
 
 - **✨ Resumo da etapa** — três linhas em linguagem simples sob o gráfico: **Usuário** recupera a mensagem que abriu o turno, **Entrada** lista o que acabou de entrar (normalmente os resultados anteriores das ferramentas), **Resposta** mostra a resposta e/ou as ferramentas chamadas. Clique em uma linha para abrir exatamente essa mensagem no Navegador de contexto.
-- **✂ marca os eventos** — compactações e podas são fixadas na barra em que aconteceram, para que as quedas se expliquem por si.
+- **Bandeiras de eventos** — compactação, poda, injeção de habilidade, criação de subagente, interação entre agentes e troca de modelo, criação/conclusão de objetivo e tarefa de equipe, adição/conclusão de tarefa, perguntas ao usuário, além do passo mais longo e do maior salto de contexto, exibem seu próprio ícone no passo correspondente; um mastro tracejado desce até a linha de base, passe o cursor para ler e clique para abrir o passo. Na visão geral, eventos próximos se agrupam em uma bandeira agregada que volta direto ao seu passo.
 - **Leia do seu jeito** — granularidade **Etapa / Turno**, **Total** (composição cumulativa) ou **Delta** (mudança com sinal de cada requisição), e rolagem lateral por toda a sessão. No modo Delta, o crescimento se acumula acima da linha de base e uma compactação mergulha abaixo dela:
 
 ![Tendência de contexto no modo Delta](https://raw.githubusercontent.com/bowenliang123/dsh-context/main/docs/history-delta.png)

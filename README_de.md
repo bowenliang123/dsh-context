@@ -123,7 +123,7 @@ Ein sechsfarbiger gestapelter Balken gegen das volle Fenster des Modells (die be
 Ein gestapelter Balken pro Modellanfrage — feiner als pro Nachricht —, sodass du das Fenster Runde für Runde wachsen siehst:
 
 - **✨ Schritt-Kurzfassung** — drei Zeilen in Alltagssprache unter dem Diagramm: **Benutzer** erinnert an die Nachricht, die die Runde eröffnet hat, **Eingang** listet, was neu hineinkam (meist die vorherigen Tool-Ergebnisse), **Antwort** zeigt die Antwort und/oder aufgerufene Tools. Klicke auf eine Zeile, um genau diese Nachricht im Kontextbrowser zu öffnen.
-- **✂ markiert die Ereignisse** — Komprimierungen und Bereinigungen sind am jeweiligen Balken markiert, sodass sich die Einbrüche selbst erklären.
+- **Ereignis-Flaggen** — Komprimierung, Bereinigung, Skill-Injektion, Subagent-Erstellung, Agent-Interaktion und Modellwechsel, Ziel- und Teamaufgaben-Erstellung/-Abschluss, Aufgaben-Hinzufügen/-Erledigen, Nutzerfragen sowie der längste Schritt und der größte Kontextsprung tragen jeweils ihr eigenes Symbol am zugehörigen Schritt; ein gestrichelter Mast reicht bis zur Grundlinie, Hover zeigt die Werte, Klick öffnet den Schritt. Die Übersicht fasst nahe Ereignisse zu einer Sammelflagge zusammen, die direkt zu ihrem Schritt zurückspringt.
 - **Lies es auf deine Weise** — Granularität **Schritt / Runde**, **Gesamt** (kumulative Zusammensetzung) oder **Delta** (die vorzeichenbehaftete Änderung jeder Anfrage) und seitliches Scrollen durch die ganze Sitzung. Im Delta-Modus stapelt sich Wachstum über der Basislinie, und eine Komprimierung taucht darunter:
 
 ![Kontexttrend im Delta-Modus](https://raw.githubusercontent.com/bowenliang123/dsh-context/main/docs/history-delta.png)

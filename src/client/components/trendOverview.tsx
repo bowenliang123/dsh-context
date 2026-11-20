@@ -2,13 +2,17 @@ import { Fragment, useCallback, useLayoutEffect, useMemo, useRef, useState, type
 import type { Category, ContextEventRecord, RequestRecord } from '../../shared/types'
 import { CATS, CAT_COLOR } from '../categories'
 import { RISE_CLASS } from './trendDnaBars'
+import { TrendMilestoneBand } from './trendMilestoneBand'
+import { fitBandItemsOf, milestoneJumpSeq, milestonesOf, type MilestoneBandItem } from './trendMilestones'
+import { milestoneLabel, milestoneTipRows } from './trendMilestoneText'
 import { TURN_FILLS, preprocessTrend, trendMaxima, turnStepsOf, trendTipRows } from './trendModel'
 import { clampTipLeft } from './tip'
+import { useElementSize } from './useElementMetrics'
 import type { ViewKit } from '../viewkit'
 
 export interface TrendOverviewProps {
   requests: RequestRecord[]
-  markers: (ContextEventRecord | undefined)[]
+  events: ContextEventRecord[]
   selectedSeq: number | null
   hoveredSeq: number | null
   activeTurn: number | null
@@ -22,13 +26,14 @@ export interface TrendOverviewProps {
   onHoverTurn: (turn: number | null) => void
   onPickTurn: (turn: number) => void
   onPickCat?: (cat: Category | 'system' | 'tools', seq: number) => void
+  onPickMilestone?: (seq: number) => void
 }
 
 const FLAG_FRACS: readonly number[] = [0.25, 0.5, 0.75, 1]
 
 const CHART_H = 112
 
-const PLOT_TOP = 18
+const PLOT_TOP = 36
 
 const yOf = (cum: number, scale: number, baseline: number): number =>
   Math.round((baseline - cum * scale) * 100) / 100
@@ -158,8 +163,6 @@ function wideQuartiles(groups: { count: number }[]): number[] {
 }
 
 export function makeTrendOverview(kit: ViewKit): (props: TrendOverviewProps) => ReactElement | null {
-  const { eventLabel, eventAt } = kit
-
   const fmtSigned = (v: number): string => (v > 0 ? '+' : '') + kit.fmt(v)
 
   return function TrendOverview(props: TrendOverviewProps): ReactElement | null {
@@ -173,17 +176,40 @@ export function makeTrendOverview(kit: ViewKit): (props: TrendOverviewProps) => 
     const geo = useMemo(() => ribbonGeometry(requests, delta, durationOn), [requests, delta, durationOn])
     const surfaceRef = useRef<HTMLDivElement | null>(null)
     const wrapRef = useRef<HTMLDivElement | null>(null)
+    const width = useElementSize(surfaceRef, 'content').width
     const lastIdxRef = useRef<number | null>(null)
     const lastCatRef = useRef<RibbonBand['cat'] | null>(null)
     const [localHover, setLocalHover] = useState<number | null>(null)
     const [localCat, setLocalCat] = useState<RibbonBand['cat'] | null>(null)
     const [keyCursor, setKeyCursor] = useState<number | null>(null)
+    const [msHoverKey, setMsHoverKey] = useState<string | null>(null)
     const hoverSeq = localHover ?? props.hoveredSeq
     const handleHover = useCallback((seq: number | null): void => {
       setLocalHover(seq)
       props.onHover(seq)
     }, [props.onHover])
+    const handleMilestoneHover = useCallback((item: MilestoneBandItem): void => {
+      setMsHoverKey(item.key)
+      handleHover(item.group.targetSeq)
+    }, [handleHover])
+    const handleMilestoneLeave = useCallback((): void => {
+      setMsHoverKey(null)
+      handleHover(null)
+    }, [handleHover])
+    const handleMilestonePick = useCallback((item: MilestoneBandItem): void => {
+      if (props.onPickMilestone !== undefined) props.onPickMilestone(milestoneJumpSeq(item.group))
+      else props.onSelect(item.group.targetSeq)
+    }, [props.onPickMilestone, props.onSelect])
     const u = n > 1 ? n - 1 : 1
+    const milestoneGroups = useMemo(
+      () => milestonesOf(props.requests, props.events, props.granularity),
+      [props.requests, props.events, props.granularity],
+    )
+    const bandItems = useMemo(
+      () => fitBandItemsOf(milestoneGroups, width, u),
+      [milestoneGroups, width, u],
+    )
+    const msItem = msHoverKey !== null ? bandItems.find(item => item.key === msHoverKey) ?? null : null
     const groups: { turn: number; count: number; first: number }[] = []
     for (let i = 0; i < n; i++) {
       const req = requests[i]
@@ -219,6 +245,7 @@ export function makeTrendOverview(kit: ViewKit): (props: TrendOverviewProps) => 
     }
     const idxOf = (x: number): number => Math.min(n - 1, Math.round(x))
     const onMove = (e: { clientX: number; clientY: number; currentTarget: HTMLElement }): void => {
+      if (msHoverKey !== null) setMsHoverKey(null)
       const rect = e.currentTarget.getBoundingClientRect()
       const x = xAt(rect, e.clientX)
       const idx = idxOf(x)
@@ -236,9 +263,11 @@ export function makeTrendOverview(kit: ViewKit): (props: TrendOverviewProps) => 
       lastIdxRef.current = null
       lastCatRef.current = null
       setLocalCat(null)
+      setMsHoverKey(null)
       handleHover(null)
     }
     const onClick = (e: { clientX: number; clientY: number; currentTarget: HTMLElement }): void => {
+      if (msHoverKey !== null) setMsHoverKey(null)
       const rect = e.currentTarget.getBoundingClientRect()
       const x = xAt(rect, e.clientX)
       const seq = requests[idxOf(x)].seq
@@ -267,6 +296,10 @@ export function makeTrendOverview(kit: ViewKit): (props: TrendOverviewProps) => 
       }
     }
     const stepsOf = useMemo(() => turnStepsOf(props.requests), [props.requests])
+    const msTextOptions = { granularity: props.granularity, stepsOf }
+    const msReq = msItem !== null ? requests[msItem.group.targetIdx] : null
+    const milestoneLabelOf = (item: MilestoneBandItem): string =>
+      milestoneLabel(kit, msTextOptions, item.group, requests[item.group.targetIdx])
     useLayoutEffect(() => {
       const el = surfaceRef.current
       /* v8 ignore next 1 */
@@ -274,18 +307,21 @@ export function makeTrendOverview(kit: ViewKit): (props: TrendOverviewProps) => 
       /* v8 ignore next 1 */
       const tip = (wrapRef.current ?? document.body).querySelector<HTMLElement>('.lc-chart-tip')
       if (tip === null) return
-      const next = `translate(${clampTipLeft(Math.max(0, hoveredIdx) / u * el.clientWidth, tip.offsetWidth, el.clientWidth)}px, 0)`
+      const x = msItem !== null ? msItem.x : Math.max(0, hoveredIdx) / u * el.clientWidth
+      const next = `translate(${clampTipLeft(x, tip.offsetWidth, el.clientWidth)}px, 0)`
       if (tip.style.transform !== next) tip.style.transform = next
     })
     if (n === 0) return null
 
-    const tipRows = hoveredIdx >= 0
-      ? trendTipRows(kit, { granularity: props.granularity, stepsOf, delta, focus, durationOn }, requests[hoveredIdx])
-      : null
+    const tipRows = msHoverKey !== null
+      ? (msItem !== null && msReq !== null ? milestoneTipRows(kit, msTextOptions, msItem.group, msReq) : null)
+      : hoveredIdx >= 0
+        ? trendTipRows(kit, { granularity: props.granularity, stepsOf, delta, focus, durationOn }, requests[hoveredIdx])
+        : null
 
     return (
       <div className="lc-chartrow">
-        <div className="lc-axis">
+        <div className="lc-axis lc-axis-milestones">
           {delta ? (
             <>
               <span className="lc-axis-top">{fmtSigned(geo.maxUp)}</span>
@@ -307,14 +343,14 @@ export function makeTrendOverview(kit: ViewKit): (props: TrendOverviewProps) => 
         <div className="lc-chart-wrap" ref={wrapRef}>
           <div className={'lc-chart-scroll lc-chart-fit' + (props.activeTurn !== null ? ' lc-chart-dim' : '')}>
             <div
-              className="lc-chart"
+              className="lc-chart lc-chart-milestones"
               ref={surfaceRef}
               data-catdim={localCat ?? props.hoverCat ?? undefined}
               role="button"
               tabIndex={0}
               aria-label={kit.t('trend.title')}
               onKeyDown={onKeyDown}
-              onFocus={() => { moveCursor(keyboardIdx()) }}
+              onFocus={() => { setMsHoverKey(null); moveCursor(keyboardIdx()) }}
               onBlur={() => { setKeyCursor(null); handleHover(null) }}
               onMouseMove={onMove}
               onMouseLeave={onLeave}
@@ -364,18 +400,6 @@ export function makeTrendOverview(kit: ViewKit): (props: TrendOverviewProps) => 
               {hoveredIdx >= 0 ? <div className="lc-fit-cursor" style={{ left: `${hoveredIdx / u * 100}%` }} /> : null}
               {selectedIdx >= 0 ? <div className="lc-fit-cursor lc-fit-pin" style={{ left: `${selectedIdx / u * 100}%` }} /> : null}
               <div className="lc-fit-layer">
-                {props.markers.map((ev, i) => {
-                  if (ev === undefined) return null
-                  const at = eventAt(ev)
-                  return (
-                    <span
-                      key={`marker-${i}`}
-                      className="lc-bar-marker"
-                      style={{ left: `${i / u * 100}%` }}
-                      title={'✂ ' + (at !== null ? at + ' — ' : '') + eventLabel(ev)}
-                    >{'✂'}</span>
-                  )
-                })}
                 {flagRecords.map(idx => (
                   <span
                     key={`flag-${idx}`}
@@ -412,13 +436,24 @@ export function makeTrendOverview(kit: ViewKit): (props: TrendOverviewProps) => 
                 )
               })}
             </div>
+            <TrendMilestoneBand
+              items={bandItems}
+              activeKey={msItem !== null ? msItem.key : null}
+              selectedSeq={props.selectedSeq}
+              activeTurn={props.activeTurn}
+              bandLabel={kit.t('trend.ms.band')}
+              labelOf={milestoneLabelOf}
+              onHoverItem={handleMilestoneHover}
+              onLeaveItem={handleMilestoneLeave}
+              onPickItem={handleMilestonePick}
+            />
           </div>
           {tipRows !== null ? (
             <div className="lc-chart-tip">{tipRows.map((row, i) => <span key={i}>{row}</span>)}</div>
           ) : null}
         </div>
         {durationOn ? (
-          <div className="lc-axis lc-axis-r">
+          <div className="lc-axis lc-axis-r lc-axis-milestones">
             <span className="lc-axis-top">{kit.fmtDuration(geo.maxActiveMs)}</span>
             <span className="lc-axis-q3">{kit.fmtDuration(Math.round(geo.maxActiveMs * 3 / 4))}</span>
             <span className="lc-axis-mid">{kit.fmtDuration(Math.round(geo.maxActiveMs / 2))}</span>

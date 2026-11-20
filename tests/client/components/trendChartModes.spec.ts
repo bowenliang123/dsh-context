@@ -679,7 +679,7 @@ describe('TrendChart lazy DNA bands', () => {
     const reread = await mount(h(TrendChart, propsOf(rereadReqs, { dnaAt: rereadLazy.at, mode: 'delta' })))
     assert.equal(rereadLazy.calls.size, rereadReqs.length, 'the axis walk read every step')
     const afterMount = total()
-    await reread.update(h(TrendChart, propsOf(rereadReqs, { dnaAt: rereadLazy.at, mode: 'delta', markers: [] })))
+    await reread.update(h(TrendChart, propsOf(rereadReqs, { dnaAt: rereadLazy.at, mode: 'delta', events: [] })))
     await flush()
     const rereadCount = total() - afterMount
     assert.ok(rereadCount <= 400, `a re-render re-reads at most the window (${rereadCount} of ${rereadReqs.length})`)

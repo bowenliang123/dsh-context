@@ -5,12 +5,28 @@
 .lc-event-icon.lc-event-inject { color: var(--color-purple-500); }
 .lc-event-icon.lc-event-model { color: var(--dsw-alias-brand-primary); }
 .lc-event-icon.lc-event-mode { color: var(--dsw-alias-label-secondary); }
+.lc-event-icon.lc-event-agent { color: var(--dsw-alias-state-success-primary); }
+.lc-event-icon.lc-event-goal-create { color: var(--color-blue-500); }
+.lc-event-icon.lc-event-goal-complete { color: var(--dsw-alias-state-success-primary); }
+.lc-event-icon.lc-event-todo-add { color: var(--color-indigo-500); }
+.lc-event-icon.lc-event-todo-done { color: var(--color-teal-500); }
+.lc-event-icon.lc-event-ask { color: var(--dsw-alias-state-warn-primary); }
+.lc-event-icon.lc-event-team-task-create { color: var(--color-pink-500); }
+.lc-event-icon.lc-event-team-task-complete { color: var(--color-violet-500); }
 .lc-kind { flex: none; font-size: 10px; font-weight: 600; padding: 1px 6px; border-radius: 4px; white-space: nowrap; }
 .lc-kind-inject { --lc-kind-fg: var(--dsw-alias-state-success-primary); }
 .lc-kind-compaction { --lc-kind-fg: var(--dsw-alias-state-error-primary); }
 .lc-kind-prune { --lc-kind-fg: var(--color-violet-500); }
 .lc-kind-model { --lc-kind-fg: var(--dsw-alias-brand-primary); }
 .lc-kind-mode { --lc-kind-fg: var(--dsw-alias-label-secondary); }
+.lc-kind-agent { --lc-kind-fg: var(--dsw-alias-state-success-primary); }
+.lc-kind-goal-create { --lc-kind-fg: var(--color-blue-500); }
+.lc-kind-goal-complete { --lc-kind-fg: var(--dsw-alias-state-success-primary); }
+.lc-kind-todo-add { --lc-kind-fg: var(--color-indigo-500); }
+.lc-kind-todo-done { --lc-kind-fg: var(--color-teal-500); }
+.lc-kind-ask { --lc-kind-fg: var(--dsw-alias-state-warn-primary); }
+.lc-kind-team-task-create { --lc-kind-fg: var(--color-pink-500); }
+.lc-kind-team-task-complete { --lc-kind-fg: var(--color-violet-500); }
 .lc-kind-all { --lc-kind-fg: var(--dsw-alias-state-business-primary); }
 .lc-kind { background: color-mix(in srgb, var(--lc-kind-fg) 15%, transparent); color: var(--lc-kind-fg); }
 .lc-kinds .lc-gran-btn, .lc-kinds .lc-gran-btn:hover { color: var(--lc-kind-fg); }

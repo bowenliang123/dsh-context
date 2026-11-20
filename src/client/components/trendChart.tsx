@@ -9,6 +9,9 @@ import { scrollToPos } from '../revealScroll'
 import type { ViewKit } from '../viewkit'
 import { DnaBar, DnaDeltaBar, DnaHighlights, RISE_CLASS, STAGGER_CAP } from './trendDnaBars'
 import { DurationCurve } from './trendDurationCurve'
+import { TrendMilestoneBand } from './trendMilestoneBand'
+import { bandItemsOf, milestonesOf, type MilestoneBandItem } from './trendMilestones'
+import { milestoneLabel, milestoneTipRows } from './trendMilestoneText'
 import { BAR_GAP, BAR_W, TREND_WINDOW_MIN, WINDOW_HYSTERESIS_BARS, WINDOW_OVERSCAN_BARS, initialBarWindow, nextBarWindow, windowPads, windowRangeFor } from './trendWindow'
 import type { BarWindow } from './trendWindow'
 import { preprocessTrend, TURN_FILLS, trendMaxima, trendTipRows, turnStepsOf } from './trendModel'
@@ -24,7 +27,7 @@ const BAND_STORE_MAX = 512
 
 export interface TrendChartProps {
   requests: RequestRecord[]
-  markers: (ContextEventRecord | undefined)[]
+  events: ContextEventRecord[]
   selectedSeq: number | null
   hoveredSeq: number | null
   activeTurn: number | null
@@ -50,7 +53,7 @@ export interface TrendChartProps {
 }
 
 export function makeTrendChart(kit: ViewKit): (props: TrendChartProps) => ReactElement {
-  const { t, fmt, fmtDuration, eventLabel, eventAt, catLabel } = kit
+  const { t, fmt, fmtDuration, catLabel } = kit
 
   const centerBar = (el: HTMLDivElement, idx: number): void => {
     scrollToPos(el, { left: Math.max(0, idx * (BAR_W + BAR_GAP) + BAR_W / 2 - el.clientWidth / 2) })
@@ -73,7 +76,6 @@ export function makeTrendChart(kit: ViewKit): (props: TrendChartProps) => ReactE
 
   interface ChartBarProps {
     req: RequestRecord
-    marker: ContextEventRecord | undefined
     selected: boolean
     hovered: boolean
     inTurn: boolean
@@ -93,8 +95,7 @@ export function makeTrendChart(kit: ViewKit): (props: TrendChartProps) => ReactE
 
   const ChartBar = memo(function ChartBar(props: ChartBarProps): ReactElement {
     kit.useLocaleTick()
-    const { req, marker } = props
-    const markerAt = marker !== undefined ? eventAt(marker) : null
+    const { req } = props
     const deltaBar = props.deltaScale !== undefined
     const enterStyle = { '--lc-i': Math.min(props.enterIndex, STAGGER_CAP) } as CSSProperties
     const riseCls = props.rise ? RISE_CLASS : ''
@@ -123,12 +124,6 @@ export function makeTrendChart(kit: ViewKit): (props: TrendChartProps) => ReactE
       >
         {props.flag !== null ? (
           <span className="lc-trend-flag" aria-hidden="true"><span className="lc-trend-flag-label">{props.flag}</span></span>
-        ) : null}
-        {marker !== undefined ? (
-          <span
-            className="lc-bar-marker"
-            title={'✂ ' + (markerAt !== null ? markerAt + ' — ' : '') + eventLabel(marker)}
-          >{'✂'}</span>
         ) : null}
         {props.dna !== null ? (
           props.dnaDelta !== null && props.dnaScale !== undefined ? (
@@ -184,12 +179,28 @@ export function makeTrendChart(kit: ViewKit): (props: TrendChartProps) => ReactE
     const durationOn = props.durationCurve === true
     const [dnaHit, setDnaHit] = useState<string | null>(null)
     const [localHover, setLocalHover] = useState<number | null>(null)
+    const [msHoverKey, setMsHoverKey] = useState<string | null>(null)
     const hoverSeq = localHover ?? props.hoveredSeq
-    const handleBarHover = useCallback((seq: number | null): void => {
+    const rawBarHover = useCallback((seq: number | null): void => {
       if (seq !== null && props.hoverLock !== undefined && performance.now() < props.hoverLock.current) return
       setLocalHover(seq)
       props.onHover(seq)
     }, [props.onHover, props.hoverLock])
+    const handleBarHover = useCallback((seq: number | null): void => {
+      setMsHoverKey(null)
+      rawBarHover(seq)
+    }, [rawBarHover])
+    const handleMilestoneHover = useCallback((item: MilestoneBandItem): void => {
+      setMsHoverKey(item.key)
+      rawBarHover(item.group.targetSeq)
+    }, [rawBarHover])
+    const handleMilestoneLeave = useCallback((): void => {
+      setMsHoverKey(null)
+      rawBarHover(null)
+    }, [rawBarHover])
+    const handleMilestonePick = useCallback((item: MilestoneBandItem): void => {
+      props.onSelect(item.group.targetSeq)
+    }, [props.onSelect])
     useEffect(() => {
       setLocalHover(prev => (prev === null || props.hoveredSeq === prev ? prev : null))
     }, [props.hoveredSeq])
@@ -224,7 +235,6 @@ export function makeTrendChart(kit: ViewKit): (props: TrendChartProps) => ReactE
       lruTrim(bandStore.deltas, BAND_STORE_MAX)
       return d
     }, [bandStore, bandAt])
-    const markers = props.markers
     const adaptive = props.adaptive === true
     const [visMax, setVisMax] = useState<VisibleMax | null>(null)
     const measureVisible = (el: HTMLDivElement): void => {
@@ -515,6 +525,15 @@ export function makeTrendChart(kit: ViewKit): (props: TrendChartProps) => ReactE
       : Math.max(0, requests.length - 1)
     const pads = windowPads(shownFrom, shownTo, requests.length)
     const shownBars = requests.slice(shownFrom, shownTo + 1)
+    const milestoneGroups = useMemo(
+      () => milestonesOf(props.requests, props.events, props.granularity),
+      [props.requests, props.events, props.granularity],
+    )
+    const bandItems = useMemo(
+      () => bandItemsOf(milestoneGroups, { shownFrom, shownTo, leftPad: pads.left }),
+      [milestoneGroups, shownFrom, shownTo, pads.left],
+    )
+    const msItem = msHoverKey !== null ? bandItems.find(item => item.key === msHoverKey) ?? null : null
 
     const stepsOf = useMemo(() => turnStepsOf(props.requests), [props.requests])
     const hoveredIdx = hoverSeq !== null ? requests.findIndex(r => r.seq === hoverSeq) : -1
@@ -562,6 +581,11 @@ export function makeTrendChart(kit: ViewKit): (props: TrendChartProps) => ReactE
       for (let i = shownFrom; i <= shownTo; i++) slices[i] = dnaSliceIndex.get(i)?.get(dnaHit) ?? null
       return slices
     }, [dnaSliceIndex, dnaHit, shownFrom, shownTo, requests.length])
+    const msTextOptions = { granularity: props.granularity, stepsOf }
+    const milestoneRowsOf = (group: MilestoneBandItem['group'], req: RequestRecord): string[] =>
+      milestoneTipRows(kit, msTextOptions, group, req)
+    const milestoneLabelOf = (item: MilestoneBandItem): string =>
+      milestoneLabel(kit, msTextOptions, item.group, requests[item.group.targetIdx])
     const tipRowsOf = (req: RequestRecord): string[] => {
       const band = hitBand ?? hoveredDelta
       return trendTipRows(kit, {
@@ -575,6 +599,9 @@ export function makeTrendChart(kit: ViewKit): (props: TrendChartProps) => ReactE
           : undefined,
       }, req)
     }
+    const tipRows = msHoverKey === null
+      ? (hoveredReq !== null ? tipRowsOf(hoveredReq) : null)
+      : (msItem !== null ? milestoneRowsOf(msItem.group, requests[msItem.group.targetIdx]) : null)
 
     const tipColRef = useRef(0)
 
@@ -591,13 +618,15 @@ export function makeTrendChart(kit: ViewKit): (props: TrendChartProps) => ReactE
     useLayoutEffect(() => {
       /* v8 ignore next 1 */
       if (scrollRef.current === null) return
-      tipColRef.current = hoveredIdx >= 0 ? hoveredIdx * (BAR_W + BAR_GAP) + BAR_W / 2 : 0
+      tipColRef.current = msItem !== null
+        ? msItem.x
+        : hoveredIdx >= 0 ? hoveredIdx * (BAR_W + BAR_GAP) + BAR_W / 2 : 0
       syncTip(scrollRef.current)
-    }, [hoveredIdx, dnaHit])
+    }, [hoveredIdx, dnaHit, msItem])
 
     return (
       <div className="lc-chartrow">
-        <div className="lc-axis">
+        <div className="lc-axis lc-axis-milestones">
           {delta ? (
             <>
               <span className="lc-axis-top">{fmtSigned(maxUp)}</span>
@@ -630,10 +659,10 @@ export function makeTrendChart(kit: ViewKit): (props: TrendChartProps) => ReactE
             }}
           >
             <div
-              className="lc-chart"
+              className="lc-chart lc-chart-milestones"
               data-lc-bars={requests.length}
               data-catdim={props.hoverCat ?? undefined}
-              onMouseLeave={() => { props.onHover(null); setLocalHover(null); setDnaHit(null) }}
+              onMouseLeave={() => { props.onHover(null); setLocalHover(null); setDnaHit(null); setMsHoverKey(null) }}
             >
               <div className="lc-grid lc-grid-top" />
               <div className="lc-grid lc-grid-q3" />
@@ -647,7 +676,6 @@ export function makeTrendChart(kit: ViewKit): (props: TrendChartProps) => ReactE
                   <ChartBar
                     key={`${req.seq}:${props.granularity}:${props.mode}`}
                     req={req}
-                    marker={markers[i]}
                     selected={props.selectedSeq === req.seq}
                     hovered={hoverSeq === req.seq}
                     inTurn={props.activeTurn !== null && (req.turn ?? 0) === props.activeTurn}
@@ -676,6 +704,17 @@ export function makeTrendChart(kit: ViewKit): (props: TrendChartProps) => ReactE
                   dots={durationGeometry.dots}
                 />
               ) : null}
+              <TrendMilestoneBand
+                items={bandItems}
+                activeKey={msItem !== null ? msItem.key : null}
+                selectedSeq={props.selectedSeq}
+                activeTurn={props.activeTurn}
+                bandLabel={t('trend.ms.band')}
+                labelOf={milestoneLabelOf}
+                onHoverItem={handleMilestoneHover}
+                onLeaveItem={handleMilestoneLeave}
+                onPickItem={handleMilestonePick}
+              />
             </div>
             <div className="lc-turns" style={labelFont !== '' ? { fontSize: labelFont } : undefined} onMouseLeave={() => { props.onHoverTurn(null) }}>
               {groups.map((grp, gi) => {
@@ -705,12 +744,12 @@ export function makeTrendChart(kit: ViewKit): (props: TrendChartProps) => ReactE
               })}
             </div>
           </div>
-          {hoveredReq !== null ? (
-            <div className="lc-chart-tip">{tipRowsOf(hoveredReq).map((row, i) => <span key={i}>{row}</span>)}</div>
+          {tipRows !== null ? (
+            <div className="lc-chart-tip">{tipRows.map((row, i) => <span key={i}>{row}</span>)}</div>
           ) : null}
         </div>
         {durationOn ? (
-          <div className="lc-axis lc-axis-r">
+          <div className="lc-axis lc-axis-r lc-axis-milestones">
             <span className="lc-axis-top">{fmtDuration(maxActiveMs)}</span>
             <span className="lc-axis-q3">{fmtDuration(Math.round(maxActiveMs * 3 / 4))}</span>
             <span className="lc-axis-mid">{fmtDuration(Math.round(maxActiveMs / 2))}</span>

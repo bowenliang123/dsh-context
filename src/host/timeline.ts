@@ -59,7 +59,11 @@ const requestRecordSchema = z.object({
 const contextEventSchema = z.object({
   seq: z.number(),
   time: z.number(),
-  kind: z.enum(['compaction', 'prune', 'inject', 'model', 'mode']),
+  kind: z.enum([
+    'compaction', 'prune', 'inject', 'model', 'mode', 'agent',
+    'goal-create', 'goal-complete', 'todo-add', 'todo-done', 'ask',
+    'team-task-create', 'team-task-complete',
+  ]),
   form: z.string().optional(),
   tokens: z.number().optional(),
   grossTokens: z.number().optional(),
@@ -68,6 +72,7 @@ const contextEventSchema = z.object({
   name: z.string().optional(),
   agent: z.string().optional(),
   detail: z.string().optional(),
+  items: z.array(z.string()).optional(),
   from: z.string().optional(),
   to: z.string().optional(),
   fromTurn: z.number().optional(),
@@ -360,6 +365,8 @@ const timelineStateSchema = z.object({
     memberName: z.string().optional(),
     catalogLabel: z.string().optional(),
   }).strict()).optional(),
+  todoItems: z.record(z.string(), z.enum(['pending', 'in_progress', 'completed'])).optional(),
+  teamTasks: z.record(z.string(), z.enum(['pending', 'in_progress', 'completed', 'deleted'])).optional(),
   pendingShadowedSeqs: z.array(z.number()).optional(),
   pendingShadowEventSeq: z.number().optional(),
   detailRev: z.number().int().nonnegative().optional(),
@@ -379,7 +386,7 @@ const timelineStateSchema = z.object({
   commandCallsOverflow: z.boolean().optional(),
 }) as unknown as z.ZodType<TimelineState>
 
-export const TIMELINE_STATE_VERSION = 45
+export const TIMELINE_STATE_VERSION = 47
 
 export function createContextTimelineDefinition(
   config: Config,

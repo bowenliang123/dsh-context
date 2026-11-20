@@ -465,6 +465,30 @@ describe('makeEventText.eventLabel', () => {
     assert.equal(eventLabel(ev({ kind: 'mode', name: 'plan.on' })), 'Plan mode on')
     assert.equal(eventLabel(ev({ kind: 'mode', name: 'plan.off' })), 'Plan mode off')
     assert.equal(eventLabel(ev({ kind: 'mode' })), 'ev.mode.?')
+    assert.equal(eventLabel(ev({ kind: 'agent', name: 'explorer' })), 'Subagent created · explorer')
+    assert.equal(
+      eventLabel(ev({ kind: 'agent', name: 'explorer', detail: 'Spec review' })),
+      'Subagent created · explorer · Spec review',
+    )
+    assert.equal(eventLabel(ev({ kind: 'agent' })), 'Subagent created')
+  })
+
+  test('workflow labels name the goal, task, or item count with its names', () => {
+    assert.equal(eventLabel(ev({ kind: 'goal-create', name: 'Ship it' })), 'Goal created · Ship it')
+    assert.equal(eventLabel(ev({ kind: 'goal-complete', name: 'Ship it' })), 'Goal completed · Ship it')
+    assert.equal(eventLabel(ev({ kind: 'goal-create' })), 'Goal created')
+    assert.equal(eventLabel(ev({ kind: 'team-task-create', name: 'Build' })), 'Team task created')
+    assert.equal(eventLabel(ev({ kind: 'team-task-complete', name: 'Build' })), 'Team task done · Build')
+    assert.equal(eventLabel(ev({ kind: 'todo-add', count: 2, items: ['a', 'b'] })), 'Todo added · ×2')
+    assert.equal(eventLabel(ev({ kind: 'todo-done', count: 1, items: ['a'] })), 'Todo done · a')
+    assert.equal(eventLabel(ev({ kind: 'todo-done', count: 1, items: [] })), 'Todo done +1')
+    assert.equal(eventLabel(ev({ kind: 'todo-add', items: ['a', 'b'] })), 'Todo added')
+    assert.equal(eventLabel(ev({ kind: 'todo-add', count: 3, items: ['a', 'b'] })), 'Todo added · ×3')
+    assert.equal(eventLabel(ev({ kind: 'todo-add', count: 1, items: [] })), 'Todo added')
+    assert.equal(eventLabel(ev({ kind: 'ask', count: 2, items: ['Why?', 'When?'] })), 'Asked user · ×2 · Why?, When?')
+    assert.equal(eventLabel(ev({ kind: 'ask', count: 1, items: ['Why?'] })), 'Asked user · Why?')
+    assert.equal(eventLabel(ev({ kind: 'ask', items: ['Why?'] })), 'Asked user · Why?')
+    assert.equal(eventLabel(ev({ kind: 'ask', count: 2 })), 'Asked user · ×2 +2')
   })
 
   test('inject labels: skill injects name the skill, plain injects label their form then append name and detail', () => {
@@ -530,6 +554,31 @@ describe('makeEventText.eventLabelParts', () => {
       eventLabelParts(ev({ kind: 'compaction', count: 2 })),
       { lead: '', tail: 'Context compacted (summary replaced 2 messages)' },
     )
+    assert.deepEqual(eventLabelParts(ev({ kind: 'agent' })), { lead: 'Subagent created', tail: '' })
+    assert.deepEqual(
+      eventLabelParts(ev({ kind: 'agent', name: 'explorer', detail: 'Spec review' })),
+      { lead: 'Subagent created', tail: ' · explorer · Spec review' },
+    )
+    assert.deepEqual(
+      eventLabelParts(ev({ kind: 'goal-create', name: 'Ship it' })),
+      { lead: 'Goal created', tail: ' · Ship it' },
+    )
+    assert.deepEqual(
+      eventLabelParts(ev({ kind: 'team-task-complete', name: 'Build' })),
+      { lead: 'Team task done', tail: ' · Build' },
+    )
+    assert.deepEqual(
+      eventLabelParts(ev({ kind: 'team-task-create', name: 'Build' })),
+      { lead: 'Team task created', tail: '' },
+    )
+    assert.deepEqual(
+      eventLabelParts(ev({ kind: 'todo-add', count: 2, items: ['a', 'b'] })),
+      { lead: 'Todo added', tail: ' · ×2' },
+    )
+    assert.deepEqual(
+      eventLabelParts(ev({ kind: 'ask', count: 1, items: ['Why?'] })),
+      { lead: 'Asked user', tail: ' · Why?' },
+    )
   })
 })
 
@@ -542,6 +591,8 @@ describe('makeEventText.eventAt', () => {
     assert.equal(eventAt(ev({ kind: 'compaction' })), null)
     assert.equal(eventAt(ev({ kind: 'prune', turn: 1 })), null)
     assert.equal(eventAt(ev({ kind: 'inject', turn: 1, step: 2 })), 'T1 S2')
+    assert.equal(eventAt(ev({ kind: 'agent', turn: 1, step: 2 })), 'T1 S2')
+    assert.equal(eventAt(ev({ kind: 'agent' })), null)
     assert.equal(eventAt(ev({ kind: 'model' })), null)
   })
 })
@@ -555,37 +606,85 @@ describe('EventList', () => {
       ev({ seq: 3, time, kind: 'compaction', count: 2, tokens: 100, grossTokens: 102 }),
       ev({ seq: 4, time, kind: 'mystery' as never }),
       ev({ seq: 5, time, kind: 'inject', tokens: 0 }),
+      ev({ seq: 6, time, kind: 'agent', form: 'spawn', name: 'explorer', detail: 'Spec review', turn: 1, step: 2 }),
     ]
     const m = await mount(h(EventList, { events }))
     const rows = queryAll(m.container, '.lc-event')
-    assert.equal(rows.length, 5)
+    assert.equal(rows.length, 6)
 
-    assert.ok(text(rows[0]).includes('Context Injection'))
-    assert.equal(query(rows[0], '.lc-event-label b').textContent, 'Context Injection')
+    assert.ok(query(rows[0], '.lc-event-icon svg') instanceof SVGElement)
+    assert.equal(query(rows[0], '.lc-kind').textContent, 'Agent')
+    assert.equal(query(rows[0], '.lc-event-label b').textContent, 'Subagent created')
+    assert.ok(text(rows[0]).includes('explorer · Spec review'))
     assert.equal(queryAll(rows[0], '.lc-event-tokens').length, 0)
+    assert.equal(query(rows[0], '.lc-event-at').textContent, 'T1 S2')
+    assert.equal(query(rows[0], '.lc-event-time').textContent, fmtTime(time))
 
-    assert.equal(query(rows[1], '.lc-event-icon').textContent, '•')
-    assert.equal(query(rows[1], '.lc-kind').textContent, 'kind.mystery')
+    assert.ok(text(rows[1]).includes('Context Injection'))
+    assert.equal(query(rows[1], '.lc-event-label b').textContent, 'Context Injection')
+    assert.equal(queryAll(rows[1], '.lc-event-tokens').length, 0)
 
-    assert.equal(query(rows[2], '.lc-event-icon').textContent, '✂')
-    const down = query(rows[2], '.lc-event-tokens')
+    assert.equal(query(rows[2], '.lc-event-icon').textContent, '•')
+    assert.equal(query(rows[2], '.lc-kind').textContent, 'kind.mystery')
+
+    assert.equal(query(rows[3], '.lc-event-icon').textContent, '✂')
+    const down = query(rows[3], '.lc-event-tokens')
     assert.ok(down.className.includes('lc-down'))
     assert.equal(down.textContent, '−100')
     assert.equal(down.getAttribute('title'), 'Removed 102; 100 net after the summary replacement')
-    assert.equal(queryAll(rows[2], '.lc-event-at').length, 0)
-
-    assert.ok(query(rows[3], '.lc-event-icon svg') instanceof SVGElement)
-    assert.ok(text(rows[3]).includes('Model switched: a → b'))
-    assert.equal(rows[3].querySelector('.lc-event-label b'), null, 'only an injection form is emphasized')
-    assert.equal(query(rows[3], '.lc-kind').textContent, 'Switch')
+    assert.equal(queryAll(rows[3], '.lc-event-at').length, 0)
 
     assert.ok(query(rows[4], '.lc-event-icon svg') instanceof SVGElement)
-    assert.equal(query(rows[4], '.lc-event-label b').textContent, 'Notice')
-    const up = query(rows[4], '.lc-event-tokens')
+    assert.ok(text(rows[4]).includes('Model switched: a → b'))
+    assert.equal(rows[4].querySelector('.lc-event-label b'), null, 'only an injection form is emphasized')
+    assert.equal(query(rows[4], '.lc-kind').textContent, 'Switch')
+
+    assert.ok(query(rows[5], '.lc-event-icon svg') instanceof SVGElement)
+    assert.equal(query(rows[5], '.lc-event-label b').textContent, 'Notice')
+    const up = query(rows[5], '.lc-event-tokens')
     assert.ok(up.className.includes('lc-up'))
     assert.equal(up.textContent, '+50')
-    assert.equal(query(rows[4], '.lc-event-at').textContent, 'T1 S1')
-    assert.equal(query(rows[4], '.lc-event-time').textContent, fmtTime(time))
+    assert.equal(query(rows[5], '.lc-event-at').textContent, 'T1 S1')
+    assert.equal(query(rows[5], '.lc-event-time').textContent, fmtTime(time))
+    await m.unmount()
+  })
+
+  test('workflow rows carry their own icons, kinds, and jump targets', async () => {
+    const events: ContextEventRecord[] = [
+      ev({ seq: 1, kind: 'goal-create', name: 'Ship it', turn: 1, step: 2 }),
+      ev({ seq: 2, kind: 'todo-add', count: 2, items: ['a', 'b'] }),
+      ev({ seq: 3, kind: 'ask', count: 1, items: ['Why?'] }),
+      ev({ seq: 4, kind: 'team-task-complete', name: 'Build' }),
+    ]
+    const focused: ContextEventRecord[] = []
+    const m = await mount(h(EventList, {
+      events,
+      onEventFocus: e => { focused.push(e) },
+      canEventFocus: e => e.kind !== 'ask',
+    }))
+    const rows = queryAll(m.container, '.lc-event')
+    assert.deepEqual(rows.map(row => query(row, '.lc-kind').textContent), ['Team task', 'Question', 'Todo', 'Goal'])
+    assert.ok(rows.every(row => query(row, '.lc-event-icon svg') instanceof SVGElement))
+    assert.equal(query(rows[0], '.lc-event-label').textContent, 'Team task done · Build')
+    assert.equal(query(rows[1], '.lc-event-label').textContent, 'Asked user · Why?')
+    assert.equal(queryAll(rows[1], '.lc-event-jump').length, 0)
+    assert.equal(query(rows[2], '.lc-event-label').textContent, 'Todo added · ×2')
+    assert.equal(query(rows[3], '.lc-event-at').textContent, 'T1 S2')
+    await click(query(rows[0], '.lc-event-jump'))
+    await click(query(rows[2], '.lc-event-jump'))
+    assert.deepEqual(focused.map(e => e.seq), [4, 2])
+    await m.unmount()
+  })
+
+  test('same-seq add and done rows both survive', async () => {
+    const events: ContextEventRecord[] = [
+      ev({ seq: 9, kind: 'todo-add', count: 1 }),
+      ev({ seq: 9, kind: 'todo-done', count: 1, items: ['a'], name: 'a' }),
+    ]
+    const m = await mount(h(EventList, { events }))
+    assert.equal(queryAll(m.container, '.lc-event').length, 2)
+    assert.ok(text(m.container).includes('Todo added'))
+    assert.ok(text(m.container).includes('Todo done · a'))
     await m.unmount()
   })
 

@@ -389,6 +389,43 @@ describe('ContextView — the events card\'s boundary rows', () => {
     assert.ok(query(prune.container, '.lc-bar[data-seq="4"]').className.includes('lc-bar-selected'), 'the pruned step is pinned')
     assert.equal(pickValue(prune), '4')
     await prune.unmount()
+
+    const spawnData = richTimeline({
+      events: [{ seq: 2, time: T0 + 1000, kind: 'agent', form: 'spawn', name: 'spec-review', turn: 1, step: 2 }],
+    })
+    const spawnView = makeView(new TestClientCtx())
+    const spawn = await mount(h(spawnView, { sessionId: 'sv-spawnjump', useProjection: projectionsFor(spawnData) }))
+    await click(eventLink(spawn.container, DICT_EN['ev.agentSpawn'] + ' · spec-review'))
+    assert.ok(query(spawn.container, '.lc-bar[data-seq="2"]').className.includes('lc-bar-selected'), 'the spawned step is pinned')
+    assert.equal(pickValue(spawn), '2')
+    await spawn.unmount()
+  })
+
+  test('workflow rows pin the step their change entered and stay plain past the log', async () => {
+    const cases: [string, Record<string, unknown>][] = [
+      ['Goal created · Ship it', { kind: 'goal-create', name: 'Ship it', count: 1 }],
+      ['Todo added · ×2', { kind: 'todo-add', count: 2 }],
+      ['Asked user · Which approach?', { kind: 'ask', count: 1, items: ['Which approach?'], name: 'Which approach?' }],
+      ['Team task done · Build', { kind: 'team-task-complete', name: 'Build', count: 1 }],
+    ]
+    for (const [label, fields] of cases) {
+      const View = makeView(new TestClientCtx())
+      const data = richTimeline({ events: [{ seq: 3, time: T0 + 2000, ...fields }] })
+      const m = await mount(h(View, { sessionId: 'sv-workflow-' + label, useProjection: projectionsFor(data) }))
+      await click(eventLink(m.container, label))
+      assert.ok(query(m.container, '.lc-bar[data-seq="4"]').className.includes('lc-bar-selected'), label)
+      assert.equal(pickValue(m), '4', label)
+      await m.unmount()
+    }
+
+    const View = makeView(new TestClientCtx())
+    const data = richTimeline({ events: [{ seq: 99, time: T0 + 9000, kind: 'goal-create', name: 'Ship it', count: 1 }] })
+    const past = await mount(h(View, { sessionId: 'sv-goalpast', useProjection: projectionsFor(data) }))
+    const row = queryAll(past.container, '.lc-event').find(r => text(r).includes('Goal created · Ship it'))
+    assert.ok(row !== undefined)
+    assert.equal(row.querySelector('.lc-event-jump'), null)
+    assert.equal(queryAll(past.container, '.lc-bar-selected').length, 0)
+    await past.unmount()
   })
 
   test('a click leaves the overview face and flips turn granularity to the exact step', async () => {
@@ -404,6 +441,37 @@ describe('ContextView — the events card\'s boundary rows', () => {
     assert.equal(queryAll(m.container, '.lc-bar').length, 3)
     assert.ok(query(m.container, '.lc-bar[data-seq="4"]').className.includes('lc-bar-selected'))
     await m.unmount()
+  })
+
+  test('an overview flag in turn mode lands on the event\'s exact step', async () => {
+    const data = timeline({
+      requests: [10, 20, 30].map((seq, i) => ({
+        seq, turn: 1, step: i + 1, time: T0 + seq * 10,
+        system: 10, tools: 0, user: 0, inject: 0, assistant: 10, tool: 0, total: 30 + i * 10,
+      })),
+      events: [{ seq: 15, time: T0 + 150, kind: 'compaction', count: 1, turn: 1, step: 2 }],
+    })
+    const originalRect = Element.prototype.getBoundingClientRect
+    const rect = vi.spyOn(Element.prototype, 'getBoundingClientRect').mockImplementation(function (this: Element) {
+      if (this.classList.contains('lc-chart')) {
+        return { top: 0, left: 0, right: 400, bottom: 148, width: 400, height: 148, x: 0, y: 0, toJSON: () => null } as DOMRect
+      }
+      return originalRect.call(this)
+    })
+    try {
+      const View = makeView(new TestClientCtx(), settingsWith({ defaultGranularity: 'turn' }))
+      const m = await mount(h(View, { sessionId: 'sv-turnjump', useProjection: projectionsFor(data) }))
+      await click(buttonByText(m.container, DICT_EN['trend.overview']))
+      await settle(20)
+      const head = queryAll(m.container, '.lc-ms-head')
+      assert.equal(head.length, 1)
+      await click(head[0])
+      assert.equal(pickValue(m), '20')
+      assert.ok(query(m.container, '.lc-bar[data-seq="20"]').className.includes('lc-bar-selected'))
+      await m.unmount()
+    } finally {
+      rect.mockRestore()
+    }
   })
 
   test('a compaction past the retained log has no landing step, so its row stays a plain label', async () => {

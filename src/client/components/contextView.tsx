@@ -70,6 +70,11 @@ const HOVER_LOCK_MS = 320
 const DNA_HOVER_DELAY = 220
 const DNA_LAZY_MIN = 512
 const NO_COUNTS: TimelineCounts = { turns: 0, steps: 0, injects: 0, compactions: 0, prunes: 0, skills: 0, events: 0, modelSwitches: 0 }
+const BOUNDARY_EVENT_KINDS: ReadonlySet<ContextEventRecord['kind']> = new Set([
+  'compaction', 'prune', 'agent',
+  'goal-create', 'goal-complete', 'todo-add', 'todo-done', 'ask',
+  'team-task-create', 'team-task-complete',
+])
 function revealCard(root: HTMLElement | null, selector: string): void {
   /* v8 ignore start */
   const card = root?.querySelector(selector) ?? null
@@ -276,15 +281,13 @@ export function makeContextView(
     useEffect(() => {
       if (source.detailState !== 'ready') return
       ensurePart('files')
+      ensurePart('events')
       const timer = setTimeout(() => { ensurePart('spans') }, 0)
       return () => { clearTimeout(timer) }
     }, [source.detailState, ensurePart])
     useEffect(() => {
       if (browserMounted) ensurePart('nodes')
     }, [browserMounted, ensurePart])
-    useEffect(() => {
-      if (belowFoldMounted) ensurePart('events')
-    }, [belowFoldMounted, ensurePart])
     useEffect(() => {
       if (cmdsMounted) ensurePart('commands')
     }, [cmdsMounted, ensurePart])
@@ -589,19 +592,26 @@ export function makeContextView(
       })
     }, [data])
     const canEventFocus = useCallback((ev: ContextEventRecord): boolean => (
-      ev.kind !== 'compaction' && ev.kind !== 'prune' ? true : boundaryIndex(requests, ev.seq) >= 0
+      BOUNDARY_EVENT_KINDS.has(ev.kind) ? boundaryIndex(requests, ev.seq) >= 0 : true
     ), [requests])
+    const revealStep = useCallback((seq: number): void => {
+      const idx = boundaryIndex(requests, seq)
+      /* v8 ignore next 1 */
+      if (idx < 0) return
+      const target = requests[idx].seq
+      setOverview(false)
+      setGranularity('step')
+      setSelectedSeq(target)
+      setFocusSeq(target)
+      revealCard(rootRef.current, '[data-lc-trend]')
+    }, [requests])
+    const pickMilestone = useCallback((seq: number): void => {
+      revealStep(seq)
+      revealBrowserIfOffscreen(rootRef.current)
+    }, [revealStep])
     const focusEvent = useCallback((ev: ContextEventRecord): void => {
-      if (ev.kind === 'compaction' || ev.kind === 'prune') {
-        const idx = boundaryIndex(requests, ev.seq)
-        /* v8 ignore next 1 */
-        if (idx < 0) return
-        const seq = requests[idx].seq
-        setOverview(false)
-        setGranularity('step')
-        setSelectedSeq(seq)
-        setFocusSeq(seq)
-        revealCard(rootRef.current, '[data-lc-trend]')
+      if (BOUNDARY_EVENT_KINDS.has(ev.kind)) {
+        revealStep(ev.seq)
         return
       }
       const node = nodeOfSeq.get(ev.seq)
@@ -609,7 +619,11 @@ export function makeContextView(
       if (step === null) return
       setNodeFocus({ step, key: 'n' + String(ev.seq), cat: node?.cat ?? 'inject' })
       revealCard(rootRef.current, '.lc-col-browser')
-    }, [requests, nodeOfSeq])
+    }, [requests, nodeOfSeq, revealStep])
+    const selectStep = useCallback((seq: number | null): void => {
+      setSelectedSeq(seq)
+      if (seq !== null) revealBrowserIfOffscreen(rootRef.current)
+    }, [])
 
     const markerOf = (req: RequestRecord): ContextEventRecord | undefined => {
       const i = displayRequests.indexOf(req)
@@ -647,7 +661,6 @@ export function makeContextView(
     )
     const trendBase = {
       requests: displayRequests,
-      markers,
       selectedSeq: pinnedReq ? pinnedReq.seq : null,
       hoveredSeq,
       activeTurn,
@@ -657,7 +670,7 @@ export function makeContextView(
       focusCat,
       durationCurve,
       hoverLock,
-      onSelect: setSelectedSeq,
+      onSelect: selectStep,
       onHover: handleHover,
       onHoverTurn: handleHoverTurn,
     }
@@ -744,13 +757,15 @@ export function makeContextView(
                   <TrendOverview
                     key={sessionId}
                     {...trendBase}
+                    events={events}
+                    onPickMilestone={pickMilestone}
                     onPickCat={revealCat}
                     onPickTurn={(turn) => {
                       setGranularity('turn')
                       let seq: number | null = null
                       for (const req of displayRequests) if ((req.turn ?? 0) === turn) seq = req.seq
                       /* v8 ignore next 1 */
-                      if (seq !== null) setSelectedSeq(seq)
+                      if (seq !== null) selectStep(seq)
                     }}
                   />
                 )
@@ -758,6 +773,7 @@ export function makeContextView(
                   <TrendChart
                     key={sessionId}
                     {...trendBase}
+                    events={events}
                     focusTurn={focusTurn}
                     focusSeq={focusSeq}
                     adaptive={adaptive}

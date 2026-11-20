@@ -124,7 +124,7 @@ Une barre empilée à six couleurs comparée à la fenêtre complète du modèle
 Une barre empilée par requête au modèle, plus précise qu’une barre par message, pour observer la croissance de la fenêtre tour après tour :
 
 - **✨ Résumé d’étape** — trois lignes en langage clair sous le graphique : **Utilisateur** rappelle le message qui a ouvert le tour, **Entrée** énumère ce qui vient d’entrer, généralement les résultats des outils précédents, et **Réponse** montre la réponse et/ou les outils appelés. Cliquez sur une ligne pour ouvrir ce message précis dans le navigateur de contexte.
-- **✂ signale les événements** — les compactions et les élagages sont rattachés à la barre où ils ont eu lieu, afin que les baisses s’expliquent d’elles-mêmes.
+- **Drapeaux d’événements** — compaction, élagage, injection de compétence, création de sous-agent, interaction entre agents et changement de modèle, création/atteinte d’objectif et de tâche d’équipe, ajout/fin de tâche, questions à l’utilisateur, ainsi que l’étape la plus longue et le plus fort saut de contexte, arborent chacun leur icône sur l’étape concernée ; un mât en pointillés descend jusqu’à la ligne de base, survolez pour lire, cliquez pour ouvrir l’étape. La vue d’ensemble regroupe les événements proches en un drapeau agrégé qui ramène directement à son étape.
 - **Lisez-le à votre façon** — granularité **Étape / Tour**, **Total** pour la composition cumulée ou **Delta** pour la variation signée de chaque requête, avec défilement horizontal sur toute la session. En mode Delta, la croissance s’accumule au-dessus de la ligne de base et une compaction plonge en dessous :
 
 ![Tendance du contexte en mode Delta](https://raw.githubusercontent.com/bowenliang123/dsh-context/main/docs/history-delta.png)

@@ -1,4 +1,5 @@
-import { TALLY_NAME_CHARS_MAX, type AgentAlias, type TimelineState } from './foldState'
+import { pushEvent, TALLY_NAME_CHARS_MAX, type AgentAlias, type TimelineState } from './foldState'
+import type { ContextEventRecord } from '../shared/types'
 import type { ContentBlock, MessageSource } from './pricing'
 
 export interface MessageLike {
@@ -34,7 +35,7 @@ const AGENT_SOURCE_KINDS: ReadonlySet<string> = new Set(['agent-message', 'subag
 const RELAY_AGENT = /^Agent (\S+) sent a message:/
 const SETTLED_AGENT = /^Background subagent (\S+)/
 
-function agentNameOf(value: unknown): string | undefined {
+export function agentNameOf(value: unknown): string | undefined {
   if (typeof value !== 'string') return undefined
   const trimmed = value.trim()
   if (trimmed === '') return undefined
@@ -140,4 +141,33 @@ export function applyAgentAliasEvent(
   if (fact === null) return undefined
   const st = { ...state }
   return noteAgentAlias(st, fact.id, fact.alias) ? st : undefined
+}
+
+export function applyCatalogEvent(
+  state: TimelineState,
+  type: string,
+  seq: number,
+  time: number,
+  data: Record<string, unknown> | undefined,
+): TimelineState | undefined {
+  const applied = applyAgentAliasEvent(state, type, data)
+  if (type !== 'subagent/catalog') return applied
+  const label = agentNameOf(data?.label)
+  const name = agentNameOf(data?.name) ?? label
+  if (name === undefined) return applied
+  const base = applied ?? state
+  const mode = data?.mode
+  const st: TimelineState = { ...base, events: [...base.events] }
+  const record: ContextEventRecord = {
+    seq,
+    time,
+    kind: 'agent',
+    form: 'spawn',
+    name,
+    ...(label !== undefined && label !== name ? { detail: label } : {}),
+    ...(mode === 'one-shot' || mode === 'continuable' || mode === 'external' || mode === 'unknown' ? { sub: mode } : {}),
+  }
+  pushEvent(st, record)
+  st.detailRev = (st.detailRev ?? 0) + 1
+  return st
 }

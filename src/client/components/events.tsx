@@ -2,6 +2,8 @@ import { useEffect, useLayoutEffect, useRef, type ReactElement } from 'react'
 import type { ContextEventRecord } from '../../shared/types'
 import { IconBranch, IconPlus } from '../primitives'
 import { formLabelOf, modeLabelOf } from '../labels'
+import { MilestoneIcon } from './milestoneIcons'
+import type { MilestoneKind } from './trendMilestones'
 import type { Translate } from '../i18n'
 import type { DetailState } from '../timelineSource'
 import type { ViewKit } from '../viewkit'
@@ -20,6 +22,16 @@ export function eventFilterLabelOf(t: Translate, filter: EventKindFilter): strin
 }
 
 const EVENT_ICONS: Record<string, string> = { compaction: '✂', prune: '✂', mode: '⇄' }
+
+const WORKFLOW_ICON_KINDS: Partial<Record<ContextEventRecord['kind'], MilestoneKind>> = {
+  'goal-create': 'goal-create',
+  'goal-complete': 'goal-complete',
+  'todo-add': 'todo-add',
+  'todo-done': 'todo-done',
+  ask: 'ask',
+  'team-task-create': 'team-task-create',
+  'team-task-complete': 'team-task-complete',
+}
 
 export interface EventListProps {
   events: ContextEventRecord[]
@@ -58,6 +70,31 @@ export function makeEventText(t: Translate): {
     if (ev.kind === 'prune') return { lead: '', tail: t('ev.prune') }
     if (ev.kind === 'model') return { lead: '', tail: t('ev.model', { a: ev.from || '?', b: ev.to || '?' }) }
     if (ev.kind === 'mode') return { lead: '', tail: modeLabelOf(t, ev.name) }
+    if (ev.kind === 'agent') {
+      return {
+        lead: t('ev.agentSpawn'),
+        tail: (ev.name ? ' · ' + ev.name : '') + (ev.detail ? ' · ' + ev.detail : ''),
+      }
+    }
+    if (ev.kind === 'goal-create' || ev.kind === 'goal-complete' || ev.kind === 'team-task-complete') {
+      return { lead: t('trend.ms.' + ev.kind), tail: ev.name ? ' · ' + ev.name : '' }
+    }
+    if (ev.kind === 'todo-add') {
+      const count = ev.count ?? 1
+      return { lead: t('trend.ms.todo-add'), tail: count > 1 ? ' · ×' + String(count) : '' }
+    }
+    if (ev.kind === 'team-task-create') return { lead: t('trend.ms.team-task-create'), tail: '' }
+    if (ev.kind === 'todo-done' || ev.kind === 'ask') {
+      const items = ev.items ?? []
+      const count = ev.count ?? items.length
+      const missing = Math.max(0, count - items.length)
+      return {
+        lead: t('trend.ms.' + ev.kind),
+        tail: (count > 1 ? ' · ×' + String(count) : '')
+          + (items.length > 0 ? ' · ' + items.join(', ') : '')
+          + (missing > 0 ? ' +' + String(missing) : ''),
+      }
+    }
     if (ev.sub === 'skill') return { lead: t('ev.skillLead'), tail: ' · ' + (ev.name || '?') }
     const agent = agentOf(ev)
     return {
@@ -146,17 +183,21 @@ export function makeEventList(kit: ViewKit): (props: EventListProps) => ReactEle
         {sorted.map((ev) => {
           const { lead, tail } = eventLabelParts(ev)
           const at = eventAt(ev)
-          const glyph = ev.kind === 'inject' ? <IconPlus />
-            : ev.kind === 'model' ? <IconBranch />
-              : EVENT_ICONS[ev.kind] || '•'
-          const jumpable = ev.kind === 'inject' || ev.kind === 'compaction' || ev.kind === 'prune'
+          const workflowIcon = WORKFLOW_ICON_KINDS[ev.kind]
+          const glyph = workflowIcon !== undefined ? <MilestoneIcon kind={workflowIcon} />
+            : ev.kind === 'agent' ? <MilestoneIcon kind="spawn" />
+              : ev.kind === 'inject' ? <IconPlus />
+                : ev.kind === 'model' ? <IconBranch />
+                  : EVENT_ICONS[ev.kind] || '•'
+          const jumpable = workflowIcon !== undefined
+            || ev.kind === 'inject' || ev.kind === 'compaction' || ev.kind === 'prune' || ev.kind === 'agent'
           const reveal = jumpable && (props.canEventFocus === undefined || props.canEventFocus(ev))
             ? props.onEventFocus
             : undefined
           const label = lead === '' ? tail : <><b>{lead}</b>{tail}</>
           const tip = eventTipOf(ev)
           return (
-            <div key={ev.seq} className="lc-event @max-[380px]/lc-card:flex-wrap">
+            <div key={ev.kind + ':' + String(ev.seq)} className="lc-event @max-[380px]/lc-card:flex-wrap">
               <span className={'lc-event-icon lc-event-' + ev.kind}>{glyph}</span>
               <span className={'lc-kind lc-kind-' + ev.kind}>{t('kind.' + ev.kind)}</span>
               {reveal !== undefined ? (

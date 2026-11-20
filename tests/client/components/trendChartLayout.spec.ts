@@ -610,22 +610,22 @@ describe('TrendChart category focus (the browser open category)', () => {
 
 })
 
-describe('TrendChart markers', () => {
-  test('compaction/prune markers render the ✂ glyph with a positioned or bare title', async () => {
+describe('TrendChart milestones', () => {
+  test('compaction and prune become boundary flags on the step they land on', async () => {
     const reqs = [req(1, { turn: 1, step: 0 }), req(2, { turn: 1, step: 1 }), req(3, { turn: 2, step: 0 })]
-    const compaction: ContextEventRecord = { seq: 2, time: 1700000000000, kind: 'compaction', count: 5, fromTurn: 1, fromStep: 0, turn: 1, step: 1 }
-    const prune: ContextEventRecord = { seq: 3, time: 1700000060000, kind: 'prune' }
-    const markers = [undefined, compaction, prune]
+    const compaction: ContextEventRecord = { seq: 2, time: 1700000000000, kind: 'compaction', count: 5, tokens: 1200, fromTurn: 1, fromStep: 0, turn: 1, step: 1 }
+    const prune: ContextEventRecord = { seq: 3, time: 1700000060000, kind: 'prune', tokens: 400 }
 
-    const m = await mount(h(TrendChart, propsOf(reqs, { markers })))
-    const glyph = queryAll(m.container, '.lc-bar-marker')
-    assert.equal(glyph.length, 2)
-    assert.equal(glyph[0].textContent, '✂')
-    assert.equal(
-      glyph[0].getAttribute('title'),
-      '✂ ' + kit.t('events.range', { t: 1, a: 0, b: 1 }) + ' — ' + kit.t('ev.compaction', { n: 5 }),
-    )
-    assert.equal(glyph[1].getAttribute('title'), '✂ ' + kit.t('ev.prune'))
+    const m = await mount(h(TrendChart, propsOf(reqs, { events: [compaction, prune] })))
+    const flags = queryAll(m.container, '.lc-ms-flag')
+    assert.deepEqual(flags.map(f => f.getAttribute('data-kind')), ['compaction', 'prune'])
+    const masts = queryAll(m.container, '.lc-ms')
+    assert.equal(masts.length, 2)
+    assert.equal(masts[0].getAttribute('data-anchor'), 'boundary')
+    assert.equal(masts[0].getAttribute('data-target-idx'), '1')
+    assert.equal(masts[1].getAttribute('data-target-idx'), '2')
+    assert.ok(query(masts[0], '.lc-ms-pole'))
+    assert.equal(queryAll(m.container, '.lc-bar-marker').length, 0, 'the old in-bar scissors moved into the flag band')
     await m.unmount()
   })
 })

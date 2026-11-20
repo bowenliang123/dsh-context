@@ -89,7 +89,7 @@ function propsOf(requests: RequestRecord[], over: Partial<TrendChartProps> = {})
   const { handlers } = makeSpies()
   return {
     requests,
-    markers: requests.map(() => undefined),
+    events: [],
     selectedSeq: null,
     hoveredSeq: null,
     activeTurn: null,

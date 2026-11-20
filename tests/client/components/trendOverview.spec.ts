@@ -16,7 +16,7 @@ const TrendOverview = makeTrendOverview(kit)
 function propsOf(requests: RequestRecord[], over: Partial<TrendOverviewProps> = {}): TrendOverviewProps {
   return {
     requests,
-    markers: requests.map(() => undefined),
+    events: [],
     selectedSeq: null,
     hoveredSeq: null,
     activeTurn: null,
@@ -32,7 +32,7 @@ function propsOf(requests: RequestRecord[], over: Partial<TrendOverviewProps> = 
 }
 
 function stubSurfaceRect(el: HTMLElement, width = 400): void {
-  el.getBoundingClientRect = () => ({ top: 0, left: 0, right: width, bottom: 130, width, height: 130, x: 0, y: 0, toJSON: () => null }) as DOMRect
+  el.getBoundingClientRect = () => ({ top: 0, left: 0, right: width, bottom: 148, width, height: 148, x: 0, y: 0, toJSON: () => null }) as DOMRect
 }
 
 async function moveXY(el: HTMLElement, clientX: number, clientY: number): Promise<void> {
@@ -279,25 +279,6 @@ describe('TrendOverview flags and markers', () => {
     await absoluteMount.unmount()
   })
 
-  test('markers carry the positioned scissors with the event title', async () => {
-    const reqs = steps(3, 2)
-    const compaction: ContextEventRecord = { seq: 2, time: 1700000000000, kind: 'compaction', count: 5, fromTurn: 1, fromStep: 0, turn: 1, step: 1 }
-    const prune: ContextEventRecord = { seq: 3, time: 1700000060000, kind: 'prune' }
-    const markers = [undefined, compaction, prune]
-    const m = await mount(h(TrendOverview, propsOf(reqs, { markers })))
-    const glyphs = queryAll(m.container, '.lc-bar-marker')
-    assert.equal(glyphs.length, 2)
-    assert.equal(glyphs[0].textContent, '✂')
-    assert.equal(glyphs[0].style.left, '50%')
-    assert.equal(
-      glyphs[0].getAttribute('title'),
-      '✂ ' + kit.t('events.range', { t: 1, a: 0, b: 1 }) + ' — ' + kit.t('ev.compaction', { n: 5 }),
-    )
-    assert.equal(glyphs[1].style.left, '100%')
-    assert.equal(glyphs[1].getAttribute('title'), '✂ ' + kit.t('ev.prune'))
-    await m.unmount()
-  })
-
 })
 
 describe('TrendOverview pointer interaction', () => {
@@ -345,11 +326,11 @@ describe('TrendOverview pointer interaction', () => {
     const banded = await mount(h(TrendOverview, propsOf(reqs, { onHover: (s) => { band.hover.push(s) } })))
     const bandSurface = query(banded.container, '.lc-chart')
     stubSurfaceRect(bandSurface)
-    await moveXY(bandSurface, 200, 30)
+    await moveXY(bandSurface, 200, 48)
     assert.equal(bandSurface.getAttribute('data-catdim'), 'tool', 'the band under the pointer lights its whole category')
-    await moveXY(bandSurface, 200, 120)
+    await moveXY(bandSurface, 200, 138)
     assert.equal(bandSurface.getAttribute('data-catdim'), 'system')
-    await moveXY(bandSurface, 200, 56)
+    await moveXY(bandSurface, 200, 74)
     assert.equal(bandSurface.getAttribute('data-catdim'), 'inject', 'the zero-width skill band is never hit-tested; its neighbour answers')
     assert.deepEqual(band.hover, [3])
     await unhover(bandSurface)
@@ -381,7 +362,7 @@ describe('TrendOverview pointer interaction', () => {
     })))
     const surface = query(m.container, '.lc-chart')
     stubSurfaceRect(surface)
-    await clickXY(surface, 200, 30)
+    await clickXY(surface, 200, 48)
     assert.deepEqual(spies.cat, ['tool:3'])
     assert.deepEqual(spies.select, [3])
     await clickXY(surface, 200, 0)
@@ -410,7 +391,7 @@ describe('TrendOverview pointer interaction', () => {
     stubSurfaceRect(interpolatedSurface)
     await moveXY(interpolatedSurface, 100, 28)
     assert.equal(interpolatedSurface.hasAttribute('data-catdim'), false)
-    await moveXY(interpolatedSurface, 300, 78)
+    await moveXY(interpolatedSurface, 300, 96)
     assert.equal(interpolatedSurface.getAttribute('data-catdim'), 'user')
     await interpolated.unmount()
   })
@@ -419,11 +400,11 @@ describe('TrendOverview pointer interaction', () => {
     const m = await mount(h(TrendOverview, propsOf([deltaBase, deltaGrown, deltaBase], { mode: 'delta' })))
     const surface = query(m.container, '.lc-chart')
     stubSurfaceRect(surface)
-    await moveXY(surface, 200, 22)
+    await moveXY(surface, 200, 40)
     assert.equal(surface.getAttribute('data-catdim'), 'tool')
-    await moveXY(surface, 200, 128)
+    await moveXY(surface, 200, 146)
     assert.equal(surface.getAttribute('data-catdim'), 'system')
-    await moveXY(surface, 200, 70)
+    await moveXY(surface, 200, 88)
     assert.equal(surface.getAttribute('data-catdim'), 'inject')
     await m.unmount()
   })
@@ -433,13 +414,13 @@ describe('TrendOverview pointer interaction', () => {
     const surface = query(m.container, '.lc-chart')
     stubSurfaceRect(surface)
     assert.equal(queryAll(m.container, '.lc-fit-wash').length, 2)
-    await moveXY(surface, 200, 30)
+    await moveXY(surface, 200, 48)
     assert.equal(queryAll(m.container, '.lc-fit-wash').length, 0)
     await moveXY(surface, 200, 0)
     assert.equal(queryAll(m.container, '.lc-fit-wash').length, 2)
     assert.equal(surface.hasAttribute('data-catdim'), false)
     await m.update(h(TrendOverview, propsOf(reqs, { activeTurn: 1, focusCat: 'tool' })))
-    await moveXY(surface, 200, 30)
+    await moveXY(surface, 200, 48)
     assert.equal(queryAll(m.container, '.lc-fit-wash').length, 0)
     assert.equal(surface.getAttribute('data-catdim'), 'tool')
     await m.unmount()

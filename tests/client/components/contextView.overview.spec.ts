@@ -88,9 +88,9 @@ describe('ContextView — overview face', () => {
     const m = await mountRich('sv-overview-band-open')
     await click(buttonByText(m.container, DICT_EN['trend.overview']))
     const surface = query(m.container, '.lc-chart')
-    pinRect(surface, 400, 130)
+    pinRect(surface, 400, 148)
     await act(async () => {
-      surface.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, clientX: 200, clientY: 60 }))
+      surface.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, clientX: 200, clientY: 78 }))
     })
     await flush()
     const open = queryAll(m.container, '.lc-br-cat-row.lc-br-cat-open')

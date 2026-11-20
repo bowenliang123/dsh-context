@@ -124,7 +124,7 @@ A six-color stacked bar against the model's full window (the two hatched masks a
 One stacked bar per model request — finer than per-message — so you watch the window grow turn by turn:
 
 - **✨ Step brief** — three plain-language rows under the chart: **User** recalls the message that opened the turn, **In** lists what newly entered (usually the previous tool results), **Response** shows the reply and/or tools called. Click a row to open that exact message in the Context browser.
-- **✂ marks the events** — compactions and prunes are pinned to the bar where they happened, so the drops explain themselves.
+- **Event flags** — compaction, pruning, skill injection, subagent creation, agent interaction and model switches, goal and team-task create/complete, todo add/done, user questions, plus the longest step and the biggest context jump, each get their own icon flag on the step they belong to; a dashed pole reaches the baseline, hover for the reading, click to open the step. Overview folds nearby events into one aggregate flag that jumps straight back to its step.
 - **Read it your way** — **Step / Turn** granularity, **Total** (cumulative makeup) or **Delta** (each request's signed change), and sideways scrolling through the whole session. In Delta mode, growth piles up above the baseline and a compaction dives below it:
 
 ![Context Trend in Delta mode](https://raw.githubusercontent.com/bowenliang123/dsh-context/main/docs/history-delta.png)

@@ -483,7 +483,9 @@ export interface RequestRecord extends SlimRequestRecord {
 export interface ContextEventRecord {
   seq: number
   time: number
-  kind: 'compaction' | 'prune' | 'inject' | 'model' | 'mode'
+  kind: 'compaction' | 'prune' | 'inject' | 'model' | 'mode' | 'agent'
+    | 'goal-create' | 'goal-complete' | 'todo-add' | 'todo-done' | 'ask'
+    | 'team-task-create' | 'team-task-complete'
   form?: string
   tokens?: number
   grossTokens?: number
@@ -492,6 +494,7 @@ export interface ContextEventRecord {
   name?: string
   agent?: string
   detail?: string
+  items?: string[]
   from?: string
   to?: string
   fromTurn?: number

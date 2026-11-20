@@ -34,7 +34,8 @@ import {
 import { TALLY_NAME_CHARS_MAX, TALLY_NAMES_MAX, countCompaction, countInject, countModelSwitch, countStep, countTurnRuns, noteCommandCall, noteSkillName, noteTurn, pushEvent, trimState } from './foldState'
 import { slimSurfaceNode } from './foldState'
 import type { CommandStateRecord, TimelineEvent, TimelineState } from './foldState'
-import { agentOfInjection, applyAgentAliasEvent, messageOf, skillNameOf, type MessageLike } from './foldInjections'
+import { agentOfInjection, applyCatalogEvent, messageOf, skillNameOf, type MessageLike } from './foldInjections'
+import { applyGoalChange, applyTeamTask, applyTodoWrite, askRecordOf } from './foldWorkflow'
 import { accumulateCost, addDecodeSpan, bumpToolTotals, carveWindows, durOf, ensureTiming, idleGapWindows, mergeWindows, tokenCountOf } from './foldMetering'
 import type { UsageLike } from './foldMetering'
 
@@ -401,7 +402,10 @@ function applyTimelineEvent(state: TimelineState, event: TimelineEvent, bounds: 
       case 'tool/call': {
         if (data && typeof data.callId === 'string' && typeof data.name === 'string') {
           const cmdTool = commandTool(data.name)
-          const s = ensure(cmdTool === null ? ['callNames'] : ['callNames', 'commands'])
+          const ask = data.name === 'ask_user_question' ? askRecordOf(event.seq, event.time, data) : undefined
+          const keys: CloneKey[] = cmdTool === null ? ['callNames'] : ['callNames', 'commands']
+          if (ask !== undefined) keys.push('events')
+          const s = ensure(keys)
           const argsRaw = bounds.headOnly === true || !rawArgsNeeded(data.name) ? undefined : argsRawOf(data.arguments)
           if (data.callId !== '__proto__') {
             s.callNames[data.callId] = {
@@ -427,6 +431,10 @@ function applyTimelineEvent(state: TimelineState, event: TimelineEvent, bounds: 
               if (parsed.background === true) bumpBg(s)
               bumpDetailRev(s)
             }
+          }
+          if (ask !== undefined) {
+            pushEvent(s, ask)
+            bumpDetailRev(s)
           }
         }
         break
@@ -677,8 +685,8 @@ function applyTimelineEvent(state: TimelineState, event: TimelineEvent, bounds: 
       }
       case 'subagent/catalog':
       case 'team/member': {
-        const applied = applyAgentAliasEvent(state, event.type, data)
-        if (applied !== undefined) st = applied
+        const next = applyCatalogEvent(state, event.type, event.seq, event.time, data)
+        if (next !== undefined) st = next
         break
       }
       case 'user/message':
@@ -948,6 +956,21 @@ function applyTimelineEvent(state: TimelineState, event: TimelineEvent, bounds: 
           pushEvent(s, { seq: event.seq, time: event.time, kind: 'mode', name: data.active ? 'plan.on' : 'plan.off' })
           bumpDetailRev(s)
         }
+        break
+      }
+      case 'goal/change': {
+        const next = applyGoalChange(state, event.seq, event.time, data)
+        if (next !== undefined) st = next
+        break
+      }
+      case 'todo/write': {
+        const next = applyTodoWrite(state, event.seq, event.time, data)
+        if (next !== undefined) st = next
+        break
+      }
+      case 'team/task': {
+        const next = applyTeamTask(state, event.seq, event.time, data)
+        if (next !== undefined) st = next
         break
       }
       case 'compaction/summary':

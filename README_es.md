@@ -124,7 +124,7 @@ Una barra apilada de seis colores sobre la ventana completa del modelo (las dos 
 Una barra apilada por solicitud al modelo, más detallada que por mensaje, para ver crecer la ventana turno a turno:
 
 - **✨ Resumen del paso**: tres filas en lenguaje sencillo bajo el gráfico: **Usuario** recupera el mensaje que abrió el turno, **Entrada** enumera lo que acaba de entrar, normalmente los resultados de herramientas anteriores, y **Respuesta** muestra la respuesta o las herramientas llamadas. Haz clic en una fila para abrir ese mensaje exacto en el Explorador de contexto.
-- **✂ señala los eventos**: las compactaciones y podas se fijan a la barra donde ocurrieron, de modo que las caídas se explican por sí solas.
+- **Banderas de eventos**: compactación, poda, inyección de habilidades, creación de subagentes, interacción entre agentes y cambios de modelo, creación/finalización de objetivos y tareas de equipo, alta/finalización de tareas, preguntas al usuario, además del paso más largo y el mayor salto de contexto, lucen su propio icono en el paso correspondiente; un mástil discontinuo llega hasta la línea base, pasa el cursor para leerlo y haz clic para abrir el paso. En la vista general, los eventos cercanos se agrupan en una bandera agregada que vuelve directo a su paso.
 - **Léelo como prefieras**: granularidad **Paso / Turno**, **Total** (composición acumulada) o **Delta** (cambio con signo de cada solicitud), y desplazamiento lateral por toda la sesión. En modo Delta, el crecimiento se apila sobre la línea base y una compactación cae por debajo:
 
 ![Tendencia del contexto en modo Delta](https://raw.githubusercontent.com/bowenliang123/dsh-context/main/docs/history-delta.png)

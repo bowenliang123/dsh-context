@@ -43,7 +43,31 @@ describe('injection agent labels', () => {
       catalogEvent(1, 'sid-1', { mode: 'continuable', label: 'Investigate flaky test' }),
       injected(2, { kind: 'coordinator', form: 'relay', senderSessionId: 'sid-1' }, 'Agent sid-1 sent a message: hi'),
     ]).state
-    assert.ok(!('agent' in legacy.events[0]))
+    assert.ok(!('agent' in legacy.events.at(-1)!))
+  })
+
+  test('catalog facts become agent-spawn events with name, label, and mode', () => {
+    const named = driveTimeline([
+      catalogEvent(1, 'sid-1', { mode: 'continuable', name: 'spec-review', label: 'Spec review of the change' }),
+    ]).state.events[0]
+    assert.deepEqual(
+      { kind: named.kind, form: named.form, name: named.name, detail: named.detail, sub: named.sub },
+      { kind: 'agent', form: 'spawn', name: 'spec-review', detail: 'Spec review of the change', sub: 'continuable' },
+    )
+    const labelOnly = driveTimeline([
+      catalogEvent(1, 'sid-1', { mode: 'one-shot', label: 'Quick check' }),
+    ]).state.events[0]
+    assert.equal(labelOnly.name, 'Quick check')
+    assert.ok(!('detail' in labelOnly))
+    assert.equal(labelOnly.sub, 'one-shot')
+    const unknownMode = driveTimeline([
+      catalogEvent(1, 'sid-1', { mode: 'unknown', name: 'explorer' }),
+    ]).state.events[0]
+    assert.equal(unknownMode.sub, 'unknown')
+    const badMode = driveTimeline([
+      catalogEvent(1, 'sid-1', { mode: 'bogus', name: 'explorer' }),
+    ]).state.events[0]
+    assert.ok(!('sub' in badMode))
   })
 
   test('settled notices prefer the text name, fall back to the summary, or stay unnamed', () => {
@@ -90,28 +114,28 @@ describe('injection agent labels', () => {
       memberEvent(2, 'sid-1', 'worker'),
       injected(3, { kind: 'agent-message', form: 'relay', senderSessionId: 'sid-1' }, 'Agent sid-1 sent a message: hi'),
     ]).state
-    assert.equal(named.events[0].agent, 'explorer')
+    assert.equal(named.events.at(-1)?.agent, 'explorer')
     const nameOnly = driveTimeline([
       catalogEvent(1, 'sid-3', { mode: 'continuable', name: 'explorer' }),
       injected(2, { kind: 'agent-message', form: 'relay', senderSessionId: 'sid-3' }, 'hi'),
     ]).state
-    assert.equal(nameOnly.events[0].agent, 'explorer')
+    assert.equal(nameOnly.events.at(-1)?.agent, 'explorer')
     const team = driveTimeline([
       catalogEvent(1, 'sid-1', { mode: 'continuable', label: 'Investigate flaky test' }),
       memberEvent(2, 'sid-1', 'worker'),
       injected(3, { kind: 'agent-message', form: 'relay', senderSessionId: 'sid-1' }, 'Agent sid-1 sent a message: hi'),
     ]).state
-    assert.equal(team.events[0].agent, 'worker')
+    assert.equal(team.events.at(-1)?.agent, 'worker')
     const label = driveTimeline([
       catalogEvent(1, 'sid-1', { mode: 'continuable', label: 'Investigate flaky test' }),
       injected(2, { kind: 'agent-message', form: 'relay', senderSessionId: 'sid-1' }, 'hi'),
     ]).state
-    assert.equal(label.events[0].agent, 'Investigate flaky test')
+    assert.equal(label.events.at(-1)?.agent, 'Investigate flaky test')
     const other = driveTimeline([
       catalogEvent(1, 'sid-1', { mode: 'continuable', label: 'Investigate flaky test' }),
       injected(2, { kind: 'agent-message', form: 'relay', senderSessionId: 'sid-2' }, 'Agent sid-2 sent a message: hi'),
     ]).state
-    assert.ok(!('agent' in other.events[0]))
+    assert.ok(!('agent' in other.events.at(-1)!))
   })
 
   test('alias lookup never reads inherited properties, while own entries still resolve', () => {
@@ -119,12 +143,12 @@ describe('injection agent labels', () => {
       catalogEvent(1, 'sid-1', { mode: 'continuable', label: 'x' }),
       injected(2, { kind: 'agent-message', form: 'relay', senderSessionId: 'toString' }, 'Agent toString sent a message: hi'),
     ]).state
-    assert.ok(!('agent' in inherited.events[0]))
+    assert.ok(!('agent' in inherited.events.at(-1)!))
     const own = driveTimeline([
       catalogEvent(1, 'toString', { mode: 'continuable', label: 'worker' }),
       injected(2, { kind: 'agent-message', form: 'relay', senderSessionId: 'toString' }, 'Agent toString sent a message: hi'),
     ]).state
-    assert.equal(own.events[0].agent, 'worker')
+    assert.equal(own.events.at(-1)?.agent, 'worker')
   })
 
   test('team messages use the assigned name, or the alias when it is absent or id-shaped', () => {
@@ -136,12 +160,12 @@ describe('injection agent labels', () => {
       catalogEvent(1, 'sid-2', { mode: 'continuable', label: 'Investigate flaky test' }),
       injected(2, { kind: 'team-message', senderId: 'sid-2' }),
     ]).state
-    assert.equal(fromAlias.events[0].agent, 'Investigate flaky test')
+    assert.equal(fromAlias.events.at(-1)?.agent, 'Investigate flaky test')
     const idShaped = driveTimeline([
       catalogEvent(1, 'sid-2', { mode: 'continuable', label: 'Investigate flaky test' }),
       injected(2, { kind: 'team-message', senderId: 'sid-2', senderName: 'sid-2' }),
     ]).state
-    assert.equal(idShaped.events[0].agent, 'Investigate flaky test')
+    assert.equal(idShaped.events.at(-1)?.agent, 'Investigate flaky test')
     const anonymous = driveTimeline([
       injected(1, { kind: 'team-message' }),
     ]).state
@@ -203,6 +227,7 @@ describe('injection agent labels', () => {
     const head = driveTimeline([catalogEvent(1, 'sid', { mode: 'continuable', label: 'x' })], undefined, true).state
     assert.equal(head.agents, undefined)
     assert.equal(head.events.length, 0)
+    assert.equal(head.totals?.events, 1)
   })
 
   test('overlong names are bounded', () => {

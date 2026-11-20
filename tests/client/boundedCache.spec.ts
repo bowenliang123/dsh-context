@@ -785,7 +785,7 @@ const DYNAMIC_PREFIXES = [
   'files.kind.', 'files.sort.', 'fleet.comms.detail.', 'fleet.comms.kind.', 'fleet.kind.',
   'fleet.pulse.mode.', 'fleet.settled.', 'fleet.settledShort.', 'fleet.task.', 'form.',
   'kind.', 'ov.cover.', 'ov.date.wd.', 'ov.heat.metric.', 'ov.heat.mon.', 'ov.list.sort.',
-  'ov.range.', 'tool.sort.',
+  'ov.range.', 'tool.sort.', 'trend.ms.',
 ]
 
 function sourceText(): string {
