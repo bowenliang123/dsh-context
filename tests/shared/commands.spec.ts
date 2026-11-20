@@ -204,7 +204,7 @@ describe('display shaping', () => {
     assert.equal(headProgramOf('export FOO=bar'), 'shell', 'a declaration alone has no program')
     assert.equal(headProgramOf('export FOO'), 'shell', 'a declared name alone has no program')
     assert.equal(headProgramOf('export -p'), 'shell', 'a declaration flag alone has no program')
-    assert.equal(headProgramOf('URL=$(cat .tmp/dsh-web-url.txt); chrome-devtools new_page "$URL" --timeout 30'), 'chrome-devtools')
+    assert.equal(headProgramOf('URL=$(sed -n \'s/^url: //p\' .tmp/dsh-web-url.txt); chrome-devtools new_page "$URL" --timeout 30'), 'chrome-devtools')
     assert.equal(headProgramOf('CH="/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"; "$CH" --headless'), 'Google Chrome')
     assert.equal(headProgramOf('CH="/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"; "${CH}" --headless'), 'Google Chrome')
     assert.equal(headProgramOf('B=/usr/bin; "$B/python3" --version'), 'python3', 'a prefixed variable resolves')

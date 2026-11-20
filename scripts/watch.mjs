@@ -3,7 +3,7 @@ import { existsSync } from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { ancestorPids, findPids, supervise, terminatePids } from './proc.mjs'
-import { cleanStateOnSignal, removeState, writeState } from './tmpState.mjs'
+import { cleanStateOnSignal, removeState, stateHeader, writeState } from './tmpState.mjs'
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
 const tsdownEntry = path.join(root, 'node_modules', 'tsdown', 'dist', 'run.mjs')
@@ -36,13 +36,14 @@ removeState(stateName)
 
 const WATCH_HEAP_MB = 192
 const nodeOptions = `--expose-gc --max-old-space-size=${WATCH_HEAP_MB}${process.env.NODE_OPTIONS ? ` ${process.env.NODE_OPTIONS}` : ''}`
+const startedAt = new Date()
 const child = spawn(process.execPath, [tsdownEntry, '--watch'], {
   cwd: root,
   stdio: 'inherit',
   env: { ...process.env, DSH_CTX_WATCH: '1', NODE_OPTIONS: nodeOptions },
 })
 const watcherPid = child.pid
-if (watcherPid !== undefined) writeState(stateName, `${watcherPid}\n`)
+if (watcherPid !== undefined) writeState(stateName, stateHeader(watcherPid, startedAt))
 const cleanup = cleanStateOnSignal(stateName, watcherPid)
 child.on('exit', cleanup)
 supervise(child)

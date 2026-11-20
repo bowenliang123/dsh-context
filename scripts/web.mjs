@@ -1,6 +1,6 @@
 import { spawn } from 'node:child_process'
 import { ancestorPids, findPids, supervise, terminatePids } from './proc.mjs'
-import { cleanStateOnSignal, removeState, writeState } from './tmpState.mjs'
+import { cleanStateOnSignal, removeState, stateHeader, writeState } from './tmpState.mjs'
 
 const stateName = 'dsh-web-url.txt'
 const urlPattern = /^dsh web: (https?:\/\/\S+)/u
@@ -38,13 +38,14 @@ const capture = chunk => {
   for (const line of lines) {
     const match = line.trim().match(urlPattern)
     if (!match) continue
-    if (serverPid > 0 && writeState(stateName, `${serverPid}\n${match[1]}\n`)) announced = true
+    if (serverPid > 0 && writeState(stateName, `${stateHeader(serverPid, startedAt)}url: ${match[1]}\n`)) announced = true
   }
 }
 
 const [command, args] = process.platform === 'win32'
   ? [process.env.ComSpec ?? 'cmd.exe', ['/d', '/s', '/c', 'dsh web --no-open']]
   : ['dsh', ['web', '--no-open']]
+const startedAt = new Date()
 const child = spawn(command, args, { stdio: ['inherit', 'pipe', 'inherit'] })
 serverPid = child.pid ?? 0
 child.stdout.setEncoding('utf8')

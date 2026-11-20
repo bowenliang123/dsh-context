@@ -6,12 +6,19 @@ const statePath = name => new URL(name, tmpDir)
 
 export const statePid = name => {
   try {
-    const pid = Number(readFileSync(statePath(name), 'utf8').split('\n')[0])
-    return Number.isInteger(pid) && pid > 0 ? pid : undefined
+    const match = /^pid:\s*([1-9]\d*)\s*$/u.exec(readFileSync(statePath(name), 'utf8').split('\n')[0])
+    return match === null ? undefined : Number(match[1])
   } catch {
     return undefined
   }
 }
+
+const formatStartTime = at => {
+  const pad = value => String(value).padStart(2, '0')
+  return `${at.getFullYear()}-${pad(at.getMonth() + 1)}-${pad(at.getDate())} ${pad(at.getHours())}:${pad(at.getMinutes())}`
+}
+
+export const stateHeader = (pid, startedAt) => `pid: ${pid}\nstart time: ${formatStartTime(startedAt)}\n`
 
 export const writeState = (name, content) => {
   try {
