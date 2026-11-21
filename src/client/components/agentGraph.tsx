@@ -307,7 +307,7 @@ export function makeAgentGraph(
                           fill="none"
                         />
                         {link.running
-                          ? <path className="lc-agents-flow animate-lc-agent-flow fill-none stroke-2" d={d} stroke={color} />
+                          ? <path className="lc-agents-flow animate-lc-agent-flow motion-reduce:animate-none fill-none stroke-2" d={d} stroke={color} />
                           : null}
                         <circle className="lc-agents-joint" cx={link.x1} cy={link.y1} r={2} fill={color} />
                         <circle className="lc-agents-joint" cx={link.x2} cy={link.y2} r={3} fill={color} />

@@ -74,6 +74,7 @@ body:not([data-ds-dark-theme]) .lc-cmd-item-on > .lc-cmd-row:hover { background:
 .lc-cmd-st-kill { color: var(--dsw-alias-state-warn-primary); }
 .lc-cmd-st-run { color: var(--dsw-alias-brand-primary); animation: lc-cmd-pulse 1.6s ease-in-out infinite; }
 @keyframes lc-cmd-pulse { 50% { opacity: 0.35; } }
+@media (prefers-reduced-motion: reduce) { .lc-cmd-st-run { animation: none; } }
 .lc-cmd-cmd { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 11.5px; }
 .lc-cmd-tool { font-size: 10px; font-weight: 600; padding: 0 5px; margin-right: 5px; border-radius: 4px; background: var(--dsw-alias-bg-layer-1); border: var(--lc-line-fine, 1px solid var(--dsw-alias-border-l2)); color: var(--dsw-alias-label-secondary); font-family: inherit; }
 .lc-cmd-badges { flex: none; display: inline-flex; gap: 4px; }
