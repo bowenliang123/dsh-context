@@ -135,6 +135,7 @@ export function makeRichText(kit: ViewKit): RichKit {
       <button
         type="button"
         className={'lc-gran-btn' + (props.mode === m ? ' lc-gran-on' : '')}
+        aria-pressed={props.mode === m}
         title={tip}
         onClick={() => { props.onPick(m) }}
       >{label}</button>

@@ -196,6 +196,7 @@ export function makeFileCard(kit: ViewKit, settings: ContextSettings): Component
                 type="button"
                 className={'lc-gran-btn' + (filter === c.key ? ' lc-gran-on' : '')
                   + (c.key === 'image' ? '' : ' lc-fa-chip-' + c.key)}
+                aria-pressed={filter === c.key}
                 title={t('files.chipTip', { files: c.files, ops: c.ops })}
                 onClick={() => { setFilter(cur => (cur === c.key ? 'all' : c.key)) }}
               >
@@ -220,6 +221,7 @@ export function makeFileCard(kit: ViewKit, settings: ContextSettings): Component
                   key={k}
                   type="button"
                   className={'lc-gran-btn' + (sort === k ? ' lc-gran-on' : '')}
+                  aria-pressed={sort === k}
                   onClick={() => { setSort(k) }}
                 >
                   {t('files.sort.' + k)}

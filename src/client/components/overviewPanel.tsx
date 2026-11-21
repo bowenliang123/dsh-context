@@ -297,6 +297,7 @@ export function makeOverviewPanel(
                       key={r}
                       type="button"
                       className={'lc-gran-btn' + (custom === null && preset === r ? ' lc-gran-on' : '')}
+                      aria-pressed={custom === null && preset === r}
                       onClick={() => { pickPreset(r) }}
                     >{t('ov.range.' + r)}</button>
                   ))}
@@ -356,6 +357,7 @@ export function makeOverviewPanel(
                               key={m}
                               type="button"
                               className={'lc-gran-btn' + (metric === m ? ' lc-gran-on' : '')}
+                              aria-pressed={metric === m}
                               onClick={() => { setMetric(m) }}
                             >{t('ov.heat.metric.' + m)}</button>
                           ))}
@@ -438,6 +440,7 @@ export function makeOverviewPanel(
                               key={s}
                               type="button"
                               className={'lc-gran-btn' + (sort === s ? ' lc-gran-on' : '')}
+                              aria-pressed={sort === s}
                               onClick={() => { setSort(s) }}
                             >{t('ov.list.sort.' + s)}</button>
                           ))}

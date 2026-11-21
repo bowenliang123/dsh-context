@@ -608,6 +608,7 @@ export function makeContextBrowser(
                 key={k}
                 type="button"
                 className={'lc-gran-btn' + (toolSort === k ? ' lc-gran-on' : '')}
+                aria-pressed={toolSort === k}
                 onClick={() => { setToolSort(k) }}
               >
                 {t('tool.sort.' + k)}
@@ -684,6 +685,7 @@ export function makeContextBrowser(
                 key={k}
                 type="button"
                 className={'lc-gran-btn' + (rowKind === k ? ' lc-gran-on' : '')}
+                aria-pressed={rowKind === k}
                 onClick={() => { setRowKind(rowKind === k ? null : k) }}
               >
                 {t('browser.kind.' + k)}
@@ -782,6 +784,7 @@ export function makeContextBrowser(
               <button
                 type="button"
                 className={'lc-gran-btn' + (dna ? ' lc-gran-on' : '')}
+                aria-pressed={dna}
                 onClick={() => { setDna(!dna) }}
               >
                 {t('browser.dna')}
@@ -802,6 +805,7 @@ export function makeContextBrowser(
                 <button
                   type="button"
                   className={'lc-gran-btn' + (deltaBase === 'step' ? ' lc-gran-on' : '')}
+                  aria-pressed={deltaBase === 'step'}
                   onClick={() => { setDeltaBase('step') }}
                 >
                   {t('browser.base.step')}
@@ -809,6 +813,7 @@ export function makeContextBrowser(
                 <button
                   type="button"
                   className={'lc-gran-btn' + (deltaBase === 'turn' ? ' lc-gran-on' : '')}
+                  aria-pressed={deltaBase === 'turn'}
                   onClick={() => { setDeltaBase('turn') }}
                 >
                   {t('browser.base.turn')}
@@ -818,6 +823,7 @@ export function makeContextBrowser(
                 <button
                   type="button"
                   className={'lc-gran-btn' + (delta ? '' : ' lc-gran-on')}
+                  aria-pressed={!delta}
                   onClick={() => { if (delta) setDelta(false) }}
                 >
                   {t('gran.total')}
@@ -825,6 +831,7 @@ export function makeContextBrowser(
                 <button
                   type="button"
                   className={'lc-gran-btn' + (delta ? ' lc-gran-on' : '')}
+                  aria-pressed={delta}
                   onClick={() => { if (!delta) setDelta(true) }}
                 >
                   {t('gran.delta')}

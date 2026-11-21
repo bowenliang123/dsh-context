@@ -542,6 +542,7 @@ export function makeCommandPanel(kit: ViewKit): ComponentType<CommandPanelProps>
                 key={f}
                 type="button"
                 className={'lc-gran-btn lc-cmd-chip-' + f + (filter === f ? ' lc-gran-on' : '')}
+                aria-pressed={filter === f}
                 onClick={() => { setFilter(cur => (cur === f ? 'all' : f)) }}
               >
                 {t('cmds.filter.' + f)}
@@ -567,6 +568,7 @@ export function makeCommandPanel(kit: ViewKit): ComponentType<CommandPanelProps>
                     key={k}
                     type="button"
                     className={'lc-gran-btn' + (sort === k ? ' lc-gran-on' : '')}
+                    aria-pressed={sort === k}
                     onClick={() => { setSort(k) }}
                   >
                     {t('cmds.sort.' + k)}

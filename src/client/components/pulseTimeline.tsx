@@ -327,11 +327,13 @@ export const PulseTimeline = memo(function PulseTimeline(props: PulseTimelinePro
               <button
                 type="button"
                 className={'lc-gran-btn' + (anchor === 'first' ? ' lc-gran-on' : '')}
+                aria-pressed={anchor === 'first'}
                 onClick={() => { jumpTo('first') }}
               >{t('fleet.pulse.first')}</button>
               <button
                 type="button"
                 className={'lc-gran-btn' + (anchor === 'latest' ? ' lc-gran-on' : '')}
+                aria-pressed={anchor === 'latest'}
                 onClick={() => { jumpTo('latest') }}
               >{t('fleet.pulse.latestRecord')}</button>
             </span>

@@ -688,6 +688,7 @@ export function makeContextView(
             <button
               type="button"
               className={'lc-gran-btn' + (dna ? ' lc-gran-on' : '')}
+              aria-pressed={dna}
               title={t('trend.dnaTip')}
               onClick={() => {
                 const on = !dna
@@ -698,6 +699,7 @@ export function makeContextView(
             <button
               type="button"
               className={'lc-gran-btn' + (adaptive ? ' lc-gran-on' : '')}
+              aria-pressed={adaptive}
               title={t('trend.adaptiveHint')}
               onClick={() => {
                 const on = !adaptive
@@ -708,12 +710,14 @@ export function makeContextView(
             <button
               type="button"
               className={'lc-gran-btn' + (durationCurve ? ' lc-gran-on' : '')}
+              aria-pressed={durationCurve}
               title={t('trend.durationTip')}
               onClick={() => { setDurationCurve(on => !on) }}
             >{t('trend.duration')}</button>
             <button
               type="button"
               className={'lc-gran-btn' + (overview ? ' lc-gran-on' : '')}
+              aria-pressed={overview}
               title={t('trend.overviewTip')}
               onClick={() => {
                 const on = !overview
@@ -726,20 +730,24 @@ export function makeContextView(
             <div className="lc-gran">
               <button
                 className={'lc-gran-btn' + (granularity === 'step' ? ' lc-gran-on' : '')}
+                aria-pressed={granularity === 'step'}
                 onClick={() => { setGranularity('step') }}
               >{t('gran.step')}</button>
               <button
                 className={'lc-gran-btn' + (granularity === 'turn' ? ' lc-gran-on' : '')}
+                aria-pressed={granularity === 'turn'}
                 onClick={() => { setGranularity('turn') }}
               >{t('gran.turn')}</button>
             </div>
             <div className="lc-gran" title={t('gran.modeHint')}>
               <button
                 className={'lc-gran-btn' + (trendMode === 'total' ? ' lc-gran-on' : '')}
+                aria-pressed={trendMode === 'total'}
                 onClick={() => { switchTrendMode('total') }}
               >{t('gran.total')}</button>
               <button
                 className={'lc-gran-btn' + (trendMode === 'delta' ? ' lc-gran-on' : '')}
+                aria-pressed={trendMode === 'delta'}
                 onClick={() => { switchTrendMode('delta') }}
               >{t('gran.delta')}</button>
             </div>
@@ -888,6 +896,7 @@ export function makeContextView(
                         key={k}
                         data-kind={k}
                         className={'lc-gran-btn lc-kind-' + k + (active ? ' lc-gran-on' : '')}
+                        aria-pressed={active}
                         onClick={() => { setKindFilter(k) }}
                       >
                         {eventFilterLabelOf(t, k)}
