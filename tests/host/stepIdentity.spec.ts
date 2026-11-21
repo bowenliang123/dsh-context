@@ -306,4 +306,3 @@ describe('detectHarnessVersion — degradation arms (fail open)', () => {
   })
 })
 })
-

@@ -41,4 +41,3 @@ export const NODE_FILE_IO: FileIo = {
   read: path => readFile(path, 'utf8'),
   write: (path, data) => writeFileAtomic(NODE_ATOMIC_FS, path, data),
 }
-
