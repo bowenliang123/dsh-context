@@ -201,4 +201,5 @@ body:not([data-ds-dark-theme]) .lc-ov-session { border-radius: 12px; box-shadow:
 .lc-ov-pager-btn { flex: none; width: 26px; height: 22px; display: flex; align-items: center; justify-content: center; border: var(--lc-line-strong, 1px solid var(--dsw-alias-border-l2)); background: transparent; color: var(--dsw-alias-label-primary); border-radius: 6px; font: inherit; line-height: 1; cursor: pointer; transition: border-color var(--ds-transition-duration, 0.2s) var(--ds-ease-in-out, ease-in-out), background-color var(--ds-transition-duration, 0.2s) var(--ds-ease-in-out, ease-in-out); }
 .lc-ov-pager-btn:hover:enabled { border-color: var(--dsw-alias-label-secondary); background: var(--dsw-alias-interactive-bg-hover); }
 .lc-ov-pager-btn:disabled { opacity: 0.4; cursor: default; }
+@media (pointer: coarse) { .lc-ov-pager-btn { height: 24px; } }
 .lc-ov-pager-n { color: var(--dsw-alias-label-secondary); font-size: 11px; font-variant-numeric: tabular-nums; white-space: nowrap; }
