@@ -1,10 +1,10 @@
-import type { ContextEventRecord, ContextTimeline, ContextTimelineDetail, FileOpRecord, HistoryPart, HistoryRow, RequestRecord, SurfaceNode, TimingSpan } from '../shared/types'
+import type { ContextEventRecord, ContextTimeline, ContextTimelineDetail, FileOpRecord, HistoryRow, RequestRecord, SurfaceNode, TimingSpan } from '../shared/types'
 import { subscribeInvalidations } from './invalidation'
 import { makeRetentionCache } from './retention'
 import { RouteError } from './route'
 import { makeDetailFetcher, makeFactsFetchers, type CoreFetcher, type CoreRead, type FactPart, type FactWindow, type FactsFetchers, type StoreFetcher } from './detailFetcher'
-import type { FactsRead, HistoryCursor, HistoryFetcher } from './timelineWire'
-import { HISTORY_PAGE_MAX, historyRowKey, loadHistoryTailIndex, mergeHistoryRows, nextHistoryCursor, type HistorySeqRow, type HistoryTailRows } from './historyPaging'
+import type { FactsRead, HistoryFetcher } from './timelineWire'
+import { CANCELLED, HISTORY_PAGE_MAX, loadAllHistory, loadHistoryTailIndex, loadTailHistory, readHistoryPage, type HistoryPagingOptions, type HistoryRows, type HistoryTailRows } from './historyPaging'
 import { WIRE_BYTES, textBytes } from '../shared/bytes'
 
 export { deltaOf, detailOf, factsOf, historyOf } from './timelineWire'
@@ -33,16 +33,9 @@ const PART_RETRY_LIMIT = 3
 
 const HISTORY_RETRY_LIMIT = 3
 
-const HISTORY_PAGES_MAX = 10_000
-
-const CANCELLED = 'cancelled'
-
-type HistoryRows<T> = T[] | typeof CANCELLED | null
-
 type CollectionPart = 'nodes' | 'archive' | 'files' | 'spans'
 
 type CollectionState = 'loading' | 'ready' | 'failed'
-
 
 function emptyDetail(rev: number, head?: ContextTimeline, requests?: RequestRecord[]): ContextTimelineDetail {
   return {
@@ -211,13 +204,14 @@ export class DetailStore {
     refresh: boolean,
     current: ContextTimelineDetail,
   ): Promise<void> {
+    const options = { rev, cancelled: () => this.parked || generation !== this.generation }
     try {
       if (refresh) {
         const [requests, events] = await Promise.all([
-          this.loadTailHistory<RequestRecord>(history, 'requests', current.requests),
-          this.loadTailHistory<ContextEventRecord>(history, 'events', current.events),
+          loadTailHistory<RequestRecord>(history, 'requests', current.requests, options),
+          loadTailHistory<ContextEventRecord>(history, 'events', current.events, options),
         ])
-        if (generation !== this.generation) return
+        if (generation !== this.generation || requests === CANCELLED || events === CANCELLED) return
         if (requests === null || events === null) {
           this.scheduleHistoryRetry()
           return
@@ -229,7 +223,7 @@ export class DetailStore {
         this.commitHistory({ ...this.detail, requests, events })
         return
       }
-      const requests = await this.loadAllHistory<RequestRecord>(history, 'requests', generation)
+      const requests = await loadAllHistory<RequestRecord>(history, 'requests', options)
       if (requests === CANCELLED) {
         if (this.historyState === 'loading') this.historyState = 'idle'
         return
@@ -238,7 +232,7 @@ export class DetailStore {
         this.failHistory()
         return
       }
-      const events = await this.loadAllHistory<ContextEventRecord>(history, 'events', generation)
+      const events = await loadAllHistory<ContextEventRecord>(history, 'events', options)
       if (events === CANCELLED) {
         if (this.historyState === 'loading') this.historyState = 'idle'
         return
@@ -257,57 +251,6 @@ export class DetailStore {
       if (refresh) this.scheduleHistoryRetry()
       else this.failHistory()
     }
-  }
-
-  private async loadAllHistory<T extends HistoryRow>(
-    history: HistoryFetcher,
-    part: HistoryPart,
-    generation: number,
-  ): Promise<HistoryRows<T>> {
-    let cursor: HistoryCursor | undefined
-    const rows: T[] = []
-    for (let pages = 0; ; pages++) {
-      /* v8 ignore next 1 */
-      if (pages >= HISTORY_PAGES_MAX) return null
-      const page = await history(part, cursor, HISTORY_PAGE_MAX)
-      if (this.parked || generation !== this.generation) return CANCELLED
-      if (page === null) return null
-      rows.unshift(...page.rows as T[])
-      const next = nextHistoryCursor(page)
-      if (next === undefined || page.rows.length === 0) break
-      if (next.beforeSeq === cursor?.beforeSeq && next.beforeIndex === cursor?.beforeIndex) return null
-      cursor = next
-    }
-    return rows
-  }
-
-  private async loadTailHistory<T extends HistorySeqRow>(
-    history: HistoryFetcher,
-    part: HistoryPart,
-    old: T[],
-  ): Promise<T[] | null> {
-    const known = new Set(old.map(historyRowKey))
-    const add: T[] = []
-    let unseen = 0
-    let cursor: number | undefined
-    for (let pages = 0; ; pages++) {
-      /* v8 ignore next 1 */
-      if (pages >= HISTORY_PAGES_MAX) return null
-      const page = await history(part, cursor === undefined ? undefined : { beforeSeq: cursor }, HISTORY_PAGE_MAX)
-      if (this.parked || page === null) return null
-      for (const row of page.rows as unknown as T[]) {
-        const key = historyRowKey(row)
-        if (known.has(key)) continue
-        known.add(key)
-        unseen++
-      }
-      add.unshift(...page.rows as unknown as T[])
-      if (unseen >= Math.max(0, page.total - old.length)
-        || page.atStart || page.beforeSeq === undefined || page.rows.length === 0) break
-      if (page.beforeSeq === cursor) return null
-      cursor = page.beforeSeq
-    }
-    return mergeHistoryRows(old, add)
   }
 
   private collectionRowsOf(part: CollectionPart): HistoryRow[] | null {
@@ -410,13 +353,14 @@ export class DetailStore {
     const rev = this.acceptedRev
     this.collectionStates.set(part, 'loading')
     const generation = this.generation
+    const options = { rev, cancelled: () => this.parked || generation !== this.generation }
     let rows: HistoryRows<HistoryRow> = null
     try {
       if (old !== null && state === 'ready') {
-        const tail = await this.refreshCollection(history, part, old, rev)
-        rows = tail === 'reload' ? await this.loadAllHistory<HistoryRow>(history, part, generation) : tail
+        const tail = await this.refreshCollection(history, part, old, options)
+        rows = tail === 'reload' ? await loadAllHistory<HistoryRow>(history, part, options) : tail
       } else {
-        rows = await this.loadAllHistory<HistoryRow>(history, part, generation)
+        rows = await loadAllHistory<HistoryRow>(history, part, options)
       }
     } catch {
       rows = null
@@ -445,11 +389,12 @@ export class DetailStore {
     history: HistoryFetcher,
     part: CollectionPart,
     old: HistoryRow[],
-    rev: number,
+    options: HistoryPagingOptions,
   ): Promise<HistoryTailRows<HistoryRow>> {
+    const rev = options.rev
     if (part === 'archive') {
-      const page = await history('archive', undefined, HISTORY_PAGE_MAX)
-      if (page === null) return null
+      const page = await readHistoryPage(history, part, undefined, HISTORY_PAGE_MAX, options)
+      if (page === CANCELLED || page === null) return page
       this.archiveKnownRev = rev
       if (page.total !== old.length) {
         this.archiveChangedAt = rev
@@ -458,7 +403,7 @@ export class DetailStore {
       return old
     }
     if (part === 'nodes' && (this.archiveKnownRev !== rev || this.archiveChangedAt === rev)) return 'reload'
-    return await loadHistoryTailIndex(history, part, old)
+    return await loadHistoryTailIndex(history, part, old, options)
   }
 
   private scheduleCollectionRetry(): void {

@@ -2,8 +2,10 @@
 
 import assert from 'node:assert/strict'
 import { describe, test } from 'vitest'
-import { historyRowKey, loadHistoryTailIndex, mergeHistoryRows, nextHistoryCursor } from '../../src/client/historyPaging'
+import { CANCELLED, historyRowKey, loadAllHistory, loadHistoryTailIndex, loadTailHistory, mergeHistoryRows, nextHistoryCursor } from '../../src/client/historyPaging'
 import type { FileOpRecord, HistoryPage, HistoryPart } from '../../src/shared/types'
+
+const OPTIONS = { rev: 1, cancelled: () => false }
 
 describe('history merge', () => {
   test('appends a newer tail without rebuilding the old rows', () => {
@@ -29,7 +31,7 @@ describe('history merge', () => {
       page({ rows: Array.from({ length: 1_000 }, (_, index) => file(501 + index)), first: 500, total: 1_502, beforeIndex: 500 }),
       page({ rows: Array.from({ length: 500 }, (_, index) => file(1 + index)), first: 0, total: 1_502 }),
     ]
-    const merged = await loadHistoryTailIndex(fake(pages), 'files', old)
+    const merged = await loadHistoryTailIndex(fake(pages), 'files', old, OPTIONS)
     assert.ok(Array.isArray(merged))
     assert.equal(merged.length, 1_502)
     assert.equal(merged[0].seq, 1)
@@ -38,35 +40,71 @@ describe('history merge', () => {
 
   test('leaves an unchanged collection untouched and rejects a stalled cursor', async () => {
     const old = [file(1)]
-    assert.equal(await loadHistoryTailIndex(fake([page({ rows: [file(1)], first: 0, total: 1 })]), 'files', old), old)
+    assert.equal(await loadHistoryTailIndex(fake([page({ rows: [file(1)], first: 0, total: 1 })]), 'files', old, OPTIONS), old)
     const stalled = page({ rows: [file(3)], first: 2, total: 3, beforeIndex: 2 })
-    assert.equal(await loadHistoryTailIndex(fake([stalled, stalled]), 'files', old), 'reload')
+    assert.equal(await loadHistoryTailIndex(fake([stalled, stalled]), 'files', old, OPTIONS), 'reload')
   })
 
   test('reloads on shrink, a gap, or an inconsistent page union', async () => {
-    assert.equal(await loadHistoryTailIndex(fake([page({ rows: [], first: 0, total: 0 })]), 'files', [file(1), file(2)]), 'reload')
+    assert.equal(await loadHistoryTailIndex(fake([page({ rows: [], first: 0, total: 0 })]), 'files', [file(1), file(2)], OPTIONS), 'reload')
     assert.equal(await loadHistoryTailIndex(fake([
       page({ rows: [file(3)], first: 2, total: 3 }),
-    ]), 'files', [file(1)]), 'reload')
+    ]), 'files', [file(1)], OPTIONS), 'reload')
     assert.equal(await loadHistoryTailIndex(fake([
       page({ rows: [file(2), file(3)], first: 2, total: 5, beforeIndex: 2 }),
       page({ rows: [file(1), file(2)], first: 0, total: 5 }),
-    ]), 'files', [file(1), file(2), file(3)]), 'reload')
+    ]), 'files', [file(1), file(2), file(3)], OPTIONS), 'reload')
   })
 
   test('returns a full page as the new collection and aborts on a missing page or start', async () => {
-    assert.deepEqual(await loadHistoryTailIndex(fake([page({ rows: [file(1)], first: 0, total: 1 })]), 'files', []), [file(1)])
-    assert.equal(await loadHistoryTailIndex(fake([null]), 'files', []), null)
+    assert.deepEqual(await loadHistoryTailIndex(fake([page({ rows: [file(1)], first: 0, total: 1 })]), 'files', [], OPTIONS), [file(1)])
+    assert.equal(await loadHistoryTailIndex(fake([null]), 'files', [], OPTIONS), null)
     const blocked = [
       page({ rows: [file(3)], first: 2, total: 3, beforeIndex: 2 }),
       null,
     ]
-    assert.equal(await loadHistoryTailIndex(fake(blocked), 'files', [file(1)]), null)
+    assert.equal(await loadHistoryTailIndex(fake(blocked), 'files', [file(1)], OPTIONS), null)
     const reachedStart = [
       page({ rows: [file(3)], first: 2, total: 3, beforeIndex: 2 }),
       page({ rows: [file(1), file(2)], first: 0, total: 3 }),
     ]
-    assert.deepEqual(await loadHistoryTailIndex(fake(reachedStart), 'files', [file(1)]), [file(1), file(2), file(3)])
+    assert.deepEqual(await loadHistoryTailIndex(fake(reachedStart), 'files', [file(1)], OPTIONS), [file(1), file(2), file(3)])
+  })
+
+  test('rejects mixed revisions in full, sequence-tail and index-tail walks', async () => {
+    const first = page({ rows: [file(4), file(5)], first: 3, total: 5, beforeSeq: 4 })
+    const older = { ...page({ rows: [file(1), file(2), file(3)], first: 0, total: 5 }), rev: 2 }
+    assert.equal(await loadAllHistory(fake([first, older]), 'requests', OPTIONS), null)
+    assert.equal(await loadTailHistory(fake([first, older]), 'requests', [file(1), file(2)], OPTIONS), null)
+    const indexed = { ...page({ rows: [file(1), file(2)], first: 0, total: 3 }), rev: 2 }
+    assert.equal(await loadHistoryTailIndex(fake([
+      page({ rows: [file(3)], first: 2, total: 3, beforeIndex: 2 }),
+      indexed,
+    ]), 'files', [file(1)], OPTIONS), null)
+  })
+
+  test('cancels before requesting another page', async () => {
+    let calls = 0
+    const pages = fake([
+      page({ rows: [file(3)], first: 2, total: 3, beforeIndex: 2 }),
+      page({ rows: [file(1), file(2)], first: 0, total: 3 }),
+    ])
+    const result = await loadHistoryTailIndex(async (part, cursor, limit) => {
+      calls++
+      return pages(part, cursor, limit)
+    }, 'files', [file(1)], { rev: 1, cancelled: () => calls > 0 })
+    assert.equal(result, CANCELLED)
+    assert.equal(calls, 1)
+  })
+
+  test('does not fetch when the walk is already cancelled', async () => {
+    let called = false
+    const result = await loadAllHistory(async () => {
+      called = true
+      return null
+    }, 'requests', { rev: 1, cancelled: () => true })
+    assert.equal(result, CANCELLED)
+    assert.equal(called, false)
   })
 
   test('derives the cursor for seq and index pages', () => {
@@ -79,7 +117,7 @@ function file(seq: number): FileOpRecord {
   return { seq, path: 'f' + String(seq), kind: 'read', tool: 'read', err: false, added: 0, removed: 0 }
 }
 
-function page(over: { rows: FileOpRecord[]; first: number; total: number; beforeIndex?: number }): HistoryPage {
+function page(over: { rows: FileOpRecord[]; first: number; total: number; beforeIndex?: number; beforeSeq?: number }): HistoryPage {
   return {
     rev: 1,
     live: true,
@@ -91,10 +129,11 @@ function page(over: { rows: FileOpRecord[]; first: number; total: number; before
     atStart: over.first === 0,
     atEnd: over.first + over.rows.length === over.total,
     ...(over.beforeIndex === undefined ? {} : { beforeIndex: over.beforeIndex }),
+    ...(over.beforeSeq === undefined ? {} : { beforeSeq: over.beforeSeq }),
   }
 }
 
-function fake(pages: (HistoryPage | null)[]): (part: HistoryPart, cursor?: { beforeIndex?: number }) => Promise<HistoryPage | null> {
+function fake(pages: (HistoryPage | null)[]): (part: HistoryPart, cursor?: { beforeIndex?: number; beforeSeq?: number }, limit?: number) => Promise<HistoryPage | null> {
   let index = 0
   return async () => pages[Math.min(index++, pages.length - 1)]
 }

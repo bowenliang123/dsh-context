@@ -22,8 +22,8 @@ describe('history pages', () => {
 
   test('loads every request and event page into the detail payload and appends a tail refresh', async () => {
     const event = (seq: number): ContextEventRecord => ({ seq, time: T0 + seq, kind: 'inject', form: 'context' })
-    const page = <T,>(rows: T[], first: number, total: number, atStart: boolean, beforeSeq?: number) =>
-      ({ rev: 1, live: true, part: 'requests' as const, rows, first, last: first + rows.length - 1, total, atStart, atEnd: !beforeSeq, ...(beforeSeq === undefined ? {} : { beforeSeq }) })
+    const page = <T,>(rows: T[], first: number, total: number, atStart: boolean, beforeSeq: number | undefined, revision: number) =>
+      ({ rev: revision, live: true, part: 'requests' as const, rows, first, last: first + rows.length - 1, total, atStart, atEnd: !beforeSeq, ...(beforeSeq === undefined ? {} : { beforeSeq }) })
     const calls: string[] = []
     let rev = 1
     const store = new DetailStore({
@@ -34,10 +34,12 @@ describe('history pages', () => {
         calls.push(part + ':' + String(beforeSeq))
         if (part === 'requests') {
           return beforeSeq === undefined
-            ? page(rev === 1 ? [request(3), request(4)] : [request(4), request(5)], 2, rev === 1 ? 4 : 5, false, 3)
-            : page([request(1), request(2)], 0, 4, true)
+            ? page(rev === 1 ? [request(3), request(4)] : [request(4), request(5)], 2, rev === 1 ? 4 : 5, false, 3, rev)
+            : page([request(1), request(2)], 0, 4, true, undefined, rev)
         }
-        return beforeSeq === undefined ? { ...page([event(3)], 2, 3, false, 3), part } : { ...page([event(1)], 0, 3, true), part }
+        return beforeSeq === undefined
+          ? { ...page([event(3)], 2, 3, false, 3, rev), part }
+          : { ...page([event(1)], 0, 3, true, undefined, rev), part }
       },
     }, 0)
     store.subscribe(() => {})
@@ -119,11 +121,11 @@ describe('history pages', () => {
     let rev = 1
     let triggered = false
     const holder: { store: DetailStore | null } = { store: null }
-    const page = (part: 'requests' | 'events'): never => ({
-      rev,
+    const page = (part: 'requests' | 'events', revision = rev): never => ({
+      rev: revision,
       live: true,
       part,
-      rows: part === 'requests' ? [request(rev === 1 ? 1 : 2)] : [{ seq: rev, time: T0, kind: 'inject', form: 'context' }],
+      rows: part === 'requests' ? [request(revision === 1 ? 1 : 2)] : [{ seq: revision, time: T0, kind: 'inject', form: 'context' }],
       first: 0,
       last: 0,
       total: 1,
@@ -139,6 +141,7 @@ describe('history pages', () => {
           rev = 2
           holder.store?.request(2)
           await new Promise(resolve => setTimeout(resolve, 5))
+          return page('events', 1)
         }
         return page(part === 'events' ? 'events' : 'requests')
       },
@@ -520,8 +523,8 @@ describe('history pages', () => {
     let blocked = false
     let releaseRefresh: (() => void) | undefined
     const gate = new Promise<void>(resolve => { releaseRefresh = resolve })
-    const page = (part: 'requests' | 'events'): never => ({
-      rev,
+    const page = (part: 'requests' | 'events', revision = rev): never => ({
+      rev: revision,
       live: true,
       part,
       rows: [part === 'requests' ? request(1) : { seq: 1, time: T0, kind: 'inject', form: 'context' }],
@@ -538,6 +541,7 @@ describe('history pages', () => {
         if (rev === 2 && !blocked) {
           blocked = true
           await gate
+          return page(part === 'requests' ? 'requests' : 'events', 2)
         }
         return page(part === 'requests' ? 'requests' : 'events')
       },

@@ -265,11 +265,12 @@ describe('history collections', () => {
         if (part === 'events') return pageOf(part, [{ seq: rev, time: T0, kind: 'inject' }], rev)
         if (part === 'archive') return pageOf(part, [], rev)
         if (part === 'files') {
+          const pageRev = rev
           if (block) {
             block = false
             await gate
           }
-          return pageOf(part, rev === 1 ? [fileOp(1, 'f1')] : [fileOp(1, 'f1'), fileOp(rev, 'f' + String(rev))], rev)
+          return pageOf(part, pageRev === 1 ? [fileOp(1, 'f1')] : [fileOp(1, 'f1'), fileOp(pageRev, 'f' + String(pageRev))], pageRev)
         }
         return pageOf(part, [], rev)
       },
@@ -344,11 +345,12 @@ describe('history collections', () => {
         if (part === 'events') return pageOf(part, [{ seq: rev, time: T0, kind: 'inject' }], rev)
         if (part === 'archive') return pageOf(part, [], rev)
         if (part === 'files') {
+          const pageRev = rev
           if (block) {
             block = false
             await gate
           }
-          return pageOf(part, rev === 1 ? [fileOp(1, 'f1')] : [fileOp(1, 'f1'), fileOp(rev, 'f' + String(rev))], rev)
+          return pageOf(part, pageRev === 1 ? [fileOp(1, 'f1')] : [fileOp(1, 'f1'), fileOp(pageRev, 'f' + String(pageRev))], pageRev)
         }
         return pageOf(part, [], rev)
       },
@@ -452,6 +454,66 @@ describe('history collections', () => {
     releaseFiles?.()
     await new Promise(resolve => setTimeout(resolve, 10))
     assert.deepEqual(store.getSnapshot().detail?.fileOps?.map(row => row.path), ['a.ts'])
+    store.release()
+  })
+
+  test('parking aborts an append-only refresh before later pages', async () => {
+    let rev = 1
+    let blocked = false
+    let releaseFiles: (() => void) | undefined
+    const gate = new Promise<void>(resolve => { releaseFiles = resolve })
+    const all = Array.from({ length: 2_001 }, (_, index) => fileOp(index + 1, 'f' + String(index + 1)))
+    let fileCalls = 0
+    const store = new DetailStore({
+      core: async () => ({ rev, live: true, parts: { head: head(rev), series: [request(rev)] } }),
+      part: async () => null,
+      history: async (part, cursor) => {
+        if (part === 'requests') return pageOf(part, [request(rev)], rev)
+        if (part === 'events') return pageOf(part, [{ seq: rev, time: T0, kind: 'inject' }], rev)
+        if (part === 'archive') return pageOf(part, [], rev)
+        if (part === 'files') {
+          fileCalls++
+          if (rev === 2 && cursor?.beforeIndex === 1_001 && blocked) {
+            blocked = false
+            await gate
+          }
+          const rows = rev === 1 ? [fileOp(1, 'f1')] : all
+          const end = cursor?.beforeIndex ?? rows.length
+          const start = Math.max(0, end - 1_000)
+          return {
+            rev,
+            live: true,
+            part,
+            rows: rows.slice(start, end),
+            first: start,
+            last: end - 1,
+            total: rows.length,
+            atStart: start === 0,
+            atEnd: end === rows.length,
+            ...(start > 0 ? { beforeIndex: start } : {}),
+          }
+        }
+        return pageOf(part, [], rev)
+      },
+    }, 0)
+    const off = store.subscribe(() => {})
+    store.request(1)
+    await until(() => store.getSnapshot().detail !== null, 'the core payload never landed')
+    store.ensureHistory()
+    await until(() => store.getSnapshot().detail?.events.length === 1, 'the core history never landed')
+    store.ensurePart('files')
+    await until(() => store.getSnapshot().detail?.fileOps?.length === 1, 'the files never landed')
+    rev = 2
+    blocked = true
+    store.request(2)
+    await until(() => store.getSnapshot().detail?.rev === 2, 'the next revision never landed')
+    store.ensureHistory()
+    await until(() => fileCalls === 3 && !blocked, 'the refresh never reached its second page')
+    off()
+    releaseFiles?.()
+    await new Promise(resolve => setTimeout(resolve, 10))
+    assert.equal(fileCalls, 3, 'no later page is fetched after parking')
+    assert.deepEqual(store.getSnapshot().detail?.fileOps?.map(row => row.path), ['f1'], 'the partial refresh is not published')
     store.release()
   })
 })
