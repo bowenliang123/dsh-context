@@ -96,6 +96,64 @@ async function checkContextModal(page) {
   await close.waitFor({ state: 'hidden' })
 }
 
+async function measureContextHistory(page, cdp, full) {
+  await page.evaluate(() => {
+    window.__benchLongTasks = []
+    try {
+      new PerformanceObserver(list => {
+        for (const entry of list.getEntries()) window.__benchLongTasks.push(entry.duration)
+      }).observe({ type: 'longtask', buffered: true })
+    } catch {}
+  })
+  const tab = page.getByRole('tab', { name: '上下文', exact: true })
+  assert.equal(await tab.count(), 1)
+  const started = performance.now()
+  await tab.click()
+  await page.locator('.lc-chart').waitFor({ state: 'visible', timeout: 120000 })
+  const firstChartMs = performance.now() - started
+  const firstMemory = await memoryOf(cdp)
+  const stepsText = await page.locator('.lc-core-kv-steps').innerText()
+  const steps = Number((stepsText.match(/\d+/) ?? ['0'])[0])
+  let complete = false
+  try {
+    await page.waitForFunction(expected => {
+      const chart = document.querySelector('.lc-chart')
+      return chart !== null && Number(chart.getAttribute('data-lc-bars') ?? '0') >= expected
+    }, steps, { timeout: full ? 180000 : 8000 })
+    complete = true
+  } catch {}
+  const fullMs = performance.now() - started
+  const fullMemory = await memoryOf(cdp)
+  const dom = await page.evaluate(() => ({
+    bars: document.querySelectorAll('.lc-bar').length,
+    masts: document.querySelectorAll('.lc-ms').length,
+    events: document.querySelectorAll('.lc-event').length,
+    barsAttr: Number(document.querySelector('.lc-chart')?.getAttribute('data-lc-bars') ?? '0'),
+    longTasks: window.__benchLongTasks ?? [],
+    historyRequests: performance.getEntriesByType('resource')
+      .filter(entry => entry.name.includes('dsh-context/history'))
+      .map(entry => ({ ms: entry.duration, bytes: entry.transferSize })),
+  }))
+  return {
+    steps,
+    complete,
+    firstChartMs,
+    fullMs,
+    firstMemory,
+    fullMemory,
+    bars: dom.bars,
+    barsAttr: dom.barsAttr,
+    masts: dom.masts,
+    events: dom.events,
+    historyRequests: dom.historyRequests.length,
+    historyMs: dom.historyRequests.reduce((sum, entry) => sum + entry.ms, 0),
+    historyBytes: dom.historyRequests.reduce((sum, entry) => sum + entry.bytes, 0),
+    longTasks: dom.longTasks.length,
+    longTaskMaxMs: Math.max(0, ...dom.longTasks),
+    longTaskTotalMs: dom.longTasks.reduce((sum, value) => sum + value, 0),
+  }
+}
+
 async function runVariant(label, plugin) {
   const work = resolve(root, `${label}-work`)
   const server = await startBenchmarkWeb({ plugin, corpus, work })
@@ -137,6 +195,7 @@ async function runVariant(label, plugin) {
     const unmountedMemory = await memoryOf(cdp)
     await openInsights(page)
     await checkContextModal(page)
+    const contextMetrics = await measureContextHistory(page, cdp, label === 'v3')
     const logs = server.logs()
     return {
       label,
@@ -146,6 +205,7 @@ async function runVariant(label, plugin) {
       repeatedMemory,
       unmountedMemory,
       contextModal: true,
+      context: contextMetrics,
       serverErrors: logs.stderr.split(/\r?\n/).filter(line => line.includes('Error') || line.includes('failed')).slice(0, 20),
     }
   } finally {

@@ -219,6 +219,63 @@ if (Object.keys(snapshotResult.value).length !== selected.length) {
 semantic.update(JSON.stringify(snapshotResult.value))
 semanticParts.snapshot = digestOf(snapshotResult.value)
 
+let history = null
+if (routes.has('/api/dsh-context/history')) {
+  const workerIndex = selectedRanks.findIndex(rank => sessionShape(rank, expectedCount).events > 30000)
+  const historyId = selected[workerIndex >= 0 ? workerIndex : selected.length - 1]
+  const report = {}
+  for (const part of ['requests', 'events', 'milestones']) {
+    let beforeSeq
+    let pages = 0
+    let rows = 0
+    let bytes = 0
+    let ms = 0
+    let total = 0
+    const samples = []
+    const seen = new Set()
+    for (;;) {
+      const result = await call('/api/dsh-context/history', {
+        sessionId: historyId,
+        part,
+        limit: 1_000,
+        ...(beforeSeq === undefined ? {} : { beforeSeq }),
+      })
+      const value = result.value
+      if (value === null || value === undefined || Array.isArray(value.rows) !== true) {
+        throw new Error(`history ${part} returned no rows`)
+      }
+      pages++
+      rows += value.rows.length
+      bytes += result.bytes
+      ms += result.ms
+      samples.push(result.ms)
+      total = value.total
+      for (const row of value.rows) {
+        const key = part === 'requests' ? String(row.seq) : String(row.kind) + ':' + String(row.seq) + ':' + String(row.ord)
+        if (seen.has(key)) throw new Error(`history ${part} returned duplicate ${key}`)
+        seen.add(key)
+      }
+      beforeSeq = value.beforeSeq
+      if (beforeSeq === undefined) break
+      if (pages > 2_000) throw new Error(`history ${part} page walk did not terminate`)
+    }
+    if (rows !== total) throw new Error(`history ${part} walked ${rows} of ${total}`)
+    samples.sort((a, b) => a - b)
+    report[part] = {
+      pages,
+      rows,
+      total,
+      bytes,
+      ms,
+      p50Ms: samples[Math.floor(samples.length / 2)] ?? 0,
+      p95Ms: samples[Math.min(samples.length - 1, Math.floor(samples.length * 0.95))] ?? 0,
+      maxMs: samples[samples.length - 1] ?? 0,
+    }
+  }
+  report.sessionId = historyId
+  history = report
+}
+
 const collect = async () => {
   globalThis.gc()
   await scheduler.yield()
@@ -267,6 +324,7 @@ const report = {
   snapshotBytes: snapshotResult.bytes,
   semanticSha256: semantic.digest('hex'),
   semanticParts,
+  history,
   pageIdsSha256: createHash('sha256').update([...pageIds].sort().join('\n')).digest('hex'),
   coverage: summary.coverage,
   summary: {
