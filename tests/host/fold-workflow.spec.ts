@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict'
 import { describe, test } from 'vitest'
 import type { TimelineEvent } from '../../src/host/fold'
+import { applyWorkflowEvent } from '../../src/host/foldWorkflow'
 import { at, header, toolCall } from './helpers/events'
 import { assertStable, driveTimeline, timelineDef } from './helpers/projection'
 
@@ -17,6 +18,10 @@ const task = (seq: number, value: Record<string, unknown>): TimelineEvent =>
   event('team/task', seq, { task: value })
 
 describe('workflow context events', () => {
+  test('unknown workflow events have no application', () => {
+    assert.equal(applyWorkflowEvent(driveTimeline([]).state, event('session/end', 1)), undefined)
+  })
+
   test('goal create and complete emit one milestone with the objective', () => {
     const drive = driveTimeline([
       goal(1, 'create', '  Ship the redesign  ', { phase: 'active' }),

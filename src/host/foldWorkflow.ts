@@ -6,6 +6,7 @@ import {
   TALLY_NAME_CHARS_MAX,
   TEAM_TASKS_MAX,
   TODO_ITEMS_MAX,
+  type TimelineEvent,
   type TimelineState,
   type WorkflowTeamTaskStatus,
   type WorkflowTodoStatus,
@@ -148,6 +149,13 @@ export function applyTeamTask(
   const nextStatus = status === 'deleted' ? undefined : status
   if (records.length === 0 && nextStatus === prev) return undefined
   return withEvents(state, records, { teamTasks: current })
+}
+
+export function applyWorkflowEvent(state: TimelineState, event: TimelineEvent): TimelineState | undefined {
+  if (event.type === 'goal/change') return applyGoalChange(state, event.seq, event.time, event.data)
+  if (event.type === 'todo/write') return applyTodoWrite(state, event.seq, event.time, event.data)
+  if (event.type === 'team/task') return applyTeamTask(state, event.seq, event.time, event.data)
+  return undefined
 }
 
 export function askRecordOf(

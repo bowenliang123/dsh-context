@@ -12,11 +12,10 @@ import {
   injectionSourceName,
   isInjection,
   toolCallNames,
+  type MessageSource,
 } from './pricing'
-import type { MessageSource } from './pricing'
 import { deriveEventMessage } from '@deepseek-ai/dsh-session'
-import { firstTokenTimeOfStream, replaceRangeOf, streamTimingOf } from './logShapes'
-import type { DecodeSpan } from './logShapes'
+import { firstTokenTimeOfStream, replaceRangeOf, streamTimingOf, type DecodeSpan } from './logShapes'
 import { opBearingTool, opsOfCall, parseCallArgs, rawArgsNeeded } from '../shared/fileOps'
 import { commandArgsOf, commandArgsRecordOf, commandProgramsOf, commandTool, markersOfText, outcomeOfMarkers } from '../shared/commands'
 import {
@@ -31,13 +30,10 @@ import {
   setCommand,
   tallyRun,
 } from './foldCommands'
-import { TALLY_NAME_CHARS_MAX, TALLY_NAMES_MAX, countCompaction, countInject, countModelSwitch, countStep, countTurnRuns, noteCommandCall, noteSkillName, noteTurn, pushEvent, trimState } from './foldState'
-import { slimSurfaceNode } from './foldState'
-import type { CommandStateRecord, TimelineEvent, TimelineState } from './foldState'
+import { TALLY_NAME_CHARS_MAX, TALLY_NAMES_MAX, countCompaction, countInject, countModelSwitch, countStep, countTurnRuns, noteCommandCall, noteSkillName, noteTurn, pushEvent, slimSurfaceNode, trimState, type CommandStateRecord, type TimelineEvent, type TimelineState } from './foldState'
 import { agentOfInjection, applyCatalogEvent, messageOf, skillNameOf, type MessageLike } from './foldInjections'
-import { applyGoalChange, applyTeamTask, applyTodoWrite, askRecordOf } from './foldWorkflow'
-import { accumulateCost, addDecodeSpan, bumpToolTotals, carveWindows, durOf, ensureTiming, idleGapWindows, mergeWindows, tokenCountOf } from './foldMetering'
-import type { UsageLike } from './foldMetering'
+import { applyWorkflowEvent, askRecordOf } from './foldWorkflow'
+import { accumulateCost, addDecodeSpan, bumpToolTotals, carveWindows, durOf, ensureTiming, idleGapWindows, mergeWindows, tokenCountOf, type UsageLike } from './foldMetering'
 
 function categoryOf(type: string, message: { source?: MessageSource } | undefined): Category {
   if (type === 'assistant/message') return 'assistant'
@@ -402,7 +398,7 @@ function applyTimelineEvent(state: TimelineState, event: TimelineEvent, bounds: 
       case 'tool/call': {
         if (data && typeof data.callId === 'string' && typeof data.name === 'string') {
           const cmdTool = commandTool(data.name)
-          const ask = data.name === 'ask_user_question' ? askRecordOf(event.seq, event.time, data) : undefined
+          const ask = data.name === ASK_USER_TOOL ? askRecordOf(event.seq, event.time, data) : undefined
           const keys: CloneKey[] = cmdTool === null ? ['callNames'] : ['callNames', 'commands']
           if (ask !== undefined) keys.push('events')
           const s = ensure(keys)
@@ -958,21 +954,11 @@ function applyTimelineEvent(state: TimelineState, event: TimelineEvent, bounds: 
         }
         break
       }
-      case 'goal/change': {
-        const next = applyGoalChange(state, event.seq, event.time, data)
-        if (next !== undefined) st = next
+      case 'goal/change':
+      case 'todo/write':
+      case 'team/task':
+        st = applyWorkflowEvent(state, event)
         break
-      }
-      case 'todo/write': {
-        const next = applyTodoWrite(state, event.seq, event.time, data)
-        if (next !== undefined) st = next
-        break
-      }
-      case 'team/task': {
-        const next = applyTeamTask(state, event.seq, event.time, data)
-        if (next !== undefined) st = next
-        break
-      }
       case 'compaction/summary':
       case 'compaction/prune': {
         const s = ensure(['events'])
@@ -1008,8 +994,6 @@ function applyTimelineEvent(state: TimelineState, event: TimelineEvent, bounds: 
 }
 
 export { skillNameOf }
-export { createTimelineState, trimToLastTurns } from './foldState'
-export type { TimelineEvent, TimelineState } from './foldState'
-export { addBilledUsage, isBeijingPeak, tokenCountOf } from './foldMetering'
-export type { BilledUsage, UsageLike } from './foldMetering'
+export { createTimelineState, trimToLastTurns, type TimelineEvent, type TimelineState } from './foldState'
+export { addBilledUsage, isBeijingPeak, tokenCountOf, type BilledUsage, type UsageLike } from './foldMetering'
 export { buildTimelineDetail, buildTimelineHead, buildTimelineView } from './foldWire'
