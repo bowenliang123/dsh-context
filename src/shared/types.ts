@@ -482,6 +482,7 @@ export interface RequestRecord extends SlimRequestRecord {
 
 export interface ContextEventRecord {
   seq: number
+  ord?: number
   time: number
   kind: 'compaction' | 'prune' | 'inject' | 'model' | 'mode' | 'agent'
     | 'goal-create' | 'goal-complete' | 'todo-add' | 'todo-done' | 'ask'
@@ -729,3 +730,18 @@ export interface OverviewProjectsValue {
 
 export type OverviewValue = OverviewUnchanged | OverviewSummaryValue | OverviewDaysValue | OverviewPageValue
   | OverviewTallyValue | OverviewProjectsValue
+
+export type HistoryPart = 'requests' | 'events' | 'milestones'
+
+export interface HistoryPage<T> {
+  rev: number
+  live: boolean
+  part: HistoryPart
+  rows: T[]
+  first: number
+  last: number
+  total: number
+  atStart: boolean
+  atEnd: boolean
+  beforeSeq?: number
+}

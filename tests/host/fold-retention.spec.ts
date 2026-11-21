@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import { describe, test } from 'vitest'
 import { buildTimelineHead, createTimelineState, trimToLastTurns, type TimelineEvent, buildTimelineDetail } from '../../src/host/fold'
-import { type TimelineState } from '../../src/host/foldState'
+import { stateBytesOf, trimState, type TimelineState } from '../../src/host/foldState'
 import { type RequestRecord } from '../../src/shared/types'
 import { assistantMessage, compaction, planMode, toolCall, toolResult, userMessage, stepEnd, stepStart, assistantAttempt, header } from './helpers/events'
 import { assertStatesPlainJson, driveTimeline, timelineDef, assertPlainJson, assertStable, requestsOf } from './helpers/projection'
@@ -131,7 +131,45 @@ describe('trimState archive pruning', () => {
     const last = buildTimelineDetail(drive.state, bounds)
     assert.deepEqual(last.archive.map(n => n.seq), [7], 'the newest removal still rides the payload')
     assert.equal(last.archiveFloor, 6, 'the payload floor names the newest dropped removal')
+    trimState(drive.state, { ...bounds, historyMode: true })
+    assert.deepEqual(drive.state.archived.map(n => n.seq), [7], 'history folds retain only the transport window')
+    const bare = createTimelineState()
+    bare.archived.push({ seq: 5, cat: 'user', tokens: 1 }, { seq: 6, cat: 'user', tokens: 1 })
+    trimState(bare, { ...bounds, historyMode: true })
+    assert.equal(bare.archiveFloor, 5, 'a removal without a gone marker floors on its seq')
     assertStatesPlainJson(drive)
+  })
+
+  test('the byte estimate counts strings, maps and pending records once', () => {
+    const base = createTimelineState()
+    const small = stateBytesOf(base)
+    const rich: TimelineState = {
+      ...base,
+      lastUser: 'question',
+      systems: [{ seq: 1, text: 'system' } as never],
+      stepWaits: [{ start: 1, end: 2 }],
+      stepBeats: [1, 2],
+      stepSpans: [{ kind: 'ttft', start: 1, end: 2 }],
+      pendingShadowedSeqs: [1],
+      commandCalls: ['c1'],
+      surface: [{ seq: 1, cat: 'user', tokens: 1, text: 'surface' }],
+      archived: [{ seq: 2, cat: 'tool', tokens: 1, text: 'gone' }],
+      fileOps: [{ seq: 3, path: 'a.ts', kind: 'read', tool: 'read', err: false, added: 0, removed: 0, detail: 'd', program: 'cat' }],
+      commands: [{ seq: 4, time: 4, tool: 'bash', cmd: 'ls', description: 'list', cwd: '/w', start: 4, status: 'running', err: false }],
+      events: [{ seq: 5, time: 5, kind: 'ask', name: 'q', detail: 'd', agent: 'a', items: ['one', 'two'] }],
+      callNames: { c1: { name: 'read', start: 1, argsRaw: '{"path":"a"}' } },
+      agents: { a: { catalogName: 'explorer', memberName: 'm', catalogLabel: 'Explorer' } },
+      todoItems: { todo: 'pending' },
+      teamTasks: { task: 'completed' },
+      totals: { turns: 1, steps: 1, events: 1, injects: 0, compactions: 0, prunes: 0, modelSwitches: 0, skills: { build: true } },
+      pendingCodeCmds: { root: [{ seq: 6, time: 6, tool: 'bash', cmd: 'pwd', start: 6, status: 'running', err: false }] },
+      pendingCodeOps: { root: [{ seq: 7, path: 'b.ts', kind: 'write', tool: 'write', err: false, added: 1, removed: 0, detail: 'd' }] },
+    }
+    const bytes = stateBytesOf(rich)
+    assert.ok(bytes > small)
+    assert.equal(stateBytesOf(rich), bytes)
+    const noSkills = { ...base, totals: { turns: 0, steps: 0, events: 0, injects: 0, compactions: 0, prunes: 0, modelSwitches: 0 } as never }
+    assert.ok(stateBytesOf(noSkills) >= small)
   })
 })
 

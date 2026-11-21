@@ -1,5 +1,6 @@
 import type { Category, CommandRecord, CommandStats, ContextEventRecord, FileOpRecord, SessionCostUsage, SurfaceNode, SurfaceNodeWindow, SystemPromptNode, TimingSpan, TimingTotals } from '../shared/types'
 import type { SlimRequestRecord } from '../shared/types'
+import { textBytes, WIRE_BYTES } from '../shared/bytes'
 import type { FoldBounds } from './config'
 
 const SURFACE_CATS: readonly Category[] = ['user', 'inject', 'skill', 'assistant', 'tool']
@@ -217,6 +218,72 @@ export interface TimelineState {
   pendingCodeStarts?: Record<string, number>
 }
 
+const stateBytes = new WeakMap<TimelineState, number>()
+
+function nodeBytesOf(node: SurfaceNode): number {
+  return WIRE_BYTES.node + textBytes(node.text) + textBytes(node.name) + textBytes(node.tool)
+    + textBytes(node.skill) + textBytes(node.agent) + textBytes(node.form)
+}
+
+function commandBytesOf(rec: CommandStateRecord): number {
+  return WIRE_BYTES.command + textBytes(rec.cmd) + textBytes(rec.tool) + textBytes(rec.description)
+    + textBytes(rec.cwd)
+}
+
+export function stateBytesOf(state: TimelineState): number {
+  const known = stateBytes.get(state)
+  if (known !== undefined) return known
+  let bytes = WIRE_BYTES.base
+    + state.requests.length * WIRE_BYTES.request
+    + state.events.length * WIRE_BYTES.event
+    + state.fileOps.length * WIRE_BYTES.fileOp
+    + state.commands.length * WIRE_BYTES.command
+    + state.spans.length * WIRE_BYTES.span
+    + (state.systems?.length ?? 0) * WIRE_BYTES.system
+    + (state.stepWaits?.length ?? 0) * 16
+    + (state.stepBeats?.length ?? 0) * 8
+    + (state.stepSpans?.length ?? 0) * WIRE_BYTES.span
+    + (state.pendingShadowedSeqs?.length ?? 0) * 8
+    + (state.commandCalls?.length ?? 0) * 24
+    + textBytes(state.lastUser)
+  for (const node of state.surface) bytes += nodeBytesOf(node)
+  for (const node of state.archived) bytes += nodeBytesOf(node)
+  for (const op of state.fileOps) {
+    bytes += WIRE_BYTES.fileOp + textBytes(op.path) + textBytes(op.tool) + textBytes(op.detail) + textBytes(op.program)
+  }
+  for (const rec of state.commands) bytes += commandBytesOf(rec)
+  for (const event of state.events) {
+    bytes += WIRE_BYTES.event + textBytes(event.name) + textBytes(event.detail) + textBytes(event.agent)
+    if (event.items !== undefined) {
+      for (const item of event.items) bytes += textBytes(item)
+    }
+  }
+  for (const key in state.callNames) {
+    const entry = state.callNames[key]
+    bytes += WIRE_BYTES.entry + textBytes(key) + textBytes(entry.name) + textBytes(entry.argsRaw)
+  }
+  const agents = state.agents ?? {}
+  for (const key in agents) {
+    const entry = agents[key]
+    bytes += WIRE_BYTES.entry + textBytes(key) + textBytes(entry.catalogName) + textBytes(entry.memberName) + textBytes(entry.catalogLabel)
+  }
+  for (const key in state.todoItems ?? {}) bytes += WIRE_BYTES.entry + textBytes(key)
+  for (const key in state.teamTasks ?? {}) bytes += WIRE_BYTES.entry + textBytes(key)
+  for (const key in state.totals?.skills ?? {}) bytes += WIRE_BYTES.entry + textBytes(key)
+  const pendingCmds = state.pendingCodeCmds ?? {}
+  for (const key in pendingCmds) {
+    bytes += WIRE_BYTES.entry + textBytes(key)
+    for (const rec of pendingCmds[key]) bytes += commandBytesOf(rec)
+  }
+  const pendingOps = state.pendingCodeOps ?? {}
+  for (const key in pendingOps) {
+    bytes += WIRE_BYTES.entry + textBytes(key)
+    for (const op of pendingOps[key]) bytes += WIRE_BYTES.fileOp + textBytes(op.path) + textBytes(op.detail)
+  }
+  stateBytes.set(state, bytes)
+  return bytes
+}
+
 export function archiveWindowOf(
   state: TimelineState,
   tail: number,
@@ -351,6 +418,12 @@ export function trimState(st: TimelineState, bounds: FoldBounds): void {
       if (floor !== undefined) st.archiveFloor = Math.max(st.archiveFloor ?? 0, floor)
       st.archived = st.archived.slice(drop)
     }
+  }
+  if (bounds.historyMode === true && st.archived.length > bounds.maxArchiveNodes) {
+    const drop = st.archived.length - bounds.maxArchiveNodes
+    const prev = st.archived[drop - 1]
+    st.archiveFloor = Math.max(st.archiveFloor ?? 0, prev.gone ?? prev.seq)
+    st.archived = st.archived.slice(drop)
   }
 }
 

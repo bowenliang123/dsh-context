@@ -2,13 +2,15 @@ import type { Context } from '@deepseek-ai/cordis'
 import type { FoldBounds } from './config'
 import { type ColdReadGate } from './coldRead'
 import { applyTimeline } from './fold'
-import { createTimelineState } from './foldState'
+import { createTimelineState, stateBytesOf } from './foldState'
 import { asRecord } from './record'
 import type { TimelineEvent, TimelineState } from './foldState'
 
 const FOLD_LOG_YIELD_EVENTS = 1_000
 
 const SHADOW_ENTRIES_MAX = 8
+
+const SHADOW_BYTES_MAX = 64 * 1024 * 1024
 
 const SHADOW_BUFFER_MAX = 512
 
@@ -72,6 +74,7 @@ export class DetailShadow {
     private readonly coldReads: ColdReadGate,
     private readonly observeOf: () => ((id: string, options: unknown) => Promise<unknown>) | undefined,
     private readonly sweepMs: number = IDLE_SWEEP_MS,
+    private readonly bytesMax: number = SHADOW_BYTES_MAX,
   ) {
     ctx.effect(() => () => {
       this.entries.clear()
@@ -124,20 +127,25 @@ export class DetailShadow {
     }
     entry.touched = ++this.ticks
     await entry.seed
+    if (entry.state !== null) this.evict(id)
     return this.entries.get(id) === entry ? entry.state : null
   }
 
   private evict(keep: string): void {
-    while (this.entries.size > SHADOW_ENTRIES_MAX) {
+    for (;;) {
+      let total = 0
       let oldest: string | undefined
       let oldestTick = Number.POSITIVE_INFINITY
       for (const [id, entry] of this.entries) {
-        if (id === keep || entry.state === null) continue
-        if (entry.touched < oldestTick) {
-          oldest = id
-          oldestTick = entry.touched
+        if (entry.state !== null) {
+          total += stateBytesOf(entry.state)
+          if (id !== keep && entry.touched < oldestTick) {
+            oldest = id
+            oldestTick = entry.touched
+          }
         }
       }
+      if (this.entries.size <= SHADOW_ENTRIES_MAX && total <= this.bytesMax) return
       if (oldest === undefined) return
       this.entries.delete(oldest)
     }

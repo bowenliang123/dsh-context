@@ -9,13 +9,15 @@ import { watchBalanceChannel } from './balance'
 import { watchActivityBackfill } from './backfill'
 import { makeColdReadGate } from './coldRead'
 import { watchCommandPageChannel } from './commandPages'
-import { Config, resolveBounds } from './config'
+import { Config, historyBounds, resolveBounds } from './config'
 import { watchDetailChannel, createDetailGate, type DetailChannelGate } from './detail'
 import { watchDeltaChannel } from './delta'
 import { DetailShadow } from './detailShadow'
+import type { TimelineState } from './foldState'
 import { observeOf } from './postRoute'
 import { createFallbackActivityDefinition, createFallbackHeadersDefinition, createFallbackTimelineDefinition } from './fallback'
 import { watchFactsChannel } from './facts'
+import { watchHistoryChannel } from './history'
 import { watchHeadsChannel } from './headsRoute'
 import { watchFleetChannel } from './fleet'
 import { createContextHeadersDefinition } from './headers'
@@ -61,11 +63,13 @@ export function apply(ctx: Context, config: Config): void {
   watchStepIdentity(ctx)
   const gate = createDetailGate(ctx)
   const bounds = resolveBounds(config)
-  const shadow = new DetailShadow(ctx, bounds, coldReads, () => observeOf(ctx))
+  const shadow = new DetailShadow(ctx, historyBounds(bounds, false), coldReads, () => observeOf(ctx))
   watchDetailChannel(ctx, bounds, coldReads, gate, shadow, pricing)
   const deltaGate: DetailChannelGate = { ...gate, live: false }
   watchDeltaChannel(ctx, bounds, coldReads, deltaGate, shadow, attribution.ownerOf.bind(attribution))
-  watchFactsChannel(ctx, bounds, { gates: gate, coldReads, detailState: id => shadow.stateOf(id), cost: pricing })
+  const detailStateOf = (id: string): Promise<TimelineState | null> => shadow.stateOf(id)
+  watchFactsChannel(ctx, bounds, { gates: gate, coldReads, detailState: detailStateOf, cost: pricing })
+  watchHistoryChannel(ctx, bounds, { coldReads, detailState: detailStateOf })
   watchCommandPageChannel(ctx, resolveBounds(config), coldReads)
   const cache = createOverviewCache({ config })
   watchHeadsChannel(ctx, { bounds, coldReads, cost: pricing, cache })

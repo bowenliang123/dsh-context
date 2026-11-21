@@ -2,7 +2,7 @@ import { act, createElement as h } from 'react'
 import assert from 'node:assert/strict'
 import { afterEach, describe, test, vi } from 'vitest'
 import { jsonOf, makeRichText, type RichMode } from '../../../src/client/components/richText'
-import { click, hover, makeKit, mount, query, queryAll, settle, text } from '../helpers/kit'
+import { click, fireScroll, hover, makeKit, mount, query, queryAll, settle, text } from '../helpers/kit'
 import { makeEventList, makeEventText } from '../../../src/client/components/events'
 import { fmtTime } from '../../../src/client/format'
 import { type ContextEventRecord } from '../../../src/shared/types'
@@ -685,6 +685,21 @@ describe('EventList', () => {
     assert.equal(queryAll(m.container, '.lc-event').length, 2)
     assert.ok(text(m.container).includes('Todo added'))
     assert.ok(text(m.container).includes('Todo done · a'))
+    await m.unmount()
+  })
+
+  test('a long event log mounts only its window', async () => {
+    const events = Array.from({ length: 80 }, (_, index) => ev({ seq: index + 1, kind: 'prune' }))
+    const m = await mount(h(EventList, { events }))
+    const rows = queryAll(m.container, '.lc-event')
+    assert.ok(rows.length > 0)
+    assert.ok(rows.length < events.length, 'the off-screen rows stay unmounted')
+    const root = query(m.container, '.lc-events')
+    Object.defineProperty(root, 'clientHeight', { value: 100, configurable: true })
+    Object.defineProperty(root, 'scrollTop', { value: 900, writable: true, configurable: true })
+    await fireScroll(root)
+    await settle(20)
+    assert.ok(queryAll(m.container, '.lc-row-pad').length > 0)
     await m.unmount()
   })
 

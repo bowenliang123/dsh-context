@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useRef, type ReactElement } from 'react'
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, type ReactElement } from 'react'
 import type { ContextEventRecord } from '../../shared/types'
 import { IconBranch, IconPlus } from '../primitives'
 import { formLabelOf, modeLabelOf } from '../labels'
@@ -10,6 +10,7 @@ import type { ViewKit } from '../viewkit'
 import { makeDetailNote } from './detailNote'
 import { LoadingLane } from './skeleton'
 import { remoteStateOf } from './useRemoteState'
+import { useSurfaceWindow } from './useRowWindow'
 
 export const EVENT_KINDS = ['inject', 'compaction', 'prune', 'model'] as const
 
@@ -22,6 +23,10 @@ export function eventFilterLabelOf(t: Translate, filter: EventKindFilter): strin
 }
 
 const EVENT_ICONS: Record<string, string> = { compaction: '✂', prune: '✂', mode: '⇄' }
+
+const EVENT_ROW_ESTIMATE = 25
+
+const eventRowSize = (): number => EVENT_ROW_ESTIMATE
 
 const WORKFLOW_ICON_KINDS: Partial<Record<ContextEventRecord['kind'], MilestoneKind>> = {
   'goal-create': 'goal-create',
@@ -152,11 +157,23 @@ export function makeEventList(kit: ViewKit): (props: EventListProps) => ReactEle
   const labelClass = 'lc-event-label flex-1 @max-[380px]/lc-card:basis-[calc(100%-92px)]'
   return function EventList(props: EventListProps): ReactElement {
     const rootRef = useRef<HTMLDivElement | null>(null)
+    const sorted = useMemo(() => props.events.slice().reverse(), [props.events])
+    const getKey = useCallback((index: number): string => {
+      const ev = sorted[index]
+      return String(ev.seq) + ':' + String(ev.ord ?? '') + ':' + ev.kind
+    }, [sorted])
+    const scope = useSurfaceWindow(rootRef, {
+      count: sorted.length,
+      getKey,
+      estimateSize: eventRowSize,
+      overscan: 240,
+      seed: 10,
+    })
     useLayoutEffect(() => {
       const root = rootRef.current
       if (!root) return
       syncTitles(root)
-    }, [props.events])
+    }, [props.events, scope.from, scope.to])
     useEffect(() => {
       let frame = 0
       const onResize = (): void => {
@@ -177,10 +194,12 @@ export function makeEventList(kit: ViewKit): (props: EventListProps) => ReactEle
     if (remote.kind === 'loading') return <LoadingLane />
     if (remote.kind === 'failed') return <DetailNote state="failed" onRetry={remote.retry} className="lc-empty lc-lane" />
     if (remote.kind === 'empty') return <div className="lc-empty lc-lane">{t('events.empty')}</div>
-    const sorted = props.events.slice().reverse()
     return (
-      <div className="lc-events" ref={rootRef}>
-        {sorted.map((ev) => {
+      <div className="lc-events" ref={rootRef} onKeyDown={scope.onKeyDown}>
+        {scope.topPad > 0 ? <div className="lc-row-pad" style={{ height: scope.topPad }} aria-hidden="true" /> : null}
+        {sorted.slice(scope.from, scope.to + 1).map((ev, offset) => {
+          const index = scope.from + offset
+          const key = getKey(index)
           const { lead, tail } = eventLabelParts(ev)
           const at = eventAt(ev)
           const workflowIcon = WORKFLOW_ICON_KINDS[ev.kind]
@@ -197,13 +216,14 @@ export function makeEventList(kit: ViewKit): (props: EventListProps) => ReactEle
           const label = lead === '' ? tail : <><b>{lead}</b>{tail}</>
           const tip = eventTipOf(ev)
           return (
-            <div key={ev.kind + ':' + String(ev.seq)} className="lc-event @max-[380px]/lc-card:flex-wrap">
+            <div key={key} ref={scope.measure(key)} className="lc-event @max-[380px]/lc-card:flex-wrap">
               <span className={'lc-event-icon lc-event-' + ev.kind}>{glyph}</span>
               <span className={'lc-kind lc-kind-' + ev.kind}>{t('kind.' + ev.kind)}</span>
               {reveal !== undefined ? (
                 <button
                   type="button"
                   className={labelClass + ' lc-event-jump'}
+                  tabIndex={scope.tabIndexFor(key)}
                   data-tip={tip}
                   title={tip}
                   onClick={() => { reveal(ev) }}
@@ -226,6 +246,7 @@ export function makeEventList(kit: ViewKit): (props: EventListProps) => ReactEle
             </div>
           )
         })}
+        {scope.bottomPad > 0 ? <div className="lc-row-pad" style={{ height: scope.bottomPad }} aria-hidden="true" /> : null}
       </div>
     )
   }

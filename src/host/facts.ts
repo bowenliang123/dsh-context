@@ -6,7 +6,7 @@ import type { DetailChannelGate } from './detail'
 import type { CachedSnapshotFace, SessionsFace, StateProjectionsFace } from './faces'
 import { type ColdReadGate, makeColdReadGate } from './coldRead'
 import { makeFoldCache } from './foldCache'
-import { buildTimelineHead, eventsOf, requestRowsOf, serveCommand } from './foldWire'
+import { buildTimelineHead, eventsOf, requestRowsOf, serveCommand, tailOf } from './foldWire'
 import { withCost, type CostSource } from './cost'
 import { TIMING_SPANS_MAX, surfaceWindowOf, type TimelineState } from './foldState'
 import { failure, leaseOf, mountPostRoute, observeOf, readBody, reply, revisionOf } from './postRoute'
@@ -133,10 +133,6 @@ function kernelOfCold(cache: CachedSnapshotFace | undefined, header: unknown): K
   }
 }
 
-function tailOf<T>(items: readonly T[], tail: number): T[] {
-  return items.length > tail ? items.slice(items.length - tail) : [...items]
-}
-
 function windowFloorOf(items: readonly { seq: number }[], tail: number, floor: number | undefined): number | undefined {
   if (items.length <= tail) return floor
   return Math.max(floor ?? 0, items[items.length - tail - 1].seq)
@@ -153,10 +149,9 @@ function surfacePartOf(state: TimelineState, tail: number, archiveTail: number):
 
 function detailPartsOf(state: TimelineState, parts: ReadonlySet<string>, window: FactWindow, archiveTail: number): Record<string, unknown> {
   const out: Record<string, unknown> = {}
-  const requests = parts.has('requests') || parts.has('events') ? requestRowsOf(state) : []
-  if (parts.has('requests')) out.requests = tailOf(requests, window.requestsTail)
+  if (parts.has('requests')) out.requests = requestRowsOf(state, window.requestsTail)
   if (parts.has('nodes')) out.nodes = surfacePartOf(state, window.nodesTail, archiveTail)
-  if (parts.has('events')) out.events = tailOf(eventsOf(state, requests), window.eventsTail)
+  if (parts.has('events')) out.events = eventsOf(state, state.requests, window.eventsTail)
   if (parts.has('files')) {
     const fileOpsFloor = windowFloorOf(state.fileOps, window.filesTail, state.fileOpsFloor)
     out.files = {
@@ -199,7 +194,7 @@ function valueOf(
   ]
   const partsValue: Record<string, unknown> = {
     ...(parts.has('head') ? { head: withCost(cost, buildTimelineHead(state)) } : {}),
-    ...(parts.has('series') ? { series: requestRowsOf(aligned ?? state) } : {}),
+    ...(parts.has('series') ? { series: requestRowsOf(aligned ?? state, window.requestsTail) } : {}),
     ...(parts.has('stats') && kernel.values !== undefined ? { stats: kernel.values } : {}),
     ...(aligned === null ? {} : detailPartsOf(aligned, parts, window, archiveTail)),
   }

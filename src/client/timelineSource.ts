@@ -1,15 +1,18 @@
 import { useEffect, useMemo, useSyncExternalStore } from 'react'
-import type { ContextTimeline, ContextTimelineDetail, HeaderRecord, HeaderTool, RequestRecord, SurfaceNode, SurfaceNodeWindow, SystemPromptNode } from '../shared/types'
-import { CATS } from '../shared/categories'
-import type { ContextDelta } from '../shared/delta'
-import type { IncrementCat } from '../shared/increment'
-import { DELTA_ROUTE, DETAIL_ROUTE, FACTS_ROUTE } from './apiRoutes'
+import type { ContextEventRecord, ContextTimeline, ContextTimelineDetail, HistoryPart, RequestRecord } from '../shared/types'
+import { DELTA_ROUTE, DETAIL_ROUTE, FACTS_ROUTE, HISTORY_ROUTE } from './apiRoutes'
 import { subscribeInvalidations } from './invalidation'
 import { noteCostPending } from './costRefresh'
 import { makeRetentionCache } from './retention'
 import { postRoute, postRouteQuietly, RouteError } from './route'
 import type { SessionStandardProps } from './services'
-import { asRecord, collectionsOf, projectionOf, timelineOf } from './services'
+import { projectionOf, timelineOf } from './services'
+import { deltaOf, detailOf, factsOf, historyOf, type DeltaFetcher, type FactsRead, type HistoryFetcher } from './timelineWire'
+import { historyRowKey, mergeHistoryRows, type HistorySeqRow } from './historyMerge'
+import { WIRE_BYTES, textBytes } from '../shared/bytes'
+
+export { deltaOf, detailOf, factsOf, historyOf } from './timelineWire'
+export type { DeltaFetcher, FactsRead, HistoryCursor, HistoryFetcher } from './timelineWire'
 
 export type FactPart = 'requests' | 'nodes' | 'events' | 'files' | 'commands' | 'spans'
 
@@ -22,189 +25,11 @@ export interface FactWindow {
   spansTail?: number
 }
 
-interface FactParts {
-  head?: ContextTimeline
-  series?: RequestRecord[]
-  requests?: RequestRecord[]
-  nodes?: SurfaceNodeWindow
-  events?: ContextTimeline['events']
-  files?: { fileOps: NonNullable<ContextTimeline['fileOps']>; fileOpsFloor?: number }
-  commands?: { commands: NonNullable<ContextTimeline['commands']>; commandsFloor?: number; commandStats?: ContextTimeline['commandStats'] }
-  spans?: NonNullable<ContextTimeline['spans']>
-}
-
-export interface FactsRead {
-  rev: number
-  live: boolean
-  asOfSeq?: number
-  parts: FactParts
-  missing?: readonly string[]
-}
-
-function numOf(value: unknown): number | undefined {
-  return typeof value === 'number' && Number.isFinite(value) && value >= 0 ? value : undefined
-}
-
-function rowsOf(value: unknown): Record<string, unknown>[] | undefined {
-  if (!Array.isArray(value)) return undefined
-  return value.filter((entry): entry is Record<string, unknown> => entry !== null && typeof entry === 'object')
-}
-
-function nodesPartOf(value: unknown): SurfaceNodeWindow | undefined {
-  const data = asRecord(value)
-  if (data === null) return undefined
-  const nodes = rowsOf(data.nodes) as SurfaceNode[] | undefined
-  const archive = rowsOf(data.archive) as SurfaceNode[] | undefined
-  if (nodes === undefined || archive === undefined) return undefined
-  return {
-    nodes,
-    archive,
-    droppedNodes: numOf(data.droppedNodes) ?? 0,
-    ...(numOf(data.surfaceFloor) === undefined ? {} : { surfaceFloor: numOf(data.surfaceFloor) }),
-    ...(numOf(data.archiveFloor) === undefined ? {} : { archiveFloor: numOf(data.archiveFloor) }),
-  }
-}
-
-export function factsOf(value: unknown): FactsRead | null {
-  const data = asRecord(value)
-  if (data === null) return null
-  const rev = numOf(data.rev)
-  if (rev === undefined) return null
-  const parts = asRecord(data.parts)
-  if (parts === null) return null
-  const head = parts.head === undefined ? undefined : timelineOf(parts.head)
-  const series = rowsOf(parts.series) as RequestRecord[] | undefined
-  const requests = rowsOf(parts.requests) as RequestRecord[] | undefined
-  const events = rowsOf(parts.events) as ContextTimeline['events'] | undefined
-  const spans = rowsOf(parts.spans) as NonNullable<ContextTimeline['spans']> | undefined
-  const files = asRecord(parts.files)
-  const fileOps = files === null ? undefined : rowsOf(files.fileOps) as NonNullable<ContextTimeline['fileOps']> | undefined
-  const commands = asRecord(parts.commands)
-  const commandRows = commands === null ? undefined : rowsOf(commands.commands) as NonNullable<ContextTimeline['commands']> | undefined
-  const stats = asRecord(commands?.commandStats)
-  const nodes = nodesPartOf(parts.nodes)
-  const fileOpsFloor = files === null ? undefined : numOf(files.fileOpsFloor)
-  const commandsFloor = commands === null ? undefined : numOf(commands.commandsFloor)
-  const missing = Array.isArray(data.missing) ? data.missing.filter((entry): entry is string => typeof entry === 'string') : undefined
-  return {
-    rev,
-    live: data.live === true,
-    ...(numOf(data.asOfSeq) === undefined ? {} : { asOfSeq: numOf(data.asOfSeq) }),
-    parts: {
-      ...(head === null || head === undefined ? {} : { head }),
-      ...(series === undefined ? {} : { series }),
-      ...(requests === undefined ? {} : { requests }),
-      ...(nodes === undefined ? {} : { nodes }),
-      ...(events === undefined ? {} : { events }),
-      ...(fileOps === undefined
-        ? {}
-        : {
-          files: {
-            fileOps,
-            ...(fileOpsFloor === undefined ? {} : { fileOpsFloor }),
-          },
-        }),
-      ...(commandRows === undefined
-        ? {}
-        : {
-          commands: {
-            commands: commandRows,
-            ...(commandsFloor === undefined ? {} : { commandsFloor }),
-            ...(stats === null
-              ? {}
-              : {
-                commandStats: {
-                  runs: numOf(stats.runs) ?? 0,
-                  failed: numOf(stats.failed) ?? 0,
-                  ms: numOf(stats.ms) ?? 0,
-                  bg: numOf(stats.bg) ?? 0,
-                },
-              }),
-          },
-        }),
-      ...(spans === undefined ? {} : { spans }),
-    },
-    ...(missing === undefined || missing.length === 0 ? {} : { missing }),
-  }
-}
-
-export function detailOf(value: unknown): ContextTimelineDetail | null {
-  const data = asRecord(value)
-  if (data === null) return null
-  if (typeof data.rev !== 'number' || !Number.isFinite(data.rev) || data.rev < 0) return null
-  const head = timelineOf(data.head)
-  return {
-    rev: data.rev,
-    ...(head !== null ? { head } : {}),
-    ...collectionsOf(data),
-  }
-}
-
 export function makeDetailFetcher(
   sessionId: string,
 ): (() => Promise<ContextTimelineDetail | null>) | undefined {
   if (sessionId === '') return undefined
   return () => postRoute(DETAIL_ROUTE, { sessionId }, detailOf, { label: 'detail' })
-}
-
-export type DeltaFetcher = (seq: number | null, baseSeq: number | null) => Promise<ContextDelta | null>
-
-function countRecordOf(value: unknown): Record<IncrementCat, number> | null {
-  const record = asRecord(value)
-  if (record === null) return null
-  const out = {} as Record<IncrementCat, number>
-  for (const cat of CATS) {
-    const n = numOf(record[cat.key])
-    if (n === undefined) return null
-    out[cat.key] = n
-  }
-  return out
-}
-
-function nullableOf(value: unknown): Record<string, unknown> | null | undefined {
-  if (value === null) return null
-  return asRecord(value) ?? undefined
-}
-
-export function deltaOf(value: unknown): ContextDelta | null {
-  const data = asRecord(value)
-  if (data === null) return null
-  const added = rowsOf(data.added) as SurfaceNode[] | undefined
-  const viewNodes = rowsOf(data.viewNodes) as SurfaceNode[] | undefined
-  const viewHeader = nullableOf(data.viewHeader)
-  const viewSystem = nullableOf(data.viewSystem)
-  const system = nullableOf(data.system)
-  const tools = rowsOf(data.tools) as HeaderTool[] | undefined
-  const header = nullableOf(data.header)
-  const counts = countRecordOf(data.counts)
-  const tokens = countRecordOf(data.tokens)
-  const removedCounts = countRecordOf(data.removedCounts)
-  const tokenUp = countRecordOf(data.tokenUp)
-  const tokenDown = countRecordOf(data.tokenDown)
-  const items = numOf(data.items)
-  const total = numOf(data.total)
-  if (added === undefined || viewNodes === undefined
-    || viewHeader === undefined || viewSystem === undefined || system === undefined
-    || tools === undefined || header === undefined
-    || counts === null || tokens === null || removedCounts === null
-    || tokenUp === null || tokenDown === null
-    || items === undefined || total === undefined) return null
-  return {
-    added,
-    viewNodes,
-    viewHeader: viewHeader as HeaderRecord | null,
-    viewSystem: viewSystem as SystemPromptNode | null,
-    system: system as SystemPromptNode | null,
-    tools,
-    header: header as HeaderRecord | null,
-    counts,
-    tokens,
-    removedCounts,
-    tokenUp,
-    tokenDown,
-    items,
-    total,
-  }
 }
 
 export function makeDeltaFetcher(sessionId: string): DeltaFetcher | undefined {
@@ -222,6 +47,7 @@ type CoreRead = FactsRead | ContextTimelineDetail
 export interface FactsFetchers {
   core: () => Promise<CoreRead | null>
   part: (part: FactPart, window: FactWindow) => Promise<CoreRead | null>
+  history?: HistoryFetcher
   legacy?: CoreFetcher
 }
 
@@ -233,9 +59,21 @@ export function makeFactsFetchers(sessionId: string): FactsFetchers | undefined 
     value => factsOf(value) ?? detailOf(value),
     { label: 'facts' },
   )
+  const history: HistoryFetcher = (part, cursor, limit) => postRoute(
+    HISTORY_ROUTE,
+    {
+      sessionId,
+      part,
+      ...(cursor?.beforeSeq === undefined ? {} : { beforeSeq: cursor.beforeSeq }),
+      ...(limit === undefined ? {} : { limit }),
+    },
+    historyOf,
+    { label: 'history' },
+  )
   return {
     core: () => read(['head', 'series']),
     part: (part, window) => read([part], window),
+    history,
     legacy: makeDetailFetcher(sessionId) as CoreFetcher,
   }
 }
@@ -261,6 +99,14 @@ const CATCH_UP_MS = 1_000
 const PART_RETRY_MS = 1_000
 
 const PART_RETRY_LIMIT = 3
+
+const HISTORY_PAGE_MAX = 1_000
+
+const HISTORY_RETRY_LIMIT = 3
+
+const CANCELLED = 'cancelled'
+
+type HistoryRows<T> = T[] | typeof CANCELLED | null
 
 function emptyDetail(rev: number, head?: ContextTimeline, requests?: RequestRecord[]): ContextTimelineDetail {
   return {
@@ -387,6 +233,10 @@ export class DetailStore {
   private readonly unavailableParts = new Set<FactPart>()
   private readonly listeners = new Set<() => void>()
   private snap: DetailSnap = EMPTY_SNAP
+  private historyState: 'idle' | 'loading' | 'ready' | 'failed' = 'idle'
+  private historyRev = -1
+  private historyTimer: ReturnType<typeof setTimeout> | null = null
+  private historyFailures = 0
 
   constructor(
     private readonly fetcher: StoreFetcher | undefined,
@@ -394,6 +244,147 @@ export class DetailStore {
     private readonly eagerFirst: boolean = false,
     private readonly onResize?: () => void,
   ) {}
+
+  readonly ensureHistory = (): void => {
+    const facts = this.facts
+    const current = this.detail
+    if (facts?.history === undefined || current === null || this.acceptedRev < 0) return
+    if (this.historyState === 'loading') return
+    if (this.historyState === 'ready' && this.historyRev === this.acceptedRev) return
+    const refresh = this.historyState === 'ready'
+    if (!refresh) this.historyState = 'loading'
+    void this.loadHistory(facts.history, this.generation, this.acceptedRev, refresh, current)
+  }
+
+  private async loadHistory(
+    history: HistoryFetcher,
+    generation: number,
+    rev: number,
+    refresh: boolean,
+    current: ContextTimelineDetail,
+  ): Promise<void> {
+    try {
+      if (refresh) {
+        const [requests, events] = await Promise.all([
+          this.loadTailHistory<RequestRecord>(history, 'requests', current.requests),
+          this.loadTailHistory<ContextEventRecord>(history, 'events', current.events),
+        ])
+        if (generation !== this.generation) return
+        if (requests === null || events === null) {
+          this.scheduleHistoryRetry()
+          return
+        }
+        if (rev !== this.acceptedRev || this.detail === null) {
+          this.ensureHistory()
+          return
+        }
+        this.commitHistory({ ...this.detail, requests, events })
+        return
+      }
+      const requests = await this.loadAllHistory<RequestRecord>(history, 'requests', generation)
+      if (requests === CANCELLED) return
+      if (requests === null) {
+        this.failHistory()
+        return
+      }
+      const events = await this.loadAllHistory<ContextEventRecord>(history, 'events', generation)
+      if (events === CANCELLED) return
+      if (events === null) {
+        this.failHistory()
+        return
+      }
+      if (rev !== this.acceptedRev || this.detail === null) {
+        this.historyState = 'idle'
+        this.ensureHistory()
+        return
+      }
+      this.commitHistory({ ...this.detail, requests, events })
+    } catch {
+      if (refresh) this.scheduleHistoryRetry()
+      else this.failHistory()
+    }
+  }
+
+  private async loadAllHistory<T>(
+    history: HistoryFetcher,
+    part: HistoryPart,
+    generation: number,
+  ): Promise<HistoryRows<T>> {
+    let beforeSeq: number | undefined
+    const rows: T[] = []
+    for (;;) {
+      const page = await history(part, beforeSeq === undefined ? undefined : { beforeSeq }, HISTORY_PAGE_MAX)
+      if (generation !== this.generation) return CANCELLED
+      if (page === null) return null
+      rows.unshift(...page.rows as T[])
+      if (page.beforeSeq === undefined || page.rows.length === 0) break
+      beforeSeq = page.beforeSeq
+    }
+    return rows
+  }
+
+  private async loadTailHistory<T extends HistorySeqRow>(
+    history: HistoryFetcher,
+    part: HistoryPart,
+    old: T[],
+  ): Promise<T[] | null> {
+    const known = new Set(old.map(historyRowKey))
+    const add: T[] = []
+    let unseen = 0
+    let cursor: number | undefined
+    for (;;) {
+      const page = await history(part, cursor === undefined ? undefined : { beforeSeq: cursor }, HISTORY_PAGE_MAX)
+      if (page === null) return null
+      for (const row of page.rows as unknown as T[]) {
+        const key = historyRowKey(row)
+        if (known.has(key)) continue
+        known.add(key)
+        unseen++
+      }
+      add.unshift(...page.rows as unknown as T[])
+      if (unseen >= Math.max(0, page.total - old.length)
+        || page.atStart || page.beforeSeq === undefined || page.rows.length === 0) break
+      cursor = page.beforeSeq
+    }
+    return mergeHistoryRows(old, add)
+  }
+
+  private failHistory(): void {
+    this.historyState = 'failed'
+    this.scheduleHistoryRetry()
+  }
+
+  private scheduleHistoryRetry(): void {
+    if (!this.active || this.historyTimer !== null) return
+    this.historyFailures += 1
+    if (this.historyFailures > HISTORY_RETRY_LIMIT) return
+    this.historyTimer = setTimeout(() => {
+      this.historyTimer = null
+      this.ensureHistory()
+    }, PART_RETRY_MS * 2 ** (this.historyFailures - 1))
+  }
+
+  private clearHistoryRetry(): void {
+    if (this.historyTimer !== null) {
+      clearTimeout(this.historyTimer)
+      this.historyTimer = null
+    }
+  }
+
+  private commitHistory(detail: ContextTimelineDetail): void {
+    this.detail = detail
+    this.bytes = detailBytesOf(detail)
+    this.historyState = 'ready'
+    this.historyRev = this.acceptedRev
+    this.historyFailures = 0
+    this.clearHistoryRetry()
+    this.emit()
+  }
+
+  private withHistory(detail: ContextTimelineDetail): ContextTimelineDetail {
+    if (this.historyState !== 'ready' || this.detail === null) return detail
+    return { ...detail, requests: this.detail.requests, events: this.detail.events }
+  }
 
   private get facts(): FactsFetchers | undefined {
     return this.fetcher !== undefined && typeof this.fetcher === 'object' ? this.fetcher : undefined
@@ -510,6 +501,10 @@ export class DetailStore {
     this.partRev.clear()
     this.unavailableParts.clear()
     this.inflightParts.clear()
+    this.clearHistoryRetry()
+    this.historyState = 'idle'
+    this.historyRev = -1
+    this.historyFailures = 0
     this.snap = EMPTY_SNAP
   }
 
@@ -536,6 +531,7 @@ export class DetailStore {
     this.parked = true
     this.clearCatchUp()
     this.clearPartRetries()
+    this.clearHistoryRetry()
     if (this.timer !== null) {
       clearTimeout(this.timer)
       this.timer = null
@@ -608,13 +604,17 @@ export class DetailStore {
         if ('missing' in read && read.missing?.includes('series') === true) {
           return { detail: await this.legacyRead(), disable: true }
         }
-        return { detail: detailFromFacts(read, this.detail), disable: false }
+        return { detail: this.withHistory(detailFromFacts(read, this.detail)), disable: false }
       }
     }
     return { detail: await this.legacyRead(), disable: false }
   }
 
   private async fetchPart(facts: FactsFetchers, part: FactPart, window: FactWindow): Promise<void> {
+    if (this.historyState === 'ready' && (part === 'events' || part === 'requests')) {
+      this.partRev.set(part, this.acceptedRev)
+      return
+    }
     const generation = this.generation
     const rev = this.acceptedRev
     this.inflightParts.add(part)
@@ -622,6 +622,10 @@ export class DetailStore {
     try {
       const read = await facts.part(part, window)
       if (generation !== this.generation || this.acceptedRev !== rev) return
+      if (this.historyState === 'ready' && (part === 'events' || part === 'requests')) {
+        this.partRev.set(part, this.acceptedRev)
+        return
+      }
       if (read === null) {
         this.schedulePartRetry(part)
         return
@@ -770,14 +774,21 @@ export class DetailStore {
 }
 
 export function detailBytesOf(detail: ContextTimelineDetail): number {
-  return 2048
-    + detail.requests.length * 180
-    + detail.events.length * 120
-    + detail.nodes.length * 160
-    + detail.archive.length * 160
-    + (detail.fileOps?.length ?? 0) * 220
-    + (detail.commands?.length ?? 0) * 420
-    + (detail.spans?.length ?? 0) * 60
+  let bytes = WIRE_BYTES.base
+    + detail.requests.length * WIRE_BYTES.request
+    + detail.events.length * WIRE_BYTES.event
+    + detail.nodes.length * WIRE_BYTES.node
+    + detail.archive.length * WIRE_BYTES.node
+    + (detail.fileOps?.length ?? 0) * WIRE_BYTES.fileOp
+    + (detail.commands?.length ?? 0) * WIRE_BYTES.command
+    + (detail.spans?.length ?? 0) * WIRE_BYTES.span
+  for (const event of detail.events) {
+    bytes += textBytes(event.name) + textBytes(event.detail) + textBytes(event.agent)
+    if (event.items !== undefined) {
+      for (const item of event.items) bytes += textBytes(item)
+    }
+  }
+  return bytes
 }
 
 const stores = makeRetentionCache<string, DetailStore>('detailStores', {
@@ -819,11 +830,13 @@ export interface TimelineSource {
   detailState: DetailState
   retryDetail: () => void
   ensurePart: (part: FactPart, window?: FactWindow) => void
+  ensureHistory: () => void
 }
 
 const noopSubscribe = (): (() => void) => () => {}
 const noopRetry = (): void => {}
 const noopEnsurePart = (): void => {}
+const noopEnsureHistory = noopEnsurePart
 
 export function useTimelineSource(props: SessionStandardProps): TimelineSource {
   const head = projectionOf(props, 'contextTimeline', timelineOf)
@@ -843,22 +856,27 @@ export function useTimelineSource(props: SessionStandardProps): TimelineSource {
     if (store !== null) store.request(headRev ?? 0)
   }, [store, headRev])
 
+  useEffect(() => {
+    if (store !== null && snap.detail !== null) store.ensureHistory()
+  }, [store, snap.detail])
+
   return useMemo<TimelineSource>(() => {
     const detail = snap.detail
     const retry = store !== null ? store.retry : noopRetry
     const ensurePart = store !== null ? store.ensurePart : noopEnsurePart
+    const ensureHistory = store !== null ? store.ensureHistory : noopEnsureHistory
     if (head !== null && !slim) {
       noteCostPending(head.costRead)
-      return { data: head, detailState: 'legacy', retryDetail: noopRetry, ensurePart: noopEnsurePart }
+      return { data: head, detailState: 'legacy', retryDetail: noopRetry, ensurePart: noopEnsurePart, ensureHistory: noopEnsureHistory }
     }
     const base = head !== null ? head : detail !== null ? detail.head ?? null : null
     if (base === null) {
       const failed = store !== null && (snap.failed || detail !== null)
-      return { data: null, detailState: failed ? 'failed' : 'loading', retryDetail: retry, ensurePart }
+      return { data: null, detailState: failed ? 'failed' : 'loading', retryDetail: retry, ensurePart, ensureHistory }
     }
     if (detail === null) {
       noteCostPending(base.costRead)
-      return { data: base, detailState: snap.failed ? 'failed' : 'loading', retryDetail: retry, ensurePart }
+      return { data: base, detailState: snap.failed ? 'failed' : 'loading', retryDetail: retry, ensurePart, ensureHistory }
     }
     noteCostPending(detail.head?.costRead ?? base.costRead)
     const data: ContextTimeline = {
@@ -878,6 +896,6 @@ export function useTimelineSource(props: SessionStandardProps): TimelineSource {
       ...(detail.commandStats !== undefined ? { commandStats: detail.commandStats } : {}),
       ...(detail.spans !== undefined ? { spans: detail.spans } : {}),
     }
-    return { data, detailState: 'ready', retryDetail: retry, ensurePart }
+    return { data, detailState: 'ready', retryDetail: retry, ensurePart, ensureHistory }
   }, [head, slim, store, snap])
 }

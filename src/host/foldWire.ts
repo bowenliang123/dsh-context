@@ -1,4 +1,4 @@
-import type { CommandRecord, ContextTimelineDetail, RequestRecord, Snapshot, ToolTimingTotals } from '../shared/types'
+import type { CommandRecord, ContextTimelineDetail, RequestRecord, SlimRequestRecord, Snapshot, ToolTimingTotals } from '../shared/types'
 import { attachTurnSpans } from '../shared/turnSpans'
 import { copyCostUsage } from './foldMetering'
 import type { FoldBounds } from './config'
@@ -70,22 +70,38 @@ function headFieldsOf(state: TimelineState): Snapshot {
   return result
 }
 
-export function requestRowsOf(state: TimelineState): RequestRecord[] {
-  return state.requests
+export function requestRowsOf(state: TimelineState, tail?: number): RequestRecord[] {
+  const requests = tail === undefined || state.requests.length <= tail ? state.requests : state.requests.slice(-tail)
+  return requests
     .filter((r): r is RequestRecord => typeof (r as { system?: unknown }).system === 'number')
     .map(r => ({ ...r }))
 }
 
-export function eventsOf(state: TimelineState, requests: readonly RequestRecord[] = requestRowsOf(state)): ContextTimelineDetail['events'] {
-  return attachTurnSpans(state.events, requests)
+type EventAnchor = Pick<SlimRequestRecord, 'seq' | 'turn' | 'step'>
+
+export function eventsOf(
+  state: TimelineState,
+  requests: readonly EventAnchor[] = state.requests,
+  tail?: number,
+): ContextTimelineDetail['events'] {
+  const events = tail === undefined || state.events.length <= tail ? state.events : state.events.slice(-tail)
+  return attachTurnSpans(events, requests)
 }
 
-function detailCollectionsOf(state: TimelineState, bounds: FoldBounds): Omit<ContextTimelineDetail, 'rev'> {
-  const requests = requestRowsOf(state)
+export function tailOf<T>(items: readonly T[], tail: number): T[] {
+  return items.length > tail ? items.slice(items.length - tail) : [...items]
+}
+
+function detailCollectionsOf(
+  state: TimelineState,
+  bounds: FoldBounds,
+  tails?: { requests: number; events: number },
+): Omit<ContextTimelineDetail, 'rev'> {
+  const requests = requestRowsOf(state, tails?.requests)
   const window = surfaceWindowOf(state, bounds.maxNodes, bounds.maxArchiveNodes)
   const result: Omit<ContextTimelineDetail, 'rev'> = {
     requests,
-    events: eventsOf(state, requests),
+    events: eventsOf(state, state.requests, tails?.events),
     nodes: window.nodes,
     droppedNodes: window.droppedNodes,
     archive: window.archive.map(node => ({ ...node })),
@@ -164,7 +180,11 @@ export function buildTimelineHead(state: TimelineState): Snapshot {
 }
 
 export function buildTimelineDetail(state: TimelineState, bounds: FoldBounds): ContextTimelineDetail {
-  return { rev: state.detailRev ?? 0, head: buildTimelineHead(state), ...detailCollectionsOf(state, bounds) }
+  return {
+    rev: state.detailRev ?? 0,
+    head: buildTimelineHead(state),
+    ...detailCollectionsOf(state, bounds, { requests: bounds.maxRequestSteps, events: bounds.maxEvents }),
+  }
 }
 
 export function buildTimelineView(state: TimelineState, bounds: FoldBounds): Snapshot {

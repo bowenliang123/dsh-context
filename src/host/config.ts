@@ -14,9 +14,22 @@ export const DEFAULT_BOUNDS = {
 
 export type FoldBounds = typeof DEFAULT_BOUNDS & {
   headOnly?: boolean
+  historyMode?: boolean
 }
 
 export type Config = Partial<FoldBounds> & Partial<PluginSettings>
+
+export const HISTORY_LIMIT = Number.MAX_SAFE_INTEGER
+
+export function historyBounds(bounds: FoldBounds, capArchive = true): FoldBounds {
+  return {
+    ...bounds,
+    maxRequestSteps: HISTORY_LIMIT,
+    maxKeptTurns: HISTORY_LIMIT,
+    maxEvents: HISTORY_LIMIT,
+    historyMode: capArchive,
+  }
+}
 
 export function volatileField<S extends z>(field: S): S {
   const volatile = (field as unknown as { volatile?: () => S }).volatile

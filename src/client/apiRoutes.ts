@@ -4,6 +4,8 @@ export const DELTA_ROUTE = 'api/dsh-context/delta'
 
 export const FACTS_ROUTE = 'api/dsh-context/facts'
 
+export const HISTORY_ROUTE = 'api/dsh-context/history'
+
 export const HEADS_ROUTE = 'api/dsh-context/heads'
 
 export const COMMANDS_ROUTE = 'api/dsh-context/commands'

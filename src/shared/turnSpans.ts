@@ -1,6 +1,9 @@
 import type { ContextEventRecord, RequestRecord } from './types'
 
-export function attachTurnSpans(events: readonly ContextEventRecord[], requests: readonly RequestRecord[]): ContextEventRecord[] {
+export function attachTurnSpans(
+  events: readonly ContextEventRecord[],
+  requests: readonly Pick<RequestRecord, 'seq' | 'turn' | 'step'>[],
+): ContextEventRecord[] {
   const out = events.map(event => ({ ...event }))
   let ri = 0
   for (const event of out) {

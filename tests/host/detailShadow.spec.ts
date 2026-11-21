@@ -305,7 +305,7 @@ describe('DetailShadow', () => {
     assert.equal(disposed.count, 1, 'the aborted seed still disposes the observation lease once')
   })
 
-  test('evicting while every other entry still seeds keeps them all', async () => {
+  test('evicting while entries seed caps the retained states', async () => {
     const harness = ctxOf()
     let release: (() => void) | undefined
     const blocked = new Promise<void>(resolve => {
@@ -320,7 +320,9 @@ describe('DetailShadow', () => {
     const pendings = []
     for (let i = 0; i < 10; i++) pendings.push(shadow.stateOf(`s${i}`))
     release!()
-    for (const p of pendings) assert.ok(await p !== null)
+    let alive = 0
+    for (const p of pendings) if (await p !== null) alive++
+    assert.equal(alive, 8)
   })
 
   test('a buffered duplicate folds past and a buffered fresh event lands exactly once', async () => {
@@ -378,6 +380,27 @@ describe('DetailShadow', () => {
     const harness = ctxOf()
     const shadow = new DetailShadow(harness.ctx, BOUNDS, gate(), () => async () => ({ events: 'junk' }))
     assert.equal(await shadow.stateOf('s1'), null)
+    harness.dispose()
+  })
+
+  test('the byte budget evicts an old full state and reseeds it on demand', async () => {
+    const harness = ctxOf()
+    let reads = 0
+    const events = [
+      header(1, { model: 'deepseek-v4-flash', provider: 'deepseek' }),
+      userMessage(2, [{ type: 'text', text: 'hi' }], { kind: 'user' }),
+      assistantMessage(3, { turn: 1, step: 0, usage: { inputTokens: 10, outputTokens: 5 } }),
+    ]
+    const shadow = new DetailShadow(harness.ctx, BOUNDS, gate(), () => (id, options) => {
+      void id
+      void options
+      reads++
+      return Promise.resolve({ events, [Symbol.dispose]: () => {} })
+    }, 0, 1)
+    assert.ok(await shadow.stateOf('s1') !== null)
+    assert.ok(await shadow.stateOf('s2') !== null)
+    assert.ok(await shadow.stateOf('s1') !== null)
+    assert.equal(reads, 3)
     harness.dispose()
   })
 })

@@ -5,6 +5,7 @@ import { afterEach, describe, test, vi } from 'vitest'
 import { DetailStore, detailBytesOf, detailStoreOf, factsOf, makeFactsFetchers, resetTimelineDetailStores, type FactPart } from '../../src/client/timelineSource'
 import { RouteError } from '../../src/client/route'
 import { type ContextTimelineDetail } from '../../src/shared/types'
+import { WIRE_BYTES } from '../../src/shared/bytes'
 import { core, head, series, storeOf, T0 } from './helpers/factsFixtures'
 import { until } from './helpers/kit'
 import { invalidate, resetInvalidations, subscribeInvalidations, type InvalidationEvent } from '../../src/client/invalidation'
@@ -720,7 +721,7 @@ describe('DetailStore over the facts protocol', () => {
       commands: [],
       spans: [],
     }
-    assert.equal(detailBytesOf(detail), 2048 + 180 + 0 + 0 + 0)
+    assert.equal(detailBytesOf(detail), WIRE_BYTES.base + WIRE_BYTES.request)
   })
 })
 
@@ -734,6 +735,19 @@ describe('makeFactsFetchers over HTTP', () => {
       if (body.parts !== undefined && Array.isArray(body.parts) && (body.parts as string[]).includes('head')) {
         return { ok: true, status: 200, json: async () => factsResponse(5, { head: head(5), series: series(5) }) }
       }
+      if (body.part !== undefined) {
+        return {
+          ok: true,
+          status: 200,
+          json: async () => ({
+            ok: true,
+            value: {
+              rev: 5, live: true, part: body.part, rows: [], first: 0, last: -1, total: 0, atStart: true, atEnd: true,
+              ...(body.beforeSeq === undefined ? {} : { beforeSeq: body.beforeSeq }),
+            },
+          }),
+        }
+      }
       return { ok: true, status: 200, json: async () => factsResponse(5, { nodes: { nodes: [], archive: [], droppedNodes: 0 } }) }
     })
     const fetchers = makeFactsFetchers('s1')
@@ -746,6 +760,11 @@ describe('makeFactsFetchers over HTTP', () => {
     const part = await fetchers.part('nodes', { nodesTail: 10 })
     assert.equal(part !== null, true)
     assert.deepEqual(requests[1]?.body, { sessionId: 's1', parts: ['nodes'], window: { nodesTail: 10 } })
+    const history = await fetchers.history?.('requests', { beforeSeq: 5 }, 100)
+    assert.equal(history?.total, 0)
+    assert.deepEqual(requests[2]?.body, { sessionId: 's1', part: 'requests', beforeSeq: 5, limit: 100 })
+    await fetchers.history?.('events')
+    assert.deepEqual(requests[3]?.body, { sessionId: 's1', part: 'events' })
   })
 })
 })
