@@ -17,8 +17,9 @@ export interface SliceListProps {
 }
 
 export function SliceList(props: SliceListProps): ReactElement {
+  const setHoverKey = props.onHoverKey
   return (
-    <div className="lc-sl flex-auto @max-[240px]/lc-card:basis-full" onMouseLeave={() => { if (props.onHoverKey !== undefined) props.onHoverKey(null) }}>
+    <div className="lc-sl flex-auto @max-[240px]/lc-card:basis-full" onMouseLeave={() => { setHoverKey?.(null) }}>
       {props.rows.map(r => (
         <div
           key={r.key}
@@ -26,7 +27,12 @@ export function SliceList(props: SliceListProps): ReactElement {
             + (r.dim ? ' lc-sl-row-dim' : '')
             + (props.hoverKey !== undefined && props.hoverKey === r.key ? ' lc-sl-row-on' : '')}
           title={r.tip}
-          onMouseEnter={() => { if (props.onHoverKey !== undefined) props.onHoverKey(r.key) }}
+          {...(setHoverKey === undefined ? {} : {
+            tabIndex: 0,
+            onFocus: () => { setHoverKey(r.key) },
+            onBlur: () => { setHoverKey(null) },
+          })}
+          onMouseEnter={() => { setHoverKey?.(r.key) }}
         >
           <div className="lc-sl-main">
             <i className="lc-sl-dot" style={{ background: r.color }} />

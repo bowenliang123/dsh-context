@@ -4,7 +4,7 @@ import { describe, test } from 'vitest'
 import { Donut, type DonutSegment } from '../../../src/client/components/donut'
 import { makeStatsTiming } from '../../../src/client/components/statsTiming'
 import { type TimingSpan, type TimingTotals, type ContextBreakdown, type Snapshot, type TokenUsage } from '../../../src/shared/types'
-import { makeKit, mount, query, queryAll, text, hover, unhover, pinRect, click } from '../helpers/kit'
+import { makeKit, mount, query, queryAll, text, hover, unhover, focus, blur, pinRect, click } from '../helpers/kit'
 import { makeStatsTokens } from '../../../src/client/components/statsTokens'
 import { clampTipLeft, TipBubble, tipShiftOf, tipShiftStyle, tipShiftTransform, useTipShift } from '../../../src/client/components/tip'
 import { SliceList, type SliceRow } from '../../../src/client/components/sliceList'
@@ -735,6 +735,28 @@ describe('SliceList', () => {
     await hover(query(inert.container, '.lc-sl-row'))
     await unhover(query(inert.container, '.lc-sl'))
     assert.equal(queryAll(inert.container, '.lc-sl-row-on').length, 0)
+    await inert.unmount()
+  })
+
+  test('focusing a row lights it like hover; blur clears it; rows tab only when a relay is wired', async () => {
+    const rowsIn: SliceRow[] = [
+      { key: 'a', color: '#ff0000', label: 'Alpha', pct: '84%', count: '204.9k' },
+      { key: 'b', color: '#00ff00', label: 'Beta', pct: '<1%', count: '3m 20s · 9 runs' },
+    ]
+    const m = await mount(h(HoverHarness, { rows: rowsIn }))
+    const rows = queryAll(m.container, '.lc-sl-row')
+    assert.equal(rows[0].getAttribute('tabindex'), '0')
+    await focus(rows[0])
+    assert.ok(rows[0].className.includes('lc-sl-row-on'))
+    await focus(rows[1])
+    assert.ok(rows[1].className.includes('lc-sl-row-on'))
+    assert.ok(!rows[0].className.includes('lc-sl-row-on'))
+    await blur(rows[1])
+    assert.ok(!rows[1].className.includes('lc-sl-row-on'))
+    await m.unmount()
+
+    const inert = await mount(h(SliceList, { rows: [{ key: 'a', color: '#ff0000', label: 'Alpha', pct: '1%', count: '1' }] }))
+    assert.equal(query(inert.container, '.lc-sl-row').getAttribute('tabindex'), null)
     await inert.unmount()
   })
 })
