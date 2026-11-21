@@ -223,6 +223,7 @@ describe('overview cache shards and capacity', () => {
     assert.equal(loaded.sessions.get('a')?.title, '界')
     assert.deepEqual([...loaded.sessions.keys()].sort(), ['a', 'b'])
     assert.ok(rig.writes.length > 0)
+    await cache.flush()
     cache.dispose()
   })
 
