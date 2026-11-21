@@ -216,7 +216,9 @@ describe('overview cache shards and capacity', () => {
     assert.equal(await cache.save([recordOf('a', 'first')]), true)
     await new Promise(resolve => setTimeout(resolve, 2))
     assert.equal(await cache.save([recordOf('a', '界'), recordOf('b')]), true)
-    await new Promise(resolve => setTimeout(resolve, 15))
+    for (let i = 0; i < 100 && rig.writes.length === 0; i++) {
+      await new Promise(resolve => setTimeout(resolve, 5))
+    }
     const loaded = await cache.load(new Set(['a', 'b']), known(['a', 'b']))
     assert.equal(loaded.sessions.get('a')?.title, '界')
     assert.deepEqual([...loaded.sessions.keys()].sort(), ['a', 'b'])
