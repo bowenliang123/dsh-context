@@ -69,7 +69,7 @@ export function Donut(props: DonutProps): ReactElement {
       <div className="lc-donut-center">
         <b style={{ fontSize: Math.max(11, Math.round(size * 0.13)) }}>{props.centerTop}</b>
         {props.centerSub !== undefined
-          ? <span style={{ fontSize: Math.max(9, Math.round(size * 0.105)) }}>{props.centerSub}</span>
+          ? <span style={{ fontSize: Math.max(10, Math.round(size * 0.105)) }}>{props.centerSub}</span>
           : null}
       </div>
     </div>

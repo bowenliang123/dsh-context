@@ -72,8 +72,8 @@
 .lc-agents-compact .lc-agent-metric { margin-top: 3px; }
 .lc-agents-compact .lc-agent-tokens { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 11px; }
 .lc-agents-compact .lc-agent-bar { height: 4px; margin-top: 5px; }
-.lc-agents-compact .lc-agent-meta { padding-top: 3px; font-size: 9px; }
-.lc-agents-compact .lc-agents-badge { padding: 0 4px; font-size: 9px; }
+.lc-agents-compact .lc-agent-meta { padding-top: 3px; font-size: 10px; }
+.lc-agents-compact .lc-agents-badge { padding: 0 4px; font-size: 10px; }
 
 .lc-agents-solo { padding: 4px 0 10px; }
 .lc-agents-split { display: flex; gap: 10px; align-items: flex-start; }
