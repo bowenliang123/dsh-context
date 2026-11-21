@@ -3,7 +3,7 @@ import { describe, test } from 'vitest'
 import { resolveBounds, type FoldBounds } from '../../src/host/config'
 import { applyTimeline, type TimelineEvent } from '../../src/host/fold'
 import { archiveWindowOf, createTimelineState, deriveHeadState, noteCommandCall, trimState, trimHeadState, type TimelineState } from '../../src/host/foldState'
-import { jobRegistered, jobSettled, planMode } from './helpers/events'
+import { codeDispatchStart, jobRegistered, jobSettled, planMode, toolCall } from './helpers/events'
 
 const FULL: FoldBounds = resolveBounds({})
 const HEAD: FoldBounds = { ...FULL, headOnly: true }
@@ -45,6 +45,37 @@ describe('head state slimming', () => {
     assert.equal(st.commandCallsOverflow, true, 'evicting call ids turns on the overflow fallback')
     const overflowed = applyTimeline({ ...createTimelineState(), detailRev: 1, commandCalls: ['old'], commandCallsOverflow: true }, jobSettled(9, { callId: 'evicted', finishedAt: 9, status: 'completed' }), HEAD)
     assert.equal(overflowed.detailRev, 2, 'late settlements of evicted ids still refresh the detail revision')
+  })
+
+  test('a head-only command call clones its predecessor call ledger', () => {
+    const first = applyTimeline(createTimelineState(), toolCall(1, { callId: 'call-a', name: 'bash', arguments: JSON.stringify({ command: 'pwd' }) }), HEAD)
+    const shared = first.commandCalls
+    const second = applyTimeline(first, toolCall(2, { callId: 'call-b', name: 'bash', arguments: JSON.stringify({ command: 'ls' }) }), HEAD)
+    assert.deepEqual(first.commandCalls, ['call-a'])
+    assert.ok(shared !== undefined && shared !== second.commandCalls)
+    assert.deepEqual(second.commandCalls, ['call-a', 'call-b'])
+  })
+
+  test('a head-only ledger cap never mutates the predecessor', () => {
+    const state: TimelineState = { ...createTimelineState(), commandCalls: Array.from({ length: 1024 }, (_, i) => 'c' + i) }
+    const shared = state.commandCalls
+    const next = applyTimeline(state, toolCall(1, { callId: 'new', name: 'bash', arguments: JSON.stringify({ command: 'pwd' }) }), HEAD)
+    assert.equal(state.commandCalls?.length, 1024)
+    assert.equal(state.commandCalls?.[0], 'c0')
+    assert.equal(state.commandCallsOverflow, undefined)
+    assert.ok(shared !== undefined && shared !== next.commandCalls)
+    assert.deepEqual(next.commandCalls?.at(-1), 'new')
+    assert.equal(next.commandCalls?.length, 1024)
+    assert.equal(next.commandCallsOverflow, true)
+  })
+
+  test('a head-only ptc dispatch start clones its predecessor call ledger', () => {
+    const first = applyTimeline(createTimelineState(), codeDispatchStart(1, { rootCallId: 'rc1', subCallId: 'rc1:0', name: 'bash', arguments: { command: 'one' } }), HEAD)
+    const shared = first.commandCalls
+    const second = applyTimeline(first, codeDispatchStart(2, { rootCallId: 'rc1', subCallId: 'rc1:1', name: 'bash', arguments: { command: 'two' } }), HEAD)
+    assert.deepEqual(first.commandCalls, ['rc1:0'])
+    assert.ok(shared !== undefined && shared !== second.commandCalls)
+    assert.deepEqual(second.commandCalls, ['rc1:0', 'rc1:1'])
   })
 
   test('a derived state skips call-less records and caps the carried ids', () => {

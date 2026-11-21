@@ -188,8 +188,7 @@ function applySurface(
   const imgs = imageCountOf(message?.content)
   if (imgs > 0) node.imgs = imgs
   const source = message?.source
-  const form = source?.form
-  if (typeof form === 'string') node.form = form
+  if (typeof source?.form === 'string') node.form = source.form
   if (type === 'assistant/message') {
     const text = firstText(message?.content)
     if (text !== '') node.text = text
@@ -209,9 +208,7 @@ function applySurface(
         timing.toolCalls += 1
         bumpToolTotals(timing, toolEntry.name, dur)
       }
-      if (st.stepStart !== undefined) {
-        st.stepSpans = [...(st.stepSpans ?? []), { kind: 'tools', start: toolEntry.start, end: ev.time }]
-      }
+      if (st.stepStart !== undefined) st.stepSpans = [...(st.stepSpans ?? []), { kind: 'tools', start: toolEntry.start, end: ev.time }]
     }
     if (typeof srcId === 'string') {
       const kept: Record<string, { name: string; start: number; argsRaw?: string; transport?: true }> = {}
@@ -287,9 +284,9 @@ function applySurface(
 
 const ASK_USER_TOOL = 'ask_user_question'
 
-type CloneKey = 'surface' | 'sums' | 'requests' | 'events' | 'archived' | 'callNames' | 'fileOps' | 'timing' | 'commands'
+type CloneKey = 'surface' | 'sums' | 'requests' | 'events' | 'archived' | 'callNames' | 'fileOps' | 'timing' | 'commands' | 'commandCalls'
 
-const CLONE_ALL: readonly CloneKey[] = ['surface', 'sums', 'requests', 'events', 'archived', 'callNames', 'fileOps', 'timing', 'commands']
+const CLONE_ALL: readonly CloneKey[] = ['surface', 'sums', 'requests', 'events', 'archived', 'callNames', 'fileOps', 'timing', 'commands', 'commandCalls']
 
 const STEP_BEATS_MAX = 1024
 
@@ -320,6 +317,7 @@ function applyTimelineEvent(state: TimelineState, event: TimelineEvent, bounds: 
       else if (key === 'callNames') st.callNames = { ...state.callNames }
       else if (key === 'fileOps') st.fileOps = [...state.fileOps]
       else if (key === 'commands') st.commands = [...state.commands]
+      else if (key === 'commandCalls' && state.commandCalls !== undefined) st.commandCalls = [...state.commandCalls]
       else if (state.timing !== undefined) st.timing = { ...state.timing, tools: { ...state.timing.tools } }
     }
     return st
@@ -401,6 +399,7 @@ function applyTimelineEvent(state: TimelineState, event: TimelineEvent, bounds: 
           const ask = data.name === ASK_USER_TOOL ? askRecordOf(event.seq, event.time, data) : undefined
           const keys: CloneKey[] = cmdTool === null ? ['callNames'] : ['callNames', 'commands']
           if (ask !== undefined) keys.push('events')
+          if (cmdTool !== null && bounds.headOnly === true) keys.push('commandCalls')
           const s = ensure(keys)
           const argsRaw = bounds.headOnly === true || !rawArgsNeeded(data.name) ? undefined : argsRawOf(data.arguments)
           if (data.callId !== '__proto__') {
@@ -498,7 +497,7 @@ function applyTimelineEvent(state: TimelineState, event: TimelineEvent, bounds: 
           ? parentCallId
           : undefined
         if (!buffered && transportParent === undefined && bounded === starts) return state
-        const s = ensure([])
+        const s = ensure(buffered && bounds.headOnly === true ? ['commandCalls'] : [])
         if (bounded !== starts) s.pendingCodeStarts = bounded
         if (transportParent !== undefined) {
           s.callNames = { ...state.callNames, [transportParent]: { ...state.callNames[transportParent], transport: true } }
