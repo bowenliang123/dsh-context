@@ -107,7 +107,7 @@ export function watchRecomChannel(ctx: Context, options: RecomChannelOptions = {
     try {
       const entry = cachedRecomsOf(JSON.parse(text))
       if (entry === null || !withinMaxAge(entry)) return null
-      cached = entry
+      if (cached === null || entry.fetchedAt > cached.fetchedAt) cached = entry
       return entry
     } catch {
       return null

@@ -172,7 +172,7 @@ export function createCatalogService(options: CatalogOptions = {}): CatalogServi
         if (books.book !== null && fresh(prices.at)) return
         const source = priceSourceOf(await readJson(PRICES_URL))
         const book = source === null ? null : pricesBookOf(source)
-        if (source === null || book === null) {
+        if (source === null || book === null || Object.keys(book.prices).length === 0) {
           books.failed = true
           prices.at = now()
           return

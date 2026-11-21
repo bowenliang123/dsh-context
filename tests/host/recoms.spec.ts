@@ -316,13 +316,17 @@ describe('recom cache', () => {
       write: async () => {},
     }
     setRecomFetcher(async () => response([recom('fresh')]))
-    const route = mount({ now: () => 1_000 + 60_000, cachePath: CACHE_PATH, cacheIo: io })
+    let clock = 1_000 + 60_000
+    const route = mount({ now: () => clock, cachePath: CACHE_PATH, cacheIo: io })
     const slow = route.fetch()
     const fast = route.fetch()
     assert.deepEqual(await (await fast).json(), { ok: true, value: [recom('fresh')], degraded: false })
     release(cachedRecoms([recom('cached')], 1_000))
     assert.deepEqual(await (await slow).json(), { ok: true, value: [recom('cached')], degraded: false }, 'the cold request answers from disk')
     assert.deepEqual(await (await route.fetch()).json(), { ok: true, value: [recom('fresh')], degraded: false }, 'the late disk read leaves the fresh slot in place')
+    clock += 60 * 60 * 1000
+    setRecomFetcher(async () => { throw new Error('down') })
+    assert.deepEqual(await (await route.fetch()).json(), { ok: true, value: [recom('fresh')], degraded: true }, 'a failed refresh keeps the newer network list')
   })
 
   test('defaults the cache path to the harness storage directory', async () => {
