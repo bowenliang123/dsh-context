@@ -10,6 +10,7 @@ import { watchActivityBackfill } from './backfill'
 import { makeColdReadGate } from './coldRead'
 import { watchCommandPageChannel } from './commandPages'
 import { Config, historyBounds, resolveBounds } from './config'
+import { createColdTimelineStates } from './coldTimeline'
 import { watchDetailChannel, createDetailGate, type DetailChannelGate } from './detail'
 import { watchDeltaChannel } from './delta'
 import { DetailShadow } from './detailShadow'
@@ -66,9 +67,11 @@ export function apply(ctx: Context, config: Config): void {
   const shadow = new DetailShadow(ctx, historyBounds(bounds), coldReads, () => observeOf(ctx))
   watchDetailChannel(ctx, bounds, coldReads, gate, shadow, pricing)
   const deltaGate: DetailChannelGate = { ...gate, live: false }
-  watchDeltaChannel(ctx, bounds, coldReads, deltaGate, shadow, attribution.ownerOf.bind(attribution))
+  const ownerOf = attribution.ownerOf.bind(attribution)
+  const coldStates = createColdTimelineStates(ctx, bounds, { coldReads, resolve: ownerOf })
+  watchDeltaChannel(ctx, bounds, coldReads, deltaGate, shadow, ownerOf, coldStates)
   const detailStateOf = (id: string): Promise<TimelineState | null> => shadow.stateOf(id)
-  watchFactsChannel(ctx, bounds, { gates: gate, coldReads, detailState: detailStateOf, cost: pricing })
+  watchFactsChannel(ctx, bounds, { gates: gate, coldStates, detailState: detailStateOf, cost: pricing })
   watchHistoryChannel(ctx, bounds, { coldReads, detailState: detailStateOf })
   watchCommandPageChannel(ctx, resolveBounds(config), coldReads)
   const cache = createOverviewCache({ config })

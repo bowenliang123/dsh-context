@@ -1,28 +1,17 @@
 import type { Context } from '@deepseek-ai/cordis'
-import type { SessionEvent } from '@deepseek-ai/dsh-session'
 import type { FoldBounds } from './config'
-import { foldLog } from './detailShadow'
+import { createColdTimelineStates, type ColdTimelineStates } from './coldTimeline'
 import type { DetailChannelGate } from './detail'
 import type { CachedSnapshotFace, SessionsFace, StateProjectionsFace } from './faces'
-import { type ColdReadGate, makeColdReadGate } from './coldRead'
-import { makeFoldCache } from './foldCache'
+import { type ColdReadGate } from './coldRead'
 import { buildTimelineHead, eventsOf, requestRowsOf, serveCommand, tailOf } from './foldWire'
 import { withCost, type CostSource } from './cost'
 import { surfaceWindowOf, type TimelineState } from './foldState'
-import { failure, leaseOf, mountPostRoute, observeOf, readBody, reply, revisionOf } from './postRoute'
+import { failure, mountPostRoute, readBody, reply } from './postRoute'
 import { asRecord } from './record'
-import { serviceIdentityOf } from './serviceIdentity'
 import type { SurfaceNodeWindow } from '../shared/types'
 
 export const FACTS_ROUTE = '/api/dsh-context/facts'
-
-function coldCursorOf(events: readonly unknown[]): string {
-  for (let i = events.length - 1; i >= 0; i--) {
-    const seq = asRecord(events[i])?.seq
-    if (typeof seq === 'number' && Number.isFinite(seq)) return 'cold-seq:' + String(seq)
-  }
-  return 'cold-seq:-1'
-}
 
 const KERNEL_KEYS = ['sessionStats', 'tokenUsage', 'contextBreakdown'] as const
 
@@ -30,7 +19,6 @@ const DETAIL_PARTS = ['requests', 'nodes', 'events', 'files', 'commands', 'spans
 
 const FACT_PARTS = new Set<string>(['head', 'series', 'stats', ...DETAIL_PARTS])
 
-const STATE_CACHE_MAX = 4
 const WINDOW_FIELDS = ['requestsTail', 'nodesTail', 'eventsTail', 'filesTail', 'commandsTail', 'spansTail'] as const
 
 type FactWindow = Record<typeof WINDOW_FIELDS[number], number>
@@ -52,11 +40,6 @@ interface FactPartRequest {
   window: FactWindow
 }
 
-interface ColdState {
-  persistence: unknown
-  revision: string
-  state: TimelineState
-}
 
 interface KernelFacts {
   asOfSeq?: number
@@ -209,20 +192,18 @@ function valueOf(
 
 export interface FactsChannelDeps {
   gates?: DetailChannelGate
+  coldStates?: ColdTimelineStates
   coldReads?: ColdReadGate
   detailState?: (id: string) => Promise<TimelineState | null>
-  stateCacheMax?: number
   idleSweepMs?: number
   cost?: CostSource
 }
 
 export function watchFactsChannel(ctx: Context, bounds: FoldBounds, deps: FactsChannelDeps = {}): void {
-  const stateCacheMax = deps.stateCacheMax ?? STATE_CACHE_MAX
-  const stateCache = makeFoldCache<ColdState>(ctx, {
-    maxEntries: stateCacheMax,
-    idleMs: deps.idleSweepMs,
+  const coldStates = deps.coldStates ?? createColdTimelineStates(ctx, bounds, {
+    coldReads: deps.coldReads,
+    idleSweepMs: deps.idleSweepMs,
   })
-  const coldReads = deps.coldReads ?? makeColdReadGate()
   const caps = windowCapsOf(bounds)
   mountPostRoute({
     ctx,
@@ -250,12 +231,11 @@ export function watchFactsChannel(ctx: Context, bounds: FoldBounds, deps: FactsC
       }
 
       return async (request: Request): Promise<Response> => {
-        stateCache.touch()
+        coldStates.touch()
         const getSession = ((): ((id: string) => unknown) | undefined => {
           const sessions = c.get('sessions') as SessionsFace | undefined
           return typeof sessions?.get === 'function' ? sessions.get.bind(sessions) : undefined
         })()
-        const observe = observeOf(c)
         const read = await readBody(request)
         if (!read.ok) return read.response
         const wanted = partsOf(read.body, caps)
@@ -275,30 +255,13 @@ export function watchFactsChannel(ctx: Context, bounds: FoldBounds, deps: FactsC
               value: valueOf(state as TimelineState, true, wanted, kernel, detailState, bounds.maxArchiveNodes, deps.cost),
             })
           }
-          if (observe === undefined) return reply({ ok: true, value: null })
-          const value = await coldReads.admit(async () => {
-            const observation = await observe(wanted.sessionId, { projectionMode: 'none' })
-            const release = leaseOf(observation)
-            try {
-              const persistence = serviceIdentityOf(c.get('sessionPersistence'))
-              const events = asRecord(observation)?.events
-              if (!Array.isArray(events)) return null
-              const revision = revisionOf(observation) ?? coldCursorOf(events)
-              const header = asRecord(observation)?.header
-              const cached = stateCache.get(wanted.sessionId, entry => entry.revision === revision && entry.persistence === persistence)
-              if (cached !== undefined) {
-                const kernel = kernelOfCold(c.get('sessionProjectionCache') as CachedSnapshotFace | undefined, header)
-                return valueOf(cached.state, false, wanted, kernel, cached.state, bounds.maxArchiveNodes, deps.cost)
-              }
-              const state = (await foldLog(events as SessionEvent[], bounds)).state
-              stateCache.set(wanted.sessionId, { persistence, revision, state })
-              const kernel = kernelOfCold(c.get('sessionProjectionCache') as CachedSnapshotFace | undefined, header)
-              return valueOf(state, false, wanted, kernel, state, bounds.maxArchiveNodes, deps.cost)
-            } finally {
-              release()
-            }
+          const entry = await coldStates.stateOf(wanted.sessionId)
+          if (entry === null) return reply({ ok: true, value: null })
+          const kernel = kernelOfCold(c.get('sessionProjectionCache') as CachedSnapshotFace | undefined, entry.header)
+          return reply({
+            ok: true,
+            value: valueOf(entry.state, false, wanted, kernel, entry.state, bounds.maxArchiveNodes, deps.cost),
           })
-          return reply({ ok: true, value: value ?? null })
         } catch (err) {
           return failure('gateway/internal', err instanceof Error ? err.message : String(err))
         }
