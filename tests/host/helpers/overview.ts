@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict'
 import { Context } from '@deepseek-ai/cordis'
 import { watchOverviewRoute, OVERVIEW_ROUTE } from '../../../src/host/overview'
+import { buildRows as buildRowsOf } from '../../../src/host/overviewCorpus'
 import type { BackfillHandle } from '../../../src/host/backfill'
 import type { CachedSession, DurableIdentity, OverviewCache, StatHost } from '../../../src/host/overviewCache'
 import type { HostSession } from '../../../src/host/overviewCorpus'
@@ -111,6 +112,7 @@ export interface BootOptions {
   capturePollMs?: number
   yieldEvery?: number
   yieldTo?: () => Promise<void>
+  buildRows?: typeof buildRowsOf
   cachePath?: string
   foldedAvailable?: boolean
   noCache?: boolean
@@ -152,12 +154,16 @@ export function numOf(value: unknown): number {
   return typeof value === 'number' && Number.isFinite(value) ? value : 0
 }
 
-export function fakeCost(ready: boolean): CostSource {
+export function fakeCost(ready: boolean | (() => boolean)): CostSource {
+  const readyOf = (): boolean => (typeof ready === 'function' ? ready() : ready)
   return {
-    ready: () => ready,
-    read: (usage) => ({ usd: ready ? costOfUsage(usage) : null, ready }),
-    usd: (usage) => (ready ? costOfUsage(usage) : null),
-    complete: (usage) => ready && usage !== null && costOfUsage(usage) !== null,
+    ready: readyOf,
+    read: (usage) => {
+      const readyNow = readyOf()
+      return { usd: readyNow ? costOfUsage(usage) : null, ready: readyNow }
+    },
+    usd: (usage) => (readyOf() ? costOfUsage(usage) : null),
+    complete: (usage) => readyOf() && usage !== null && costOfUsage(usage) !== null,
   }
 }
 
@@ -454,10 +460,11 @@ export function boot(options: BootOptions = {}): Promise<Harness> {
     ...(options.capturePollMs === undefined ? {} : { capturePollMs: options.capturePollMs }),
     ...(options.yieldEvery === undefined ? {} : { yieldEvery: options.yieldEvery }),
     ...(options.yieldTo === undefined ? {} : { yieldTo: options.yieldTo }),
+    ...(options.buildRows === undefined ? {} : { buildRows: options.buildRows }),
     ...(options.cachePath === undefined ? {} : { cachePath: options.cachePath }),
     ...(cache === null ? {} : { cache }),
   }
-  const dispose = watchOverviewRoute(ctx, fakeCost(state.costReady), fakeBackfill(state), routeOptions)
+  const dispose = watchOverviewRoute(ctx, fakeCost(() => state.costReady), fakeBackfill(state), routeOptions)
   return (async () => {
     for (let index = 0; index < 300 && !routes.has(OVERVIEW_ROUTE); index++) {
       await new Promise(resolve => setTimeout(resolve, 1))

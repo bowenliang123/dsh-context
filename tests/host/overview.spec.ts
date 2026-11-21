@@ -2,6 +2,7 @@ import assert from 'node:assert/strict'
 import { Context } from '@deepseek-ai/cordis'
 import { describe, test, vi } from 'vitest'
 import { watchOverviewRoute, OVERVIEW_ROUTE } from '../../src/host/overview'
+import { buildRows as buildRowsOf } from '../../src/host/overviewCorpus'
 import { type ContextTimeline, type SessionCostUsage } from '../../src/shared/types'
 import { boot, call, summaryOf, pageOf, revisionOf, recordOf, unwrap, usageOf, timelineOf, timingOf, dayOf, costOfUsage, fakeCost, fakeBackfill, fakeState, tokenPartsOf, sortedParts, WIDE_RANGE, type RouteBox } from './helpers/overview'
 import { makeScanWindow, type ScanResult } from '../../src/host/overviewScan'
@@ -264,6 +265,85 @@ describe('dsh-context overview route', () => {
     assert.notEqual(revisionOf(reworded), revisionOf(detailed), 'a changed reason moves the revision')
     const unchanged = await call(harness, { part: 'summary', revision: revisionOf(reworded) })
     assert.deepEqual(unchanged.reply, { ok: true, value: { revision: revisionOf(reworded), unchanged: true } })
+  })
+
+  test('coverage progress reuses the built rows while the response revision advances', async () => {
+    const buildRows = vi.fn(buildRowsOf)
+    const harness = await boot({
+      records: [recordOf('a')],
+      values: { a: { contextTimeline: timelineOf(), contextActivity: { days: {} }, title: 'Alpha' } },
+      persistence: { stat: async () => ({ path: '/p/a.jsonl', sizeBytes: 1, mtimeMs: 2 }) },
+      coverage: { complete: false, remaining: 1, failed: 0, running: true, total: 2, covered: 1, unsupported: 0, unreadable: 0 },
+      buildRows,
+    })
+    const first = await call(harness, { part: 'summary' })
+    const revision = revisionOf(first)
+    assert.equal(buildRows.mock.calls.length, 1, 'the first request builds the rows')
+    harness.state.coverage.covered = 2
+    harness.state.coverage.remaining = 0
+    harness.state.coverage.complete = true
+    harness.state.coverage.running = false
+    const advanced = await call(harness, { part: 'summary', revision })
+    assert.notEqual(revisionOf(advanced), revision, 'the coverage progress moves the response revision')
+    assert.equal(summaryOf(advanced).coverage.complete, true, 'the reply carries the advanced coverage')
+    assert.equal(buildRows.mock.calls.length, 1, 'the coverage-only poll reuses the built rows')
+    const settled = revisionOf(advanced)
+    const unchanged = await call(harness, { part: 'summary', revision: settled })
+    assert.deepEqual(unchanged.reply, { ok: true, value: { revision: settled, unchanged: true } })
+    assert.equal(buildRows.mock.calls.length, 1, 'the unchanged poll builds nothing')
+  })
+
+  test('a pricing flip reuses the built rows and reprices the response', async () => {
+    const buildRows = vi.fn(buildRowsOf)
+    const harness = await boot({
+      records: [recordOf('a')],
+      values: {
+        a: {
+          contextTimeline: timelineOf({ cost: usageOf(10, 2, 3, 4) }),
+          contextActivity: { days: { '2026-11-01': dayOf(20, 2, { cost: usageOf(10, 2, 3, 4) }) } },
+          title: 'Alpha',
+        },
+      },
+      persistence: { stat: async () => ({ path: '/p/a.jsonl', sizeBytes: 1, mtimeMs: 2 }) },
+      costReady: true,
+      buildRows,
+    })
+    const first = await call(harness, { part: 'summary' })
+    const revision = revisionOf(first)
+    harness.state.costReady = false
+    const cold = await call(harness, { part: 'summary', revision })
+    assert.notEqual(revisionOf(cold), revision, 'the pricing flip moves the response revision')
+    const coldValue = unwrap(cold).value
+    assert.ok(coldValue !== undefined && 'summary' in coldValue)
+    assert.equal(coldValue.pricingReady, false, 'the cold price book marks the reply')
+    assert.equal(summaryOf(cold).costUsd, null, 'the cold price book serves no money')
+    assert.equal(buildRows.mock.calls.length, 1, 'the pricing-only poll reuses the built rows')
+    harness.state.costReady = true
+    const warm = await call(harness, { part: 'summary', revision: revisionOf(cold) })
+    assert.ok(summaryOf(warm).costUsd !== null, 'the re-priced reply carries money again')
+    assert.equal(buildRows.mock.calls.length, 1, 'the re-priced poll reuses the built rows')
+    const unchanged = await call(harness, { part: 'summary', revision: revisionOf(warm) })
+    assert.deepEqual(unchanged.reply, { ok: true, value: { revision: revisionOf(warm), unchanged: true } })
+    assert.equal(buildRows.mock.calls.length, 1, 'the unchanged poll builds nothing')
+  })
+
+  test('without the fold journal a coverage advance still rebuilds the rows', async () => {
+    const buildRows = vi.fn(buildRowsOf)
+    const harness = await boot({
+      records: [recordOf('a')],
+      values: { a: { contextTimeline: timelineOf(), contextActivity: { days: {} }, title: 'Alpha' } },
+      foldedAvailable: false,
+      coverage: { complete: false, remaining: 1, failed: 0, running: true, total: 2, covered: 1, unsupported: 0, unreadable: 0 },
+      buildRows,
+    })
+    const first = await call(harness, { part: 'summary' })
+    assert.equal(buildRows.mock.calls.length, 1)
+    harness.state.coverage.covered = 2
+    harness.state.coverage.remaining = 0
+    harness.state.coverage.complete = true
+    const advanced = await call(harness, { part: 'summary', revision: revisionOf(first) })
+    assert.notEqual(revisionOf(advanced), revisionOf(first), 'the coverage progress moves the revision')
+    assert.equal(buildRows.mock.calls.length, 2, 'the fallback invalidation rebuilds the rows')
   })
 
   test('a live session moves the revision with its event seq, and the live snapshot path serves its values', async () => {

@@ -220,6 +220,7 @@ export interface OverviewRouteOptions {
   capturePollMs?: number
   yieldEvery?: number
   yieldTo?: () => Promise<void>
+  buildRows?: typeof buildRows
   cache?: OverviewCache
   cachePath?: string
 }
@@ -439,12 +440,13 @@ export function watchOverviewRoute(
         const workspace = workspaceOf(c)
         const persistentStat = statOf()
         const identityMode = persistentStat !== undefined
+        const journalMode = identityMode && typeof backfill.foldedSince === 'function'
         const dirty = identityMode
           ? await syncIdentities(coldIds, !scanned.identitiesSynced, persistentStat)
           : new Set<string>()
         if (identityMode) scanned.identitiesSynced = true
         const workerFolded: string[] = []
-        if (identityMode && typeof backfill.foldedSince === 'function') {
+        if (journalMode) {
           const folded = backfill.foldedSince(foldMarker)
           foldMarker = folded.version
           if (folded.ids === null) {
@@ -468,17 +470,20 @@ export function watchOverviewRoute(
         const coverageKey = `${coverage.complete ? 'c' : 'i'}:${coverage.running ? 'r' : 's'}:${coverage.remaining}:${coverage.failed}:${coverage.unsupported}:${coverage.unreadable}:${coverage.total}:${coverage.covered}:${issueKey}`
         const pricingKey = cost.ready() ? `ready${cost.version?.() ?? 0}` : 'cold'
         const revision = revisionOf([corpusRevision, workspace.signature, coverageKey, pricingKey, `f${foldEpoch}`])
+        const expectedRowsRevision = journalMode
+          ? revisionOf([corpusRevision, workspace.signature, `f${foldEpoch}`])
+          : revisionOf([corpusRevision, workspace.signature, coverageKey, `f${foldEpoch}`])
         if (feed.revision !== revision) feed.served.clear()
         const now = Math.floor(Date.now() / 60_000) * 60_000
         const filters = filtersOf(parsed, now)
         const timeKey = dayKeyOf(filters.window.start) ?? ''
         const requestKey = requestKeyOf(parsed, timeKey)
-        if (dirty.size === 0 && feed.rowsRevision === revision && parsed.revision !== undefined
+        if (dirty.size === 0 && feed.rowsRevision === expectedRowsRevision && parsed.revision !== undefined
           && parsed.revision === revision && servedOf(feed, requestKey)) {
           return { revision, unchanged: true }
         }
         let rows: HostRow[]
-        if (feed.rows !== null && feed.rowsRevision === revision && sessionsReady && dirty.size === 0) {
+        if (feed.rows !== null && feed.rowsRevision === expectedRowsRevision && sessionsReady && dirty.size === 0) {
           rows = feed.rows
         } else {
           const coldFeedLoad = !sessionsReady
@@ -505,12 +510,12 @@ export function watchOverviewRoute(
               ...(options.yieldTo === undefined ? {} : { yieldTo: options.yieldTo }),
             }
           const previousSessions = feed.sessions
-          const built = await buildRows(feed.sessions, { entries }, workspace, cacheFace, projections, c, buildOptions)
+          const build = options.buildRows ?? buildRows
+          const built = await build(feed.sessions, { entries }, workspace, cacheFace, projections, c, buildOptions)
           feed.sessions = built.reusableSessions
           rows = built.rows
           feed.rows = rows
-          feed.revision = revision
-          feed.rowsRevision = built.incomplete > 0 ? '' : revision
+          feed.rowsRevision = built.incomplete > 0 ? '' : expectedRowsRevision
           if (identityMode) {
             const fullSave = coldFeedLoad || [...previousSessions.keys()].some(id => !built.reusableSessions.has(id))
             if ((fullSave || dirty.size > 0 || built.rebuilt > 0)
@@ -527,6 +532,7 @@ export function watchOverviewRoute(
           coverage: backfill.coverage(),
           filters,
         })
+        feed.revision = revision
         rememberServed(feed, requestKey, servedKeysMax)
         return value
       }
