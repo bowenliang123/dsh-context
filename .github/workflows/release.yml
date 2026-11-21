@@ -59,9 +59,7 @@ jobs:
             refs/tags/dsh-v0.2.2-rc.3:refs/tags/dsh-v0.2.2-rc.3
 
       - name: Test
-        # Coverage adds no gate here (the per-file 100% gate runs in `pnpm run check` locally and in the pre-commit
-        # hook) and its profile merge OOMs the hosted runner behind the compat matrix's staged harness sources.
-        run: DSH_REPO="$PWD/.tmp/dsh-repo" pnpm exec vitest run
+        run: DSH_REPO="$PWD/.tmp/dsh-repo" pnpm test
 
       - name: Verify version matches the tag
         run: |

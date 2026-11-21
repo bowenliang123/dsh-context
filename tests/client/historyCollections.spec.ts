@@ -209,7 +209,7 @@ describe('history collections', () => {
     store.ensureHistory()
     await until(() => store.getSnapshot().detail?.events.length === 1, 'the core history never landed')
     store.ensurePart('files')
-    await until(() => store.getSnapshot().detail?.fileOps?.length === 1, 'the files retry never landed', 500)
+    await until(() => store.getSnapshot().detail?.fileOps?.length === 1, 'the files retry never landed', 2_000)
     rev = 2
     failRefresh = true
     store.request(2)

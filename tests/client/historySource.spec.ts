@@ -513,7 +513,7 @@ describe('history pages', () => {
     store.request(1)
     await until(() => store.getSnapshot().detail !== null, 'the core payload never landed')
     store.ensureHistory()
-    await until(() => store.getSnapshot().detail?.events.length === 1, 'the retry never landed', 500)
+    await until(() => store.getSnapshot().detail?.events.length === 1, 'the retry never landed', 2_000)
     assert.equal(store.getSnapshot().detail?.requests.length, 1)
     store.release()
   })

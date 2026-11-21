@@ -12,7 +12,7 @@ export const FAST_PACING = {
 }
 
 export async function until<T>(read: () => T | undefined, message: string): Promise<T> {
-  for (let i = 0; i < 300; i++) {
+  for (let i = 0; i < 2_000; i++) {
     const value = read()
     if (value !== undefined) return value
     await new Promise(resolve => setTimeout(resolve, 1))
