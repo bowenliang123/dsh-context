@@ -24,6 +24,73 @@ describe('history merge', () => {
     assert.deepEqual(merged.map(historyRowKey), ['9:', '9:0', '9:1', '10:'])
   })
 
+  test('replaces overlap rows in place and splices add rows around the region', () => {
+    const old = Array.from({ length: 10 }, (_, index) => ({ seq: index + 1, tag: 'old' }))
+    const add = [
+      { seq: 8, tag: 'new' },
+      { seq: 9, tag: 'new' },
+      { seq: 10, tag: 'new' },
+      { seq: 11, tag: 'new' },
+    ]
+    const merged = mergeHistoryRows(old, add)
+    assert.deepEqual(merged.map(row => row.seq), [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11])
+    assert.deepEqual(merged.slice(0, 7).map(row => row.tag), Array.from({ length: 7 }, () => 'old'))
+    assert.deepEqual(merged.slice(7).map(row => row.tag), ['new', 'new', 'new', 'new'])
+  })
+
+  test('merges add rows that precede the old head', () => {
+    const old = [{ seq: 5, tag: 'old' }, { seq: 6, tag: 'old' }]
+    const merged = mergeHistoryRows(old, [{ seq: 3, tag: 'new' }, { seq: 5, tag: 'new' }, { seq: 7, tag: 'new' }])
+    assert.deepEqual(merged.map(row => row.seq), [3, 5, 6, 7])
+    assert.deepEqual(merged.map(row => row.tag), ['new', 'new', 'old', 'new'])
+  })
+
+  test('a same-total refresh replaces the content of retained rows', async () => {
+    const old = [file(1), file(2)]
+    const merged = await loadTailHistory(fake([page({ rows: [file(1), { ...file(2), added: 9 }], first: 0, total: 2 })]), 'files', old, OPTIONS)
+    assert.ok(Array.isArray(merged))
+    assert.equal(merged.length, 2)
+    assert.equal(merged[1].added, 9)
+    assert.notEqual(merged[0], old[0])
+  })
+
+  test('walks sequence pages across a multi-page gap and merges in order', async () => {
+    const pages = [
+      page({ rows: [file(7), file(8)], first: 6, total: 8, beforeSeq: 7 }),
+      page({ rows: [file(3), file(4), file(5), file(6)], first: 2, total: 8 }),
+    ]
+    const merged = await loadTailHistory(fake(pages), 'requests', [file(1), file(2)], OPTIONS)
+    assert.ok(Array.isArray(merged))
+    assert.deepEqual(merged.map(row => row.seq), [1, 2, 3, 4, 5, 6, 7, 8])
+  })
+
+  test('assembles a full multi-page walk oldest-first', async () => {
+    const pages = [
+      page({ rows: [file(4), file(5)], first: 3, total: 5, beforeSeq: 4 }),
+      page({ rows: [file(1), file(2), file(3)], first: 0, total: 5 }),
+    ]
+    const rows = await loadAllHistory<FileOpRecord>(fake(pages), 'requests', OPTIONS)
+    assert.ok(Array.isArray(rows))
+    assert.deepEqual(rows.map(row => row.seq), [1, 2, 3, 4, 5])
+  })
+
+  test('stops the walk when a page omits its cursor', async () => {
+    const merged = await loadTailHistory(fake([page({ rows: [file(3)], first: 2, total: 9 })]), 'requests', [file(1), file(2)], OPTIONS)
+    assert.ok(Array.isArray(merged))
+    assert.deepEqual(merged.map(row => row.seq), [1, 2, 3])
+  })
+
+  test('stops the walk on an empty cursor-bearing page', async () => {
+    const merged = await loadTailHistory(fake([page({ rows: [], first: 2, total: 9, beforeSeq: 3 })]), 'requests', [file(1), file(2)], OPTIONS)
+    assert.ok(Array.isArray(merged))
+    assert.deepEqual(merged.map(row => row.seq), [1, 2])
+  })
+
+  test('rejects a stalled sequence cursor', async () => {
+    const stalled = page({ rows: [file(3)], first: 2, total: 9, beforeSeq: 2 })
+    assert.equal(await loadTailHistory(fake([stalled, stalled]), 'requests', [file(1)], OPTIONS), null)
+  })
+
   test('reads older index pages until the tail reaches the known prefix', async () => {
     const old = [file(1)]
     const pages: HistoryPage[] = [

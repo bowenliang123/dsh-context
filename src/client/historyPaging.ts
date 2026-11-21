@@ -41,19 +41,19 @@ export async function loadAllHistory<T extends HistoryRow>(
   options: HistoryPagingOptions,
 ): Promise<HistoryRows<T>> {
   let cursor: HistoryCursor | undefined
-  const rows: T[] = []
+  const collected: T[][] = []
   for (let pages = 0; ; pages++) {
     /* v8 ignore next 1 */
     if (pages >= HISTORY_PAGES_MAX) return null
     const page = await readHistoryPage(history, part, cursor, HISTORY_PAGE_MAX, options)
     if (page === CANCELLED || page === null) return page
-    rows.unshift(...page.rows as T[])
+    collected.push(page.rows as T[])
     const next = nextHistoryCursor(page)
     if (next === undefined || page.rows.length === 0) break
     if (next.beforeSeq === cursor?.beforeSeq && next.beforeIndex === cursor?.beforeIndex) return null
     cursor = next
   }
-  return rows
+  return pagesOldestFirst(collected)
 }
 
 export type HistorySeqRow = { seq: number; ord?: number }
@@ -67,14 +67,32 @@ function compareRows(a: HistorySeqRow, b: HistorySeqRow): number {
   return bySeq !== 0 ? bySeq : (a.ord ?? 0) - (b.ord ?? 0)
 }
 
+function pagesOldestFirst<T>(pages: readonly T[][]): T[] {
+  const rows: T[] = []
+  for (let index = pages.length - 1; index >= 0; index--) rows.push(...pages[index])
+  return rows
+}
+
+function overlapStart(rows: readonly HistorySeqRow[], target: HistorySeqRow): number {
+  let low = 0
+  let high = rows.length
+  while (low < high) {
+    const mid = low + Math.floor((high - low) / 2)
+    if (compareRows(rows[mid], target) < 0) low = mid + 1
+    else high = mid
+  }
+  return low
+}
+
 export function mergeHistoryRows<T extends HistorySeqRow>(old: T[], add: T[]): T[] {
   if (add.length === 0) return old
   const last = old.at(-1)
   if (last === undefined || compareRows(add[0], last) > 0) return [...old, ...add]
-  const merged = new Map<string, T>()
-  for (const row of old) merged.set(historyRowKey(row), row)
-  for (const row of add) merged.set(historyRowKey(row), row)
-  return [...merged.values()].sort(compareRows)
+  const start = overlapStart(old, add[0])
+  const region = new Map<string, T>()
+  for (const row of old.slice(start)) region.set(historyRowKey(row), row)
+  for (const row of add) region.set(historyRowKey(row), row)
+  return [...old.slice(0, start), ...[...region.values()].sort(compareRows)]
 }
 
 export async function loadTailHistory<T extends HistorySeqRow>(
@@ -83,8 +101,7 @@ export async function loadTailHistory<T extends HistorySeqRow>(
   old: T[],
   options: HistoryPagingOptions,
 ): Promise<HistoryRows<T>> {
-  const known = new Set(old.map(historyRowKey))
-  const add: T[] = []
+  const collected: T[][] = []
   let unseen = 0
   let cursor: number | undefined
   for (let pages = 0; ; pages++) {
@@ -98,19 +115,15 @@ export async function loadTailHistory<T extends HistorySeqRow>(
       options,
     )
     if (page === CANCELLED || page === null) return page
-    for (const row of page.rows as unknown as T[]) {
-      const key = historyRowKey(row)
-      if (known.has(key)) continue
-      known.add(key)
-      unseen++
-    }
-    add.unshift(...page.rows as unknown as T[])
+    const rows = page.rows as unknown as T[]
+    collected.push(rows)
+    unseen += Math.max(0, page.first + rows.length - Math.max(page.first, old.length))
     if (unseen >= Math.max(0, page.total - old.length)
-      || page.atStart || page.beforeSeq === undefined || page.rows.length === 0) break
+      || page.atStart || page.beforeSeq === undefined || rows.length === 0) break
     if (page.beforeSeq === cursor) return null
     cursor = page.beforeSeq
   }
-  return mergeHistoryRows(old, add)
+  return mergeHistoryRows(old, pagesOldestFirst(collected))
 }
 
 export async function loadHistoryTailIndex<T extends HistoryRow>(
@@ -125,7 +138,7 @@ export async function loadHistoryTailIndex<T extends HistoryRow>(
   if (page.total < old.length) return 'reload'
   if (page.total === old.length) return old
   if (page.atStart) return page.rows as T[]
-  let add = page.rows as T[]
+  const collected: T[][] = [page.rows as T[]]
   let first = page.first
   let cursor = nextHistoryCursor(page)
   let pages = 1
@@ -134,7 +147,7 @@ export async function loadHistoryTailIndex<T extends HistoryRow>(
     if (++pages > HISTORY_PAGES_MAX) return 'reload'
     page = await readHistoryPage(history, part, cursor, limit, options)
     if (page === CANCELLED || page === null) return page
-    add = [...page.rows as T[], ...add]
+    collected.push(page.rows as T[])
     first = page.first
     if (page.atStart) break
     const next = nextHistoryCursor(page)
@@ -142,6 +155,6 @@ export async function loadHistoryTailIndex<T extends HistoryRow>(
     cursor = next
   }
   if (first > old.length) return 'reload'
-  const merged = [...old.slice(0, first), ...add]
+  const merged = [...old.slice(0, first), ...pagesOldestFirst(collected)]
   return merged.length === page.total ? merged : 'reload'
 }
