@@ -220,12 +220,12 @@ semantic.update(JSON.stringify(snapshotResult.value))
 semanticParts.snapshot = digestOf(snapshotResult.value)
 
 let history = null
-if (routes.has('/api/dsh-context/history')) {
+if (process.env.DSH_BENCH_HISTORY !== '0' && routes.has('/api/dsh-context/history')) {
   const workerIndex = selectedRanks.findIndex(rank => sessionShape(rank, expectedCount).events > 30000)
   const historyId = selected[workerIndex >= 0 ? workerIndex : selected.length - 1]
   const report = {}
-  for (const part of ['requests', 'events', 'milestones']) {
-    let beforeSeq
+  for (const part of ['requests', 'events', 'milestones', 'nodes', 'archive', 'files', 'spans']) {
+    let cursor
     let pages = 0
     let rows = 0
     let bytes = 0
@@ -238,7 +238,7 @@ if (routes.has('/api/dsh-context/history')) {
         sessionId: historyId,
         part,
         limit: 1_000,
-        ...(beforeSeq === undefined ? {} : { beforeSeq }),
+        ...cursor,
       })
       const value = result.value
       if (value === null || value === undefined || Array.isArray(value.rows) !== true) {
@@ -250,13 +250,21 @@ if (routes.has('/api/dsh-context/history')) {
       ms += result.ms
       samples.push(result.ms)
       total = value.total
-      for (const row of value.rows) {
-        const key = part === 'requests' ? String(row.seq) : String(row.kind) + ':' + String(row.seq) + ':' + String(row.ord)
+      for (const [index, row] of value.rows.entries()) {
+        const key = part === 'requests'
+          ? String(row.seq)
+          : part === 'events' || part === 'milestones'
+            ? String(row.kind) + ':' + String(row.seq) + ':' + String(row.ord)
+            : String(value.first + index)
         if (seen.has(key)) throw new Error(`history ${part} returned duplicate ${key}`)
         seen.add(key)
       }
-      beforeSeq = value.beforeSeq
-      if (beforeSeq === undefined) break
+      cursor = value.beforeSeq !== undefined
+        ? { beforeSeq: value.beforeSeq }
+        : value.beforeIndex !== undefined
+          ? { beforeIndex: value.beforeIndex }
+          : undefined
+      if (cursor === undefined) break
       if (pages > 2_000) throw new Error(`history ${part} page walk did not terminate`)
     }
     if (rows !== total) throw new Error(`history ${part} walked ${rows} of ${total}`)
