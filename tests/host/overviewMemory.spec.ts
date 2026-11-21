@@ -63,6 +63,32 @@ function seedDisk(harness: Awaited<ReturnType<typeof boot>>): void {
   }
 }
 
+function gatedBoot(ids: readonly string[], options: { idleMs?: number; tokens?: readonly number[]; gateFirstOnly?: boolean } = {}): Promise<{
+  harness: Awaited<ReturnType<typeof boot>>
+  yields: () => number
+  release: () => void
+}> {
+  let count = 0
+  let release!: () => void
+  const gate = new Promise<void>((resolve) => { release = () => resolve() })
+  return (async () => {
+    const values = Object.fromEntries(ids.map((id, index) => [id, valuesOf(options.tokens?.[index] ?? 10)]))
+    const harness = await boot({
+      persistence: PERSISTENCE,
+      records: ids.map(id => recordOf(id)),
+      values,
+      ...(options.idleMs === undefined ? {} : { idleMs: options.idleMs }),
+      yieldEvery: 1,
+      yieldTo: async () => {
+        count += 1
+        if (options.gateFirstOnly !== true || count === 1) await gate
+      },
+    })
+    for (const id of ids) harness.state.captureIdentities.set(id, identityOf(id))
+    return { harness, yields: () => count, release }
+  })()
+}
+
 const sleep = (ms: number): Promise<void> => new Promise(resolve => setTimeout(resolve, ms))
 
 describe('overview memory: disk cache, idle release, incremental updates', () => {
@@ -315,6 +341,96 @@ describe('overview memory: disk cache, idle release, incremental updates', () =>
     await call(harness, { part: 'summary', revision: revisionOf(first) })
     assert.ok(harness.calls.list > reads, 'the released scan was not reused')
     harness.dispose()
+  })
+
+  test('a build longer than the idle window releases the feed only after it completes', async () => {
+    const gated = await gatedBoot(['a', 'b'], { idleMs: 5 })
+    const pending = call(gated.harness, { part: 'summary' })
+    while (gated.yields() < 1) await sleep(1)
+    await sleep(10)
+    assert.equal(gated.harness.cache.flushCalls, 0, 'the idle window never fires during the build')
+    gated.release()
+    const first = await pending
+    assert.equal(summaryOf(first).sessions, 2)
+    await sleep(20)
+    assert.ok(gated.harness.cache.flushCalls >= 1, 'the completed build arms a fresh idle release')
+    gated.harness.dispose()
+  })
+
+  test('a long warm build re-arms the idle release after it completes', async () => {
+    const gated = await gatedBoot(['a'], { idleMs: 5 })
+    const warming = gated.harness.warm()
+    while (gated.yields() < 1) await sleep(1)
+    await sleep(10)
+    assert.equal(gated.harness.cache.flushCalls, 0, 'the idle window never fires during the warm build')
+    gated.release()
+    await warming
+    await sleep(20)
+    assert.ok(gated.harness.cache.flushCalls >= 1, 'the completed warm build arms a fresh idle release')
+    gated.harness.dispose()
+  })
+
+  test('a warm follow-up round never releases between iterations', async () => {
+    const gated = await gatedBoot(['a'], { idleMs: 5 })
+    const first = gated.harness.warm()
+    const second = gated.harness.warm()
+    gated.release()
+    await Promise.all([first, second])
+    assert.equal(gated.harness.cache.flushCalls, 0, 'no release lands between warm iterations')
+    await sleep(20)
+    assert.ok(gated.harness.cache.flushCalls >= 1, 'the settled warm loop arms the release')
+    gated.harness.dispose()
+  })
+
+  test('overlapping requests release only after the last one settles', async () => {
+    const gated = await gatedBoot(['a', 'b'], { idleMs: 5, gateFirstOnly: true })
+    const first = call(gated.harness, { part: 'summary' })
+    while (gated.yields() < 1) await sleep(1)
+    const second = call(gated.harness, { part: 'days' })
+    await sleep(10)
+    assert.equal(gated.harness.cache.flushCalls, 0, 'neither request releases while the other is active')
+    gated.release()
+    const [one, two] = await Promise.all([first, second])
+    assert.equal(summaryOf(one).sessions, 2)
+    assert.equal(two.reply.ok, true)
+    await sleep(20)
+    assert.ok(gated.harness.cache.flushCalls >= 1, 'the shared activity arms one release after both settle')
+    gated.harness.dispose()
+  })
+
+  test('a failed build still re-arms the idle release', async () => {
+    const harness = await identityBoot({ idleMs: 5 })
+    seedIdentities(harness)
+    const original = harness.cache.load.bind(harness.cache)
+    let failures = 1
+    harness.cache.load = async (...args) => {
+      if (failures > 0) {
+        failures -= 1
+        throw new Error('load broke once')
+      }
+      return original(...args)
+    }
+    const failed = await call(harness, { part: 'summary' })
+    assert.equal(failed.reply.error?.code, 'gateway/internal')
+    await sleep(20)
+    assert.ok(harness.cache.flushCalls >= 1, 'the failed build re-arms the idle release')
+    const recovered = await call(harness, { part: 'summary' })
+    assert.equal(recovered.reply.ok, true)
+    assert.equal(summaryOf(recovered).sessions, 2)
+    harness.dispose()
+  })
+
+  test('a disposed route never re-arms the idle release', async () => {
+    const gated = await gatedBoot(['a', 'b'], { idleMs: 5 })
+    const pending = call(gated.harness, { part: 'summary' })
+    while (gated.yields() < 1) await sleep(1)
+    gated.harness.dispose()
+    gated.release()
+    const first = await pending
+    assert.equal(first.reply.ok, true, 'the in-flight request still answers')
+    await sleep(20)
+    assert.equal(gated.harness.cache.flushCalls, 0, 'a disposed route never re-arms the release')
+    gated.harness.dispose()
   })
 
   test('a pre-populated disk cache serves the first paint without any projection read', async () => {
@@ -806,36 +922,23 @@ describe('overview memory: disk cache, idle release, incremental updates', () =>
   })
 
   test('a request arriving mid-build waits for the critical section and never interleaves a second build', async () => {
-    let yields = 0
-    let release!: () => void
-    const gate = new Promise<void>((resolve) => { release = () => resolve() })
-    const harness = await boot({
-      persistence: PERSISTENCE,
-      records: [recordOf('a'), recordOf('b')],
-      values: { a: valuesOf(10), b: valuesOf(20) },
-      yieldEvery: 1,
-      yieldTo: async () => {
-        yields += 1
-        await gate
-      },
-    })
-    for (const id of ['a', 'b']) harness.state.captureIdentities.set(id, identityOf(id))
-    const first = call(harness, { part: 'summary' })
-    while (yields < 1) await sleep(1)
-    const readsWhileBuilding = harness.calls.cached.length
+    const gated = await gatedBoot(['a', 'b'])
+    const first = call(gated.harness, { part: 'summary' })
+    while (gated.yields() < 1) await sleep(1)
+    const readsWhileBuilding = gated.harness.calls.cached.length
     let secondSettled = false
-    const second = call(harness, { part: 'days' })
+    const second = call(gated.harness, { part: 'days' })
     void second.then(() => { secondSettled = true })
     await sleep(10)
     assert.equal(secondSettled, false, 'the second request waits for the in-flight critical section')
-    assert.equal(harness.calls.cached.length, readsWhileBuilding, 'the second request adds no cold read while waiting')
-    release()
+    assert.equal(gated.harness.calls.cached.length, readsWhileBuilding, 'the second request adds no cold read while waiting')
+    gated.release()
     const [one, two] = await Promise.all([first, second])
     assert.equal(summaryOf(one).sessions, 2)
     assert.equal(two.reply.ok, true)
-    assert.equal(yields, 2, 'only the first build yielded')
-    assert.deepEqual(harness.calls.cached.sort(), ['a', 'b'])
-    harness.dispose()
+    assert.equal(gated.yields(), 2, 'only the first build yielded')
+    assert.deepEqual(gated.harness.calls.cached.sort(), ['a', 'b'])
+    gated.harness.dispose()
   })
 
   test('a folded revision rebuilds once for a concurrent part burst and the next revision is served from rows', async () => {

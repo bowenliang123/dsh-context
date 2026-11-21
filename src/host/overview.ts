@@ -253,6 +253,7 @@ export function watchOverviewRoute(
   let foldEpoch = 0
   let foldMarker = 0
   let idleTimer: ReturnType<typeof setTimeout> | null = null
+  let activeBuilds = 0
   let disposed = false
   let disposePromise: Promise<void> | null = null
   let cache: OverviewCache | null = options.cache ?? null
@@ -269,9 +270,12 @@ export function watchOverviewRoute(
     sessionsReady = false
     scanWindow.reset()
   }
-  const resetIdle = (): void => {
+  const clearIdle = (): void => {
     if (idleTimer !== null) clearTimeout(idleTimer)
     idleTimer = null
+  }
+  const resetIdle = (): void => {
+    clearIdle()
     if (disposed || idleMs <= 0) return
     idleTimer = setTimeout(() => {
       idleTimer = null
@@ -279,14 +283,21 @@ export function watchOverviewRoute(
     }, idleMs)
     ;(idleTimer as { unref?: () => void }).unref?.()
   }
+  const runMaterialize = async <T>(task: () => Promise<T>): Promise<T> => {
+    clearIdle()
+    activeBuilds++
+    try {
+      return await task()
+    } finally {
+      activeBuilds--
+      if (activeBuilds === 0) resetIdle()
+    }
+  }
   const dispose = (): Promise<void> => {
     if (disposePromise !== null) return disposePromise
     disposed = true
     warmHandler = null
-    if (idleTimer !== null) {
-      clearTimeout(idleTimer)
-      idleTimer = null
-    }
+    clearIdle()
     disposePromise = (async () => {
       if (cache !== null) await cache.dispose()
     })()
@@ -551,10 +562,11 @@ export function watchOverviewRoute(
         warmTail = (async () => {
           do {
             warmAgain = false
-            resetIdle()
-            const scanned = await awaitScan()
-            if (disposed) return
-            await withMaterializeLock(() => materialize(warmingRequest, scanned))
+            await runMaterialize(async () => {
+              const scanned = await awaitScan()
+              if (disposed) return
+              await withMaterializeLock(() => materialize(warmingRequest, scanned))
+            })
           } while (warmingAgain())
         })().catch(() => {}).finally(() => { warmTail = null })
         return warmTail
@@ -565,10 +577,11 @@ export function watchOverviewRoute(
         if (!read.ok) return read.response
         const parsed = requestOf(read.body)
         if (parsed === null) return failure('dsh-context/bad-request', 'unknown overview part')
-        resetIdle()
         try {
-          const scanned = await awaitScan()
-          const value = await withMaterializeLock(() => materialize(parsed, scanned))
+          const value = await runMaterialize(async () => {
+            const scanned = await awaitScan()
+            return await withMaterializeLock(() => materialize(parsed, scanned))
+          })
           return reply({ ok: true, value })
         } catch (err) {
           return failure('gateway/internal', err instanceof Error ? err.message : String(err))
