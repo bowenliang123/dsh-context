@@ -3,7 +3,7 @@ import { act, createElement as h, type ReactElement, useState } from 'react'
 import { afterEach, describe, test, vi } from 'vitest'
 import { type Command } from '../../../src/client/commands'
 import { type CommandPageFetcher } from '../../../src/client/commandPages'
-import { useCommandLog, FILL_MAX_KNOWN, type CommandLog } from '../../../src/client/components/useCommandLog'
+import { useCommandLog, type CommandLog } from '../../../src/client/components/useCommandLog'
 import { type CommandPage } from '../../../src/shared/types'
 import { mount, until, click, makeKit, query, queryAll, text, typeText } from '../helpers/kit'
 import { MissionPulse } from '../../../src/client/components/missionPulse'
@@ -349,7 +349,7 @@ describe('useCommandLog fill budget and cap', () => {
     }
   })
 
-  test('the known ledger stops at the cap and keeps every listed row', async () => {
+  test('the automatic fill keeps walking past the old cap without user action', async () => {
     const rows = Array.from({ length: 60 }, (_, i) => cmd(i + 1, 'row ' + String(i + 1)))
     let cursor = 100
     let served = 0
@@ -364,19 +364,9 @@ describe('useCommandLog fill budget and cap', () => {
     }
     const m = await mount(h(Probe, { commands: rows, floor: 100, fetchOlder: fetchPage, scope: 's' }))
     try {
-      await until(() => log?.status === 'paused', 'the burst never paused at the budget')
-      for (let round = 0; round < 200 && (log?.records.length ?? 0) < FILL_MAX_KNOWN; round++) {
-        await act(async () => { log?.resume() })
-        await act(async () => { await new Promise(resolve => setTimeout(resolve, 45)) })
-      }
-      const atCap = log?.records.length ?? 0
-      assert.ok(atCap >= FILL_MAX_KNOWN, 'the ledger never reached the cap')
-      const callsAtCap = served
-      await act(async () => { log?.resume() })
-      await act(async () => { await new Promise(resolve => setTimeout(resolve, 45)) })
-      assert.equal(served, callsAtCap, 'a capped ledger refuses to erase what the list shows')
-      assert.equal(log?.records.length, atCap, 'the capped set stays whole')
-      assert.equal(log?.status, 'paused', 'the cap parks the walk instead of trimming the listed rows')
+      await until(() => (log?.records.length ?? 0) >= 1_000, 'the fill stopped before the old cap', 1_000)
+      assert.ok(served >= 1_000)
+      assert.notEqual(log?.status, 'done')
     } finally {
       await m.unmount()
     }

@@ -1,16 +1,17 @@
 import type {
-  ContextEventRecord,
   ContextTimeline,
   ContextTimelineDetail,
   HeaderRecord,
   HeaderTool,
   HistoryPage,
   HistoryPart,
+  HistoryRow,
   RequestRecord,
   SurfaceNode,
   SurfaceNodeWindow,
   SystemPromptNode,
 } from '../shared/types'
+import { HISTORY_PARTS } from '../shared/types'
 import { CATS } from '../shared/categories'
 import type { ContextDelta } from '../shared/delta'
 import type { IncrementCat } from '../shared/increment'
@@ -37,13 +38,14 @@ export interface FactsRead {
 
 export interface HistoryCursor {
   beforeSeq?: number
+  beforeIndex?: number
 }
 
 export type HistoryFetcher = (
   part: HistoryPart,
   cursor?: HistoryCursor,
   limit?: number,
-) => Promise<HistoryPage<RequestRecord | ContextEventRecord> | null>
+) => Promise<HistoryPage | null>
 
 export type DeltaFetcher = (seq: number | null, baseSeq: number | null) => Promise<ContextDelta | null>
 
@@ -146,9 +148,9 @@ export function detailOf(value: unknown): ContextTimelineDetail | null {
   }
 }
 
-const HISTORY_PARTS = new Set<HistoryPart>(['requests', 'events', 'milestones'])
+const HISTORY_PART_SET = new Set<HistoryPart>(HISTORY_PARTS)
 
-export function historyOf(value: unknown): HistoryPage<RequestRecord | ContextEventRecord> | null {
+export function historyOf(value: unknown): HistoryPage | null {
   const data = asRecord(value)
   if (data === null) return null
   const rev = numOf(data.rev)
@@ -157,21 +159,23 @@ export function historyOf(value: unknown): HistoryPage<RequestRecord | ContextEv
   const first = numOf(data.first)
   const last = typeof data.last === 'number' && Number.isSafeInteger(data.last) && data.last >= -1 ? data.last : undefined
   const total = numOf(data.total)
-  if (rev === undefined || typeof part !== 'string' || !HISTORY_PARTS.has(part as HistoryPart)
+  if (rev === undefined || typeof part !== 'string' || !HISTORY_PART_SET.has(part as HistoryPart)
     || rows === undefined || first === undefined || last === undefined || total === undefined
     || typeof data.atStart !== 'boolean' || typeof data.atEnd !== 'boolean') return null
   const beforeSeq = numOf(data.beforeSeq)
+  const beforeIndex = numOf(data.beforeIndex)
   return {
     rev,
     live: data.live === true,
     part: part as HistoryPart,
-    rows: rows as unknown as (RequestRecord | ContextEventRecord)[],
+    rows: rows as unknown as HistoryRow[],
     first,
     last,
     total,
     atStart: data.atStart,
     atEnd: data.atEnd,
     ...(beforeSeq === undefined ? {} : { beforeSeq }),
+    ...(beforeIndex === undefined ? {} : { beforeIndex }),
   }
 }
 

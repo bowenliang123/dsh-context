@@ -5,7 +5,7 @@ import { stateBytesOf, trimState, type TimelineState } from '../../src/host/fold
 import { type RequestRecord } from '../../src/shared/types'
 import { assistantMessage, compaction, planMode, toolCall, toolResult, userMessage, stepEnd, stepStart, assistantAttempt, header } from './helpers/events'
 import { assertStatesPlainJson, driveTimeline, timelineDef, assertPlainJson, assertStable, requestsOf } from './helpers/projection'
-import { resolveBounds } from '../../src/host/config'
+import { historyBounds, resolveBounds } from '../../src/host/config'
 import { estimateSystemContent } from '../../src/shared/estimate'
 
 describe('fold-retention', () => {
@@ -131,13 +131,29 @@ describe('trimState archive pruning', () => {
     const last = buildTimelineDetail(drive.state, bounds)
     assert.deepEqual(last.archive.map(n => n.seq), [7], 'the newest removal still rides the payload')
     assert.equal(last.archiveFloor, 6, 'the payload floor names the newest dropped removal')
-    trimState(drive.state, { ...bounds, historyMode: true })
-    assert.deepEqual(drive.state.archived.map(n => n.seq), [7], 'history folds retain only the transport window')
+    trimState(drive.state, historyBounds(bounds))
+    assert.deepEqual(drive.state.archived.map(n => n.seq), [1, 4, 7], 'history folds keep every removal')
     const bare = createTimelineState()
     bare.archived.push({ seq: 5, cat: 'user', tokens: 1 }, { seq: 6, cat: 'user', tokens: 1 })
-    trimState(bare, { ...bounds, historyMode: true })
-    assert.equal(bare.archiveFloor, 5, 'a removal without a gone marker floors on its seq')
+    trimState(bare, historyBounds(bounds))
+    assert.equal(bare.archived.length, 2)
+    assert.equal(bare.archiveFloor, undefined)
     assertStatesPlainJson(drive)
+  })
+
+  test('history bounds keep removals older than the first retained request', () => {
+    const state = createTimelineState()
+    state.requests.push({ seq: 10, time: 10, total: 1 })
+    state.archived.push({ seq: 1, cat: 'user', tokens: 1, gone: 5 })
+    trimState(state, historyBounds(resolveBounds({})))
+    assert.deepEqual(state.archived.map(node => node.seq), [1])
+    assert.equal(state.archiveFloor, undefined)
+    const narrow = createTimelineState()
+    narrow.requests.push({ seq: 10, time: 10, total: 1 })
+    narrow.archived.push({ seq: 1, cat: 'user', tokens: 1, gone: 5 })
+    trimState(narrow, resolveBounds({}))
+    assert.deepEqual(narrow.archived, [])
+    assert.equal(narrow.archiveFloor, 5)
   })
 
   test('the byte estimate counts strings, maps and pending records once', () => {

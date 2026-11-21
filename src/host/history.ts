@@ -11,13 +11,22 @@ import { asRecord } from './record'
 import { serviceIdentityOf } from './serviceIdentity'
 import type { SessionsFace } from './faces'
 import { milestoneKindOf } from '../shared/milestones'
-import type { ContextEventRecord, HistoryPage, HistoryPart, RequestRecord } from '../shared/types'
+import { HISTORY_PARTS, type HistoryPage, type HistoryPart, type HistoryRow } from '../shared/types'
 
 export const HISTORY_ROUTE = '/api/dsh-context/history'
 
-const PART_SET = new Set<HistoryPart>(['requests', 'events', 'milestones'])
-const PAGE_LIMIT = 400
+const PART_SET = new Set<HistoryPart>(HISTORY_PARTS)
 const PAGE_LIMIT_MAX = 1_000
+const PAGE_LIMIT: Record<HistoryPart, number> = {
+  requests: 400,
+  events: 400,
+  milestones: 400,
+  nodes: 200,
+  archive: 200,
+  files: 200,
+  spans: 1_000,
+}
+const SEQ_PARTS = new Set<HistoryPart>(['requests', 'events', 'milestones'])
 const STATE_CACHE_MAX = 2
 const STATE_CACHE_BYTES = 64 * 1024 * 1024
 const COLD_FRESH_MS = 5_000
@@ -26,6 +35,7 @@ interface HistoryRead {
   sessionId: string
   part: HistoryPart
   beforeSeq?: number
+  beforeIndex?: number
   limit: number
 }
 
@@ -34,10 +44,11 @@ interface ColdState {
   revision: string
   statRevision?: string
   state: TimelineState
+  rows?: { part: HistoryPart; rows: HistoryRow[] }
   checkedAt: number
 }
 
-const rowsCache = new WeakMap<TimelineState, Partial<Record<HistoryPart, (RequestRecord | ContextEventRecord)[]>>>()
+const liveRows = new WeakMap<TimelineState, { part: HistoryPart; rows: HistoryRow[] }>()
 
 function requestOf(body: unknown): HistoryRead | null {
   const data = asRecord(body)
@@ -47,19 +58,22 @@ function requestOf(body: unknown): HistoryRead | null {
   const part = data.part
   if (typeof part !== 'string' || !PART_SET.has(part as HistoryPart)) return null
   const beforeSeq = data.beforeSeq
+  const beforeIndex = data.beforeIndex
   const limit = data.limit
+  const historyPart = part as HistoryPart
   return {
     sessionId,
-    part: part as HistoryPart,
+    part: historyPart,
     ...(typeof beforeSeq === 'number' && Number.isSafeInteger(beforeSeq) && beforeSeq >= 0 ? { beforeSeq } : {}),
+    ...(typeof beforeIndex === 'number' && Number.isSafeInteger(beforeIndex) && beforeIndex >= 0 ? { beforeIndex } : {}),
     limit: typeof limit === 'number' && Number.isFinite(limit)
       ? Math.min(PAGE_LIMIT_MAX, Math.max(1, Math.floor(limit)))
-      : PAGE_LIMIT,
+      : PAGE_LIMIT[historyPart],
   }
 }
 
 function stateBytesOfEntry(entry: ColdState): number {
-  return stateBytesOf(entry.state)
+  return stateBytesOf(entry.state) + (entry.rows?.rows.length ?? 0) * 128
 }
 
 function lowerBound(rows: readonly { seq: number }[], seq: number): number {
@@ -73,9 +87,11 @@ function lowerBound(rows: readonly { seq: number }[], seq: number): number {
   return low
 }
 
-type PageSlice<T> = Omit<HistoryPage<T>, 'rev' | 'live' | 'part'>
+type PageSlice = Omit<HistoryPage, 'rev' | 'live' | 'part'>
 
-function pageOf<T extends { seq: number }>(rows: readonly T[], beforeSeq: number | undefined, limit: number): PageSlice<T> {
+type SeqHistoryRow = Extract<HistoryRow, { seq: number }>
+
+function pageBySeq(rows: readonly SeqHistoryRow[], beforeSeq: number | undefined, limit: number): PageSlice {
   const end = beforeSeq === undefined ? rows.length : lowerBound(rows, beforeSeq)
   let start = Math.max(0, end - limit)
   while (start > 0 && rows[start - 1].seq === rows[start].seq) start--
@@ -90,24 +106,57 @@ function pageOf<T extends { seq: number }>(rows: readonly T[], beforeSeq: number
   }
 }
 
-function rowsOf(state: TimelineState, part: HistoryPart): (RequestRecord | ContextEventRecord)[] {
-  const cached = rowsCache.get(state)
-  const hit = cached?.[part]
-  if (hit !== undefined) return hit
-  let rows: (RequestRecord | ContextEventRecord)[]
-  if (part === 'requests') {
-    rows = requestRowsOf(state)
-  } else {
-    const events = eventsOf(state, state.requests)
-    for (let ord = 0; ord < events.length; ord++) events[ord].ord = ord
-    rows = part === 'events' ? events : events.filter(event => milestoneKindOf(event) !== null)
+function pageByIndex(rows: readonly HistoryRow[], beforeIndex: number | undefined, limit: number): PageSlice {
+  const end = beforeIndex === undefined ? rows.length : Math.min(beforeIndex, rows.length)
+  const start = Math.max(0, end - limit)
+  return {
+    rows: rows.slice(start, end),
+    first: start,
+    last: end - 1,
+    total: rows.length,
+    atStart: start === 0,
+    atEnd: end === rows.length,
+    ...(start > 0 ? { beforeIndex: start } : {}),
   }
-  rowsCache.set(state, { ...cached, [part]: rows })
+}
+
+function rowsOf(state: TimelineState, part: HistoryPart, cold?: ColdState): HistoryRow[] {
+  if (cold?.rows?.part === part) return cold.rows.rows
+  const cached = cold === undefined ? liveRows.get(state) : undefined
+  if (cached?.part === part) return cached.rows
+  let rows: HistoryRow[]
+  switch (part) {
+    case 'requests':
+      rows = requestRowsOf(state)
+      break
+    case 'nodes':
+      rows = state.surface
+      break
+    case 'archive':
+      rows = state.archived
+      break
+    case 'files':
+      rows = state.fileOps
+      break
+    case 'spans':
+      rows = state.spans
+      break
+    default: {
+      const events = eventsOf(state, state.requests)
+      for (let ord = 0; ord < events.length; ord++) events[ord].ord = ord
+      rows = part === 'events' ? events : events.filter(event => milestoneKindOf(event) !== null)
+    }
+  }
+  if (cold !== undefined) cold.rows = { part, rows }
+  else liveRows.set(state, { part, rows })
   return rows
 }
 
-function pageValue(state: TimelineState, live: boolean, read: HistoryRead): HistoryPage<RequestRecord | ContextEventRecord> {
-  const page = pageOf(rowsOf(state, read.part), read.beforeSeq, read.limit)
+function pageValue(state: TimelineState, live: boolean, read: HistoryRead, cold?: ColdState): HistoryPage {
+  const rows = rowsOf(state, read.part, cold)
+  const page = SEQ_PARTS.has(read.part)
+    ? pageBySeq(rows as SeqHistoryRow[], read.beforeSeq, read.limit)
+    : pageByIndex(rows, read.beforeIndex, read.limit)
   return { rev: state.detailRev ?? 0, live, part: read.part, ...page }
 }
 
@@ -120,11 +169,6 @@ function coldCursorOf(events: readonly unknown[]): string {
 function compactHistoryState(state: TimelineState): TimelineState {
   return {
     ...state,
-    surface: [],
-    archived: [],
-    fileOps: [],
-    commands: [],
-    spans: [],
     systems: undefined,
     timing: undefined,
     stepWaits: undefined,
@@ -233,13 +277,13 @@ export function watchHistoryChannel(ctx: Context, bounds: FoldBounds, deps: Hist
           if (statRevision === undefined) {
             const fresh = stateCache.get(wanted.sessionId, entry => entry.persistence === identity)
             if (fresh !== undefined && Date.now() - fresh.checkedAt < COLD_FRESH_MS) {
-              return reply({ ok: true, value: pageValue(fresh.state, false, wanted) })
+              return reply({ ok: true, value: pageValue(fresh.state, false, wanted, fresh) })
             }
           } else {
             const hit = stateCache.get(wanted.sessionId, entry => entry.persistence === identity && entry.statRevision === statRevision)
             if (hit !== undefined) {
               hit.checkedAt = Date.now()
-              return reply({ ok: true, value: pageValue(hit.state, false, wanted) })
+              return reply({ ok: true, value: pageValue(hit.state, false, wanted, hit) })
             }
           }
           const value = await coldReads.admit(async () => {
@@ -266,17 +310,18 @@ export function watchHistoryChannel(ctx: Context, bounds: FoldBounds, deps: Hist
               && (statRevision === undefined ? entry.revision === revision : entry.statRevision === statRevision))
             if (cached !== undefined) {
               cached.checkedAt = Date.now()
-              return pageValue(cached.state, false, wanted)
+              return pageValue(cached.state, false, wanted, cached)
             }
             const state = compactHistoryState((await foldLog(events, historyBounds(bounds))).state)
-            stateCache.set(wanted.sessionId, {
+            const entry: ColdState = {
               persistence: identity,
               revision,
               ...(statRevision === undefined ? {} : { statRevision }),
               state,
               checkedAt: Date.now(),
-            })
-            return pageValue(state, false, wanted)
+            }
+            stateCache.set(wanted.sessionId, entry)
+            return pageValue(state, false, wanted, entry)
           })
           return reply({ ok: true, value: value ?? null })
         } catch (err) {

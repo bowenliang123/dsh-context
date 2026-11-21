@@ -765,6 +765,8 @@ describe('makeFactsFetchers over HTTP', () => {
     assert.deepEqual(requests[2]?.body, { sessionId: 's1', part: 'requests', beforeSeq: 5, limit: 100 })
     await fetchers.history?.('events')
     assert.deepEqual(requests[3]?.body, { sessionId: 's1', part: 'events' })
+    await fetchers.history?.('nodes', { beforeIndex: 5 })
+    assert.deepEqual(requests[4]?.body, { sessionId: 's1', part: 'nodes', beforeIndex: 5 })
   })
 })
 })

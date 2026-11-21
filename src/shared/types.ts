@@ -731,17 +731,22 @@ export interface OverviewProjectsValue {
 export type OverviewValue = OverviewUnchanged | OverviewSummaryValue | OverviewDaysValue | OverviewPageValue
   | OverviewTallyValue | OverviewProjectsValue
 
-export type HistoryPart = 'requests' | 'events' | 'milestones'
+export const HISTORY_PARTS = ['requests', 'events', 'milestones', 'nodes', 'archive', 'files', 'spans'] as const
 
-export interface HistoryPage<T> {
+export type HistoryPart = (typeof HISTORY_PARTS)[number]
+
+export type HistoryRow = RequestRecord | ContextEventRecord | SurfaceNode | FileOpRecord | TimingSpan
+
+export interface HistoryPage {
   rev: number
   live: boolean
   part: HistoryPart
-  rows: T[]
+  rows: HistoryRow[]
   first: number
   last: number
   total: number
   atStart: boolean
   atEnd: boolean
   beforeSeq?: number
+  beforeIndex?: number
 }

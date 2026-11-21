@@ -389,7 +389,7 @@ function PagedWindow(props: { commands: Command[]; fetchOlder?: CommandPageFetch
 }
 
 describe('CommandPanel fill pause away from the history tail', () => {
-  test('a paused burst stays paused at the newest head and resumes when the tail nears', async () => {
+  test('a paused burst resumes automatically at the newest head', async () => {
     const calls: number[] = []
     const fetchOlder = async (beforeSeq: number): Promise<CommandPage> => {
       const seq = beforeSeq - 1
@@ -401,12 +401,7 @@ describe('CommandPanel fill pause away from the history tail', () => {
     try {
       await until(() => calls.length === 12, 'the burst never paused at the budget', 800)
       await act(async () => { await new Promise(resolve => setTimeout(resolve, 80)) })
-      assert.equal(calls.length, 12, 'the newest head does not demand older history')
-      const list = query<HTMLElement>(m.container, '.lc-cmd-list')
-      list.scrollTop = 12_000
-      await act(async () => { list.dispatchEvent(new Event('scroll')) })
-      await until(() => calls.length > 12, 'the tail proximity never resumed the walk', 800)
-      await m.unmount()
+      await until(() => calls.length > 12, 'the paused burst resumes without user action', 200)
     } finally {
       await m.unmount()
     }

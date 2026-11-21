@@ -8,7 +8,7 @@ import { type ColdReadGate, makeColdReadGate } from './coldRead'
 import { makeFoldCache } from './foldCache'
 import { buildTimelineHead, eventsOf, requestRowsOf, serveCommand, tailOf } from './foldWire'
 import { withCost, type CostSource } from './cost'
-import { TIMING_SPANS_MAX, surfaceWindowOf, type TimelineState } from './foldState'
+import { surfaceWindowOf, type TimelineState } from './foldState'
 import { failure, leaseOf, mountPostRoute, observeOf, readBody, reply, revisionOf } from './postRoute'
 import { asRecord } from './record'
 import { serviceIdentityOf } from './serviceIdentity'
@@ -42,7 +42,7 @@ function windowCapsOf(bounds: FoldBounds): FactWindow {
     eventsTail: bounds.maxEvents,
     filesTail: bounds.maxFileOps,
     commandsTail: bounds.maxCommands,
-    spansTail: TIMING_SPANS_MAX,
+    spansTail: bounds.maxSpans,
   }
 }
 

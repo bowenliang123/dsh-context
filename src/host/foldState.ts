@@ -1,7 +1,7 @@
 import type { Category, CommandRecord, CommandStats, ContextEventRecord, FileOpRecord, SessionCostUsage, SurfaceNode, SurfaceNodeWindow, SystemPromptNode, TimingSpan, TimingTotals } from '../shared/types'
 import type { SlimRequestRecord } from '../shared/types'
 import { textBytes, WIRE_BYTES } from '../shared/bytes'
-import type { FoldBounds } from './config'
+import { HISTORY_LIMIT, type FoldBounds } from './config'
 
 const SURFACE_CATS: readonly Category[] = ['user', 'inject', 'skill', 'assistant', 'tool']
 
@@ -375,7 +375,7 @@ export function trimState(st: TimelineState, bounds: FoldBounds): void {
     st.turnRuns = countTurnRuns(st.requests)
   }
   if (st.events.length > bounds.maxEvents) st.events = st.events.slice(-bounds.maxEvents)
-  if (st.spans.length > TIMING_SPANS_MAX) st.spans = st.spans.slice(-TIMING_SPANS_MAX)
+  if (st.spans.length > bounds.maxSpans) st.spans = st.spans.slice(-bounds.maxSpans)
   if (st.fileOps.length > bounds.maxFileOps) {
     const drop = st.fileOps.length - bounds.maxFileOps
     st.fileOpsFloor = Math.max(st.fileOpsFloor ?? 0, st.fileOps[drop - 1].seq)
@@ -405,7 +405,7 @@ export function trimState(st: TimelineState, bounds: FoldBounds): void {
     trimHeadState(st)
     return
   }
-  if (st.archived.length > 0) {
+  if (st.archived.length > 0 && bounds.maxRequestSteps !== HISTORY_LIMIT) {
     let drop = 0
     const oldestReq = st.requests.length > 0 ? st.requests[0].seq : undefined
     if (oldestReq !== undefined) {
@@ -418,12 +418,6 @@ export function trimState(st: TimelineState, bounds: FoldBounds): void {
       if (floor !== undefined) st.archiveFloor = Math.max(st.archiveFloor ?? 0, floor)
       st.archived = st.archived.slice(drop)
     }
-  }
-  if (bounds.historyMode === true && st.archived.length > bounds.maxArchiveNodes) {
-    const drop = st.archived.length - bounds.maxArchiveNodes
-    const prev = st.archived[drop - 1]
-    st.archiveFloor = Math.max(st.archiveFloor ?? 0, prev.gone ?? prev.seq)
-    st.archived = st.archived.slice(drop)
   }
 }
 
@@ -453,8 +447,6 @@ export function trimHeadState(st: TimelineState): void {
   if (st.spans.length > 0) st.spans = []
   if (st.archived.length > 0) st.archived = []
 }
-
-export const TIMING_SPANS_MAX = 2_000
 
 export const SKILL_NAMES_MAX = 500
 

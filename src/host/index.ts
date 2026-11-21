@@ -63,7 +63,7 @@ export function apply(ctx: Context, config: Config): void {
   watchStepIdentity(ctx)
   const gate = createDetailGate(ctx)
   const bounds = resolveBounds(config)
-  const shadow = new DetailShadow(ctx, historyBounds(bounds, false), coldReads, () => observeOf(ctx))
+  const shadow = new DetailShadow(ctx, historyBounds(bounds), coldReads, () => observeOf(ctx))
   watchDetailChannel(ctx, bounds, coldReads, gate, shadow, pricing)
   const deltaGate: DetailChannelGate = { ...gate, live: false }
   watchDeltaChannel(ctx, bounds, coldReads, deltaGate, shadow, attribution.ownerOf.bind(attribution))

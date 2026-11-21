@@ -6,8 +6,6 @@ const PAGE_PAUSE_MS = 30
 
 export const FILL_PAGE_BUDGET = 12
 
-export const FILL_MAX_KNOWN = 4_000
-
 type FillState =
   | { status: 'idle' }
   | { status: 'done' }
@@ -103,9 +101,6 @@ export function useCommandLog(
             if (result.atStart) return { ...prev, known, fill: { status: 'done' } }
             if (oldest >= cursor) return { ...prev, known, fill: { status: 'failed', cursor } }
             cursorTarget.current = oldest
-            if (known.size >= FILL_MAX_KNOWN) {
-              return { ...prev, known, fill: { status: 'paused', cursor: oldest, total: result.total } }
-            }
             const budget = budgetAtStart - 1
             return budget > 0
               ? { ...prev, known, fill: { status: 'loading', cursor: oldest, total: result.total, budget } }
@@ -137,11 +132,15 @@ export function useCommandLog(
   const resume = useCallback(() => {
     setStore((prev) => {
       if (prev.fill.status !== 'paused' || fetchOlder === undefined) return prev
-      if (prev.known.size >= FILL_MAX_KNOWN) return prev
       cursorTarget.current = prev.fill.cursor
       return { ...prev, fill: { status: 'loading', cursor: prev.fill.cursor, total: prev.fill.total, budget: FILL_PAGE_BUDGET } }
     })
   }, [fetchOlder])
+  useEffect(() => {
+    if (store.fill.status !== 'paused' || fetchOlder === undefined) return
+    const timer = setTimeout(resume, PAGE_PAUSE_MS)
+    return () => { clearTimeout(timer) }
+  }, [store.fill, fetchOlder, resume])
   const fill = store.fill
   return {
     records,

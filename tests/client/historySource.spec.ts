@@ -5,13 +5,8 @@ import { describe, test, vi } from 'vitest'
 import { DetailStore, historyOf } from '../../src/client/timelineSource'
 import type { ContextEventRecord, RequestRecord } from '../../src/shared/types'
 import { head, T0 } from './helpers/factsFixtures'
+import { request } from './helpers/historyFixtures'
 import { until } from './helpers/kit'
-
-function request(seq: number): RequestRecord {
-  return {
-    seq, time: T0 + seq, turn: 1, step: seq, system: 1, tools: 2, user: 3, inject: 0, assistant: 4, tool: 5, total: 15,
-  }
-}
 
 describe('history pages', () => {
   test('decodes valid pages and rejects unusable metadata', () => {
@@ -21,6 +16,8 @@ describe('history pages', () => {
     assert.equal(historyOf({ rev: 1, live: false, part: 'nope', rows: [], first: 0, last: -1, total: 0, atStart: true, atEnd: true }), null)
     assert.equal(historyOf({ rev: 1, part: 'events', rows: [], first: 0, last: 0, total: 1, atStart: true }), null)
     assert.equal(historyOf({ rev: 1, part: 'events', rows: [], first: -1, last: 0, total: 1, atStart: true, atEnd: true }), null)
+    const indexed = historyOf({ rev: 1, live: false, part: 'nodes', rows: [], first: 2, last: 1, total: 3, atStart: false, atEnd: false, beforeIndex: 2 })
+    assert.equal(indexed?.beforeIndex, 2)
   })
 
   test('loads every request and event page into the detail payload and appends a tail refresh', async () => {
@@ -374,6 +371,116 @@ describe('history pages', () => {
     await until(() => store.getSnapshot().detail?.requests.length === 2_505, 'the gap never closed')
     assert.equal(store.getSnapshot().detail?.requests.at(-1)?.seq, 2_505)
     assert.ok(requestCalls >= 4)
+    store.release()
+  })
+
+  test('parking during the core load leaves it retriable', async () => {
+    for (const cancelPart of ['requests', 'events'] as const) {
+      let releasePage: (() => void) | undefined
+      const gate = new Promise<void>(resolve => { releasePage = resolve })
+      let calls = 0
+      const store = new DetailStore({
+        core: async () => ({ rev: 1, live: true, parts: { head: head(1), series: [request(1)] } }),
+        part: async () => null,
+        history: async (part) => {
+          calls++
+          if (part === cancelPart) {
+            await gate
+          }
+          return {
+            rev: 1,
+            live: true,
+            part,
+            rows: [part === 'requests' ? request(1) : { seq: 1, time: T0, kind: 'inject' }],
+            first: 0,
+            last: 0,
+            total: 1,
+            atStart: true,
+            atEnd: true,
+          }
+        },
+      }, 0)
+      const off = store.subscribe(() => {})
+      store.request(1)
+      await until(() => store.getSnapshot().detail !== null, 'the core payload never landed')
+      store.ensureHistory()
+      await until(() => calls === (cancelPart === 'requests' ? 1 : 2), 'the cancelling page never started')
+      off()
+      releasePage?.()
+      await new Promise(resolve => setTimeout(resolve, 10))
+      assert.equal(store.getSnapshot().detail?.events.length, 0)
+      store.subscribe(() => {})
+      await until(() => store.getSnapshot().detail?.events.length === 1, 'the core history never resumed')
+      store.release()
+    }
+  })
+
+  test('a stalled cursor fails the walk instead of looping', async () => {
+    let calls = 0
+    const store = new DetailStore({
+      core: async () => ({ rev: 1, live: true, parts: { head: head(1), series: [request(1)] } }),
+      part: async () => null,
+      history: async (part) => {
+        calls++
+        return {
+          rev: 1,
+          live: true,
+          part,
+          rows: [request(1)],
+          first: 0,
+          last: 0,
+          total: 1,
+          atStart: false,
+          atEnd: false,
+          beforeSeq: 1,
+        }
+      },
+    }, 0)
+    store.subscribe(() => {})
+    store.request(1)
+    await until(() => store.getSnapshot().detail !== null, 'the core payload never landed')
+    store.ensureHistory()
+    await until(() => calls >= 2, 'the stalled cursor was not followed')
+    await new Promise(resolve => setTimeout(resolve, 10))
+    assert.equal(store.getSnapshot().detail?.requests.length, 1)
+    store.release()
+  })
+
+  test('a stalled refresh cursor keeps the loaded history', async () => {
+    let rev = 1
+    let calls = 0
+    const store = new DetailStore({
+      core: async () => ({ rev, live: true, parts: { head: head(rev), series: [request(rev)] } }),
+      part: async () => null,
+      history: async (part) => {
+        calls++
+        return {
+          rev,
+          live: true,
+          part,
+          rows: [part === 'requests' ? request(rev) : { seq: rev, time: T0, kind: 'inject' }],
+          first: 0,
+          last: 0,
+          total: rev === 1 ? 1 : 100,
+          atStart: rev === 1,
+          atEnd: rev === 1,
+          ...(rev === 1 ? {} : { beforeSeq: rev }),
+        }
+      },
+    }, 0)
+    store.subscribe(() => {})
+    store.request(1)
+    await until(() => store.getSnapshot().detail !== null, 'the core payload never landed')
+    store.ensureHistory()
+    await until(() => store.getSnapshot().detail?.events.length === 1, 'the full history never landed')
+    rev = 2
+    store.request(2)
+    await until(() => store.getSnapshot().detail?.rev === 2, 'the next revision never landed')
+    const before = calls
+    store.ensureHistory()
+    await until(() => calls >= before + 2, 'the stalled refresh never ran')
+    await new Promise(resolve => setTimeout(resolve, 10))
+    assert.equal(store.getSnapshot().detail?.events.length, 1)
     store.release()
   })
 

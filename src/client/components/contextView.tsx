@@ -280,11 +280,14 @@ export function makeContextView(
 
     useEffect(() => {
       if (source.detailState !== 'ready') return
-      ensurePart('files')
-      ensurePart('events')
       const timer = setTimeout(() => { ensurePart('spans') }, 0)
       return () => { clearTimeout(timer) }
     }, [source.detailState, ensurePart])
+    useEffect(() => {
+      if (!belowFoldMounted || source.detailState !== 'ready') return
+      ensurePart('files')
+      ensurePart('events')
+    }, [belowFoldMounted, source.detailState, ensurePart])
     useEffect(() => {
       if (browserMounted) ensurePart('nodes')
     }, [browserMounted, ensurePart])

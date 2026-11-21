@@ -35,27 +35,24 @@ function liveCtx(detailState = STATE) {
   return fake
 }
 
-async function page(fake: ReturnType<typeof liveCtx>, body: Record<string, unknown>): Promise<HistoryPage<unknown>> {
+async function page(fake: ReturnType<typeof liveCtx>, body: Record<string, unknown>): Promise<HistoryPage> {
   const response = await postJson(fake.captured, HISTORY_ROUTE, { sessionId: 's', ...body })
   assert.equal(response.ok, true)
-  return response.value as HistoryPage<unknown>
+  return response.value as HistoryPage
 }
 
-function walk(rows: readonly { seq: number }[], first: HistoryPage<unknown>): void {
+function walk(rows: readonly { seq: number }[], first: HistoryPage): void {
   assert.equal(first.total, STATE.requests.length)
   assert.equal(first.atEnd, true)
   assert.deepEqual(first.rows, rows.slice(rows.length - first.rows.length))
 }
 
 describe('history route', () => {
-  test('history bounds remove request and event caps but keep archive capping optional', () => {
-    const capped = historyBounds(BOUNDS)
-    const open = historyBounds(BOUNDS, false)
-    assert.equal(capped.maxRequestSteps, Number.MAX_SAFE_INTEGER)
-    assert.equal(capped.maxKeptTurns, Number.MAX_SAFE_INTEGER)
-    assert.equal(capped.maxEvents, Number.MAX_SAFE_INTEGER)
-    assert.equal(capped.historyMode, true)
-    assert.equal(open.historyMode, false)
+  test('history bounds remove every session collection cap', () => {
+    const full = historyBounds(BOUNDS)
+    for (const key of ['maxRequestSteps', 'maxKeptTurns', 'maxEvents', 'maxNodes', 'maxArchiveNodes', 'maxFileOps', 'maxSpans'] as const) {
+      assert.equal(full[key], Number.MAX_SAFE_INTEGER)
+    }
   })
 
   test('mounts only with a connection', () => {
@@ -117,6 +114,52 @@ describe('history route', () => {
     const second = await page(fake, { part: 'events', limit: 1, beforeSeq: first.beforeSeq })
     assert.deepEqual((second.rows as ContextEventRecord[]).map(row => row.seq), [4])
     assert.equal(second.beforeSeq, undefined)
+  })
+
+  test('pages nodes, archive, files, commands and spans through index cursors', async () => {
+    const base = driveTimeline([]).state
+    const state = {
+      ...base,
+      surface: [
+        { seq: 1, cat: 'user', tokens: 1 },
+        { seq: 2, cat: 'assistant', tokens: 2 },
+        { seq: 3, cat: 'tool', tokens: 3 },
+      ],
+      archived: [
+        { seq: 4, cat: 'user', tokens: 4, gone: 8 },
+        { seq: 5, cat: 'tool', tokens: 5, gone: 9 },
+      ],
+      fileOps: [
+        { seq: 6, path: 'a.ts', kind: 'read', tool: 'read', err: false, added: 0, removed: 0 },
+        { seq: 6, path: 'b.ts', kind: 'write', tool: 'write', err: false, added: 1, removed: 0 },
+      ],
+      spans: [
+        { kind: 'ttft', start: 10, end: 20 },
+        { kind: 'other', start: 20, end: 30 },
+      ],
+    } as never
+    const fake = liveCtx(state)
+    const expected = { nodes: 3, archive: 2, files: 2, spans: 2 }
+    for (const [part, total] of Object.entries(expected)) {
+      const all: unknown[] = []
+      let cursor: number | undefined
+      let seq = false
+      for (let guard = 0; guard < 10; guard++) {
+        const current = await page(fake, {
+          part,
+          limit: 1,
+          ...(cursor === undefined ? {} : seq ? { beforeSeq: cursor } : { beforeIndex: cursor }),
+        })
+        assert.equal(current.total, total)
+        all.unshift(...current.rows)
+        seq = current.beforeSeq !== undefined
+        cursor = current.beforeSeq ?? current.beforeIndex
+        if (cursor === undefined) break
+      }
+      assert.equal(all.length, total, part)
+    }
+    const rejected = await postJson(fake.captured, HISTORY_ROUTE, { sessionId: 's', part: 'commands' })
+    assert.equal(rejected.ok, false)
   })
 
   test('milestones exclude non-milestone events and page independently', async () => {
