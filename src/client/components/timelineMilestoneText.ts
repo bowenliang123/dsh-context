@@ -1,6 +1,6 @@
 import type { ContextEventRecord, RequestRecord } from '../../shared/types'
 import type { ViewKit } from '../viewkit'
-import { isMetricEntry, type MilestoneEntry, type MilestoneGroup, type MilestoneKind } from './timelineMilestones'
+import { isMetricEntry, milestoneItemCount, type MilestoneEntry, type MilestoneGroup, type MilestoneKind } from './timelineMilestones'
 
 export interface MilestoneTextOptions {
   granularity: 'step' | 'turn'
@@ -61,14 +61,14 @@ export function milestoneEntryRows(kit: TextKit, granularity: 'step' | 'turn', e
   }
   if (entry.kind === 'todo-add' || entry.kind === 'team-task-create') {
     let count = 0
-    for (const ev of entry.events) count += ev.count ?? 1
+    for (const ev of entry.events) count += milestoneItemCount(ev)
     return [label + (count > 1 ? ' · ×' + String(count) : '')]
   }
   if (entry.kind === 'todo-done' || entry.kind === 'ask') {
     const items: string[] = []
     let count = 0
     for (const ev of entry.events) {
-      count += ev.count ?? ev.items?.length ?? 1
+      count += milestoneItemCount(ev)
       for (const item of ev.items ?? []) {
         if (!items.includes(item)) items.push(item)
       }

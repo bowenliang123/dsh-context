@@ -43,7 +43,6 @@ export interface MilestoneGroup {
   anchor: 'boundary' | 'bar'
   leadKind: MilestoneKind
   entries: MilestoneEntry[]
-  count: number
   members?: MilestoneGroup[]
 }
 
@@ -68,6 +67,16 @@ interface Peak {
 
 export function isMetricEntry(entry: MilestoneEntry): entry is MilestoneMetricEntry {
   return entry.kind === 'longest' || entry.kind === 'growth'
+}
+
+export function milestoneItemCount(ev: ContextEventRecord): number {
+  return ev.kind === 'todo-add' || ev.kind === 'todo-done' || ev.kind === 'ask'
+    ? ev.count ?? ev.items?.length ?? 1
+    : 1
+}
+
+export function milestoneEntryCount(entry: MilestoneEntry): number {
+  return isMetricEntry(entry) ? 1 : entry.events.reduce((sum, ev) => sum + milestoneItemCount(ev), 0)
 }
 
 export function eventTargetIndex(
@@ -118,7 +127,6 @@ export function milestonesOf(
       anchor,
       leadKind: kind,
       entries: [],
-      count: 0,
     }
     groups.set(key, group)
     return group
@@ -136,14 +144,12 @@ export function milestonesOf(
       group.entries.push(entry)
     }
     entry.events.push(ev)
-    group.count += 1
   }
   const peaks = metricPeaksOf(requests)
   const addMetric = (peak: Peak | null, kind: 'longest' | 'growth'): void => {
     if (peak === null) return
     const group = groupAt(peak.idx, 'bar', kind)
     group.entries.push({ kind, value: peak.value })
-    group.count += 1
   }
   addMetric(peaks.longest, 'longest')
   addMetric(peaks.growth, 'growth')
@@ -223,7 +229,6 @@ function mergeCluster(members: MilestoneGroup[]): MilestoneGroup {
     anchor: entries.every(isMetricEntry) ? 'bar' : 'boundary',
     leadKind: lead.kind,
     entries,
-    count: members.reduce((sum, group) => sum + group.count, 0),
     members,
   }
 }

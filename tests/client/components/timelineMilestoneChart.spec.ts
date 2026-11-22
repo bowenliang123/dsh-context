@@ -126,6 +126,11 @@ describe('TimelineChart milestone flags', () => {
 
     assert.equal(queryAll(m.container, '.lc-ms').length, 4)
     assert.equal(queryAll(m.container, '.lc-ms-flag').length, 7)
+    assert.equal(query(headAt(m.container, 1, 'boundary'), '.lc-ms-flag[data-kind="todo-add"] .lc-ms-count').textContent, '2')
+    assert.equal(queryAll(headAt(m.container, 1, 'boundary'), '.lc-ms-count').length, 1, 'only the multi-item flag carries a badge')
+    assert.equal(queryAll(headAt(m.container, 3, 'boundary'), '.lc-ms-count').length, 0)
+    assert.equal(queryAll(headAt(m.container, 5, 'boundary'), '.lc-ms-count').length, 0)
+    assert.equal(queryAll(headAt(m.container, 7, 'boundary'), '.lc-ms-count').length, 0)
 
     const cases: [number, string, string[]][] = [
       [1, 'goal-create', ['Goal created · Ship the redesign', 'Todo added · ×2']],

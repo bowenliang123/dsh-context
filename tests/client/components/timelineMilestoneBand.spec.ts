@@ -14,10 +14,9 @@ function group(over: Partial<MilestoneGroup> = {}): MilestoneGroup {
     anchor: 'boundary',
     leadKind: 'compaction',
     entries: [
-      { kind: 'compaction', events: [] },
-      { kind: 'skill', events: [] },
+      { kind: 'compaction', events: [{ seq: 2, time: 1, kind: 'compaction' }, { seq: 2, time: 2, kind: 'compaction' }, { seq: 2, time: 3, kind: 'compaction' }] },
+      { kind: 'skill', events: [{ seq: 2, time: 4, kind: 'inject', sub: 'skill' }] },
     ],
-    count: 3,
     ...over,
   }
 }
@@ -39,7 +38,6 @@ describe('TimelineMilestoneBand', () => {
           anchor: 'bar',
           leadKind: 'longest',
           entries: [{ kind: 'longest', value: 20 }],
-          count: 1,
         }),
       }),
     ]
@@ -70,7 +68,8 @@ describe('TimelineMilestoneBand', () => {
     assert.equal(heads[0].getAttribute('aria-label'), 'label-b:1')
     assert.equal(heads[0].getAttribute('aria-pressed'), 'true')
     assert.equal(queryAll(masts[0], '.lc-ms-flag').length, 1, 'maxIcons caps the visible chips')
-    assert.equal(query(masts[0], '.lc-ms-count').textContent, '3')
+    const compactionFlag = query(masts[0], '.lc-ms-flag[data-kind="compaction"]')
+    assert.equal(query(compactionFlag, '.lc-ms-count').textContent, '3')
     assert.equal(queryAll(masts[1], '.lc-ms-flag').length, 1)
     assert.equal(masts[1].getAttribute('data-anchor'), 'bar')
     assert.equal(queryAll(masts[1], '.lc-ms-count').length, 0)
@@ -147,6 +146,8 @@ describe('TimelineMilestoneBand', () => {
     }))
     assert.ok(!query(m.container, '.lc-ms').className.includes('lc-ms-in-turn'))
     assert.equal(queryAll(m.container, '.lc-ms-flag').length, 2)
+    assert.equal(queryAll(m.container, '.lc-ms-flag[data-kind="skill"] .lc-ms-count').length, 0, 'a single-item flag carries no badge')
+    assert.equal(queryAll(m.container, '.lc-ms-flag[data-kind="compaction"] .lc-ms-count').length, 1)
     await m.unmount()
   })
 

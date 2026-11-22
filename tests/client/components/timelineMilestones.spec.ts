@@ -7,7 +7,9 @@ import {
   fitBandItemsOf,
   isMetricEntry,
   metricPeaksOf,
+  milestoneEntryCount,
   milestoneJumpSeq,
+  milestoneItemCount,
   milestoneKindOf,
   milestonesOf,
   type MilestoneGroup,
@@ -41,7 +43,6 @@ function group(over: Partial<MilestoneGroup> & { targetIdx: number; anchor: 'bou
     targetTurn: 1,
     leadKind: 'compaction',
     entries: [{ kind: 'compaction', events: [] }],
-    count: 1,
     ...over,
   }
 }
@@ -136,12 +137,12 @@ describe('milestonesOf', () => {
       ev({ seq: 99, kind: 'compaction' }),
     ]
     const groups = milestonesOf(requests, events, 'step')
-    assert.deepEqual(groups.map(g => [g.key, g.anchor, g.entries.map(e => e.kind), g.count]), [
-      ['b:1', 'boundary', ['compaction', 'prune'], 2],
-      ['m:1', 'bar', ['longest'], 1],
-      ['b:2', 'boundary', ['skill'], 1],
-      ['b:3', 'boundary', ['spawn', 'model'], 2],
-      ['m:3', 'bar', ['growth'], 1],
+    assert.deepEqual(groups.map(g => [g.key, g.anchor, g.entries.map(e => e.kind)]), [
+      ['b:1', 'boundary', ['compaction', 'prune']],
+      ['m:1', 'bar', ['longest']],
+      ['b:2', 'boundary', ['skill']],
+      ['b:3', 'boundary', ['spawn', 'model']],
+      ['m:3', 'bar', ['growth']],
     ])
     assert.equal(groups[0].leadKind, 'compaction')
     assert.equal(groups[0].targetTurn, 1)
@@ -182,7 +183,23 @@ describe('milestonesOf', () => {
       [1, ['team-task-complete', 'ask']],
     ])
     assert.equal(groups[0].leadKind, 'goal-create')
+    assert.equal(milestoneEntryCount(groups[0].entries[0]), 1)
+    assert.equal(milestoneEntryCount(groups[0].entries[1]), 2)
     assert.equal(groups[1].leadKind, 'team-task-complete')
+    assert.equal(milestoneEntryCount(groups[1].entries[1]), 1)
+  })
+
+  test('a flag badge counts the records items, weighted for multi-item kinds', () => {
+    const groups = milestonesOf([req(3), req(4), req(5), req(6)], [
+      ev({ seq: 3, kind: 'todo-add', count: 4 }),
+      ev({ seq: 4, kind: 'todo-done', items: ['a', 'b'] }),
+      ev({ seq: 5, kind: 'ask', count: 2, items: ['q1', 'q2'] }),
+      ev({ seq: 6, kind: 'compaction', count: 9 }),
+    ], 'step')
+    assert.deepEqual(groups.map(g => milestoneEntryCount(g.entries[0])), [4, 2, 2, 1])
+    assert.equal(milestoneEntryCount({ kind: 'longest', value: 5 }), 1)
+    assert.equal(milestoneItemCount({ seq: 1, time: 1, kind: 'todo-add' }), 1)
+    assert.equal(milestoneItemCount({ seq: 1, time: 1, kind: 'ask', items: ['q'] }), 1)
   })
 
   test('a request without a turn keeps a null target turn and repeated kinds share one entry', () => {
@@ -192,7 +209,6 @@ describe('milestonesOf', () => {
       'step',
     )
     assert.equal(groups[0].targetTurn, null)
-    assert.equal(groups[0].count, 2)
     const entry = groups[0].entries[0]
     assert.ok(!isMetricEntry(entry))
     assert.equal(entry.events.length, 2)
@@ -263,7 +279,6 @@ describe('bandItemsOf', () => {
     assert.equal(items[0].x, 15)
     assert.equal(merged.anchor, 'boundary')
     assert.deepEqual(merged.entries.map(entry => entry.kind), ['compaction', 'longest'])
-    assert.equal(merged.count, 2)
     assert.equal(merged.members?.length, 2)
   })
 
@@ -275,7 +290,6 @@ describe('bandItemsOf', () => {
     assert.equal(items.length, 1)
     assert.equal(items[0].x, 15)
     assert.equal(items[0].group.targetIdx, 1)
-    assert.equal(items[0].group.count, 2)
     assert.deepEqual(items[0].group.entries.map(entry => entry.kind), ['compaction', 'longest'])
   })
 
@@ -315,21 +329,18 @@ describe('fitBandItemsOf', () => {
         anchor: 'boundary',
         leadKind: 'compaction',
         entries: [{ kind: 'compaction', events: [ev({ kind: 'compaction', tokens: 10 })] }],
-        count: 1,
       }),
       group({
         targetIdx: 3,
         anchor: 'boundary',
         leadKind: 'prune',
         entries: [{ kind: 'prune', events: [ev({ kind: 'prune' })] }],
-        count: 1,
       }),
       group({
         targetIdx: 5,
         anchor: 'boundary',
         leadKind: 'spawn',
         entries: [{ kind: 'spawn', events: [ev({ kind: 'agent', name: 'worker' })] }],
-        count: 1,
       }),
     ], 100, 10)
     assert.equal(items.length, 2)
@@ -339,7 +350,6 @@ describe('fitBandItemsOf', () => {
     assert.deepEqual(cluster.entries.map(entry => entry.kind), ['compaction', 'prune'])
     assert.equal(cluster.leadKind, 'compaction')
     assert.equal(cluster.targetSeq, 3)
-    assert.equal(cluster.count, 2)
     assert.equal(cluster.anchor, 'boundary')
     assert.equal(cluster.members?.length, 2)
     assert.equal(items[1].group.targetIdx, 5)
@@ -353,14 +363,12 @@ describe('fitBandItemsOf', () => {
         anchor: 'boundary',
         leadKind: 'skill',
         entries: [{ kind: 'skill', events: [ev({ kind: 'inject', sub: 'skill', name: 'a' }), ev({ kind: 'inject', sub: 'skill', name: 'b' })] }],
-        count: 2,
       }),
       group({
         targetIdx: 1,
         anchor: 'boundary',
         leadKind: 'skill',
         entries: [{ kind: 'skill', events: [ev({ kind: 'inject', sub: 'skill', name: 'c' })] }],
-        count: 1,
       }),
       group({
         targetIdx: 1,
@@ -374,7 +382,6 @@ describe('fitBandItemsOf', () => {
     assert.deepEqual(cluster.entries.map(entry => entry.kind), ['longest', 'skill'])
     assert.equal(cluster.leadKind, 'longest')
     assert.equal(cluster.targetIdx, 1)
-    assert.equal(cluster.count, 4)
     assert.equal(cluster.anchor, 'boundary')
     assert.ok(isMetricEntry(cluster.entries[0]))
     const skill = cluster.entries[1]
@@ -387,7 +394,6 @@ describe('fitBandItemsOf', () => {
     assert.equal(metrics.length, 1)
     assert.equal(metrics[0].group.anchor, 'bar')
     assert.equal(metrics[0].group.entries.length, 1)
-    assert.equal(metrics[0].group.count, 2)
   })
 
   test('spaces two clusters for two icons and a lone cluster for three', () => {

@@ -27,7 +27,7 @@ function req(): RequestRecord {
   }
 }
 
-function group(entries: MilestoneEventEntry[], count: number): MilestoneGroup {
+function group(entries: MilestoneEventEntry[]): MilestoneGroup {
   return {
     key: 'b:1',
     targetIdx: 1,
@@ -36,7 +36,6 @@ function group(entries: MilestoneEventEntry[], count: number): MilestoneGroup {
     anchor: 'boundary',
     leadKind: entries[0].kind,
     entries,
-    count,
   }
 }
 
@@ -325,7 +324,7 @@ describe('milestone tip rows', () => {
       { kind: 'spawn', events: ['a', 'b', 'c', 'd', 'e'].map((name, i) => spawn(name, i + 1)) },
       { kind: 'compaction', events: [{ seq: 6, time: 6, kind: 'compaction', count: 2, tokens: 120 }] },
     ]
-    const rows = milestoneTipRows(kit, { granularity: 'step', stepsOf: () => 5 }, group(entries, 6), req())
+    const rows = milestoneTipRows(kit, { granularity: 'step', stepsOf: () => 5 }, group(entries), req())
     assert.deepEqual(rows, [
       kit.t('tip.step', { t: 1, s: 2, n: 5 }),
       'Subagent created · ×5',
@@ -333,7 +332,7 @@ describe('milestone tip rows', () => {
       'Compacted · −' + kit.fmt(120),
       kit.t('timeline.ms.open'),
     ])
-    assert.equal(milestoneLabel(kit, { granularity: 'step', stepsOf: () => 5 }, group(entries, 6), req()), rows.join('. '))
+    assert.equal(milestoneLabel(kit, { granularity: 'step', stepsOf: () => 5 }, group(entries), req()), rows.join('. '))
   })
 
   test('a cluster across targets says so under the head', () => {
@@ -341,10 +340,10 @@ describe('milestone tip rows', () => {
       { kind: 'compaction', events: [{ seq: 6, time: 6, kind: 'compaction', count: 2, tokens: 120 }] },
     ]
     const clustered = {
-      ...group(entries, 2),
+      ...group(entries),
       targetIdx: 3,
       targetSeq: 4,
-      members: [group(entries, 1), { ...group(entries, 1), targetIdx: 3, targetSeq: 4 }],
+      members: [group(entries), { ...group(entries), targetIdx: 3, targetSeq: 4 }],
     }
     assert.deepEqual(milestoneTipRows(kit, { granularity: 'step', stepsOf: () => 5 }, clustered, req()), [
       kit.t('tip.step', { t: 1, s: 2, n: 5 }),

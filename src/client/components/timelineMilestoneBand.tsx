@@ -1,6 +1,6 @@
 import type { CSSProperties, ReactElement } from 'react'
 import { MILESTONE_COLOR, MilestoneIcon } from './milestoneIcons'
-import type { MilestoneBandItem } from './timelineMilestones'
+import { milestoneEntryCount, type MilestoneBandItem } from './timelineMilestones'
 
 export interface TimelineMilestoneBandProps {
   items: MilestoneBandItem[]
@@ -52,18 +52,21 @@ export function TimelineMilestoneBand(props: TimelineMilestoneBandProps): ReactE
               }}
             >
               <span className="lc-ms-flags">
-                {group.entries.slice(0, item.maxIcons).map(entry => (
-                  <span
-                    key={entry.kind}
-                    className="lc-ms-flag"
-                    data-kind={entry.kind}
-                    style={{ '--lc-ms-c': MILESTONE_COLOR[entry.kind] } as CSSProperties}
-                  >
-                    <MilestoneIcon kind={entry.kind} />
-                  </span>
-                ))}
+                {group.entries.slice(0, item.maxIcons).map((entry) => {
+                  const count = milestoneEntryCount(entry)
+                  return (
+                    <span
+                      key={entry.kind}
+                      className="lc-ms-flag"
+                      data-kind={entry.kind}
+                      style={{ '--lc-ms-c': MILESTONE_COLOR[entry.kind] } as CSSProperties}
+                    >
+                      <MilestoneIcon kind={entry.kind} />
+                      {count > 1 ? <span className="lc-ms-count">{count}</span> : null}
+                    </span>
+                  )
+                })}
               </span>
-              {group.count > 1 ? <span className="lc-ms-count">{group.count}</span> : null}
             </button>
             <span className="lc-ms-pole" aria-hidden="true" />
             <span className="lc-ms-foot" aria-hidden="true" />

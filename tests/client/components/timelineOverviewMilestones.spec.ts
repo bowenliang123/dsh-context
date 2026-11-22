@@ -153,7 +153,8 @@ describe('TimelineOverview milestone bands', () => {
     assert.equal(queryAll(m.container, '.lc-ms').length, 1)
     const mast = query(m.container, '.lc-ms')
     assert.equal(queryAll(mast, '.lc-ms-flag').length, 3)
-    assert.equal(query(mast, '.lc-ms-count').textContent, '4')
+    assert.equal(query(mast, '.lc-ms-flag[data-kind="compaction"] .lc-ms-count').textContent, '2')
+    assert.equal(queryAll(mast, '.lc-ms-count').length, 1, 'each flag carries its own badge')
     assert.equal(mast.getAttribute('data-target-idx'), '1')
     near(mast.style.left, (400 * (0.5 + 1.5 + 2.5 + 3.5) / 4) / 39)
 
