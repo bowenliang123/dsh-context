@@ -20,14 +20,14 @@ export const MILESTONE_COLOR: Record<MilestoneKind, string> = {
 }
 
 const GLYPHS: Record<MilestoneKind, ReactElement> = {
-  compaction: <path d="M1.6 2.2h6.8L6 5.1v2.4L4 8.3V5.1z" />,
-  prune: (
+  compaction: (
     <>
       <circle cx="2.6" cy="2.6" r="1.2" />
       <circle cx="2.6" cy="7.4" r="1.2" />
       <path d="M3.6 3.4L8.2 6.8M3.6 6.6L8.2 3.2" />
     </>
   ),
+  prune: <path d="M1.6 2.2h6.8L6 5.1v2.4L4 8.3V5.1z" />,
   skill: <path d="M5 1.2l.9 2.6 2.6.9-2.6.9L5 8.8 4.1 5.6 1.5 4.7l2.6-.9z" />,
   agent: (
     <>
