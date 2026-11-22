@@ -22,7 +22,7 @@ export function eventFilterLabelOf(t: Translate, filter: EventKindFilter): strin
   return t(filter === 'model' ? 'kind.modelSwitch' : 'kind.' + filter)
 }
 
-const EVENT_ICONS: Record<string, string> = { compaction: '✂', prune: '✂', mode: '⇄' }
+const EVENT_ICONS: Record<string, string> = { mode: '⇄' }
 
 const EVENT_ROW_ESTIMATE = 25
 
@@ -205,9 +205,11 @@ export function makeEventList(kit: ViewKit): (props: EventListProps) => ReactEle
           const workflowIcon = WORKFLOW_ICON_KINDS[ev.kind]
           const glyph = workflowIcon !== undefined ? <MilestoneIcon kind={workflowIcon} />
             : ev.kind === 'agent' ? <MilestoneIcon kind="spawn" />
-              : ev.kind === 'inject' ? <IconPlus />
-                : ev.kind === 'model' ? <IconBranch />
-                  : EVENT_ICONS[ev.kind] || '•'
+              : ev.kind === 'compaction' ? <MilestoneIcon kind="compaction" />
+                : ev.kind === 'prune' ? <MilestoneIcon kind="prune" />
+                  : ev.kind === 'inject' ? <IconPlus />
+                    : ev.kind === 'model' ? <IconBranch />
+                      : EVENT_ICONS[ev.kind] || '•'
           const jumpable = workflowIcon !== undefined
             || ev.kind === 'inject' || ev.kind === 'compaction' || ev.kind === 'prune' || ev.kind === 'agent'
           const reveal = jumpable && (props.canEventFocus === undefined || props.canEventFocus(ev))

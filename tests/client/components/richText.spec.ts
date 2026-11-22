@@ -627,7 +627,7 @@ describe('EventList', () => {
     assert.equal(query(rows[2], '.lc-event-icon').textContent, '•')
     assert.equal(query(rows[2], '.lc-kind').textContent, 'kind.mystery')
 
-    assert.equal(query(rows[3], '.lc-event-icon').textContent, '✂')
+    assert.ok(query(rows[3], '.lc-event-icon svg') instanceof SVGElement)
     const down = query(rows[3], '.lc-event-tokens')
     assert.ok(down.className.includes('lc-down'))
     assert.equal(down.textContent, '−100')

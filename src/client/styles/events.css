@@ -6,6 +6,8 @@
 .lc-event-icon.lc-event-model { color: var(--dsw-alias-brand-primary); }
 .lc-event-icon.lc-event-mode { color: var(--dsw-alias-label-secondary); }
 .lc-event-icon.lc-event-agent { color: var(--dsw-alias-state-success-primary); }
+.lc-event-icon.lc-event-compaction { color: var(--dsw-alias-state-error-primary); }
+.lc-event-icon.lc-event-prune { color: var(--color-violet-500); }
 .lc-event-icon.lc-event-goal-create { color: var(--color-blue-500); }
 .lc-event-icon.lc-event-goal-complete { color: var(--dsw-alias-state-success-primary); }
 .lc-event-icon.lc-event-todo-add { color: var(--color-indigo-500); }
