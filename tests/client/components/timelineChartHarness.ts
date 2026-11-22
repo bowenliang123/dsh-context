@@ -1,12 +1,12 @@
 import assert from 'node:assert/strict'
 import { act } from 'react'
 import { afterAll, beforeAll } from 'vitest'
-import { makeTrendChart, type TrendChartProps } from '../../../src/client/components/trendChart'
+import { makeTimelineChart, type TimelineChartProps } from '../../../src/client/components/timelineChart'
 import type { RequestRecord } from '../../../src/shared/types'
 import { flush, makeKit, queryAll } from '../helpers/kit'
 
 const kit = makeKit()
-const TrendChart = makeTrendChart(kit)
+const TimelineChart = makeTimelineChart(kit)
 
 const CHART_H = 112
 const BAR_CELL = 16
@@ -70,7 +70,7 @@ interface Spies {
   seqFocusHandled: number
 }
 
-function makeSpies(): { spies: Spies; handlers: Pick<TrendChartProps, 'onSelect' | 'onHover' | 'onHoverTurn' | 'onPickTurn' | 'onFocusTurnHandled' | 'onFocusSeqHandled'> } {
+function makeSpies(): { spies: Spies; handlers: Pick<TimelineChartProps, 'onSelect' | 'onHover' | 'onHoverTurn' | 'onPickTurn' | 'onFocusTurnHandled' | 'onFocusSeqHandled'> } {
   const spies: Spies = { select: [], hover: [], hoverTurn: [], pickTurn: [], focusHandled: 0, seqFocusHandled: 0 }
   return {
     spies,
@@ -85,7 +85,7 @@ function makeSpies(): { spies: Spies; handlers: Pick<TrendChartProps, 'onSelect'
   }
 }
 
-function propsOf(requests: RequestRecord[], over: Partial<TrendChartProps> = {}): TrendChartProps {
+function propsOf(requests: RequestRecord[], over: Partial<TimelineChartProps> = {}): TimelineChartProps {
   const { handlers } = makeSpies()
   return {
     requests,
@@ -124,6 +124,6 @@ async function scrollEvent(el: Element): Promise<void> {
 }
 
 export {
-  BAR_CELL, CHART_H, TrendChart, assertColor, bars, kit, makeSpies, propsOf, req, scrollEvent, scrollTo, viewport,
+  BAR_CELL, CHART_H, TimelineChart, assertColor, bars, kit, makeSpies, propsOf, req, scrollEvent, scrollTo, viewport,
 }
 export type { LayoutEl }

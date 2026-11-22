@@ -2,8 +2,8 @@ import assert from 'node:assert/strict'
 import { describe, test } from 'vitest'
 import type { ContextEventRecord, RequestRecord } from '../../../src/shared/types'
 import { makeKit } from '../helpers/kit'
-import type { MilestoneEventEntry, MilestoneGroup } from '../../../src/client/components/trendMilestones'
-import { milestoneEntryRows, milestoneLabel, milestoneTipRows } from '../../../src/client/components/trendMilestoneText'
+import type { MilestoneEventEntry, MilestoneGroup } from '../../../src/client/components/timelineMilestones'
+import { milestoneEntryRows, milestoneLabel, milestoneTipRows } from '../../../src/client/components/timelineMilestoneText'
 
 const kit = makeKit()
 
@@ -72,14 +72,14 @@ describe('milestone entry rows', () => {
           { seq: 2, time: 2, kind: 'goal-create', name: 'Polish the docs', count: 1 },
         ],
       }),
-      [kit.t('trend.ms.goal-create') + ' · ×2', 'Ship the redesign, Polish the docs'],
+      [kit.t('timeline.ms.goal-create') + ' · ×2', 'Ship the redesign, Polish the docs'],
     )
     assert.deepEqual(
       milestoneEntryRows(kit, 'step', {
         kind: 'team-task-complete',
         events: [{ seq: 1, time: 1, kind: 'team-task-complete', name: 'Build the parser', count: 1 }],
       }),
-      [kit.t('trend.ms.team-task-complete') + ' · Build the parser'],
+      [kit.t('timeline.ms.team-task-complete') + ' · Build the parser'],
     )
     assert.deepEqual(
       milestoneEntryRows(kit, 'step', {
@@ -89,14 +89,14 @@ describe('milestone entry rows', () => {
           { seq: 2, time: 2, kind: 'goal-create', count: 1 },
         ],
       }),
-      [kit.t('trend.ms.goal-create') + ' · ×2'],
+      [kit.t('timeline.ms.goal-create') + ' · ×2'],
     )
     assert.deepEqual(
       milestoneEntryRows(kit, 'step', {
         kind: 'goal-complete',
         events: [{ seq: 1, time: 1, kind: 'goal-complete', count: 1 }],
       }),
-      [kit.t('trend.ms.goal-complete')],
+      [kit.t('timeline.ms.goal-complete')],
     )
   })
 
@@ -106,14 +106,14 @@ describe('milestone entry rows', () => {
         kind: 'todo-add',
         events: [{ seq: 1, time: 1, kind: 'todo-add', count: 3 }],
       }),
-      [kit.t('trend.ms.todo-add') + ' · ×3'],
+      [kit.t('timeline.ms.todo-add') + ' · ×3'],
     )
     assert.deepEqual(
       milestoneEntryRows(kit, 'step', {
         kind: 'todo-add',
         events: [{ seq: 1, time: 1, kind: 'todo-add', count: 1 }],
       }),
-      [kit.t('trend.ms.todo-add')],
+      [kit.t('timeline.ms.todo-add')],
     )
     assert.deepEqual(
       milestoneEntryRows(kit, 'step', {
@@ -123,21 +123,21 @@ describe('milestone entry rows', () => {
           { seq: 2, time: 2, kind: 'todo-add', count: 1 },
         ],
       }),
-      [kit.t('trend.ms.todo-add') + ' · ×2'],
+      [kit.t('timeline.ms.todo-add') + ' · ×2'],
     )
     assert.deepEqual(
       milestoneEntryRows(kit, 'step', {
         kind: 'todo-add',
         events: [{ seq: 1, time: 1, kind: 'todo-add' }],
       }),
-      [kit.t('trend.ms.todo-add')],
+      [kit.t('timeline.ms.todo-add')],
     )
     assert.deepEqual(
       milestoneEntryRows(kit, 'step', {
         kind: 'team-task-create',
         events: [{ seq: 1, time: 1, kind: 'team-task-create', count: 1 }],
       }),
-      [kit.t('trend.ms.team-task-create')],
+      [kit.t('timeline.ms.team-task-create')],
     )
     assert.deepEqual(
       milestoneEntryRows(kit, 'step', {
@@ -147,7 +147,7 @@ describe('milestone entry rows', () => {
           { seq: 2, time: 2, kind: 'team-task-create', count: 1 },
         ],
       }),
-      [kit.t('trend.ms.team-task-create') + ' · ×2'],
+      [kit.t('timeline.ms.team-task-create') + ' · ×2'],
     )
   })
 
@@ -157,14 +157,14 @@ describe('milestone entry rows', () => {
         kind: 'todo-done',
         events: [{ seq: 1, time: 1, kind: 'todo-done', items: ['a'] }],
       }),
-      [kit.t('trend.ms.todo-done') + ' · a'],
+      [kit.t('timeline.ms.todo-done') + ' · a'],
     )
     assert.deepEqual(
       milestoneEntryRows(kit, 'step', {
         kind: 'todo-done',
         events: [{ seq: 1, time: 1, kind: 'todo-done', count: 1, items: [], name: 'only' }],
       }),
-      [kit.t('trend.ms.todo-done') + ' · only'],
+      [kit.t('timeline.ms.todo-done') + ' · only'],
     )
     assert.deepEqual(
       milestoneEntryRows(kit, 'step', {
@@ -174,21 +174,21 @@ describe('milestone entry rows', () => {
           { seq: 2, time: 2, kind: 'todo-done', count: 1, items: ['b'], name: 'b' },
         ],
       }),
-      [kit.t('trend.ms.todo-done') + ' · ×2', 'a, b'],
+      [kit.t('timeline.ms.todo-done') + ' · ×2', 'a, b'],
     )
     assert.deepEqual(
       milestoneEntryRows(kit, 'step', {
         kind: 'todo-done',
         events: [{ seq: 1, time: 1, kind: 'todo-done', count: 2, items: [] }],
       }),
-      [kit.t('trend.ms.todo-done') + ' · ×2', '+2'],
+      [kit.t('timeline.ms.todo-done') + ' · ×2', '+2'],
     )
     assert.deepEqual(
       milestoneEntryRows(kit, 'step', {
         kind: 'todo-done',
         events: [{ seq: 1, time: 1, kind: 'todo-done', count: 5, items: ['a', 'b', 'c'], name: 'a' }],
       }),
-      [kit.t('trend.ms.todo-done') + ' · ×5', 'a, b, c +2'],
+      [kit.t('timeline.ms.todo-done') + ' · ×5', 'a, b, c +2'],
     )
     assert.deepEqual(
       milestoneEntryRows(kit, 'step', {
@@ -198,35 +198,35 @@ describe('milestone entry rows', () => {
           { seq: 2, time: 2, kind: 'todo-done', count: 1, items: ['a'], name: 'a' },
         ],
       }),
-      [kit.t('trend.ms.todo-done') + ' · ×2', 'a +1'],
+      [kit.t('timeline.ms.todo-done') + ' · ×2', 'a +1'],
     )
     assert.deepEqual(
       milestoneEntryRows(kit, 'step', {
         kind: 'ask',
         events: [{ seq: 1, time: 1, kind: 'ask' }],
       }),
-      [kit.t('trend.ms.ask')],
+      [kit.t('timeline.ms.ask')],
     )
     assert.deepEqual(
       milestoneEntryRows(kit, 'step', {
         kind: 'ask',
         events: [{ seq: 1, time: 1, kind: 'ask', count: 1 }],
       }),
-      [kit.t('trend.ms.ask')],
+      [kit.t('timeline.ms.ask')],
     )
     assert.deepEqual(
       milestoneEntryRows(kit, 'step', {
         kind: 'ask',
         events: [{ seq: 1, time: 1, kind: 'ask', count: 2, items: ['Which one?', 'And when?'], name: 'Which one?' }],
       }),
-      [kit.t('trend.ms.ask') + ' · ×2', 'Which one?, And when?'],
+      [kit.t('timeline.ms.ask') + ' · ×2', 'Which one?, And when?'],
     )
     assert.deepEqual(
       milestoneEntryRows(kit, 'step', {
         kind: 'ask',
         events: [{ seq: 1, time: 1, kind: 'ask', count: 1, items: ['Why?'], name: 'Why?' }],
       }),
-      [kit.t('trend.ms.ask') + ' · Why?'],
+      [kit.t('timeline.ms.ask') + ' · Why?'],
     )
   })
 
@@ -239,7 +239,7 @@ describe('milestone entry rows', () => {
           { seq: 2, time: 2, kind: 'inject', agent: 'spec-review' },
         ],
       }),
-      [kit.t('trend.ms.agent') + ' · ×2', 'standards-review, spec-review'],
+      [kit.t('timeline.ms.agent') + ' · ×2', 'standards-review, spec-review'],
     )
     assert.deepEqual(
       milestoneEntryRows(kit, 'step', {
@@ -273,28 +273,28 @@ describe('milestone entry rows', () => {
         kind: 'agent',
         events: [{ seq: 1, time: 1, kind: 'inject', name: 'agent-message', agent: 'explorer' }],
       }),
-      [kit.t('trend.ms.agentMessage') + ' · explorer'],
+      [kit.t('timeline.ms.agentMessage') + ' · explorer'],
     )
     assert.deepEqual(
       milestoneEntryRows(kit, 'step', {
         kind: 'agent',
         events: [{ seq: 1, time: 1, kind: 'inject', name: 'team-message', agent: 'worker' }],
       }),
-      [kit.t('trend.ms.agentTeam') + ' · worker'],
+      [kit.t('timeline.ms.agentTeam') + ' · worker'],
     )
     assert.deepEqual(
       milestoneEntryRows(kit, 'step', {
         kind: 'agent',
         events: [{ seq: 1, time: 1, kind: 'inject', name: 'subagent-settled', agent: 'dataplane-specialist' }],
       }),
-      [kit.t('trend.ms.agentDone') + ' · dataplane-specialist'],
+      [kit.t('timeline.ms.agentDone') + ' · dataplane-specialist'],
     )
     assert.deepEqual(
       milestoneEntryRows(kit, 'step', {
         kind: 'agent',
         events: [{ seq: 1, time: 1, kind: 'inject', name: 'session-reference', agent: 'Alpha' }],
       }),
-      [kit.t('trend.ms.agentRef') + ' · Alpha'],
+      [kit.t('timeline.ms.agentRef') + ' · Alpha'],
     )
     assert.deepEqual(
       milestoneEntryRows(kit, 'step', {
@@ -304,7 +304,7 @@ describe('milestone entry rows', () => {
           { seq: 2, time: 2, kind: 'inject', name: 'team-message', agent: 'b' },
         ],
       }),
-      [kit.t('trend.ms.agent') + ' · ×2', 'a, b'],
+      [kit.t('timeline.ms.agent') + ' · ×2', 'a, b'],
     )
     assert.deepEqual(
       milestoneEntryRows(kit, 'step', {
@@ -314,7 +314,7 @@ describe('milestone entry rows', () => {
           { seq: 2, time: 2, kind: 'inject', name: 'subagent-settled', agent: 'b' },
         ],
       }),
-      [kit.t('trend.ms.agentDone') + ' · ×2', 'a, b'],
+      [kit.t('timeline.ms.agentDone') + ' · ×2', 'a, b'],
     )
   })
 })
@@ -331,7 +331,7 @@ describe('milestone tip rows', () => {
       'Subagent created · ×5',
       'a, b, c, d, e',
       'Compacted · −' + kit.fmt(120),
-      kit.t('trend.ms.open'),
+      kit.t('timeline.ms.open'),
     ])
     assert.equal(milestoneLabel(kit, { granularity: 'step', stepsOf: () => 5 }, group(entries, 6), req()), rows.join('. '))
   })
@@ -348,9 +348,9 @@ describe('milestone tip rows', () => {
     }
     assert.deepEqual(milestoneTipRows(kit, { granularity: 'step', stepsOf: () => 5 }, clustered, req()), [
       kit.t('tip.step', { t: 1, s: 2, n: 5 }),
-      kit.t('trend.ms.cluster'),
+      kit.t('timeline.ms.cluster'),
       'Compacted · −' + kit.fmt(120),
-      kit.t('trend.ms.open'),
+      kit.t('timeline.ms.open'),
     ])
   })
 

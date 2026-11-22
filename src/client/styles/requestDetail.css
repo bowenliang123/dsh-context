@@ -1,6 +1,6 @@
 .lc-detail { margin-top: 12px; border-top: var(--lc-line-fine, 1px solid var(--dsw-alias-border-l1)); padding-top: 12px; }
 .lc-detail-head { display: flex; align-items: center; flex-wrap: wrap; gap: 6px 8px; margin-bottom: 10px; color: var(--dsw-alias-label-secondary); }
-.lc-trend-lane .lc-detail-head { min-height: 45px; }
+.lc-timeline-lane .lc-detail-head { min-height: 45px; }
 .lc-detail-head b { font-size: 13px; color: var(--dsw-alias-label-primary); }
 .lc-detail-time { margin-left: auto; font-size: 12px; font-variant-numeric: tabular-nums; white-space: nowrap; }
 .lc-detail-metrics { flex: 1 0 100%; display: flex; flex-wrap: wrap; gap: 4px 6px; min-width: 0; }

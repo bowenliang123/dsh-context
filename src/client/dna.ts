@@ -32,12 +32,12 @@ export function dnaOf(view: Assembled): DnaItem[] {
   return items
 }
 
-export type TrendBand =
+export type TimelineBand =
   | { key: string; cat: 'system' | 'tools'; tokens: number; off: number; color: string }
   | { key: string; cat: Category; tokens: number; off: number; color: string; node: SurfaceNode }
 
-export function trendBandsOf(view: Assembled): TrendBand[] {
-  const bands: TrendBand[] = []
+export function timelineBandsOf(view: Assembled): TimelineBand[] {
+  const bands: TimelineBand[] = []
   let off = 0
   for (const it of dnaOf(view)) {
     if ('node' in it) {
@@ -59,7 +59,7 @@ export interface DnaDelta {
   down: DeltaBand[]
 }
 
-export function deltaTotalsOf(bands: readonly TrendBand[], prev: readonly TrendBand[] | null): { up: number; down: number } {
+export function deltaTotalsOf(bands: readonly TimelineBand[], prev: readonly TimelineBand[] | null): { up: number; down: number } {
   if (prev === null) return { up: 0, down: 0 }
   const before = new Map<string, number>()
   for (const b of prev) before.set(b.key, b.tokens)
@@ -78,7 +78,7 @@ export function deltaTotalsOf(bands: readonly TrendBand[], prev: readonly TrendB
   return { up, down }
 }
 
-export function deltaBandsOf(bands: TrendBand[], prev: TrendBand[] | null): DnaDelta {
+export function deltaBandsOf(bands: TimelineBand[], prev: TimelineBand[] | null): DnaDelta {
   if (prev === null) return { up: [], down: [] }
   const before = new Map(prev.map(b => [b.key, b.tokens] as const))
   const after = new Map(bands.map(b => [b.key, b.tokens] as const))
@@ -110,10 +110,10 @@ export interface DeltaMaxima {
   down: number
 }
 
-export function bandsMaximaOf(bandsPerRequest: readonly TrendBand[][]): DeltaMaxima {
+export function bandsMaximaOf(bandsPerRequest: readonly TimelineBand[][]): DeltaMaxima {
   let up = 0
   let down = 0
-  let prev: TrendBand[] | null = null
+  let prev: TimelineBand[] | null = null
   for (const bands of bandsPerRequest) {
     const totals = deltaTotalsOf(bands, prev)
     if (totals.up > up) up = totals.up
@@ -183,7 +183,7 @@ export function dnaDeltaMaximaOf(
   headers: ContextHeaders | null,
   requests: readonly RequestRecord[],
 ): DeltaMaxima {
-  const fallback = (): DeltaMaxima => bandsMaximaOf(requests.map(req => trendBandsOf(assembleCached(data, headers, req.seq))))
+  const fallback = (): DeltaMaxima => bandsMaximaOf(requests.map(req => timelineBandsOf(assembleCached(data, headers, req.seq))))
   if (requests.length === 0) return { up: 0, down: 0 }
   if (data.archive.length > 0) return fallback()
   let sorted = true
@@ -215,7 +215,7 @@ export function dnaDeltaMaximaOf(
   return surfaceMaximaOf(data, headers, requests)
 }
 
-export function dnaBaseLabel(b: DnaItem | TrendBand | DeltaBand, t: Translate, catLabel: (key: string) => string): string {
+export function dnaBaseLabel(b: DnaItem | TimelineBand | DeltaBand, t: Translate, catLabel: (key: string) => string): string {
   if (!('node' in b)) return b.cat === 'system' ? catLabel('system') : b.key.slice('tool:'.length)
   const n = b.node
   return n.skill !== undefined ? t('node.skillTag', { name: n.skill })

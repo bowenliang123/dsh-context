@@ -160,7 +160,7 @@ export interface FleetBatchValue {
 
 export type DefaultGranularity = 'step' | 'turn'
 
-export type DefaultTrendMode = 'total' | 'delta'
+export type DefaultTimelineMode = 'total' | 'delta'
 
 export type DefaultDeltaBase = 'step' | 'turn'
 
@@ -183,7 +183,7 @@ export type FleetTab = 'show' | 'hide'
 export interface PluginSettings {
   defaultPlacement: DefaultPlacement
   defaultGranularity: DefaultGranularity
-  defaultTrendMode: DefaultTrendMode
+  defaultTimelineMode: DefaultTimelineMode
   defaultDeltaBase: DefaultDeltaBase
   defaultToolSort: DefaultToolSort
   defaultFileSort: DefaultFileSort

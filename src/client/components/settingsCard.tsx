@@ -215,7 +215,7 @@ function PreferenceRows(props: { t: Translate; state: SettingsState; set?: Setti
             { id: 'total', label: t('gran.total') },
             { id: 'delta', label: t('gran.delta') },
           ]}
-          onPick={(id) => { set?.('defaultTrendMode', id) }}
+          onPick={(id) => { set?.('defaultTimelineMode', id) }}
         />
         <ShowHideRow t={t} label={t('settings.durationCurve')} value={state.durationCurve} disabled={disabled}
           onPick={(id) => { set?.('defaultDurationCurve', id) }} />

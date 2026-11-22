@@ -81,7 +81,7 @@ function deltaOf(req: RequestRecord, prev: RequestRecord | null): RequestRecord 
   return out
 }
 
-export function preprocessTrend(
+export function preprocessTimeline(
   requests: RequestRecord[],
   delta: boolean,
   focusCat: string | null | undefined,
@@ -91,7 +91,7 @@ export function preprocessTrend(
   return { requests: delta ? base.map((req, i) => deltaOf(req, i > 0 ? base[i - 1] : null)) : base, focus }
 }
 
-export function trendMaxima(requests: RequestRecord[], delta: boolean): { maxTotal: number; maxUp: number } {
+export function timelineMaxima(requests: RequestRecord[], delta: boolean): { maxTotal: number; maxUp: number } {
   let maxTotal = 1
   let maxUp = 0
   if (delta) {
@@ -109,7 +109,7 @@ export function trendMaxima(requests: RequestRecord[], delta: boolean): { maxTot
   return { maxTotal, maxUp }
 }
 
-export function trendTipRows(
+export function timelineTipRows(
   kit: Pick<ViewKit, 't' | 'fmt' | 'fmtDuration' | 'catLabel'>,
   opts: {
     granularity: 'step' | 'turn'

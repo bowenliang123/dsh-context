@@ -2,7 +2,7 @@
 
 import assert from 'node:assert/strict'
 import { describe, test } from 'vitest'
-import { deltaBandsOf, deltaTotalsOf, dnaBaseLabel, dnaDeltaMaximaOf, dnaOf, trendBandsOf, type TrendBand } from '../../src/client/dna'
+import { deltaBandsOf, deltaTotalsOf, dnaBaseLabel, dnaDeltaMaximaOf, dnaOf, timelineBandsOf, type TimelineBand } from '../../src/client/dna'
 import { CAT_COLOR } from '../../src/client/categories'
 import { makeKit, surfaceNode } from './helpers/kit'
 import { assemble, type Assembled } from '../../src/shared/assemble'
@@ -70,9 +70,9 @@ describe('dnaOf', () => {
   })
 })
 
-describe('trendBandsOf', () => {
+describe('timelineBandsOf', () => {
   test('read-order bands carry the category colors and cumulative offsets from the floor; zero-token bands keep their slot', () => {
-    const bands = trendBandsOf(asm({
+    const bands = timelineBandsOf(asm({
       system: system(),
       header: header({ tools: [tool('bash', 30)] }),
       nodes: [surfaceNode({ seq: 1 }), surfaceNode({ seq: 2, cat: 'assistant', tokens: 20 })],
@@ -84,7 +84,7 @@ describe('trendBandsOf', () => {
     for (const b of bands) assert.equal(b.color, CAT_COLOR[b.cat])
     assert.ok(!('node' in bands[0]), 'header bands carry no node')
     assert.equal((bands[2] as { node: SurfaceNode }).node.cat, 'user', 'message bands hand the node through')
-    const zero = trendBandsOf(asm({ nodes: [surfaceNode({ seq: 1, tokens: 0 }), surfaceNode({ seq: 2, tokens: 7 })] }))
+    const zero = timelineBandsOf(asm({ nodes: [surfaceNode({ seq: 1, tokens: 0 }), surfaceNode({ seq: 2, tokens: 7 })] }))
     assert.deepEqual(zero.map(b => b.off), [0, 0])
     assert.equal(zero[1].off + zero[1].tokens, 7)
   })
@@ -92,7 +92,7 @@ describe('trendBandsOf', () => {
 
 describe('dnaBaseLabel', () => {
   const kit = makeKit()
-  const bands = trendBandsOf(asm({
+  const bands = timelineBandsOf(asm({
     system: system(),
     header: header({ tools: [tool('bash', 30)] }),
     nodes: [
@@ -123,14 +123,14 @@ describe('dnaBaseLabel', () => {
 })
 
 describe('deltaBandsOf', () => {
-  function barsOf(spec: [key: string, cat: string, tokens: number][][]): TrendBand[][] {
+  function barsOf(spec: [key: string, cat: string, tokens: number][][]): TimelineBand[][] {
     return spec.map(list => {
       let off = 0
-      const out: TrendBand[] = list.map(([key, cat, tokens]) => {
+      const out: TimelineBand[] = list.map(([key, cat, tokens]) => {
         const color = CAT_COLOR[cat as keyof typeof CAT_COLOR]
         const band = (key.startsWith('n')
           ? { key, cat, tokens, off, color, node: { seq: Number(key.slice(1)), cat, tokens } as SurfaceNode }
-          : { key, cat, tokens, off, color }) as TrendBand
+          : { key, cat, tokens, off, color }) as TimelineBand
         off += tokens
         return band
       })
@@ -160,7 +160,7 @@ describe('deltaBandsOf', () => {
     assert.equal(n4.node.seq, 4, 'message delta bands hand the node through for labels')
 
     const kit = makeKit()
-    const removed = deltaBandsOf(trendBandsOf(asm({})), trendBandsOf(asm({ nodes: [surfaceNode({ seq: 9, cat: 'tool', tool: 'write', tokens: 50 })] })))
+    const removed = deltaBandsOf(timelineBandsOf(asm({})), timelineBandsOf(asm({ nodes: [surfaceNode({ seq: 9, cat: 'tool', tool: 'write', tokens: 50 })] })))
     assert.equal(removed.down.length, 1)
     assert.equal(removed.down[0].tokens, -50)
     assert.equal(dnaBaseLabel(removed.down[0], kit.t, kit.catLabel), 'write', 'a removed item\'s node still reaches the label builder')
@@ -169,7 +169,7 @@ describe('deltaBandsOf', () => {
 
 
 describe('deltaTotalsOf', () => {
-  const band = (key: string, tokens: number): TrendBand => ({ key, cat: 'assistant', tokens, off: 0, color: CAT_COLOR.assistant, node: { seq: 1, cat: 'assistant', tokens } })
+  const band = (key: string, tokens: number): TimelineBand => ({ key, cat: 'assistant', tokens, off: 0, color: CAT_COLOR.assistant, node: { seq: 1, cat: 'assistant', tokens } })
 
   test('sums the churn; no predecessor changes nothing; negative tokens land on the right arm', () => {
     const prev = [band('a', 10), band('b', 5), band('c', 7)]
@@ -203,12 +203,12 @@ describe('dnaDeltaMaximaOf', () => {
   const reference = (data: ContextTimeline, headers: ContextHeaders | null, requests: RequestRecord[]): { up: number; down: number } => {
     let up = 0
     let down = 0
-    let prev: TrendBand[] | null = null
+    let prev: TimelineBand[] | null = null
     for (const req of requests) {
-      const totals = deltaTotalsOf(trendBandsOf(assemble(data, headers, req.seq)), prev)
+      const totals = deltaTotalsOf(timelineBandsOf(assemble(data, headers, req.seq)), prev)
       if (totals.up > up) up = totals.up
       if (totals.down > down) down = totals.down
-      prev = trendBandsOf(assemble(data, headers, req.seq))
+      prev = timelineBandsOf(assemble(data, headers, req.seq))
     }
     return { up, down }
   }
@@ -345,9 +345,9 @@ describe('dnaDeltaMaximaOf randomized parity', () => {
       }
       let up = 0
       let down = 0
-      let prev: TrendBand[] | null = null
+      let prev: TimelineBand[] | null = null
       for (const req of requests) {
-        const bands = trendBandsOf(assemble(data, headers, req.seq))
+        const bands = timelineBandsOf(assemble(data, headers, req.seq))
         const totals = deltaTotalsOf(bands, prev)
         if (totals.up > up) up = totals.up
         if (totals.down > down) down = totals.down
@@ -433,11 +433,11 @@ describe('store', () => {
     const s = createContextSettings()
     let calls = 0
     const unsubscribe = s.store.subscribe(() => { calls++ })
-    s.set('defaultTrendMode', 'delta')
+    s.set('defaultTimelineMode', 'delta')
     assert.equal(calls, 1)
     assert.equal(s.store.getSnapshot().mode, 'delta')
     unsubscribe()
-    s.set('defaultTrendMode', 'total')
+    s.set('defaultTimelineMode', 'total')
     assert.equal(calls, 1)
   })
 })
@@ -478,20 +478,20 @@ describe('set', () => {
     const s = createContextSettings()
     const scope = new TestSettingsScope({ status: 'ready', value: {}, writable: true })
     s.attach(scope)
-    s.set('defaultTrendMode', 'delta')
-    assert.equal(s.defaultTrendMode(), 'delta')
-    assert.deepEqual(scope.sets, [{ field: 'defaultTrendMode', value: 'delta' }])
+    s.set('defaultTimelineMode', 'delta')
+    assert.equal(s.defaultTimelineMode(), 'delta')
+    assert.deepEqual(scope.sets, [{ field: 'defaultTimelineMode', value: 'delta' }])
   })
 
   test('a rejected scope write settles handled and rolls the echo back to the scope truth', async () => {
     const s = createContextSettings()
-    const scope = new TestSettingsScope({ status: 'ready', value: { defaultTrendMode: 'total' }, writable: true })
+    const scope = new TestSettingsScope({ status: 'ready', value: { defaultTimelineMode: 'total' }, writable: true })
     s.attach(scope)
     scope.failSet = true
-    s.set('defaultTrendMode', 'delta')
-    assert.equal(s.defaultTrendMode(), 'delta', 'the optimistic echo lands first')
+    s.set('defaultTimelineMode', 'delta')
+    assert.equal(s.defaultTimelineMode(), 'delta', 'the optimistic echo lands first')
     await new Promise(resolve => setTimeout(resolve, 0))
-    assert.equal(s.defaultTrendMode(), 'total', 'the echo rolls back to the scope truth')
+    assert.equal(s.defaultTimelineMode(), 'total', 'the echo rolls back to the scope truth')
   })
 
   test('a rejected gate write echoes first, then degrades without a scope truth or rolls back to one', async () => {
@@ -543,7 +543,7 @@ describe('attach', () => {
       value: {
         defaultPlacement: 'sidebar',
         defaultGranularity: 'turn',
-        defaultTrendMode: 'delta',
+        defaultTimelineMode: 'delta',
         defaultDeltaBase: 'turn',
         defaultToolSort: 'name',
         defaultFileSort: 'path',
@@ -578,12 +578,12 @@ describe('attach', () => {
     const defaults = createContextSettings()
     defaults.attach(new TestSettingsScope({
       status: 'ready',
-      value: { defaultPlacement: 'all', defaultGranularity: 'step', defaultTrendMode: 'total', defaultDeltaBase: 'step', defaultToolSort: 'count', defaultFileSort: 'lines', insightsEntry: 'show', overviewAutoSteps: '200', defaultOverviewRange: '7d' },
+      value: { defaultPlacement: 'all', defaultGranularity: 'step', defaultTimelineMode: 'total', defaultDeltaBase: 'step', defaultToolSort: 'count', defaultFileSort: 'lines', insightsEntry: 'show', overviewAutoSteps: '200', defaultOverviewRange: '7d' },
       writable: false,
     }))
     assert.equal(defaults.defaultPlacement(), 'all')
     assert.equal(defaults.defaultGranularity(), 'step')
-    assert.equal(defaults.defaultTrendMode(), 'total')
+    assert.equal(defaults.defaultTimelineMode(), 'total')
     assert.equal(defaults.defaultDeltaBase(), 'step')
     assert.equal(defaults.defaultToolSort(), 'count')
     assert.equal(defaults.defaultFileSort(), 'lines')
@@ -629,12 +629,12 @@ describe('attach', () => {
     const s = createContextSettings()
     s.attach(new TestSettingsScope({
       status: 'ready',
-      value: { defaultPlacement: 'window', defaultGranularity: 'bogus', defaultTrendMode: 7, defaultDeltaBase: 'bogus', defaultToolSort: 'alpha', defaultFileSort: 'alpha', insightsEntry: 42, defaultDurationCurve: 'always', overviewAutoSteps: 200, defaultOverviewRange: 'week', fleetTab: 7, promptPrefix: 9, promptSuffix: {} },
+      value: { defaultPlacement: 'window', defaultGranularity: 'bogus', defaultTimelineMode: 7, defaultDeltaBase: 'bogus', defaultToolSort: 'alpha', defaultFileSort: 'alpha', insightsEntry: 42, defaultDurationCurve: 'always', overviewAutoSteps: 200, defaultOverviewRange: 'week', fleetTab: 7, promptPrefix: 9, promptSuffix: {} },
       writable: false,
     }))
     assert.equal(s.defaultPlacement(), 'all')
     assert.equal(s.defaultGranularity(), 'step')
-    assert.equal(s.defaultTrendMode(), 'total')
+    assert.equal(s.defaultTimelineMode(), 'total')
     assert.equal(s.defaultDeltaBase(), 'step')
     assert.equal(s.defaultToolSort(), 'count')
     assert.equal(s.defaultFileSort(), 'lines')
@@ -678,7 +678,7 @@ describe('attach', () => {
     s.attach(new TestSettingsScope({ status: 'ready', value: { defaultFileSort: 'latest' }, writable: false }))
     assert.equal(s.defaultPlacement(), 'tab', 'the in-session choice survives a section without the field')
     assert.equal(s.defaultGranularity(), 'step')
-    assert.equal(s.defaultTrendMode(), 'total')
+    assert.equal(s.defaultTimelineMode(), 'total')
     assert.equal(s.defaultToolSort(), 'size', 'the in-session tool sort survives a section without the field')
     assert.equal(s.defaultFileSort(), 'latest')
     assert.equal(s.insightsEntry(), 'hide', 'the in-session entry choice survives a section without the field')
@@ -697,9 +697,9 @@ describe('attach', () => {
     scope.emit({ status: 'ready', value: { defaultGranularity: 'turn' }, writable: true })
     assert.equal(calls, 1)
     assert.equal(s.defaultGranularity(), 'turn')
-    scope.emit({ status: 'ready', value: { defaultGranularity: 'turn', defaultTrendMode: 'delta' }, writable: true })
+    scope.emit({ status: 'ready', value: { defaultGranularity: 'turn', defaultTimelineMode: 'delta' }, writable: true })
     assert.equal(calls, 2)
-    assert.equal(s.defaultTrendMode(), 'delta')
+    assert.equal(s.defaultTimelineMode(), 'delta')
     scope.emit({ status: 'ready', value: { defaultFileSort: 'path' }, writable: false })
     assert.equal(calls, 3)
     assert.equal(s.store.getSnapshot().writable, false)
@@ -732,7 +732,7 @@ describe('attach', () => {
     scope.emit({ status: 'ready', value: { defaultGranularity: 'turn' }, writable: true })
     assert.equal(calls, 0)
     assert.equal(s.defaultGranularity(), 'step')
-    s.set('defaultTrendMode', 'delta')
+    s.set('defaultTimelineMode', 'delta')
     assert.deepEqual(scope.sets, [])
 
     const first = new TestSettingsScope({ status: 'ready', value: {}, writable: true })

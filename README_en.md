@@ -14,7 +14,7 @@
 
 [`dsh-context`](https://www.npmjs.com/package/dsh-context) provides full context lifecycle management features.
 - **Context Insights page** — the cross-session overview as a first-level sidebar panel (beside Plugins and Automation tasks): KPI band with a 7-day token/cost usage chart, activity heatmap, aggregate composition ring, and filterable session cards that jump straight into any session.
-- **Context tab** — a UI context dashboard for DeepSeek Harness's context stats, composition, trend, events, messages, and commands.
+- **Context tab** — a UI context dashboard for DeepSeek Harness's context stats, composition, timeline, events, messages, and commands.
 - **Fleet tab** — the agent family's own page: the current agent, its parents, and every subagent as one live card each.
 - **Context panel** — the same dashboard as a right-sidebar tab: pick **Context** on the sidebar's guide page and the panel opens beside the chat, agent network included.
 - **`/context` command** — the slash command shows the context model for current context composition and recent context evolution.
@@ -54,10 +54,10 @@ Five surfaces, one story — what your agent is carrying, how it got there, and 
 | Where | What you get |
 | --- | --- |
 | **Context Insights page** | Every session at a glance: usage, cost, cache hit, daily activity, and per-session context profiles — filtered by range, day, group, or search, one click to jump in. |
-| **Context tab** | The full dashboard: stats, composition, per-request trend, events, file activity, and command executions — in every session. |
+| **Context tab** | The full dashboard: stats, composition, per-request context timeline, events, file activity, and command executions — in every session. |
 | **Fleet tab** | The agent network: the current agent, its parents, and every subagent, live. |
 | **`/context` command** | A centered modal with the same composition and context browser, without leaving the chat. |
-| **Preferences card** | Per-user defaults: the panel entry, Insights range, trend and sort defaults, and the system prompt prefix/suffix joined around every session. |
+| **Preferences card** | Per-user defaults: the panel entry, Insights range, timeline and sort defaults, and the system prompt prefix/suffix joined around every session. |
 
 ## 🗂️ The Context Insights page
 
@@ -90,7 +90,7 @@ Open any session and click the **Context / 上下文** tab:
 | **Token Stats** | Where the billed tokens went — the same total as the chat stats line under the composer, split into System Prompt, Tool Schemas, User Messages, Injected Context, Skill Injections, Tool Calls, Reasoning, and Answers. Tool Calls folds the tool-call names and arguments (replayed in the prompt plus generated in the output) together with the results those tools returned; Answers splits the model's reply prose out of the same assistant content and output; Reasoning splits its thinking the same way; the session's cache-hit rate sits in the corner. |
 | **Timing Stats** | How active time split across model calls, tool runs, and overhead. |
 | **Current Context** | What's in the window *right now*. |
-| **Context Trend** | Every request's size — and its story. |
+| **Context Timeline** | Every request's size — and its story. |
 | **Context Browser** | What any request was *actually* assembled from. |
 | **Context Events** | When and why the window changed. |
 | **File Activity** | What the agent *did* to your files. |
@@ -117,9 +117,9 @@ The **Context Stats** card's Agent Network cell (the billed tokens and estimated
 
 A six-color stacked bar against the model's full window (the two hatched masks at the end = auto-compaction's reserve: its headroom, then the request's reserved output window): system prompt, tool schemas, user messages, injected context, assistant replies, tool results — each with its ≈token figure and share. When a conversation starts degrading, this is where you see *which part* is responsible.
 
-### 📈 Context Trend — how the context grew and evolved by turn or steps
+### 📈 Context Timeline — how the context grew and evolved by turn or steps
 
-![Context Trend with the step brief](https://raw.githubusercontent.com/bowenliang123/dsh-context/main/docs/context-trend.png)
+![Context Timeline with the step brief](https://raw.githubusercontent.com/bowenliang123/dsh-context/main/docs/context-timeline.png)
 
 One stacked bar per model request — finer than per-message — so you watch the window grow turn by turn:
 
@@ -127,7 +127,7 @@ One stacked bar per model request — finer than per-message — so you watch th
 - **Event flags** — compaction, pruning, skill injection, subagent creation, agent interaction and model switches, goal and team-task create/complete, todo add/done, user questions, plus the longest step and the biggest context jump, each get their own icon flag on the step they belong to; a dashed pole reaches the baseline, hover for the reading, click to open the step. Overview folds nearby events into one aggregate flag that jumps straight back to its step.
 - **Read it your way** — **Step / Turn** granularity, **Total** (cumulative makeup) or **Delta** (each request's signed change), and sideways scrolling through the whole session. In Delta mode, growth piles up above the baseline and a compaction dives below it:
 
-![Context Trend in Delta mode](https://raw.githubusercontent.com/bowenliang123/dsh-context/main/docs/history-delta.png)
+![Context Timeline in Delta mode](https://raw.githubusercontent.com/bowenliang123/dsh-context/main/docs/history-delta.png)
 
 - **Overview** — one toggle squashes the whole session (steps or turns) into the pane's width as a continuous stacked ribbon: every compaction drop and composition shift at a glance, no sideways scrolling, nothing extra to load. Flags mark the quartiles and the full span; hover to scrub, hover a band to light that category across the whole ribbon; click pins the step and opens that band's category in the browser (exclusive with DNA mode and Adaptive).
 - **Hover & pin** — scrub for an instant tooltip; click to pin the full breakdown, with provider-reported **Actual Prompt / Output / Cache** next to the estimates.
@@ -155,7 +155,7 @@ Pick **Live** or any retained step, and browse what that request was assembled f
 
 - **Diff against the previous turn** — signed delta badges per category (`+N` items, `±Nk` tokens) tell you what a turn added or reclaimed at one glance. Steps older than a compaction are reconstructed from the removed-message archive — and the card says so when a step's makeup is only approximate.
 
-- **DNA mode lays the whole context out flat** — the bar draws one band per item in the model's reading order, and below it the same items become one flat list with the newest message on top (the model reads oldest-first, so the list runs that order bottom-up): every row carries its prompt position (`#12`), category, introducing step, and token price, and expands into the same full content; the tool schemas and the system prompt close the list as two group rows. The card ends flush with the composition + trend cards beside it — a fully flattened session scrolls inside instead of flooding the page.
+- **DNA mode lays the whole context out flat** — the bar draws one band per item in the model's reading order, and below it the same items become one flat list with the newest message on top (the model reads oldest-first, so the list runs that order bottom-up): every row carries its prompt position (`#12`), category, introducing step, and token price, and expands into the same full content; the tool schemas and the system prompt close the list as two group rows. The card ends flush with the composition + timeline cards beside it — a fully flattened session scrolls inside instead of flooding the page.
 
 ### ⚡ Context Events — when and why the window changed
 
@@ -167,7 +167,7 @@ Every injection, compaction, prune, model switch, and plan-mode toggle — label
 
 ![File Activity](https://raw.githubusercontent.com/bowenliang123/dsh-context/main/docs/file-activity.png)
 
-One row per touched file — read, written, or searched — aggregated up to whichever step you pick on the trend chart:
+One row per touched file — read, written, or searched — aggregated up to whichever step you pick on the timeline chart:
 
 - **Per-purpose counts** with header chips doubling as filters (**Read / Written / Searched / Images**) and a path search box.
 - **Line deltas** — every `edit`/`write` contributes its estimated `+added / −removed` footprint, per file and summed.
@@ -220,7 +220,7 @@ A centered dialog opens with the **Current Composition** card and the **Context 
 
 ## ⚙️ Settings
 
-The **Context** preferences card holds this plugin's per-user settings — the **Context panel entry** (the **Context** conversation tab, the right Sidebar panel, both, or Hide for neither — the reply-row jump goes with it), the **Fleet** tab's own Show/Hide switch (the panel entry never gates it), the **Context Insights** default range (Today / Last 7 days / Last 30 days, Last 30 days unless changed; picking a preset on the page writes it back), trend granularity (Step/Turn), trend mode (Total/Delta), the trend duration curve (shown by default), the trend auto-overview step threshold, the Context Browser diff baseline, tool and File Activity sort, and the Context Insights Show/Hide switch. It lives on the **Plugins** page: the sidebar **Plugins** entry → the **dsh-context** bundle's page → its **Configuration** section (the card is served by the entry's live Config form).
+The **Context** preferences card holds this plugin's per-user settings — the **Context panel entry** (the **Context** conversation tab, the right Sidebar panel, both, or Hide for neither — the reply-row jump goes with it), the **Fleet** tab's own Show/Hide switch (the panel entry never gates it), the **Context Insights** default range (Today / Last 7 days / Last 30 days, Last 30 days unless changed; picking a preset on the page writes it back), timeline granularity (Step/Turn), timeline mode (Total/Delta), the timeline duration curve (shown by default), the timeline auto-overview step threshold, the Context Browser diff baseline, tool and File Activity sort, and the Context Insights Show/Hide switch. It lives on the **Plugins** page: the sidebar **Plugins** entry → the **dsh-context** bundle's page → its **Configuration** section (the card is served by the entry's live Config form).
 
 The **System Prompt · Prefix / Suffix** rows hold free text joined at the very start / end of every session's system prompt, for all agents (subagents included) — a per-deployment persona or behavioral rule that rides the harness's own prompt assembly. Edits apply from the next turn; leave a row empty to disable it.
 
@@ -231,7 +231,7 @@ The Context Insights preset buttons write the pick back as the stored default; e
 ## Good to know
 
 - **Cache footprint** — the plugin checkpoints only a compact per-session summary (composition, counts, cost/timing, model info) into dsh's projection cache; the heavy per-event details (surface text, request breakdowns, file ops, command programs, spans) are refolded from the durable log when a panel needs them, so the cache stays small even on long sessions. Detail views page the complete request, turn, event, surface-node, archive, file-op, command and span history from the durable log, loading each collection on demand when its card opens.
-- **Estimates vs actuals** — category figures use dsh's own fixed-density heuristic (the same one as its built-in token meter); the pinned trend details show provider-reported actuals next to them, and the Token card pairs its ≈-estimated composition shares with the provider-exact billed total.
+- **Estimates vs actuals** — category figures use dsh's own fixed-density heuristic (the same one as its built-in token meter); the pinned timeline details show provider-reported actuals next to them, and the Token card pairs its ≈-estimated composition shares with the provider-exact billed total.
 - **Compatibility** — works on `@deepseek-ai/dsh` from **0.2.0-rc.2** (the `0.2.0` and `0.2.1` lines verified on their rc.2 releases, and the `0.2.2` line on its rc.1 and rc.3 releases), the V4 session-log generation, from one shape-driven code path. The per-release matrix and how it is verified: [docs/compatibility.md](docs/compatibility.md).
 - **I18n** — UI in 简体中文, English, 日本語, Español, Français, Deutsch, Русский, and Português (switching languages needs dsh 0.2.2+; earlier supported lines offer Chinese and English only).
 

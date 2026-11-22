@@ -14,7 +14,7 @@
 
 [`dsh-context`](https://www.npmjs.com/package/dsh-context) bietet umfassende Funktionen zur Verwaltung des gesamten Kontextlebenszyklus.
 - **Kontext-Einblicke-Seite** — die sitzungsübergreifende Übersicht als eigenes Seitenleisten-Panel (neben Plugins und Automatisierungsaufgaben): KPI-Leiste mit 7-Tage-Token-/Kosten-Diagramm, Aktivitäts-Heatmap, aggregiertem Zusammensetzungsring und filterbaren Sitzungskarten, die direkt in jede Sitzung springen.
-- **Kontext-Tab** — ein UI-Kontext-Dashboard für die Kontextstatistiken, Zusammensetzung, Trends, Ereignisse, Nachrichten und Befehle von DeepSeek Harness.
+- **Kontext-Tab** — ein UI-Kontext-Dashboard für die Kontextstatistiken, Zusammensetzung, Zeitverläufe, Ereignisse, Nachrichten und Befehle von DeepSeek Harness.
 - **Flotten-Tab** — die eigene Seite der Agentenfamilie: der aktuelle Agent, seine Eltern und jeder Subagent als je eine Live-Karte.
 - **Kontext-Panel** — dasselbe Dashboard als Tab in der rechten Seitenleiste: Wähle auf der Leitfadenseite der Seitenleiste **Kontext**, und das Panel öffnet sich neben dem Chat, inklusive Agentennetzwerk.
 - **`/context`-Befehl** — der Slash-Befehl zeigt das Kontextmodell für die aktuelle Kontextzusammensetzung und die jüngste Kontextentwicklung.
@@ -54,10 +54,10 @@ Fünf Oberflächen, eine Geschichte — was dein Agent mit sich trägt, wie es d
 | Ort | Was du bekommst |
 | --- | --- |
 | **Kontext-Einblicke-Seite** | Jede Sitzung auf einen Blick: Nutzung, Kosten, Cache-Treffer, tägliche Aktivität und Kontextprofile pro Sitzung — filterbar nach Bereich, Tag, Gruppe oder Suche, ein Klick zum Einspringen. |
-| **Kontext-Tab** | Das vollständige Dashboard: Statistiken, Zusammensetzung, Trend pro Anfrage, Ereignisse, Dateiaktivität und Befehlsausführungen — in jeder Sitzung. |
+| **Kontext-Tab** | Das vollständige Dashboard: Statistiken, Zusammensetzung, Zeitverlauf pro Anfrage, Ereignisse, Dateiaktivität und Befehlsausführungen — in jeder Sitzung. |
 | **Flotten-Tab** | Das Agentennetzwerk: der aktuelle Agent, seine Eltern und jeder Subagent, live. |
 | **`/context`-Befehl** | Ein zentriertes Modal mit derselben Zusammensetzung und demselben Kontextbrowser, ohne den Chat zu verlassen. |
-| **Einstellungen-Karte** | Benutzerbezogene Standards: Panel-Eintrag, Einblicke-Bereich, Trend- und Sortierstandards sowie System-Prompt-Präfix/-Suffix um jede Sitzung. |
+| **Einstellungen-Karte** | Benutzerbezogene Standards: Panel-Eintrag, Einblicke-Bereich, Zeitverlauf- und Sortierstandards sowie System-Prompt-Präfix/-Suffix um jede Sitzung. |
 
 ## 🗂️ Die Kontext-Einblicke-Seite
 
@@ -89,7 +89,7 @@ Klicke in der Panel-Liste der Seitenleiste auf **Kontext-Einblicke** — dieselb
 | **Token-Statistik** | Wohin die abgerechneten Tokens gingen — dieselbe Summe wie die Chat-Statistikzeile unter dem Composer, aufgeteilt in System-Prompt, Tool-Schemas, Benutzernachrichten, injizierten Kontext, Skill-Injektionen, Tool-Aufrufe, Schlussfolgern und Antworten. Tool-Aufrufe fasst die Tool-Aufrufnamen und -Argumente (im Prompt wiederholt und in der Ausgabe erzeugt) mit den zurückgegebenen Ergebnissen zusammen; Antworten trennt den Antworttext des Modells aus demselben Assistenteninhalt und der Ausgabe; Schlussfolgern trennt dessen Denken auf dieselbe Weise; die Cache-Trefferquote der Sitzung steht in der Ecke. |
 | **Zeitstatistik** | Wie sich die aktive Zeit auf Modellaufrufe, Tool-Ausführungen und Overhead verteilte. |
 | **Aktueller Kontext** | Was sich *gerade jetzt* im Fenster befindet. |
-| **Kontexttrend** | Die Größe jeder Anfrage — und ihre Geschichte. |
+| **Kontext-Zeitverlauf** | Die Größe jeder Anfrage — und ihre Geschichte. |
 | **Kontextbrowser** | Woraus eine Anfrage *tatsächlich* zusammengesetzt wurde. |
 | **Kontextereignisse** | Wann und warum sich das Fenster geändert hat. |
 | **Dateiaktivität** | Was der Agent mit deinen Dateien *gemacht* hat. |
@@ -116,9 +116,9 @@ Die Agentennetzwerk-Zelle der **Kontextstatistik**-Karte (die abgerechneten Toke
 
 Ein sechsfarbiger gestapelter Balken gegen das volle Fenster des Modells (die beiden schraffierten Masken am Ende = Reserve der automatischen Komprimierung: ihr Puffer, dann das reservierte Ausgabefenster der Anfrage): System-Prompt, Tool-Schemas, Benutzernachrichten, injizierter Kontext, Assistentenantworten, Tool-Ergebnisse — jeweils mit ≈Token-Zahl und Anteil. Wenn eine Unterhaltung zu verschlechtern beginnt, siehst du hier, *welcher Teil* dafür verantwortlich ist.
 
-### 📈 Kontexttrend — wie der Kontext pro Runde oder Schritt wuchs und sich entwickelte
+### 📈 Kontext-Zeitverlauf — wie der Kontext pro Runde oder Schritt wuchs und sich entwickelte
 
-![Kontexttrend mit der Schritt-Kurzfassung](https://raw.githubusercontent.com/bowenliang123/dsh-context/main/docs/context-trend.png)
+![Kontext-Zeitverlauf mit der Schritt-Kurzfassung](https://raw.githubusercontent.com/bowenliang123/dsh-context/main/docs/context-timeline.png)
 
 Ein gestapelter Balken pro Modellanfrage — feiner als pro Nachricht —, sodass du das Fenster Runde für Runde wachsen siehst:
 
@@ -126,7 +126,7 @@ Ein gestapelter Balken pro Modellanfrage — feiner als pro Nachricht —, sodas
 - **Ereignis-Flaggen** — Komprimierung, Bereinigung, Skill-Injektion, Subagent-Erstellung, Agent-Interaktion und Modellwechsel, Ziel- und Teamaufgaben-Erstellung/-Abschluss, Aufgaben-Hinzufügen/-Erledigen, Nutzerfragen sowie der längste Schritt und der größte Kontextsprung tragen jeweils ihr eigenes Symbol am zugehörigen Schritt; ein gestrichelter Mast reicht bis zur Grundlinie, Hover zeigt die Werte, Klick öffnet den Schritt. Die Übersicht fasst nahe Ereignisse zu einer Sammelflagge zusammen, die direkt zu ihrem Schritt zurückspringt.
 - **Lies es auf deine Weise** — Granularität **Schritt / Runde**, **Gesamt** (kumulative Zusammensetzung) oder **Delta** (die vorzeichenbehaftete Änderung jeder Anfrage) und seitliches Scrollen durch die ganze Sitzung. Im Delta-Modus stapelt sich Wachstum über der Basislinie, und eine Komprimierung taucht darunter:
 
-![Kontexttrend im Delta-Modus](https://raw.githubusercontent.com/bowenliang123/dsh-context/main/docs/history-delta.png)
+![Kontext-Zeitverlauf im Delta-Modus](https://raw.githubusercontent.com/bowenliang123/dsh-context/main/docs/history-delta.png)
 
 - **Übersicht** — ein Schalter quetscht die ganze Sitzung (Schritte oder Runden) in die Breite des Bereichs als durchgehendes gestapeltes Band: jeder Komprimierungseinbruch und jede Verschiebung der Zusammensetzung auf einen Blick, kein seitliches Scrollen, nichts zusätzlich zu laden. Markierungen zeigen die Quartile und die volle Spanne; zum Lesen darüberfahren, über ein Band fahren, um diese Kategorie im ganzen Band hervorzuheben; Klick fixiert den Schritt und öffnet die Kategorie des Bands im Browser (nicht kombinierbar mit DNA-Modus und Adaptiv).
 - **Hover & Fixieren** — für einen sofortigen Tooltip darüberfahren; klicken, um die vollständige Aufschlüsselung zu fixieren, mit vom Anbieter gemeldeten **tatsächlichen Prompt / Output / Cache** neben den Schätzungen.
@@ -154,7 +154,7 @@ Wähle **Live** oder einen beliebigen aufbewahrten Schritt und durchstöbere, wo
 
 - **Diff gegen die vorherige Runde** — vorzeichenbehaftete Delta-Badges pro Kategorie (`+N` Elemente, `±Nk` Tokens) zeigen auf einen Blick, was eine Runde hinzugefügt oder zurückgewonnen hat. Schritte, die älter als eine Komprimierung sind, werden aus dem Archiv entfernter Nachrichten rekonstruiert — und die Karte sagt es, wenn die Zusammensetzung eines Schritts nur ungefähr ist.
 
-- **Der DNA-Modus legt den ganzen Kontext flach aus** — der Balken zeichnet ein Band pro Element in der Lesereihenfolge des Modells, und darunter werden dieselben Elemente zu einer flachen Liste mit der neuesten Nachricht oben (das Modell liest älteste zuerst, daher läuft die Liste diese Reihenfolge von unten nach oben): jede Zeile trägt ihre Prompt-Position (`#12`), Kategorie, einführenden Schritt und Token-Preis und entfaltet sich zum selben vollständigen Inhalt; die Tool-Schemas und der System-Prompt schließen die Liste als zwei Gruppenzeilen ab. Die Karte endet bündig mit den Zusammensetzungs- und Trendkarten daneben — eine vollständig abgeflachte Sitzung scrollt intern, statt die Seite zu fluten.
+- **Der DNA-Modus legt den ganzen Kontext flach aus** — der Balken zeichnet ein Band pro Element in der Lesereihenfolge des Modells, und darunter werden dieselben Elemente zu einer flachen Liste mit der neuesten Nachricht oben (das Modell liest älteste zuerst, daher läuft die Liste diese Reihenfolge von unten nach oben): jede Zeile trägt ihre Prompt-Position (`#12`), Kategorie, einführenden Schritt und Token-Preis und entfaltet sich zum selben vollständigen Inhalt; die Tool-Schemas und der System-Prompt schließen die Liste als zwei Gruppenzeilen ab. Die Karte endet bündig mit den Zusammensetzungs- und Zeitverlauf-Karten daneben — eine vollständig abgeflachte Sitzung scrollt intern, statt die Seite zu fluten.
 
 ### ⚡ Kontextereignisse — wann und warum sich das Fenster geändert hat
 
@@ -166,7 +166,7 @@ Jede Injektion, Komprimierung, Bereinigung, jeder Modellwechsel und jede Planmod
 
 ![Dateiaktivität](https://raw.githubusercontent.com/bowenliang123/dsh-context/main/docs/file-activity.png)
 
-Eine Zeile pro berührter Datei — gelesen, geschrieben oder durchsucht — aggregiert bis zu dem Schritt, den du im Trenddiagramm wählst:
+Eine Zeile pro berührter Datei — gelesen, geschrieben oder durchsucht — aggregiert bis zu dem Schritt, den du im Zeitverlauf-Diagramm wählst:
 
 - **Zählungen pro Zweck** mit Header-Chips, die zugleich Filter sind (**Gelesen / Geschrieben / Durchsucht / Bilder**), und einem Pfad-Suchfeld.
 - **Zeilen-Deltas** — jeder `edit`/`write` trägt seinen geschätzten `+hinzugefügt / −entfernt`-Fußabdruck bei, pro Datei und summiert.
@@ -219,7 +219,7 @@ Ein zentriertes Dialogfenster öffnet sich mit der Karte **Aktuelle Zusammensetz
 
 ## ⚙️ Einstellungen
 
-Die Einstellungen-Karte **Kontext** enthält die benutzerbezogenen Einstellungen dieses Plugins — den **Eintrag des Kontextbereichs** (der **Kontext**-Tab im Gespräch, das Panel der rechten Seitenleiste, beides oder Ausblenden für keines — der Sprung aus der Antwortzeile geht mit), den eigenen Anzeigen/Ausblenden-Schalter des **Flotten**-Tabs (der Panel-Eintrag steuert ihn nie), den Standardbereich von **Kontext-Einblicke** (Heute / Letzte 7 Tage / Letzte 30 Tage, standardmäßig Letzte 30 Tage; das Wählen einer Voreinstellung auf der Seite schreibt sie zurück), die Trend-Granularität (Schritt/Runde), den Trendmodus (Gesamt/Delta), die Dauerkurve des Trends (standardmäßig angezeigt), die Schwelle für die automatische Trendübersicht, die Diff-Basis des Kontextbrowsers, die Sortierung von Tools und Dateiaktivität und den Anzeigen/Ausblenden-Schalter von Kontext-Einblicke. Sie lebt auf der **Plugins**-Seite: Seitenleisten-Eintrag **Plugins** → Seite des **dsh-context**-Bundles → dessen Abschnitt **Konfiguration** (die Karte wird vom Live-Konfigurationsformular des Eintrags bereitgestellt).
+Die Einstellungen-Karte **Kontext** enthält die benutzerbezogenen Einstellungen dieses Plugins — den **Eintrag des Kontextbereichs** (der **Kontext**-Tab im Gespräch, das Panel der rechten Seitenleiste, beides oder Ausblenden für keines — der Sprung aus der Antwortzeile geht mit), den eigenen Anzeigen/Ausblenden-Schalter des **Flotten**-Tabs (der Panel-Eintrag steuert ihn nie), den Standardbereich von **Kontext-Einblicke** (Heute / Letzte 7 Tage / Letzte 30 Tage, standardmäßig Letzte 30 Tage; das Wählen einer Voreinstellung auf der Seite schreibt sie zurück), die Zeitverlauf-Granularität (Schritt/Runde), den Zeitverlauf-Modus (Gesamt/Delta), die Dauerkurve des Zeitverlaufs (standardmäßig angezeigt), die Schwelle für die automatische Übersicht des Zeitverlaufs, die Diff-Basis des Kontextbrowsers, die Sortierung von Tools und Dateiaktivität und den Anzeigen/Ausblenden-Schalter von Kontext-Einblicke. Sie lebt auf der **Plugins**-Seite: Seitenleisten-Eintrag **Plugins** → Seite des **dsh-context**-Bundles → dessen Abschnitt **Konfiguration** (die Karte wird vom Live-Konfigurationsformular des Eintrags bereitgestellt).
 
 Die Zeilen **System-Prompt · Präfix / Suffix** enthalten freien Text, der ganz am Anfang / Ende des System-Prompts jeder Sitzung angehängt wird, für alle Agenten (auch Subagenten) — eine Persona oder Verhaltensregel pro Deployment, die die eigene Prompt-Zusammensetzung des Harness nutzt. Änderungen gelten ab der nächsten Runde; lasse eine Zeile leer, um sie zu deaktivieren.
 
@@ -230,7 +230,7 @@ Die Voreinstellungs-Schaltflächen von Kontext-Einblicke schreiben die Auswahl a
 ## Gut zu wissen
 
 - **Cache-Fußabdruck** — das Plugin speichert nur eine kompakte Zusammenfassung pro Sitzung (Zusammensetzung, Zählungen, Kosten/Zeit, Modellinfo) im Projektions-Cache von dsh; die schweren Details pro Ereignis (Oberflächentext, Anfrageaufschlüsselungen, Dateivorgänge, Befehlprogramme, Spannen) werden bei Bedarf aus dem dauerhaften Protokoll neu gefaltet, sodass der Cache auch bei langen Sitzungen klein bleibt. Detailansichten laden die vollständige Anfrage-, Runden-, Ereignis-, Oberflächenknoten-, Archiv-, Dateivorgangs-, Befehls- und Spannenhistorie seitenweise aus dem dauerhaften Protokoll und laden jede Sammlung beim Öffnen ihrer Karte.
-- **Schätzungen vs. Ist-Werte** — Kategoriezahlen verwenden die eigene Heuristik fester Dichte von dsh (dieselbe wie sein integrierter Token-Meter); die fixierten Trenddetails zeigen die vom Anbieter gemeldeten Ist-Werte daneben, und die Token-Karte paart ihre ≈-geschätzten Zusammensetzungsanteile mit der anbieter-exakten abgerechneten Summe.
+- **Schätzungen vs. Ist-Werte** — Kategoriezahlen verwenden die eigene Heuristik fester Dichte von dsh (dieselbe wie sein integrierter Token-Meter); die fixierten Zeitverlauf-Details zeigen die vom Anbieter gemeldeten Ist-Werte daneben, und die Token-Karte paart ihre ≈-geschätzten Zusammensetzungsanteile mit der anbieter-exakten abgerechneten Summe.
 - **Kompatibilität** — funktioniert mit `@deepseek-ai/dsh` ab **0.2.0-rc.2** (die Linien `0.2.0` und `0.2.1` verifiziert auf ihren rc.2-Releases, die Linie `0.2.2` auf ihren rc.1- und rc.3-Releases), der V4-Sitzungsprotokoll-Generation, aus einem einzigen formgesteuerten Codepfad. Die Matrix pro Release und wie sie verifiziert wird: [docs/compatibility.md](docs/compatibility.md).
 - **I18n** — UI in 简体中文, English, 日本語, Español, Français, Deutsch, Русский und Português (Sprachwechsel erfordert dsh 0.2.2+; frühere unterstützte Linien bieten nur Chinesisch und Englisch).
 

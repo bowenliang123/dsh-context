@@ -1,6 +1,6 @@
 import { memo, type CSSProperties, type ReactElement } from 'react'
 import type { Category } from '../../shared/types'
-import type { DeltaBand, TrendBand } from '../dna'
+import type { DeltaBand, TimelineBand } from '../dna'
 
 export const RISE_CLASS = ' animate-lc-bar-in motion-reduce:animate-none'
 
@@ -53,7 +53,7 @@ export function snapDnaRuns(
 }
 
 interface DnaBarProps {
-  bands: TrendBand[]
+  bands: TimelineBand[]
   total: number
   maxTotal: number
   chartHeight: number
@@ -61,11 +61,11 @@ interface DnaBarProps {
   rise: boolean
   seq: number
   onHit: (key: string | null) => void
-  onPick?: (seq: number, band: TrendBand) => void
+  onPick?: (seq: number, band: TimelineBand) => void
 }
 
 export const DnaBar = function DnaBar(props: DnaBarProps): ReactElement | null {
-  const visible: TrendBand[] = []
+  const visible: TimelineBand[] = []
   for (const b of props.bands) if (b.tokens > 0) visible.push(b)
   if (visible.length === 0) return null
   const pxPerToken = props.chartHeight / props.maxTotal
@@ -81,7 +81,7 @@ export const DnaBar = function DnaBar(props: DnaBarProps): ReactElement | null {
   const background = stops.length === 0
     ? visible[visible.length - 1].color
     : 'linear-gradient(to top, ' + stops.map(r => `${r.color} ${r.from}px, ${r.color} ${r.to}px`).join(', ') + ')'
-  const hitAt = (e: { clientY: number; currentTarget: HTMLDivElement }): TrendBand => {
+  const hitAt = (e: { clientY: number; currentTarget: HTMLDivElement }): TimelineBand => {
     const rect = e.currentTarget.getBoundingClientRect()
     const frac = rect.height > 0 ? Math.min(1, Math.max(0, 1 - (e.clientY - rect.top) / rect.height)) : 0
     const pos = frac * props.total

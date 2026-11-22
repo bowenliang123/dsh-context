@@ -1,5 +1,5 @@
 import type { ReactElement } from 'react'
-import type { MilestoneKind } from './trendMilestones'
+import type { MilestoneKind } from './timelineMilestones'
 
 export const MILESTONE_COLOR: Record<MilestoneKind, string> = {
   compaction: 'var(--dsw-alias-state-error-primary)',

@@ -39,13 +39,13 @@ function viewWith(value: OverviewAutoSteps, sessionId: string, steps: number) {
 describe('ContextView — overview face', () => {
   test('the Overview chip rides right of Duration and clears DNA/Adaptive on activation', async () => {
     const m = await mountRich('sv-overview-chip')
-    const mods = buttonByText(m.container, DICT_EN['trend.dna']).parentElement as HTMLElement
+    const mods = buttonByText(m.container, DICT_EN['timeline.dna']).parentElement as HTMLElement
     const last = (mods.lastElementChild as HTMLElement).textContent
-    assert.equal(last, DICT_EN['trend.overview'], 'Overview is the mods group\'s last chip')
+    assert.equal(last, DICT_EN['timeline.overview'], 'Overview is the mods group\'s last chip')
 
-    const overview = () => buttonByText(m.container, DICT_EN['trend.overview'])
-    const dna = () => buttonByText(m.container, DICT_EN['trend.dna'])
-    const adaptive = () => buttonByText(m.container, DICT_EN['trend.adaptive'])
+    const overview = () => buttonByText(m.container, DICT_EN['timeline.overview'])
+    const dna = () => buttonByText(m.container, DICT_EN['timeline.dna'])
+    const adaptive = () => buttonByText(m.container, DICT_EN['timeline.adaptive'])
     await click(dna())
     assert.ok(dna().className.includes('lc-gran-on'))
     await click(overview())
@@ -68,13 +68,13 @@ describe('ContextView — overview face', () => {
 
   test('the overview face swaps the bars for a full-width ribbon with the same detail flow', async () => {
     const m = await mountRich('sv-overview-ribbon')
-    await click(buttonByText(m.container, DICT_EN['trend.overview']))
+    await click(buttonByText(m.container, DICT_EN['timeline.overview']))
     assert.equal(queryAll(m.container, '.lc-bar').length, 0)
     assert.match(query(m.container, '.lc-chart-scroll').className, /lc-chart-fit/)
     const svg = query(m.container, '.lc-fit-svg')
     assert.equal(svg.getAttribute('viewBox'), '0 0 2 112')
     assert.equal(query(m.container, '.lc-axis-top').textContent, '420')
-    assert.deepEqual(queryAll(m.container, '.lc-trend-flag-label').map(f => f.textContent), ['2', '3'])
+    assert.deepEqual(queryAll(m.container, '.lc-timeline-flag-label').map(f => f.textContent), ['2', '3'])
     assert.deepEqual(queryAll(m.container, '.lc-turn-label').map(l => l.textContent), ['1', '0'])
 
     await click(query(m.container, '.lc-turn'))
@@ -86,7 +86,7 @@ describe('ContextView — overview face', () => {
 
   test('clicking a ribbon band opens that category in the browser and focuses the chart on it', async () => {
     const m = await mountRich('sv-overview-band-open')
-    await click(buttonByText(m.container, DICT_EN['trend.overview']))
+    await click(buttonByText(m.container, DICT_EN['timeline.overview']))
     const surface = query(m.container, '.lc-chart')
     pinRect(surface, 400, 148)
     await act(async () => {
@@ -109,18 +109,18 @@ describe('ContextView — overview face', () => {
     const direct = await mount(h(atThreshold.View, atThreshold.props))
     assert.equal(queryAll(direct.container, '.lc-bar').length, 0)
     assert.ok(query(direct.container, '.lc-fit-svg'))
-    assert.ok(buttonByText(direct.container, DICT_EN['trend.overview']).className.includes('lc-gran-on'))
+    assert.ok(buttonByText(direct.container, DICT_EN['timeline.overview']).className.includes('lc-gran-on'))
     await direct.unmount()
 
     const { View, props } = viewWith('100', 'sv-overview-auto-grow', 99)
     const m = await mount(h(View, props))
     assert.equal(queryAll(m.container, '.lc-bar').length, 99)
-    await click(buttonByText(m.container, DICT_EN['trend.dna']))
+    await click(buttonByText(m.container, DICT_EN['timeline.dna']))
     await m.update(h(View, { ...props, useProjection: projectionsFor(stepsTimeline(100)) }))
     assert.equal(queryAll(m.container, '.lc-bar').length, 0)
-    assert.ok(buttonByText(m.container, DICT_EN['trend.overview']).className.includes('lc-gran-on'))
-    assert.equal(buttonByText(m.container, DICT_EN['trend.dna']).className.includes('lc-gran-on'), false)
-    await click(buttonByText(m.container, DICT_EN['trend.overview']))
+    assert.ok(buttonByText(m.container, DICT_EN['timeline.overview']).className.includes('lc-gran-on'))
+    assert.equal(buttonByText(m.container, DICT_EN['timeline.dna']).className.includes('lc-gran-on'), false)
+    await click(buttonByText(m.container, DICT_EN['timeline.overview']))
     assert.equal(queryAll(m.container, '.lc-bar').length, 100)
     await m.update(h(View, { ...props, useProjection: projectionsFor(stepsTimeline(101)) }))
     assert.equal(queryAll(m.container, '.lc-bar').length, 101)
@@ -140,7 +140,7 @@ describe('ContextView — overview face', () => {
   test('a manual toggle-off survives a session round trip out of an auto-opened session', async () => {
     const { View, props } = viewWith('100', 'sv-overview-auto-sticky', 100)
     const m = await mount(h(View, props))
-    await click(buttonByText(m.container, DICT_EN['trend.overview']))
+    await click(buttonByText(m.container, DICT_EN['timeline.overview']))
     assert.equal(queryAll(m.container, '.lc-bar').length, 100)
     await m.update(h(View, { ...props, sessionId: 'sv-overview-auto-other', useProjection: projectionsFor(stepsTimeline(3)) }))
     assert.ok(queryAll(m.container, '.lc-bar').length > 0)
@@ -168,7 +168,7 @@ describe('ContextView — projection guards', () => {
       assert.equal(queryAll(m.container, '.lc-deferred-skeleton').length, 0)
       assert.ok(queryAll(m.container, '.lc-loading-lane').length >= 2, 'the event and file lanes reserve their rows')
       assert.ok(query(m.container, '.lc-cols-main').children.length >= 2)
-      for (const key of ['overview.title', 'stats.title', 'tokens.title', 'timing.title', 'trend.title', 'browser.title', 'events.title', 'files.title'] as const) {
+      for (const key of ['overview.title', 'stats.title', 'tokens.title', 'timing.title', 'timeline.title', 'browser.title', 'events.title', 'files.title'] as const) {
         assert.ok(text(m.container).includes(DICT_EN[key]), `the ${key} card keeps its frame`)
       }
       await m.unmount()
@@ -209,7 +209,7 @@ describe('ContextView — projection guards', () => {
     }))
     assert.ok(text(m.container).includes(DICT_EN['overview.title']))
     assert.ok(text(m.container).includes(DICT_EN['stats.title']))
-    assert.ok(text(m.container).includes(DICT_EN['trend.empty']))
+    assert.ok(text(m.container).includes(DICT_EN['timeline.empty']))
     assert.ok(text(m.container).includes(DICT_EN['events.empty']))
     assert.ok(text(m.container).includes(DICT_EN['files.empty']))
     assert.ok(text(m.container).includes(DICT_EN['footer']))
@@ -273,7 +273,7 @@ describe('ContextView — baseline gate', () => {
     assert.ok(text(card).includes('v0.1.1-rc.2'))
     assert.ok(text(card).includes('v0.2.0-rc.2'))
     assert.ok(text(m.container).includes(DICT_EN['overview.title']))
-    assert.ok(text(m.container).includes(DICT_EN['trend.empty']))
+    assert.ok(text(m.container).includes(DICT_EN['timeline.empty']))
     assert.ok(text(m.container).includes(DICT_EN['events.empty']))
     await click(buttonByText(m.container, DICT_EN['gate.ok']))
     assert.equal(m.container.querySelector('.lc-modal-backdrop'), null)
@@ -398,8 +398,8 @@ describe('ContextView — locale and settings', () => {
     }
   })
 
-  test('mount-time granularity/trend/file-sort defaults come from the bound settings scope', async () => {
-    const settings = settingsWith({ defaultGranularity: 'turn', defaultTrendMode: 'delta', defaultFileSort: 'path', defaultDurationCurve: 'hide' })
+  test('mount-time granularity/timeline/file-sort defaults come from the bound settings scope', async () => {
+    const settings = settingsWith({ defaultGranularity: 'turn', defaultTimelineMode: 'delta', defaultFileSort: 'path', defaultDurationCurve: 'hide' })
     const View = makeView(new TestClientCtx(), settings)
     const m = await mount(h(View, {
       sessionId: 'sv-settings',
@@ -421,8 +421,8 @@ describe('ContextView — locale and settings', () => {
     }))
     assert.ok(buttonByText(m.container, DICT_EN['gran.turn']).className.includes('lc-gran-on'))
     assert.ok(buttonByText(m.container, DICT_EN['gran.delta']).className.includes('lc-gran-on'))
-    assert.ok(buttonByText(m.container, DICT_EN['trend.adaptive']).className.includes('lc-gran-on'), 'Adaptive follows the Delta default')
-    assert.ok(!buttonByText(m.container, DICT_EN['trend.duration']).className.includes('lc-gran-on'))
+    assert.ok(buttonByText(m.container, DICT_EN['timeline.adaptive']).className.includes('lc-gran-on'), 'Adaptive follows the Delta default')
+    assert.ok(!buttonByText(m.container, DICT_EN['timeline.duration']).className.includes('lc-gran-on'))
     assert.equal(queryAll(m.container, '.lc-bar').length, 2)
     assert.deepEqual(queryAll(m.container, '.lc-fa-row').map(r => r.title), ['/a.ts', '/z.ts'])
     await m.unmount()
@@ -592,7 +592,7 @@ describe('ContextView lazy DNA bands', () => {
   test('a long log assembles DNA bands only for the rendered window, in total and delta mode', async () => {
     const m = await mountBig('sv-lazy-dna')
     try {
-      await act(async () => { buttonByText(m.container, kit.t('trend.dna')).click() })
+      await act(async () => { buttonByText(m.container, kit.t('timeline.dna')).click() })
       await flush()
       const dnaBars = queryAll(m.container, '.lc-bar-dna')
       assert.ok(dnaBars.length > 0, 'DNA bars render from the lazy accessor')

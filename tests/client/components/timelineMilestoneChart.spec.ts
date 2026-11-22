@@ -2,9 +2,9 @@ import assert from 'node:assert/strict'
 import { createElement as h } from 'react'
 import { describe, test } from 'vitest'
 import type { ContextEventRecord, RequestRecord } from '../../../src/shared/types'
-import { aggregateByTurn } from '../../../src/client/components/trendModel'
+import { aggregateByTurn } from '../../../src/client/components/timelineModel'
 import { click, hover, keydown, mount, query, queryAll, settle, unhover } from '../helpers/kit'
-import { TrendChart, kit, makeSpies, propsOf, req, scrollEvent, scrollTo, type LayoutEl } from './trendChartHarness'
+import { TimelineChart, kit, makeSpies, propsOf, req, scrollEvent, scrollTo, type LayoutEl } from './timelineChartHarness'
 
 const EXPANDED = 25
 
@@ -44,12 +44,12 @@ function tipText(root: HTMLElement): string[] {
   return queryAll(query(root, '.lc-chart-tip'), 'span').map(row => row.textContent ?? '')
 }
 
-describe('TrendChart milestone flags', () => {
+describe('TimelineChart milestone flags', () => {
   test('every event kind and both metric peaks render one mast with the event rows in the tip', async () => {
     const reqs = manyRequests()
     const events = allEvents()
     const { spies, handlers } = makeSpies()
-    const m = await mount(h(TrendChart, propsOf(reqs, { ...handlers, events })))
+    const m = await mount(h(TimelineChart, propsOf(reqs, { ...handlers, events })))
 
     assert.equal(queryAll(m.container, '.lc-ms').length, 10)
     assert.equal(queryAll(m.container, '.lc-ms-flag').length, 12)
@@ -62,10 +62,10 @@ describe('TrendChart milestone flags', () => {
       [9, 'boundary', 'longest', ['Longest step · ' + kit.fmtDuration(9000), 'Skill']],
       [11, 'boundary', 'skill', ['Skill · ×2', 'review, review']],
       [13, 'boundary', 'model', ['Model · a → ?']],
-      [15, 'boundary', 'agent', [kit.t('trend.ms.agent') + ' · worker']],
+      [15, 'boundary', 'agent', [kit.t('timeline.ms.agent') + ' · worker']],
       [17, 'boundary', 'model', ['Model · ? → b']],
       [19, 'boundary', 'growth', ['Most context added · +' + kit.fmt(5100), 'Model · a → b']],
-      [23, 'boundary', 'spawn', [kit.t('trend.ms.spawn') + ' · explorer']],
+      [23, 'boundary', 'spawn', [kit.t('timeline.ms.spawn') + ' · explorer']],
     ]
     for (const [idx, anchor, kind, rows] of cases) {
       const head = headAt(m.container, idx, anchor)
@@ -73,7 +73,7 @@ describe('TrendChart milestone flags', () => {
       const tip = query<HTMLElement>(m.container, '.lc-chart-tip')
       assert.equal(query(head, '.lc-ms-flag').getAttribute('data-kind'), kind)
       const text = tipText(m.container)
-      assert.equal(text.at(-1), kit.t('trend.ms.open'))
+      assert.equal(text.at(-1), kit.t('timeline.ms.open'))
       assert.deepEqual(text.slice(1, -1), rows)
       const target = reqs[idx]
       const expectedHead = kit.t('tip.step', { t: target.turn ?? 0, s: target.step ?? 0, n: 5 })
@@ -90,7 +90,7 @@ describe('TrendChart milestone flags', () => {
     const reqs = manyRequests()
     const events = allEvents()
     const { spies, handlers } = makeSpies()
-    const m = await mount(h(TrendChart, propsOf(reqs, { ...handlers, events })))
+    const m = await mount(h(TimelineChart, propsOf(reqs, { ...handlers, events })))
 
     const compaction = headAt(m.container, 3, 'boundary')
     await click(compaction)
@@ -100,13 +100,13 @@ describe('TrendChart milestone flags', () => {
     await keydown('a', headAt(m.container, 7, 'boundary'))
     assert.deepEqual(spies.select, [4, 16, 24])
 
-    await m.update(h(TrendChart, propsOf(reqs, { ...handlers, events, selectedSeq: 4, activeTurn: 1 })))
+    await m.update(h(TimelineChart, propsOf(reqs, { ...handlers, events, selectedSeq: 4, activeTurn: 1 })))
     const compMast = query(m.container, '.lc-ms[data-target-idx="3"]')
     assert.ok(compMast.className.includes('lc-ms-selected'))
     assert.ok(compMast.className.includes('lc-ms-in-turn'))
     assert.equal(query(compMast, '.lc-ms-head').getAttribute('aria-pressed'), 'true')
     assert.ok(!query(m.container, '.lc-ms[data-target-idx="7"]').className.includes('lc-ms-in-turn'))
-    assert.ok(query(m.container, '.lc-ms[data-target-idx="3"] .lc-ms-head').getAttribute('aria-label')?.includes(kit.t('trend.ms.open')))
+    assert.ok(query(m.container, '.lc-ms[data-target-idx="3"] .lc-ms-head').getAttribute('aria-label')?.includes(kit.t('timeline.ms.open')))
     await m.unmount()
   })
 
@@ -122,7 +122,7 @@ describe('TrendChart milestone flags', () => {
       { seq: 8, time: 7, kind: 'team-task-create', count: 1 },
     ]
     const { spies, handlers } = makeSpies()
-    const m = await mount(h(TrendChart, propsOf(reqs, { ...handlers, events })))
+    const m = await mount(h(TimelineChart, propsOf(reqs, { ...handlers, events })))
 
     assert.equal(queryAll(m.container, '.lc-ms').length, 4)
     assert.equal(queryAll(m.container, '.lc-ms-flag').length, 7)
@@ -152,7 +152,7 @@ describe('TrendChart milestone flags', () => {
     const reqs = manyRequests()
     const events = allEvents()
     const { spies, handlers } = makeSpies()
-    const m = await mount(h(TrendChart, propsOf(reqs, { ...handlers, events })))
+    const m = await mount(h(TimelineChart, propsOf(reqs, { ...handlers, events })))
 
     const head = headAt(m.container, 3, 'boundary')
     await hover(head)
@@ -181,30 +181,30 @@ describe('TrendChart milestone flags', () => {
       { seq: 2, time: 1, kind: 'compaction', turn: 1 },
       { seq: 3, time: 2, kind: 'agent', form: 'spawn', name: 'worker', turn: 2 },
     ]
-    const m = await mount(h(TrendChart, propsOf(agg, { granularity: 'turn', events })))
+    const m = await mount(h(TimelineChart, propsOf(agg, { granularity: 'turn', events })))
     assert.equal(queryAll(m.container, '.lc-ms').length, 2)
 
     await hover(headAt(m.container, 0, 'boundary'))
     assert.deepEqual(tipText(m.container), [
       kit.t('tip.turn', { t: 1, n: 2 }),
-      kit.t('trend.ms.compaction'),
-      kit.t('trend.ms.longestTurn') + ' · ' + kit.fmtDuration(3000),
-      kit.t('trend.ms.open'),
+      kit.t('timeline.ms.compaction'),
+      kit.t('timeline.ms.longestTurn') + ' · ' + kit.fmtDuration(3000),
+      kit.t('timeline.ms.open'),
     ])
     await unhover(headAt(m.container, 0, 'boundary'))
 
     await hover(headAt(m.container, 1, 'boundary'))
     assert.deepEqual(tipText(m.container), [
       kit.t('tip.turn1', { t: 2 }),
-      kit.t('trend.ms.growthTurn') + ' · +' + kit.fmt(500),
-      kit.t('trend.ms.spawn') + ' · worker',
-      kit.t('trend.ms.open'),
+      kit.t('timeline.ms.growthTurn') + ' · +' + kit.fmt(500),
+      kit.t('timeline.ms.spawn') + ' · worker',
+      kit.t('timeline.ms.open'),
     ])
     await m.unmount()
   })
 
   test('turnless steps and turnless turns floor their labels at zero', async () => {
-    const step = await mount(h(TrendChart, propsOf(
+    const step = await mount(h(TimelineChart, propsOf(
       [req(1, { turn: undefined, step: undefined })],
       { events: [{ seq: 1, time: 1, kind: 'compaction' }] },
     )))
@@ -213,7 +213,7 @@ describe('TrendChart milestone flags', () => {
     await step.unmount()
 
     const one = aggregateByTurn([req(1, { turn: undefined, total: 100, activeMs: 1000 })])
-    const single = await mount(h(TrendChart, propsOf(one, { granularity: 'turn' })))
+    const single = await mount(h(TimelineChart, propsOf(one, { granularity: 'turn' })))
     await hover(headAt(single.container, 0, 'bar'))
     assert.equal(tipText(single.container)[0], kit.t('tip.turn1', { t: 0 }))
     await single.unmount()
@@ -222,7 +222,7 @@ describe('TrendChart milestone flags', () => {
       req(1, { turn: undefined, total: 100, activeMs: 1000 }),
       req(2, { turn: undefined, total: 200, activeMs: 500 }),
     ])
-    const pairs = await mount(h(TrendChart, propsOf(two, { granularity: 'turn' })))
+    const pairs = await mount(h(TimelineChart, propsOf(two, { granularity: 'turn' })))
     await hover(headAt(pairs.container, 0, 'bar'))
     assert.equal(tipText(pairs.container)[0], kit.t('tip.turn', { t: 0, n: 2 }))
     await pairs.unmount()
@@ -231,7 +231,7 @@ describe('TrendChart milestone flags', () => {
   test('a scrolled-away mast loses its tip when the virtualization window drops it', async () => {
     const reqs = Array.from({ length: 300 }, (_, i) => req(i + 1, { turn: 1, step: i, total: 100 }))
     const events: ContextEventRecord[] = [{ seq: 6, time: 1, kind: 'compaction' }]
-    const m = await mount(h(TrendChart, propsOf(reqs, { events })))
+    const m = await mount(h(TimelineChart, propsOf(reqs, { events })))
     const scroll = query<LayoutEl>(m.container, '.lc-chart-scroll')
     assert.equal(queryAll(m.container, '.lc-ms').length, 0, 'the event sits before the initial window')
 

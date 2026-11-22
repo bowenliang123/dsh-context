@@ -106,15 +106,15 @@ describe('ContextView — the stats board\'s pill jumps', () => {
     })
   }
 
-  test('the session figures scroll the trend card into view', async () => {
+  test('the session figures scroll the timeline card into view', async () => {
     const scroller = overflowingScroller(900)
-    const gBCR = stubRevealRects(scroller, el => (el.hasAttribute('data-lc-trend') ? 450 : 0))
+    const gBCR = stubRevealRects(scroller, el => (el.hasAttribute('data-lc-timeline') ? 450 : 0))
     try {
       const View = makeView(new TestClientCtx())
-      const m = await mountInScroller(h(View, { sessionId: 'sv-trendjump', useProjection: projectionsFor(jumpTimeline()) }), scroller)
+      const m = await mountInScroller(h(View, { sessionId: 'sv-timelinejump', useProjection: projectionsFor(jumpTimeline()) }), scroller)
       await click(query(m.container, '.lc-core-kv-turns.lc-core-kv-btn'))
       await flush()
-      assert.equal(scroller.scrollTop, 350, 'the turn figure lands on the trend card')
+      assert.equal(scroller.scrollTop, 350, 'the turn figure lands on the timeline card')
       scroller.scrollTop = 0
       await click(query(m.container, '.lc-core-kv-steps.lc-core-kv-btn'))
       await flush()
@@ -127,7 +127,7 @@ describe('ContextView — the stats board\'s pill jumps', () => {
 
   test('a session-figure jump ignores the hover its own scroll leaves under the pointer', async () => {
     const scroller = overflowingScroller(900)
-    const gBCR = stubRevealRects(scroller, el => (el.hasAttribute('data-lc-trend') ? 450 : 0))
+    const gBCR = stubRevealRects(scroller, el => (el.hasAttribute('data-lc-timeline') ? 450 : 0))
     const now = vi.spyOn(performance, 'now').mockReturnValue(1_000)
     try {
       const View = makeView(new TestClientCtx())
@@ -359,9 +359,9 @@ describe('ContextView — the events card\'s boundary rows', () => {
     return eventLink(container, DICT_EN['ev.compaction'].replace('{n}', '2'))
   }
 
-  test('a click pins the step the compaction landed on, aligns the browser, and reveals the trend card', async () => {
+  test('a click pins the step the compaction landed on, aligns the browser, and reveals the timeline card', async () => {
     const scroller = overflowingScroller(1200)
-    const gBCR = stubRevealRects(scroller, el => (el.hasAttribute('data-lc-trend') ? 450 : 0))
+    const gBCR = stubRevealRects(scroller, el => (el.hasAttribute('data-lc-timeline') ? 450 : 0))
     try {
       const View = makeView(new TestClientCtx())
       const m = await mountInScroller(h(View, {
@@ -372,9 +372,9 @@ describe('ContextView — the events card\'s boundary rows', () => {
 
       await click(compactionLink(m.container))
       assert.ok(query(m.container, '.lc-bar[data-seq="4"]').className.includes('lc-bar-selected'), 'the landed-on step is pinned')
-      assert.equal(query<HTMLElement>(m.container, '.lc-chart-scroll').scrollLeft, 1 * 16 + 7, 'the trend scrolled to the landed bar')
+      assert.equal(query<HTMLElement>(m.container, '.lc-chart-scroll').scrollLeft, 1 * 16 + 7, 'the timeline scrolled to the landed bar')
       assert.equal(pickValue(m), '4', 'the browser aligns to the same step')
-      assert.equal(scroller.scrollTop, 350, 'the trend card scrolled to the scrollport top')
+      assert.equal(scroller.scrollTop, 350, 'the timeline card scrolled to the scrollport top')
       await m.unmount()
     } finally {
       gBCR.mockRestore()
@@ -432,11 +432,11 @@ describe('ContextView — the events card\'s boundary rows', () => {
     const View = makeView(new TestClientCtx(), settingsWith({ defaultGranularity: 'turn' }))
     const m = await mount(h(View, { sessionId: 'sv-compactoverview', useProjection: projectionsFor(richTimeline()) }))
     assert.equal(queryAll(m.container, '.lc-bar').length, 2, 'one aggregate bar per turn at mount')
-    await click(buttonByText(m.container, DICT_EN['trend.overview']))
-    assert.ok(buttonByText(m.container, DICT_EN['trend.overview']).className.includes('lc-gran-on'))
+    await click(buttonByText(m.container, DICT_EN['timeline.overview']))
+    assert.ok(buttonByText(m.container, DICT_EN['timeline.overview']).className.includes('lc-gran-on'))
 
     await click(compactionLink(m.container))
-    assert.ok(!buttonByText(m.container, DICT_EN['trend.overview']).className.includes('lc-gran-on'), 'the overview yields to the bar face')
+    assert.ok(!buttonByText(m.container, DICT_EN['timeline.overview']).className.includes('lc-gran-on'), 'the overview yields to the bar face')
     assert.ok(buttonByText(m.container, DICT_EN['gran.step']).className.includes('lc-gran-on'), 'step granularity is on')
     assert.equal(queryAll(m.container, '.lc-bar').length, 3)
     assert.ok(query(m.container, '.lc-bar[data-seq="4"]').className.includes('lc-bar-selected'))
@@ -461,7 +461,7 @@ describe('ContextView — the events card\'s boundary rows', () => {
     try {
       const View = makeView(new TestClientCtx(), settingsWith({ defaultGranularity: 'turn' }))
       const m = await mount(h(View, { sessionId: 'sv-turnjump', useProjection: projectionsFor(data) }))
-      await click(buttonByText(m.container, DICT_EN['trend.overview']))
+      await click(buttonByText(m.container, DICT_EN['timeline.overview']))
       await settle(20)
       const head = queryAll(m.container, '.lc-ms-head')
       assert.equal(head.length, 1)
@@ -635,8 +635,8 @@ describe('ContextView — interactions', () => {
     await m.unmount()
   })
 
-  test('category hover links the composition legend, browser rows, trend segments, and detail chips', async () => {
-    const m = await mountRich('sv-link-trend')
+  test('category hover links the composition legend, browser rows, timeline segments, and detail chips', async () => {
+    const m = await mountRich('sv-link-timeline')
     const comp = queryAll(m.container, '.lc-card').find(c => text(c).includes(DICT_EN['overview.title']))
     assert.ok(comp !== undefined)
 
@@ -672,7 +672,7 @@ describe('ContextView — interactions', () => {
     await m.unmount()
   })
 
-  test('expanding a browser category focuses the trend bars on it; collapsing restores all', async () => {
+  test('expanding a browser category focuses the timeline bars on it; collapsing restores all', async () => {
     const m = await mountRich('sv-focus')
     assert.equal(text(query(m.container, '.lc-axis-top')), '420', 'unfocused: the axis tops at the largest whole-bar total')
     assert.equal(queryAll(m.container, '.lc-bar[data-seq="4"] .lc-bar-stack > .lc-cat-seg').length, 5)
@@ -701,7 +701,7 @@ describe('ContextView — interactions', () => {
       })),
     }))
 
-    const msBtn = () => buttonByText(m.container, DICT_EN['trend.duration'])
+    const msBtn = () => buttonByText(m.container, DICT_EN['timeline.duration'])
     assert.ok(msBtn().className.includes('lc-gran-on'), 'on at mount (the settings default)')
     assert.equal(queryAll(m.container, '.lc-duration polyline:not(.lc-dur-halo)').length, 1)
     assert.equal(text(query(m.container, '.lc-axis-r .lc-axis-top')), '2.0s')
@@ -713,7 +713,7 @@ describe('ContextView — interactions', () => {
     await click(msBtn())
     assert.equal(queryAll(m.container, '.lc-duration polyline:not(.lc-dur-halo)').length, 1)
 
-    const adaptive = () => buttonByText(m.container, DICT_EN['trend.adaptive'])
+    const adaptive = () => buttonByText(m.container, DICT_EN['timeline.adaptive'])
     assert.ok(!adaptive().className.includes('lc-gran-on'), 'off at mount')
     await click(adaptive())
     assert.ok(adaptive().className.includes('lc-gran-on'))
@@ -722,14 +722,14 @@ describe('ContextView — interactions', () => {
     await m.unmount()
   })
 
-  test('the trend card\'s DNA toggle fingerprints the bars, combinable with Delta', async () => {
-    const m = await mountRich('sv-trend-dna')
-    const dnaBtn = () => buttonByText(m.container, DICT_EN['trend.dna'])
+  test('the timeline card\'s DNA toggle fingerprints the bars, combinable with Delta', async () => {
+    const m = await mountRich('sv-timeline-dna')
+    const dnaBtn = () => buttonByText(m.container, DICT_EN['timeline.dna'])
     assert.ok(!dnaBtn().className.includes('lc-gran-on'), 'off at mount')
     const dnaGroup = dnaBtn().parentElement as HTMLElement
-    assert.ok(dnaGroup.className.includes('lc-trend-mods'))
-    assert.equal(dnaBtn().getAttribute('title'), DICT_EN['trend.dnaTip'])
-    assert.equal(dnaBtn().nextElementSibling, buttonByText(m.container, DICT_EN['trend.adaptive']), 'DNA rides left of the adaptive switch')
+    assert.ok(dnaGroup.className.includes('lc-timeline-mods'))
+    assert.equal(dnaBtn().getAttribute('title'), DICT_EN['timeline.dnaTip'])
+    assert.equal(dnaBtn().nextElementSibling, buttonByText(m.container, DICT_EN['timeline.adaptive']), 'DNA rides left of the adaptive switch')
 
     await click(dnaBtn())
     assert.ok(dnaBtn().className.includes('lc-gran-on'))
@@ -753,21 +753,21 @@ describe('ContextView — interactions', () => {
 
     const browserDna = () => query(m.container, '.lc-br-dna-ctl .lc-gran-btn')
     await click(dnaBtn())
-    assert.ok(browserDna().className.includes('lc-gran-on'), 'the browser follows the trend toggle')
+    assert.ok(browserDna().className.includes('lc-gran-on'), 'the browser follows the timeline toggle')
     assert.equal(queryAll(m.container, '.lc-br-bar-dna').length, 1)
     await click(browserDna())
-    assert.ok(!dnaBtn().className.includes('lc-gran-on'), 'the trend follows the browser toggle')
+    assert.ok(!dnaBtn().className.includes('lc-gran-on'), 'the timeline follows the browser toggle')
     assert.equal(queryAll(m.container, '.lc-br-bar-dna').length, 0)
     await m.unmount()
   })
 
   test('Delta arms Adaptive and links the browser switch; Overview suppresses the link', async () => {
-    const m = await mountRich('sv-trend-delta-link')
-    const trendDelta = () => buttonByText(m.container, DICT_EN['gran.delta'])
+    const m = await mountRich('sv-timeline-delta-link')
+    const timelineDelta = () => buttonByText(m.container, DICT_EN['gran.delta'])
     const browserDelta = () => queryAll(m.container, '.lc-br-mode-ctl .lc-gran-btn').find(b => text(b) === DICT_EN['gran.delta']) as HTMLElement
     const browserTotal = () => queryAll(m.container, '.lc-br-mode-ctl .lc-gran-btn').find(b => text(b) === DICT_EN['gran.total']) as HTMLElement
-    const adaptive = () => buttonByText(m.container, DICT_EN['trend.adaptive'])
-    const overview = () => buttonByText(m.container, DICT_EN['trend.overview'])
+    const adaptive = () => buttonByText(m.container, DICT_EN['timeline.adaptive'])
+    const overview = () => buttonByText(m.container, DICT_EN['timeline.overview'])
     assert.ok(!browserDelta().className.includes('lc-gran-on'), 'off at mount')
     const modeGroup = query(m.container, '.lc-br-mode-ctl')
     const baseGroup = query(m.container, '.lc-br-base-ctl')
@@ -779,47 +779,47 @@ describe('ContextView — interactions', () => {
     assert.equal(modeGroup.nextElementSibling, null, 'the switch closes the control cluster')
     assert.equal(modeGroup.getAttribute('title'), DICT_EN['browser.deltaTip'])
 
-    await click(trendDelta())
-    assert.ok(trendDelta().className.includes('lc-gran-on'))
-    assert.ok(browserDelta().className.includes('lc-gran-on'), 'the browser follows the trend Delta')
+    await click(timelineDelta())
+    assert.ok(timelineDelta().className.includes('lc-gran-on'))
+    assert.ok(browserDelta().className.includes('lc-gran-on'), 'the browser follows the timeline Delta')
     assert.ok(adaptive().className.includes('lc-gran-on'), 'Delta arms Adaptive')
     assert.ok(text(query(m.container, '.lc-br-meta')).includes('Added ≈'))
 
     await click(buttonByText(m.container, DICT_EN['gran.total']))
-    assert.ok(!trendDelta().className.includes('lc-gran-on'))
+    assert.ok(!timelineDelta().className.includes('lc-gran-on'))
     assert.ok(adaptive().className.includes('lc-gran-on'), 'leaving Delta keeps Adaptive as set')
 
-    await click(trendDelta())
+    await click(timelineDelta())
     await click(adaptive())
     assert.ok(!adaptive().className.includes('lc-gran-on'), 'Adaptive stays switchable under Delta')
-    await click(trendDelta())
+    await click(timelineDelta())
     assert.ok(!adaptive().className.includes('lc-gran-on'), 're-clicking the active Delta chip keeps the opt-out')
 
     await click(browserTotal())
-    assert.ok(!trendDelta().className.includes('lc-gran-on'), 'the trend follows the browser switch')
+    assert.ok(!timelineDelta().className.includes('lc-gran-on'), 'the timeline follows the browser switch')
     assert.ok(!browserDelta().className.includes('lc-gran-on'))
 
     await click(browserDelta())
     assert.ok(browserDelta().className.includes('lc-gran-on'), 'the browser can switch it back on')
-    assert.ok(trendDelta().className.includes('lc-gran-on'), 'the trend follows that direction too')
+    assert.ok(timelineDelta().className.includes('lc-gran-on'), 'the timeline follows that direction too')
     assert.ok(adaptive().className.includes('lc-gran-on'), 'the linked switch arms Adaptive too')
 
     await click(overview())
     assert.ok(overview().className.includes('lc-gran-on'))
     assert.ok(!adaptive().className.includes('lc-gran-on'), 'Overview clears Adaptive')
     await click(buttonByText(m.container, DICT_EN['gran.total']))
-    await click(trendDelta())
+    await click(timelineDelta())
     assert.ok(overview().className.includes('lc-gran-on'), 'Overview keeps the face')
     assert.ok(!adaptive().className.includes('lc-gran-on'), 'Overview suppresses the Delta-to-Adaptive link')
 
     await click(buttonByText(m.container, DICT_EN['gran.total']))
-    assert.ok(!trendDelta().className.includes('lc-gran-on'))
+    assert.ok(!timelineDelta().className.includes('lc-gran-on'))
     assert.ok(!browserDelta().className.includes('lc-gran-on'))
     await m.unmount()
   })
 
   test('clicking a DNA band reveals that item in the Context browser', async () => {    const m = await mountRich('sv-dna-reveal')
-    await click(buttonByText(m.container, DICT_EN['trend.dna']))
+    await click(buttonByText(m.container, DICT_EN['timeline.dna']))
     const dnaDiv = query(m.container, '.lc-bar[data-seq="4"] .lc-bar-dna')
     dnaDiv.getBoundingClientRect = () => ({ top: 0, left: 0, right: 14, bottom: 112, width: 14, height: 112, x: 0, y: 0, toJSON: () => null }) as DOMRect
     await act(async () => { dnaDiv.dispatchEvent(new MouseEvent('click', { bubbles: true, clientY: 0 })) })

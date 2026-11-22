@@ -139,7 +139,7 @@ describe('incrementOf', () => {
     assert.equal(tail.tokenDown.tool, 15)
   })
 
-  test('incrementHas resolves every item key the browser and trend share', () => {
+  test('incrementHas resolves every item key the browser and timeline share', () => {
     const inc = incrementOf(asm({
       nodes: [node(7, 'user', 5)],
       system: system(8, 10),

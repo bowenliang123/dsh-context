@@ -263,7 +263,7 @@ describe('client entry: configForms inject', () => {
   test('armed later: the form binds the namespace and the served registration claims the Plugins-page seat', () => {
     const ctx = new TestClientCtx()
     applyTo(ctx)
-    const scope = makeScope({ status: 'ready', value: { defaultTrendMode: 'delta' }, writable: true })
+    const scope = makeScope({ status: 'ready', value: { defaultTimelineMode: 'delta' }, writable: true })
     const forms = fakeConfigForms(scope)
     ctx.setService('configForms', forms)
     assert.deepEqual(forms.gets, ['dsh-context'])

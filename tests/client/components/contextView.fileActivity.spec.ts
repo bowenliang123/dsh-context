@@ -86,7 +86,7 @@ describe('ContextView — file activity card', () => {
     clock.mockRestore()
     await until(() => text(card).includes('+1'), 'the trailing hover lands on the last bar')
 
-    await click(buttonByText(m.container, DICT_EN['trend.dna']))
+    await click(buttonByText(m.container, DICT_EN['timeline.dna']))
     await hover(query(m.container, '.lc-bar[data-seq="2"]'))
     await settle(80)
     assert.ok(text(card).includes('−2'), 'the cross-card preview stays on the latest scope')
@@ -348,7 +348,7 @@ describe('ContextView — the split generation (slim head + detail channel)', ()
     await m.unmount()
   })
 
-  test('the facts core series carries the category breakdown for the trend and per-step composition', async () => {
+  test('the facts core series carries the category breakdown for the timeline and per-step composition', async () => {
     const rich = richTimeline()
     const head = slimHead()
     vi.stubGlobal('fetch', async (_url: unknown, init: { body: string }) => {
@@ -367,9 +367,9 @@ describe('ContextView — the split generation (slim head + detail channel)', ()
     const ctx = new TestClientCtx()
     const View = makeView(ctx)
     const m = await mount(h(View, { sessionId: 'sv-facts', useProjection: projectionsFor(head) }))
-    await until(() => queryAll(m.container, '.lc-bar').length === 3, 'the facts series never reached the trend')
+    await until(() => queryAll(m.container, '.lc-bar').length === 3, 'the facts series never reached the timeline')
     const segments = queryAll(m.container, '.lc-cat-seg')
-    assert.ok(segments.length > 0, 'the trend needs per-category request buckets, not only totals')
+    assert.ok(segments.length > 0, 'the timeline needs per-category request buckets, not only totals')
     assert.ok(/Actual|实际/.test(text(m.container)), 'the step composition reads the same full request')
     await m.unmount()
   })
@@ -385,7 +385,7 @@ describe('ContextView — the split generation (slim head + detail channel)', ()
     await m.unmount()
   })
 
-  test('the pending trend body reserves the loaded panel, so the detail fills the card instead of growing it', async () => {
+  test('the pending timeline body reserves the loaded panel, so the detail fills the card instead of growing it', async () => {
     let release!: () => void
     vi.stubGlobal('fetch', () => new Promise(res => {
       release = () => { res({ ok: true, status: 200, json: async () => ({ ok: true, value: slimDetail() }) }) }
@@ -394,19 +394,19 @@ describe('ContextView — the split generation (slim head + detail channel)', ()
     const View = makeView(ctx)
     const m = await mount(h(View, { sessionId: 'sv-reserve', useProjection: projectionsFor(slimHead()) }))
 
-    assert.equal(queryAll(m.container, '.lc-trend-lane').length, 1, 'the reserved body renders while the read is in flight')
-    assert.equal(queryAll(m.container, '.lc-trend-lane .lc-legend .lc-chip').length, 7,
+    assert.equal(queryAll(m.container, '.lc-timeline-lane').length, 1, 'the reserved body renders while the read is in flight')
+    assert.equal(queryAll(m.container, '.lc-timeline-lane .lc-legend .lc-chip').length, 7,
       'the lane reserves one chip per category')
-    const laneChip = query(m.container, '.lc-trend-lane .lc-legend .lc-chip')
+    const laneChip = query(m.container, '.lc-timeline-lane .lc-legend .lc-chip')
     assert.deepEqual(Array.from(laneChip.children).map(el => el.className.split(' ')[0]), ['', 'lc-chip-label', 'lc-chip-nums'],
       'the reserved chips wear the legend chip anatomy, so the panels measure alike')
-    assert.equal(queryAll(m.container, '.lc-trend-lane .lc-detail-metrics').length, 0,
+    assert.equal(queryAll(m.container, '.lc-timeline-lane .lc-detail-metrics').length, 0,
       'no fabricated figures in the reserved panel')
 
     await act(async () => { await new Promise(resolve => setTimeout(resolve, 20)) })
     await act(async () => { release() })
     await until(() => queryAll(m.container, '.lc-bar').length === 3, 'the detail never landed')
-    assert.equal(queryAll(m.container, '.lc-trend-lane').length, 0, 'the lane yields to the real panel')
+    assert.equal(queryAll(m.container, '.lc-timeline-lane').length, 0, 'the lane yields to the real panel')
     assert.equal(queryAll(m.container, '.lc-chartrow').length, 1, 'the chart took its place')
     await m.unmount()
   })

@@ -1,6 +1,6 @@
 import type { ContextEventRecord, RequestRecord } from '../../shared/types'
 import type { ViewKit } from '../viewkit'
-import { isMetricEntry, type MilestoneEntry, type MilestoneGroup, type MilestoneKind } from './trendMilestones'
+import { isMetricEntry, type MilestoneEntry, type MilestoneGroup, type MilestoneKind } from './timelineMilestones'
 
 export interface MilestoneTextOptions {
   granularity: 'step' | 'turn'
@@ -18,23 +18,23 @@ function nameList(names: string[], missingBase = 0): string {
 }
 
 export function milestoneKindLabel(t: ViewKit['t'], granularity: 'step' | 'turn', kind: MilestoneKind): string {
-  if (kind === 'longest') return t(granularity === 'turn' ? 'trend.ms.longestTurn' : 'trend.ms.longest')
-  if (kind === 'growth') return t(granularity === 'turn' ? 'trend.ms.growthTurn' : 'trend.ms.growth')
-  return t('trend.ms.' + kind)
+  if (kind === 'longest') return t(granularity === 'turn' ? 'timeline.ms.longestTurn' : 'timeline.ms.longest')
+  if (kind === 'growth') return t(granularity === 'turn' ? 'timeline.ms.growthTurn' : 'timeline.ms.growth')
+  return t('timeline.ms.' + kind)
 }
 
 function agentEventLabel(t: ViewKit['t'], ev: ContextEventRecord): string {
-  if (ev.name === 'subagent-settled') return t('trend.ms.agentDone')
-  if (ev.name === 'agent-message') return t('trend.ms.agentMessage')
-  if (ev.name === 'team-message') return t('trend.ms.agentTeam')
-  if (ev.name === 'session-reference') return t('trend.ms.agentRef')
-  return t('trend.ms.agent')
+  if (ev.name === 'subagent-settled') return t('timeline.ms.agentDone')
+  if (ev.name === 'agent-message') return t('timeline.ms.agentMessage')
+  if (ev.name === 'team-message') return t('timeline.ms.agentTeam')
+  if (ev.name === 'session-reference') return t('timeline.ms.agentRef')
+  return t('timeline.ms.agent')
 }
 
 function agentEntryLabel(t: ViewKit['t'], events: ContextEventRecord[]): string {
   const first = agentEventLabel(t, events[0])
   for (let i = 1; i < events.length; i++) {
-    if (agentEventLabel(t, events[i]) !== first) return t('trend.ms.agent')
+    if (agentEventLabel(t, events[i]) !== first) return t('timeline.ms.agent')
   }
   return first
 }
@@ -114,9 +114,9 @@ export function milestoneTipRows(
   const cluster = group.members !== undefined && group.members.some(member => member.targetIdx !== group.targetIdx)
   return [
     head,
-    ...(cluster ? [kit.t('trend.ms.cluster')] : []),
+    ...(cluster ? [kit.t('timeline.ms.cluster')] : []),
     ...group.entries.flatMap(entry => milestoneEntryRows(kit, opts.granularity, entry)),
-    kit.t('trend.ms.open'),
+    kit.t('timeline.ms.open'),
   ]
 }
 

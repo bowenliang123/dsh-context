@@ -14,7 +14,7 @@
 
 [`dsh-context`](https://www.npmjs.com/package/dsh-context) offre des fonctionnalités complètes de gestion du cycle de vie du contexte.
 - **Page Analyse du contexte** — la vue d’ensemble intersessions sous forme de panneau de premier niveau dans la barre latérale, aux côtés de Plugins et des tâches d’automatisation : bande d’indicateurs clés avec graphique d’utilisation des tokens et des coûts sur 7 jours, carte thermique d’activité, anneau de composition agrégée et cartes de session filtrables permettant d’accéder directement à chaque session.
-- **Onglet Contexte** — un tableau de bord graphique des statistiques, de la composition, de la tendance, des événements, des messages et des commandes du contexte de DeepSeek Harness.
+- **Onglet Contexte** — un tableau de bord graphique des statistiques, de la composition, de la chronologie, des événements, des messages et des commandes du contexte de DeepSeek Harness.
 - **Onglet Flotte** — la page dédiée à la famille d’agents : l’agent actuel, ses parents et tous ses sous-agents, chacun avec sa propre carte en direct.
 - **Panneau Contexte** — le même tableau de bord sous forme d’onglet dans la barre latérale droite : sélectionnez **Contexte** dans la page de guide de la barre latérale pour ouvrir le panneau à côté du chat, avec le réseau d’agents inclus.
 - **Commande `/context`** — la commande slash affiche le modèle de contexte pour examiner la composition actuelle du contexte et son évolution récente.
@@ -54,10 +54,10 @@ Cinq interfaces, un même récit : ce que votre agent emporte avec lui, comment 
 | Emplacement | Ce que vous obtenez |
 | --- | --- |
 | **Page Analyse du contexte** | Toutes les sessions en un coup d’œil : utilisation, coût, succès du cache, activité quotidienne et profils de contexte par session, filtrés par plage, jour, groupe ou recherche, avec accès en un clic. |
-| **Onglet Contexte** | Le tableau de bord complet : statistiques, composition, tendance par requête, événements, activité des fichiers et exécutions de commandes, dans chaque session. |
+| **Onglet Contexte** | Le tableau de bord complet : statistiques, composition, chronologie par requête, événements, activité des fichiers et exécutions de commandes, dans chaque session. |
 | **Onglet Flotte** | Le réseau d’agents : l’agent actuel, ses parents et tous ses sous-agents, en direct. |
 | **Commande `/context`** | Une fenêtre modale centrée avec la même composition et le même navigateur de contexte, sans quitter le chat. |
-| **Carte Préférences** | Les valeurs par défaut de chaque utilisateur : entrée du panneau, plage d’Analyse du contexte, tendance et tris par défaut, ainsi que préfixe et suffixe de l’invite système ajoutés autour de chaque session. |
+| **Carte Préférences** | Les valeurs par défaut de chaque utilisateur : entrée du panneau, plage d’Analyse du contexte, chronologie et tris par défaut, ainsi que préfixe et suffixe de l’invite système ajoutés autour de chaque session. |
 
 ## 🗂️ La page Analyse du contexte
 
@@ -90,7 +90,7 @@ Ouvrez une session et cliquez sur l’onglet **Contexte** :
 | **Statistiques des tokens** | Où sont allés les tokens facturés : le même total que la ligne de statistiques du chat sous l’éditeur, réparti entre invite système, schémas d’outils, messages utilisateur, contexte injecté, injections de compétences, appels d’outils, raisonnement et réponses. Les appels d’outils regroupent leurs noms et arguments, rejoués dans l’invite et générés dans la sortie, ainsi que les résultats renvoyés par ces outils ; les réponses isolent le texte des réponses du modèle dans le même contenu de l’assistant et la même sortie ; le raisonnement isole de la même façon sa réflexion ; le taux de succès du cache de la session figure dans le coin. |
 | **Statistiques de durée** | Comment le temps actif se répartit entre les appels au modèle, les exécutions d’outils et la surcharge. |
 | **Contexte actuel** | Ce que contient la fenêtre *en ce moment même*. |
-| **Tendance du contexte** | La taille de chaque requête et son histoire. |
+| **Chronologie du contexte** | La taille de chaque requête et son histoire. |
 | **Navigateur de contexte** | À partir de quoi chaque requête a été *réellement* assemblée. |
 | **Événements de contexte** | Quand et pourquoi la fenêtre a changé. |
 | **Activité des fichiers** | Ce que l’agent a *fait* à vos fichiers. |
@@ -117,9 +117,9 @@ La cellule Réseau d’agents de la carte **Statistiques du contexte**, qui indi
 
 Une barre empilée à six couleurs comparée à la fenêtre complète du modèle, les deux masques hachurés à la fin représentant la réserve de compaction automatique : sa marge, puis la fenêtre de sortie réservée à la requête. Elle présente l’invite système, les schémas d’outils, les messages utilisateur, le contexte injecté, les réponses de l’assistant et les résultats d’outils, chacun avec son nombre approximatif de tokens et sa part. Lorsqu’une conversation commence à se dégrader, c’est ici que vous voyez *quelle partie* en est responsable.
 
-### 📈 Tendance du contexte — croissance et évolution du contexte par tour ou par étape
+### 📈 Chronologie du contexte — croissance et évolution du contexte par tour ou par étape
 
-![Tendance du contexte avec le résumé d’étape](https://raw.githubusercontent.com/bowenliang123/dsh-context/main/docs/context-trend.png)
+![Chronologie du contexte avec le résumé d’étape](https://raw.githubusercontent.com/bowenliang123/dsh-context/main/docs/context-timeline.png)
 
 Une barre empilée par requête au modèle, plus précise qu’une barre par message, pour observer la croissance de la fenêtre tour après tour :
 
@@ -127,7 +127,7 @@ Une barre empilée par requête au modèle, plus précise qu’une barre par mes
 - **Drapeaux d’événements** — compaction, élagage, injection de compétence, création de sous-agent, interaction entre agents et changement de modèle, création/atteinte d’objectif et de tâche d’équipe, ajout/fin de tâche, questions à l’utilisateur, ainsi que l’étape la plus longue et le plus fort saut de contexte, arborent chacun leur icône sur l’étape concernée ; un mât en pointillés descend jusqu’à la ligne de base, survolez pour lire, cliquez pour ouvrir l’étape. La vue d’ensemble regroupe les événements proches en un drapeau agrégé qui ramène directement à son étape.
 - **Lisez-le à votre façon** — granularité **Étape / Tour**, **Total** pour la composition cumulée ou **Delta** pour la variation signée de chaque requête, avec défilement horizontal sur toute la session. En mode Delta, la croissance s’accumule au-dessus de la ligne de base et une compaction plonge en dessous :
 
-![Tendance du contexte en mode Delta](https://raw.githubusercontent.com/bowenliang123/dsh-context/main/docs/history-delta.png)
+![Chronologie du contexte en mode Delta](https://raw.githubusercontent.com/bowenliang123/dsh-context/main/docs/history-delta.png)
 
 - **Vue d’ensemble** — un bouton compresse toute la session, étapes ou tours, dans la largeur du panneau sous forme de ruban empilé continu : chaque baisse due à une compaction et chaque changement de composition en un coup d’œil, sans défilement horizontal ni chargement supplémentaire. Des repères indiquent les quartiles et toute la plage ; survolez pour parcourir, survolez une bande pour mettre cette catégorie en évidence sur tout le ruban ; cliquez pour fixer l’étape et ouvrir la catégorie de cette bande dans le navigateur. Cette vue est mutuellement exclusive avec les modes DNA et Adaptatif.
 - **Survol et fixation** — parcourez pour obtenir une infobulle instantanée ; cliquez pour fixer la répartition complète, avec les valeurs réelles **Invite / Sortie / Cache** signalées par le fournisseur à côté des estimations.
@@ -155,7 +155,7 @@ Choisissez **En direct** ou toute étape conservée, puis parcourez les élémen
 
 - **Comparaison avec le tour précédent** — des badges de delta signés par catégorie, `+N` éléments et `±Nk` tokens, indiquent d’un coup d’œil ce qu’un tour a ajouté ou récupéré. Les étapes antérieures à une compaction sont reconstruites à partir de l’archive des messages supprimés, et la carte l’indique lorsque la composition d’une étape n’est qu’approximative.
 
-- **Le mode DNA déploie tout le contexte à plat** — la barre dessine une bande par élément dans l’ordre de lecture du modèle et, en dessous, ces mêmes éléments forment une liste plate avec le message le plus récent en haut ; le modèle lisant du plus ancien au plus récent, la liste présente cet ordre de bas en haut. Chaque ligne indique sa position dans l’invite (`#12`), sa catégorie, l’étape qui l’a introduite et son coût en tokens, puis se développe pour afficher le même contenu complet ; les schémas d’outils et l’invite système ferment la liste sous forme de deux lignes de groupe. La carte s’aligne exactement sur les cartes de composition et de tendance adjacentes : une session entièrement aplatie défile à l’intérieur au lieu d’envahir la page.
+- **Le mode DNA déploie tout le contexte à plat** — la barre dessine une bande par élément dans l’ordre de lecture du modèle et, en dessous, ces mêmes éléments forment une liste plate avec le message le plus récent en haut ; le modèle lisant du plus ancien au plus récent, la liste présente cet ordre de bas en haut. Chaque ligne indique sa position dans l’invite (`#12`), sa catégorie, l’étape qui l’a introduite et son coût en tokens, puis se développe pour afficher le même contenu complet ; les schémas d’outils et l’invite système ferment la liste sous forme de deux lignes de groupe. La carte s’aligne exactement sur les cartes de composition et de chronologie adjacentes : une session entièrement aplatie défile à l’intérieur au lieu d’envahir la page.
 
 ### ⚡ Événements de contexte — quand et pourquoi la fenêtre a changé
 
@@ -167,7 +167,7 @@ Chaque injection, compaction, élagage, changement de modèle et activation ou d
 
 ![Activité des fichiers](https://raw.githubusercontent.com/bowenliang123/dsh-context/main/docs/file-activity.png)
 
-Une ligne par fichier touché, lu, écrit ou recherché, agrégée jusqu’à l’étape choisie sur le graphique de tendance :
+Une ligne par fichier touché, lu, écrit ou recherché, agrégée jusqu’à l’étape choisie sur le graphique de la chronologie :
 
 - **Compteurs par objectif** avec des puces d’en-tête servant aussi de filtres (**Lus / Écrits / Recherchés / Images**) et un champ de recherche par chemin.
 - **Deltas de lignes** — chaque appel `edit`/`write` apporte son empreinte estimée `+ajoutées / −supprimées`, par fichier et au total.
@@ -220,7 +220,7 @@ Une boîte de dialogue centrée s’ouvre avec la carte **Composition actuelle**
 
 ## ⚙️ Paramètres
 
-La carte de préférences **Contexte** contient les paramètres de ce plugin propres à chaque utilisateur : **entrée du panneau Contexte**, onglet de conversation **Contexte**, panneau de la barre latérale droite, les deux ou Masquer pour aucun, le lien de la ligne de réponse suivant ce choix ; interrupteur Afficher/Masquer propre à l’onglet **Flotte**, que l’entrée du panneau ne bloque jamais ; plage par défaut d’**Analyse du contexte**, Aujourd’hui / 7 derniers jours / 30 derniers jours, avec 30 derniers jours par défaut, la sélection d’un préréglage sur la page mettant à jour cette valeur ; granularité de la tendance, Étape/Tour ; mode de la tendance, Total/Delta ; courbe de durée de la tendance, affichée par défaut ; seuil d’étapes pour la vue d’ensemble automatique de la tendance ; base de comparaison du navigateur de contexte ; tri des outils et de l’activité des fichiers ; et interrupteur Afficher/Masquer d’Analyse du contexte. Elle se trouve sur la page **Plugins** : entrée **Plugins** de la barre latérale → page du bundle **dsh-context** → section **Configuration**, la carte étant fournie par le formulaire de configuration actif de l’entrée.
+La carte de préférences **Contexte** contient les paramètres de ce plugin propres à chaque utilisateur : **entrée du panneau Contexte**, onglet de conversation **Contexte**, panneau de la barre latérale droite, les deux ou Masquer pour aucun, le lien de la ligne de réponse suivant ce choix ; interrupteur Afficher/Masquer propre à l’onglet **Flotte**, que l’entrée du panneau ne bloque jamais ; plage par défaut d’**Analyse du contexte**, Aujourd’hui / 7 derniers jours / 30 derniers jours, avec 30 derniers jours par défaut, la sélection d’un préréglage sur la page mettant à jour cette valeur ; granularité de la chronologie, Étape/Tour ; mode de la chronologie, Total/Delta ; courbe de durée de la chronologie, affichée par défaut ; seuil d’étapes pour la vue d’ensemble automatique de la chronologie ; base de comparaison du navigateur de contexte ; tri des outils et de l’activité des fichiers ; et interrupteur Afficher/Masquer d’Analyse du contexte. Elle se trouve sur la page **Plugins** : entrée **Plugins** de la barre latérale → page du bundle **dsh-context** → section **Configuration**, la carte étant fournie par le formulaire de configuration actif de l’entrée.
 
 Les lignes **Invite système · Préfixe / Suffixe** contiennent du texte libre ajouté au tout début ou à la toute fin de l’invite système de chaque session, pour tous les agents, sous-agents inclus : une personnalité ou une règle de comportement propre au déploiement, intégrée à l’assemblage d’invite du harness. Les modifications s’appliquent à partir du tour suivant ; laissez une ligne vide pour la désactiver.
 
@@ -231,7 +231,7 @@ Les boutons de préréglage d’Analyse du contexte enregistrent le choix comme 
 ## Bon à savoir
 
 - **Empreinte du cache** — le plugin n’enregistre dans le cache de projection de dsh qu’un résumé compact par session : composition, compteurs, coût et durée, informations sur le modèle. Les détails volumineux par événement, textes de surface, répartitions des requêtes, opérations sur les fichiers, programmes de commandes et plages, sont reconstitués à partir du journal durable lorsqu’un panneau en a besoin, afin que le cache reste petit même sur les longues sessions. Les vues détaillées chargent par pages l’historique complet des requêtes, tours, événements, nœuds de surface, archives, opérations sur fichiers, commandes et plages depuis le journal durable, collection par collection à l’ouverture de sa carte.
-- **Estimations et valeurs réelles** — les chiffres par catégorie utilisent l’heuristique de densité fixe de dsh, la même que son compteur de tokens intégré ; les détails de tendance fixés affichent à côté les valeurs réelles signalées par le fournisseur, et la carte Tokens associe ses parts de composition estimées avec ≈ au total facturé exact du fournisseur.
+- **Estimations et valeurs réelles** — les chiffres par catégorie utilisent l’heuristique de densité fixe de dsh, la même que son compteur de tokens intégré ; les détails de chronologie fixés affichent à côté les valeurs réelles signalées par le fournisseur, et la carte Tokens associe ses parts de composition estimées avec ≈ au total facturé exact du fournisseur.
 - **Compatibilité** — fonctionne avec `@deepseek-ai/dsh` à partir de **0.2.0-rc.2**, les lignes `0.2.0` et `0.2.1` étant vérifiées sur leurs versions rc.2 et la ligne `0.2.2` sur ses versions rc.1 et rc.3, avec la génération V4 du journal de session, à partir d’un seul chemin de code guidé par la structure. La matrice par version et sa méthode de vérification : [docs/compatibility.md](docs/compatibility.md).
 - **I18n** — interface en 简体中文, English, 日本語, Español, Français, Deutsch, Русский et Português (le changement de langue nécessite dsh 0.2.2+ ; les lignes prises en charge antérieures n’offrent que le chinois et l’anglais).
 

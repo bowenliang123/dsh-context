@@ -2,11 +2,11 @@ import assert from 'node:assert/strict'
 import { act, createElement as h } from 'react'
 import { afterAll, beforeAll, describe, test } from 'vitest'
 import type { ContextEventRecord, RequestRecord } from '../../../src/shared/types'
-import { makeTrendOverview, type TrendOverviewProps } from '../../../src/client/components/trendOverview'
+import { makeTimelineOverview, type TimelineOverviewProps } from '../../../src/client/components/timelineOverview'
 import { click, hover, keydown, mount, query, queryAll, unhover } from '../helpers/kit'
-import { kit, req } from './trendChartHarness'
+import { kit, req } from './timelineChartHarness'
 
-const TrendOverview = makeTrendOverview(kit)
+const TimelineOverview = makeTimelineOverview(kit)
 
 let chartWidth = 400
 const originalRect = HTMLElement.prototype.getBoundingClientRect
@@ -27,7 +27,7 @@ afterAll(() => {
   HTMLElement.prototype.getBoundingClientRect = originalRect
 })
 
-function propsOf(requests: RequestRecord[], over: Partial<TrendOverviewProps> = {}): TrendOverviewProps {
+function propsOf(requests: RequestRecord[], over: Partial<TimelineOverviewProps> = {}): TimelineOverviewProps {
   return {
     requests,
     events: [],
@@ -69,7 +69,7 @@ function near(actual: string, expected: number): void {
   assert.ok(Math.abs(parseFloat(actual) - expected) < 0.01, `${actual} != ${expected}`)
 }
 
-describe('TrendOverview milestone bands', () => {
+describe('TimelineOverview milestone bands', () => {
   test('places event and metric masts by their session fraction and opens the detailed step', async () => {
     chartWidth = 400
     const reqs = paced(10)
@@ -85,7 +85,7 @@ describe('TrendOverview milestone bands', () => {
       hover: [] as (number | null)[],
       cat: [] as string[],
     }
-    const m = await mount(h(TrendOverview, propsOf(reqs, {
+    const m = await mount(h(TimelineOverview, propsOf(reqs, {
       events,
       onPickMilestone: (seq) => { spies.pick.push(seq) },
       onSelect: (seq) => { spies.select.push(seq) },
@@ -107,7 +107,7 @@ describe('TrendOverview milestone bands', () => {
     assert.deepEqual(tipRows(m.container), [
       kit.t('tip.step', { t: 1, s: 1, n: 5 }),
       'Compacted · −' + kit.fmt(1000),
-      kit.t('trend.ms.open'),
+      kit.t('timeline.ms.open'),
     ])
     assert.equal(spies.hover.at(-1), 2)
     assert.equal(query<HTMLElement>(m.container, '.lc-fit-cursor').style.left, `${1 / 9 * 100}%`)
@@ -127,12 +127,12 @@ describe('TrendOverview milestone bands', () => {
     chartWidth = 400
     const reqs = flat(10)
     const events: ContextEventRecord[] = [{ seq: 2, time: 1, kind: 'compaction', turn: 1, step: 1 }]
-    const m = await mount(h(TrendOverview, propsOf(reqs, { events, selectedSeq: 2, activeTurn: 1 })))
+    const m = await mount(h(TimelineOverview, propsOf(reqs, { events, selectedSeq: 2, activeTurn: 1 })))
     const masts = queryAll(m.container, '.lc-ms')
     assert.ok(masts[0].className.includes('lc-ms-selected'))
     assert.ok(masts[0].className.includes('lc-ms-in-turn'))
     assert.equal(query(masts[0], '.lc-ms-head').getAttribute('aria-pressed'), 'true')
-    assert.ok(query(masts[0], '.lc-ms-head').getAttribute('aria-label')?.includes(kit.t('trend.ms.open')))
+    assert.ok(query(masts[0], '.lc-ms-head').getAttribute('aria-label')?.includes(kit.t('timeline.ms.open')))
     await m.unmount()
   })
 
@@ -146,7 +146,7 @@ describe('TrendOverview milestone bands', () => {
       { seq: 5, time: 4, kind: 'agent', form: 'spawn', name: 'worker', turn: 1, step: 4 },
     ]
     const picks: number[] = []
-    const m = await mount(h(TrendOverview, propsOf(reqs, {
+    const m = await mount(h(TimelineOverview, propsOf(reqs, {
       events,
       onPickMilestone: (seq) => { picks.push(seq) },
     })))
@@ -160,11 +160,11 @@ describe('TrendOverview milestone bands', () => {
     await hover(query(mast, '.lc-ms-head'))
     assert.deepEqual(tipRows(m.container), [
       kit.t('tip.step', { t: 1, s: 1, n: 5 }),
-      kit.t('trend.ms.cluster'),
+      kit.t('timeline.ms.cluster'),
       'Compacted ×2 · −' + kit.fmt(150),
       'Pruned',
-      kit.t('trend.ms.spawn') + ' · worker',
-      kit.t('trend.ms.open'),
+      kit.t('timeline.ms.spawn') + ' · worker',
+      kit.t('timeline.ms.open'),
     ])
     await click(query(mast, '.lc-ms-head'))
     assert.deepEqual(picks, [2])
@@ -181,7 +181,7 @@ describe('TrendOverview milestone bands', () => {
       { seq: 6, time: 4, kind: 'team-task-complete', name: 'Build the parser', count: 1 },
     ]
     const picks: number[] = []
-    const m = await mount(h(TrendOverview, propsOf(reqs, {
+    const m = await mount(h(TimelineOverview, propsOf(reqs, {
       events,
       onPickMilestone: (seq) => { picks.push(seq) },
     })))
@@ -210,15 +210,15 @@ describe('TrendOverview milestone bands', () => {
     chartWidth = 0
     const reqs = flat(6)
     const events: ContextEventRecord[] = [{ seq: 2, time: 1, kind: 'compaction', turn: 1, step: 1 }]
-    const zero = await mount(h(TrendOverview, propsOf(reqs, { events })))
+    const zero = await mount(h(TimelineOverview, propsOf(reqs, { events })))
     assert.equal(queryAll(zero.container, '.lc-ms').length, 0)
     await zero.unmount()
 
     chartWidth = 400
-    const m = await mount(h(TrendOverview, propsOf(reqs, { events })))
+    const m = await mount(h(TimelineOverview, propsOf(reqs, { events })))
     await hover(headOf(m.container, 1))
     assert.equal(queryAll(m.container, '.lc-chart-tip').length, 1)
-    await m.update(h(TrendOverview, propsOf(reqs, { events: [] })))
+    await m.update(h(TimelineOverview, propsOf(reqs, { events: [] })))
     assert.equal(queryAll(m.container, '.lc-ms').length, 0)
     assert.equal(queryAll(m.container, '.lc-chart-tip').length, 0)
     await m.unmount()
@@ -229,7 +229,7 @@ describe('TrendOverview milestone bands', () => {
     const reqs = flat(10)
     const events: ContextEventRecord[] = [{ seq: 2, time: 1, kind: 'compaction', turn: 1, step: 1 }]
     const hovered: (number | null)[] = []
-    const m = await mount(h(TrendOverview, propsOf(reqs, {
+    const m = await mount(h(TimelineOverview, propsOf(reqs, {
       events,
       onHover: (seq) => { hovered.push(seq) },
     })))
@@ -249,18 +249,18 @@ describe('TrendOverview milestone bands', () => {
     const reqs = flat(10)
     const events: ContextEventRecord[] = [{ seq: 2, time: 1, kind: 'compaction', turn: 1, step: 1 }]
     const selected: (number | null)[] = []
-    const m = await mount(h(TrendOverview, propsOf(reqs, {
+    const m = await mount(h(TimelineOverview, propsOf(reqs, {
       events,
       onSelect: (seq) => { selected.push(seq) },
     })))
     await hover(headOf(m.container, 1))
-    assert.ok(tipRows(m.container).includes(kit.t('trend.ms.open')))
+    assert.ok(tipRows(m.container).includes(kit.t('timeline.ms.open')))
     const surface = query<HTMLElement>(m.container, '.lc-chart')
     await act(async () => {
       surface.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, clientX: 200, clientY: 48 }))
     })
     assert.deepEqual(selected, [reqs[5].seq])
-    assert.ok(!tipRows(m.container).includes(kit.t('trend.ms.open')))
+    assert.ok(!tipRows(m.container).includes(kit.t('timeline.ms.open')))
     await m.unmount()
   })
 
@@ -269,7 +269,7 @@ describe('TrendOverview milestone bands', () => {
     const reqs = flat(6)
     const events: ContextEventRecord[] = [{ seq: 2, time: 1, kind: 'compaction', turn: 1, step: 1 }]
     const selected: (number | null)[] = []
-    const m = await mount(h(TrendOverview, propsOf(reqs, {
+    const m = await mount(h(TimelineOverview, propsOf(reqs, {
       events,
       onSelect: (seq) => { selected.push(seq) },
     })))

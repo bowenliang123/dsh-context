@@ -1,20 +1,20 @@
 import { createElement as h, act } from 'react'
 import assert from 'node:assert/strict'
 import { describe, test } from 'vitest'
-import { RISE_CAP } from '../../../src/client/components/trendChart'
-import { aggregateByTurn } from '../../../src/client/components/trendModel'
+import { RISE_CAP } from '../../../src/client/components/timelineChart'
+import { aggregateByTurn } from '../../../src/client/components/timelineModel'
 import { CATS } from '../../../src/client/categories'
-import { type TrendBand } from '../../../src/client/dna'
+import { type TimelineBand } from '../../../src/client/dna'
 import { type RequestRecord, type SurfaceNode } from '../../../src/shared/types'
 import { click, hover, mount, query, queryAll, unhover, flush } from '../helpers/kit'
-import { CHART_H, TrendChart, assertColor, bars, kit, makeSpies, propsOf, req, viewport } from './trendChartHarness'
-import { capDnaRuns, snapDnaRuns } from '../../../src/client/components/trendDnaBars'
+import { CHART_H, TimelineChart, assertColor, bars, kit, makeSpies, propsOf, req, viewport } from './timelineChartHarness'
+import { capDnaRuns, snapDnaRuns } from '../../../src/client/components/timelineDnaBars'
 
-describe('trendChartModes', () => {
+describe('timelineChartModes', () => {
 
-describe('TrendChart empty history', () => {
+describe('TimelineChart empty history', () => {
   test('renders the chart frame with no bars and no turn blocks; a zero-only history keeps the unit scale', async () => {
-    const m = await mount(h(TrendChart, propsOf([])))
+    const m = await mount(h(TimelineChart, propsOf([])))
     assert.equal(bars(m.container).length, 0)
     assert.equal(queryAll(m.container, '.lc-turn').length, 0)
     assert.deepEqual(['top', 'q3', 'mid', 'q1', 'bot'].map(k => query(m.container, `.lc-axis-${k}`).textContent),
@@ -23,18 +23,18 @@ describe('TrendChart empty history', () => {
     await m.unmount()
 
     const zero = req(1, { turn: 1, step: 0, system: 0, tools: 0, user: 0, inject: 0, assistant: 0, tool: 0, total: 0 })
-    const zeroMount = await mount(h(TrendChart, propsOf([zero])))
+    const zeroMount = await mount(h(TimelineChart, propsOf([zero])))
     assert.equal(query(zeroMount.container, '.lc-axis-top').textContent, '1', 'maxTotal floors at 1')
     assert.equal(queryAll(bars(zeroMount.container)[0], '.lc-bar-stack > div').length, 0)
     await zeroMount.unmount()
   })
 })
 
-describe('TrendChart entrance rise cap', () => {
+describe('TimelineChart entrance rise cap', () => {
   test('a log longer than the cap rises only over its newest columns, while a short log cascades fully', async () => {
     const reqs: RequestRecord[] = []
     for (let i = 0; i < RISE_CAP + 10; i++) reqs.push(req(i + 1, { turn: 1, step: i }))
-    const m = await mount(h(TrendChart, propsOf(reqs)))
+    const m = await mount(h(TimelineChart, propsOf(reqs)))
     const stacks = queryAll(m.container, '.lc-bar-stack')
     assert.equal(stacks.length, RISE_CAP + 10)
     const risers = stacks.filter(s => s.className.includes('animate-lc-bar-in'))
@@ -44,23 +44,23 @@ describe('TrendChart entrance rise cap', () => {
     assert.equal(stacks[10].style.getPropertyValue('--lc-i'), '0')
     await m.unmount()
 
-    const short = await mount(h(TrendChart, propsOf([req(1, { turn: 1, step: 0 }), req(2, { turn: 1, step: 1 }), req(3, { turn: 2, step: 0 })])))
+    const short = await mount(h(TimelineChart, propsOf([req(1, { turn: 1, step: 0 }), req(2, { turn: 1, step: 1 }), req(3, { turn: 2, step: 0 })])))
     assert.deepEqual(queryAll(short.container, '.lc-bar-stack').map(s => s.className.includes('animate-lc-bar-in')), [true, true, true])
     await short.unmount()
 
     const dnaReqs: RequestRecord[] = []
-    const bands: TrendBand[][] = []
+    const bands: TimelineBand[][] = []
     for (let i = 0; i < RISE_CAP + 5; i++) {
       const tokens = 100 + i
       dnaReqs.push(req(i + 1, { turn: 1, step: i, total: tokens }))
-      bands.push([{ key: 'sys', cat: 'system', tokens, off: 0, color: '#123456' } as TrendBand])
+      bands.push([{ key: 'sys', cat: 'system', tokens, off: 0, color: '#123456' } as TimelineBand])
     }
-    const total = await mount(h(TrendChart, propsOf(dnaReqs, { dna: bands })))
+    const total = await mount(h(TimelineChart, propsOf(dnaReqs, { dna: bands })))
     const totalDivs = queryAll(total.container, '.lc-bar-dna')
     assert.equal(totalDivs.length, RISE_CAP + 5)
     assert.equal(totalDivs.filter(d => d.className.includes('animate-lc-bar-in')).length, RISE_CAP)
     await total.unmount()
-    const delta = await mount(h(TrendChart, propsOf(dnaReqs, { dna: bands, mode: 'delta' })))
+    const delta = await mount(h(TimelineChart, propsOf(dnaReqs, { dna: bands, mode: 'delta' })))
     const deltaDivs = queryAll(delta.container, '.lc-bar-dna')
     assert.equal(deltaDivs.length, RISE_CAP + 4, 'the DNA and DNA+delta interiors obey the same cap')
     assert.equal(deltaDivs.filter(d => d.className.includes('animate-lc-bar-in')).length, RISE_CAP)
@@ -68,12 +68,12 @@ describe('TrendChart entrance rise cap', () => {
   })
 })
 
-describe('TrendChart step granularity, total mode', () => {
+describe('TimelineChart step granularity, total mode', () => {
   test('stacks per-category segments in CATS order with real colors and proportional px heights, plotting raw fold figures', async () => {
     const r1 = req(1, { turn: 1, step: 0, skill: 40, total: 340 })
     const r2 = req(2, { turn: 1, step: 1, system: 200, tools: 100, user: 60, inject: 40, skill: 60, assistant: 80, tool: 120, total: 660 })
     const r3 = req(3, { turn: undefined, step: 0, user: 0, total: 280 })
-    const m = await mount(h(TrendChart, propsOf([r1, r2, r3])))
+    const m = await mount(h(TimelineChart, propsOf([r1, r2, r3])))
 
     const bs = bars(m.container)
     assert.equal(bs.length, 3)
@@ -113,7 +113,7 @@ describe('TrendChart step granularity, total mode', () => {
       req(2, { turn: 1, step: 1, ...composition, prompt: 1200 }),
       req(3, { turn: 2, step: 0, system: 0, tools: 0, user: 0, inject: 0, assistant: 0, tool: 0, total: 0, prompt: 500 }),
     ]
-    const raw = await mount(h(TrendChart, propsOf(rawReqs)))
+    const raw = await mount(h(TimelineChart, propsOf(rawReqs)))
     assert.equal(query(raw.container, '.lc-axis-top').textContent, '600')
     const rawBars = bars(raw.container)
     assert.equal(rawBars.length, 3)
@@ -127,13 +127,13 @@ describe('TrendChart step granularity, total mode', () => {
   })
 })
 
-describe('TrendChart delta mode', () => {
+describe('TimelineChart delta mode', () => {
   const base = req(1, { turn: 1, step: 0 })
   const grown = req(2, { turn: 1, step: 1, system: 110, tools: 60, user: 40, inject: 30, assistant: 50, tool: 70, total: 360 })
   const shrunk = req(3, { turn: 2, step: 0, system: 90, tools: 40, user: 20, inject: 10, assistant: 30, tool: 50, total: 240 })
 
   test('positive stacks fill the plot height and a shrinking step carries no arm', async () => {
-    const m = await mount(h(TrendChart, propsOf([base, grown, shrunk], { mode: 'delta' })))
+    const m = await mount(h(TimelineChart, propsOf([base, grown, shrunk], { mode: 'delta' })))
 
     assert.equal(query(m.container, '.lc-axis-top').textContent, '+60')
     assert.equal(query(m.container, '.lc-axis-q3').textContent, '+45')
@@ -157,20 +157,20 @@ describe('TrendChart delta mode', () => {
     assert.equal(query(bs[1], '.lc-bar-up').style.bottom, '0px')
     assert.equal(queryAll(m.container, '.lc-bar-down').length, 0)
 
-    await m.update(h(TrendChart, propsOf([base, grown, shrunk], { mode: 'delta', hoveredSeq: 2 })))
+    await m.update(h(TimelineChart, propsOf([base, grown, shrunk], { mode: 'delta', hoveredSeq: 2 })))
     assert.deepEqual(
       queryAll(query(m.container, '.lc-chart-tip'), 'span').map(r => r.textContent),
       [kit.t('tip.step', { t: 1, s: 1, n: 2 }), kit.t('tip.delta', { n: '+60' })],
     )
-    await m.update(h(TrendChart, propsOf([base, grown, shrunk], { mode: 'delta', hoveredSeq: 3 })))
+    await m.update(h(TimelineChart, propsOf([base, grown, shrunk], { mode: 'delta', hoveredSeq: 3 })))
     assert.ok(query(m.container, '.lc-chart-tip').textContent!.includes(kit.t('tip.delta', { n: '-120' })))
-    await m.update(h(TrendChart, propsOf([base, grown, shrunk], { mode: 'delta', hoveredSeq: 1 })))
+    await m.update(h(TimelineChart, propsOf([base, grown, shrunk], { mode: 'delta', hoveredSeq: 1 })))
     assert.ok(query(m.container, '.lc-chart-tip').textContent!.includes(kit.t('tip.delta', { n: '0' })))
     await m.unmount()
 
     const zeroReq = req(9, { turn: 3, step: 0, system: 0, tools: 0, user: 0, inject: 0, assistant: 0, tool: 0, total: 0 })
     const baseReq = req(1, { turn: 1, step: 0 })
-    const up = await mount(h(TrendChart, propsOf([zeroReq, baseReq], { mode: 'delta' })))
+    const up = await mount(h(TimelineChart, propsOf([zeroReq, baseReq], { mode: 'delta' })))
     assert.equal(query(up.container, '.lc-axis-top').textContent, '+300')
     assert.equal(query(up.container, '.lc-axis-q3').textContent, '+225')
     assert.equal(query(up.container, '.lc-axis-q1').textContent, '+75')
@@ -180,7 +180,7 @@ describe('TrendChart delta mode', () => {
     assert.equal(upSegs.length, 6)
     assert.equal(upSegs[0]!.style.height, `${Math.round(100 * CHART_H / 300)}px`)
     await up.unmount()
-    const down = await mount(h(TrendChart, propsOf([baseReq, zeroReq], { mode: 'delta' })))
+    const down = await mount(h(TimelineChart, propsOf([baseReq, zeroReq], { mode: 'delta' })))
     assert.equal(query(down.container, '.lc-axis-top').textContent, '0')
     assert.equal(query(down.container, '.lc-axis-q3').textContent, '0')
     assert.equal(query(down.container, '.lc-axis-q1').textContent, '0')
@@ -194,7 +194,7 @@ describe('TrendChart delta mode', () => {
   test('the positive delta axis keeps its quarter marks', async () => {
     const flat = req(1, { turn: 1, step: 0, system: 0, tools: 30, user: 0, inject: 0, assistant: 0, tool: 0, total: 30 })
     const mixed = req(2, { turn: 1, step: 1, system: 90, tools: 0, user: 0, inject: 0, assistant: 0, tool: 0, total: 90 })
-    const m = await mount(h(TrendChart, propsOf([flat, mixed], { mode: 'delta' })))
+    const m = await mount(h(TimelineChart, propsOf([flat, mixed], { mode: 'delta' })))
     assert.equal(query(m.container, '.lc-axis-top').textContent, '+90')
     assert.equal(query(m.container, '.lc-axis-q3').textContent, '+68')
     assert.equal(query(m.container, '.lc-axis-q1').textContent, '+23')
@@ -207,14 +207,14 @@ describe('TrendChart delta mode', () => {
   })
 })
 
-describe('TrendChart turn granularity', () => {
+describe('TimelineChart turn granularity', () => {
   const t1s0 = req(1, { turn: 1, step: 0 })
   const t1s1 = req(2, { turn: 1, step: 1, total: 360 })
   const t2s0 = req(3, { turn: 2, step: 0, total: 280 })
 
   test('turn aggregates render one bar per turn with aggregated labels and turn-count tooltips, and the strip drives the turn callbacks', async () => {
     const agg = aggregateByTurn([t1s0, t1s1, t2s0])
-    const m = await mount(h(TrendChart, propsOf(agg, { granularity: 'turn' })))
+    const m = await mount(h(TimelineChart, propsOf(agg, { granularity: 'turn' })))
     const bs = bars(m.container)
     assert.equal(bs.length, 2)
     const turns = queryAll(m.container, '.lc-turn')
@@ -222,24 +222,24 @@ describe('TrendChart turn granularity', () => {
     assert.deepEqual(turns.map(t => t.style.width), ['14px', '14px'])
     assert.deepEqual(turns.map(t => t.textContent), ['1', '2'])
 
-    await m.update(h(TrendChart, propsOf(agg, { granularity: 'turn', hoveredSeq: t1s1.seq })))
+    await m.update(h(TimelineChart, propsOf(agg, { granularity: 'turn', hoveredSeq: t1s1.seq })))
     assert.ok(query(m.container, '.lc-chart-tip').textContent!.includes(kit.t('tip.turn', { t: 1, n: 2 })))
-    await m.update(h(TrendChart, propsOf(agg, { granularity: 'turn', hoveredSeq: t2s0.seq })))
+    await m.update(h(TimelineChart, propsOf(agg, { granularity: 'turn', hoveredSeq: t2s0.seq })))
     assert.ok(query(m.container, '.lc-chart-tip').textContent!.includes(kit.t('tip.turn1', { t: 2 })))
     await m.unmount()
 
     const turnless = aggregateByTurn([req(10, { turn: undefined }), req(11, { turn: undefined })])
-    const m2 = await mount(h(TrendChart, propsOf(turnless, { granularity: 'turn', hoveredSeq: 11 })))
+    const m2 = await mount(h(TimelineChart, propsOf(turnless, { granularity: 'turn', hoveredSeq: 11 })))
     assert.ok(query(m2.container, '.lc-chart-tip').textContent!.includes(kit.t('tip.turn', { t: 0, n: 2 })))
     await m2.unmount()
 
-    const m3 = await mount(h(TrendChart, propsOf([req(20, { turn: undefined, step: 3 })], { granularity: 'turn', hoveredSeq: 20 })))
+    const m3 = await mount(h(TimelineChart, propsOf([req(20, { turn: undefined, step: 3 })], { granularity: 'turn', hoveredSeq: 20 })))
     assert.ok(query(m3.container, '.lc-chart-tip').textContent!.includes(kit.t('tip.turn1', { t: 0 })))
     await m3.unmount()
 
     const { spies, handlers } = makeSpies()
     const stripAgg = aggregateByTurn([t1s0, t1s1, t2s0])
-    const strip = await mount(h(TrendChart, propsOf(stripAgg, { ...handlers, granularity: 'turn' })))
+    const strip = await mount(h(TimelineChart, propsOf(stripAgg, { ...handlers, granularity: 'turn' })))
     const stripBlocks = queryAll(strip.container, '.lc-turn')
     await hover(stripBlocks[0]!)
     assert.deepEqual(spies.hoverTurn, [1])
@@ -247,57 +247,57 @@ describe('TrendChart turn granularity', () => {
     assert.deepEqual(spies.pickTurn, [2])
     await unhover(stripBlocks[0]!)
     assert.deepEqual(spies.hoverTurn, [1, null])
-    await strip.update(h(TrendChart, propsOf(stripAgg, { ...handlers, granularity: 'turn', activeTurn: 1 })))
+    await strip.update(h(TimelineChart, propsOf(stripAgg, { ...handlers, granularity: 'turn', activeTurn: 1 })))
     assert.ok(query(strip.container, '.lc-chart-scroll').className.includes('lc-chart-dim'))
     const stripBars = bars(strip.container)
     assert.ok(stripBars[0]!.className.includes('lc-bar-in-turn'))
     assert.ok(!stripBars[1]!.className.includes('lc-bar-in-turn'))
     assert.ok(queryAll(strip.container, '.lc-turn')[0]!.className.includes('lc-turn-on'))
     assert.ok(!queryAll(strip.container, '.lc-turn')[1]!.className.includes('lc-turn-on'))
-    await strip.update(h(TrendChart, propsOf(stripAgg, { ...handlers, granularity: 'turn', activeTurn: null })))
+    await strip.update(h(TimelineChart, propsOf(stripAgg, { ...handlers, granularity: 'turn', activeTurn: null })))
     assert.ok(!query(strip.container, '.lc-chart-scroll').className.includes('lc-chart-dim'))
     assert.ok(!bars(strip.container)[0]!.className.includes('lc-bar-in-turn'))
     await strip.unmount()
   })
 })
 
-describe('TrendChart step flags', () => {
+describe('TimelineChart step flags', () => {
   test('every 5th step bar plants a flag labeled with its cumulative step number', async () => {
     const reqs = Array.from({ length: 12 }, (_, i) => req(i + 1, { turn: 1, step: i }))
-    const m = await mount(h(TrendChart, propsOf(reqs)))
-    const flags = queryAll(m.container, '.lc-trend-flag')
+    const m = await mount(h(TimelineChart, propsOf(reqs)))
+    const flags = queryAll(m.container, '.lc-timeline-flag')
     assert.equal(flags.length, 2)
     assert.deepEqual(flags.map(f => f.textContent), ['5', '10'])
     const bs = bars(m.container)
-    assert.equal(queryAll(bs[0], '.lc-trend-flag').length, 0)
-    assert.ok(query(bs[4], '.lc-trend-flag'))
-    assert.ok(query(bs[9], '.lc-trend-flag'))
+    assert.equal(queryAll(bs[0], '.lc-timeline-flag').length, 0)
+    assert.ok(query(bs[4], '.lc-timeline-flag'))
+    assert.ok(query(bs[9], '.lc-timeline-flag'))
     await m.unmount()
 
     const deltaReqs = Array.from({ length: 6 }, (_, i) => req(i + 1, { turn: 1, step: i }))
-    const delta = await mount(h(TrendChart, propsOf(deltaReqs, { mode: 'delta' })))
-    assert.deepEqual(queryAll(delta.container, '.lc-trend-flag').map(f => f.textContent), ['5'], 'delta mode keeps the flags')
+    const delta = await mount(h(TimelineChart, propsOf(deltaReqs, { mode: 'delta' })))
+    assert.deepEqual(queryAll(delta.container, '.lc-timeline-flag').map(f => f.textContent), ['5'], 'delta mode keeps the flags')
     await delta.unmount()
 
     const turns = Array.from({ length: 6 }, (_, i) => req(i + 1, { turn: i + 1, step: 0 }))
-    const turnMount = await mount(h(TrendChart, propsOf(aggregateByTurn(turns), { granularity: 'turn' })))
-    assert.equal(queryAll(turnMount.container, '.lc-trend-flag').length, 0, 'the turn strip numbers that grid')
+    const turnMount = await mount(h(TimelineChart, propsOf(aggregateByTurn(turns), { granularity: 'turn' })))
+    assert.equal(queryAll(turnMount.container, '.lc-timeline-flag').length, 0, 'the turn strip numbers that grid')
     await turnMount.unmount()
   })
 })
 })
 
-describe('trendChartDna', () => {
+describe('timelineChartDna', () => {
 
-describe('TrendChart DNA mode', () => {
+describe('TimelineChart DNA mode', () => {
   const COLORS = Object.fromEntries(CATS.map(c => [c.key, c.color])) as Record<string, string>
 
-  function dnaBands(spec: [string, string, number, SurfaceNode?][]): TrendBand[] {
+  function dnaBands(spec: [string, string, number, SurfaceNode?][]): TimelineBand[] {
     let off = 0
     return spec.map(([key, cat, tokens, node]) => {
       const band = (node !== undefined
         ? { key, cat, tokens, off, color: COLORS[cat], node }
-        : { key, cat, tokens, off, color: COLORS[cat] }) as TrendBand
+        : { key, cat, tokens, off, color: COLORS[cat] }) as TimelineBand
       off += tokens
       return band
     })
@@ -327,7 +327,7 @@ describe('TrendChart DNA mode', () => {
       ['n4', 'user', 0, { seq: 4, cat: 'user', tokens: 0 }],
       ['n5', 'tool', 220, { seq: 5, cat: 'tool', tokens: 220 }],
     ])
-    const m = await mount(h(TrendChart, propsOf([r1, r2], { dna: [d1, d2] })))
+    const m = await mount(h(TimelineChart, propsOf([r1, r2], { dna: [d1, d2] })))
     const dnaDivs = queryAll(m.container, '.lc-bar-dna')
     assert.equal(dnaDivs.length, 2)
     assert.equal(dnaDivs[0].style.height, `${Math.round(300 / 600 * CHART_H)}px`)
@@ -349,7 +349,7 @@ describe('TrendChart DNA mode', () => {
 
     const r1b = req(1, { turn: 1, step: 0, total: 1, system: 1 })
     const r2b = req(2, { turn: 1, step: 1, total: 50000, system: 50000 })
-    const tiny = await mount(h(TrendChart, propsOf([r1b, r2b], {
+    const tiny = await mount(h(TimelineChart, propsOf([r1b, r2b], {
       dna: [dnaBands([['sys', 'system', 1]]), dnaBands([['sys', 'system', 50000]])],
     })))
     const tinyBars = queryAll<HTMLElement>(tiny.container, '.lc-bar-dna')
@@ -358,13 +358,13 @@ describe('TrendChart DNA mode', () => {
     assert.ok(tinyBars[0].style.background.includes('var(--color-indigo-500)'), 'a bar far below the shared scale keeps its colour')
     await tiny.unmount()
 
-    const empty = await mount(h(TrendChart, propsOf([req(1, { turn: 1, step: 0, total: 0 }), req(2, { turn: 1, step: 1, total: 600 })], {
+    const empty = await mount(h(TimelineChart, propsOf([req(1, { turn: 1, step: 0, total: 0 }), req(2, { turn: 1, step: 1, total: 600 })], {
       dna: [dnaBands([['n1', 'user', 0, { seq: 1, cat: 'user', tokens: 0 }]]), dnaBands([['n2', 'user', 600, { seq: 2, cat: 'user', tokens: 600 }]])],
     })))
     assert.equal(queryAll(empty.container, '.lc-bar-dna').length, 1, 'a bar whose bands carry no tokens paints no DNA strip')
     await empty.unmount()
 
-    const focused = await mount(h(TrendChart, propsOf(
+    const focused = await mount(h(TimelineChart, propsOf(
       [req(1, { turn: 1, step: 0, total: 300 }), req(2, { turn: 1, step: 1, total: 600, user: 150 })],
       {
         dna: [
@@ -385,7 +385,7 @@ describe('TrendChart DNA mode', () => {
     const r1 = req(1, { turn: 1, step: 0, total: 300 })
     const d1 = dnaBands([['sys', 'system', 100], ['n1', 'user', 200, { seq: 1, cat: 'user', tokens: 200 }]])
     const picks: [number, string][] = []
-    const m = await mount(h(TrendChart, propsOf([r1], {
+    const m = await mount(h(TimelineChart, propsOf([r1], {
       dna: [d1],
       onPickBand: (seq, band) => { picks.push([seq, band.key]) },
     })))
@@ -406,7 +406,7 @@ describe('TrendChart DNA mode', () => {
       ['n4', 'user', 0, { seq: 4, cat: 'user', tokens: 0 }],
       ['n5', 'tool', 100, { seq: 5, cat: 'tool', tokens: 100, tool: 'write' }],
     ])
-    const m = await mount(h(TrendChart, propsOf([r1, r2], { dna: [d1, d2], hoveredSeq: 1 })))
+    const m = await mount(h(TimelineChart, propsOf([r1, r2], { dna: [d1, d2], hoveredSeq: 1 })))
     const dnaDivs = queryAll(m.container, '.lc-bar-dna')
     assert.equal(dnaDivs.length, 2)
     const tipText = () => query(m.container, '.lc-chart-tip').textContent ?? ''
@@ -416,19 +416,19 @@ describe('TrendChart DNA mode', () => {
     assert.equal(slices.length, 2)
     assert.equal(slices[0].style.bottom, '0px')
     assert.equal(slices[0].style.height, `${Math.round(100 / 600 * CHART_H)}px`)
-    assert.ok(tipText().includes(kit.t('trend.dnaItem', { label: kit.catLabel('user'), n: '100' })))
+    assert.ok(tipText().includes(kit.t('timeline.dnaItem', { label: kit.catLabel('user'), n: '100' })))
 
     stubBarRect(dnaDivs[0])
     stubBarRect(dnaDivs[1])
     await move(dnaDivs[0], CHART_H + 20)
-    assert.ok(tipText().includes(kit.t('trend.dnaItem', { label: kit.catLabel('user'), n: '100' })))
+    assert.ok(tipText().includes(kit.t('timeline.dnaItem', { label: kit.catLabel('user'), n: '100' })))
     await move(dnaDivs[0], 0)
     slices = queryAll(m.container, '.lc-dna-slice')
     assert.equal(slices.length, 1)
-    assert.ok(tipText().includes(kit.t('trend.dnaItem', { label: kit.catLabel('assistant'), n: '200' })))
-    await m.update(h(TrendChart, propsOf([r1, r2], { dna: [d1, d2], hoveredSeq: 2 })))
+    assert.ok(tipText().includes(kit.t('timeline.dnaItem', { label: kit.catLabel('assistant'), n: '200' })))
+    await m.update(h(TimelineChart, propsOf([r1, r2], { dna: [d1, d2], hoveredSeq: 2 })))
     await move(dnaDivs[1], -10)
-    assert.ok(tipText().includes(kit.t('trend.dnaItem', { label: 'write', n: '100' })))
+    assert.ok(tipText().includes(kit.t('timeline.dnaItem', { label: 'write', n: '100' })))
 
     await unhover(dnaDivs[1])
     assert.equal(queryAll(m.container, '.lc-dna-slice').length, 0)
@@ -457,7 +457,7 @@ describe('TrendChart DNA mode', () => {
       dnaBands([['sys', 'system', 100], ['n1', 'user', 100, { seq: 1, cat: 'user', tokens: 100 }]]),
     ]
     const picks: [number, string][] = []
-    const m = await mount(h(TrendChart, propsOf(rs, {
+    const m = await mount(h(TimelineChart, propsOf(rs, {
       dna: ds,
       mode: 'delta',
       hoveredSeq: 3,
@@ -489,9 +489,9 @@ describe('TrendChart DNA mode', () => {
     stubBarRect(dnaDivs[1])
     const tipText = () => query(m.container, '.lc-chart-tip').textContent ?? ''
     await move(dnaDivs[1], 100)
-    assert.ok(tipText().includes(kit.t('trend.dnaItem', { label: kit.catLabel('assistant'), n: '+30' })))
+    assert.ok(tipText().includes(kit.t('timeline.dnaItem', { label: kit.catLabel('assistant'), n: '+30' })))
     await move(dnaDivs[1], 0)
-    assert.ok(tipText().includes(kit.t('trend.dnaItem', { label: 'bash', n: '+120' })), 'the very top is the last up band')
+    assert.ok(tipText().includes(kit.t('timeline.dnaItem', { label: 'bash', n: '+120' })), 'the very top is the last up band')
     await act(async () => { dnaDivs[1].dispatchEvent(new MouseEvent('click', { bubbles: true, clientY: 100 })) })
     assert.deepEqual(picks, [[3, 'a1']])
 
@@ -505,7 +505,7 @@ describe('TrendChart DNA mode', () => {
     assert.equal(queryAll(m.container, '.lc-dna-slice').length, 0)
     await m.unmount()
 
-    const noPick = await mount(h(TrendChart, propsOf(rs, { dna: ds, mode: 'delta' })))
+    const noPick = await mount(h(TimelineChart, propsOf(rs, { dna: ds, mode: 'delta' })))
     const noPickBar = query(noPick.container, '.lc-bar-dna')
     await move(noPickBar, 0)
     stubBarRect(noPickBar)
@@ -518,7 +518,7 @@ describe('TrendChart DNA mode', () => {
       dnaBands([['sys', 'system', 100], ['n1', 'user', 200, { seq: 1, cat: 'user', tokens: 200 }]]),
       dnaBands([['sys', 'system', 100]]),
     ]
-    const downOnly = await mount(h(TrendChart, propsOf(downOnlyReqs, { dna: downOnlyBands, mode: 'delta', hoveredSeq: 2 })))
+    const downOnly = await mount(h(TimelineChart, propsOf(downOnlyReqs, { dna: downOnlyBands, mode: 'delta', hoveredSeq: 2 })))
     assert.equal(queryAll(downOnly.container, '.lc-bar-dna').length, 0, 'a purely removing step carries no strip')
     await downOnly.unmount()
   })
@@ -532,7 +532,7 @@ describe('TrendChart DNA mode', () => {
       dnaBands([['sys', 'system', 100], ['n1', 'user', 200, { seq: 1, cat: 'user', tokens: 200 }]]),
       dnaBands([['sys', 'system', 100]]),
     ]
-    const m = await mount(h(TrendChart, propsOf(rs, { dna: ds, mode: 'delta', hoveredSeq: 2 })))
+    const m = await mount(h(TimelineChart, propsOf(rs, { dna: ds, mode: 'delta', hoveredSeq: 2 })))
     const tipText = () => query(m.container, '.lc-chart-tip').textContent ?? ''
     assert.ok(tipText().includes(kit.t('tip.delta', { n: '-40' })))
     assert.ok(!tipText().includes(kit.t('tip.total', { n: '40' })))
@@ -542,9 +542,9 @@ describe('TrendChart DNA mode', () => {
 })
 })
 
-describe('trendChartLazyDna', () => {
+describe('timelineChartLazyDna', () => {
 
-const bandOf = (seq: number): TrendBand[] => [{ key: 'a', cat: 'system', tokens: 10 + (seq % 7), off: 0, color: '#8b5cf6' }]
+const bandOf = (seq: number): TimelineBand[] => [{ key: 'a', cat: 'system', tokens: 10 + (seq % 7), off: 0, color: '#8b5cf6' }]
 
 function requestList(n: number) {
   return Array.from({ length: n }, (_, i) => req(i + 1, {
@@ -563,7 +563,7 @@ function requestList(n: number) {
 
 function lazyBands() {
   const calls = new Map<number, number>()
-  const at = (seq: number): TrendBand[] => {
+  const at = (seq: number): TimelineBand[] => {
     calls.set(seq, (calls.get(seq) ?? 0) + 1)
     return bandOf(seq)
   }
@@ -616,12 +616,12 @@ describe('capDnaRuns', () => {
   })
 })
 
-describe('TrendChart lazy DNA bands', () => {
+describe('TimelineChart lazy DNA bands', () => {
   test('a lazy source assembles only the rendered window and hit-tests its bands', async () => {
     const reqs = requestList(600)
     const lazy = lazyBands()
     viewport.clientW = 400
-    const m = await mount(h(TrendChart, propsOf(reqs, { dnaAt: lazy.at })))
+    const m = await mount(h(TimelineChart, propsOf(reqs, { dnaAt: lazy.at })))
     const dnaBars = queryAll(m.container, '.lc-bar-dna')
     assert.ok(dnaBars.length > 0 && dnaBars.length < reqs.length, `windowed DNA bars (${dnaBars.length})`)
     assert.ok(lazy.calls.size < reqs.length, `only visible steps assembled (${lazy.calls.size})`)
@@ -635,12 +635,12 @@ describe('TrendChart lazy DNA bands', () => {
     const reqs = requestList(600)
     const lazy = lazyBands()
     viewport.clientW = 400
-    const m = await mount(h(TrendChart, propsOf(reqs, { dna: null })))
+    const m = await mount(h(TimelineChart, propsOf(reqs, { dna: null })))
     const plain = queryAll(m.container, '.lc-bar').length
-    await m.update(h(TrendChart, propsOf(reqs, { dnaAt: lazy.at })))
+    await m.update(h(TimelineChart, propsOf(reqs, { dnaAt: lazy.at })))
     const dna = queryAll(m.container, '.lc-bar').length
     assert.ok(dna > 0 && dna < plain, `DNA window is tighter (${dna} < ${plain})`)
-    await m.update(h(TrendChart, propsOf(reqs, { dna: null })))
+    await m.update(h(TimelineChart, propsOf(reqs, { dna: null })))
     assert.ok(queryAll(m.container, '.lc-bar').length > dna, 'leaving DNA expands the window again')
     await m.unmount()
   })
@@ -650,12 +650,12 @@ describe('TrendChart lazy DNA bands', () => {
     const lazy = lazyBands()
     viewport.clientW = 400
     const eager = reqs.map((_, i) => bandOf(i + 1))
-    const eagerView = await mount(h(TrendChart, propsOf(reqs, { dna: eager, mode: 'delta' })))
+    const eagerView = await mount(h(TimelineChart, propsOf(reqs, { dna: eager, mode: 'delta' })))
     const axisOf = (el: HTMLElement): (string | null)[] => ['.lc-axis-top', '.lc-axis-q3', '.lc-axis-mid', '.lc-axis-q1']
       .map(sel => el.querySelector(sel)?.textContent ?? null)
     const eagerAxis = axisOf(eagerView.container)
     await eagerView.unmount()
-    const m = await mount(h(TrendChart, propsOf(reqs, { dnaAt: lazy.at, mode: 'delta' })))
+    const m = await mount(h(TimelineChart, propsOf(reqs, { dnaAt: lazy.at, mode: 'delta' })))
     try {
       assert.ok(queryAll(m.container, '.lc-bar-dna').length > 0)
       assert.deepEqual(axisOf(m.container), eagerAxis, 'lazy delta axes match the eager per-band maxima')
@@ -676,10 +676,10 @@ describe('TrendChart lazy DNA bands', () => {
     const rereadReqs = requestList(600)
     const rereadLazy = lazyBands()
     const total = (): number => [...rereadLazy.calls.values()].reduce((a, b) => a + b, 0)
-    const reread = await mount(h(TrendChart, propsOf(rereadReqs, { dnaAt: rereadLazy.at, mode: 'delta' })))
+    const reread = await mount(h(TimelineChart, propsOf(rereadReqs, { dnaAt: rereadLazy.at, mode: 'delta' })))
     assert.equal(rereadLazy.calls.size, rereadReqs.length, 'the axis walk read every step')
     const afterMount = total()
-    await reread.update(h(TrendChart, propsOf(rereadReqs, { dnaAt: rereadLazy.at, mode: 'delta', events: [] })))
+    await reread.update(h(TimelineChart, propsOf(rereadReqs, { dnaAt: rereadLazy.at, mode: 'delta', events: [] })))
     await flush()
     const rereadCount = total() - afterMount
     assert.ok(rereadCount <= 400, `a re-render re-reads at most the window (${rereadCount} of ${rereadReqs.length})`)
@@ -689,17 +689,17 @@ describe('TrendChart lazy DNA bands', () => {
 })
 
 
-describe('TrendChart lazy DNA maxima with adaptive window', () => {
+describe('TimelineChart lazy DNA maxima with adaptive window', () => {
   test('an adaptive window skips the full-history maxima walk and scales from the visible window', async () => {
     const lazy = lazyBands()
     const reqs = requestList(60)
-    const m = await mount(h(TrendChart, propsOf(reqs, { dnaAt: lazy.at, mode: 'delta', adaptive: true })))
+    const m = await mount(h(TimelineChart, propsOf(reqs, { dnaAt: lazy.at, mode: 'delta', adaptive: true })))
     try {
       const callsAfterMount = lazy.calls.size
       assert.ok(callsAfterMount > 0, 'the first paint resolves the pre-measure maxima through the lazy accessor')
-      await m.update(h(TrendChart, propsOf(reqs.map(r => ({ ...r })), { dnaAt: lazy.at, mode: 'delta', adaptive: true })))
+      await m.update(h(TimelineChart, propsOf(reqs.map(r => ({ ...r })), { dnaAt: lazy.at, mode: 'delta', adaptive: true })))
       const total = lazy.calls.size
-      await m.update(h(TrendChart, propsOf(reqs.map(r => ({ ...r, total: r.total + 5 })), { dnaAt: lazy.at, mode: 'delta', adaptive: true })))
+      await m.update(h(TimelineChart, propsOf(reqs.map(r => ({ ...r, total: r.total + 5 })), { dnaAt: lazy.at, mode: 'delta', adaptive: true })))
       assert.ok(lazy.calls.size >= total, 'the lazy accessor keeps serving the visible window')
       assert.notEqual(query(m.container, '.lc-axis-top')?.textContent ?? '', '', 'the adaptive chart keeps an axis')
       void callsAfterMount

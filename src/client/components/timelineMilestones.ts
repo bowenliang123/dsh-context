@@ -1,7 +1,7 @@
 import type { ContextEventRecord, RequestRecord } from '../../shared/types'
 import { milestoneKindOf, type MilestoneKind } from '../../shared/milestones'
-import { boundaryIndex } from './trendModel'
-import { BAR_GAP, BAR_W } from './trendWindow'
+import { boundaryIndex } from './timelineModel'
+import { BAR_GAP, BAR_W } from './timelineWindow'
 
 export { milestoneKindOf, type MilestoneKind } from '../../shared/milestones'
 

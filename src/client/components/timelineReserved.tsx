@@ -2,10 +2,10 @@ import type { ReactElement, ReactNode } from 'react'
 import type { Category } from '../../shared/types'
 import { CATS } from '../categories'
 
-export function TrendReserved(props: { children: ReactNode; catLabel: (cat: Category | 'system' | 'tools') => string }): ReactElement {
+export function TimelineReserved(props: { children: ReactNode; catLabel: (cat: Category | 'system' | 'tools') => string }): ReactElement {
   return (
-    <div className="lc-trend-lane">
-      <div className="lc-trend-plot">{props.children}</div>
+    <div className="lc-timeline-lane">
+      <div className="lc-timeline-plot">{props.children}</div>
       <div className="lc-detail">
         <div className="lc-detail-head" />
         <div className="lc-brief" />

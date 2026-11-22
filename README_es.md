@@ -14,7 +14,7 @@
 
 [`dsh-context`](https://www.npmjs.com/package/dsh-context) ofrece funciones completas de gestión del ciclo de vida del contexto.
 - **Página Análisis del contexto**: la vista general entre sesiones como panel de primer nivel en la barra lateral (junto a Plugins y Tareas de automatización): banda de KPI con un gráfico de uso de tokens y coste de 7 días, mapa de calor de actividad, anillo de composición agregada y tarjetas de sesión filtrables que abren directamente cualquier sesión.
-- **Pestaña Contexto**: un panel de contexto con estadísticas, composición, tendencias, eventos, mensajes y comandos de DeepSeek Harness.
+- **Pestaña Contexto**: un panel de contexto con estadísticas, composición, cronología, eventos, mensajes y comandos de DeepSeek Harness.
 - **Pestaña Flota**: la página propia de la familia de agentes: el agente actual, sus padres y todos los subagentes, cada uno con una tarjeta en vivo.
 - **Panel Contexto**: el mismo panel como pestaña de la barra lateral derecha: selecciona **Contexto** en la página de guía de la barra lateral y el panel se abre junto al chat, incluida la red de agentes.
 - **Comando `/context`**: el comando de barra diagonal muestra el modelo de contexto para la composición actual y la evolución reciente del contexto.
@@ -54,10 +54,10 @@ Cinco superficies, una misma historia: qué lleva tu agente, cómo llegó ahí y
 | Dónde | Qué obtienes |
 | --- | --- |
 | **Página Análisis del contexto** | Todas las sesiones de un vistazo: uso, coste, aciertos de caché, actividad diaria y perfiles de contexto por sesión, filtrados por intervalo, día, grupo o búsqueda, con un clic para entrar. |
-| **Pestaña Contexto** | El panel completo: estadísticas, composición, tendencia por solicitud, eventos, actividad de archivos y ejecuciones de comandos, en cada sesión. |
+| **Pestaña Contexto** | El panel completo: estadísticas, composición, cronología por solicitud, eventos, actividad de archivos y ejecuciones de comandos, en cada sesión. |
 | **Pestaña Flota** | La red de agentes: el agente actual, sus padres y todos los subagentes, en vivo. |
 | **Comando `/context`** | Un modal centrado con la misma composición y el mismo explorador de contexto, sin salir del chat. |
-| **Tarjeta de preferencias** | Valores predeterminados por usuario: la entrada del panel, el intervalo de Análisis del contexto, las opciones de tendencia y orden, y el prefijo/sufijo del prompt del sistema que se añade a cada sesión. |
+| **Tarjeta de preferencias** | Valores predeterminados por usuario: la entrada del panel, el intervalo de Análisis del contexto, las opciones de cronología y orden, y el prefijo/sufijo del prompt del sistema que se añade a cada sesión. |
 
 ## 🗂️ La página Análisis del contexto
 
@@ -90,7 +90,7 @@ Abre cualquier sesión y haz clic en la pestaña **Contexto**:
 | **Estadísticas de tokens** | Adónde fueron los tokens facturados: el mismo total que la línea de estadísticas del chat bajo el editor, dividido en Prompt del sistema, Esquemas de herramientas, Mensajes del usuario, Contexto inyectado, Inyecciones de habilidades, Llamadas a herramientas, Razonamiento y Respuestas. Llamadas a herramientas combina los nombres y argumentos de las llamadas, reproducidos en el prompt y generados en la salida, con los resultados devueltos por esas herramientas; Respuestas separa el texto de las respuestas del modelo del mismo contenido y salida del asistente; Razonamiento separa su pensamiento del mismo modo; la tasa de aciertos de caché de la sesión aparece en la esquina. |
 | **Estadísticas de tiempo** | Cómo se dividió el tiempo activo entre llamadas al modelo, ejecuciones de herramientas y sobrecarga. |
 | **Contexto actual** | Qué hay en la ventana *ahora mismo*. |
-| **Tendencia del contexto** | El tamaño de cada solicitud y su historia. |
+| **Cronología del contexto** | El tamaño de cada solicitud y su historia. |
 | **Explorador de contexto** | Con qué se ensambló *realmente* cualquier solicitud. |
 | **Eventos de contexto** | Cuándo y por qué cambió la ventana. |
 | **Actividad de archivos** | Qué *hizo* el agente con tus archivos. |
@@ -117,9 +117,9 @@ La celda Red de agentes de la tarjeta **Estadísticas del contexto**, con los to
 
 Una barra apilada de seis colores sobre la ventana completa del modelo (las dos máscaras rayadas del final = la reserva de compactación automática: su margen y luego la ventana de salida reservada de la solicitud): prompt del sistema, esquemas de herramientas, mensajes del usuario, contexto inyectado, respuestas del asistente y resultados de herramientas, cada uno con su cifra aproximada de tokens y su proporción. Cuando una conversación empieza a degradarse, aquí ves *qué parte* es responsable.
 
-### 📈 Tendencia del contexto: cómo creció y evolucionó el contexto por turnos o pasos
+### 📈 Cronología del contexto: cómo creció y evolucionó el contexto por turnos o pasos
 
-![Tendencia del contexto con el resumen del paso](https://raw.githubusercontent.com/bowenliang123/dsh-context/main/docs/context-trend.png)
+![Cronología del contexto con el resumen del paso](https://raw.githubusercontent.com/bowenliang123/dsh-context/main/docs/context-timeline.png)
 
 Una barra apilada por solicitud al modelo, más detallada que por mensaje, para ver crecer la ventana turno a turno:
 
@@ -127,7 +127,7 @@ Una barra apilada por solicitud al modelo, más detallada que por mensaje, para 
 - **Banderas de eventos**: compactación, poda, inyección de habilidades, creación de subagentes, interacción entre agentes y cambios de modelo, creación/finalización de objetivos y tareas de equipo, alta/finalización de tareas, preguntas al usuario, además del paso más largo y el mayor salto de contexto, lucen su propio icono en el paso correspondiente; un mástil discontinuo llega hasta la línea base, pasa el cursor para leerlo y haz clic para abrir el paso. En la vista general, los eventos cercanos se agrupan en una bandera agregada que vuelve directo a su paso.
 - **Léelo como prefieras**: granularidad **Paso / Turno**, **Total** (composición acumulada) o **Delta** (cambio con signo de cada solicitud), y desplazamiento lateral por toda la sesión. En modo Delta, el crecimiento se apila sobre la línea base y una compactación cae por debajo:
 
-![Tendencia del contexto en modo Delta](https://raw.githubusercontent.com/bowenliang123/dsh-context/main/docs/history-delta.png)
+![Cronología del contexto en modo Delta](https://raw.githubusercontent.com/bowenliang123/dsh-context/main/docs/history-delta.png)
 
 - **Vista general**: un conmutador comprime toda la sesión, por pasos o turnos, al ancho del panel como una cinta apilada continua: cada caída por compactación y cada cambio de composición de un vistazo, sin desplazamiento lateral ni cargas adicionales. Las marcas señalan los cuartiles y el intervalo completo; desplaza el cursor para recorrerla y pásalo por una banda para resaltar esa categoría en toda la cinta; haz clic para fijar el paso y abrir la categoría de esa banda en el explorador. Es excluyente con el modo DNA y Adaptativo.
 - **Pasar el cursor y fijar**: desplázalo para ver un tooltip instantáneo; haz clic para fijar el desglose completo, con **Prompt / Salida / Caché reales** informados por el proveedor junto a las estimaciones.
@@ -155,7 +155,7 @@ Elige **En vivo** o cualquier paso conservado, y explora con qué se ensambló e
 
 - **Comparación con el turno anterior**: las insignias de delta con signo por categoría, `+N` elementos y `±Nk` tokens, muestran de un vistazo qué añadió o recuperó un turno. Los pasos anteriores a una compactación se reconstruyen a partir del archivo de mensajes eliminados, y la tarjeta lo indica cuando la composición de un paso solo es aproximada.
 
-- **El modo DNA despliega todo el contexto en una lista plana**: la barra dibuja una banda por elemento en el orden de lectura del modelo y, debajo, esos mismos elementos forman una lista plana con el mensaje más reciente arriba; el modelo lee del más antiguo al más reciente, por lo que la lista invierte ese orden. Cada fila lleva su posición en el prompt (`#12`), categoría, paso que la introdujo y coste en tokens, y se expande en el mismo contenido completo; los esquemas de herramientas y el prompt del sistema cierran la lista como dos filas de grupo. La tarjeta termina alineada con las tarjetas de composición y tendencia que tiene al lado; una sesión completamente desplegada se desplaza dentro de ella en lugar de inundar la página.
+- **El modo DNA despliega todo el contexto en una lista plana**: la barra dibuja una banda por elemento en el orden de lectura del modelo y, debajo, esos mismos elementos forman una lista plana con el mensaje más reciente arriba; el modelo lee del más antiguo al más reciente, por lo que la lista invierte ese orden. Cada fila lleva su posición en el prompt (`#12`), categoría, paso que la introdujo y coste en tokens, y se expande en el mismo contenido completo; los esquemas de herramientas y el prompt del sistema cierran la lista como dos filas de grupo. La tarjeta termina alineada con las tarjetas de composición y cronología que tiene al lado; una sesión completamente desplegada se desplaza dentro de ella en lugar de inundar la página.
 
 ### ⚡ Eventos de contexto: cuándo y por qué cambió la ventana
 
@@ -167,7 +167,7 @@ Cada inyección, compactación, poda, cambio de modelo y activación o desactiva
 
 ![Actividad de archivos](https://raw.githubusercontent.com/bowenliang123/dsh-context/main/docs/file-activity.png)
 
-Una fila por archivo tocado, leído, escrito o buscado, agregada hasta el paso que elijas en el gráfico de tendencias:
+Una fila por archivo tocado, leído, escrito o buscado, agregada hasta el paso que elijas en el gráfico de la cronología:
 
 - **Recuentos por finalidad** con chips de encabezado que también sirven como filtros (**Lectura / Escritura / Búsqueda / Imágenes**) y un cuadro de búsqueda por ruta.
 - **Deltas de líneas**: cada `edit`/`write` aporta su huella estimada de `+líneas añadidas / −líneas eliminadas`, por archivo y sumada.
@@ -220,7 +220,7 @@ Se abre un diálogo centrado con la tarjeta **Composición actual** y el **Explo
 
 ## ⚙️ Configuración
 
-La tarjeta de preferencias **Contexto** contiene la configuración por usuario de este plugin: la **Entrada del panel de contexto** (la pestaña de conversación **Contexto**, el panel de la barra lateral derecha, ambos u Ocultar para ninguno; el salto de la fila de respuestas la acompaña), el conmutador Mostrar/Ocultar propio de la pestaña **Flota** (la entrada del panel nunca la condiciona), el intervalo predeterminado de **Análisis del contexto** (Hoy / Últimos 7 días / Últimos 30 días; Últimos 30 días si no se cambia; elegir un preset en la página lo guarda), la granularidad de la tendencia (Paso/Turno), el modo de tendencia (Total/Delta), la curva de duración de la tendencia (visible de forma predeterminada), el umbral de pasos para la vista general automática de la tendencia, la base de comparación del Explorador de contexto, el orden de herramientas y Actividad de archivos, y el conmutador Mostrar/Ocultar de Análisis del contexto. Está en la página **Plugins**: entrada **Plugins** de la barra lateral → página del paquete **dsh-context** → sección **Configuración**; la tarjeta la sirve el formulario Config activo de la entrada.
+La tarjeta de preferencias **Contexto** contiene la configuración por usuario de este plugin: la **Entrada del panel de contexto** (la pestaña de conversación **Contexto**, el panel de la barra lateral derecha, ambos u Ocultar para ninguno; el salto de la fila de respuestas la acompaña), el conmutador Mostrar/Ocultar propio de la pestaña **Flota** (la entrada del panel nunca la condiciona), el intervalo predeterminado de **Análisis del contexto** (Hoy / Últimos 7 días / Últimos 30 días; Últimos 30 días si no se cambia; elegir un preset en la página lo guarda), la granularidad de la cronología (Paso/Turno), el modo de la cronología (Total/Delta), la curva de duración de la cronología (visible de forma predeterminada), el umbral de pasos para la vista general automática de la cronología, la base de comparación del Explorador de contexto, el orden de herramientas y Actividad de archivos, y el conmutador Mostrar/Ocultar de Análisis del contexto. Está en la página **Plugins**: entrada **Plugins** de la barra lateral → página del paquete **dsh-context** → sección **Configuración**; la tarjeta la sirve el formulario Config activo de la entrada.
 
 Las filas **Prompt del sistema · Prefijo / Sufijo** contienen texto libre que se añade justo al principio / final del prompt del sistema de cada sesión, para todos los agentes, incluidos los subagentes: una persona o regla de comportamiento por despliegue que acompaña al ensamblaje de prompts propio del harness. Los cambios se aplican a partir del siguiente turno; deja una fila vacía para desactivarla.
 
@@ -231,7 +231,7 @@ Los botones de preset de Análisis del contexto guardan la selección como valor
 ## Conviene saber
 
 - **Huella de caché**: el plugin solo guarda puntos de control con un resumen compacto por sesión (composición, recuentos, coste/tiempo e información del modelo) en la caché de proyecciones de dsh; los detalles pesados por evento (texto de superficie, desgloses de solicitudes, operaciones de archivos, programas de comandos e intervalos) se reconstruyen a partir del registro persistente cuando un panel los necesita, de modo que la caché sigue siendo pequeña incluso en sesiones largas. Las vistas de detalle cargan por páginas el historial completo de solicitudes, turnos, eventos, nodos de superficie, archivo, operaciones de archivos, comandos e intervalos desde el registro persistente, y cargan cada colección cuando se abre su tarjeta.
-- **Estimaciones y valores reales**: las cifras por categoría usan la heurística de densidad fija propia de dsh, la misma que su medidor de tokens integrado; los detalles fijados de la tendencia muestran los valores reales informados por el proveedor junto a ellas, y la tarjeta Tokens combina sus proporciones de composición estimadas con ≈ y el total facturado exacto del proveedor.
+- **Estimaciones y valores reales**: las cifras por categoría usan la heurística de densidad fija propia de dsh, la misma que su medidor de tokens integrado; los detalles fijados de la cronología muestran los valores reales informados por el proveedor junto a ellas, y la tarjeta Tokens combina sus proporciones de composición estimadas con ≈ y el total facturado exacto del proveedor.
 - **Compatibilidad**: funciona con `@deepseek-ai/dsh` desde **0.2.0-rc.2** (las líneas `0.2.0` y `0.2.1` verificadas en sus versiones rc.2, y la línea `0.2.2` en sus versiones rc.1 y rc.3), la generación V4 del registro de sesiones, desde una única ruta de código orientada por la forma. La matriz por versión y cómo se verifica: [docs/compatibility.md](docs/compatibility.md).
 - **I18n**: interfaz en chino simplificado, inglés, japonés, español, francés, alemán, ruso y portugués (cambiar de idioma requiere dsh 0.2.2+; las líneas admitidas anteriores solo ofrecen chino e inglés).
 

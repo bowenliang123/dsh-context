@@ -55,7 +55,7 @@ export const Config = z.object({
   maxCommandChars: count(DEFAULT_BOUNDS.maxCommandChars),
   defaultPlacement: volatileField(z.union(['all', 'tab', 'sidebar', 'hide']).default('all').loose()),
   defaultGranularity: volatileField(z.union(['step', 'turn']).default('step').loose()),
-  defaultTrendMode: volatileField(z.union(['total', 'delta']).default('total').loose()),
+  defaultTimelineMode: volatileField(z.union(['total', 'delta']).default('total').loose()),
   defaultDeltaBase: volatileField(z.union(['step', 'turn']).default('step').loose()),
   defaultToolSort: volatileField(z.union(['size', 'count', 'name']).default('count').loose()),
   defaultFileSort: volatileField(z.union(['count', 'lines', 'latest', 'path', 'name']).default('lines').loose()),

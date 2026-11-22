@@ -3,18 +3,18 @@ import type { Category, ContextEventRecord, RequestRecord } from '../../shared/t
 import { CATS } from '../categories'
 import { bandsMaximaOf, deltaBandsOf, deltaTotalsOf, dnaBaseLabel } from '../dna'
 import { lruTouch, lruTrim } from '../boundedCache'
-import type { DeltaMaxima, DnaDelta, TrendBand } from '../dna'
+import type { DeltaMaxima, DnaDelta, TimelineBand } from '../dna'
 import { containHorizontalOverscroll } from '../overscroll'
 import { scrollToPos } from '../revealScroll'
 import type { ViewKit } from '../viewkit'
-import { DnaBar, DnaDeltaBar, DnaHighlights, RISE_CLASS, STAGGER_CAP } from './trendDnaBars'
-import { DurationCurve } from './trendDurationCurve'
-import { TrendMilestoneBand } from './trendMilestoneBand'
-import { bandItemsOf, milestonesOf, type MilestoneBandItem } from './trendMilestones'
-import { milestoneLabel, milestoneTipRows } from './trendMilestoneText'
-import { BAR_GAP, BAR_W, TREND_WINDOW_MIN, WINDOW_HYSTERESIS_BARS, WINDOW_OVERSCAN_BARS, initialBarWindow, nextBarWindow, windowPads, windowRangeFor } from './trendWindow'
-import type { BarWindow } from './trendWindow'
-import { preprocessTrend, TURN_FILLS, trendMaxima, trendTipRows, turnStepsOf } from './trendModel'
+import { DnaBar, DnaDeltaBar, DnaHighlights, RISE_CLASS, STAGGER_CAP } from './timelineDnaBars'
+import { DurationCurve } from './timelineDurationCurve'
+import { TimelineMilestoneBand } from './timelineMilestoneBand'
+import { bandItemsOf, milestonesOf, type MilestoneBandItem } from './timelineMilestones'
+import { milestoneLabel, milestoneTipRows } from './timelineMilestoneText'
+import { BAR_GAP, BAR_W, TIMELINE_WINDOW_MIN, WINDOW_HYSTERESIS_BARS, WINDOW_OVERSCAN_BARS, initialBarWindow, nextBarWindow, windowPads, windowRangeFor } from './timelineWindow'
+import type { BarWindow } from './timelineWindow'
+import { preprocessTimeline, TURN_FILLS, timelineMaxima, timelineTipRows, turnStepsOf } from './timelineModel'
 import { clampTipLeft } from './tip'
 import { useElementSize } from './useElementMetrics'
 
@@ -25,7 +25,7 @@ const DNA_WINDOW_HYSTERESIS = 2
 
 const BAND_STORE_MAX = 512
 
-export interface TrendChartProps {
+export interface TimelineChartProps {
   requests: RequestRecord[]
   events: ContextEventRecord[]
   selectedSeq: number | null
@@ -39,8 +39,8 @@ export interface TrendChartProps {
   focusCat?: string | null
   adaptive?: boolean
   durationCurve?: boolean
-  dna?: TrendBand[][] | null
-  dnaAt?: ((seq: number) => TrendBand[]) | null
+  dna?: TimelineBand[][] | null
+  dnaAt?: ((seq: number) => TimelineBand[]) | null
   deltaMaxima?: DeltaMaxima | null
   onPickBand?: (seq: number, band: { key: string; cat: Category | 'system' | 'tools' }) => void
   onSelect: (seq: number | null) => void
@@ -52,7 +52,7 @@ export interface TrendChartProps {
   onFocusSeqHandled: () => void
 }
 
-export function makeTrendChart(kit: ViewKit): (props: TrendChartProps) => ReactElement {
+export function makeTimelineChart(kit: ViewKit): (props: TimelineChartProps) => ReactElement {
   const { t, fmt, fmtDuration, catLabel } = kit
 
   const centerBar = (el: HTMLDivElement, idx: number): void => {
@@ -84,7 +84,7 @@ export function makeTrendChart(kit: ViewKit): (props: TrendChartProps) => ReactE
     enterIndex: number
     rise: boolean
     flag: number | null
-    dna: TrendBand[] | null
+    dna: TimelineBand[] | null
     dnaDelta: DnaDelta | null
     dnaScale: number | undefined
     onDnaHit: (key: string | null) => void
@@ -123,7 +123,7 @@ export function makeTrendChart(kit: ViewKit): (props: TrendChartProps) => ReactE
         onMouseEnter={() => { props.onHover(req.seq) }}
       >
         {props.flag !== null ? (
-          <span className="lc-trend-flag" aria-hidden="true"><span className="lc-trend-flag-label">{props.flag}</span></span>
+          <span className="lc-timeline-flag" aria-hidden="true"><span className="lc-timeline-flag-label">{props.flag}</span></span>
         ) : null}
         {props.dna !== null ? (
           props.dnaDelta !== null && props.dnaScale !== undefined ? (
@@ -170,7 +170,7 @@ export function makeTrendChart(kit: ViewKit): (props: TrendChartProps) => ReactE
     )
   })
 
-  return function TrendChart(props: TrendChartProps): ReactElement {
+  return function TimelineChart(props: TimelineChartProps): ReactElement {
     const dnaArray = props.dna ?? null
     const dnaAt = props.dnaAt ?? null
     const dnaOn = dnaArray !== null || dnaAt !== null
@@ -205,21 +205,21 @@ export function makeTrendChart(kit: ViewKit): (props: TrendChartProps) => ReactE
       setLocalHover(prev => (prev === null || props.hoveredSeq === prev ? prev : null))
     }, [props.hoveredSeq])
     const { requests, focus } = useMemo(
-      () => preprocessTrend(props.requests, delta, dnaOn ? null : props.focusCat),
+      () => preprocessTimeline(props.requests, delta, dnaOn ? null : props.focusCat),
       [props.requests, delta, props.focusCat, dnaOn],
     )
     const bandStore = useMemo(() => ({
-      bands: new Map<number, TrendBand[]>(),
+      bands: new Map<number, TimelineBand[]>(),
       deltas: new Map<number, DnaDelta>(),
     }), [dnaAt, dnaArray])
-    const bandAt = useCallback((idx: number): TrendBand[] => {
+    const bandAt = useCallback((idx: number): TimelineBand[] => {
       const seq = requests[idx].seq
       const hit = bandStore.bands.get(seq)
       if (hit !== undefined) {
         lruTouch(bandStore.bands, seq)
         return hit
       }
-      const bands = dnaAt !== null ? dnaAt(seq) : (dnaArray as TrendBand[][])[idx]
+      const bands = dnaAt !== null ? dnaAt(seq) : (dnaArray as TimelineBand[][])[idx]
       bandStore.bands.set(seq, bands)
       lruTrim(bandStore.bands, BAND_STORE_MAX)
       return bands
@@ -279,7 +279,7 @@ export function makeTrendChart(kit: ViewKit): (props: TrendChartProps) => ReactE
       if (props.deltaMaxima !== undefined && props.deltaMaxima !== null) return props.deltaMaxima.up
       let up = 0
       if (dnaDeltaOn && dnaAt !== null && (!adaptive || visMax === null)) {
-        let prev: TrendBand[] | null = null
+        let prev: TimelineBand[] | null = null
         for (let i = 0; i < requests.length; i++) {
           const bands = dnaAt(requests[i].seq)
           const totals = deltaTotalsOf(bands, prev)
@@ -294,7 +294,7 @@ export function makeTrendChart(kit: ViewKit): (props: TrendChartProps) => ReactE
     if (dnaDeltaOn) {
       maxUp = dnaMaxUp
     } else {
-      const maxima = trendMaxima(requests, delta)
+      const maxima = timelineMaxima(requests, delta)
       maxTotal = maxima.maxTotal
       maxUp = maxima.maxUp
     }
@@ -382,7 +382,7 @@ export function makeTrendChart(kit: ViewKit): (props: TrendChartProps) => ReactE
     const prevScrollWidthRef = useRef(0)
     const cwRef = useRef(0)
     const slRef = useRef(0)
-    const windowed = requests.length > TREND_WINDOW_MIN
+    const windowed = requests.length > TIMELINE_WINDOW_MIN
     const windowOverscan = dnaOn ? DNA_WINDOW_OVERSCAN : WINDOW_OVERSCAN_BARS
     const windowHysteresis = dnaOn ? DNA_WINDOW_HYSTERESIS : WINDOW_HYSTERESIS_BARS
     const [barWindow, setBarWindow] = useState<BarWindow>(() => initialBarWindow(requests.length, windowOverscan))
@@ -390,7 +390,7 @@ export function makeTrendChart(kit: ViewKit): (props: TrendChartProps) => ReactE
     useLayoutEffect(() => { barWindowRef.current = barWindow }, [barWindow])
     const winRafRef = useRef<number | null>(null)
     const syncWindow = (el: HTMLDivElement): void => {
-      if (requests.length <= TREND_WINDOW_MIN) return
+      if (requests.length <= TIMELINE_WINDOW_MIN) return
       const desired = windowRangeFor(el.scrollLeft, el.clientWidth, requests.length, windowOverscan)
       const prev = barWindowRef.current
       const next = nextBarWindow(prev, desired, requests.length, windowHysteresis)
@@ -416,7 +416,7 @@ export function makeTrendChart(kit: ViewKit): (props: TrendChartProps) => ReactE
       const changed = prevDnaOn.current !== dnaOn
       prevDnaOn.current = dnaOn
       const el = scrollRef.current
-      if (el === null || requests.length <= TREND_WINDOW_MIN || (first && !dnaOn) || (!first && !changed)) return
+      if (el === null || requests.length <= TIMELINE_WINDOW_MIN || (first && !dnaOn) || (!first && !changed)) return
       const overscan = dnaOn ? DNA_WINDOW_OVERSCAN : WINDOW_OVERSCAN_BARS
       const hysteresis = dnaOn ? DNA_WINDOW_HYSTERESIS : WINDOW_HYSTERESIS_BARS
       const desired = windowRangeFor(el.scrollLeft, el.clientWidth, requests.length, overscan)
@@ -588,14 +588,14 @@ export function makeTrendChart(kit: ViewKit): (props: TrendChartProps) => ReactE
       milestoneLabel(kit, msTextOptions, item.group, requests[item.group.targetIdx])
     const tipRowsOf = (req: RequestRecord): string[] => {
       const band = hitBand ?? hoveredDelta
-      return trendTipRows(kit, {
+      return timelineTipRows(kit, {
         granularity: props.granularity,
         stepsOf,
         delta,
         focus,
         durationOn,
         metric: band !== null
-          ? t('trend.dnaItem', { label: dnaBaseLabel(band, t, catLabel), n: dnaDeltaOn ? fmtSigned(band.tokens) : fmt(band.tokens) })
+          ? t('timeline.dnaItem', { label: dnaBaseLabel(band, t, catLabel), n: dnaDeltaOn ? fmtSigned(band.tokens) : fmt(band.tokens) })
           : undefined,
       }, req)
     }
@@ -704,12 +704,12 @@ export function makeTrendChart(kit: ViewKit): (props: TrendChartProps) => ReactE
                   dots={durationGeometry.dots}
                 />
               ) : null}
-              <TrendMilestoneBand
+              <TimelineMilestoneBand
                 items={bandItems}
                 activeKey={msItem !== null ? msItem.key : null}
                 selectedSeq={props.selectedSeq}
                 activeTurn={props.activeTurn}
-                bandLabel={t('trend.ms.band')}
+                bandLabel={t('timeline.ms.band')}
                 labelOf={milestoneLabelOf}
                 onHoverItem={handleMilestoneHover}
                 onLeaveItem={handleMilestoneLeave}

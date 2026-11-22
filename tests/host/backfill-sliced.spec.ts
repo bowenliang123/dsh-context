@@ -864,7 +864,7 @@ describe('Config validator (cordis Standard Schema face)', () => {
       ...DEFAULT_BOUNDS,
       defaultPlacement: 'all',
       defaultGranularity: 'step',
-      defaultTrendMode: 'total',
+      defaultTimelineMode: 'total',
       defaultDeltaBase: 'step',
       defaultToolSort: 'count',
       defaultFileSort: 'lines',
@@ -901,7 +901,7 @@ describe('Config validator (cordis Standard Schema face)', () => {
 describe('preference fields (the Config-form generation surface)', () => {
   test('every preference is volatile-marked; the bounds are not', () => {
     const dict = Config.dict ?? {}
-    for (const pref of ['defaultPlacement', 'defaultGranularity', 'defaultTrendMode', 'defaultDeltaBase', 'defaultToolSort', 'defaultFileSort', 'insightsEntry', 'defaultDurationCurve', 'overviewAutoSteps', 'defaultOverviewRange', 'fleetTab', 'promptPrefix', 'promptSuffix']) {
+    for (const pref of ['defaultPlacement', 'defaultGranularity', 'defaultTimelineMode', 'defaultDeltaBase', 'defaultToolSort', 'defaultFileSort', 'insightsEntry', 'defaultDurationCurve', 'overviewAutoSteps', 'defaultOverviewRange', 'fleetTab', 'promptPrefix', 'promptSuffix']) {
       assert.equal((dict[pref] as z['dict'] extends undefined ? never : { meta?: { volatile?: boolean } }).meta?.volatile, true, pref)
     }
     for (const bound of ['maxRequestSteps', 'maxKeptTurns', 'maxEvents', 'maxNodes', 'maxArchiveNodes', 'maxFileOps']) {

@@ -1,4 +1,4 @@
-import type { DefaultDeltaBase, DefaultFileSort, DefaultGranularity, DefaultDurationCurve, DefaultOverviewRange, DefaultPlacement, DefaultToolSort, DefaultTrendMode, FleetTab, InsightsEntry, OverviewAutoSteps, SettingsField } from '../shared/types'
+import type { DefaultDeltaBase, DefaultFileSort, DefaultGranularity, DefaultDurationCurve, DefaultOverviewRange, DefaultPlacement, DefaultToolSort, DefaultTimelineMode, FleetTab, InsightsEntry, OverviewAutoSteps, SettingsField } from '../shared/types'
 
 export type { DefaultDeltaBase, DefaultFileSort, DefaultToolSort, SettingsField } from '../shared/types'
 
@@ -21,7 +21,7 @@ export interface SettingsState {
   status: 'loading' | 'ready' | 'unavailable'
   placement: DefaultPlacement
   granularity: DefaultGranularity
-  mode: DefaultTrendMode
+  mode: DefaultTimelineMode
   deltaBase: DefaultDeltaBase
   toolSort: DefaultToolSort
   fileSort: DefaultFileSort
@@ -39,7 +39,7 @@ export interface ContextSettings {
   store: { subscribe(listener: () => void): () => void; getSnapshot(): SettingsState }
   defaultPlacement(): DefaultPlacement
   defaultGranularity(): DefaultGranularity
-  defaultTrendMode(): DefaultTrendMode
+  defaultTimelineMode(): DefaultTimelineMode
   defaultDeltaBase(): DefaultDeltaBase
   defaultToolSort(): DefaultToolSort
   defaultFileSort(): DefaultFileSort
@@ -55,7 +55,7 @@ export interface ContextSettings {
 type Prefs = {
   placement?: DefaultPlacement
   granularity?: DefaultGranularity
-  mode?: DefaultTrendMode
+  mode?: DefaultTimelineMode
   deltaBase?: DefaultDeltaBase
   toolSort?: DefaultToolSort
   fileSort?: DefaultFileSort
@@ -74,7 +74,7 @@ function prefsOf(value: unknown): Prefs {
   return {
     ...(v.defaultPlacement === 'all' || v.defaultPlacement === 'tab' || v.defaultPlacement === 'sidebar' || v.defaultPlacement === 'hide' ? { placement: v.defaultPlacement } : {}),
     ...(v.defaultGranularity === 'step' || v.defaultGranularity === 'turn' ? { granularity: v.defaultGranularity } : {}),
-    ...(v.defaultTrendMode === 'total' || v.defaultTrendMode === 'delta' ? { mode: v.defaultTrendMode } : {}),
+    ...(v.defaultTimelineMode === 'total' || v.defaultTimelineMode === 'delta' ? { mode: v.defaultTimelineMode } : {}),
     ...(v.defaultDeltaBase === 'step' || v.defaultDeltaBase === 'turn' ? { deltaBase: v.defaultDeltaBase } : {}),
     ...(v.defaultToolSort === 'size' || v.defaultToolSort === 'count' || v.defaultToolSort === 'name' ? { toolSort: v.defaultToolSort } : {}),
     ...(v.defaultFileSort === 'count' || v.defaultFileSort === 'lines' || v.defaultFileSort === 'latest' || v.defaultFileSort === 'path' || v.defaultFileSort === 'name' ? { fileSort: v.defaultFileSort } : {}),
@@ -136,7 +136,7 @@ export function createContextSettings(): ContextSettings {
     },
     defaultPlacement: () => state.placement,
     defaultGranularity: () => state.granularity,
-    defaultTrendMode: () => state.mode,
+    defaultTimelineMode: () => state.mode,
     defaultDeltaBase: () => state.deltaBase,
     defaultToolSort: () => state.toolSort,
     defaultFileSort: () => state.fileSort,

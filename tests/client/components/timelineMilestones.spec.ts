@@ -11,7 +11,7 @@ import {
   milestoneKindOf,
   milestonesOf,
   type MilestoneGroup,
-} from '../../../src/client/components/trendMilestones'
+} from '../../../src/client/components/timelineMilestones'
 
 function req(seq: number, over: Partial<RequestRecord> = {}): RequestRecord {
   return {

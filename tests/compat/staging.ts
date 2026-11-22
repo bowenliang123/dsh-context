@@ -414,7 +414,6 @@ export const ICON_SEAMS = [
   'IconDatabaseOutlineRegular',
   'IconClockOutlineRegular',
   'IconGaugeOutlineRegular',
-  'IconCompareSplitOutlineRegular',
   'IconBrowseOutlineRegular',
   'IconContextInjectionOutlineRegular',
   'IconFolderOpenOutlineRegular',

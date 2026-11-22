@@ -154,7 +154,7 @@ describe('PluginConfigCard (the Plugins-page seat)', () => {
     const modeItems = menuItems()
     assert.deepEqual(modeItems.map(i => text(i)), [DICT_EN['gran.total'], DICT_EN['gran.delta']])
     await click(modeItems[1])
-    commit('defaultTrendMode', 'delta')
+    commit('defaultTimelineMode', 'delta')
 
     await click(selects[6])
     const curveItems = menuItems()

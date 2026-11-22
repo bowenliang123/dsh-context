@@ -1,16 +1,16 @@
 import { Fragment, useCallback, useLayoutEffect, useMemo, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type ReactElement } from 'react'
 import type { Category, ContextEventRecord, RequestRecord } from '../../shared/types'
 import { CATS, CAT_COLOR } from '../categories'
-import { RISE_CLASS } from './trendDnaBars'
-import { TrendMilestoneBand } from './trendMilestoneBand'
-import { fitBandItemsOf, milestoneJumpSeq, milestonesOf, type MilestoneBandItem } from './trendMilestones'
-import { milestoneLabel, milestoneTipRows } from './trendMilestoneText'
-import { TURN_FILLS, preprocessTrend, trendMaxima, turnStepsOf, trendTipRows } from './trendModel'
+import { RISE_CLASS } from './timelineDnaBars'
+import { TimelineMilestoneBand } from './timelineMilestoneBand'
+import { fitBandItemsOf, milestoneJumpSeq, milestonesOf, type MilestoneBandItem } from './timelineMilestones'
+import { milestoneLabel, milestoneTipRows } from './timelineMilestoneText'
+import { TURN_FILLS, preprocessTimeline, timelineMaxima, turnStepsOf, timelineTipRows } from './timelineModel'
 import { clampTipLeft } from './tip'
 import { useElementSize } from './useElementMetrics'
 import type { ViewKit } from '../viewkit'
 
-export interface TrendOverviewProps {
+export interface TimelineOverviewProps {
   requests: RequestRecord[]
   events: ContextEventRecord[]
   selectedSeq: number | null
@@ -69,7 +69,7 @@ function ribbonGeometry(requests: RequestRecord[], delta: boolean, durationOn: b
     durationDots: [],
   }
   if (n === 0) return geo
-  ;({ maxTotal: geo.maxTotal, maxUp: geo.maxUp } = trendMaxima(requests, delta))
+  ;({ maxTotal: geo.maxTotal, maxUp: geo.maxUp } = timelineMaxima(requests, delta))
   const span = Math.max(1, geo.maxUp)
   const deltaScale = CHART_H / span
   const u = n > 1 ? n - 1 : 1
@@ -162,14 +162,14 @@ function wideQuartiles(groups: { count: number }[]): number[] {
   return picks
 }
 
-export function makeTrendOverview(kit: ViewKit): (props: TrendOverviewProps) => ReactElement | null {
+export function makeTimelineOverview(kit: ViewKit): (props: TimelineOverviewProps) => ReactElement | null {
   const fmtSigned = (v: number): string => (v > 0 ? '+' : '') + kit.fmt(v)
 
-  return function TrendOverview(props: TrendOverviewProps): ReactElement | null {
+  return function TimelineOverview(props: TimelineOverviewProps): ReactElement | null {
     const delta = props.mode === 'delta'
     const durationOn = props.durationCurve === true
     const { requests, focus } = useMemo(
-      () => preprocessTrend(props.requests, delta, props.focusCat),
+      () => preprocessTimeline(props.requests, delta, props.focusCat),
       [props.requests, delta, props.focusCat],
     )
     const n = requests.length
@@ -316,7 +316,7 @@ export function makeTrendOverview(kit: ViewKit): (props: TrendOverviewProps) => 
     const tipRows = msHoverKey !== null
       ? (msItem !== null && msReq !== null ? milestoneTipRows(kit, msTextOptions, msItem.group, msReq) : null)
       : hoveredIdx >= 0
-        ? trendTipRows(kit, { granularity: props.granularity, stepsOf, delta, focus, durationOn }, requests[hoveredIdx])
+        ? timelineTipRows(kit, { granularity: props.granularity, stepsOf, delta, focus, durationOn }, requests[hoveredIdx])
         : null
 
     return (
@@ -348,7 +348,7 @@ export function makeTrendOverview(kit: ViewKit): (props: TrendOverviewProps) => 
               data-catdim={localCat ?? props.hoverCat ?? undefined}
               role="button"
               tabIndex={0}
-              aria-label={kit.t('trend.title')}
+              aria-label={kit.t('timeline.title')}
               onKeyDown={onKeyDown}
               onFocus={() => { setMsHoverKey(null); moveCursor(keyboardIdx()) }}
               onBlur={() => { setKeyCursor(null); handleHover(null) }}
@@ -403,11 +403,11 @@ export function makeTrendOverview(kit: ViewKit): (props: TrendOverviewProps) => 
                 {flagRecords.map(idx => (
                   <span
                     key={`flag-${idx}`}
-                    className="lc-trend-flag"
+                    className="lc-timeline-flag"
                     style={{ left: idx === n - 1 ? 'calc(100% - 1px)' : `${idx / u * 100}%` }}
                     aria-hidden="true"
                   >
-                    <span className="lc-trend-flag-label">{flagLabel(idx)}</span>
+                    <span className="lc-timeline-flag-label">{flagLabel(idx)}</span>
                   </span>
                 ))}
               </div>
@@ -436,12 +436,12 @@ export function makeTrendOverview(kit: ViewKit): (props: TrendOverviewProps) => 
                 )
               })}
             </div>
-            <TrendMilestoneBand
+            <TimelineMilestoneBand
               items={bandItems}
               activeKey={msItem !== null ? msItem.key : null}
               selectedSeq={props.selectedSeq}
               activeTurn={props.activeTurn}
-              bandLabel={kit.t('trend.ms.band')}
+              bandLabel={kit.t('timeline.ms.band')}
               labelOf={milestoneLabelOf}
               onHoverItem={handleMilestoneHover}
               onLeaveItem={handleMilestoneLeave}

@@ -3,7 +3,7 @@ import type { ContextEventRecord } from '../../shared/types'
 import { IconBranch, IconPlus } from '../primitives'
 import { formLabelOf, modeLabelOf } from '../labels'
 import { MilestoneIcon } from './milestoneIcons'
-import type { MilestoneKind } from './trendMilestones'
+import type { MilestoneKind } from './timelineMilestones'
 import type { Translate } from '../i18n'
 import type { DetailState } from '../timelineSource'
 import type { ViewKit } from '../viewkit'
@@ -82,19 +82,19 @@ export function makeEventText(t: Translate): {
       }
     }
     if (ev.kind === 'goal-create' || ev.kind === 'goal-complete' || ev.kind === 'team-task-complete') {
-      return { lead: t('trend.ms.' + ev.kind), tail: ev.name ? ' · ' + ev.name : '' }
+      return { lead: t('timeline.ms.' + ev.kind), tail: ev.name ? ' · ' + ev.name : '' }
     }
     if (ev.kind === 'todo-add') {
       const count = ev.count ?? 1
-      return { lead: t('trend.ms.todo-add'), tail: count > 1 ? ' · ×' + String(count) : '' }
+      return { lead: t('timeline.ms.todo-add'), tail: count > 1 ? ' · ×' + String(count) : '' }
     }
-    if (ev.kind === 'team-task-create') return { lead: t('trend.ms.team-task-create'), tail: '' }
+    if (ev.kind === 'team-task-create') return { lead: t('timeline.ms.team-task-create'), tail: '' }
     if (ev.kind === 'todo-done' || ev.kind === 'ask') {
       const items = ev.items ?? []
       const count = ev.count ?? items.length
       const missing = Math.max(0, count - items.length)
       return {
-        lead: t('trend.ms.' + ev.kind),
+        lead: t('timeline.ms.' + ev.kind),
         tail: (count > 1 ? ' · ×' + String(count) : '')
           + (items.length > 0 ? ' · ' + items.join(', ') : '')
           + (missing > 0 ? ' +' + String(missing) : ''),

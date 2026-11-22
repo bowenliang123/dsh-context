@@ -2,8 +2,8 @@ import assert from 'node:assert/strict'
 import { act, createElement as h, type ReactElement } from 'react'
 import { describe, test } from 'vitest'
 import { blur, click, focus, hover, keydown, mount, query, queryAll, unhover } from '../helpers/kit'
-import { TrendMilestoneBand } from '../../../src/client/components/trendMilestoneBand'
-import type { MilestoneBandItem, MilestoneGroup } from '../../../src/client/components/trendMilestones'
+import { TimelineMilestoneBand } from '../../../src/client/components/timelineMilestoneBand'
+import type { MilestoneBandItem, MilestoneGroup } from '../../../src/client/components/timelineMilestones'
 
 function group(over: Partial<MilestoneGroup> = {}): MilestoneGroup {
   return {
@@ -26,7 +26,7 @@ function item(over: Partial<MilestoneBandItem> = {}): MilestoneBandItem {
   return { key: 'b:1', x: 15, maxIcons: 1, group: group(), ...over }
 }
 
-describe('TrendMilestoneBand', () => {
+describe('TimelineMilestoneBand', () => {
   test('renders a mast per group with capped icons, count badge, state classes, and aria labels', async () => {
     const items = [
       item(),
@@ -44,7 +44,7 @@ describe('TrendMilestoneBand', () => {
       }),
     ]
     const labels = new Map(items.map(it => [it.key, 'label-' + it.key]))
-    const m = await mount(h(TrendMilestoneBand, {
+    const m = await mount(h(TimelineMilestoneBand, {
       items,
       activeKey: 'b:1',
       selectedSeq: 2,
@@ -86,7 +86,7 @@ describe('TrendMilestoneBand', () => {
     const left: string[] = []
     const picked: string[] = []
     const it = item()
-    const m = await mount(h(TrendMilestoneBand, {
+    const m = await mount(h(TimelineMilestoneBand, {
       items: [it],
       activeKey: null,
       selectedSeq: null,
@@ -120,7 +120,7 @@ describe('TrendMilestoneBand', () => {
   })
 
   test('a null active turn and an empty item list render quietly', async () => {
-    const empty = await mount(h(TrendMilestoneBand, {
+    const empty = await mount(h(TimelineMilestoneBand, {
       items: [],
       activeKey: null,
       selectedSeq: null,
@@ -134,7 +134,7 @@ describe('TrendMilestoneBand', () => {
     assert.equal(queryAll(empty.container, '.lc-ms').length, 0)
     await empty.unmount()
 
-    const m = await mount(h(TrendMilestoneBand, {
+    const m = await mount(h(TimelineMilestoneBand, {
       items: [item({ maxIcons: 3 })],
       activeKey: null,
       selectedSeq: null,
@@ -159,7 +159,7 @@ describe('TrendMilestoneBand', () => {
       onFocus: () => { calls.push('focus') },
       onBlur: () => { calls.push('blur') },
       onKeyDown: () => { calls.push('key') },
-    }, h(TrendMilestoneBand, {
+    }, h(TimelineMilestoneBand, {
       items: [it],
       activeKey: null,
       selectedSeq: null,

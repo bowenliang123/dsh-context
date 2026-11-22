@@ -1,7 +1,7 @@
 .lc-chartrow { display: flex; gap: 6px; align-items: stretch; }
-.lc-trend-lane { display: flex; flex-direction: column; }
-.lc-trend-lane > .lc-trend-plot { display: flex; align-items: center; justify-content: center; height: 156px; box-sizing: border-box; }
-.lc-trend-lane .lc-stacked { height: 10px; margin: 3px 0; }
+.lc-timeline-lane { display: flex; flex-direction: column; }
+.lc-timeline-lane > .lc-timeline-plot { display: flex; align-items: center; justify-content: center; height: 156px; box-sizing: border-box; }
+.lc-timeline-lane .lc-stacked { height: 10px; margin: 3px 0; }
 .lc-axis { position: relative; width: 40px; height: 150px; padding-top: 18px; box-sizing: border-box; color: var(--dsw-alias-label-secondary); font-size: 11px; }
 .lc-axis span { position: absolute; right: 0; line-height: 1; }
 .lc-axis-r { width: 34px; flex: none; }
@@ -58,8 +58,8 @@
 .lc-duration .lc-dur-halo { stroke: var(--dsw-alias-bg-layer-1); stroke-width: 3; opacity: 0.85; }
 .lc-duration circle.lc-dur-halo { stroke: none; fill: var(--dsw-alias-bg-layer-1); }
 .lc-chart-dim .lc-duration polyline, .lc-chart-dim .lc-duration circle { opacity: 0.35; }
-.lc-trend-flag { position: absolute; right: -1px; top: -17px; bottom: 0; z-index: 2; width: 1px; background: color-mix(in srgb, var(--color-neutral-500) 45%, transparent); pointer-events: none; }
-.lc-trend-flag-label { position: absolute; top: 0; right: 0; box-sizing: border-box; padding: 1px 3px; border: 1px solid color-mix(in srgb, var(--color-neutral-500) 45%, transparent); border-radius: 3px; background: var(--dsw-alias-bg-layer-1); font-size: 10px; line-height: 1; font-weight: 600; color: var(--dsw-alias-label-secondary); white-space: nowrap; }
+.lc-timeline-flag { position: absolute; right: -1px; top: -17px; bottom: 0; z-index: 2; width: 1px; background: color-mix(in srgb, var(--color-neutral-500) 45%, transparent); pointer-events: none; }
+.lc-timeline-flag-label { position: absolute; top: 0; right: 0; box-sizing: border-box; padding: 1px 3px; border: 1px solid color-mix(in srgb, var(--color-neutral-500) 45%, transparent); border-radius: 3px; background: var(--dsw-alias-bg-layer-1); font-size: 10px; line-height: 1; font-weight: 600; color: var(--dsw-alias-label-secondary); white-space: nowrap; }
 .lc-turns { display: flex; gap: 2px; overflow: hidden; margin-top: 4px; padding: 0 2px; box-sizing: border-box; width: max-content; min-width: 100%; }
 .lc-turn { flex: none; box-sizing: border-box; text-align: center; font-size: 10px; line-height: 14px; font-weight: 600; color: var(--dsw-alias-label-secondary); border-radius: 3px; height: 14px; white-space: nowrap; cursor: pointer; transition: filter var(--ds-transition-duration, 0.2s) var(--ds-ease-in-out, ease-in-out), opacity var(--ds-transition-duration, 0.2s) var(--ds-ease-in-out, ease-in-out); }
 .lc-turn-on { filter: brightness(1.35); color: var(--dsw-alias-label-primary); }

@@ -1,8 +1,8 @@
 import type { CSSProperties, ReactElement } from 'react'
 import { MILESTONE_COLOR, MilestoneIcon } from './milestoneIcons'
-import type { MilestoneBandItem } from './trendMilestones'
+import type { MilestoneBandItem } from './timelineMilestones'
 
-export interface TrendMilestoneBandProps {
+export interface TimelineMilestoneBandProps {
   items: MilestoneBandItem[]
   activeKey: string | null
   selectedSeq: number | null
@@ -14,7 +14,7 @@ export interface TrendMilestoneBandProps {
   onPickItem: (item: MilestoneBandItem) => void
 }
 
-export function TrendMilestoneBand(props: TrendMilestoneBandProps): ReactElement {
+export function TimelineMilestoneBand(props: TimelineMilestoneBandProps): ReactElement {
   return (
     <div className="lc-milestones" role="group" aria-label={props.bandLabel}>
       {props.items.map((item) => {
