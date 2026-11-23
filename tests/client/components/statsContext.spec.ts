@@ -1,7 +1,9 @@
 
 import { act, createElement as h } from 'react'
+import { renderToStaticMarkup } from 'react-dom/server'
 import assert from 'node:assert/strict'
 import { afterEach, describe, test, vi } from 'vitest'
+import { IconAgentPresetOutlineRegular, IconApiOutlineRegular, IconCompareSplitOutlineRegular, IconSparkleRegular } from '@deepseek-ai/dsh-client-ui-primitives'
 import { makeStatsContext, makeSubagentCost } from '../../../src/client/components/statsContext'
 import type { StatsEventKind, SubagentStats } from '../../../src/client/components/statsContext'
 import { DICT_EN } from '../../../src/client/i18n'
@@ -284,6 +286,22 @@ describe('StatsContext', () => {
       '按 deepseek · deepseek-v4-flash 在 models.dev 的刊登价格如上。',
       '人民币按 1 元 = 0.15 美元换算。', '缓存输入 ¥0.02', '未缓存输入 ¥1.00', '缓存写入 ¥1.00', '输出 ¥4.00',
     ]) assert.ok(costTip.includes(part), `the zh team tip carries: ${part}`)
+    await m.unmount()
+  })
+
+  test('each stats section label uses its approved native icon', async () => {
+    const m = await mount(h(StatsContext, {
+      counts: NO_COUNTS, files: NO_FILES, tools: [], cost: COST, costRead: OWN_READ, locale: 'en',
+      onTeamClick: () => {},
+    }))
+    await flush()
+    const expected = [IconCompareSplitOutlineRegular, IconSparkleRegular, IconApiOutlineRegular, IconAgentPresetOutlineRegular].map((Icon) => {
+      const markup = renderToStaticMarkup(h(Icon, { size: 12, className: 'lc-pi-labelicon' }))
+      return markup.slice(markup.indexOf('>') + 1, markup.lastIndexOf('</svg>'))
+    })
+    const icons = queryAll<SVGElement>(m.container, '.lc-ledger-head .lc-ledger-label svg')
+    assert.deepEqual(icons.map(icon => icon.innerHTML), expected)
+    assert.ok(icons.every(icon => icon.getAttribute('aria-hidden') === 'true'))
     await m.unmount()
   })
 

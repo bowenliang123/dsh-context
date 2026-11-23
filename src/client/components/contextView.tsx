@@ -21,7 +21,7 @@ import type { Command } from '../commands'
 import type { ContextSettings } from '../settings'
 import { overviewThresholdOf } from '../settings'
 import type { ViewKit } from '../viewkit'
-import { IconContextInjection } from '../primitives'
+import { IconFlatList } from '../primitives'
 import { TimelineIcon } from './timelineIcon'
 import type { AgentHeads } from '../agentHeads'
 import { agentSelfOf, providerModelLabelOf } from '../agentTree'
@@ -885,7 +885,7 @@ export function makeContextView(
             <div className="lc-card lc-events-card lc-col flex-1 min-w-[min(360px,100%)]">
               <div className="lc-card-title">
                 <span className="lc-card-title-text">
-                  <IconContextInjection size={14} />
+                  <IconFlatList size={14} />
                   {t('events.title')}
                 </span>
                 <div className="lc-kinds @max-[380px]/lc-card:flex-wrap">

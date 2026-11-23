@@ -73,6 +73,7 @@ button.lc-ledger-cost-row { appearance: none; border: 0; padding: 0; background:
 .lc-ledger-head { display: flex; align-items: baseline; gap: 6px; padding-bottom: 5px; border-bottom: var(--lc-line-strong, 1px solid var(--dsw-alias-border-l2)); }
 .lc-ledger-in-head2 { margin-top: 8px; }
 .lc-ledger-label { color: var(--dsw-alias-label-primary); font-size: 12px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.lc-ledger-label .lc-pi-labelicon { color: var(--dsw-alias-label-secondary); }
 .lc-ledger-total { flex: none; margin-left: auto; color: var(--dsw-alias-label-primary); font-size: 12px; font-weight: 600; font-variant-numeric: tabular-nums; }
 .lc-ledger-chips { display: flex; flex-wrap: wrap; gap: 3px; min-width: 0; align-self: start; position: relative; align-content: start; }
 .lc-ledger-in-body2 { min-height: 21px; flex-wrap: nowrap; }

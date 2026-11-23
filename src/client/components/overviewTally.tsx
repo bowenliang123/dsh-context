@@ -1,7 +1,7 @@
 import type { ReactElement, ReactNode } from 'react'
 import { nameColorOf } from '../nameColor'
 import type { TallyStat } from '../overview'
-import { IconApi, IconInspect, type IconComponent } from '../primitives'
+import { IconApi, IconSparkle, type IconComponent } from '../primitives'
 import type { ViewKit } from '../viewkit'
 import { SkeletonRows } from './skeleton'
 
@@ -90,7 +90,7 @@ interface CardFace {
 
 const FACES: Record<TallyCardKind, CardFace> = {
   tool: {
-    icon: IconInspect,
+    icon: IconSparkle,
     title: 'stats.toolCalls',
     empty: 'ov.tools.empty',
     summary: 'ov.tools.summary',

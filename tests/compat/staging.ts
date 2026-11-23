@@ -415,11 +415,16 @@ export const ICON_SEAMS = [
   'IconClockOutlineRegular',
   'IconGaugeOutlineRegular',
   'IconBrowseOutlineRegular',
-  'IconContextInjectionOutlineRegular',
   'IconFolderOpenOutlineRegular',
   'IconApiOutlineRegular',
-  'IconInspectOutlineRegular',
   'IconPluginPinwheelOutlineRegular',
+  'IconFlatListOutlineRegular',
+  'IconCompareSplitOutlineRegular',
+  'IconQueueOutlineRegular',
+  'IconAgentPresetOutlineRegular',
+  'IconUsersOutlineRegular',
+  'IconWorkspaceTreeOutlineRegular',
+  'IconSparkleRegular',
   'FileTypeIcon',
 ] as const
 

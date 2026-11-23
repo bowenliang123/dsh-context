@@ -15,7 +15,7 @@ import type { FleetDetail, FleetMemberInfo } from '../../shared/types'
 import { makeAgentGraph } from './agentGraph'
 import { makeDetailNote } from './detailNote'
 import { LoadingLane } from './skeleton'
-import { IconChecklistOutlineRegular, IconSendOutlineRegular, IconWorkspaceTreeOutlineRegular } from '@deepseek-ai/dsh-client-ui-primitives'
+import { IconChecklistOutlineRegular, IconQueueOutlineRegular, IconUsersOutlineRegular } from '@deepseek-ai/dsh-client-ui-primitives'
 import { makeRichText } from './richText'
 import { makeErrorBoundary } from './errorBoundary'
 import { MissionPulse, PulseHeader } from './missionPulse'
@@ -143,7 +143,7 @@ export function makeFleetView(
               <div className="lc-pulse-boards">
                 <div className="lc-card lc-pulse-timeline lc-pulse-board-skel">
                   <div className="lc-card-title">
-                    <span className="lc-card-title-text"><IconWorkspaceTreeOutlineRegular size={14} />{t('fleet.pulse.timeline')}</span>
+                    <span className="lc-card-title-text"><IconUsersOutlineRegular size={14} />{t('fleet.pulse.timeline')}</span>
                   </div>
                   <LoadingLane />
                 </div>
@@ -157,7 +157,7 @@ export function makeFleetView(
             </div>
             <div className="lc-card lc-pulse-events lc-pulse-events-skel">
               <div className="lc-card-title">
-                <span className="lc-card-title-text"><IconSendOutlineRegular size={14} />{t('fleet.pulse.events')}</span>
+                <span className="lc-card-title-text"><IconQueueOutlineRegular size={14} />{t('fleet.pulse.events')}</span>
               </div>
               <LoadingLane />
             </div>

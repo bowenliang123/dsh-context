@@ -2,7 +2,7 @@ import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useStat
 import {
   IconChecklistOutlineRegular,
   IconRightUpOutlineRegular,
-  IconWorkspaceTreeOutlineRegular,
+  IconUsersOutlineRegular,
 } from '@deepseek-ai/dsh-client-ui-primitives'
 import {
   fromPartyOf,
@@ -292,7 +292,7 @@ export const PulseTimeline = memo(function PulseTimeline(props: PulseTimelinePro
   return (
     <section className="lc-card lc-pulse-timeline" aria-busy={props.pending}>
       <div className="lc-card-title">
-        <span className="lc-card-title-text"><IconWorkspaceTreeOutlineRegular size={14} />{t('fleet.pulse.timeline')}</span>
+        <span className="lc-card-title-text"><IconUsersOutlineRegular size={14} />{t('fleet.pulse.timeline')}</span>
         <span className="lc-pulse-card-tools">
           <span className="lc-card-sub">
             {t('fleet.pulse.timelineSub', { shown: shownRecords, total: recordTotal, lanes: visibleIds.length })}

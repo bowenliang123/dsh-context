@@ -34,12 +34,15 @@ export const IconDatabase = resolveIcon('IconDatabaseOutlineRegular')
 export const IconClock = resolveIcon('IconClockOutlineRegular')
 export const IconGauge = resolveIcon('IconGaugeOutlineRegular')
 export const IconBrowse = resolveIcon('IconBrowseOutlineRegular')
-export const IconContextInjection = resolveIcon('IconContextInjectionOutlineRegular')
+export const IconFlatList = resolveIcon('IconFlatListOutlineRegular')
+export const IconCompareSplit = resolveIcon('IconCompareSplitOutlineRegular')
+export const IconAgentPreset = resolveIcon('IconAgentPresetOutlineRegular')
 export const IconFolderOpen = resolveIcon('IconFolderOpenOutlineRegular')
+export const IconWorkspaceTree = resolveIcon('IconWorkspaceTreeOutlineRegular')
 export const IconApi = resolveIcon('IconApiOutlineRegular')
-export const IconInspect = resolveIcon('IconInspectOutlineRegular')
 export const IconPlugin = resolveIcon('IconPluginPinwheelOutlineRegular')
 export const IconSkill = resolveIcon('IconSkillOutlineRegular')
+export const IconSparkle = resolveIcon('IconSparkleRegular')
 
 interface FileGlyphProps {
   path?: string

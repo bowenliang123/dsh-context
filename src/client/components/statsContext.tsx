@@ -13,7 +13,7 @@ import { nameColorOf } from '../nameColor'
 import { type ClientCtx } from '../services'
 import { isDeepSeekProvider } from '../../shared/providers'
 import type { ViewKit } from '../viewkit'
-import { IconData } from '../primitives'
+import { IconAgentPreset, IconApi, IconCompareSplit, IconData, IconSparkle } from '../primitives'
 import { useElementSize } from './useElementMetrics'
 
 interface PriceRow { key: string; face: CostPriceFace }
@@ -464,6 +464,7 @@ export function makeStatsContext(
     const openEvents = props.onEventsClick
     const eventsJump = openEvents === undefined ? undefined : (): void => { openEvents(null) }
     const onEventsTile = eventsJump === undefined ? undefined : rowJump(eventsJump)
+    const fleetLabel = <><IconAgentPreset size={12} className="lc-pi-labelicon" />{t('stats.fleet')}</>
     return (
       <div className="lc-card flex-[3] min-w-[min(360px,100%)]">
         <div className="lc-card-title">
@@ -475,7 +476,7 @@ export function makeStatsContext(
         <div className="lc-stats">
           <div className="lc-ledger">
             <div className="lc-ledger-head lc-ledger-in-head">
-              <span className="lc-ledger-label">{t('stats.io')}</span>
+              <span className="lc-ledger-label"><IconCompareSplit size={12} className="lc-pi-labelicon" />{t('stats.io')}</span>
               <b className="lc-ledger-total">{fmt(ioTotal)}</b>
             </div>
             <div className="lc-core">
@@ -520,7 +521,7 @@ export function makeStatsContext(
               </span>
             </div>
             <div className="lc-ledger-head lc-ledger-out-head">
-              <span className="lc-ledger-label">{t('stats.toolCalls')}</span>
+              <span className="lc-ledger-label"><IconSparkle size={12} className="lc-pi-labelicon" />{t('stats.toolCalls')}</span>
               <b className="lc-ledger-total">{fmt(toolTotal)}</b>
             </div>
             <ChipLane
@@ -536,7 +537,7 @@ export function makeStatsContext(
               fmt={fmt}
             />
             <div className="lc-ledger-head lc-ledger-in-head2">
-              <span className="lc-ledger-label">{t('stats.commands')}</span>
+              <span className="lc-ledger-label"><IconApi size={12} className="lc-pi-labelicon" />{t('stats.commands')}</span>
               <b className="lc-ledger-total">{fmt(props.commands?.runs ?? 0)}</b>
             </div>
             <div className="lc-ledger-team">
@@ -547,8 +548,8 @@ export function makeStatsContext(
                 <span className="lc-strip-cell lc-ledger-team-pair lc-stat-tipped group/tip">
                   <i>
                     {openTeam === undefined
-                      ? <span className="lc-ledger-label">{t('stats.fleet')}</span>
-                      : <button type="button" className="lc-ledger-label lc-ledger-team-open" onClick={openTeam}>{t('stats.fleet')}</button>}
+                      ? <span className="lc-ledger-label">{fleetLabel}</span>
+                      : <button type="button" className="lc-ledger-label lc-ledger-team-open" onClick={openTeam}>{fleetLabel}</button>}
                     <i className="lc-stat-q group-hover/tip:text-(--dsw-alias-label-primary) group-hover/tip:border-(--dsw-alias-label-primary)" aria-hidden="true">?</i>
                   </i>
                   <span className="lc-ledger-total">

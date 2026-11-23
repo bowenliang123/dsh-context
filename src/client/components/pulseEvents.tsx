@@ -1,8 +1,8 @@
 import { memo, useEffect, useRef, type ReactElement } from 'react'
 import {
   IconPanelLeftOutlineRegular,
+  IconQueueOutlineRegular,
   IconRightUpOutlineRegular,
-  IconSendOutlineRegular,
 } from '@deepseek-ai/dsh-client-ui-primitives'
 import { previewOf, type CommsAgent, type CommsKindFilter } from '../commsModel'
 import type { CommsRow, FleetDelegationRow } from '../fleetDetail'
@@ -206,7 +206,7 @@ export const PulseEvents = memo(function PulseEvents(props: PulseEventsProps): R
   return (
     <section className="lc-card lc-pulse-events">
       <div className="lc-card-title">
-        <span className="lc-card-title-text"><IconSendOutlineRegular size={14} />{t('fleet.pulse.events')}</span>
+        <span className="lc-card-title-text"><IconQueueOutlineRegular size={14} />{t('fleet.pulse.events')}</span>
         <span className="lc-card-sub">{t('fleet.comms.filtered', { n: props.events.length, total: props.scopedEvents.length })}</span>
       </div>
       <div className="lc-fleet-toolbar lc-pulse-event-tools">
