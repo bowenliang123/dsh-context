@@ -5,7 +5,7 @@ import { RISE_CLASS } from './timelineDnaBars'
 import { TimelineMilestoneBand } from './timelineMilestoneBand'
 import { fitBandItemsOf, milestoneJumpSeq, milestonesOf, type MilestoneBandItem } from './timelineMilestones'
 import { milestoneLabel, milestoneTipRows } from './timelineMilestoneText'
-import { TURN_FILLS, preprocessTimeline, timelineMaxima, turnStepsOf, timelineTipRows } from './timelineModel'
+import { preprocessTimeline, riseKeyOf, TURN_FILLS, timelineMaxima, turnStepsOf, timelineTipRows } from './timelineModel'
 import { clampTipLeft } from './tip'
 import { useElementSize } from './useElementMetrics'
 import type { ViewKit } from '../viewkit'
@@ -363,6 +363,7 @@ export function makeTimelineOverview(kit: ViewKit): (props: TimelineOverviewProp
               <div className="lc-grid lc-grid-zero" />
               {geo.bands.length > 0 || geo.durationRuns.length > 0 || geo.durationDots.length > 0 ? (
                 <svg
+                  key={riseKeyOf(props.granularity, props.mode, focus)}
                   className={'lc-duration lc-fit-svg' + RISE_CLASS}
                   viewBox={`0 0 ${u} ${CHART_H}`}
                   preserveAspectRatio="none"

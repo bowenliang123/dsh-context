@@ -203,6 +203,36 @@ describe('TimelineOverview category focus', () => {
   })
 })
 
+describe('TimelineOverview entrance rise', () => {
+  test('remounts the fit chart when the focus, granularity, or mode switches so the rise replays', async () => {
+    const r1 = req(1, { turn: 1, step: 0 })
+    const r2 = req(2, { turn: 1, step: 1, system: 300, tools: 150, user: 90, inject: 60, skill: 30, assistant: 120, tool: 180, total: 930 })
+    const r3 = req(3, { turn: 2, step: 0, system: 320, tools: 160, user: 100, inject: 70, skill: 40, assistant: 130, tool: 190, total: 1010 })
+    const m = await mount(h(TimelineOverview, propsOf([r1, r2])))
+    const chart = (): HTMLElement => query(m.container, '.lc-fit-svg')
+    const apply = async (over: Partial<TimelineOverviewProps> = {}, requests = [r1, r2]): Promise<HTMLElement> => {
+      await m.update(h(TimelineOverview, propsOf(requests, over)))
+      return chart()
+    }
+    const initial = chart()
+    assert.equal(await apply({ focusCat: 'nope' }), initial, 'an invalid focus leaves the chart unchanged')
+    const focused = await apply({ focusCat: 'tool' })
+    assert.notEqual(focused, initial)
+    assert.match(focused.getAttribute('class')!, /\blc-bar-in\b/)
+    const switched = await apply({ focusCat: 'system' })
+    assert.notEqual(switched, focused)
+    const cleared = await apply()
+    assert.notEqual(cleared, switched)
+    const turned = await apply({ granularity: 'turn' })
+    assert.notEqual(turned, cleared)
+    const delta = await apply({ granularity: 'turn', mode: 'delta' })
+    assert.notEqual(delta, turned)
+    assert.equal(await apply({ granularity: 'turn', mode: 'delta', durationCurve: true }), delta, 'the duration overlay toggles in place')
+    assert.equal(await apply({ granularity: 'turn', mode: 'delta' }, [r1, r2, r3]), delta, 'an appended step extends the ribbon in place')
+    await m.unmount()
+  })
+})
+
 describe('TimelineOverview flags and markers', () => {
   function steps(count: number, perTurn = 1): RequestRecord[] {
     const out: RequestRecord[] = []

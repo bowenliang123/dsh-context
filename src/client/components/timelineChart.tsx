@@ -14,7 +14,7 @@ import { bandItemsOf, milestonesOf, type MilestoneBandItem } from './timelineMil
 import { milestoneLabel, milestoneTipRows } from './timelineMilestoneText'
 import { BAR_GAP, BAR_W, TIMELINE_WINDOW_MIN, WINDOW_HYSTERESIS_BARS, WINDOW_OVERSCAN_BARS, initialBarWindow, nextBarWindow, windowPads, windowRangeFor } from './timelineWindow'
 import type { BarWindow } from './timelineWindow'
-import { preprocessTimeline, TURN_FILLS, timelineMaxima, timelineTipRows, turnStepsOf } from './timelineModel'
+import { preprocessTimeline, riseKeyOf, TURN_FILLS, timelineMaxima, timelineTipRows, turnStepsOf } from './timelineModel'
 import { clampTipLeft } from './tip'
 import { useElementSize } from './useElementMetrics'
 
@@ -674,7 +674,7 @@ export function makeTimelineChart(kit: ViewKit): (props: TimelineChartProps) => 
                 const i = shownFrom + k
                 return (
                   <ChartBar
-                    key={`${req.seq}:${props.granularity}:${props.mode}:${focus ?? ''}`}
+                    key={`${req.seq}:${riseKeyOf(props.granularity, props.mode, focus)}`}
                     req={req}
                     selected={props.selectedSeq === req.seq}
                     hovered={hoverSeq === req.seq}

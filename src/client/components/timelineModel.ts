@@ -81,6 +81,10 @@ function deltaOf(req: RequestRecord, prev: RequestRecord | null): RequestRecord 
   return out
 }
 
+export function riseKeyOf(granularity: 'step' | 'turn', mode: 'total' | 'delta', focus: string | null): string {
+  return `${granularity}:${mode}:${focus ?? ''}`
+}
+
 export function preprocessTimeline(
   requests: RequestRecord[],
   delta: boolean,
