@@ -10,6 +10,8 @@
 
 **Лучший [плагин DeepSeek Harness](https://www.deepseek.com/harness/) для анализа и управления контекстом агента.**
 
+> **Официально рекомендован DeepSeek Harness** — см. статью в WeChat [DeepSeek Harness: Growing Together with Our Plugin Community](https://mp.weixin.qq.com/s/xqyrRaiBpIcf0jeJzP7W0g) (на китайском) и [пост в X](https://x.com/DeepSeekHarness/status/2119431663642153128).
+
 > Рекомендован и отмечен звёздочкой сотрудниками DeepSeek Harness [@tianyicui](https://github.com/tianyicui) и [@turtle1999](https://github.com/turtle1999) — см. [этот пост в X](https://x.com/tianyi/status/2105256532657267119).
 
 [`dsh-context`](https://www.npmjs.com/package/dsh-context) предоставляет полный набор функций управления жизненным циклом контекста.

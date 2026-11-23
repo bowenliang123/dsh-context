@@ -10,6 +10,8 @@
 
 **The best [DeepSeek Harness plugin](https://www.deepseek.com/harness/) for Agent's context insights and management.**
 
+> **Officially recommended by DeepSeek Harness** — see the WeChat article [DeepSeek Harness: Growing Together with Our Plugin Community](https://mp.weixin.qq.com/s/xqyrRaiBpIcf0jeJzP7W0g) (in Chinese) and the [post on X](https://x.com/DeepSeekHarness/status/2119431663642153128).
+
 > Recommended and starred by DeepSeek Harness staff [@tianyicui](https://github.com/tianyicui) and [@turtle1999](https://github.com/turtle1999) — see [this post on X](https://x.com/tianyi/status/2105256532657267119).
 
 [`dsh-context`](https://www.npmjs.com/package/dsh-context) provides full context lifecycle management features.

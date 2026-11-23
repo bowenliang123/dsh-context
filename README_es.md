@@ -10,6 +10,8 @@
 
 **El mejor [plugin de DeepSeek Harness](https://www.deepseek.com/harness/) para el análisis y la gestión del contexto del agente.**
 
+> **Recomendado oficialmente por DeepSeek Harness**: consulta el artículo de WeChat [DeepSeek Harness: Growing Together with Our Plugin Community](https://mp.weixin.qq.com/s/xqyrRaiBpIcf0jeJzP7W0g) (en chino) y la [publicación en X](https://x.com/DeepSeekHarness/status/2119431663642153128).
+
 > Recomendado y marcado con una estrella por [@tianyicui](https://github.com/tianyicui) y [@turtle1999](https://github.com/turtle1999), del equipo de DeepSeek Harness; consulta [esta publicación en X](https://x.com/tianyi/status/2105256532657267119).
 
 [`dsh-context`](https://www.npmjs.com/package/dsh-context) ofrece funciones completas de gestión del ciclo de vida del contexto.

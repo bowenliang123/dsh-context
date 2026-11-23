@@ -10,6 +10,8 @@
 
 **适用于 Agent 上下文洞察与管理的最佳 [DeepSeek Harness 插件](https://www.deepseek.com/harness/)。**
 
+> **DeepSeek Harness 官方实名推荐** dsh-context 插件——参见微信公众号文章[《DeepSeek Harness 与插件社区共同成长》](https://mp.weixin.qq.com/s/xqyrRaiBpIcf0jeJzP7W0g)及 [X 上的推文](https://x.com/DeepSeekHarness/status/2119431663642153128)。
+
 > 获得 DeepSeek Harness 团队成员 [@tianyicui](https://github.com/tianyicui) 和 [@turtle1999](https://github.com/turtle1999) 推荐并加星——参见 [X 上的这条帖子](https://x.com/tianyi/status/2105256532657267119)。
 
 [`dsh-context`](https://www.npmjs.com/package/dsh-context) 提供完整的上下文生命周期管理功能。

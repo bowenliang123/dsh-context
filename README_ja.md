@@ -10,6 +10,8 @@
 
 **Agent のコンテキストを可視化・管理するための最高の [DeepSeek Harness プラグイン](https://www.deepseek.com/harness/)。**
 
+> **DeepSeek Harness 公式が dsh-context プラグインを推薦** — WeChat の記事「[DeepSeek Harness 与插件社区共同成长](https://mp.weixin.qq.com/s/xqyrRaiBpIcf0jeJzP7W0g)」（中国語）と [X の投稿](https://x.com/DeepSeekHarness/status/2119431663642153128)をご覧ください。
+
 > DeepSeek Harness チームのメンバー [@tianyicui](https://github.com/tianyicui) と [@turtle1999](https://github.com/turtle1999) が推薦し、スターを付けています。[X の投稿](https://x.com/tianyi/status/2105256532657267119)をご覧ください。
 
 [`dsh-context`](https://www.npmjs.com/package/dsh-context) は、コンテキストのライフサイクル全体を管理する機能を提供します。
