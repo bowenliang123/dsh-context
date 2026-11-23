@@ -1,5 +1,7 @@
 import { act, createElement as h, type ReactElement } from 'react'
 import assert from 'node:assert/strict'
+import { readFileSync } from 'node:fs'
+import { join } from 'node:path'
 import { afterEach, describe, expect, test, vi } from 'vitest'
 import { makeAgentGraph } from '../../../src/client/components/agentGraph'
 import { DICT_EN } from '../../../src/client/i18n'
@@ -758,6 +760,16 @@ describe('AgentGraph — viewport windowing', () => {
     } finally {
       vi.unstubAllGlobals()
     }
+  })
+})
+
+describe('AgentGraph — narrow inspector', () => {
+  test('the stacked rule declares border-box sizing', () => {
+    const css = readFileSync(join(process.cwd(), 'src/client/styles/agentGraph.css'), 'utf8')
+    const stackedRule = css.match(/@container lc-card[^{]*\{[\s\S]*?\.lc-agents-inspector\.lc-inspector\s*\{([^}]*)\}/)
+    assert.ok(stackedRule, 'the stacked container block still sizes the inspector')
+    assert.match(stackedRule[1], /(?:^|;)\s*width:\s*100%\s*(?=;|$)/)
+    assert.match(stackedRule[1], /(?:^|;)\s*box-sizing:\s*border-box\s*(?=;|$)/)
   })
 })
 })

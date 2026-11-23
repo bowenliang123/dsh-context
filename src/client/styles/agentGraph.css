@@ -81,7 +81,7 @@
 .lc-agents-inspector.lc-inspector { flex: 0 0 300px; width: 300px; margin-top: 0; position: sticky; top: 8px; max-height: min(560px, 80vh); overflow-y: auto; }
 @container lc-card (max-width: 720px) {
   .lc-agents-split { flex-direction: column; align-items: stretch; }
-  .lc-agents-inspector.lc-inspector { flex: none; width: 100%; position: static; max-height: none; }
+  .lc-agents-inspector.lc-inspector { flex: none; width: 100%; box-sizing: border-box; position: static; max-height: none; }
 }
 
 .lc-col-graph { display: flex; flex-direction: column; }
