@@ -4,6 +4,7 @@ import { describe, test } from 'vitest'
 import { aggregateByTurn, attachMarkers, jumpTargetOf, turnStepsOf } from '../../../src/client/components/timelineModel'
 import { makeTimelineOverview, type TimelineOverviewProps } from '../../../src/client/components/timelineOverview'
 import { type ContextEventRecord, type RequestRecord } from '../../../src/shared/types'
+import { type TimelineBand } from '../../../src/client/dna'
 import { click, hover, mount, query, queryAll, unhover, flush, until } from '../helpers/kit'
 import { kit, req, TimelineChart, bars, propsOf, scrollTo, viewport, type LayoutEl } from './timelineChartHarness'
 import { BAR_GAP, BAR_W, initialBarWindow, nextBarWindow, WINDOW_HYSTERESIS_BARS, WINDOW_OVERSCAN_BARS, windowPads, windowRangeFor } from '../../../src/client/components/timelineWindow'
@@ -762,6 +763,35 @@ describe('TimelineChart entrance rise', () => {
     assert.deepEqual(bars(m.container).map(b => b.getAttribute('data-seq')), ['1', '2', '3'])
     assert.notEqual(query(m.container, '.lc-bar[data-seq="2"]'), reusedSeq)
     await m.unmount()
+  })
+
+  test('switching the focused category remounts every bar so the entrance rise replays', async () => {
+    const reqs = [req(1, { turn: 1, step: 0 }), req(2, { turn: 1, step: 1 })]
+    const m = await mount(h(TimelineChart, propsOf(reqs)))
+    const unfocused = bars(m.container)[0]
+    await m.update(h(TimelineChart, propsOf(reqs, { focusCat: 'nope' })))
+    assert.equal(bars(m.container)[0], unfocused, 'an invalid focus leaves the chart unchanged')
+    await m.update(h(TimelineChart, propsOf(reqs, { focusCat: 'tool' })))
+    const focused = bars(m.container)[0]
+    assert.notEqual(focused, unfocused)
+    assert.ok(query(focused, '.lc-bar-stack').className.includes('animate-lc-bar-in'))
+    await m.update(h(TimelineChart, propsOf(reqs, { focusCat: 'system' })))
+    const switched = bars(m.container)[0]
+    assert.notEqual(switched, focused)
+    assert.ok(query(switched, '.lc-bar-stack').className.includes('animate-lc-bar-in'))
+    await m.update(h(TimelineChart, propsOf(reqs, { focusCat: null })))
+    const cleared = bars(m.container)[0]
+    assert.notEqual(cleared, switched)
+    assert.ok(query(cleared, '.lc-bar-stack').className.includes('animate-lc-bar-in'))
+    await m.unmount()
+
+    const band = (tokens: number): TimelineBand[] => [{ key: 'sys', cat: 'system', tokens, off: 0, color: '#123456' }]
+    const dna = [band(100), band(120)]
+    const d = await mount(h(TimelineChart, propsOf(reqs, { dna })))
+    const dnaBar = bars(d.container)[0]
+    await d.update(h(TimelineChart, propsOf(reqs, { dna, focusCat: 'tool' })))
+    assert.equal(bars(d.container)[0], dnaBar, 'DNA mode ignores the focus, so the bars stay put')
+    await d.unmount()
   })
 
   test('switching total ↔ delta remounts every bar so the entrance rise replays', async () => {

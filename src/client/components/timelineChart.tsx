@@ -674,7 +674,7 @@ export function makeTimelineChart(kit: ViewKit): (props: TimelineChartProps) => 
                 const i = shownFrom + k
                 return (
                   <ChartBar
-                    key={`${req.seq}:${props.granularity}:${props.mode}`}
+                    key={`${req.seq}:${props.granularity}:${props.mode}:${focus ?? ''}`}
                     req={req}
                     selected={props.selectedSeq === req.seq}
                     hovered={hoverSeq === req.seq}
