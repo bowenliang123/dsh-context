@@ -1,7 +1,7 @@
 {
   "meta": {
     "title": "Contexto (dsh-context)",
-    "description": "Análisis y gestión del contexto, con panel, explorador, evolución y comandos, para comprender cómo se compone el contexto y cómo evoluciona.",
+    "description": "Plugin de análisis y gestión del contexto recomendado oficialmente por DeepSeek Harness: ofrece un explorador de contexto, tendencias del contexto, una vista de colaboración multiagente, análisis de eventos clave del contexto, estadísticas entre sesiones y actividad de llamadas a herramientas y comandos, para comprender por completo la composición del contexto, el uso de tokens y su evolución.",
     "detail": "README_es.md"
   }
 }

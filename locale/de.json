@@ -1,7 +1,7 @@
 {
   "meta": {
     "title": "Kontext (dsh-context)",
-    "description": "Kontext-Einblicke und -Verwaltung mit Dashboard, Browser, Dynamik und Befehlen, um den Aufbau des Kontexts und seine Entwicklung zu verstehen.",
+    "description": "Offiziell von DeepSeek Harness empfohlenes Plugin für Kontext-Einblicke und -Verwaltung: Kontext-Browser, Kontexttrends, Ansicht der Multi-Agenten-Zusammenarbeit, Analysen wichtiger Kontextereignisse, sitzungsübergreifende Statistiken sowie Aktivitäten von Tool-Aufrufen und Befehlen, für einen vollständigen Überblick über Kontextaufbau, Token-Nutzung und die Entwicklung des Kontexts.",
     "detail": "README_de.md"
   }
 }
