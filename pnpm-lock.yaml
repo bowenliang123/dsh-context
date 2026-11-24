@@ -151,8 +151,8 @@ importers:
         specifier: ^4.5.0
         version: 4.5.0
       simple-icons:
-        specifier: 16.32.0
-        version: 16.32.0
+        specifier: 16.38.1
+        version: 16.38.1
       tsdown:
         specifier: 0.23.7
         version: 0.23.7(typescript@7.1.0-beta)
@@ -2063,8 +2063,8 @@ packages:
     resolution: {integrity: sha512-OcRW72ngQvc+MSVWBRIovC/BTW589iUE/Vxav7VeM4RcY9MUjqB+IR6ILG1k9nuW6LiG/nct9uma4/MBtnZbmQ==}
     engines: {node: '>=20'}
 
-  simple-icons@16.32.0:
-    resolution: {integrity: sha512-BwqATHxAulx7X6kNdTkecy7PBjLkgtAHcgrwYLd9iA+cD2At9DzhJwdwaSELk2+aZe01IfiM/Wxtyp68Dvup2A==}
+  simple-icons@16.38.1:
+    resolution: {integrity: sha512-q4JnGp1cgeASp4jzEsmSh/7BD/e2y7aYO8XST+QBEvOJ5wzZ/9WRmKsI+QUwkfPUSiXC+sfh2+QetD38zl3N0g==}
     engines: {node: '>=0.12.18'}
 
   source-map-js@1.2.2:
@@ -4181,7 +4181,7 @@ snapshots:
       '@shikijs/vscode-textmate': 10.1.0
       '@types/hast': 3.0.5
 
-  simple-icons@16.32.0: {}
+  simple-icons@16.38.1: {}
 
   source-map-js@1.2.2: {}
 
