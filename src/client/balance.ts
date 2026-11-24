@@ -1,5 +1,5 @@
 import { amountOf } from '../shared/decode'
-import type { PlatformBalance, PlatformBalanceEntry } from '../shared/types'
+import type { PlatformBalance, PlatformBalanceEntry, PlatformBalances } from '../shared/types'
 import { BALANCE_ROUTE } from './apiRoutes'
 import { postRouteQuietly } from './route'
 import { asRecord } from './services'
@@ -18,7 +18,7 @@ export function setPlatformBalanceStorage(next: StorageFace | null | undefined):
   storage = next
 }
 
-export const PLATFORM_BALANCE_STORAGE_KEY = STORAGE_KEY
+export const PLATFORM_BALANCES_STORAGE_KEY = STORAGE_KEY
 
 export function platformBalanceOf(value: unknown): PlatformBalance | null {
   const data = asRecord(value)
@@ -45,6 +45,21 @@ export function platformBalanceOf(value: unknown): PlatformBalance | null {
     : null
 }
 
+function armOf(value: unknown): PlatformBalance | null {
+  if (value === null) return null
+  try {
+    return platformBalanceOf(value)
+  } catch {
+    return null
+  }
+}
+
+export function platformBalancesOf(value: unknown): PlatformBalances | null {
+  const data = asRecord(value)
+  if (data === null || !('account' in data) || !('api' in data)) return null
+  return { account: armOf(data.account), api: armOf(data.api) }
+}
+
 export function balanceEntryOf(
   balance: PlatformBalance | null | undefined,
   currency: 'cny' | 'usd',
@@ -54,9 +69,9 @@ export function balanceEntryOf(
   return balance.balances.find(entry => entry.currency === want) ?? balance.balances[0]
 }
 
-let cached: PlatformBalance | null = null
+let cached: PlatformBalances | null = null
 let refreshing: Promise<void> | null = null
-const landingCallbacks = new Set<(value: PlatformBalance) => void>()
+const landingCallbacks = new Set<(value: PlatformBalances) => void>()
 
 let storage: StorageFace | null | undefined
 
@@ -71,53 +86,53 @@ function storageFn(): StorageFace | null {
   return storage
 }
 
-function storedBalance(): PlatformBalance | null {
+function storedBalances(): PlatformBalances | null {
   try {
     const raw = storageFn()?.getItem(STORAGE_KEY)
     if (raw === null || raw === undefined) return null
     const parsed: unknown = JSON.parse(raw)
-    if (parsed === null || typeof parsed !== 'object' || Array.isArray(parsed)) return platformBalanceOf(parsed)
+    if (parsed === null || typeof parsed !== 'object' || Array.isArray(parsed)) return platformBalancesOf(parsed)
     const envelope = parsed as Record<string, unknown>
-    if (typeof envelope.at !== 'number' || !Number.isFinite(envelope.at)) return platformBalanceOf(parsed)
+    if (typeof envelope.at !== 'number' || !Number.isFinite(envelope.at)) return platformBalancesOf(parsed)
     if (Date.now() - envelope.at > BALANCE_STORAGE_TTL_MS) {
       storageFn()?.removeItem(STORAGE_KEY)
       return null
     }
-    return platformBalanceOf(envelope.balance)
+    return platformBalancesOf(envelope.balances)
   } catch {
     return null
   }
 }
 
-function rememberBalance(value: PlatformBalance | null): void {
+function rememberBalances(value: PlatformBalances | null): void {
   try {
-    storageFn()?.setItem(STORAGE_KEY, JSON.stringify({ at: Date.now(), balance: value }))
+    storageFn()?.setItem(STORAGE_KEY, JSON.stringify({ at: Date.now(), balances: value }))
   } catch {
   }
 }
 
-async function readRoute(): Promise<PlatformBalance | null> {
-  return postRouteQuietly(BALANCE_ROUTE, {}, platformBalanceOf)
+async function readRoute(): Promise<PlatformBalances | null> {
+  return postRouteQuietly(BALANCE_ROUTE, {}, platformBalancesOf)
 }
 
-export function readPlatformBalance(onRefresh: (value: PlatformBalance) => void): PlatformBalance | null {
+export function readPlatformBalances(onRefresh: (value: PlatformBalances) => void): PlatformBalances | null {
   landingCallbacks.add(onRefresh)
   if (refreshing === null) {
     refreshing = (async () => {
       const value = await readRoute()
       if (value === null) return
       cached = value
-      rememberBalance(value)
+      rememberBalances(value)
       for (const waiter of landingCallbacks) waiter(value)
     })().finally(() => {
       refreshing = null
       landingCallbacks.clear()
     })
   }
-  return cached ?? storedBalance()
+  return cached ?? storedBalances()
 }
 
-export function resetPlatformBalance(): void {
+export function resetPlatformBalances(): void {
   cached = null
   refreshing = null
   landingCallbacks.clear()

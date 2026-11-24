@@ -129,8 +129,8 @@ describe('balance reads across credentials', () => {
     assert.equal(log.length, 2, 'each credential fetches its own balance')
     assert.equal(log[1]?.auth, 'Bearer sk-beta', 'the second read carries its own key instead of joining the first')
     assert.notDeepEqual(x, y, 'the answers report their own accounts')
-    assert.equal((x.value as { balances: { total: number }[] }).balances[0]?.total, 1)
-    assert.equal((y.value as { balances: { total: number }[] }).balances[0]?.total, 2)
+    assert.equal(((x.value as { api: { balances: { total: number }[] } }).api).balances[0]?.total, 1)
+    assert.equal(((y.value as { api: { balances: { total: number }[] } }).api).balances[0]?.total, 2)
   })
 })
 
@@ -173,7 +173,10 @@ describe('balance route outcomes', () => {
     assert.equal(log[0]?.accept, 'application/json')
     assert.deepEqual(reply, {
       ok: true,
-      value: { isAvailable: true, balances: [{ currency: 'CNY', total: 110, granted: 10, toppedUp: 100 }] },
+      value: {
+        account: null,
+        api: { isAvailable: true, balances: [{ currency: 'CNY', total: 110, granted: 10, toppedUp: 100 }] },
+      },
     })
     resetBalance()
     const numeric = ctxOf(configuredCtx())
@@ -184,7 +187,10 @@ describe('balance route outcomes', () => {
     })
     assert.deepEqual(await serve(numeric.captured), {
       ok: true,
-      value: { isAvailable: false, balances: [{ currency: 'USD', total: 0.5, granted: 0, toppedUp: 0.5 }] },
+      value: {
+        account: null,
+        api: { isAvailable: false, balances: [{ currency: 'USD', total: 0.5, granted: 0, toppedUp: 0.5 }] },
+      },
     })
   })
 
@@ -222,7 +228,7 @@ describe('balance route outcomes', () => {
       watchBalanceChannel(ctx)
       const { calls } = stubPlatform(CNY_BALANCE)
       const reply = await serve(captured)
-      assert.deepEqual(reply, { ok: true, value: null })
+      assert.deepEqual(reply, { ok: true, value: { account: null, api: null } })
       assert.equal(calls(), 0)
     }
   })
@@ -252,7 +258,7 @@ describe('balance route outcomes', () => {
       watchBalanceChannel(ctx)
       stubPlatform(body, mode)
       const reply = await serve(captured)
-      assert.deepEqual(reply, { ok: true, value: null }, label)
+      assert.deepEqual(reply, { ok: true, value: { account: null, api: null } }, label)
     }
   })
 
@@ -264,7 +270,10 @@ describe('balance route outcomes', () => {
     const reply = await serve(captured)
     assert.deepEqual(reply, {
       ok: true,
-      value: { isAvailable: true, balances: [{ currency: 'CNY', total: 110, granted: 10, toppedUp: 100 }] },
+      value: {
+        account: null,
+        api: { isAvailable: true, balances: [{ currency: 'CNY', total: 110, granted: 10, toppedUp: 100 }] },
+      },
     })
   })
 })
@@ -360,7 +369,7 @@ describe('settings face (the Config-form projection)', () => {
     })
     watchBalanceChannel(other.ctx)
     const otherFetch = stubPlatform(CNY_BALANCE)
-    assert.deepEqual(await serve(other.captured), { ok: true, value: null })
+    assert.deepEqual(await serve(other.captured), { ok: true, value: { account: null, api: null } })
     assert.deepEqual(refs, [])
     assert.equal(otherFetch.calls(), 0)
 
@@ -394,7 +403,7 @@ describe('settings face (the Config-form projection)', () => {
     })
     watchBalanceChannel(unresolved.ctx)
     const unresolvedFetch = stubPlatform(CNY_BALANCE)
-    assert.deepEqual(await serve(unresolved.captured), { ok: true, value: null })
+    assert.deepEqual(await serve(unresolved.captured), { ok: true, value: { account: null, api: null } })
     assert.deepEqual(unresolvedRefs, ['DEEPSEEK_API_KEY'], 'the shared credential ref is read once, not once per row')
     assert.equal(unresolvedFetch.calls(), 0)
 
@@ -406,7 +415,7 @@ describe('settings face (the Config-form projection)', () => {
     })
     watchBalanceChannel(refLess.ctx)
     const refLessFetch = stubPlatform(CNY_BALANCE)
-    assert.deepEqual(await serve(refLess.captured), { ok: true, value: null })
+    assert.deepEqual(await serve(refLess.captured), { ok: true, value: { account: null, api: null } })
     assert.deepEqual(refs, [])
     assert.equal(refLessFetch.calls(), 0)
   })
@@ -460,7 +469,7 @@ describe('settings face (the Config-form projection)', () => {
       watchBalanceChannel(ctx)
       const { calls } = stubPlatform(CNY_BALANCE)
       const reply = await serve(captured)
-      assert.deepEqual(reply, { ok: true, value: null })
+      assert.deepEqual(reply, { ok: true, value: { account: null, api: null } })
       assert.equal(calls(), 0)
     }
     resetBalance()
@@ -477,7 +486,10 @@ describe('settings face (the Config-form projection)', () => {
     assert.deepEqual(refs, ['DEEPSEEK_API_KEY'])
     assert.deepEqual(reply, {
       ok: true,
-      value: { isAvailable: true, balances: [{ currency: 'CNY', total: 110, granted: 10, toppedUp: 100 }] },
+      value: {
+        account: null,
+        api: { isAvailable: true, balances: [{ currency: 'CNY', total: 110, granted: 10, toppedUp: 100 }] },
+      },
     })
   })
 })
@@ -522,7 +534,13 @@ describe('balance reads', () => {
     vi.setSystemTime(1_000_000 + 4 * 60_000)
     const settled = await serve(captured)
     assert.equal(calls(), 3, 'the account moves with every billed request, so no read is served from a cache')
-    assert.deepEqual(settled, { ok: true, value: { isAvailable: true, balances: [{ currency: 'CNY', total: 110, granted: 10, toppedUp: 100 }] } })
+    assert.deepEqual(settled, {
+      ok: true,
+      value: {
+        account: null,
+        api: { isAvailable: true, balances: [{ currency: 'CNY', total: 110, granted: 10, toppedUp: 100 }] },
+      },
+    })
     let fails = 0
     setBalanceFetcher(async () => {
       fails++
@@ -531,7 +549,7 @@ describe('balance reads', () => {
     await serve(captured)
     await serve(captured)
     assert.equal(fails, 2)
-    assert.deepEqual(await serve(captured), { ok: true, value: null })
+    assert.deepEqual(await serve(captured), { ok: true, value: { account: null, api: null } })
   })
 
   test('clearing the seam restores the default fetcher over the real global fetch', async () => {
@@ -550,7 +568,10 @@ describe('balance reads', () => {
     assert.deepEqual(seen, ['https://api.deepseek.com/user/balance'])
     assert.deepEqual(reply, {
       ok: true,
-      value: { isAvailable: true, balances: [{ currency: 'CNY', total: 110, granted: 10, toppedUp: 100 }] },
+      value: {
+        account: null,
+        api: { isAvailable: true, balances: [{ currency: 'CNY', total: 110, granted: 10, toppedUp: 100 }] },
+      },
     })
     vi.unstubAllGlobals()
   })
@@ -608,7 +629,7 @@ describe('account balance', () => {
     }
   }
 
-  test('a signed-in account serves its topped-up and granted wallets ahead of any API key', async () => {
+  test('a signed-in account and the configured API key each report their own wallets', async () => {
     const refs: string[] = []
     const calls: Record<string, unknown>[] = []
     const { ctx, captured } = ctxOf(accountCtx(accountOf(ACCOUNT_BALANCE, calls), {
@@ -618,21 +639,24 @@ describe('account balance', () => {
     const platform = stubPlatform(CNY_BALANCE)
     const reply = await serve(captured)
     assert.deepEqual(calls, [{ version: '0.2.3', locale: 'en', timezoneOffsetSeconds: 0 }])
-    assert.deepEqual(refs, [], 'the API key is never resolved')
-    assert.equal(platform.calls(), 0, 'the API key endpoint is never called')
+    assert.deepEqual(refs, ['DEEPSEEK_API_KEY'], 'the API arm resolves its own key')
+    assert.equal(platform.calls(), 1, 'the API arm reads the platform')
     assert.deepEqual(reply, {
       ok: true,
       value: {
-        isAvailable: true,
-        balances: [
-          { currency: 'CNY', total: 110.5, granted: 10, toppedUp: 100.5 },
-          { currency: 'USD', total: 1.5, granted: 0.25, toppedUp: 1.25 },
-        ],
+        account: {
+          isAvailable: true,
+          balances: [
+            { currency: 'CNY', total: 110.5, granted: 10, toppedUp: 100.5 },
+            { currency: 'USD', total: 1.5, granted: 0.25, toppedUp: 1.25 },
+          ],
+        },
+        api: { isAvailable: true, balances: [{ currency: 'CNY', total: 110, granted: 10, toppedUp: 100 }] },
       },
     })
   })
 
-  test('signed-out, failed, throwing, or shape-broken account reads fall back to the API key', async () => {
+  test('signed-out, failed, throwing, or shape-broken account reads report no account while the API arm still serves', async () => {
     const hostile = new Proxy({}, { get() { throw new Error('hostile') } })
     const variants: [string, unknown][] = [
       ['signed out', accountOf(null)],
@@ -651,7 +675,10 @@ describe('account balance', () => {
       const reply = await serve(captured)
       assert.deepEqual(reply, {
         ok: true,
-        value: { isAvailable: true, balances: [{ currency: 'CNY', total: 110, granted: 10, toppedUp: 100 }] },
+        value: {
+          account: null,
+          api: { isAvailable: true, balances: [{ currency: 'CNY', total: 110, granted: 10, toppedUp: 100 }] },
+        },
       }, label)
       assert.equal(platform.calls(), 1, label)
     }

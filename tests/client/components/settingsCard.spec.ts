@@ -19,7 +19,7 @@ function hookFor(state: SettingsState) {
 }
 
 function stateOf(partial: Partial<SettingsState> = {}): SettingsState {
-  return { status: 'ready', placement: 'all', granularity: 'step', mode: 'total', deltaBase: 'step', toolSort: 'count', fileSort: 'count', insightsEntry: 'show', durationCurve: 'show', overviewAutoSteps: '100', overviewRange: '30d', fleetTab: 'show', promptPrefix: '', promptSuffix: '', writable: true, ...partial }
+  return { status: 'ready', placement: 'all', granularity: 'step', mode: 'total', deltaBase: 'step', toolSort: 'count', fileSort: 'count', insightsEntry: 'show', durationCurve: 'show', overviewAutoSteps: '100', overviewRange: '30d', fleetTab: 'show', balanceSource: 'account', promptPrefix: '', promptSuffix: '', writable: true, ...partial }
 }
 
 function menuItems(): HTMLElement[] {
@@ -59,7 +59,7 @@ describe('PluginConfigCard (the Plugins-page seat)', () => {
     await m.unmount()
   })
 
-  test('renders the eleven selects and the two prompt text rows across three titled groups — no card chrome', async () => {
+  test('renders the twelve selects and the two prompt text rows across three titled groups — no card chrome', async () => {
     const m = await mount(h(PluginConfigCard, { useContextSettings: hookFor(stateOf({ status: 'loading', writable: false })) }))
     assert.equal(m.container.querySelector('.lc-settings-card'), null, 'no settings-section chrome')
     assert.ok(query(m.container, '.lc-settings-prefs'))
@@ -71,7 +71,7 @@ describe('PluginConfigCard (the Plugins-page seat)', () => {
       DICT_EN['settings.group.prompt'],
     ])
     const selects = queryAll<HTMLButtonElement>(m.container, '.lc-settings-select')
-    assert.equal(selects.length, 11)
+    assert.equal(selects.length, 12)
     assert.ok(selects.every(s => s.disabled), 'loading is not ready: the rows are disabled')
     const textareas = queryAll<HTMLTextAreaElement>(m.container, '.lc-settings-textarea')
     assert.equal(textareas.length, 2)
@@ -195,6 +195,14 @@ describe('PluginConfigCard (the Plugins-page seat)', () => {
     ])
     await click(sortItems[4])
     commit('defaultFileSort', 'name')
+
+    assert.ok(text(m.container).includes(DICT_EN['settings.balanceSource']))
+    assert.ok(text(selects[11]).includes(DICT_EN['balance.account']))
+    await click(selects[11])
+    const balanceItems = menuItems()
+    assert.deepEqual(balanceItems.map(i => text(i)), [DICT_EN['balance.account'], DICT_EN['balance.api']])
+    await click(balanceItems[1])
+    commit('balanceSource', 'api')
 
     await click(selects[3])
     const rangeItems = menuItems()

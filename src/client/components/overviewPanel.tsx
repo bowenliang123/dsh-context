@@ -65,7 +65,7 @@ export function makeOverviewPanel(
   const subscribeSettings = settings.store.subscribe.bind(settings.store)
   const Heatmap = makeHeatmap(kit)
   const OverviewCard = makeOverviewCard(kit)
-  const BalanceCapsule = makeBalanceCapsule(ctx, kit)
+  const BalanceCapsule = makeBalanceCapsule(ctx, kit, settings)
   const DateRange = makeDateRange(kit)
   const OverviewTokens = makeOverviewTokens(kit, Donut)
   const StatsTiming = makeStatsTiming(kit, Donut)

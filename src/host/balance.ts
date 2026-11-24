@@ -253,6 +253,11 @@ async function readAccountBalance(ctx: Context, version: string): Promise<Platfo
   }
 }
 
+async function readApiBalance(ctx: Context): Promise<PlatformBalance | null> {
+  const facts = await resolveFacts(ctx)
+  return facts === null ? null : readBalance(facts)
+}
+
 export function watchBalanceChannel(ctx: Context, version = '0.0.0'): void {
   mountPostRoute({
     ctx,
@@ -260,11 +265,11 @@ export function watchBalanceChannel(ctx: Context, version = '0.0.0'): void {
     path: BALANCE_ROUTE,
     label: 'dsh-context: balance route',
     handler: () => async (): Promise<Response> => {
-      const account = await readAccountBalance(ctx, version)
-      if (account !== null) return reply({ ok: true, value: account })
-      const facts = await resolveFacts(ctx)
-      const value = facts !== null ? await readBalance(facts) : null
-      return reply({ ok: true, value })
+      const [account, api] = await Promise.all([
+        readAccountBalance(ctx, version),
+        readApiBalance(ctx),
+      ])
+      return reply({ ok: true, value: { account, api } })
     },
   })
 }

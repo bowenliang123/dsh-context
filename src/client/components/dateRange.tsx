@@ -1,10 +1,10 @@
-import { useEffect, useLayoutEffect, useRef, useState, type ReactElement } from 'react'
+import { useRef, useState, type ReactElement } from 'react'
 import { createPortal } from 'react-dom'
 import { MONTH_KEY_RE, monthGridOf, shiftDayKey, shiftMonthKey } from '../../shared/days'
 import { orderedDayRange, type DayRange } from '../overview'
 import type { ViewKit } from '../viewkit'
+import { useAnchoredPanel } from './anchoredPanel'
 import { useEscapeClose } from './escapeClose'
-import { clampPopoverLeft } from './tip'
 import { IconChevronDown } from '../primitives'
 
 export interface DateRangeProps {
@@ -14,9 +14,6 @@ export interface DateRangeProps {
   today: string
   locale: string
 }
-
-const GAP = 6
-const MARGIN = 8
 
 const CELL_ID = 'lc-dp-day'
 
@@ -42,43 +39,12 @@ export function makeDateRange(kit: ViewKit): (props: DateRangeProps) => ReactEle
     const [cursor, setCursor] = useState('')
     const [anchor, setAnchor] = useState<string | null>(null)
     const [hover, setHover] = useState<string | null>(null)
-    const [spot, setSpot] = useState<{ left: number; top: number } | null>(null)
     const rootRef = useRef<HTMLDivElement | null>(null)
     const panelRef = useRef<HTMLDivElement | null>(null)
 
     const close = (): void => { setOpen(false) }
     useEscapeClose(open, close)
-
-    useEffect(() => {
-      if (!open) return undefined
-      const onDown = (ev: MouseEvent): void => {
-        const target = ev.target
-        if (!(target instanceof Node)) return
-        if (rootRef.current?.contains(target) === true || panelRef.current?.contains(target) === true) return
-        close()
-      }
-      window.addEventListener('mousedown', onDown)
-      window.addEventListener('scroll', close, true)
-      window.addEventListener('resize', close)
-      return () => {
-        window.removeEventListener('mousedown', onDown)
-        window.removeEventListener('scroll', close, true)
-        window.removeEventListener('resize', close)
-      }
-    }, [open])
-
-    useLayoutEffect(() => {
-      const anchorEl = rootRef.current
-      const panelEl = panelRef.current
-      if (!open || anchorEl === null || panelEl === null) return
-      const rect = anchorEl.getBoundingClientRect()
-      const left = clampPopoverLeft(rect.right, panelEl.offsetWidth, window.innerWidth, MARGIN)
-      const below = rect.bottom + GAP
-      const top = below + panelEl.offsetHeight > window.innerHeight - MARGIN
-        ? Math.max(MARGIN, rect.top - panelEl.offsetHeight - GAP)
-        : below
-      setSpot(current => current !== null && Object.is(current.left, left) && Object.is(current.top, top) ? current : { left, top })
-    })
+    const spot = useAnchoredPanel(open, rootRef, panelRef, close)
 
     const draft = anchor === null ? props.value : orderedDayRange(anchor, hover ?? anchor)
     const grid = open ? monthGridOf(month) : null
@@ -125,7 +91,7 @@ export function makeDateRange(kit: ViewKit): (props: DateRangeProps) => ReactEle
       if (next !== null && next <= props.today && next.slice(0, 7) === month) setCursor(next)
     }
 
-    const shown = spot !== null && open ? spot : null
+    const shown = spot
     const from = draft?.from
     const to = anchor !== null && hover === null ? undefined : draft?.to
     return (

@@ -2,14 +2,14 @@
 
 import assert from 'node:assert/strict'
 import { afterEach, beforeEach, describe, test, vi } from 'vitest'
-import { balanceEntryOf, PLATFORM_BALANCE_STORAGE_KEY, platformBalanceOf, readPlatformBalance, resetPlatformBalance, setPlatformBalanceStorage, type StorageFace } from '../../src/client/balance'
-import { type PlatformBalance } from '../../src/shared/types'
+import { balanceEntryOf, PLATFORM_BALANCES_STORAGE_KEY, platformBalanceOf, platformBalancesOf, readPlatformBalances, resetPlatformBalances, setPlatformBalanceStorage, type StorageFace } from '../../src/client/balance'
+import { type PlatformBalances } from '../../src/shared/types'
 import { overviewValueOf } from '../../src/client/overviewSource'
 import { BASE_COVERAGE, daysValue, pageValue, summaryRaw, summaryValue, tallyValue } from './helpers/overviewWire'
 
 describe('balance', () => {
 
-const WIRE_BALANCE = {
+const ACCOUNT_BALANCE = {
   isAvailable: true,
   balances: [
     { currency: 'CNY', total: 110, granted: 10, toppedUp: 100 },
@@ -17,8 +17,18 @@ const WIRE_BALANCE = {
   ],
 }
 
-function wire(total: number): { isAvailable: boolean; balances: { currency: string; total: number; granted: number; toppedUp: number }[] } {
-  return { isAvailable: true, balances: [{ currency: 'CNY', total, granted: 0, toppedUp: total }] }
+const API_BALANCE = {
+  isAvailable: true,
+  balances: [
+    { currency: 'CNY', total: 90, granted: 20, toppedUp: 70 },
+    { currency: 'USD', total: 2, granted: 0.5, toppedUp: 1.5 },
+  ],
+}
+
+const WIRE_BALANCES = { account: ACCOUNT_BALANCE, api: API_BALANCE }
+
+function wire(total: number): PlatformBalances {
+  return { account: null, api: { isAvailable: true, balances: [{ currency: 'CNY', total, granted: 0, toppedUp: total }] } }
 }
 
 function stubRoute(body: unknown | undefined, mode: 'ok' | 'reject' | 'status' = 'ok'): { calls: () => number } {
@@ -39,7 +49,7 @@ function gatedRoute(): { release: () => void; calls: () => number } {
   vi.stubGlobal('fetch', async () => {
     n++
     await gate
-    return { ok: true, json: async () => ({ ok: true, value: WIRE_BALANCE }) }
+    return { ok: true, json: async () => ({ ok: true, value: WIRE_BALANCES }) }
   })
   return { release, calls: () => n }
 }
@@ -64,13 +74,15 @@ async function drain(): Promise<void> {
   for (let i = 0; i < 8; i++) await Promise.resolve()
 }
 
-function collector(): { seen: PlatformBalance[]; onRefresh: (v: PlatformBalance) => void } {
-  const seen: PlatformBalance[] = []
+function collector(): { seen: PlatformBalances[]; onRefresh: (v: PlatformBalances) => void } {
+  const seen: PlatformBalances[] = []
   return { seen, onRefresh: (v) => seen.push(v) }
 }
 
 function seededStorage(): FakeStorage {
-  const fake = new FakeStorage({ [PLATFORM_BALANCE_STORAGE_KEY]: JSON.stringify(WIRE_BALANCE) })
+  const fake = new FakeStorage({
+    [PLATFORM_BALANCES_STORAGE_KEY]: JSON.stringify({ at: Date.now(), balances: WIRE_BALANCES }),
+  })
   setPlatformBalanceStorage(fake)
   return fake
 }
@@ -83,12 +95,12 @@ function clearRealStorage(): void {
 }
 
 beforeEach(() => {
-  resetPlatformBalance()
+  resetPlatformBalances()
   clearRealStorage()
 })
 
 afterEach(() => {
-  resetPlatformBalance()
+  resetPlatformBalances()
   clearRealStorage()
   vi.unstubAllGlobals()
   vi.restoreAllMocks()
@@ -96,7 +108,7 @@ afterEach(() => {
 
 describe('platformBalanceOf', () => {
   test('a delivered wire balance parses whole; absent, shapeless, or entry-less payloads are no balance', () => {
-    assert.deepEqual(platformBalanceOf(WIRE_BALANCE), WIRE_BALANCE)
+    assert.deepEqual(platformBalanceOf(ACCOUNT_BALANCE), ACCOUNT_BALANCE)
     assert.equal(platformBalanceOf(undefined), null)
     assert.equal(platformBalanceOf(null), null)
     assert.equal(platformBalanceOf('balance'), null)
@@ -130,8 +142,36 @@ describe('platformBalanceOf', () => {
     })
     const hostile = new Proxy({}, { get() { throw new Error('hostile') } })
     assert.equal(platformBalanceOf({ balances: [hostile] }), null)
-    const mixed = platformBalanceOf({ balances: [hostile, WIRE_BALANCE.balances[0]] })
+    const mixed = platformBalanceOf({ balances: [hostile, ACCOUNT_BALANCE.balances[0]] })
     assert.deepEqual(mixed?.balances, [{ currency: 'CNY', total: 110, granted: 10, toppedUp: 100 }])
+  })
+})
+
+describe('platformBalancesOf', () => {
+  test('a delivered report parses both arms; an absent arm stays null', () => {
+    assert.deepEqual(platformBalancesOf(WIRE_BALANCES), WIRE_BALANCES)
+    assert.deepEqual(platformBalancesOf({ account: null, api: null }), { account: null, api: null })
+    assert.deepEqual(platformBalancesOf({ account: ACCOUNT_BALANCE, api: null }), { account: ACCOUNT_BALANCE, api: null })
+    assert.deepEqual(platformBalancesOf({ account: null, api: API_BALANCE }), { account: null, api: API_BALANCE })
+  })
+
+  test('a malformed or hostile non-null arm degrades to absent while the other arm survives', () => {
+    for (const bad of [undefined, null, 'balances', [], {}, { account: ACCOUNT_BALANCE }, { api: API_BALANCE }]) {
+      assert.equal(platformBalancesOf(bad), null, JSON.stringify(bad))
+    }
+    assert.deepEqual(
+      platformBalancesOf({ account: { isAvailable: true }, api: API_BALANCE }),
+      { account: null, api: API_BALANCE },
+      'a malformed account arm never blanks a readable API arm',
+    )
+    assert.deepEqual(
+      platformBalancesOf({ account: ACCOUNT_BALANCE, api: { balances: 'CNY' } }),
+      { account: ACCOUNT_BALANCE, api: null },
+    )
+    const hostile = new Proxy({}, { get() { throw new Error('hostile') } })
+    assert.deepEqual(platformBalancesOf({ account: hostile, api: API_BALANCE }), { account: null, api: API_BALANCE })
+    assert.deepEqual(platformBalancesOf({ account: ACCOUNT_BALANCE, api: hostile }), { account: ACCOUNT_BALANCE, api: null })
+    assert.deepEqual(platformBalancesOf({ account: undefined, api: undefined }), { account: null, api: null })
   })
 })
 
@@ -140,107 +180,119 @@ describe('balanceEntryOf', () => {
     assert.equal(balanceEntryOf(null, 'cny'), null)
     assert.equal(balanceEntryOf(undefined, 'usd'), null)
     assert.equal(balanceEntryOf({ isAvailable: true, balances: [] }, 'cny'), null)
-    assert.deepEqual(balanceEntryOf(WIRE_BALANCE, 'cny'), WIRE_BALANCE.balances[0])
-    assert.deepEqual(balanceEntryOf(WIRE_BALANCE, 'usd'), WIRE_BALANCE.balances[1])
+    assert.deepEqual(balanceEntryOf(ACCOUNT_BALANCE, 'cny'), ACCOUNT_BALANCE.balances[0])
+    assert.deepEqual(balanceEntryOf(ACCOUNT_BALANCE, 'usd'), ACCOUNT_BALANCE.balances[1])
     const eurOnly = platformBalanceOf({ balances: [{ currency: 'EUR', total: 2, granted: 0, toppedUp: 2 }] })
     assert.deepEqual(balanceEntryOf(eurOnly, 'usd'), eurOnly?.balances[0] ?? null)
   })
 })
 
-describe('readPlatformBalance', () => {
-  test('a landing figure reports through the refresh and is served from memory next time', async () => {
-    const { calls } = stubRoute({ ok: true, value: WIRE_BALANCE })
+describe('readPlatformBalances', () => {
+  test('a landing report reports through the refresh and is served from memory next time', async () => {
+    const { calls } = stubRoute({ ok: true, value: WIRE_BALANCES })
     const first = collector()
-    assert.equal(readPlatformBalance(first.onRefresh), null, 'the first open has nothing to paint')
+    assert.equal(readPlatformBalances(first.onRefresh), null, 'the first open has nothing to paint')
     await drain()
-    assert.deepEqual(first.seen, [WIRE_BALANCE])
+    assert.deepEqual(first.seen, [WIRE_BALANCES])
     assert.equal(calls(), 1)
 
     const second = collector()
-    assert.deepEqual(readPlatformBalance(second.onRefresh), WIRE_BALANCE, 'the memory figure paints at once')
+    assert.deepEqual(readPlatformBalances(second.onRefresh), WIRE_BALANCES, 'the memory report paints at once')
     await drain()
-    assert.deepEqual(second.seen, [WIRE_BALANCE])
+    assert.deepEqual(second.seen, [WIRE_BALANCES])
     assert.equal(calls(), 2, 'every open revalidates regardless of what it could paint')
   })
 
-  test('the stored figure paints before the read lands, then the live one replaces it', async () => {
+  test('the stored report paints before the read lands, then the live one replaces it', async () => {
     seededStorage()
     const fresh = wire(99)
     stubRoute({ ok: true, value: fresh })
     const { seen, onRefresh } = collector()
-    assert.deepEqual(readPlatformBalance(onRefresh), WIRE_BALANCE, 'the stored figure shows at once')
+    assert.deepEqual(readPlatformBalances(onRefresh), WIRE_BALANCES, 'the stored report shows at once')
     await drain()
     assert.deepEqual(seen, [fresh])
-    assert.deepEqual(readPlatformBalance(() => {}), fresh, 'memory now outranks storage')
+    assert.deepEqual(readPlatformBalances(() => {}), fresh, 'memory now outranks storage')
   })
 
   test('an open while a read is in flight joins that read and lands with it (issue #82)', async () => {
     const { release, calls } = gatedRoute()
     const a = collector()
     const b = collector()
-    assert.equal(readPlatformBalance(a.onRefresh), null)
-    assert.equal(readPlatformBalance(b.onRefresh), null, 'nothing remembered until a read lands')
+    assert.equal(readPlatformBalances(a.onRefresh), null)
+    assert.equal(readPlatformBalances(b.onRefresh), null, 'nothing remembered until a read lands')
     await Promise.resolve()
     release()
     await drain()
-    assert.deepEqual(a.seen, [WIRE_BALANCE], 'the open that started the read reports its figure')
-    assert.deepEqual(b.seen, [WIRE_BALANCE], 'the joining open takes the landing for its own too')
+    assert.deepEqual(a.seen, [WIRE_BALANCES], 'the open that started the read receives the report')
+    assert.deepEqual(b.seen, [WIRE_BALANCES], 'the joining open takes the landing for its own too')
     assert.equal(calls(), 1, 'one read serves both opens')
-    assert.deepEqual(readPlatformBalance(() => {}), WIRE_BALANCE, 'and the joined read is the memory figure afterwards')
+    assert.deepEqual(readPlatformBalances(() => {}), WIRE_BALANCES, 'and the joined read is the memory report afterwards')
   })
 
-  test('every absent answer notifies nobody and keeps the remembered figure', async () => {
+  test('every absent answer notifies nobody and keeps the remembered report', async () => {
     for (const [label, body, mode] of [
       ['route absent (404)', undefined, 'status'],
       ['transport down', undefined, 'reject'],
       ['definitive absence', { ok: true, value: null }, 'ok'],
       ['bad envelope', { ok: false }, 'ok'],
       ['value not a record', { ok: true, value: 'nope' }, 'ok'],
+      ['missing arm', { ok: true, value: { account: null } }, 'ok'],
     ] as [string, unknown, 'ok' | 'reject' | 'status'][]) {
-      resetPlatformBalance()
+      resetPlatformBalances()
       seededStorage()
       stubRoute(body, mode)
       const { seen, onRefresh } = collector()
-      assert.deepEqual(readPlatformBalance(onRefresh), WIRE_BALANCE, label)
+      assert.deepEqual(readPlatformBalances(onRefresh), WIRE_BALANCES, label)
       await drain()
       assert.equal(seen.length, 0, label)
-      assert.deepEqual(readPlatformBalance(() => {}), WIRE_BALANCE, label + ' — the figure survives the miss')
+      assert.deepEqual(readPlatformBalances(() => {}), WIRE_BALANCES, label + ' — the report survives the miss')
     }
   })
 
-  test('garbage in storage is no remembered figure', async () => {
-    stubRoute({ ok: true, value: WIRE_BALANCE })
-    for (const raw of ['not json', 'null', '"CNY"', '{"isAvailable":true}', '{"balances":[{"currency":"CNY"}]}']) {
-      resetPlatformBalance()
-      setPlatformBalanceStorage(new FakeStorage({ [PLATFORM_BALANCE_STORAGE_KEY]: raw }))
+  test('a definitive empty report replaces the remembered one and hides both arms', async () => {
+    seededStorage()
+    const empty = { account: null, api: null }
+    stubRoute({ ok: true, value: empty })
+    const { seen, onRefresh } = collector()
+    assert.deepEqual(readPlatformBalances(onRefresh), WIRE_BALANCES, 'the stored report paints first')
+    await drain()
+    assert.deepEqual(seen, [empty])
+    assert.deepEqual(readPlatformBalances(() => {}), empty, 'the empty report is the latest truth')
+  })
+
+  test('garbage in storage is no remembered report', async () => {
+    stubRoute({ ok: true, value: WIRE_BALANCES })
+    for (const raw of ['not json', 'null', '"CNY"', '{"isAvailable":true}', '{"balances":[{"currency":"CNY"}]}', '{"account":{"isAvailable":true}}']) {
+      resetPlatformBalances()
+      setPlatformBalanceStorage(new FakeStorage({ [PLATFORM_BALANCES_STORAGE_KEY]: raw }))
       const { onRefresh } = collector()
-      assert.equal(readPlatformBalance(onRefresh), null, raw)
+      assert.equal(readPlatformBalances(onRefresh), null, raw)
       await drain()
-      assert.deepEqual(readPlatformBalance(() => {}), WIRE_BALANCE)
+      assert.deepEqual(readPlatformBalances(() => {}), WIRE_BALANCES)
     }
   })
 
-  test('unreadable or unwritable storage costs the head start, never the live figure', async () => {
+  test('an unreadable or unwritable storage costs the head start, never the live report', async () => {
     const throwing = new FakeStorage()
     vi.spyOn(throwing, 'getItem').mockImplementation(() => { throw new Error('denied') })
     setPlatformBalanceStorage(throwing)
-    stubRoute({ ok: true, value: WIRE_BALANCE })
+    stubRoute({ ok: true, value: WIRE_BALANCES })
     const { seen, onRefresh } = collector()
-    assert.equal(readPlatformBalance(onRefresh), null, 'no remembered figure to paint')
+    assert.equal(readPlatformBalances(onRefresh), null, 'no remembered report to paint')
     await drain()
-    assert.deepEqual(seen, [WIRE_BALANCE])
+    assert.deepEqual(seen, [WIRE_BALANCES])
 
     const refusing = new FakeStorage()
     vi.spyOn(refusing, 'setItem').mockImplementation(() => { throw new Error('quota') })
     setPlatformBalanceStorage(refusing)
-    stubRoute({ ok: true, value: WIRE_BALANCE })
+    stubRoute({ ok: true, value: WIRE_BALANCES })
     const second = collector()
-    readPlatformBalance(second.onRefresh)
+    readPlatformBalances(second.onRefresh)
     await drain()
-    assert.deepEqual(second.seen, [WIRE_BALANCE], 'the live figure still lands')
+    assert.deepEqual(second.seen, [WIRE_BALANCES], 'the live report still lands')
   })
 
-  test('absent or refused storage is the same as empty storage: no remembered figure, no crash', async () => {
+  test('absent or refused storage is the same as empty storage: no remembered report, no crash', async () => {
     const real = Object.getOwnPropertyDescriptor(globalThis, 'localStorage')
     try {
       for (const descriptor of [
@@ -248,13 +300,13 @@ describe('readPlatformBalance', () => {
         { configurable: true, get() { throw new Error('denied') } },
       ]) {
         setPlatformBalanceStorage(undefined)
-        resetPlatformBalance()
+        resetPlatformBalances()
         Object.defineProperty(globalThis, 'localStorage', descriptor)
-        stubRoute({ ok: true, value: WIRE_BALANCE })
+        stubRoute({ ok: true, value: WIRE_BALANCES })
         const { seen, onRefresh } = collector()
-        assert.equal(readPlatformBalance(onRefresh), null)
+        assert.equal(readPlatformBalances(onRefresh), null)
         await drain()
-        assert.deepEqual(seen, [WIRE_BALANCE], 'the read is unaffected')
+        assert.deepEqual(seen, [WIRE_BALANCES], 'the read is unaffected')
         vi.unstubAllGlobals()
       }
     } finally {
@@ -262,23 +314,23 @@ describe('readPlatformBalance', () => {
     }
   })
 
-  test('a reset drops the remembered figure, its storage, the storage swap, and even a refused figure', async () => {
+  test('a reset drops the remembered report, its storage, the storage swap, and even a refused report', async () => {
     const fake = seededStorage()
-    stubRoute({ ok: true, value: WIRE_BALANCE })
-    readPlatformBalance(() => {})
+    stubRoute({ ok: true, value: WIRE_BALANCES })
+    readPlatformBalances(() => {})
     await drain()
-    resetPlatformBalance()
-    assert.equal(fake.store.has(PLATFORM_BALANCE_STORAGE_KEY), false, 'storage is emptied')
+    resetPlatformBalances()
+    assert.equal(fake.store.has(PLATFORM_BALANCES_STORAGE_KEY), false, 'storage is emptied')
     const { onRefresh } = collector()
-    assert.equal(readPlatformBalance(onRefresh), null, 'real storage is re-detected, and it is empty too')
+    assert.equal(readPlatformBalances(onRefresh), null, 'real storage is re-detected, and it is empty too')
 
     setPlatformBalanceStorage(null)
-    stubRoute({ ok: true, value: WIRE_BALANCE })
-    readPlatformBalance(() => {})
+    stubRoute({ ok: true, value: WIRE_BALANCES })
+    readPlatformBalances(() => {})
     await drain()
-    assert.deepEqual(readPlatformBalance(() => {}), WIRE_BALANCE)
-    resetPlatformBalance()
-    assert.equal(readPlatformBalance(() => {}), null, 'a reset over refused storage still clears the memory figure')
+    assert.deepEqual(readPlatformBalances(() => {}), WIRE_BALANCES)
+    resetPlatformBalances()
+    assert.equal(readPlatformBalances(() => {}), null, 'a reset over refused storage still clears the memory report')
   })
 })
 
@@ -289,22 +341,34 @@ describe('platform balance storage ttl', () => {
     const fresh = new FakeStorage()
     setPlatformBalanceStorage(fresh)
     const { onRefresh } = collector()
-    readPlatformBalance(onRefresh)
+    readPlatformBalances(onRefresh)
     await drain()
-    const raw = fresh.store.get(PLATFORM_BALANCE_STORAGE_KEY)
+    const raw = fresh.store.get(PLATFORM_BALANCES_STORAGE_KEY)
     assert.ok(raw !== undefined && JSON.parse(raw).at !== undefined, 'the write carries a timestamp')
 
-    const parsed = JSON.parse(raw) as { at: number; balance: unknown }
-    const replay = new FakeStorage({ [PLATFORM_BALANCE_STORAGE_KEY]: JSON.stringify(parsed) })
-    resetPlatformBalance()
+    const parsed = JSON.parse(raw) as { at: number; balances: unknown }
+    const replay = new FakeStorage({ [PLATFORM_BALANCES_STORAGE_KEY]: JSON.stringify(parsed) })
+    resetPlatformBalances()
     setPlatformBalanceStorage(replay)
-    assert.deepEqual(readPlatformBalance(() => {}), wire(5), 'a fresh envelope paints at once')
+    assert.deepEqual(readPlatformBalances(() => {}), wire(5), 'a fresh envelope paints at once')
 
-    const stale = new FakeStorage({ [PLATFORM_BALANCE_STORAGE_KEY]: JSON.stringify({ at: Date.now() - 11 * 60_000, balance: parsed.balance }) })
-    resetPlatformBalance()
+    const stale = new FakeStorage({ [PLATFORM_BALANCES_STORAGE_KEY]: JSON.stringify({ at: Date.now() - 11 * 60_000, balances: parsed.balances }) })
+    resetPlatformBalances()
     setPlatformBalanceStorage(stale)
-    assert.equal(readPlatformBalance(() => {}), null, 'a stale envelope never paints')
-    assert.equal(stale.store.has(PLATFORM_BALANCE_STORAGE_KEY), false, 'the stale entry is removed')
+    assert.equal(readPlatformBalances(() => {}), null, 'a stale envelope never paints')
+    assert.equal(stale.store.has(PLATFORM_BALANCES_STORAGE_KEY), false, 'the stale entry is removed')
+  })
+
+  test('a bare report without an envelope and the legacy single-source envelope both paint only when they parse', async () => {
+    stubRoute({ ok: true, value: WIRE_BALANCES })
+    setPlatformBalanceStorage(new FakeStorage({ [PLATFORM_BALANCES_STORAGE_KEY]: JSON.stringify(WIRE_BALANCES) }))
+    assert.deepEqual(readPlatformBalances(() => {}), WIRE_BALANCES, 'a bare report paints')
+
+    resetPlatformBalances()
+    setPlatformBalanceStorage(new FakeStorage({
+      [PLATFORM_BALANCES_STORAGE_KEY]: JSON.stringify({ at: Date.now(), balance: ACCOUNT_BALANCE }),
+    }))
+    assert.equal(readPlatformBalances(() => {}), null, 'an older single-source envelope never paints')
   })
 })
 })
