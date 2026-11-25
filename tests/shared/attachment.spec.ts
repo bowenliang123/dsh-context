@@ -471,7 +471,7 @@ describe('recom payload', () => {
     const payload = JSON.parse(source) as { id: string }[]
     const rows = recomsOfPayload(payload)
     assert.equal(rows.length, payload.length)
-    assert.deepEqual({ ...rows[0], icon: DEFAULT_RECOM.icon }, DEFAULT_RECOM)
+    assert.deepEqual({ ...rows[0], icon: DEFAULT_RECOM.icon, url: DEFAULT_RECOM.url }, DEFAULT_RECOM)
     assert.deepEqual(rows.map((row) => row.id), payload.map((item) => item.id))
   })
 
