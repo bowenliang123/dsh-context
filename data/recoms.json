@@ -3,7 +3,7 @@
     "id": "deepseek-platform",
     "name": "DeepSeek",
     "url": "https://platform.deepseek.com/",
-    "icon": "https://cdn.simpleicons.org/deepseek",
+    "icon": "https://dsh-context.dev/r/deepseek-platform",
     "slogan": {
       "zh": "探索未至之境。",
       "en": "Into the Unknown."
@@ -21,7 +21,7 @@
     "id": "zilliz-cloud",
     "name": "Zilliz Cloud",
     "url": "https://cloud.zilliz.com.cn/signup?utm_source=dsh_context",
-    "icon": "https://cdn.simpleicons.org/zilliz",
+    "icon": "https://dsh-context.dev/r/zilliz-cloud",
     "slogan": {
       "zh": "Milvus原厂，全能 AI 检索。",
       "en": "Original Milvus Creator, full AI search."
@@ -39,7 +39,7 @@
     "id": "powercontext",
     "name": "PowerContext",
     "url": "https://github.com/oceanbase/powercontext",
-    "icon": "https://raw.githubusercontent.com/oceanbase/powercontext/master/desktop/src-tauri/icons/icon.png",
+    "icon": "https://dsh-context.dev/r/powercontext",
     "slogan": {
       "zh": "OB开源 Agent 记忆及上下文引擎",
       "en": "OSS Agentic context engine"
