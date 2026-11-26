@@ -468,7 +468,7 @@ export function makeCommandPanel(kit: ViewKit): ComponentType<CommandPanelProps>
       const toggle = (): void => { setOpenSeq(open ? null : rec.seq) }
       const stampSuffix = stamp !== null ? ' · ' + t('browser.stepAt', { t: stamp.turn, s: stamp.step }) : ''
       return (
-        <div key={rec.seq} className={'lc-cmd-item' + (index % 2 === 1 ? ' lc-cmd-item-alt' : '') + (open ? ' lc-cmd-item-on' : '')} ref={scope.measure(String(rec.seq))}>
+        <div key={rec.seq} className={'lc-cmd-item' + (index % 2 === 0 ? ' lc-cmd-item-alt' : '') + (open ? ' lc-cmd-item-on' : '')} ref={scope.measure(String(rec.seq))}>
           <div
             className="lc-cmd-row hover:bg-(--dsw-alias-interactive-bg-hover)"
             title={rec.description ?? view.preview}

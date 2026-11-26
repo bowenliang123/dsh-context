@@ -1,5 +1,5 @@
 .lc-event { content-visibility: auto; contain-intrinsic-size: auto 25px; display: flex; align-items: center; gap: 8px; padding: 3px 6px; border-radius: 6px; transition: background-color var(--ds-transition-duration, 0.2s) var(--ds-ease-in-out, ease-in-out); }
-.lc-event:nth-child(even of .lc-event) { background: var(--lc-list-stripe); }
+.lc-event:nth-child(odd of .lc-event) { background: var(--lc-list-stripe); }
 .lc-event:has(.lc-event-jump):hover { background: var(--dsw-alias-interactive-bg-hover); }
 .lc-event-icon { width: 18px; text-align: center; color: var(--dsw-alias-state-warn-primary); }
 .lc-event-icon.lc-event-inject { color: var(--color-purple-500); }

@@ -96,7 +96,7 @@
 }
 .lc-br-body { border-top: var(--lc-line-fine, 1px solid var(--dsw-alias-border-l1)); padding: 4px 6px; display: flex; flex-direction: column; gap: 2px; }
 .lc-br-elem { border-radius: 6px; padding-bottom: 2px; }
-.lc-br-elem:nth-child(even of .lc-br-elem):not(.lc-br-elem-on) { background: var(--lc-list-stripe); }
+.lc-br-elem:nth-child(odd of .lc-br-elem):not(.lc-br-elem-on) { background: var(--lc-list-stripe); }
 .lc-br-elem-on { background: var(--dsw-alias-interactive-bg-active); }
 .lc-br-elem-row { display: flex; align-items: center; gap: 8px; width: 100%; border: 0; background: transparent; color: var(--dsw-alias-label-primary); font: inherit; font-size: 12px; padding: 5px 6px; cursor: pointer; text-align: left; border-radius: 6px; transition: background-color var(--ds-transition-duration, 0.2s) var(--ds-ease-in-out, ease-in-out); }
 .lc-br-err-dot { flex: none; width: 6px; height: 6px; border-radius: 50%; background: var(--dsw-alias-state-error-primary); box-shadow: 0 0 0 2px color-mix(in srgb, var(--dsw-alias-state-error-primary) 10%, transparent); }

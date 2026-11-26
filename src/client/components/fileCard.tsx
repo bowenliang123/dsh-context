@@ -243,7 +243,7 @@ export function makeFileCard(kit: ViewKit, settings: ContextSettings): Component
               {shown.slice(scope.from, scope.to + 1).map((e, i) => {
                 const index = scope.from + i
                 const open = openPath === e.path
-                const alt = index % 2 === 1
+                const alt = index % 2 === 0
                 const display = displayOf(e)
                 const windows = e.pattern !== true && displayStyleOf(e.path, workspace) === 'windows'
                 const { directory: dir, name: base } = windows || !display.includes('\\')
