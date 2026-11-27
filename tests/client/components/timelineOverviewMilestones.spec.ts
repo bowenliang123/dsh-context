@@ -2,9 +2,10 @@ import assert from 'node:assert/strict'
 import { act, createElement as h } from 'react'
 import { afterAll, beforeAll, describe, test } from 'vitest'
 import type { ContextEventRecord, RequestRecord } from '../../../src/shared/types'
-import { makeTimelineOverview, type TimelineOverviewProps } from '../../../src/client/components/timelineOverview'
+import { makeTimelineOverview } from '../../../src/client/components/timelineOverview'
 import { click, hover, keydown, mount, query, queryAll, unhover } from '../helpers/kit'
-import { kit, req } from './timelineChartHarness'
+import { kit, req, viewport } from './timelineChartHarness'
+import { propsOf } from './timelineOverviewHarness'
 
 const TimelineOverview = makeTimelineOverview(kit)
 
@@ -26,24 +27,6 @@ beforeAll(() => {
 afterAll(() => {
   HTMLElement.prototype.getBoundingClientRect = originalRect
 })
-
-function propsOf(requests: RequestRecord[], over: Partial<TimelineOverviewProps> = {}): TimelineOverviewProps {
-  return {
-    requests,
-    events: [],
-    selectedSeq: null,
-    hoveredSeq: null,
-    activeTurn: null,
-    granularity: 'step',
-    mode: 'total',
-    hoverCat: null,
-    onSelect: () => {},
-    onHover: () => {},
-    onHoverTurn: () => {},
-    onPickTurn: () => {},
-    ...over,
-  }
-}
 
 function paced(count: number): RequestRecord[] {
   return Array.from({ length: count }, (_, i) => req(i + 1, {
@@ -94,6 +77,9 @@ describe('TimelineOverview milestone bands', () => {
     })))
     const masts = queryAll(m.container, '.lc-ms')
     assert.equal(masts.length, 4)
+    const band = query(m.container, '.lc-band')
+    assert.equal(band.contains(query(m.container, '.lc-milestones')), true)
+    assert.equal(query(m.container, '.lc-chart').contains(band), false, 'the band stays outside the chart button')
     near(masts[0].style.left, 400 / 18)
     near(masts[1].style.left, 400 / 3)
     near(masts[2].style.left, 200)
@@ -208,14 +194,19 @@ describe('TimelineOverview milestone bands', () => {
   })
 
   test('an unmeasured pane shows no flags, and a removed cluster drops its tip', async () => {
-    chartWidth = 0
+    chartWidth = 400
     const reqs = flat(6)
     const events: ContextEventRecord[] = [{ seq: 2, time: 1, kind: 'compaction', turn: 1, step: 1 }]
-    const zero = await mount(h(TimelineOverview, propsOf(reqs, { events })))
-    assert.equal(queryAll(zero.container, '.lc-ms').length, 0)
-    await zero.unmount()
+    const saved = viewport.clientW
+    viewport.clientW = 0
+    try {
+      const zero = await mount(h(TimelineOverview, propsOf(reqs, { events })))
+      assert.equal(queryAll(zero.container, '.lc-ms').length, 0)
+      await zero.unmount()
+    } finally {
+      viewport.clientW = saved
+    }
 
-    chartWidth = 400
     const m = await mount(h(TimelineOverview, propsOf(reqs, { events })))
     await hover(headOf(m.container, 1))
     assert.equal(queryAll(m.container, '.lc-chart-tip').length, 1)

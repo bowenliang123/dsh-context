@@ -131,7 +131,7 @@ Uma barra empilhada por requisição ao modelo — mais detalhada que por mensag
 
 ![Linha do tempo do contexto no modo Delta](https://raw.githubusercontent.com/bowenliang123/dsh-context/main/docs/history-delta.png)
 
-- **Visão geral** — um botão comprime toda a sessão (etapas ou turnos) na largura do painel como uma fita empilhada contínua: cada queda de compactação e mudança de composição em uma visão, sem rolagem lateral, nada extra para carregar. Bandeiras marcam os quartis e o período completo; passe o mouse para percorrer, passe sobre uma faixa para destacar essa categoria em toda a fita; clicar fixa a etapa e abre a categoria dessa faixa no navegador (mutuamente exclusivo com o modo DNA e Adaptativo).
+- **Visão geral** — um botão comprime toda a sessão (etapas ou turnos) na largura do painel como uma fita empilhada contínua: cada queda de compactação e mudança de composição em uma visão, nada extra para carregar. A roda amplia horizontalmente em torno do ponteiro, Shift+roda ou um gesto horizontal deslocam, e a etiqueta ×N volta a ajustar à largura. Bandeiras marcam os quartis e o período completo; passe o mouse para percorrer, passe sobre uma faixa para destacar essa categoria em toda a fita; clicar fixa a etapa e abre a categoria dessa faixa no navegador (mutuamente exclusivo com o modo DNA e Adaptativo).
 - **Passar o mouse e fixar** — percorra para ver um tooltip instantâneo; clique para fixar o detalhamento completo, com **Prompt / Saída / Cache** reais informados pelo provedor ao lado das estimativas.
 - **Vinculação ao vivo** — passar o mouse sobre uma barra mostra uma prévia do contexto montado daquela etapa no Navegador de contexto ao lado do gráfico; sair do gráfico retorna à sua própria seleção.
 

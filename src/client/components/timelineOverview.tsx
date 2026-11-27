@@ -1,13 +1,16 @@
 import { Fragment, useCallback, useLayoutEffect, useMemo, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type ReactElement } from 'react'
 import type { Category, ContextEventRecord, RequestRecord } from '../../shared/types'
 import { CATS, CAT_COLOR } from '../categories'
+import { containHorizontalOverscroll, panByWheel } from '../overscroll'
 import { RISE_CLASS } from './timelineDnaBars'
 import { TimelineMilestoneBand } from './timelineMilestoneBand'
 import { fitBandItemsOf, milestoneJumpSeq, milestonesOf, type MilestoneBandItem } from './timelineMilestones'
 import { milestoneLabel, milestoneTipRows } from './timelineMilestoneText'
 import { preprocessTimeline, riseKeyOf, TURN_FILLS, timelineMaxima, turnStepsOf, timelineTipRows } from './timelineModel'
-import { clampTipLeft } from './tip'
+import { placeTip } from './tip'
 import { useElementSize } from './useElementMetrics'
+import { ZOOM_FIT, anchoredScrollLeft, clampZoom, maxZoomOf, wheelZoomFactor, zoomAnchorOf, zoomLabelOf, type ZoomAnchor } from './timelineZoom'
+import { isVerticalWheel } from '../wheel'
 import type { ViewKit } from '../viewkit'
 
 export interface TimelineOverviewProps {
@@ -30,6 +33,10 @@ export interface TimelineOverviewProps {
 }
 
 const FLAG_FRACS: readonly number[] = [0.25, 0.5, 0.75, 1]
+
+const TURN_LABEL_CHAR_PX = 6
+
+const TURN_LABEL_PAD_PX = 6
 
 const CHART_H = 112
 
@@ -174,9 +181,26 @@ export function makeTimelineOverview(kit: ViewKit): (props: TimelineOverviewProp
     )
     const n = requests.length
     const geo = useMemo(() => ribbonGeometry(requests, delta, durationOn), [requests, delta, durationOn])
-    const surfaceRef = useRef<HTMLDivElement | null>(null)
     const wrapRef = useRef<HTMLDivElement | null>(null)
-    const width = useElementSize(surfaceRef, 'content').width
+    const rowRef = useRef<HTMLDivElement | null>(null)
+    const scrollRef = useRef<HTMLDivElement | null>(null)
+    const paneWidth = useElementSize(scrollRef).width
+    const [zoom, setZoom] = useState(ZOOM_FIT)
+    const zoomRef = useRef(ZOOM_FIT)
+    const anchorRef = useRef<ZoomAnchor | null>(null)
+    const tipXRef = useRef(0)
+    const syncTip = useCallback((): void => {
+      const wrap = wrapRef.current
+      const scroller = scrollRef.current
+      /* v8 ignore next 1 */
+      if (wrap === null || scroller === null) return
+      placeTip(wrap, tipXRef.current, scroller.scrollLeft, paneWidth)
+    }, [paneWidth])
+    const resetZoom = useCallback((): void => {
+      anchorRef.current = null
+      zoomRef.current = ZOOM_FIT
+      setZoom(ZOOM_FIT)
+    }, [])
     const lastIdxRef = useRef<number | null>(null)
     const lastCatRef = useRef<RibbonBand['cat'] | null>(null)
     const [localHover, setLocalHover] = useState<number | null>(null)
@@ -201,13 +225,93 @@ export function makeTimelineOverview(kit: ViewKit): (props: TimelineOverviewProp
       else props.onSelect(item.group.targetSeq)
     }, [props.onPickMilestone, props.onSelect])
     const u = n > 1 ? n - 1 : 1
+    const zoomed = zoom > ZOOM_FIT
+    const zoomStyle = zoomed ? { width: `${Math.round(zoom * 1000) / 10}%` } : undefined
+    const contentWidth = zoom * paneWidth
+    const maxZoom = maxZoomOf(paneWidth, u)
+    const viewRef = useRef({ u, w: paneWidth })
+    const resetPendingRef = useRef(false)
+    useLayoutEffect(() => {
+      resetPendingRef.current = zoomRef.current > ZOOM_FIT
+      anchorRef.current = null
+      zoomRef.current = ZOOM_FIT
+      setZoom(prev => (prev === ZOOM_FIT ? prev : ZOOM_FIT))
+    }, [props.granularity, props.mode, props.focusCat])
+    useLayoutEffect(() => {
+      if (resetPendingRef.current) {
+        resetPendingRef.current = false
+        return
+      }
+      if (zoom <= maxZoom) return
+      setZoom(maxZoom)
+    }, [maxZoom, zoom])
+    useLayoutEffect(() => {
+      const prev = viewRef.current
+      viewRef.current = { u, w: paneWidth }
+      const scroller = scrollRef.current
+      /* v8 ignore next 1 */
+      if (scroller === null) return
+      if (prev.u === u && prev.w === paneWidth) return
+      if (zoomRef.current <= ZOOM_FIT) return
+      const zoomNow = Math.min(zoomRef.current, maxZoom)
+      const max = Math.max(0, zoomNow * paneWidth - paneWidth)
+      const atEnd = scroller.scrollLeft >= Math.max(0, zoomRef.current * prev.w - prev.w) - 2
+      scroller.scrollLeft = atEnd
+        ? max
+        : Math.min(max, scroller.scrollLeft * (prev.u / u) * (zoomNow / zoomRef.current) * (paneWidth / Math.max(1, prev.w)))
+    }, [u, paneWidth, maxZoom])
+    useLayoutEffect(() => {
+      zoomRef.current = zoom
+      const scroller = scrollRef.current
+      /* v8 ignore next 1 */
+      if (scroller === null) return
+      const anchor = anchorRef.current
+      anchorRef.current = null
+      scroller.scrollLeft = anchor !== null
+        ? anchoredScrollLeft(anchor, contentWidth, paneWidth)
+        : Math.min(scroller.scrollLeft, Math.max(0, contentWidth - paneWidth))
+    }, [zoom, contentWidth, paneWidth])
+    useLayoutEffect(() => {
+      const row = rowRef.current
+      /* v8 ignore next 1 */
+      if (row === null) return
+      const onWheel = (e: WheelEvent): void => {
+        if (!isVerticalWheel(e)) return
+        const scroller = scrollRef.current
+        /* v8 ignore next 1 */
+        if (scroller === null) return
+        e.preventDefault()
+        if (e.shiftKey) {
+          panByWheel(scroller, e, contentWidth - paneWidth)
+          syncTip()
+          return
+        }
+        const base = zoomRef.current
+        const nextZoom = clampZoom(base * wheelZoomFactor(e.deltaY, e.deltaMode, paneWidth), maxZoom)
+        if (nextZoom === base) return
+        if (paneWidth > 0) {
+          const vx = Math.min(Math.max(e.clientX - scroller.getBoundingClientRect().left, 0), paneWidth)
+          anchorRef.current = zoomAnchorOf(scroller.scrollLeft, vx, contentWidth)
+        }
+        zoomRef.current = nextZoom
+        setZoom(nextZoom)
+      }
+      row.addEventListener('wheel', onWheel, { passive: false })
+      return () => { row.removeEventListener('wheel', onWheel) }
+    }, [contentWidth, maxZoom, paneWidth, syncTip])
+    useLayoutEffect(() => {
+      const scroller = scrollRef.current
+      /* v8 ignore next 1 */
+      if (scroller === null) return
+      return containHorizontalOverscroll(scroller)
+    }, [])
     const milestoneGroups = useMemo(
       () => milestonesOf(props.requests, props.events, props.granularity),
       [props.requests, props.events, props.granularity],
     )
     const bandItems = useMemo(
-      () => fitBandItemsOf(milestoneGroups, width, u),
-      [milestoneGroups, width, u],
+      () => fitBandItemsOf(milestoneGroups, contentWidth, u),
+      [milestoneGroups, contentWidth, u],
     )
     const msItem = msHoverKey !== null ? bandItems.find(item => item.key === msHoverKey) ?? null : null
     const groups: { turn: number; count: number; first: number }[] = []
@@ -223,6 +327,12 @@ export function makeTimelineOverview(kit: ViewKit): (props: TimelineOverviewProp
     const flagRecords = [...new Set(FLAG_FRACS.map(q => Math.round(q * (n - 1))))].filter(idx => idx > 0)
     const flagLabel = (idx: number): number => (props.granularity === 'step' ? idx + 1 : requests[idx].turn ?? 0)
     const flagGroups = wideQuartiles(groups)
+    const turnLabelFits = (gi: number): boolean => {
+      if (flagGroups.includes(gi)) return true
+      if (!zoomed) return false
+      const grp = groups[gi]
+      return grp.count / n * contentWidth >= String(grp.turn).length * TURN_LABEL_CHAR_PX + TURN_LABEL_PAD_PX
+    }
     const q3Value = Math.round(geo.maxUp * 3 / 4)
     const q1Value = Math.round(geo.maxUp / 4)
     const midValue = Math.round(geo.maxUp / 2)
@@ -279,16 +389,42 @@ export function makeTimelineOverview(kit: ViewKit): (props: TimelineOverviewProp
     const hoveredIdx = hoverSeq !== null ? requests.findIndex(r => r.seq === hoverSeq) : -1
     const selectedIdx = props.selectedSeq !== null ? requests.findIndex(r => r.seq === props.selectedSeq) : -1
     const keyboardIdx = (): number => keyCursor ?? (hoveredIdx >= 0 ? hoveredIdx : selectedIdx >= 0 ? selectedIdx : 0)
-    const moveCursor = (index: number): void => {
+    const revealCursor = (index: number): void => {
+      const scroller = scrollRef.current
+      /* v8 ignore next 1 */
+      if (scroller === null) return
+      if (zoomRef.current <= ZOOM_FIT) return
+      const content = zoomRef.current * paneWidth
+      const x = index / u * content
+      if (x < scroller.scrollLeft + 8 || x > scroller.scrollLeft + paneWidth - 8) {
+        scroller.scrollLeft = Math.max(0, Math.min(x - paneWidth / 2, content - paneWidth))
+      }
+    }
+    const moveCursor = (index: number, reveal = true): void => {
       const clamped = Math.min(n - 1, Math.max(0, index))
       setKeyCursor(clamped)
       handleHover(requests[clamped].seq)
+      if (reveal) revealCursor(clamped)
+    }
+    const zoomByStep = (factor: number): void => {
+      const scroller = scrollRef.current
+      /* v8 ignore next 1 */
+      if (scroller === null) return
+      const next = clampZoom(zoomRef.current * factor, maxZoom)
+      if (next === zoomRef.current) return
+      anchorRef.current = zoomAnchorOf(scroller.scrollLeft, paneWidth / 2, contentWidth)
+      zoomRef.current = next
+      setZoom(next)
     }
     const onKeyDown = (ev: ReactKeyboardEvent): void => {
+      if (ev.ctrlKey || ev.metaKey || ev.altKey) return
       if (ev.key === 'ArrowLeft') { ev.preventDefault(); moveCursor(keyboardIdx() - 1) }
       else if (ev.key === 'ArrowRight') { ev.preventDefault(); moveCursor(keyboardIdx() + 1) }
       else if (ev.key === 'Home') { ev.preventDefault(); moveCursor(0) }
       else if (ev.key === 'End') { ev.preventDefault(); moveCursor(n - 1) }
+      else if (ev.key === '+' || ev.key === '=') { ev.preventDefault(); zoomByStep(1.25) }
+      else if (ev.key === '-' || ev.key === '_') { ev.preventDefault(); zoomByStep(1 / 1.25) }
+      else if (ev.key === '0') { ev.preventDefault(); resetZoom() }
       else if (ev.key === 'Enter' || ev.key === ' ') {
         ev.preventDefault()
         const seq = requests[keyboardIdx()].seq
@@ -301,15 +437,10 @@ export function makeTimelineOverview(kit: ViewKit): (props: TimelineOverviewProp
     const milestoneLabelOf = (item: MilestoneBandItem): string =>
       milestoneLabel(kit, msTextOptions, item.group, requests[item.group.targetIdx])
     useLayoutEffect(() => {
-      const el = surfaceRef.current
-      /* v8 ignore next 1 */
-      if (el === null) return
-      /* v8 ignore next 1 */
-      const tip = (wrapRef.current ?? document.body).querySelector<HTMLElement>('.lc-chart-tip')
-      if (tip === null) return
-      const x = msItem !== null ? msItem.x : Math.max(0, hoveredIdx) / u * el.clientWidth
-      const next = `translate(${clampTipLeft(x, tip.offsetWidth, el.clientWidth)}px, 0)`
-      if (tip.style.transform !== next) tip.style.transform = next
+      tipXRef.current = msItem !== null
+        ? msItem.x
+        : hoveredIdx >= 0 ? hoveredIdx / u * contentWidth : 0
+      syncTip()
     })
     if (n === 0) return null
 
@@ -320,7 +451,16 @@ export function makeTimelineOverview(kit: ViewKit): (props: TimelineOverviewProp
         : null
 
     return (
-      <div className="lc-chartrow">
+      <div className="lc-chartrow" ref={rowRef}>
+        {zoomed ? (
+          <button
+            type="button"
+            className="lc-zoom-chip"
+            title={kit.t('timeline.zoomReset')}
+            aria-label={`${zoomLabelOf(zoom)} · ${kit.t('timeline.zoomReset')}`}
+            onClick={resetZoom}
+          >{zoomLabelOf(zoom)}</button>
+        ) : null}
         <div className="lc-axis lc-axis-milestones">
           {delta ? (
             <>
@@ -341,16 +481,20 @@ export function makeTimelineOverview(kit: ViewKit): (props: TimelineOverviewProp
           )}
         </div>
         <div className="lc-chart-wrap" ref={wrapRef}>
-          <div className={'lc-chart-scroll lc-chart-fit' + (props.activeTurn !== null ? ' lc-chart-dim' : '')}>
+          <div
+            className={'lc-chart-scroll lc-chart-fit' + (zoomed ? ' lc-chart-zoom' : '') + (props.activeTurn !== null ? ' lc-chart-dim' : '')}
+            ref={scrollRef}
+            onScroll={syncTip}
+          >
             <div
               className="lc-chart lc-chart-milestones"
-              ref={surfaceRef}
+              style={zoomStyle}
               data-catdim={localCat ?? props.hoverCat ?? undefined}
               role="button"
               tabIndex={0}
               aria-label={kit.t('timeline.title')}
               onKeyDown={onKeyDown}
-              onFocus={() => { setMsHoverKey(null); moveCursor(keyboardIdx()) }}
+              onFocus={() => { setMsHoverKey(null); moveCursor(keyboardIdx(), false) }}
               onBlur={() => { setKeyCursor(null); handleHover(null) }}
               onMouseMove={onMove}
               onMouseLeave={onLeave}
@@ -413,7 +557,7 @@ export function makeTimelineOverview(kit: ViewKit): (props: TimelineOverviewProp
                 ))}
               </div>
             </div>
-            <div className="lc-turns" onMouseLeave={() => { props.onHoverTurn(null) }}>
+            <div className="lc-turns" style={zoomStyle} onMouseLeave={() => { props.onHoverTurn(null) }}>
               {groups.map((grp, gi) => {
                 const on = props.activeTurn === grp.turn
                 return (
@@ -433,21 +577,23 @@ export function makeTimelineOverview(kit: ViewKit): (props: TimelineOverviewProp
                     }}
                     onMouseEnter={() => { props.onHoverTurn(grp.turn) }}
                     onClick={() => { props.onPickTurn(grp.turn) }}
-                  >{flagGroups.includes(gi) ? <span className="lc-turn-label">{`${grp.turn}`}</span> : null}</span>
+                  >{turnLabelFits(gi) ? <span className="lc-turn-label">{`${grp.turn}`}</span> : null}</span>
                 )
               })}
             </div>
-            <TimelineMilestoneBand
-              items={bandItems}
-              activeKey={msItem !== null ? msItem.key : null}
-              selectedSeq={props.selectedSeq}
-              activeTurn={props.activeTurn}
-              bandLabel={kit.t('timeline.ms.band')}
-              labelOf={milestoneLabelOf}
-              onHoverItem={handleMilestoneHover}
-              onLeaveItem={handleMilestoneLeave}
-              onPickItem={handleMilestonePick}
-            />
+            <div className="lc-band" style={zoomStyle}>
+              <TimelineMilestoneBand
+                items={bandItems}
+                activeKey={msItem !== null ? msItem.key : null}
+                selectedSeq={props.selectedSeq}
+                activeTurn={props.activeTurn}
+                bandLabel={kit.t('timeline.ms.band')}
+                labelOf={milestoneLabelOf}
+                onHoverItem={handleMilestoneHover}
+                onLeaveItem={handleMilestoneLeave}
+                onPickItem={handleMilestonePick}
+              />
+            </div>
           </div>
           {tipRows !== null ? (
             <div className="lc-chart-tip">{tipRows.map((row, i) => <span key={i}>{row}</span>)}</div>

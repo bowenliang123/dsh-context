@@ -458,6 +458,8 @@ describe('ContextView — the events card\'s boundary rows', () => {
       }
       return originalRect.call(this)
     })
+    const ownClientWidth = Object.getOwnPropertyDescriptor(HTMLElement.prototype, 'clientWidth')
+    Object.defineProperty(HTMLElement.prototype, 'clientWidth', { configurable: true, get: () => 400 })
     try {
       const View = makeView(new TestClientCtx(), settingsWith({ defaultGranularity: 'turn' }))
       const m = await mount(h(View, { sessionId: 'sv-turnjump', useProjection: projectionsFor(data) }))
@@ -470,6 +472,8 @@ describe('ContextView — the events card\'s boundary rows', () => {
       assert.ok(query(m.container, '.lc-bar[data-seq="20"]').className.includes('lc-bar-selected'))
       await m.unmount()
     } finally {
+      if (ownClientWidth === undefined) delete (HTMLElement.prototype as unknown as Record<string, unknown>).clientWidth
+      else Object.defineProperty(HTMLElement.prototype, 'clientWidth', ownClientWidth)
       rect.mockRestore()
     }
   })

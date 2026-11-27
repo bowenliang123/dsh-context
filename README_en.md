@@ -131,7 +131,7 @@ One stacked bar per model request — finer than per-message — so you watch th
 
 ![Context Timeline in Delta mode](https://raw.githubusercontent.com/bowenliang123/dsh-context/main/docs/history-delta.png)
 
-- **Overview** — one toggle squashes the whole session (steps or turns) into the pane's width as a continuous stacked ribbon: every compaction drop and composition shift at a glance, no sideways scrolling, nothing extra to load. Flags mark the quartiles and the full span; hover to scrub, hover a band to light that category across the whole ribbon; click pins the step and opens that band's category in the browser (exclusive with DNA mode and Adaptive).
+- **Overview** — one toggle squashes the whole session (steps or turns) into the pane's width as a continuous stacked ribbon: every compaction drop and composition shift at a glance, nothing extra to load. Wheel to zoom horizontally around the pointer, Shift+wheel or a horizontal gesture to pan, and the ×N chip to fit it back. Flags mark the quartiles and the full span; hover to scrub, hover a band to light that category across the whole ribbon; click pins the step and opens that band's category in the browser (exclusive with DNA mode and Adaptive).
 - **Hover & pin** — scrub for an instant tooltip; click to pin the full breakdown, with provider-reported **Actual Prompt / Output / Cache** next to the estimates.
 - **Live linkage** — hovering a bar previews that step's assembled context in the Context browser beside the chart; leaving the chart returns to your own pick.
 
