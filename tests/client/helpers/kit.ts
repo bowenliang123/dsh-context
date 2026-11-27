@@ -196,8 +196,8 @@ export async function press(
   return { ev, reachedDocument }
 }
 
-export function wheel(el: Element, deltaX: number, deltaY: number): boolean {
-  const event = new WheelEvent('wheel', { bubbles: true, cancelable: true, deltaX, deltaY })
+export function wheel(el: Element, deltaX: number, deltaY: number, init: WheelEventInit = {}): boolean {
+  const event = new WheelEvent('wheel', { bubbles: true, cancelable: true, ...init, deltaX, deltaY })
   el.dispatchEvent(event)
   return event.defaultPrevented
 }

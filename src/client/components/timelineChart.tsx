@@ -4,7 +4,7 @@ import { CATS } from '../categories'
 import { bandsMaximaOf, deltaBandsOf, deltaTotalsOf, dnaBaseLabel } from '../dna'
 import { lruTouch, lruTrim } from '../boundedCache'
 import type { DeltaMaxima, DnaDelta, TimelineBand } from '../dna'
-import { containHorizontalOverscroll } from '../overscroll'
+import { containHorizontalOverscroll, wheelScrollHorizontally } from '../overscroll'
 import { scrollToPos } from '../revealScroll'
 import type { ViewKit } from '../viewkit'
 import { DnaBar, DnaDeltaBar, DnaHighlights, RISE_CLASS, STAGGER_CAP } from './timelineDnaBars'
@@ -15,7 +15,7 @@ import { milestoneLabel, milestoneTipRows } from './timelineMilestoneText'
 import { BAR_GAP, BAR_W, TIMELINE_WINDOW_MIN, WINDOW_HYSTERESIS_BARS, WINDOW_OVERSCAN_BARS, initialBarWindow, nextBarWindow, windowPads, windowRangeFor } from './timelineWindow'
 import type { BarWindow } from './timelineWindow'
 import { preprocessTimeline, riseKeyOf, TURN_FILLS, timelineMaxima, timelineTipRows, turnStepsOf } from './timelineModel'
-import { clampTipLeft } from './tip'
+import { placeTip } from './tip'
 import { useElementSize } from './useElementMetrics'
 
 export const RISE_CAP = 200
@@ -375,6 +375,7 @@ export function makeTimelineChart(kit: ViewKit): (props: TimelineChartProps) => 
     }
 
     const scrollRef = useRef<HTMLDivElement | null>(null)
+    const rowRef = useRef<HTMLDivElement | null>(null)
     const chartWidth = useElementSize(scrollRef).width
     const scrolledOnce = useRef(false)
     const lastGranRef = useRef(props.granularity)
@@ -514,9 +515,15 @@ export function makeTimelineChart(kit: ViewKit): (props: TimelineChartProps) => 
     }, [chartWidth])
     useLayoutEffect(() => {
       const el = scrollRef.current
+      const row = rowRef.current
       /* v8 ignore next 1 */
-      if (el === null) return
-      return containHorizontalOverscroll(el)
+      if (el === null || row === null) return
+      const releaseOverscroll = containHorizontalOverscroll(el)
+      const releaseWheel = wheelScrollHorizontally(el, row)
+      return () => {
+        releaseOverscroll()
+        releaseWheel()
+      }
     }, [])
 
     const shownFrom = windowed ? Math.min(Math.max(barWindow.from, 0), Math.max(0, requests.length - 1)) : 0
@@ -606,13 +613,10 @@ export function makeTimelineChart(kit: ViewKit): (props: TimelineChartProps) => 
     const tipColRef = useRef(0)
 
     const syncTip = (el: HTMLDivElement): void => {
+      const wrap = el.parentElement
       /* v8 ignore next 1 */
-      const tip = (el.parentElement ?? document.body).querySelector<HTMLElement>('.lc-chart-tip')
-      if (tip === null) return
-      const lw = tip.offsetWidth
-      const cw = cwRef.current
-      const next = `translate(${clampTipLeft(tipColRef.current - slRef.current, lw, cw)}px, 0)`
-      if (tip.style.transform !== next) tip.style.transform = next
+      if (wrap === null) return
+      placeTip(wrap, tipColRef.current, slRef.current, cwRef.current)
     }
 
     useLayoutEffect(() => {
@@ -625,7 +629,7 @@ export function makeTimelineChart(kit: ViewKit): (props: TimelineChartProps) => 
     }, [hoveredIdx, dnaHit, msItem])
 
     return (
-      <div className="lc-chartrow">
+      <div className="lc-chartrow" ref={rowRef}>
         <div className="lc-axis lc-axis-milestones">
           {delta ? (
             <>

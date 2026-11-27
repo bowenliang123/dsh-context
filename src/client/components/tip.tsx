@@ -12,6 +12,13 @@ export function clampTipLeft(anchor: number, tipWidth: number, frameWidth: numbe
   return Math.round(Math.min(Math.max(anchor, half), frameWidth - half) - tipWidth / 2)
 }
 
+export function placeTip(wrap: Element, anchor: number, scrollLeft: number, frameWidth: number): void {
+  const tip = wrap.querySelector<HTMLElement>('.lc-chart-tip')
+  if (tip === null) return
+  const next = `translate(${clampTipLeft(anchor - scrollLeft, tip.offsetWidth, frameWidth)}px, 0)`
+  if (tip.style.transform !== next) tip.style.transform = next
+}
+
 export function clampPopoverLeft(anchorRight: number, width: number, frameWidth: number, margin: number): number {
   return Math.max(margin, Math.min(anchorRight - width, frameWidth - width - margin))
 }

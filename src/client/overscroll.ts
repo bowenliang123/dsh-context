@@ -1,3 +1,5 @@
+import { isVerticalWheel, wheelDeltaPx } from './wheel'
+
 export function containHorizontalOverscroll(el: HTMLElement): () => void {
   const onWheel = (e: WheelEvent): void => {
     if (Math.abs(e.deltaX) <= Math.abs(e.deltaY)) return
@@ -7,4 +9,21 @@ export function containHorizontalOverscroll(el: HTMLElement): () => void {
   }
   el.addEventListener('wheel', onWheel, { passive: false })
   return () => { el.removeEventListener('wheel', onWheel) }
+}
+
+export function panByWheel(el: HTMLElement, e: WheelEvent, max: number): void {
+  const next = Math.max(0, Math.min(el.scrollLeft + wheelDeltaPx(e.deltaY, e.deltaMode, el.clientWidth), Math.max(0, max)))
+  if (next !== el.scrollLeft) el.scrollLeft = next
+}
+
+export function wheelScrollHorizontally(el: HTMLElement, target: HTMLElement): () => void {
+  const onWheel = (e: WheelEvent): void => {
+    if (!isVerticalWheel(e)) return
+    const max = el.scrollWidth - el.clientWidth
+    if (max <= 0) return
+    e.preventDefault()
+    panByWheel(el, e, max)
+  }
+  target.addEventListener('wheel', onWheel, { passive: false })
+  return () => { target.removeEventListener('wheel', onWheel) }
 }

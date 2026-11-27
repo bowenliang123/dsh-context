@@ -132,12 +132,52 @@ describe('TimelineChart adaptive scale (the title-adjacent toggle)', () => {
     assert.equal(scroll.scrollLeft, 240)
     assert.equal(wheel(scroll, 30, 0), true, 'right edge cancels the forward swipe')
     assert.equal(wheel(scroll, -30, 0), false, 'leftward still scrolls the chart')
-    assert.equal(wheel(scroll, 30, 120), false, 'vertical-dominant gestures stay with the page')
+    assert.equal(wheel(scroll, 30, 120), true, 'a vertical-dominant gesture is the chart gesture')
     await scrollTo(scroll, 0)
     assert.equal(wheel(scroll, -30, 0), true, 'left edge cancels the back swipe')
     await scrollTo(scroll, 100)
     assert.equal(wheel(scroll, -30, 0), false, 'mid-chart leftward still scrolls')
     await m.unmount()
+  })
+
+  test('a vertical wheel slides the chart horizontally and keeps its ends for itself', async () => {
+    const reqs: RequestRecord[] = []
+    for (let i = 0; i < 40; i++) reqs.push(req(i + 1, { turn: 1, step: i }))
+    const m = await mount(h(TimelineChart, propsOf(reqs)))
+    await flush()
+    const scroll = query<LayoutEl>(m.container, '.lc-chart-scroll')
+    assert.equal(scroll.scrollLeft, 240)
+
+    assert.equal(wheel(scroll, 0, 120), true, 'the newest end still owns the gesture')
+    assert.equal(scroll.scrollLeft, 240)
+    assert.equal(wheel(scroll, 0, -120), true)
+    assert.equal(scroll.scrollLeft, 120)
+
+    await scrollTo(scroll, 100)
+    assert.equal(wheel(scroll, 0, 60), true, 'a vertical notch slides the chart')
+    assert.equal(scroll.scrollLeft, 160)
+    assert.equal(wheel(scroll, 0, -60), true)
+    assert.equal(scroll.scrollLeft, 100)
+
+    assert.equal(wheel(scroll, 0, 2, { deltaMode: 1 }), true, 'line deltas count as text lines')
+    assert.equal(scroll.scrollLeft, 132)
+    assert.equal(wheel(scroll, 0, 1, { deltaMode: 2 }), true, 'page deltas count as a viewport')
+    assert.equal(scroll.scrollLeft, 240)
+    assert.equal(wheel(scroll, 0, 120, { ctrlKey: true }), false, 'browser zoom keeps the wheel')
+    assert.equal(wheel(scroll, 0, 0), true, 'a zero notch still belongs to the chart')
+
+    await scrollTo(scroll, 0)
+    assert.equal(wheel(scroll, 0, -60), true, 'the oldest end still owns the gesture')
+    assert.equal(scroll.scrollLeft, 0)
+    assert.equal(wheel(scroll, 0, 60), true)
+    assert.equal(scroll.scrollLeft, 60)
+    await m.unmount()
+
+    const short = await mount(h(TimelineChart, propsOf(reqs.slice(0, 5))))
+    await flush()
+    const shortScroll = query<LayoutEl>(short.container, '.lc-chart-scroll')
+    assert.equal(wheel(shortScroll, 0, 120), false, 'a chart that fits leaves the wheel to the page')
+    await short.unmount()
   })
 })
 
