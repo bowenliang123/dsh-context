@@ -177,6 +177,11 @@ describe('TimelineChart adaptive scale (the title-adjacent toggle)', () => {
     await flush()
     const shortScroll = query<LayoutEl>(short.container, '.lc-chart-scroll')
     assert.equal(wheel(shortScroll, 0, 120), false, 'a chart that fits leaves the wheel to the page')
+    Object.defineProperty(shortScroll, 'scrollWidth', { configurable: true, get: () => shortScroll.clientWidth + 1 })
+    assert.equal(wheel(shortScroll, 0, 120), false, 'the reserved scrollbar rail still leaves the wheel to the page')
+    shortScroll.scrollLeft = 1
+    await act(async () => { shortScroll.dispatchEvent(new Event('scroll')) })
+    assert.equal(shortScroll.scrollLeft, 0, 'the chart never parks inside the reserved rail')
     await short.unmount()
   })
 })

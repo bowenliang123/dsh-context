@@ -12,7 +12,8 @@
 .lc-axis-q1 { top: 97px; }
 .lc-axis-bot { top: 125px; }
 .lc-chart-wrap { position: relative; flex: 1; min-width: 0; }
-.lc-chart-scroll { overflow-x: auto; overflow-y: hidden; overscroll-behavior-x: contain; scrollbar-gutter: stable; padding-bottom: var(--dsh-scrollbar-width, 8px); }
+.lc-chart-scroll { position: relative; overflow-x: scroll; overflow-y: hidden; overscroll-behavior-x: contain; scrollbar-gutter: stable; padding-bottom: var(--dsh-scrollbar-width, 8px); }
+.lc-chart-scroll::after { content: ''; position: absolute; top: 0; left: 100%; width: 1px; height: 1px; pointer-events: none; }
 .lc-chart { position: relative; display: flex; align-items: flex-end; gap: 2px; height: 130px; padding: 18px 2px 0; box-sizing: border-box; width: max-content; min-width: 100%; }
 .lc-grid { position: absolute; left: 0; right: 0; border-top: var(--lc-line-dashed, 1px dashed var(--dsw-alias-border-l2)); pointer-events: none; }
 .lc-grid-top { top: 18px; }
@@ -65,8 +66,7 @@
 .lc-turn-on { filter: brightness(1.35); color: var(--dsw-alias-label-primary); }
 .lc-turn-label { display: inline-block; }
 
-.lc-chart-scroll.lc-chart-fit { position: relative; overflow-x: hidden; scrollbar-gutter: auto; }
-.lc-chart-scroll.lc-chart-fit.lc-chart-zoom { overflow-x: auto; }
+.lc-chart-scroll.lc-chart-fit { scrollbar-gutter: auto; }
 .lc-band { position: absolute; top: 0; left: 0; width: 100%; height: 148px; z-index: 1; pointer-events: none; }
 .lc-zoom-chip { position: absolute; top: 0; left: 0; z-index: 6; height: 18px; padding: 0 5px; border: 1px solid var(--dsw-alias-border-l2); border-radius: 4px; background: var(--dsw-alias-bg-layer-1); color: var(--dsw-alias-label-secondary); font-size: 10px; line-height: 1; font-variant-numeric: tabular-nums; cursor: pointer; }
 .lc-zoom-chip:hover { border-color: var(--dsw-alias-brand-primary); color: var(--dsw-alias-label-primary); }

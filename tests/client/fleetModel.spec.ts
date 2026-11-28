@@ -11,7 +11,7 @@ import { makeAgentHeads } from '../../src/client/agentHeads'
 import { watchFleetTab } from '../../src/client/fleetTab'
 import { createContextSettings } from '../../src/client/settings'
 import { measureDock } from '../../src/client/dockMeasure'
-import { containHorizontalOverscroll } from '../../src/client/overscroll'
+import { clampSpacerScroll, containHorizontalOverscroll, wheelScrollHorizontally } from '../../src/client/overscroll'
 import { activateViewTab, currentFleetMemberFocus, openContextSidebar, requestContextFocus, requestFleetMemberFocus, subscribeContextFocus, takeContextFocus, useFleetMemberFocus } from '../../src/client/viewFocus'
 import { disposeRetention } from '../../src/client/retention'
 import { DICT_EN } from '../../src/client/i18n'
@@ -587,6 +587,37 @@ describe('containHorizontalOverscroll', () => {
 
     release()
     assert.equal(wheel(el, 30, 0), false, 'the disposer removed the listener')
+  })
+})
+
+describe('clampSpacerScroll', () => {
+  test('snaps out of the reserved spacer while leaving real overflow alone', () => {
+    const spacerOnly = scroller(1, 100, 101)
+    clampSpacerScroll(spacerOnly)
+    assert.equal(spacerOnly.scrollLeft, 0)
+
+    const atStart = scroller(0, 100, 101)
+    clampSpacerScroll(atStart)
+    assert.equal(atStart.scrollLeft, 0)
+
+    const real = scroller(50, 100, 400)
+    clampSpacerScroll(real)
+    assert.equal(real.scrollLeft, 50)
+  })
+})
+
+describe('wheelScrollHorizontally', () => {
+  test('slides a real overflow but leaves a spacer-only rail to the page', () => {
+    const spacerOnly = scroller(0, 100, 101)
+    const releaseSpacer = wheelScrollHorizontally(spacerOnly, spacerOnly)
+    assert.equal(wheel(spacerOnly, 0, 120), false)
+    releaseSpacer()
+
+    const real = scroller(0, 100, 300)
+    const release = wheelScrollHorizontally(real, real)
+    assert.equal(wheel(real, 0, 120), true)
+    assert.equal(real.scrollLeft, 120)
+    release()
   })
 })
 })

@@ -482,7 +482,7 @@ export function makeTimelineOverview(kit: ViewKit): (props: TimelineOverviewProp
         </div>
         <div className="lc-chart-wrap" ref={wrapRef}>
           <div
-            className={'lc-chart-scroll lc-chart-fit' + (zoomed ? ' lc-chart-zoom' : '') + (props.activeTurn !== null ? ' lc-chart-dim' : '')}
+            className={'lc-chart-scroll lc-chart-fit' + (props.activeTurn !== null ? ' lc-chart-dim' : '')}
             ref={scrollRef}
             onScroll={syncTip}
           >

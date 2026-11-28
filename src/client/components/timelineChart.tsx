@@ -4,7 +4,7 @@ import { CATS } from '../categories'
 import { bandsMaximaOf, deltaBandsOf, deltaTotalsOf, dnaBaseLabel } from '../dna'
 import { lruTouch, lruTrim } from '../boundedCache'
 import type { DeltaMaxima, DnaDelta, TimelineBand } from '../dna'
-import { containHorizontalOverscroll, wheelScrollHorizontally } from '../overscroll'
+import { clampSpacerScroll, containHorizontalOverscroll, wheelScrollHorizontally } from '../overscroll'
 import { scrollToPos } from '../revealScroll'
 import type { ViewKit } from '../viewkit'
 import { DnaBar, DnaDeltaBar, DnaHighlights, RISE_CLASS, STAGGER_CAP } from './timelineDnaBars'
@@ -493,6 +493,7 @@ export function makeTimelineChart(kit: ViewKit): (props: TimelineChartProps) => 
       } else if (grew && el.scrollLeft + el.clientWidth >= widthBeforeAppend - 24) {
         el.scrollLeft = el.scrollWidth
       }
+      clampSpacerScroll(el)
       lastSeqRef.current = newestSeq
       prevScrollWidthRef.current = el.scrollWidth
       slRef.current = el.scrollLeft
@@ -654,6 +655,7 @@ export function makeTimelineChart(kit: ViewKit): (props: TimelineChartProps) => 
             className={'lc-chart-scroll' + (props.activeTurn !== null ? ' lc-chart-dim' : '')}
             ref={scrollRef}
             onScroll={(e: UIEvent<HTMLDivElement>) => {
+              clampSpacerScroll(e.currentTarget)
               slRef.current = e.currentTarget.scrollLeft
               cwRef.current = e.currentTarget.clientWidth
               updateTurnLabels(e.currentTarget)
